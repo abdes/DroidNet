@@ -42,111 +42,114 @@ class RenderController;
 */
 class Surface : public Composition, public Named {
 public:
-    OXYGEN_GFX_API ~Surface() override;
+  OXYGEN_GFX_API ~Surface() override;
 
-    OXYGEN_DEFAULT_COPYABLE(Surface)
-    OXYGEN_DEFAULT_MOVABLE(Surface)
+  OXYGEN_DEFAULT_COPYABLE(Surface)
+  OXYGEN_DEFAULT_MOVABLE(Surface)
 
-    virtual void AttachRenderer(std::shared_ptr<RenderController> renderer) = 0;
-    virtual void DetachRenderer() = 0;
+  virtual auto AttachRenderer(std::shared_ptr<RenderController> renderer)
+    -> void
+    = 0;
+  virtual auto DetachRenderer() -> void = 0;
 
-    void ShouldResize(const bool flag) { should_resize_ = flag; }
-    auto ShouldResize() const -> bool { return should_resize_; }
+  auto ShouldResize(const bool flag) -> void { should_resize_ = flag; }
+  auto ShouldResize() const -> bool { return should_resize_; }
 
-    //! Handle a surface resize.
-    virtual void Resize() = 0;
+  //! Handle a surface resize.
+  virtual auto Resize() -> void = 0;
 
-    virtual auto GetCurrentBackBufferIndex() const -> uint32_t = 0;
-    virtual auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture> = 0;
-    virtual auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture> = 0;
+  virtual auto GetCurrentBackBufferIndex() const -> uint32_t = 0;
+  virtual auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture> = 0;
+  virtual auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture>
+    = 0;
 
-    //! Present the current frame if the surface supports it.
-    virtual void Present() const = 0;
+  //! Present the current frame if the surface supports it.
+  virtual auto Present() const -> void = 0;
 
-    [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
-    [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
+  [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
+  [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
 
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-    {
-        return GetComponent<ObjectMetaData>().GetName();
-    }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  {
+    return GetComponent<ObjectMetaData>().GetName();
+  }
 
-    void SetName(std::string_view name) noexcept override
-    {
-        GetComponent<ObjectMetaData>().SetName(name);
-    }
+  auto SetName(std::string_view name) noexcept -> void override
+  {
+    GetComponent<ObjectMetaData>().SetName(name);
+  }
 
 protected:
-    explicit Surface(std::string_view name = "Surface")
-    {
-        AddComponent<ObjectMetaData>(name);
-    }
+  explicit Surface(std::string_view name = "Surface")
+  {
+    AddComponent<ObjectMetaData>(name);
+  }
 
 private:
-    bool should_resize_ { false };
+  bool should_resize_ { false };
 };
 
 namespace detail {
 
-    class WindowSurface;
+  class WindowSurface;
 
-    //! A component that encapsulates the window part of a WindowSurface.
-    class WindowComponent final : public Component {
-        OXYGEN_COMPONENT(WindowComponent)
-    public:
-        using NativeHandles = platform::window::NativeHandles;
+  //! A component that encapsulates the window part of a WindowSurface.
+  class WindowComponent final : public Component {
+    OXYGEN_COMPONENT(WindowComponent)
+  public:
+    using NativeHandles = platform::window::NativeHandles;
 
-        ~WindowComponent() override = default;
+    explicit WindowComponent(platform::WindowPtr window)
+      : window_(std::move(window))
+    {
+    }
 
-        OXYGEN_DEFAULT_COPYABLE(WindowComponent)
-        OXYGEN_DEFAULT_MOVABLE(WindowComponent)
+    ~WindowComponent() override = default;
 
-        [[nodiscard]] auto IsValid() const { return !window_.expired(); }
+    OXYGEN_DEFAULT_COPYABLE(WindowComponent)
+    OXYGEN_DEFAULT_MOVABLE(WindowComponent)
 
-        [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
-        [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;
+    [[nodiscard]] auto IsValid() const { return !window_.expired(); }
 
-        [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const -> platform::window::ExtentT;
+    [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
+    [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;
 
-        [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
+    [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const
+      -> platform::window::ExtentT;
 
-        [[nodiscard]] OXYGEN_GFX_API auto GetWindowTitle() const -> std::string;
+    [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
 
-    private:
-        friend WindowSurface;
-        explicit WindowComponent(platform::WindowPtr window)
-            : window_(std::move(window))
-        {
-        }
+    [[nodiscard]] OXYGEN_GFX_API auto GetWindowTitle() const -> std::string;
 
-        platform::WindowPtr window_;
-    };
+  private:
+    platform::WindowPtr window_;
+  };
 
-    //! Represents a surface associated with a window.
-    class WindowSurface : public Surface {
-    public:
-        OXYGEN_GFX_API ~WindowSurface() override = default;
+  //! Represents a surface associated with a window.
+  class WindowSurface : public Surface {
+  public:
+    OXYGEN_GFX_API ~WindowSurface() override = default;
 
-        OXYGEN_DEFAULT_COPYABLE(WindowSurface)
-        OXYGEN_DEFAULT_MOVABLE(WindowSurface)
+    OXYGEN_DEFAULT_COPYABLE(WindowSurface)
+    OXYGEN_DEFAULT_MOVABLE(WindowSurface)
 
-        [[nodiscard]] auto Width() const -> uint32_t override
-        {
-            return GetComponent<WindowComponent>().Width();
-        }
+    [[nodiscard]] auto Width() const -> uint32_t override
+    {
+      return GetComponent<WindowComponent>().Width();
+    }
 
-        [[nodiscard]] auto Height() const -> uint32_t override
-        {
-            return GetComponent<WindowComponent>().Height();
-        }
+    [[nodiscard]] auto Height() const -> uint32_t override
+    {
+      return GetComponent<WindowComponent>().Height();
+    }
 
-    protected:
-        explicit WindowSurface(platform::WindowPtr window)
-            : Surface("Window Surface")
-        {
-            AddComponent<WindowComponent>(std::move(window));
-        }
-    };
+  protected:
+    explicit WindowSurface(platform::WindowPtr window)
+      : Surface("Window Surface")
+    {
+      AddComponent<WindowComponent>(std::move(window));
+    }
+  };
 } // namespace detail
 
 } // namespace oxygen::graphics

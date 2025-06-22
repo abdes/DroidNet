@@ -15,8 +15,8 @@ namespace oxygen {
 
 class Object {
 public:
-  OXYGEN_COMP_API Object();
-  OXYGEN_COMP_API virtual ~Object();
+  OXGN_COM_API Object();
+  OXGN_COM_API virtual ~Object();
 
   // All components should implement proper copy and move semantics to handle
   // copying and moving as appropriate.

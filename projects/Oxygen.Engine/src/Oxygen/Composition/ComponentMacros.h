@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Oxygen/Composition/Concepts.h>
 #include <Oxygen/Composition/Object.h>
 
 //! Adds the necessary declarations for a class as a typed component.
@@ -29,11 +30,12 @@
 
  \note Components must be instantiated through `Composition::AddComponent`.
 */
-#define OXYGEN_COMPONENT(arg_type)    \
-protected:                            \
-    friend class oxygen::Composition; \
-                                      \
-    OXYGEN_TYPED(arg_type)
+#define OXYGEN_COMPONENT(arg_type)                                             \
+protected:                                                                     \
+  friend class oxygen::Composition;                                            \
+  static constexpr bool IsPooledComponent = oxygen::PooledComponent<arg_type>; \
+                                                                               \
+  OXYGEN_TYPED(arg_type)
 
 // https://www.scs.stanford.edu/~dm/blog/va-opt.html
 
@@ -62,29 +64,40 @@ protected:                            \
  Composition::AddComponent
  \see https://www.scs.stanford.edu/~dm/blog/va-opt.html
 */
-#define OXYGEN_COMPONENT_REQUIRES(...) OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
-#define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                                                  \
-private:                                                                                                      \
-    inline static const oxygen::TypeId dependencies[] = {                                                     \
-        __VA_OPT__(OXYGEN_EXPAND(FOR_EACH_HELPER(__VA_ARGS__)))                                               \
-    };                                                                                                        \
-                                                                                                              \
-public:                                                                                                       \
-    static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> { return { dependencies }; } \
-    auto HasDependencies() const -> bool override { return true; }                                            \
-    auto Dependencies() const -> std::span<const oxygen::TypeId> override { return { dependencies }; }        \
-                                                                                                              \
+#define OXYGEN_COMPONENT_REQUIRES(...)                                         \
+  OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
+#define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                   \
+private:                                                                       \
+  inline static const oxygen::TypeId dependencies[]                            \
+    = { __VA_OPT__(OXYGEN_EXPAND(FOR_EACH_HELPER(__VA_ARGS__))) };             \
+                                                                               \
+public:                                                                        \
+  static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> \
+  {                                                                            \
+    return { dependencies };                                                   \
+  }                                                                            \
+  auto HasDependencies() const -> bool override { return true; }               \
+  auto Dependencies() const -> std::span<const oxygen::TypeId> override        \
+  {                                                                            \
+    return { dependencies };                                                   \
+  }                                                                            \
+                                                                               \
 private:
 
 #if !defined(DOXYGEN_DOCUMENTATION_BUILD)
-#  define FOR_EACH_HELPER(a1, ...) a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
+#  define FOR_EACH_HELPER(a1, ...)                                             \
+    a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
 #  define FOR_EACH_AGAIN() FOR_EACH_HELPER
 
 #  define PARENS ()
 
-#  define OXYGEN_EXPAND(...) OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
-#  define OXYGEN_EXPAND4(...) OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
-#  define OXYGEN_EXPAND3(...) OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
-#  define OXYGEN_EXPAND2(...) OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
+#  define OXYGEN_EXPAND(...)                                                   \
+    OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
+#  define OXYGEN_EXPAND4(...)                                                  \
+    OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
+#  define OXYGEN_EXPAND3(...)                                                  \
+    OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
+#  define OXYGEN_EXPAND2(...)                                                  \
+    OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
 #  define OXYGEN_EXPAND1(...) __VA_ARGS__
 #endif // !defined(DOXYGEN_DOCUMENTATION_BUILD)

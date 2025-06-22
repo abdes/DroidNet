@@ -57,3 +57,6 @@ m_gtest_program(
     "memory_invalidation_test.cpp"
     "ObjectMetaData_test.cpp"
 )
+
+m_gtest_program(ComponentPool SOURCES "ComponentPool_test.cpp")
+m_gtest_program(ComponentPoolRegistry SOURCES "ComponentPoolRegistry_test.cpp")

@@ -150,9 +150,12 @@ template <typename ResourceT, typename ResourceTypeList,
   requires(std::is_base_of_v<ResourceHandle, HandleT>)
 class Resource {
 public:
+  //! The centralized TypeList containing all valid resource types.
+  using ResourceTypeList_t = ResourceTypeList;
+
   //! Compile-time allocated resource type ID
   static constexpr ResourceHandle::ResourceTypeT kResourceType
-    = GetResourceTypeId<ResourceT, ResourceTypeList>();
+    = GetResourceTypeId<ResourceT, ResourceTypeList_t>();
 
   constexpr explicit Resource(HandleT handle)
     : handle_(std::move(handle))

@@ -36,6 +36,7 @@
  ```
 */
 
+#include <Oxygen/Composition/ComponentPoolRegistry.h>
 #include <Oxygen/Composition/TypeSystem.h>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -54,4 +55,14 @@ EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*
   static oxygen::TypeRegistry registry {};
   return &registry;
 }
+
+EXPORT_SYMBOL auto InitializeComponentPoolRegistry()
+  -> oxygen::ComponentPoolRegistry*
+{
+  // Single instance of the component pool registry provided by the main
+  // executable module.
+  static oxygen::ComponentPoolRegistry registry {};
+  return &registry;
+}
+
 } // extern "C"

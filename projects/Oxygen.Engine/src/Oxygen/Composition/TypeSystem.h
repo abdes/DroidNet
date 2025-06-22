@@ -18,21 +18,21 @@ auto constexpr kInvalidTypeId = static_cast<TypeId>(-1);
 
 class TypeRegistry {
 public:
-    OXYGEN_COMP_API static auto Get() -> TypeRegistry&;
+  OXGN_COM_API static auto Get() -> TypeRegistry&;
 
-    OXYGEN_COMP_API TypeRegistry();
-    OXYGEN_COMP_API ~TypeRegistry();
+  OXGN_COM_API TypeRegistry();
+  OXGN_COM_API ~TypeRegistry();
 
-    OXYGEN_MAKE_NON_COPYABLE(TypeRegistry)
-    OXYGEN_DEFAULT_MOVABLE(TypeRegistry)
+  OXYGEN_MAKE_NON_COPYABLE(TypeRegistry)
+  OXYGEN_DEFAULT_MOVABLE(TypeRegistry)
 
-    OXYGEN_COMP_API auto RegisterType(const char* name) const -> TypeId;
-    OXYGEN_COMP_API auto GetTypeId(const char* name) const -> TypeId;
+  OXGN_COM_API auto RegisterType(const char* name) const -> TypeId;
+  OXGN_COM_API auto GetTypeId(const char* name) const -> TypeId;
 
 private:
-    class Impl;
-    // Raw pointer, because smart pointers do not work well across DLL boundaries.
-    Impl* impl_;
+  class Impl;
+  // Raw pointer, because smart pointers do not work well across DLL boundaries.
+  Impl* impl_;
 };
 
 } // namespace oxygen

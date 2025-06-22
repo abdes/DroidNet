@@ -62,7 +62,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_COMP_EXPORTS"
+      "OXGN_COM_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -89,7 +89,11 @@ target_sources(
     FILES
       "api_export.h"
       "ComponentMacros.h"
+      "Component.h"
       "Composition.h"
+      "ComponentPool.h"
+      "ComponentPoolRegistry.h"
+      "Concepts.h"
       "Named.h"
       "Object.h"
       "ObjectMetaData.h"
@@ -101,7 +105,7 @@ target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_COMP_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_COM_STATIC>
 )
 
 target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen::base)
@@ -154,7 +158,7 @@ if(NOT BUILD_SHARED_LIBS)
     ${cs_init_target}
     PROPERTIES
       DEFINE_SYMBOL
-        "OXYGEN_COMP_EXPORTS"
+        "OXGN_COM_EXPORTS"
       OUTPUT_NAME
         "Oxygen.TypeRegistry"
       VERSION

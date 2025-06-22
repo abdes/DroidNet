@@ -167,9 +167,11 @@ protected:
    This method is called when the component is cloned, to ensure that the
    dependencies are properly set up in the cloned component.
    */
-  void UpdateDependencies(const Composition& composition) override
+  void UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) override
   {
-    meta_data_ = &composition.GetComponent<ObjectMetaData>();
+    meta_data_ = &static_cast<ObjectMetaData&>(
+      get_component(ObjectMetaData::ClassTypeId()));
   }
 
 private:
