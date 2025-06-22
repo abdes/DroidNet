@@ -8,76 +8,217 @@
 
 #include <Oxygen/Base/Resource.h>
 
+using oxygen::GetResourceTypeId;
 using oxygen::Resource;
 using oxygen::ResourceHandle;
+using oxygen::TypeList;
 
 namespace base::resources {
 
-constexpr ResourceHandle::ResourceTypeT kTestResourceType = 0x01;
-class TestResource final : public Resource<kTestResourceType> {
+//=== Test Resource Types ===------------------------------------------------//
+
+// Forward declare test resource types
+class TestResource;
+class AnotherTestResource;
+
+// Define the centralized type list for test resources
+using TestResourceTypeList = TypeList<TestResource, AnotherTestResource>;
+
+// Test resource implementations
+class TestResource final : public Resource<TestResource, TestResourceTypeList> {
 public:
   using Resource::Resource;
 
   void InvalidateResource() { Invalidate(); }
 };
 
-NOLINT_TEST(ResourceTest, DefaultConstructor)
+class AnotherTestResource final
+  : public Resource<AnotherTestResource, TestResourceTypeList> {
+public:
+  using Resource::Resource;
+
+  void InvalidateResource() { Invalidate(); }
+};
+
+//=== Basic Resource Construction Tests ===-----------------------------------//
+
+//! Test default constructor creates invalid resource
+/*!
+ Verify that default-constructed resources are properly initialized
+ as invalid with the correct compile-time resource type.
+*/
+NOLINT_TEST(ResourceTest, DefaultConstructor_CreatesInvalidResource)
 {
+  // Arrange & Act
   const TestResource resource;
+
+  // Assert
   EXPECT_FALSE(resource.IsValid());
+  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
 }
 
-NOLINT_TEST(ResourceTest, ParameterizedConstructor)
+//! Test parameterized constructor with valid handle
+/*!
+ Verify that resources constructed with valid handles maintain
+ the handle and report as valid.
+*/
+NOLINT_TEST(ResourceTest, ParameterizedConstructor_WithValidHandle)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
+
+  // Act
   const TestResource resource(handle);
+
+  // Assert
   EXPECT_TRUE(resource.IsValid());
   EXPECT_EQ(resource.GetHandle(), handle);
+  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
 }
 
-NOLINT_TEST(ResourceTest, CopyConstructor)
+//=== Copy Semantics Tests ===------------------------------------------------//
+
+//! Test copy constructor preserves resource state
+/*!
+ Verify that copy construction creates an independent resource
+ with the same handle and validity state.
+*/
+NOLINT_TEST(ResourceTest, CopyConstructor_PreservesState)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
   const TestResource resource1(handle);
+
+  // Act
   const auto& resource2(resource1);
+
+  // Assert
   EXPECT_EQ(resource1.GetHandle(), resource2.GetHandle());
+  EXPECT_EQ(resource1.GetResourceType(), resource2.GetResourceType());
+  EXPECT_TRUE(resource2.IsValid());
 }
 
-NOLINT_TEST(ResourceTest, CopyAssignment)
+//! Test copy assignment preserves resource state
+/*!
+ Verify that copy assignment creates an independent resource
+ with the same handle and validity state.
+*/
+NOLINT_TEST(ResourceTest, CopyAssignment_PreservesState)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
   const TestResource resource1(handle);
+
+  // Act
   const auto& resource2 = resource1;
+
+  // Assert
   EXPECT_EQ(resource1.GetHandle(), resource2.GetHandle());
+  EXPECT_EQ(resource1.GetResourceType(), resource2.GetResourceType());
+  EXPECT_TRUE(resource2.IsValid());
 }
 
-NOLINT_TEST(ResourceTest, MoveConstructor)
+//=== Move Semantics Tests ===------------------------------------------------//
+
+//! Test move constructor transfers resource ownership
+/*!
+ Verify that move construction properly transfers the handle
+ and invalidates the source resource.
+*/
+NOLINT_TEST(ResourceTest, MoveConstructor_TransfersOwnership)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
   TestResource resource1(handle);
+
+  // Act
   const auto resource2(std::move(resource1));
+
+  // Assert
   EXPECT_EQ(resource2.GetHandle(), handle);
+  EXPECT_TRUE(resource2.IsValid());
   EXPECT_FALSE(resource1
       .IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-NOLINT_TEST(ResourceTest, MoveAssignment)
+//! Test move assignment transfers resource ownership
+/*!
+ Verify that move assignment properly transfers the handle
+ and invalidates the source resource.
+*/
+NOLINT_TEST(ResourceTest, MoveAssignment_TransfersOwnership)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
   TestResource resource1(handle);
+
+  // Act
   const auto resource2 = std::move(resource1);
+
+  // Assert
   EXPECT_EQ(resource2.GetHandle(), handle);
+  EXPECT_TRUE(resource2.IsValid());
   EXPECT_FALSE(resource1
       .IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-NOLINT_TEST(ResourceTest, Invalidate)
+//=== Resource State Management Tests ===-------------------------------------//
+
+//! Test resource invalidation changes validity state
+/*!
+ Verify that calling InvalidateResource() properly invalidates
+ the resource while preserving the resource type.
+*/
+NOLINT_TEST(ResourceTest, Invalidate_ChangesValidityState)
 {
-  const ResourceHandle handle(1U, kTestResourceType);
+  // Arrange
+  const ResourceHandle handle(1U, TestResource::kResourceType);
   TestResource resource(handle);
   EXPECT_TRUE(resource.IsValid());
+
+  // Act
   resource.InvalidateResource();
+
+  // Assert
   EXPECT_FALSE(resource.IsValid());
+  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
+}
+
+//=== Compile-Time Resource Type Tests ===------------------------------------//
+
+//! Test different resource types get unique compile-time IDs
+/*!
+ Verify that the compile-time resource type system assigns
+ unique IDs to different resource types.
+*/
+NOLINT_TEST(ResourceTest, CompileTimeResourceTypes_AreUnique)
+{
+  using ::testing::Ne;
+
+  // Arrange & Act
+  constexpr auto test_resource_type = TestResource::kResourceType;
+  constexpr auto another_resource_type = AnotherTestResource::kResourceType;
+
+  // Assert
+  EXPECT_THAT(test_resource_type, Ne(another_resource_type));
+}
+
+//! Test GetResourceTypeId function returns correct compile-time values
+/*!
+ Verify that the GetResourceTypeId template function returns
+ the same values as the class static constants.
+*/
+NOLINT_TEST(ResourceTest, GetResourceTypeId_ReturnsCorrectValues)
+{
+  // Arrange & Act
+  constexpr auto test_resource_type_func
+    = GetResourceTypeId<TestResource, TestResourceTypeList>();
+  constexpr auto another_resource_type_func
+    = GetResourceTypeId<AnotherTestResource, TestResourceTypeList>();
+
+  // Assert
+  EXPECT_EQ(test_resource_type_func, TestResource::kResourceType);
+  EXPECT_EQ(another_resource_type_func, AnotherTestResource::kResourceType);
 }
 
 } // namespace base::resources
