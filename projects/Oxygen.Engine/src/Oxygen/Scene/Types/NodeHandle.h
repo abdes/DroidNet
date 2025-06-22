@@ -87,10 +87,9 @@ public:
     : NodeHandle(index, kInvalidSceneId)
   {
   }
-
   //! Creates a node handle with the given \p index and \p scene_id.
   constexpr NodeHandle(IndexT index, SceneId scene_id)
-    : ResourceHandle(index, resources::kSceneNode)
+    : ResourceHandle(index, GetResourceTypeId<SceneNode, ResourceTypeList>())
   {
     SetSceneId(scene_id);
   }
@@ -104,7 +103,8 @@ public:
   constexpr NodeHandle(const ResourceHandle& handle, SceneId scene_id)
     : ResourceHandle(handle)
   {
-    assert(handle.ResourceType() == resources::kSceneNode);
+    assert(handle.ResourceType()
+      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
 
     SetSceneId(scene_id);
   }
@@ -118,7 +118,8 @@ public:
   constexpr NodeHandle(ResourceHandle&& handle, SceneId scene_id) noexcept
     : ResourceHandle(std::move(handle))
   {
-    assert(ResourceType() == resources::kSceneNode);
+    assert(
+      ResourceType() == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
 
     SetSceneId(scene_id);
   }
@@ -127,7 +128,8 @@ public:
   //! type of the original handle must match this handle expected resource type.
   constexpr auto operator=(const ResourceHandle& handle) -> NodeHandle&
   {
-    assert(handle.ResourceType() == resources::kSceneNode);
+    assert(handle.ResourceType()
+      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
 
     ResourceHandle::operator=(handle);
     SetSceneId(kInvalidSceneId);
@@ -138,7 +140,8 @@ public:
   //! type of the original handle must match this handle expected resource type.
   constexpr auto operator=(ResourceHandle&& handle) noexcept -> NodeHandle&
   {
-    assert(handle.ResourceType() == resources::kSceneNode);
+    assert(handle.ResourceType()
+      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
 
     ResourceHandle::operator=(std::move(handle));
     SetSceneId(kInvalidSceneId);

@@ -85,7 +85,8 @@ auto SceneIdManager::Instance() -> SceneIdManager&
 //------------------------------------------------------------------------------
 
 Scene::Scene(const std::string& name, size_t initial_capacity)
-  : nodes_(std::make_shared<NodeTable>(resources::kSceneNode, initial_capacity))
+  : nodes_(
+      std::make_shared<NodeTable>(SceneNode::kResourceType, initial_capacity))
 {
   LOG_SCOPE_F(INFO, "Scene creation");
   LOG_F(2, "name: '{}'", name);
@@ -347,7 +348,8 @@ auto Scene::GetNodeImpl(const SceneNode& node) const noexcept
   return const_cast<Scene*>(this)->GetNodeImpl(node);
 }
 
-auto Scene::GetNodeImplRef(const NodeHandle& handle) noexcept -> SceneNodeImpl&
+auto Scene::GetNodeImplRef(const ResourceHandle& handle) noexcept
+  -> SceneNodeImpl&
 {
   // This is a logic error, should be fixed in the code. An invalid handle
   // should not be used anymore.
@@ -360,19 +362,19 @@ auto Scene::GetNodeImplRef(const NodeHandle& handle) noexcept -> SceneNodeImpl&
   }
 }
 
-auto Scene::GetNodeImplRef(const NodeHandle& handle) const noexcept
+auto Scene::GetNodeImplRef(const ResourceHandle& handle) const noexcept
   -> const SceneNodeImpl&
 {
   return const_cast<Scene*>(this)->GetNodeImplRef(handle);
 }
 
-auto Scene::GetNodeImplRefUnsafe(const NodeHandle& handle) const
+auto Scene::GetNodeImplRefUnsafe(const ResourceHandle& handle) const
   -> const SceneNodeImpl&
 {
   return nodes_->ItemAt(handle);
 }
 
-auto Scene::GetNodeImplRefUnsafe(const NodeHandle& handle) -> SceneNodeImpl&
+auto Scene::GetNodeImplRefUnsafe(const ResourceHandle& handle) -> SceneNodeImpl&
 {
   return nodes_->ItemAt(handle);
 }

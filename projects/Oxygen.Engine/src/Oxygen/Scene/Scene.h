@@ -470,14 +470,14 @@ public:
    Expects the handle to be valid, and the node to exist, or it will
    terminate the program.
   */
-  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) const noexcept
-    -> const SceneNodeImpl&;
-  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) noexcept
+  OXGN_SCN_NDAPI auto GetNodeImplRef(
+    const ResourceHandle& handle) const noexcept -> const SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto GetNodeImplRef(const ResourceHandle& handle) noexcept
     -> SceneNodeImpl&;
 
-  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle) const
+  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const ResourceHandle& handle) const
     -> const SceneNodeImpl&;
-  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle)
+  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const ResourceHandle& handle)
     -> SceneNodeImpl&;
   //! @}
 
