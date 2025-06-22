@@ -40,30 +40,19 @@ add_test(
     "Oxygen.Composition.LinkTest"
 )
 
+# -- Global Initialization Tests -----------------------------------------------
+
+add_subdirectory("GlobalInit")
+
 # -- GTest Test Programs -------------------------------------------------------
 
 include(GTestHelpers)
 
-m_gtest_program(
-  TypeSystem
-  SOURCES
-    "ts_init.cpp"
-    "TypeSystem_test.cpp"
-)
-
-# Tell clang and gcc to export symbols even from the executable.
-# Needed so that the type system can find the `InitializeTypeRegistry`
-# function defined in the executable.
-target_link_options(
-  "Oxygen.Composition.TypeSystem.Tests"
-  PRIVATE
-    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:-Wl,--export-dynamic>
-)
+m_gtest_program(TypeSystem SOURCES "TypeSystem_test.cpp")
 
 m_gtest_program(
   Composition
   SOURCES
-    "ts_init.cpp"
     "Composition_test.cpp"
     "memory_invalidation_test.cpp"
     "ObjectMetaData_test.cpp"

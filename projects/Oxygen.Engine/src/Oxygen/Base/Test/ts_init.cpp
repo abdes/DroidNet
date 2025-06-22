@@ -21,11 +21,12 @@ namespace {
 extern "C" {
 EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*
 {
-    // Single instance of the type registry provided by the main executable module.
-    static oxygen::TypeRegistry registry {};
+  // Single instance of the type registry provided by the main executable
+  // module.
+  static oxygen::TypeRegistry registry {};
 
-    initialize_called = true;
-    return &registry;
+  initialize_called = true;
+  return &registry;
 }
 } // extern "C"
 
