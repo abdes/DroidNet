@@ -44,7 +44,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
     oxygen::base
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     oxygen::oxco
     oxygen::platform
     oxygen::graphics-direct3d12

@@ -17,16 +17,15 @@
 extern "C" bool initialize_called { false };
 
 namespace {
-
-extern "C" {
-EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*
+extern "C" EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*
 {
-    // Single instance of the type registry provided by the main executable module.
-    static oxygen::TypeRegistry registry {};
+  // Single instance of the type registry, which MUST be provided by the main
+  // executable module, allocated from the process global heap, and not for one
+  // of DLLs heaps.
+  static oxygen::TypeRegistry registry {};
 
-    initialize_called = true;
-    return &registry;
+  initialize_called = true;
+  return &registry;
 }
-} // extern "C"
 
 } // namespace

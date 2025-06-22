@@ -27,10 +27,10 @@ asap_push_module("${META_MODULE_NAME}")
 
 add_executable(
   ${META_MODULE_TARGET}
-  "main.cpp"
+  "../main.cpp"
+  "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
-  "ts_init.cpp"
 )
 set_target_properties(
   ${META_MODULE_TARGET}

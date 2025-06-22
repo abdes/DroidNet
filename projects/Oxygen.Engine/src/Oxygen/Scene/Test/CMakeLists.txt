@@ -78,15 +78,8 @@ m_gtest_program(
 
 # Macro to add common dependencies and libraries for TestSceneFactory-based tests
 macro(add_test_scene_factory_dependencies target_name)
-  target_sources(
-    ${target_name}
-    PRIVATE
-    "${TEST_FACTORY_SOURCES}"
-  )
-  add_dependencies(
-    ${target_name}
-    "${META_MODULE_NAME}.TestSceneFactorySchema"
-  )
+  target_sources(${target_name} PRIVATE "${TEST_FACTORY_SOURCES}")
+  add_dependencies(${target_name} "${META_MODULE_NAME}.TestSceneFactorySchema")
   target_link_libraries(
     ${target_name}
     PRIVATE
@@ -170,7 +163,7 @@ target_link_libraries(
   "Oxygen.Scene.Example"
   PRIVATE
     oxygen::scene
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
 )
 
 # -- Scene Graph Pretty Printer ------------------------------------------------
@@ -191,6 +184,6 @@ target_link_libraries(
   "Oxygen.Scene.PrettyPrinter"
   PRIVATE
     oxygen::scene
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
 )
 add_test_scene_factory_dependencies(Oxygen.Scene.PrettyPrinter)
