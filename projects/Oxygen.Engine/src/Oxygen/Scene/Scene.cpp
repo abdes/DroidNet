@@ -110,7 +110,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
 Scene::~Scene()
 {
   LOG_SCOPE_F(INFO, "Scene destruction");
-
+  nodes_->Clear();
   // Release the scene ID for reuse
   SceneIdManager::Instance().ReleaseId(scene_id_);
 }

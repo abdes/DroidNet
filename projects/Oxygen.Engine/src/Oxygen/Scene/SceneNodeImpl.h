@@ -137,7 +137,7 @@ public:
   OXGN_SCN_API explicit SceneNodeImpl(
     const std::string& name, Flags flags = kDefaultFlags);
 
-  OXGN_SCN_API ~SceneNodeImpl() override;
+  ~SceneNodeImpl() override = default;
 
   OXGN_SCN_API SceneNodeImpl(const SceneNodeImpl& other);
   OXGN_SCN_API auto operator=(const SceneNodeImpl& other) -> SceneNodeImpl&;
