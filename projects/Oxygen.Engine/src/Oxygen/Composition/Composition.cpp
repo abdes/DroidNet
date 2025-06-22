@@ -6,8 +6,6 @@
 
 #include <iostream>
 #include <ranges>
-#include <unordered_map>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
@@ -17,39 +15,26 @@ using oxygen::Component;
 using oxygen::Composition;
 using oxygen::TypeId;
 
-using ComponentsCollection = std::vector<std::unique_ptr<Component>>;
-
-struct Composition::ComponentManager {
-  ComponentsCollection components_;
-  std::unordered_map<TypeId, size_t> component_index_;
-
-  explicit ComponentManager(std::size_t initial_capacity)
-  {
-    // Reserve capacity to prevent reallocations that would invalidate pointers
-    // stored during UpdateDependencies calls
-    components_.reserve(initial_capacity);
-  }
-};
-
-Composition::~Composition() noexcept { DestroyComponents(); }
+Composition::~Composition() noexcept
+{
+  LOG_SCOPE_FUNCTION(3);
+  DestroyComponents();
+}
 
 auto Composition::HasComponents() const noexcept -> bool
 {
-  return pimpl_ && !pimpl_->components_.empty();
+  std::shared_lock lock(mutex_);
+  return !components_.empty();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void Composition::DestroyComponents() noexcept
 {
-  if (!pimpl_) {
-    return;
-  }
+  std::unique_lock lock(mutex_);
   // Clear in reverse order - dependents before dependencies
-  auto& components = pimpl_->components_;
-  while (!components.empty()) {
+  while (!components_.empty()) {
     // Absorb all exceptions
     try {
-      components.pop_back(); // unique_ptr auto-destructs
+      components_.pop_back();
     } catch (const std::exception& e) {
       LOG_F(
         ERROR, "Exception caught while destructing components: %s", e.what());
@@ -58,40 +43,40 @@ void Composition::DestroyComponents() noexcept
 }
 
 Composition::Composition(const Composition& other)
-  : pimpl_(other.pimpl_)
+  : components_(other.components_)
 {
-  DCHECK_NOTNULL_F(
-    pimpl_, "Composition copy constructed from a moved composition!");
+  // Shallow copy: share the same component instances
 }
 
 auto Composition::operator=(const Composition& other) -> Composition&
 {
-  DCHECK_NOTNULL_F(other.pimpl_, "Composition used after having been moved!");
   if (this != &other) {
-    pimpl_ = other.pimpl_;
+    // Shallow copy: share the same component instances
+    components_ = other.components_;
   }
   return *this;
 }
 
 Composition::Composition(Composition&& other) noexcept
-  : pimpl_(std::move(other.pimpl_))
+  : components_(std::move(other.components_))
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition constructed from a moved composition!");
 }
 
 auto Composition::operator=(Composition&& other) noexcept -> Composition&
 {
-  DCHECK_NOTNULL_F(other.pimpl_, "Composition used after having been moved!");
   if (this != &other) {
-    pimpl_ = std::move(other.pimpl_);
+    DestroyComponents();
+    components_ = std::move(other.components_);
   }
   return *this;
 }
 
 Composition::Composition(std::size_t initial_capacity)
-  : pimpl_(std::make_shared<ComponentManager>(initial_capacity))
+  : components_()
 {
-  DCHECK_NOTNULL_F(pimpl_, "Failed to allocate component manager");
+  // Reserve capacity to prevent reallocations that would invalidate pointers
+  // stored during UpdateDependencies calls
+  components_.reserve(initial_capacity);
 }
 
 void Composition::ValidateDependencies(
@@ -119,11 +104,12 @@ void Composition::ValidateDependencies(
 void Composition::EnsureDependencies(
   const std::span<const TypeId> dependencies) const
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
   DCHECK_F(!dependencies.empty(), "Dependencies must not be empty");
 
   for (const auto dep_id : dependencies) {
-    if (!pimpl_->component_index_.contains(dep_id)) {
+    auto it = std::ranges::find_if(components_,
+      [dep_id](const auto& comp) { return comp->GetTypeId() == dep_id; });
+    if (it == components_.end()) {
       throw ComponentError("Missing dependency component");
     }
   }
@@ -131,8 +117,8 @@ void Composition::EnsureDependencies(
 
 auto Composition::ExpectExistingComponent(const TypeId id) const -> bool
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  if (!pimpl_->component_index_.contains(id)) {
+  if (!std::ranges::any_of(components_,
+        [id](const auto& comp) { return comp->GetTypeId() == id; })) {
     DLOG_F(
       WARNING, "Attempt to remove or replace a component that is not there");
     return false;
@@ -142,100 +128,82 @@ auto Composition::ExpectExistingComponent(const TypeId id) const -> bool
 
 auto Composition::HasComponentImpl(const TypeId id) const -> bool
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return pimpl_->component_index_.contains(id);
+  return std::ranges::any_of(
+    components_, [id](const auto& comp) { return comp->GetTypeId() == id; });
 }
 
-auto Composition::AddComponentImpl(std::unique_ptr<Component> component) const
+auto Composition::AddComponentImpl(std::shared_ptr<Component> component)
   -> Component&
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
   DCHECK_NOTNULL_F(component, "Component must not be null");
-  DCHECK_F(!pimpl_->component_index_.contains(component->GetTypeId()),
-    "Component already exists");
+  DCHECK_F(
+    !HasComponentImpl(component->GetTypeId()), "Component already exists");
 
-  pimpl_->components_.emplace_back(std::move(component));
-  const auto& entry = pimpl_->components_.back();
-  pimpl_->component_index_[entry->GetTypeId()] = pimpl_->components_.size() - 1;
-
-  return *entry;
+  components_.emplace_back(std::move(component));
+  return *components_.back();
 }
 
-auto Composition::ReplaceComponentImpl(const TypeId old_id,
-  std::unique_ptr<Component> new_component) const -> Component&
+auto Composition::ReplaceComponentImpl(
+  const TypeId old_id, std::shared_ptr<Component> new_component) -> Component&
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
   DCHECK_NOTNULL_F(new_component, "Component must not be null");
-  DCHECK_F(
-    pimpl_->component_index_.contains(old_id), "Old component must exist");
+  auto it = std::ranges::find_if(components_,
+    [old_id](const auto& comp) { return comp->GetTypeId() == old_id; });
+  DCHECK_F(it != components_.end(), "Old component must exist");
 
-  const auto new_id = new_component->GetTypeId();
-  const auto index = pimpl_->component_index_.at(old_id);
-  pimpl_->components_[index] = std::move(new_component);
-  if (old_id != new_id) {
-    pimpl_->component_index_.erase(old_id);
-    pimpl_->component_index_[new_id] = index;
-  }
-  return *pimpl_->components_[index];
+  *it = std::move(new_component);
+  return **it;
 }
 
 auto Composition::GetComponentImpl(const TypeId id) const -> Component&
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  const auto it = pimpl_->component_index_.find(id);
-  if (it == pimpl_->component_index_.end()) {
+  auto it = std::ranges::find_if(
+    components_, [id](const auto& comp) { return comp->GetTypeId() == id; });
+  if (it == components_.end()) {
     throw ComponentError("Missing dependency component");
   }
-  return *pimpl_->components_[it->second];
+  return **it;
 }
 
-void Composition::RemoveComponentImpl(
-  const TypeId id, const bool update_indices) const
+void Composition::RemoveComponentImpl(const TypeId id)
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  const auto index = pimpl_->component_index_.at(id);
-  pimpl_->components_.erase(pimpl_->components_.begin()
-    + static_cast<ComponentsCollection::difference_type>(index));
-  pimpl_->component_index_.erase(id);
-
-  if (update_indices) {
-    const auto size = pimpl_->components_.size();
-    for (size_t i = index; i < size; ++i) {
-      pimpl_->component_index_[pimpl_->components_[i]->GetTypeId()] = i;
-    }
+  auto it = std::ranges::find_if(
+    components_, [id](const auto& comp) { return comp->GetTypeId() == id; });
+  if (it != components_.end()) {
+    components_.erase(it);
   }
 }
 
 void Composition::DeepCopyComponentsFrom(const Composition& other)
 {
-  DCHECK_NOTNULL_F(
-    other.pimpl_, "Composition deep copied from a moved composition!");
+  std::unique_lock lock(mutex_);
+
   // Resize to fit the actual number of components being copied
-  const auto component_count = other.pimpl_->components_.size();
-  pimpl_ = std::make_shared<ComponentManager>(component_count);
-  for (const auto& entry : other.pimpl_->components_) {
-    if (const auto* comp = entry.get(); comp->IsCloneable()) {
-      pimpl_->components_.emplace_back(comp->Clone());
-      const auto& clone = pimpl_->components_.back();
-      pimpl_->component_index_[clone->GetTypeId()]
-        = pimpl_->components_.size() - 1;
+  const auto component_count = other.components_.size();
+  components_.clear();
+  components_.reserve(component_count);
+  for (const auto& entry : other.components_) {
+    if (const Component* comp = entry.get(); comp->IsCloneable()) {
+      components_.emplace_back(std::shared_ptr<Component>(comp->Clone()));
     } else {
       throw ComponentError("Component must be cloneable");
     }
   }
 
   // Update dependencies AFTER all components are added to prevent invalidation
-  for (const auto& comp : pimpl_->components_) {
+  for (const auto& comp : components_) {
     if (comp->HasDependencies()) {
-      comp->UpdateDependencies(*this);
+      comp->UpdateDependencies([this](TypeId id) -> Component& {
+        // Nollocking needed here
+        return GetComponentImpl(id);
+      });
     }
   }
 }
 
 auto Composition::IsComponentRequired(const TypeId id) const -> bool
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  for (const auto& comp : pimpl_->components_) {
+  for (const auto& comp : components_) {
     if (std::ranges::find(comp->Dependencies(), id)
       != comp->Dependencies().end()) {
       return true;
@@ -244,96 +212,17 @@ auto Composition::IsComponentRequired(const TypeId id) const -> bool
   return false;
 }
 
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator*() const -> reference
-{
-  return *mgr_->components_[pos_];
-}
-
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator->() const -> pointer
-{
-  return mgr_->components_[pos_].get();
-}
-
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator++() -> Iterator&
-{
-  ++pos_;
-  return *this;
-}
-
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator++(int) -> Iterator
-{
-  Iterator tmp = *this;
-  ++*this;
-  return tmp;
-}
-
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator==(const Iterator& rhs) const
-  -> bool
-{
-  return pos_ == rhs.pos_;
-}
-
-template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator!=(const Iterator& rhs) const
-  -> bool
-{
-  return !(*this == rhs);
-}
-
-// Force instantiation of required template specializations
-template class Composition::Iterator<Component>;
-template class Composition::Iterator<const Component>;
-
-auto Composition::begin() -> iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), 0 };
-}
-
-auto Composition::end() -> iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), pimpl_->components_.size() };
-}
-
-auto Composition::begin() const -> const_iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), 0 };
-}
-
-auto Composition::end() const -> const_iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), pimpl_->components_.size() };
-}
-
-auto Composition::cbegin() const -> const_iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), 0 };
-}
-
-auto Composition::cend() const -> const_iterator
-{
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
-  return { pimpl_.get(), pimpl_->components_.size() };
-}
-
 void Composition::PrintComponents(std::ostream& out) const
 {
-  DCHECK_NOTNULL_F(pimpl_, "Composition used after having been moved!");
+  std::shared_lock lock(mutex_);
+
   std::string object_name = "Unknown";
   if (HasComponent<ObjectMetaData>()) {
-    object_name = GetComponent<ObjectMetaData>().GetName();
+    object_name = static_cast<const ObjectMetaData&>(
+      GetComponentImpl(ObjectMetaData::ClassTypeId()))
+                    .GetName();
   }
 
-  const auto& components_ = pimpl_->components_;
   out << "> Object \"" << object_name << "\" has " << components_.size()
       << " components:\n";
   for (const auto& entry : components_) {

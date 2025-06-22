@@ -36,193 +36,202 @@ class Platform;
 
 namespace platform {
 
-    class AsyncOps final : public Component, public co::LiveObject {
-        OXYGEN_COMPONENT(AsyncOps)
-    public:
-        AsyncOps();
-        ~AsyncOps() override;
+  class AsyncOps final : public Component, public co::LiveObject {
+    OXYGEN_COMPONENT(AsyncOps)
+  public:
+    AsyncOps();
+    ~AsyncOps() override;
 
-        //! A utility function, returning an awaitable suspending the caller for a
-        //! specified duration. Suitable for use with `AnyOf()` etc.
-        auto SleepFor(std::chrono::microseconds delay)
-        {
-            return co::SleepFor(io_, delay);
-        }
+    //! A utility function, returning an awaitable suspending the caller for a
+    //! specified duration. Suitable for use with `AnyOf()` etc.
+    auto SleepFor(std::chrono::microseconds delay)
+    {
+      return co::SleepFor(io_, delay);
+    }
 
-        auto PollOne() -> size_t
-        {
-            return io_.poll();
-        }
+    auto PollOne() -> size_t { return io_.poll(); }
 
-        void Stop() override;
+    void Stop() override;
 
-        [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> override;
+    [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {})
+      -> co::Co<> override;
 
-        [[nodiscard]] auto IsRunning() const -> bool
-        {
-            return nursery_ != nullptr;
-        }
+    [[nodiscard]] auto IsRunning() const -> bool { return nursery_ != nullptr; }
 
-        [[nodiscard]] auto Nursery() const -> co::Nursery&
-        {
-            DCHECK_NOTNULL_F(nursery_);
-            return *nursery_;
-        }
+    [[nodiscard]] auto Nursery() const -> co::Nursery&
+    {
+      DCHECK_NOTNULL_F(nursery_);
+      return *nursery_;
+    }
 
-        [[nodiscard]] auto OnTerminate() -> co::Event& { return terminate_; }
+    [[nodiscard]] auto OnTerminate() -> co::Event& { return terminate_; }
 
-    private:
-        void HandleSignal(const std::error_code& error, int signal_number);
+  private:
+    void HandleSignal(const std::error_code& error, int signal_number);
 
-        asio::io_context io_;
-        asio::signal_set signals_;
-        co::Event terminate_;
-        co::Nursery* nursery_ { nullptr };
-    };
+    asio::io_context io_;
+    asio::signal_set signals_;
+    co::Event terminate_;
+    co::Nursery* nursery_ { nullptr };
+  };
 
-    class EventPump final : public Component {
-        OXYGEN_COMPONENT(EventPump)
-    public:
-        EventPump();
+  class EventPump final : public Component {
+    OXYGEN_COMPONENT(EventPump)
+  public:
+    EventPump();
 
-        //! Called as part of the main loop to check for pending platform
-        //! events, and if any are found, to remove and asynchronously process
-        //! __only__ the next one.
-        /*!
-         \note This method is not asynchronous and needs to complete quickly.
-               When at least one event is ready, it resumes `PumpEvent()`,
-               which will do the actual processing asynchronously. This
-               machinery is internal to the platform. Externally, interested
-               parties should await the awaitable appropriate for the event type
-               they are interested in.
-        */
-        OXYGEN_PLATFORM_API auto PollOne() -> bool;
+    //! Called as part of the main loop to check for pending platform
+    //! events, and if any are found, to remove and asynchronously process
+    //! __only__ the next one.
+    /*!
+     \note This method is not asynchronous and needs to complete quickly.
+           When at least one event is ready, it resumes `PumpEvent()`,
+           which will do the actual processing asynchronously. This
+           machinery is internal to the platform. Externally, interested
+           parties should await the awaitable appropriate for the event type
+           they are interested in.
+    */
+    OXYGEN_PLATFORM_API auto PollOne() -> bool;
 
-        //! Suspends the caller until a platform event is available.
-        /*!
-         When an event is ready, all suspended tasks are resumed and will have a
-         chance to receive it. The next event will not be pumped as long as any
-         of the tasks is still processing the current one. That is indicated by
-         the task acquiring the lock on the event source via `Lock()` right
-         after being resumed, and releasing it when it is done processing the
-         event.
+    //! Suspends the caller until a platform event is available.
+    /*!
+     When an event is ready, all suspended tasks are resumed and will have a
+     chance to receive it. The next event will not be pumped as long as any
+     of the tasks is still processing the current one. That is indicated by
+     the task acquiring the lock on the event source via `Lock()` right
+     after being resumed, and releasing it when it is done processing the
+     event.
 
-         This locking rule ensures that all tasks awaiting the event will have a
-         chance to process it before the next one is started, and that tasks are
-         scheduled in sequence, each one after the one before it fully
-         completes. This is useful for event filtering, event augmentation, and
-         for orchestrated processing of events.
+     This locking rule ensures that all tasks awaiting the event will have a
+     chance to process it before the next one is started, and that tasks are
+     scheduled in sequence, each one after the one before it fully
+     completes. This is useful for event filtering, event augmentation, and
+     for orchestrated processing of events.
 
-         Additionally, all tasks share the same copy of the event. Therefore, an
-         earlier task may mark the event as handled to instruct later tasks to
-         skip it.
-        */
-        auto NextEvent()
-        {
-            return event_source_.Next();
-        }
+     Additionally, all tasks share the same copy of the event. Therefore, an
+     earlier task may mark the event as handled to instruct later tasks to
+     skip it.
+    */
+    auto NextEvent() { return event_source_.Next(); }
 
-        //! Acquires exclusive access to the event source, preventing other
-        //! tasks from starting and pausing the event pump.
-        /*!
-         \return An awaitable semaphore lock guard (acquires the semaphore on
-         construction, and releases it on destruction).
+    //! Acquires exclusive access to the event source, preventing other
+    //! tasks from starting and pausing the event pump.
+    /*!
+     \return An awaitable semaphore lock guard (acquires the semaphore on
+     construction, and releases it on destruction).
 
-         \note It is important that the guard is assigned to a variable,
-               otherwise it will be returned as a temporary and the lock will be
-               released immediately.
-        */
-        auto Lock()
-        {
-            return event_source_.Lock();
-        }
+     \note It is important that the guard is assigned to a variable,
+           otherwise it will be returned as a temporary and the lock will be
+           released immediately.
+    */
+    auto Lock() { return event_source_.Lock(); }
 
-    private:
-        co::RepeatableShared<PlatformEvent> event_source_;
-        co::ParkingLot poll_;
-    };
+  private:
+    co::RepeatableShared<PlatformEvent> event_source_;
+    co::ParkingLot poll_;
+  };
 
-    class InputEvents final : public Component {
-        OXYGEN_COMPONENT(InputEvents)
-        OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
-    public:
-        auto ForRead() { return channel_.ForRead(); }
+  class InputEvents final : public Component {
+    OXYGEN_COMPONENT(InputEvents)
+    OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
+  public:
+    auto ForRead() { return channel_.ForRead(); }
 
-    protected:
-        void UpdateDependencies(const Composition& composition) override
-        {
-            async_ = &composition.GetComponent<AsyncOps>();
-            DCHECK_NOTNULL_F(async_);
-            event_pump_ = &composition.GetComponent<EventPump>();
-            DCHECK_NOTNULL_F(event_pump_);
-        }
+  protected:
+    void UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) override
+    {
+      async_ = &static_cast<AsyncOps&>(get_component(AsyncOps::ClassTypeId()));
+      event_pump_
+        = &static_cast<EventPump&>(get_component(EventPump::ClassTypeId()));
+    }
 
-    private:
-        friend Platform;
-        [[nodiscard]] auto ProcessPlatformEvents() const -> co::Co<>;
+  private:
+    friend Platform;
+    [[nodiscard]] auto ProcessPlatformEvents() const -> co::Co<>;
 
-        co::BroadcastChannel<InputEvent> channel_ { 8 };
-        // NOLINTNEXTLINE(*-avoid-const-or-ref-data-members) - lifetime is linked to channel_
-        co::BroadcastChannel<InputEvent>::Writer& channel_writer_ = channel_.ForWrite();
+    co::BroadcastChannel<InputEvent> channel_ { 8 };
+    // NOLINTNEXTLINE(*-avoid-const-or-ref-data-members) - lifetime is linked to
+    // channel_
+    co::BroadcastChannel<InputEvent>::Writer& channel_writer_
+      = channel_.ForWrite();
 
-        AsyncOps* async_ { nullptr };
-        EventPump* event_pump_ { nullptr };
-    };
+    AsyncOps* async_ { nullptr };
+    EventPump* event_pump_ { nullptr };
+  };
 
-    class WindowManager final : public Component {
-        OXYGEN_COMPONENT(WindowManager)
-        OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
-    public:
-        OXYGEN_PLATFORM_API auto MakeWindow(const window::Properties& props) -> std::weak_ptr<Window>;
+  class WindowManager final : public Component {
+    OXYGEN_COMPONENT(WindowManager)
+    OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
+  public:
+    OXYGEN_PLATFORM_API auto MakeWindow(const window::Properties& props)
+      -> std::weak_ptr<Window>;
 
-        [[nodiscard]] auto LastWindowClosed() -> co::Event& { return last_window_closed_; }
+    [[nodiscard]] auto LastWindowClosed() -> co::Event&
+    {
+      return last_window_closed_;
+    }
 
-    protected:
-        void UpdateDependencies(const Composition& composition) override
-        {
-            async_ = &composition.GetComponent<AsyncOps>();
-            DCHECK_NOTNULL_F(async_);
-            event_pump_ = &composition.GetComponent<EventPump>();
-            DCHECK_NOTNULL_F(event_pump_);
-        }
+  protected:
+    void UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) override
+    {
+      async_ = &static_cast<AsyncOps&>(get_component(AsyncOps::ClassTypeId()));
+      event_pump_
+        = &static_cast<EventPump&>(get_component(EventPump::ClassTypeId()));
+    }
 
-    private:
-        friend Platform;
-        [[nodiscard]] auto ProcessPlatformEvents() -> co::Co<>;
+  private:
+    friend Platform;
+    [[nodiscard]] auto ProcessPlatformEvents() -> co::Co<>;
 
-        [[nodiscard]] auto WindowFromId(WindowIdType window_id) const -> Window&;
+    [[nodiscard]] auto WindowFromId(WindowIdType window_id) const -> Window&;
 
-        AsyncOps* async_ { nullptr };
-        EventPump* event_pump_ { nullptr };
-        co::Event last_window_closed_;
+    AsyncOps* async_ { nullptr };
+    EventPump* event_pump_ { nullptr };
+    co::Event last_window_closed_;
 
-        std::vector<std::shared_ptr<Window>> windows_;
-    };
+    std::vector<std::shared_ptr<Window>> windows_;
+  };
 
 } // namespace platform
 
 class Platform final : public Composition, public co::LiveObject {
 public:
-    OXYGEN_PLATFORM_API explicit Platform(const PlatformConfig& config);
-    OXYGEN_PLATFORM_API ~Platform() override;
+  OXYGEN_PLATFORM_API explicit Platform(const PlatformConfig& config);
+  OXYGEN_PLATFORM_API ~Platform() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(Platform)
-    OXYGEN_MAKE_NON_MOVABLE(Platform)
+  OXYGEN_MAKE_NON_COPYABLE(Platform)
+  OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-    [[nodiscard]] OXYGEN_PLATFORM_API auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<>;
-    OXYGEN_PLATFORM_API void Run();
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
-    OXYGEN_PLATFORM_API void Stop();
+  [[nodiscard]] OXYGEN_PLATFORM_API auto ActivateAsync(
+    co::TaskStarted<> started = {}) -> co::Co<>;
+  OXYGEN_PLATFORM_API void Run();
+  [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
+  OXYGEN_PLATFORM_API void Stop();
 
-    auto Async() const -> platform::AsyncOps& { return GetComponent<platform::AsyncOps>(); }
-    auto Events() const -> platform::EventPump& { return GetComponent<platform::EventPump>(); }
-    auto Input() const -> platform::InputEvents& { return GetComponent<platform::InputEvents>(); }
-    auto Windows() const -> platform::WindowManager& { return GetComponent<platform::WindowManager>(); }
+  auto Async() const -> platform::AsyncOps&
+  {
+    return GetComponent<platform::AsyncOps>();
+  }
+  auto Events() const -> platform::EventPump&
+  {
+    return GetComponent<platform::EventPump>();
+  }
+  auto Input() const -> platform::InputEvents&
+  {
+    return GetComponent<platform::InputEvents>();
+  }
+  auto Windows() const -> platform::WindowManager&
+  {
+    return GetComponent<platform::WindowManager>();
+  }
 
-    static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
+  static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key)
+    -> platform::InputSlot;
 
 private:
-    void Compose(const PlatformConfig& config);
+  void Compose(const PlatformConfig& config);
 };
 
 #if 0

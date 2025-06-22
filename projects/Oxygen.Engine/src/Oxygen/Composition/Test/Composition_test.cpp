@@ -14,6 +14,8 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 
+using oxygen::TypeId;
+
 namespace {
 
 // Test Components
@@ -40,9 +42,11 @@ class DependentComponent final : public oxygen::Component {
   OXYGEN_TYPED(DependentComponent)
   OXYGEN_COMPONENT_REQUIRES(SimpleComponent)
 public:
-  void UpdateDependencies(const oxygen::Composition& composition) override
+  void UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) override
   {
-    simple_ = &composition.GetComponent<SimpleComponent>();
+    simple_ = &static_cast<SimpleComponent&>(
+      get_component(SimpleComponent::ClassTypeId()));
   }
 
   SimpleComponent* simple_ { nullptr };
@@ -188,10 +192,13 @@ class ComplexComponent final : public oxygen::Component {
   OXYGEN_TYPED(ComplexComponent)
   OXYGEN_COMPONENT_REQUIRES(SimpleComponent, DependentComponent)
 public:
-  void UpdateDependencies(const oxygen::Composition& composition) override
+  void UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) override
   {
-    simple_ = &composition.GetComponent<SimpleComponent>();
-    dependent_ = &composition.GetComponent<DependentComponent>();
+    simple_ = &static_cast<SimpleComponent&>(
+      get_component(SimpleComponent::ClassTypeId()));
+    dependent_ = &static_cast<DependentComponent&>(
+      get_component(DependentComponent::ClassTypeId()));
   }
 
   SimpleComponent* simple_ { nullptr };
@@ -381,9 +388,11 @@ public:
   {
     return std::make_unique<CloneableDependentComponent>(*this);
   }
-  void UpdateDependencies(const oxygen::Composition& composition) override
+  void UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) override
   {
-    dependency_ = &composition.GetComponent<CloneableComponent>();
+    dependency_ = &static_cast<CloneableComponent&>(
+      get_component(CloneableComponent::ClassTypeId()));
   }
 
   CloneableComponent* dependency_ { nullptr };
@@ -430,86 +439,6 @@ NOLINT_TEST_F(CompositionCloningTest, ClonedComponentsHaveUpdatedDependencies)
 
   const auto& dependent = clone->GetComponent<CloneableDependentComponent>();
   EXPECT_NE(dependent.dependency_, nullptr);
-}
-
-NOLINT_TEST_F(CompositionTest, IterateEmptyComposition)
-{
-  EXPECT_EQ(composition_.begin(), composition_.end());
-  EXPECT_EQ(composition_.cbegin(), composition_.cend());
-}
-
-NOLINT_TEST_F(CompositionTest, IterateSingleComponent)
-{
-  auto& simple = composition_.AddComponent<SimpleComponent>();
-
-  auto it = composition_.begin();
-  EXPECT_EQ(&*it, &simple);
-  ++it;
-  EXPECT_EQ(it, composition_.end());
-}
-
-NOLINT_TEST_F(CompositionTest, IterateMultipleComponents)
-{
-  [[maybe_unused]] auto& simple = composition_.AddComponent<SimpleComponent>();
-  [[maybe_unused]] auto& dependent
-    = composition_.AddComponent<DependentComponent>();
-  [[maybe_unused]] auto& cloneable
-    = composition_.AddComponent<CloneableComponent>();
-
-  int count = 0;
-  for (auto& component : composition_) {
-    EXPECT_TRUE((std::is_same_v<decltype(component), oxygen::Component&>));
-    ++count;
-  }
-  EXPECT_EQ(count, 3);
-}
-
-NOLINT_TEST_F(CompositionTest, IterateConstComposition)
-{
-  composition_.AddComponent<SimpleComponent>();
-  composition_.AddComponent<CloneableComponent>();
-
-  const auto& constComp = composition_;
-  int count = 0;
-  for (const auto& component : constComp) {
-    EXPECT_TRUE(
-      (std::is_same_v<decltype(component), const oxygen::Component&>));
-    ++count;
-  }
-  EXPECT_EQ(count, 2);
-}
-
-NOLINT_TEST_F(CompositionTest, IterateWithRanges)
-{
-  [[maybe_unused]] auto& simple = composition_.AddComponent<SimpleComponent>();
-  [[maybe_unused]] auto& dependent
-    = composition_.AddComponent<DependentComponent>();
-  [[maybe_unused]] auto& cloneable
-    = composition_.AddComponent<CloneableComponent>();
-
-  const auto view = composition_
-    | std::views::transform(
-      [](const oxygen::Component& comp) { return comp.GetTypeId(); });
-
-  std::vector<oxygen::TypeId> types {};
-  for (const auto type_id : view) {
-    types.push_back(type_id);
-  }
-
-  // Collect expected TypeIds
-  std::vector expected = { SimpleComponent::ClassTypeId(),
-    DependentComponent::ClassTypeId(), CloneableComponent::ClassTypeId() };
-
-  // Verify collected TypeIds match expected values
-  EXPECT_TRUE(std::ranges::equal(types, expected));
-
-  // Count components with specific TypeId
-  const auto simpleCount
-    = std::ranges::count_if(composition_, [](const oxygen::Component& c) {
-        return c.GetTypeId() == SimpleComponent::ClassTypeId();
-      });
-
-  EXPECT_EQ(simpleCount, 1);
 }
 
 NOLINT_TEST_F(CompositionTest, PrintComponents)

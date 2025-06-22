@@ -7,21 +7,23 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
-#  ifdef OXYGEN_COMP_STATIC
-#    define OXYGEN_COMP_API
+#  ifdef OXGN_COM_STATIC
+#    define OXGN_COM_API
 #  else
-#    ifdef OXYGEN_COMP_EXPORTS
-#      define OXYGEN_COMP_API __declspec(dllexport)
+#    ifdef OXGN_COM_EXPORTS
+#      define OXGN_COM_API __declspec(dllexport)
 #    else
-#      define OXYGEN_COMP_API __declspec(dllimport)
+#      define OXGN_COM_API __declspec(dllimport)
 #    endif
 #  endif
 #elif defined(__APPLE__) || defined(__linux__)
-#  ifdef OXYGEN_COMP_EXPORTS
-#    define OXYGEN_COMP_API __attribute__((visibility("default")))
+#  ifdef OXGN_COM_EXPORTS
+#    define OXGN_COM_API __attribute__((visibility("default")))
 #  else
-#    define OXYGEN_COMP_API
+#    define OXGN_COM_API
 #  endif
 #else
-#  define OXYGEN_COMP_API
+#  define OXGN_COM_API
 #endif
+
+#define OXGN_COM_NDAPI [[nodiscard]] OXGN_COM_API

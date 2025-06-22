@@ -7,162 +7,74 @@
 #pragma once
 
 #include <concepts>
-#include <mutex>
+#include <shared_mutex>
 #include <span>
-#include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 
-class ComponentError final : public std::runtime_error {
-  using std::runtime_error::runtime_error;
-};
-
-class Composition;
-
-class Component : public virtual Object {
-public:
-  OXYGEN_COMP_API ~Component() override = default;
-
-  // All components should implement proper copy and move semantics to handle
-  // copying and moving as appropriate.
-  OXYGEN_COMP_API Component(const Component&) = default;
-  OXYGEN_COMP_API auto operator=(const Component&) -> Component& = default;
-  OXYGEN_COMP_API Component(Component&&) = default;
-  OXYGEN_COMP_API auto operator=(Component&&) -> Component& = default;
-
-  [[nodiscard]] virtual auto IsCloneable() const noexcept -> bool
-  {
-    return false;
-  }
-
-  //! Create a clone of the component.
-  /*!
-   \note The clone will not have any dependencies updated until a call to its
-   UpdateDependencies method is made.
-  */
-  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<Component>
-  {
-    throw ComponentError("Component is not cloneable");
-  }
-
-protected:
-  OXYGEN_COMP_API Component() = default;
-  OXYGEN_COMP_API virtual void UpdateDependencies(
-    [[maybe_unused]] const Composition& composition)
-  {
-  }
-
-private:
-  friend class Composition;
-  static constexpr auto ClassDependencies() -> std::span<const TypeId>
-  {
-    return {};
-  }
-  [[nodiscard]] virtual auto HasDependencies() const -> bool { return false; }
-  [[nodiscard]] virtual auto Dependencies() const -> std::span<const TypeId>
-  {
-    return ClassDependencies();
-  }
-};
-
-// Non-member swap (move semantics implementation in derived classes)
-inline void swap(Component& /*lhs*/, Component& /*rhs*/) noexcept { }
-
-//! Specifies the requirements on a type to be considered as a Component.
-template <typename T>
-concept IsComponent = std::is_base_of_v<Component, T>;
+// NOTE: The Composition class is not thread-safe during cloning, shallow
+// copying, moving or assignment. The standard C++ practice is for the caller to
+// ensure exclusive access to the source object being copied (e.g., by
+// externally synchronizing access, or by not sharing the object across threads
+// during copy).
 
 class Composition : public virtual Object {
   OXYGEN_TYPED(Composition)
 
-  struct ComponentManager;
-  // Implementation of the component storage, wrapped in a shared_ptr so we
-  // can share it when shallow copying the composition.
-  std::shared_ptr<ComponentManager> pimpl_;
+  // Single storage for components - optimal for <8 components
+  std::vector<std::shared_ptr<Component>> components_;
 
   // Allow access to components_ from CloneableMixin to make a deep copy.
   template <typename T> friend class CloneableMixin;
 
 public:
-  OXYGEN_COMP_API ~Composition() noexcept override;
+  OXGN_COM_API ~Composition() noexcept override;
 
   //! Copy constructor, make a shallow copy of the composition.
-  OXYGEN_COMP_API Composition(const Composition& other);
+  OXGN_COM_API Composition(const Composition& other);
 
   //! Copy assignment operator, make a shallow copy of the composition.
-  OXYGEN_COMP_API auto operator=(const Composition& rhs) -> Composition&;
+  OXGN_COM_API auto operator=(const Composition& rhs) -> Composition&;
 
   //! Moves the composition to the new object and leaves the original in an
   //! empty state.
-  OXYGEN_COMP_API Composition(Composition&& other) noexcept;
+  OXGN_COM_API Composition(Composition&& other) noexcept;
 
   //! Moves the composition to the new object and leaves the original in an
   //! empty state.
-  OXYGEN_COMP_API auto operator=(Composition&& rhs) noexcept -> Composition&;
+  OXGN_COM_API auto operator=(Composition&& rhs) noexcept -> Composition&;
 
   template <typename T> [[nodiscard]] auto HasComponent() const -> bool
   {
+    std::shared_lock lock(mutex_);
     return HasComponentImpl(T::ClassTypeId());
   }
 
   template <typename T> [[nodiscard]] auto GetComponent() const -> T&
   {
+    std::shared_lock lock(mutex_);
     return static_cast<T&>(GetComponentImpl(T::ClassTypeId()));
   }
 
-  template <typename ValueType> class OXYGEN_COMP_API Iterator {
-  public:
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = ValueType;
-    using difference_type = std::ptrdiff_t;
-    using pointer = ValueType*;
-    using reference = ValueType&;
-
-    Iterator() = default;
-
-    auto operator*() const -> reference;
-    auto operator->() const -> pointer;
-    auto operator++() -> Iterator&;
-    auto operator++(int) -> Iterator;
-    auto operator==(const Iterator& rhs) const -> bool;
-    auto operator!=(const Iterator& rhs) const -> bool;
-
-  private:
-    friend class Composition;
-    Iterator(ComponentManager* mgr, const size_t pos)
-      : mgr_(mgr)
-      , pos_(pos)
-    {
-    }
-    ComponentManager* mgr_;
-    size_t pos_;
-  };
-
-  using iterator = Iterator<Component>;
-  using const_iterator = Iterator<const Component>;
-
-  OXYGEN_COMP_API virtual auto begin() -> iterator;
-  OXYGEN_COMP_API virtual auto end() -> iterator;
-  OXYGEN_COMP_API virtual auto begin() const -> const_iterator;
-  OXYGEN_COMP_API virtual auto end() const -> const_iterator;
-  OXYGEN_COMP_API virtual auto cbegin() const -> const_iterator;
-  OXYGEN_COMP_API virtual auto cend() const -> const_iterator;
-
-  OXYGEN_COMP_API void PrintComponents(std::ostream& out) const;
+  OXGN_COM_API auto PrintComponents(std::ostream& out) const -> void;
 
 protected:
-  OXYGEN_COMP_API explicit Composition(std::size_t initial_capacity = 4);
+  OXGN_COM_API explicit Composition(std::size_t initial_capacity = 4);
 
   template <IsComponent T, typename... Args>
   auto AddComponent(Args&&... args) -> T&
   {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
 
     auto id = T::ClassTypeId();
-    if (HasComponent<T>()) {
+    if (HasComponentImpl(T::ClassTypeId())) {
       throw ComponentError("Component already exists");
     }
 
@@ -171,18 +83,21 @@ protected:
       EnsureDependencies(T::ClassDependencies());
     }
 
-    auto component = std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-    auto& component_ref
-      = static_cast<T&>(AddComponentImpl(std::move(component)));
-    if (!T::ClassDependencies().empty()) {
-      component_ref.UpdateDependencies(*this);
+    auto component = std::make_shared<T>(std::forward<Args>(args)...);
+    if (component->HasDependencies()) {
+      component->UpdateDependencies([this](TypeId id) -> Component& {
+        // Nollocking needed here
+        return GetComponentImpl(id);
+      });
     }
-    return component_ref;
+
+    auto& component_ref = AddComponentImpl(std::move(component));
+    return static_cast<T&>(component_ref);
   }
 
-  template <typename T> void RemoveComponent()
+  template <typename T> auto RemoveComponent() -> void
   {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
 
     auto id = T::ClassTypeId();
     if (!ExpectExistingComponent(id)) {
@@ -192,6 +107,7 @@ protected:
       throw ComponentError(
         "Cannot remove component; other components depend on it");
     }
+
     RemoveComponentImpl(id);
   }
 
@@ -199,54 +115,52 @@ protected:
   auto ReplaceComponent(Args&&... args) -> NewT&
   {
     {
-      std::lock_guard lock(mutex_);
+      std::unique_lock lock(mutex_);
 
       if (auto old_id = OldT::ClassTypeId(); ExpectExistingComponent(old_id)) {
         if (IsComponentRequired(old_id) && !std::is_same_v<OldT, NewT>) {
           throw ComponentError("Cannot replace component with a different "
                                "type; other components depend on it");
         }
-        auto component
-          = std::unique_ptr<NewT>(new NewT(std::forward<Args>(args)...));
-        auto& component_ref = static_cast<NewT&>(
-          ReplaceComponentImpl(old_id, std::move(component)));
-        if (!NewT::ClassDependencies().empty()) {
-          component_ref.UpdateDependencies(*this);
+        auto component = std::make_shared<NewT>(std::forward<Args>(args)...);
+        if (component->HasDependencies()) {
+          component->UpdateDependencies([this](TypeId id) -> Component& {
+            // Nollocking needed here
+            return GetComponentImpl(id);
+          });
         }
-        return component_ref;
+
+        auto& component_ref
+          = ReplaceComponentImpl(old_id, std::move(component));
+        return static_cast<NewT&>(component_ref);
       }
     }
 
     return AddComponent<NewT>(std::forward<Args>(args)...);
   }
 
-  OXYGEN_COMP_API auto HasComponents() const noexcept -> bool;
-  OXYGEN_COMP_API void DestroyComponents() noexcept;
+  OXGN_COM_API auto HasComponents() const noexcept -> bool;
 
 private:
-  OXYGEN_COMP_API static void ValidateDependencies(
-    TypeId comp_id, std::span<const TypeId> dependencies);
-  OXYGEN_COMP_API void EnsureDependencies(
-    std::span<const TypeId> dependencies) const;
-  [[nodiscard]] OXYGEN_COMP_API auto ExpectExistingComponent(TypeId id) const
-    -> bool;
-  [[nodiscard]] OXYGEN_COMP_API auto IsComponentRequired(TypeId id) const
-    -> bool;
-  [[nodiscard]] OXYGEN_COMP_API auto HasComponentImpl(TypeId id) const -> bool;
-  [[nodiscard]] OXYGEN_COMP_API auto AddComponentImpl(
-    std::unique_ptr<Component> component) const -> Component&;
-  [[nodiscard]] OXYGEN_COMP_API auto ReplaceComponentImpl(TypeId old_id,
-    std::unique_ptr<Component> new_component) const -> Component&;
-  [[nodiscard]] OXYGEN_COMP_API auto GetComponentImpl(TypeId id) const
-    -> Component&;
-  OXYGEN_COMP_API void RemoveComponentImpl(
-    TypeId id, bool update_indices = true) const;
-  OXYGEN_COMP_API void DeepCopyComponentsFrom(const Composition& other);
+  OXGN_COM_API auto DestroyComponents() noexcept -> void;
 
-  mutable std::mutex mutex_;
+  OXGN_COM_API static auto ValidateDependencies(
+    TypeId comp_id, std::span<const TypeId> dependencies) -> void;
+  OXGN_COM_API auto EnsureDependencies(
+    std::span<const TypeId> dependencies) const -> void;
+  OXGN_COM_NDAPI auto ExpectExistingComponent(TypeId id) const -> bool;
+  OXGN_COM_NDAPI auto IsComponentRequired(TypeId id) const -> bool;
+  OXGN_COM_NDAPI auto HasComponentImpl(TypeId id) const -> bool;
+  OXGN_COM_NDAPI auto AddComponentImpl(std::shared_ptr<Component> component)
+    -> Component&;
+  OXGN_COM_NDAPI auto ReplaceComponentImpl(
+    TypeId old_id, std::shared_ptr<Component> new_component) -> Component&;
+  OXGN_COM_NDAPI auto GetComponentImpl(TypeId id) const -> Component&;
+  OXGN_COM_API auto RemoveComponentImpl(TypeId id) -> void;
+  OXGN_COM_API auto DeepCopyComponentsFrom(const Composition& other) -> void;
+
+  mutable std::shared_mutex mutex_;
 };
-static_assert(std::forward_iterator<Composition::Iterator<Component>>);
-static_assert(std::ranges::common_range<Composition>);
 
 template <typename T>
 concept IsComposition = std::derived_from<T, Composition>;

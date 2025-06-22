@@ -17,9 +17,9 @@ namespace oxygen {
 class ObjectMetaData final : public Component {
   OXYGEN_COMPONENT(ObjectMetaData)
 public:
-  OXYGEN_COMP_API explicit ObjectMetaData(const std::string_view name);
+  OXGN_COM_API explicit ObjectMetaData(std::string_view name);
 
-  OXYGEN_COMP_API ~ObjectMetaData() override;
+  OXGN_COM_API ~ObjectMetaData() override;
 
   OXYGEN_DEFAULT_COPYABLE(ObjectMetaData)
   OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
@@ -29,7 +29,7 @@ public:
     return name_;
   }
 
-  void SetName(const std::string_view name) noexcept
+  auto SetName(const std::string_view name) noexcept -> void
   {
     try {
       name_ = name;

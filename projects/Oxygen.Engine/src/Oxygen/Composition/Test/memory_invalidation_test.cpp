@@ -10,6 +10,8 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 
+using oxygen::TypeId;
+
 namespace {
 
 //=== Test Components ===-----------------------------------------------------//
@@ -31,9 +33,11 @@ class DependentComponent final : public oxygen::Component {
   OXYGEN_TYPED(DependentComponent)
   OXYGEN_COMPONENT_REQUIRES(BaseComponent)
 public:
-  void UpdateDependencies(const oxygen::Composition& composition) override
+  void UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) override
   {
-    base_ptr_ = &composition.GetComponent<BaseComponent>();
+    base_ptr_ = &static_cast<BaseComponent&>(
+      get_component(BaseComponent::ClassTypeId()));
   }
 
   [[nodiscard]] auto GetBaseValue() const -> int { return base_ptr_->Value(); }
