@@ -58,8 +58,7 @@ class Scene;
  @note SceneNode is the primary user-facing API for scene graph operations. Use
  Scene methods for creating, destroying, or re-parenting nodes.
 */
-class SceneNode : public Object,
-                  public Resource<resources::kSceneNode, NodeHandle> {
+class SceneNode : public Object, public Resource<SceneNode, ResourceTypeList> {
   OXYGEN_TYPED(SceneNode)
 
 public:
@@ -113,6 +112,13 @@ public:
   OXGN_SCN_NDAPI auto HasParent() noexcept -> bool;
   OXGN_SCN_NDAPI auto HasChildren() noexcept -> bool;
   OXGN_SCN_NDAPI auto IsRoot() noexcept -> bool;
+
+  //=== NodeHandle Access ===-------------------------------------------------//
+
+  auto GetHandle() const noexcept -> const NodeHandle&
+  {
+    return static_cast<const NodeHandle&>(Resource::GetHandle());
+  }
 
   //=== SceneNodeImpl Access ===----------------------------------------------//
 
