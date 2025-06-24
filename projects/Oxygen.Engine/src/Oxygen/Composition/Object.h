@@ -10,6 +10,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Composition/api_export.h>
+#include <string_view>
 
 namespace oxygen {
 
@@ -23,8 +24,12 @@ public:
   OXYGEN_DEFAULT_COPYABLE(Object)
   OXYGEN_DEFAULT_MOVABLE(Object)
 
-  [[nodiscard]] virtual auto GetTypeId() const -> TypeId = 0;
-  [[nodiscard]] virtual auto GetTypeName() const -> const char* = 0;
+  [[nodiscard]] virtual auto GetTypeId() const noexcept -> TypeId = 0;
+  [[nodiscard]] virtual auto GetTypeName() const noexcept -> std::string_view
+    = 0;
+  [[nodiscard]] virtual auto GetTypeNamePretty() const noexcept
+    -> std::string_view
+    = 0;
 };
 
 } // namespace oxygen
@@ -39,18 +44,34 @@ public:
 
 #define OXYGEN_TYPED(arg_type)                                                 \
 public:                                                                        \
-  inline static constexpr auto ClassTypeName()                                 \
+  inline static constexpr auto ClassTypeName() noexcept                        \
   {                                                                            \
     return OXYGEN_TYPE_NAME_IMPL();                                            \
   }                                                                            \
-  inline static auto ClassTypeId() -> ::oxygen::TypeId                         \
+  inline static auto ClassTypeNamePretty() noexcept -> std::string_view        \
+  {                                                                            \
+    static std::string pretty {};                                              \
+    if (pretty.empty()) {                                                      \
+      pretty                                                                   \
+        = ::oxygen::TypeRegistry::ExtractQualifiedClassName(ClassTypeName());  \
+    }                                                                          \
+    return pretty;                                                             \
+  }                                                                            \
+  inline static auto ClassTypeId() noexcept -> ::oxygen::TypeId                \
   {                                                                            \
     static ::oxygen::TypeId typeId                                             \
       = ::oxygen::TypeRegistry::Get().RegisterType(arg_type::ClassTypeName()); \
     return typeId;                                                             \
   }                                                                            \
-  auto GetTypeName() const -> const char* override { return ClassTypeName(); } \
-  inline auto GetTypeId() const -> ::oxygen::TypeId override                   \
+  auto GetTypeName() const noexcept -> std::string_view override               \
+  {                                                                            \
+    return ClassTypeName();                                                    \
+  }                                                                            \
+  auto GetTypeNamePretty() const noexcept -> std::string_view override         \
+  {                                                                            \
+    return ClassTypeNamePretty();                                              \
+  }                                                                            \
+  inline auto GetTypeId() const noexcept -> ::oxygen::TypeId override          \
   {                                                                            \
     return ClassTypeId();                                                      \
   }                                                                            \

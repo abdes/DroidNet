@@ -77,16 +77,18 @@ public:
     return Get().GetPoolImpl<PooledComponentType>();
   }
 
-  //! Clear all components from all pools
+  //! Clear all components from all pools, invalidating all handles.
   /*!
-   Removes all components from all existing pools, invalidating all handles.
-   This is primarily intended for testing scenarios where clean state is needed
-   between test cases.
+   Under normal circumstances, the lifecycle of components in the pools is
+   managed by the owning compositions. There is no need to call this method.
+   However, when recovering from critical errors, it may be necessary to put the
+   global pools and the registry in a clean state. This is the only reasonable
+   use case for calling this method.
 
    @note Thread-safe operation with exclusive locking
    @warning This invalidates all existing component handles across all pools
    */
-  static void ClearAllPools() { Get().ClearAllPoolsImpl(); }
+  static auto ForceClearAllPools() -> void { Get().ClearAllPoolsImpl(); }
 
 private:
   //! Internal pool access implementation
@@ -102,8 +104,7 @@ private:
   auto GetPoolImpl() -> ComponentPool<PooledComponentType>&
   {
     std::lock_guard lock(pools_mutex_);
-    auto resource_type = GetResourceTypeId<PooledComponentType,
-      typename PooledComponentType::ResourceTypeList>();
+    auto resource_type = PooledComponentType::GetResourceType();
     auto it = pools_.find(resource_type);
 
     if (it == pools_.end()) {
@@ -117,7 +118,7 @@ private:
                         ptr);
                     }),
           [](void* ptr) {
-            static_cast<ComponentPool<PooledComponentType>*>(ptr)->Clear();
+            static_cast<ComponentPool<PooledComponentType>*>(ptr)->ForceClear();
           }));
       return *pool_ptr;
     }
@@ -130,7 +131,7 @@ private:
 
    @note Uses exclusive locking to ensure thread safety
    */
-  void ClearAllPoolsImpl()
+  auto ClearAllPoolsImpl() -> void
   {
     std::lock_guard lock(pools_mutex_);
     for (auto& [type_id, pool_entry] : pools_) {

@@ -8,10 +8,13 @@
 
 #include <shared_mutex>
 #include <span>
+#include <utility>
 
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/IComponentPoolUntyped.h>
 
 namespace oxygen {
 
@@ -56,7 +59,8 @@ namespace oxygen {
  @see ResourceTable for underlying sparse/dense storage implementation
  @see ComponentPoolRegistry for global pool management
 */
-template <typename PooledComponentType> class ComponentPool {
+template <IsPooledComponent PooledComponentType>
+class ComponentPool : public IComponentPoolUntyped {
 public:
   using Handle = ResourceHandle;
 
@@ -66,9 +70,7 @@ public:
    @param reserve_count Initial capacity for the pool
    */
   explicit ComponentPool(std::size_t reserve_count = 1024)
-    : table_(GetResourceTypeId<PooledComponentType,
-               typename PooledComponentType::ResourceTypeList>(),
-        reserve_count)
+    : table_(PooledComponentType::GetResourceType(), reserve_count)
   {
   }
 
@@ -95,10 +97,25 @@ public:
 
    @note Thread-safe operation with exclusive locking
    */
-  auto Deallocate(Handle handle) -> void
+  auto Deallocate(Handle handle) noexcept -> size_t override
   {
     std::lock_guard lock(mutex_);
-    table_.Erase(handle);
+    try {
+      auto erased = table_.Erase(handle);
+      if (erased != 1) {
+        LOG_F(WARNING, "Component({}) not removed from table",
+          oxygen::to_string_compact(handle));
+      }
+      return erased;
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "exception when deallocating component({}): {}",
+        oxygen::to_string_compact(handle), ex.what());
+    } catch (...) {
+      // Any exception is non-recoverable, log and return 0
+      LOG_F(ERROR, "unknown exception when deallocating component({})",
+        oxygen::to_string_compact(handle));
+    }
+    return 0;
   }
 
   //! Thread-safe component access - returns nullptr if handle is invalid
@@ -110,8 +127,7 @@ public:
    */
   auto Get(Handle handle) noexcept -> PooledComponentType*
   {
-    std::shared_lock lock(mutex_);
-    return table_.Contains(handle) ? &table_.ItemAt(handle) : nullptr;
+    return const_cast<PooledComponentType*>(std::as_const(*this).Get(handle));
   }
 
   //! Thread-safe const component access
@@ -124,7 +140,17 @@ public:
   auto Get(Handle handle) const noexcept -> const PooledComponentType*
   {
     std::shared_lock lock(mutex_);
-    return table_.Contains(handle) ? &table_.ItemAt(handle) : nullptr;
+    try {
+      return &table_.ItemAt(handle);
+    } catch (const std::out_of_range&) {
+      return nullptr;
+    } catch (...) {
+      // Any other exception is unexpected, return nullptr
+      LOG_F(ERROR,
+        "Unexpected exception when getting a component for handle: {}",
+        oxygen::to_string_compact(handle));
+      return nullptr;
+    }
   }
 
   //! Leverage ResourceTable's defragmentation with thread safety
@@ -215,18 +241,33 @@ public:
     return table_.GetItemType();
   }
 
-  //! Clear all components from the pool
+  //! Clear all components from the pool, invalidating all handles.
   /*!
-   Removes all components from the pool, invalidating all handles.
-   This operation is thread-safe and useful for cleanup between tests
-   or when resetting the pool state.
+   Under normal circumstances, the lifecycle of components in the pool is
+   managed by the owning compositions. There is no need to call this method.
+   However, when recovering from critical errors, it may be necessary to put the
+   global pools in a clean state. This is the only reasonable use case for
+   calling this method.
 
    @note Thread-safe operation with exclusive locking
    */
-  auto Clear() noexcept -> void
+  auto ForceClear() noexcept -> void
   {
     std::lock_guard lock(mutex_);
     table_.Clear();
+  }
+
+  // Type-erased access for pooled lookup
+  auto GetUntyped(ResourceHandle handle) noexcept -> Component* override
+  {
+    return static_cast<Component*>(Get(handle));
+  }
+
+  // Type-erased access for pooled lookup
+  auto GetUntyped(ResourceHandle handle) const noexcept
+    -> const Component* override
+  {
+    return static_cast<const Component*>(Get(handle));
   }
 
 private:

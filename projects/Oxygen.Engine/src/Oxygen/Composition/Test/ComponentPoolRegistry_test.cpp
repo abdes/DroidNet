@@ -24,25 +24,23 @@ namespace {
 //=== Test Component Types ===------------------------------------------------//
 
 // Forward declarations for test resource types
-class TestPoolRegistryTransformComponent;
-class TestPoolRegistryRenderComponent;
-class TestPoolRegistryPhysicsComponent;
-class TestPoolRegistryCustomSizeComponent;
+class TestTransformComponent;
+class TestRenderComponent;
+class TestPhysicsComponent;
+class TestCustomSizeComponent;
 
 // Test ResourceTypeList for ComponentPoolRegistry unit tests
 using TestPoolRegistryResourceTypeList
-  = oxygen::TypeList<TestPoolRegistryTransformComponent,
-    TestPoolRegistryRenderComponent, TestPoolRegistryPhysicsComponent,
-    TestPoolRegistryCustomSizeComponent>;
+  = oxygen::TypeList<TestTransformComponent, TestRenderComponent,
+    TestPhysicsComponent, TestCustomSizeComponent>;
 
 //! Test pooled component with basic functionality
-class TestPoolRegistryTransformComponent
-  : public oxygen::Resource<TestPoolRegistryTransformComponent,
-      TestPoolRegistryResourceTypeList> {
-public:
-  using ResourceTypeList = TestPoolRegistryResourceTypeList;
+class TestTransformComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(
+    TestTransformComponent, TestPoolRegistryResourceTypeList);
 
-  explicit TestPoolRegistryTransformComponent(int x = 0, int y = 0, int z = 0)
+public:
+  explicit TestTransformComponent(int x = 0, int y = 0, int z = 0)
     : x_(x)
     , y_(y)
     , z_(z)
@@ -65,13 +63,12 @@ private:
 };
 
 //! Test pooled component without custom pool size
-class TestPoolRegistryRenderComponent
-  : public oxygen::Resource<TestPoolRegistryRenderComponent,
-      TestPoolRegistryResourceTypeList> {
-public:
-  using ResourceTypeList = TestPoolRegistryResourceTypeList;
+class TestRenderComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(
+    TestRenderComponent, TestPoolRegistryResourceTypeList);
 
-  explicit TestPoolRegistryRenderComponent(std::string name = "default")
+public:
+  explicit TestRenderComponent(std::string name = "default")
     : name_(std::move(name))
   {
   }
@@ -84,13 +81,12 @@ private:
 };
 
 //! Test pooled component for threading tests
-class TestPoolRegistryPhysicsComponent
-  : public oxygen::Resource<TestPoolRegistryPhysicsComponent,
-      TestPoolRegistryResourceTypeList> {
-public:
-  using ResourceTypeList = TestPoolRegistryResourceTypeList;
+class TestPhysicsComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(
+    TestPhysicsComponent, TestPoolRegistryResourceTypeList);
 
-  explicit TestPoolRegistryPhysicsComponent(double mass = 1.0)
+public:
+  explicit TestPhysicsComponent(double mass = 1.0)
     : mass_(mass)
     , counter_(0)
   {
@@ -106,14 +102,14 @@ private:
 };
 
 //! Test pooled component with custom expected pool size
-class TestPoolRegistryCustomSizeComponent
-  : public oxygen::Resource<TestPoolRegistryCustomSizeComponent,
-      TestPoolRegistryResourceTypeList> {
+class TestCustomSizeComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(
+    TestCustomSizeComponent, TestPoolRegistryResourceTypeList);
+
 public:
-  using ResourceTypeList = TestPoolRegistryResourceTypeList;
   static constexpr std::size_t kExpectedPoolSize = 2048;
 
-  explicit TestPoolRegistryCustomSizeComponent(int value = 42)
+  explicit TestCustomSizeComponent(int value = 42)
     : value_(value)
   {
   }
@@ -137,22 +133,12 @@ protected:
   {
     // Get registry instance for testing
     registry_ = &oxygen::ComponentPoolRegistry::Get();
-
-    // Clear all existing pools to ensure clean state for each test
-    ClearAllPools();
   }
 
   void TearDown() override
   {
     // Clean up after each test to prevent state leakage
-    ClearAllPools();
-  }
-
-private:
-  void ClearAllPools()
-  {
-    // Use the registry's built-in clear functionality
-    oxygen::ComponentPoolRegistry::ClearAllPools();
+    registry_->ForceClearAllPools();
   }
 
   oxygen::ComponentPoolRegistry* registry_;
@@ -162,18 +148,8 @@ private:
  Threading fixture for ComponentPoolRegistry concurrency tests.
  Tests thread safety of registry operations and pool access.
 */
-class ComponentPoolRegistryThreadingTest : public ::testing::Test {
-protected:
-  void SetUp() override
-  {
-    registry_ = &oxygen::ComponentPoolRegistry::Get();
-    oxygen::ComponentPoolRegistry::ClearAllPools();
-  }
-
-  void TearDown() override { oxygen::ComponentPoolRegistry::ClearAllPools(); }
-
-  oxygen::ComponentPoolRegistry* registry_;
-};
+class ComponentPoolRegistryThreadingTest
+  : public ComponentPoolRegistryBasicTest { };
 
 //=== Singleton and Basic Access Tests ===------------------------------------//
 
@@ -202,12 +178,12 @@ NOLINT_TEST_F(ComponentPoolRegistryBasicTest, PoolAccess_DifferentTypes)
   // (No setup needed)
 
   // Act
-  auto& transform_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
-  auto& render_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryRenderComponent>();
-  auto& physics_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryPhysicsComponent>();
+  auto& transform_pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
+  auto& render_pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestRenderComponent>();
+  auto& physics_pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestPhysicsComponent>();
 
   // Assert
   // Different component types should get different pool instances
@@ -230,12 +206,12 @@ NOLINT_TEST_F(
   // (No setup needed)
 
   // Act
-  auto& pool1 = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
-  auto& pool2 = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
-  auto& pool3 = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
+  auto& pool1
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
+  auto& pool2
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
+  auto& pool3
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
 
   // Assert
   // The same pool instance should be returned for multiple accesses
@@ -253,8 +229,8 @@ NOLINT_TEST_F(
   using ::testing::NotNull;
 
   // Arrange
-  auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
+  auto& pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
 
   // Act
   auto handle = pool.Allocate(10, 20, 30);
@@ -285,10 +261,10 @@ NOLINT_TEST_F(
   using ::testing::NotNull;
 
   // Arrange
-  auto& transform_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
-  auto& render_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryRenderComponent>();
+  auto& transform_pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
+  auto& render_pool
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestRenderComponent>();
 
   // Act
   auto transform_handle = transform_pool.Allocate(1, 2, 3);
@@ -325,7 +301,7 @@ NOLINT_TEST_F(
 
   // Arrange
   auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryCustomSizeComponent>();
+    TestCustomSizeComponent>();
 
   // Act
   auto handle = pool.Allocate(123);
@@ -357,7 +333,7 @@ NOLINT_TEST_F(
   for (int i = 0; i < kNumThreads; ++i) {
     threads.emplace_back([&, i]() {
       auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-        TestPoolRegistryPhysicsComponent>();
+        TestPhysicsComponent>();
 
       for (int j = 0; j < kOperationsPerThread; ++j) {
         // Allocate component
@@ -403,7 +379,7 @@ NOLINT_TEST_F(
       if (i % 3 == 0) {
         // Transform pool
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-          TestPoolRegistryTransformComponent>();
+          TestTransformComponent>();
         auto handle = pool.Allocate(i, i + 1, i + 2);
         if (auto* component = pool.Get(handle)) {
           component->SetPosition(i * 10, i * 10 + 1, i * 10 + 2);
@@ -413,7 +389,7 @@ NOLINT_TEST_F(
       } else if (i % 3 == 1) {
         // Render pool
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-          TestPoolRegistryRenderComponent>();
+          TestRenderComponent>();
         auto handle = pool.Allocate("thread_" + std::to_string(i));
         if (auto* component = pool.Get(handle)) {
           component->SetName("modified_" + std::to_string(i));
@@ -423,7 +399,7 @@ NOLINT_TEST_F(
       } else {
         // Physics pool
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-          TestPoolRegistryPhysicsComponent>();
+          TestPhysicsComponent>();
         auto handle = pool.Allocate(static_cast<double>(i));
         if (auto* component = pool.Get(handle)) {
           component->IncrementCounter();
@@ -482,15 +458,15 @@ NOLINT_TEST_F(
   //! Rapidly create and access pools
   for (int i = 0; i < 100; ++i) {
     auto& transform_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-      TestPoolRegistryTransformComponent>();
-    auto& render_pool = oxygen::ComponentPoolRegistry::GetComponentPool<
-      TestPoolRegistryRenderComponent>();
+      TestTransformComponent>();
+    auto& render_pool
+      = oxygen::ComponentPoolRegistry::GetComponentPool<TestRenderComponent>();
 
     // Verify pools are consistently the same
     auto& transform_pool2 = oxygen::ComponentPoolRegistry::GetComponentPool<
-      TestPoolRegistryTransformComponent>();
-    auto& render_pool2 = oxygen::ComponentPoolRegistry::GetComponentPool<
-      TestPoolRegistryRenderComponent>();
+      TestTransformComponent>();
+    auto& render_pool2
+      = oxygen::ComponentPoolRegistry::GetComponentPool<TestRenderComponent>();
 
     EXPECT_THAT(
       std::addressof(transform_pool), Eq(std::addressof(transform_pool2)));
@@ -505,16 +481,16 @@ NOLINT_TEST_F(ComponentPoolRegistryBasicTest, EdgeCases_PoolStatePersistence)
   using ::testing::NotNull;
 
   // Arrange & Act
-  auto& pool1 = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
+  auto& pool1
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
   auto initial_size = pool1.Size(); // Get current size instead of assuming 0
   auto handle = pool1.Allocate(100, 200, 300);
 
   EXPECT_THAT(pool1.Size(), Eq(initial_size + 1));
 
   // Act
-  auto& pool2 = oxygen::ComponentPoolRegistry::GetComponentPool<
-    TestPoolRegistryTransformComponent>();
+  auto& pool2
+    = oxygen::ComponentPoolRegistry::GetComponentPool<TestTransformComponent>();
   auto* component = pool2.Get(handle);
   // Assert
   // Component should persist across pool accesses

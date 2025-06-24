@@ -7,6 +7,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <span>
 #include <stdexcept>
 
@@ -31,6 +32,18 @@ public:
   OXYGEN_DEFAULT_COPYABLE(Component)
   OXYGEN_DEFAULT_MOVABLE(Component)
 
+  //== Default Component Dependencies ===-------------------------------------//
+
+  [[nodiscard]] virtual auto HasDependencies() const noexcept -> bool
+  {
+    return false;
+  }
+  [[nodiscard]] virtual auto Dependencies() const noexcept
+    -> std::span<const TypeId>
+  {
+    return {};
+  }
+
   [[nodiscard]] virtual auto IsCloneable() const noexcept -> bool
   {
     return false;
@@ -47,23 +60,12 @@ public:
   }
 
 protected:
+  friend class Composition;
   OXGN_COM_API Component() = default;
   OXGN_COM_API virtual auto UpdateDependencies(
-    const std::function<Component&(TypeId)>& /*get_component*/) -> void
+    const std::function<Component&(TypeId)>& /*get_component*/) noexcept -> void
   {
     // Default: do nothing
-  }
-
-private:
-  friend class Composition;
-  static constexpr auto ClassDependencies() -> std::span<const TypeId>
-  {
-    return {};
-  }
-  [[nodiscard]] virtual auto HasDependencies() const -> bool { return false; }
-  [[nodiscard]] virtual auto Dependencies() const -> std::span<const TypeId>
-  {
-    return ClassDependencies();
   }
 };
 
@@ -74,4 +76,19 @@ inline auto swap(Component& /*lhs*/, Component& /*rhs*/) noexcept -> void { }
 template <typename T>
 concept IsComponent = std::is_base_of_v<Component, T>;
 
+//! Concept to check if a Component is a pooled component.
+template <typename T>
+concept IsPooledComponent = IsComponent<T> && requires {
+  { T::is_pooled } -> std::convertible_to<bool>;
+} && T::is_pooled;
+
+//! Concept to check if a Component has dependencies.
+template <typename T>
+concept IsComponentWithDependencies = IsComponent<T> && requires {
+  { T::ClassDependencies() };
+};
+
 } // namespace oxygen
+
+// ReSharper disable once CppUnusedIncludeDirective
+#include <Oxygen/Composition/Detail/ComponentMacros.h>

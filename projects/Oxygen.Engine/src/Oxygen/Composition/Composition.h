@@ -6,14 +6,18 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <shared_mutex>
 #include <span>
 #include <unordered_map>
+#include <utility> // std::as_const
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentPool.h>
+#include <Oxygen/Composition/ComponentPoolRegistry.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/api_export.h>
 
@@ -28,10 +32,31 @@ namespace oxygen {
 class Composition : public virtual Object {
   OXYGEN_TYPED(Composition)
 
-  // Single storage for components - optimal for <8 components
-  std::vector<std::shared_ptr<Component>> components_;
+  // Single storage for non-pooled components - optimal for <8 components
+  std::vector<std::shared_ptr<Component>> local_components_;
 
-  // Allow access to components_ from CloneableMixin to make a deep copy.
+  struct PooledEntry {
+    ResourceHandle handle { ResourceHandle::kInvalidIndex };
+    IComponentPoolUntyped* pool_ptr { nullptr }; // type-erased pointer to pool
+
+    PooledEntry() = default;
+    PooledEntry(ResourceHandle handle, IComponentPoolUntyped* pool_ptr)
+      : handle(handle)
+      , pool_ptr(pool_ptr)
+    {
+      DCHECK_F(handle.IsValid());
+      DCHECK_NOTNULL_F(pool_ptr);
+    }
+    OXGN_COM_API ~PooledEntry() noexcept;
+
+    OXYGEN_DEFAULT_COPYABLE(PooledEntry)
+    OXYGEN_DEFAULT_MOVABLE(PooledEntry)
+  };
+  // Storage for pooled components, using the type-erased pool interface for a
+  // generic lookup
+  std::unordered_map<TypeId, std::shared_ptr<PooledEntry>> pooled_components_;
+
+  // Allow access to components from CloneableMixin to make a deep copy.
   template <typename T> friend class CloneableMixin;
 
 public:
@@ -54,13 +79,27 @@ public:
   template <typename T> [[nodiscard]] auto HasComponent() const -> bool
   {
     std::shared_lock lock(mutex_);
-    return HasComponentImpl(T::ClassTypeId());
+    if constexpr (IsPooledComponent<T>) {
+      return HasPooledComponentImpl(T::ClassTypeId());
+    } else {
+      return HasLocalComponentImpl(T::ClassTypeId());
+    }
   }
 
-  template <typename T> [[nodiscard]] auto GetComponent() const -> T&
+  template <typename T> [[nodiscard]] auto GetComponent() const -> const T&
   {
     std::shared_lock lock(mutex_);
-    return static_cast<T&>(GetComponentImpl(T::ClassTypeId()));
+    if constexpr (IsPooledComponent<T>) {
+      auto& pool = ComponentPoolRegistry::GetComponentPool<T>();
+      return static_cast<const T&>(
+        GetPooledComponentImpl(pool, T::ClassTypeId()));
+    } else {
+      return static_cast<const T&>(GetComponentImpl(T::ClassTypeId()));
+    }
+  }
+  template <typename T> [[nodiscard]] auto GetComponent() -> T&
+  {
+    return const_cast<T&>(std::as_const(*this).GetComponent<T>());
   }
 
   OXGN_COM_API auto PrintComponents(std::ostream& out) const -> void;
@@ -73,91 +112,172 @@ protected:
   {
     std::unique_lock lock(mutex_);
 
-    auto id = T::ClassTypeId();
-    if (HasComponentImpl(T::ClassTypeId())) {
-      throw ComponentError("Component already exists");
+    EnsureDoesNotExist<T>();
+
+    if constexpr (IsComponentWithDependencies<T>) {
+      EnsureDependencies(T::ClassTypeId(), T::ClassDependencies());
     }
 
-    if (!T::ClassDependencies().empty()) {
-      ValidateDependencies(id, T::ClassDependencies());
-      EnsureDependencies(T::ClassDependencies());
+    Component* component;
+    if constexpr (IsPooledComponent<T>) {
+      // Pooled component: allocate from pool and store handle and pool pointer
+      auto& pool = ComponentPoolRegistry::GetComponentPool<T>();
+      auto handle = pool.Allocate(std::forward<Args>(args)...);
+      if (!handle.IsValid()) {
+        throw ComponentError("Failed to allocate pooled component");
+      }
+      pooled_components_[T::ClassTypeId()]
+        = std::make_shared<PooledEntry>(handle, &pool);
+      component = pool.Get(handle);
+    } else {
+      auto component_ptr = std::make_shared<T>(std::forward<Args>(args)...);
+      local_components_.emplace_back(component_ptr);
+      component = component_ptr.get();
     }
-
-    auto component = std::make_shared<T>(std::forward<Args>(args)...);
-    if (component->HasDependencies()) {
-      component->UpdateDependencies([this](TypeId id) -> Component& {
-        // Nollocking needed here
-        return GetComponentImpl(id);
-      });
+    DCHECK_NOTNULL_F(component);
+    if constexpr (IsComponentWithDependencies<T>) {
+      UpdateComponentDependencies(*component);
     }
-
-    auto& component_ref = AddComponentImpl(std::move(component));
-    return static_cast<T&>(component_ref);
+    return static_cast<T&>(*component);
   }
 
   template <typename T> auto RemoveComponent() -> void
   {
     std::unique_lock lock(mutex_);
-
-    auto id = T::ClassTypeId();
-    if (!ExpectExistingComponent(id)) {
-      return;
+    auto type_id = T::ClassTypeId();
+    if constexpr (IsPooledComponent<T>) {
+      auto it = pooled_components_.find(type_id);
+      if (it == pooled_components_.end()) {
+        return;
+      }
+      EnsureNotRequired(type_id);
+      pooled_components_.erase(it);
+    } else {
+      auto it
+        = std::ranges::find_if(local_components_, [&](const auto& local_comp) {
+            return local_comp->GetTypeId() == type_id;
+          });
+      if (it == local_components_.end()) {
+        return;
+      }
+      EnsureNotRequired(type_id);
+      local_components_.erase(it);
     }
-    if (IsComponentRequired(id)) {
-      throw ComponentError(
-        "Cannot remove component; other components depend on it");
-    }
-
-    RemoveComponentImpl(id);
   }
 
   template <typename OldT, typename NewT = OldT, typename... Args>
   auto ReplaceComponent(Args&&... args) -> NewT&
   {
-    {
-      std::unique_lock lock(mutex_);
+    static_assert(IsPooledComponent<OldT> == IsPooledComponent<NewT>,
+      "Cannot replace pooled with non-pooled or vice versa");
 
-      if (auto old_id = OldT::ClassTypeId(); ExpectExistingComponent(old_id)) {
-        if (IsComponentRequired(old_id) && !std::is_same_v<OldT, NewT>) {
-          throw ComponentError("Cannot replace component with a different "
-                               "type; other components depend on it");
-        }
-        auto component = std::make_shared<NewT>(std::forward<Args>(args)...);
-        if (component->HasDependencies()) {
-          component->UpdateDependencies([this](TypeId id) -> Component& {
-            // Nollocking needed here
-            return GetComponentImpl(id);
-          });
-        }
+    std::unique_lock lock(mutex_);
 
-        auto& component_ref
-          = ReplaceComponentImpl(old_id, std::move(component));
-        return static_cast<NewT&>(component_ref);
+    EnsureExists<OldT>();
+
+    auto old_id = OldT::ClassTypeId();
+    if constexpr (!std::is_same_v<OldT, NewT>) {
+      EnsureDoesNotExist<NewT>();
+      EnsureNotRequired(old_id);
+      // Also ensure not required by the new component
+      if constexpr (IsComponentWithDependencies<NewT>) {
+        if (std::ranges::find(NewT::ClassDependencies(), OldT::ClassTypeId())
+          != NewT::ClassDependencies().end()) {
+          throw ComponentError("Cannot replace component; new component has "
+                               "dependencies on it");
+        }
       }
     }
 
-    return AddComponent<NewT>(std::forward<Args>(args)...);
+    Component* component;
+    if constexpr (IsPooledComponent<OldT>) {
+      // Pre-allocate new pooled component (do not register handle yet)
+      auto& pool = ComponentPoolRegistry::GetComponentPool<NewT>();
+      auto new_handle = pool.Allocate(std::forward<Args>(args)...);
+      if (!new_handle.IsValid()) {
+        throw ComponentError("Failed to allocate pooled component");
+      }
+      // Remove old pooled handle and deallocate from pool
+      auto it = pooled_components_.find(old_id);
+      if (it != pooled_components_.end()) {
+        pooled_components_.erase(it);
+      }
+      // Register new pooled handle
+      pooled_components_[NewT::ClassTypeId()]
+        = std::make_shared<PooledEntry>(new_handle, &pool);
+      component = pool.Get(new_handle);
+    } else {
+      // Non-pooled: construct new component first
+      auto component_ptr = std::make_shared<NewT>(std::forward<Args>(args)...);
+      std::replace_if(
+        local_components_.begin(), local_components_.end(),
+        [old_id](const auto& comp) { return comp->GetTypeId() == old_id; },
+        component_ptr);
+      component = component_ptr.get();
+    }
+    DCHECK_NOTNULL_F(component);
+    if constexpr (IsComponentWithDependencies<NewT>) {
+      UpdateComponentDependencies(*component);
+    }
+    return static_cast<NewT&>(*component);
   }
 
   OXGN_COM_API auto HasComponents() const noexcept -> bool;
 
 private:
+  template <IsComponent T> auto EnsureExistence(bool state) -> void
+  {
+    auto type_id = T::ClassTypeId();
+    const bool exists = [&] {
+      if constexpr (IsPooledComponent<T>) {
+        return HasPooledComponentImpl(type_id);
+      } else {
+        return HasLocalComponentImpl(type_id);
+      }
+    }();
+    if (exists != state) {
+      throw ComponentError(fmt::format(
+        "expecting component {}to be in the composition", state ? "" : "not "));
+    }
+  }
+
+  template <IsComponent T> auto EnsureExists() -> void
+  {
+    return EnsureExistence<T>(true);
+  }
+
+  template <IsComponent T> auto EnsureDoesNotExist() -> void
+  {
+    return EnsureExistence<T>(false);
+  }
+
   OXGN_COM_API auto DestroyComponents() noexcept -> void;
 
   OXGN_COM_API static auto ValidateDependencies(
     TypeId comp_id, std::span<const TypeId> dependencies) -> void;
-  OXGN_COM_API auto EnsureDependencies(
-    std::span<const TypeId> dependencies) const -> void;
-  OXGN_COM_NDAPI auto ExpectExistingComponent(TypeId id) const -> bool;
-  OXGN_COM_NDAPI auto IsComponentRequired(TypeId id) const -> bool;
-  OXGN_COM_NDAPI auto HasComponentImpl(TypeId id) const -> bool;
-  OXGN_COM_NDAPI auto AddComponentImpl(std::shared_ptr<Component> component)
-    -> Component&;
+  OXGN_COM_NDAPI auto HasLocalComponentImpl(TypeId id) const -> bool;
+  OXGN_COM_NDAPI auto HasPooledComponentImpl(TypeId id) const -> bool;
+  OXGN_COM_API auto UpdateComponentDependencies(Component& component) noexcept
+    -> void;
+
   OXGN_COM_NDAPI auto ReplaceComponentImpl(
     TypeId old_id, std::shared_ptr<Component> new_component) -> Component&;
-  OXGN_COM_NDAPI auto GetComponentImpl(TypeId id) const -> Component&;
-  OXGN_COM_API auto RemoveComponentImpl(TypeId id) -> void;
+  // Unified: GetComponentImpl handles both pooled and non-pooled components
+  OXGN_COM_NDAPI auto GetComponentImpl(TypeId id) const -> const Component&;
+  OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) -> Component&;
+  OXGN_COM_NDAPI auto GetPooledComponentImpl(const IComponentPoolUntyped& pool,
+    TypeId type_id) const -> const Component&;
+  OXGN_COM_NDAPI auto GetPooledComponentImpl(
+    const IComponentPoolUntyped& pool, TypeId id) -> Component&;
+
+  OXGN_COM_API auto EnsureDependencies(
+    TypeId comp_id, std::span<const TypeId> dependencies) const -> void;
+  OXGN_COM_API auto EnsureNotRequired(TypeId type_id) const -> void;
+
   OXGN_COM_API auto DeepCopyComponentsFrom(const Composition& other) -> void;
+
+  auto TopologicallySortedPooledEntries()
+    -> std::vector<std::shared_ptr<PooledEntry>>;
 
   mutable std::shared_mutex mutex_;
 };
