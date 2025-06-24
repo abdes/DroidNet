@@ -11,8 +11,7 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 
@@ -36,16 +35,17 @@ namespace detail {
     OXYGEN_MAKE_NON_COPYABLE(RenderThread)
     OXYGEN_DEFAULT_MOVABLE(RenderThread)
 
-    void Submit(FrameRenderTask task);
+    auto Submit(FrameRenderTask task) -> void;
 
-    void Stop();
+    auto Stop() -> void;
 
   protected:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) override;
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override;
 
   private:
-    void Start();
+    auto Start() -> void;
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

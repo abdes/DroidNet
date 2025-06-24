@@ -277,7 +277,7 @@ void RenderThread::Stop()
 }
 
 void RenderThread::UpdateDependencies(
-  const std::function<Component&(TypeId)>& get_component)
+  const std::function<Component&(TypeId)>& get_component) noexcept
 {
   const auto& meta_data = static_cast<ObjectMetaData&>(
     get_component(ObjectMetaData::ClassTypeId()));

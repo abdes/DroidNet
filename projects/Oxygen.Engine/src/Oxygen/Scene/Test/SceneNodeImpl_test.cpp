@@ -457,7 +457,7 @@ class SceneNodeImplCloningTest : public SceneNodeImplTestBase { };
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_CreatesIndependentCopy)
 {
   // Arrange: Create original node with custom properties
-  const auto original = SceneNodeImpl("OriginalNode");
+  auto original = SceneNodeImpl("OriginalNode");
 
   // Arrange: Modify transform component
   auto& transform = original.GetComponent<TransformComponent>();
@@ -476,7 +476,7 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_CreatesIndependentCopy)
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesTransformData)
 {
   // Arrange: Create original with specific transform
-  const auto original = SceneNodeImpl("OriginalNode");
+  auto original = SceneNodeImpl("OriginalNode");
   auto& transform = original.GetComponent<TransformComponent>();
   transform.SetLocalPosition({ 1.0f, 2.0f, 3.0f });
   transform.SetLocalScale({ 2.0f, 2.0f, 2.0f });
@@ -526,8 +526,8 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesObjectMetaData)
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ObjectMetaDataIsIndependent)
 {
   // Arrange: Create original node and clone it
-  const auto original = SceneNodeImpl("OriginalMeta");
-  const auto clone = original.Clone();
+  auto original = SceneNodeImpl("OriginalMeta");
+  auto clone = original.Clone();
   ASSERT_NE(clone, nullptr);
 
   // Act: Change name in original and clone independently
@@ -566,8 +566,8 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesNodeDataFlags)
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_NodeDataFlagsAreIndependent)
 {
   // Arrange: Create original node and clone it
-  const auto original = SceneNodeImpl("FlagIndependence");
-  const auto clone = original.Clone();
+  auto original = SceneNodeImpl("FlagIndependence");
+  auto clone = original.Clone();
   ASSERT_NE(clone, nullptr);
 
   // Act: Change a flag in original and clone independently

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -65,7 +67,7 @@ public:
 
   SDL_Window* sdl_window_ { nullptr };
   WindowIdType id_ { kInvalidWindowId };
-  bool should_close_ { false };
+  mutable bool should_close_ { false };
   bool forced_close_ { false };
 };
 
@@ -84,24 +86,25 @@ public:
     return close_vote_aw_.Park();
   }
 
-  void DoRestore() const override;
-  void DoMaximize() const override;
-  void DoResize(const window::ExtentT& extent) const override;
-  void DoPosition(const window::PositionT& position) const override;
-  void DispatchEvent(const window::Event event) const override
+  auto DoRestore() const -> void override;
+  auto DoMaximize() const -> void override;
+  auto DoResize(const window::ExtentT& extent) const -> void override;
+  auto DoPosition(const window::PositionT& position) const -> void override;
+  auto DispatchEvent(const window::Event event) const -> void override
   {
     events_.Set(event);
   }
-  void InitiateClose(co::Nursery& n) override;
-  void DoClose() const;
-  void RecordVote() const
+  auto InitiateClose(co::Nursery& n) -> void override;
+  auto DoClose() const -> void;
+  auto RecordVote() const -> void
   {
     close_vote_count_.Set(close_vote_count_.Get() - 1);
   }
 
 protected:
-  void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) override
+  auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override
   {
     data_ = &static_cast<Data&>(get_component(Data::ClassTypeId()));
   }
@@ -115,28 +118,29 @@ private:
   mutable co::Value<window::Event> events_ { window::Event::kUnknown };
 };
 
-void Window::ManagerInterfaceImpl::DoRestore() const
+auto Window::ManagerInterfaceImpl::DoRestore() const -> void
 {
   sdl::RestoreWindow(data_->sdl_window_);
 }
 
-void Window::ManagerInterfaceImpl::DoMaximize() const
+auto Window::ManagerInterfaceImpl::DoMaximize() const -> void
 {
   sdl::MaximizeWindow(data_->sdl_window_);
 }
 
-void Window::ManagerInterfaceImpl::DoResize(const window::ExtentT& extent) const
+auto Window::ManagerInterfaceImpl::DoResize(const window::ExtentT& extent) const
+  -> void
 {
   sdl::SetWindowSize(data_->sdl_window_, extent.width, extent.height);
 }
 
-void Window::ManagerInterfaceImpl::DoPosition(
-  const window::PositionT& position) const
+auto Window::ManagerInterfaceImpl::DoPosition(
+  const window::PositionT& position) const -> void
 {
   sdl::SetWindowPosition(data_->sdl_window_, position.x, position.y);
 }
 
-void Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n)
+auto Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n) -> void
 {
   if (vote_in_progress_) {
     LOG_F(INFO, "Window [id = {}] close vote already in progress", data_->id_);
@@ -168,7 +172,7 @@ void Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n)
   });
 }
 
-void Window::ManagerInterfaceImpl::DoClose() const
+auto Window::ManagerInterfaceImpl::DoClose() const -> void
 {
   LOG_F(INFO, "SDL3 Window[{}] is closing", data_->id_);
   sdl::DestroyWindow(data_->sdl_window_);
@@ -270,48 +274,48 @@ auto Window::Hide() const -> void
   sdl::HideWindow(GetComponent<Data>().sdl_window_);
 }
 
-void Window::EnterFullScreen() const
+auto Window::EnterFullScreen() const -> void
 {
   sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_, true);
 }
 
-void Window::ExitFullScreen() const
+auto Window::ExitFullScreen() const -> void
 {
   sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_, false);
 }
 
-void Window::Minimize() const
+auto Window::Minimize() const -> void
 {
   sdl::MinimizeWindow(GetComponent<Data>().sdl_window_);
 }
 
-void Window::Maximize() const
+auto Window::Maximize() const -> void
 {
   if (CheckNotInFullScreenMode(*this, "maximize")) {
     GetComponent<ManagerInterfaceImpl>().DoMaximize();
   }
 }
 
-void Window::Restore() const
+auto Window::Restore() const -> void
 {
   if (CheckNotInFullScreenMode(*this, "restore")) {
     GetComponent<ManagerInterfaceImpl>().DoRestore();
   }
 }
 
-void Window::SetMinimumSize(const window::ExtentT& extent) const
+auto Window::SetMinimumSize(const window::ExtentT& extent) const -> void
 {
   sdl::SetWindowMinimumSize(
     GetComponent<Data>().sdl_window_, extent.width, extent.height);
 }
 
-void Window::SetMaximumSize(const window::ExtentT& extent) const
+auto Window::SetMaximumSize(const window::ExtentT& extent) const -> void
 {
   sdl::SetWindowMaximumSize(
     GetComponent<Data>().sdl_window_, extent.width, extent.height);
 }
 
-void Window::EnableResizing() const
+auto Window::EnableResizing() const -> void
 {
   // SDL behavior is inconsistent with OS interactive behavior on most
   // platforms. Therefore, we only allow a window to be resizable if it is not
@@ -325,12 +329,12 @@ void Window::EnableResizing() const
   sdl::SetWindowResizable(GetComponent<Data>().sdl_window_, true);
 }
 
-void Window::DisableResizing() const
+auto Window::DisableResizing() const -> void
 {
   sdl::SetWindowResizable(GetComponent<Data>().sdl_window_, false);
 }
 
-void Window::Resize(const window::ExtentT& extent) const
+auto Window::Resize(const window::ExtentT& extent) const -> void
 {
   if (CheckNotInFullScreenMode(*this, "resize")
     && CheckNotMinimized(*this, "resize")) {
@@ -349,22 +353,22 @@ auto Window::MoveTo(const window::PositionT& position) const -> void
   }
 }
 
-void Window::SetTitle(const std::string& title) const
+auto Window::SetTitle(const std::string& title) const -> void
 {
   sdl::SetWindowTitle(GetComponent<Data>().sdl_window_, title);
 }
 
-void Window::Activate() const
+auto Window::Activate() const -> void
 {
   sdl::RaiseWindow(GetComponent<Data>().sdl_window_);
 }
 
-void Window::KeepAlwaysOnTop(const bool always_on_top) const
+auto Window::KeepAlwaysOnTop(const bool always_on_top) const -> void
 {
   sdl::SetWindowAlwaysOnTop(GetComponent<Data>().sdl_window_, always_on_top);
 }
 
-void Window::RequestClose(const bool force) const
+auto Window::RequestClose(const bool force) const -> void
 {
   if (GetComponent<Data>().should_close_) {
     LOG_F(
@@ -386,12 +390,12 @@ void Window::RequestClose(const bool force) const
   sdl::PushEvent(&event);
 }
 
-void Window::VoteToClose() const
+auto Window::VoteToClose() const -> void
 {
   GetComponent<ManagerInterfaceImpl>().RecordVote();
 }
 
-void Window::VoteNotToClose() const
+auto Window::VoteNotToClose() const -> void
 {
   GetComponent<ManagerInterfaceImpl>().RecordVote();
   auto& data = GetComponent<Data>();
@@ -409,12 +413,18 @@ auto Window::Events() const -> co::Value<window::Event>&
   return GetComponent<ManagerInterfaceImpl>().Events();
 }
 
-auto Window::CloseRequested() const -> co::ParkingLot::Awaiter
+auto Window::CloseRequested() -> co::ParkingLot::Awaiter
 {
   return GetComponent<ManagerInterfaceImpl>().CloseRequested();
 }
 
-auto Window::GetManagerInterface() const -> window::ManagerInterface&
+auto Window::GetManagerInterface() const -> const window::ManagerInterface&
 {
   return GetComponent<ManagerInterfaceImpl>();
+}
+
+auto Window::GetManagerInterface() -> window::ManagerInterface&
+{
+  return const_cast<window::ManagerInterface&>(
+    std::as_const(*this).GetManagerInterface());
 }

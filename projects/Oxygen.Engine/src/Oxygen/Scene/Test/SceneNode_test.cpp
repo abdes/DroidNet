@@ -53,7 +53,7 @@ NOLINT_TEST_F(SceneNodeBasicTest, Constructor_CreatesValidNodeHandle)
 
   // Assert: Node should be valid with correct resource type
   EXPECT_TRUE(node.IsValid());
-  EXPECT_EQ(node.GetHandle().ResourceType(), SceneNode::kResourceType);
+  EXPECT_EQ(node.GetHandle().ResourceType(), SceneNode::GetResourceType());
 }
 
 NOLINT_TEST_F(SceneNodeBasicTest, CopyConstructor_PreservesHandle)

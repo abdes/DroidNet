@@ -11,6 +11,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
@@ -33,274 +34,291 @@ using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;
 
 //! Default constructor, sets the object name.
-RenderController::RenderController(
-    std::string_view name,
-    std::weak_ptr<Graphics> gfx_weak,
-    std::weak_ptr<Surface> surface_weak,
-    uint32_t frames_in_flight)
-    : gfx_weak_(std::move(gfx_weak))
-    , surface_weak_(std::move(surface_weak))
-    , frame_count_(frames_in_flight + 1)
-    , frames_(std::make_unique<Frame[]>(frame_count_))
+RenderController::RenderController(std::string_view name,
+  std::weak_ptr<Graphics> gfx_weak, std::weak_ptr<Surface> surface_weak,
+  uint32_t frames_in_flight)
+  : gfx_weak_(std::move(gfx_weak))
+  , surface_weak_(std::move(surface_weak))
+  , frame_count_(frames_in_flight + 1)
+  , frames_(std::make_unique<Frame[]>(frame_count_))
 {
-    CHECK_F(!surface_weak_.expired(), "RenderController cannot be created with a null Surface");
-    DCHECK_F(!gfx_weak_.expired(), "RenderController cannot be created with an expired Graphics backend pointer");
+  CHECK_F(!surface_weak_.expired(),
+    "RenderController cannot be created with a null Surface");
+  DCHECK_F(!gfx_weak_.expired(),
+    "RenderController cannot be created with an expired Graphics backend "
+    "pointer");
 
-    // Initialize all frame values to 0
-    for (uint32_t i = 0; i < frame_count_; ++i) {
-        frames_[i] = Frame {};
-    }
+  // Initialize all frame values to 0
+  for (uint32_t i = 0; i < frame_count_; ++i) {
+    frames_[i] = Frame {};
+  }
 
-    AddComponent<ObjectMetaData>(name);
-    AddComponent<RenderThread>(
-        frames_in_flight,
-        [this]() {
-            this->BeginFrame();
-        },
-        [this]() {
-            this->EndFrame();
-        });
+  AddComponent<ObjectMetaData>(name);
+  AddComponent<RenderThread>(
+    frames_in_flight, [this]() { this->BeginFrame(); },
+    [this]() { this->EndFrame(); });
 }
 
-RenderController::~RenderController()
-{
-    Stop();
-}
+RenderController::~RenderController() { Stop(); }
 
 auto RenderController::GetGraphics() -> Graphics&
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
-    return *gfx_weak_.lock();
+  CHECK_F(!gfx_weak_.expired(),
+    "Unexpected use of RenderController when the Graphics backend is no longer "
+    "valid");
+  return *gfx_weak_.lock();
 }
 
 auto RenderController::GetGraphics() const -> const Graphics&
 {
-    return const_cast<RenderController*>(this)->GetGraphics();
+  return const_cast<RenderController*>(this)->GetGraphics();
 }
 
-auto RenderController::GetDescriptorAllocator() const -> DescriptorAllocator&
+auto RenderController::GetDescriptorAllocator() const
+  -> const DescriptorAllocator&
 {
-    return GetComponent<Bindless>().GetAllocator();
+  return GetComponent<Bindless>().GetAllocator();
 }
 
-auto RenderController::GetResourceRegistry() const -> ResourceRegistry&
+auto RenderController::GetDescriptorAllocator() -> DescriptorAllocator&
 {
-    return GetComponent<Bindless>().GetRegistry();
+  return const_cast<DescriptorAllocator&>(
+    std::as_const(*this).GetDescriptorAllocator());
+}
+
+auto RenderController::GetResourceRegistry() const -> const ResourceRegistry&
+{
+  return GetComponent<Bindless>().GetRegistry();
+}
+
+auto RenderController::GetResourceRegistry() -> ResourceRegistry&
+{
+  return const_cast<ResourceRegistry&>(
+    std::as_const(*this).GetResourceRegistry());
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void RenderController::Stop()
+auto RenderController::Stop() -> void
 {
-    GetComponent<RenderThread>().Stop();
-    per_frame_resource_manager_.OnRendererShutdown();
+  GetComponent<RenderThread>().Stop();
+  per_frame_resource_manager_.OnRendererShutdown();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void RenderController::Submit(FrameRenderTask task)
+auto RenderController::Submit(FrameRenderTask task) -> void
 {
-    GetComponent<RenderThread>().Submit(std::move(task));
+  GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto RenderController::AcquireCommandRecorder(
-    const std::string_view queue_name,
-    const std::string_view command_list_name,
-    bool immediate_submission)
-    -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
+auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
+  const std::string_view command_list_name, bool immediate_submission)
+  -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
-    const auto gfx = gfx_weak_.lock();
+  CHECK_F(!gfx_weak_.expired(),
+    "Unexpected use of RenderController when the Graphics backend is no longer "
+    "valid");
+  const auto gfx = gfx_weak_.lock();
 
-    const auto queue = gfx->GetCommandQueue(queue_name);
-    if (!queue) {
-        LOG_F(ERROR, "Command queue '{}' not found", queue_name);
-        return nullptr;
-    }
+  const auto queue = gfx->GetCommandQueue(queue_name);
+  if (!queue) {
+    LOG_F(ERROR, "Command queue '{}' not found", queue_name);
+    return nullptr;
+  }
 
-    // Get a command list with automatic cleanup
-    auto cmd_list = gfx->AcquireCommandList(queue->GetQueueRole(), command_list_name);
-    if (!cmd_list) {
-        return nullptr;
-    }
+  // Get a command list with automatic cleanup
+  auto cmd_list
+    = gfx->AcquireCommandList(queue->GetQueueRole(), command_list_name);
+  if (!cmd_list) {
+    return nullptr;
+  }
 
-    // Create a command recorder for this command list
-    auto recorder = CreateCommandRecorder(cmd_list.get(), queue.get());
-    if (!recorder) {
-        return nullptr;
-    }
-    recorder->Begin();
+  // Create a command recorder for this command list
+  auto recorder = CreateCommandRecorder(cmd_list.get(), queue.get());
+  if (!recorder) {
+    return nullptr;
+  }
+  recorder->Begin();
 
-    return {
-        recorder.release(),
-        [self_weak = weak_from_this(),
-            cmd_list = std::move(cmd_list),
-            queue = queue.get(), immediate_submission](CommandRecorder* rec) mutable {
-            if (rec == nullptr) {
-                return;
-            }
-            if (self_weak.expired()) {
-                LOG_F(ERROR, "RenderController is no longer valid");
-                delete rec;
-                return;
-            }
-            auto renderer = self_weak.lock();
-            try {
-                if (immediate_submission) {
-                    if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-                        auto* target_queue = rec->GetTargetQueue();
-                        DCHECK_NOTNULL_F(target_queue);
-                        target_queue->Submit(*completed_cmd);
-                        rec->OnSubmitted();
-                        const uint64_t timeline_value = target_queue->Signal();
-                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
-                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
-                        timeline_values[queue] = timeline_value;
-                        pending_command_lists.emplace_back(cmd_list, queue);
-                    }
-                } else {
-                    // Deferred: just end, don't submit. Add to pending_command_lists for later flush.
-                    if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
-                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
-                        pending_command_lists.emplace_back(cmd_list, queue);
-                    }
-                }
-            } catch (const std::exception& ex) {
-                LOG_F(ERROR, "Exception in command recorder cleanup: {}", ex.what());
-            }
-            delete rec;
-        }
-    };
-}
-
-void RenderController::FlushPendingCommandLists()
-{
-    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
-    if (pending_command_lists.empty())
+  return { recorder.release(),
+    [self_weak = weak_from_this(), cmd_list = std::move(cmd_list),
+      queue = queue.get(), immediate_submission](CommandRecorder* rec) mutable {
+      if (rec == nullptr) {
         return;
-    if (!gfx_weak_.expired()) {
-        auto it = pending_command_lists.begin();
-        while (it != pending_command_lists.end()) {
-            CommandQueue* current_queue = it->second;
-            std::vector<CommandList*> batch;
-            auto batch_start = it;
-            // Collect contiguous command lists for the same queue, only if closed and not submitted
-            while (it != pending_command_lists.end() && it->second == current_queue) {
-                if (it->first && it->first->IsClosed() && !it->first->IsSubmitted()) {
-                    batch.push_back(it->first.get());
-                }
-                ++it;
-            }
-            if (!batch.empty()) {
-                current_queue->Submit(std::span<CommandList*> { batch });
-                uint64_t timeline_value = current_queue->Signal();
-                timeline_values[current_queue] = timeline_value;
-                for (auto* cmd_list : batch) {
-                    cmd_list->OnSubmitted();
-                }
-            }
+      }
+      if (self_weak.expired()) {
+        LOG_F(ERROR, "RenderController is no longer valid");
+        delete rec;
+        return;
+      }
+      auto renderer = self_weak.lock();
+      try {
+        if (immediate_submission) {
+          if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
+            auto* target_queue = rec->GetTargetQueue();
+            DCHECK_NOTNULL_F(target_queue);
+            target_queue->Submit(*completed_cmd);
+            rec->OnSubmitted();
+            const uint64_t timeline_value = target_queue->Signal();
+            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+            auto& [timeline_values, pending_command_lists]
+              = renderer->frames_[frame_idx];
+            timeline_values[queue] = timeline_value;
+            pending_command_lists.emplace_back(cmd_list, queue);
+          }
+        } else {
+          // Deferred: just end, don't submit. Add to pending_command_lists for
+          // later flush.
+          if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
+            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+            auto& [timeline_values, pending_command_lists]
+              = renderer->frames_[frame_idx];
+            pending_command_lists.emplace_back(cmd_list, queue);
+          }
         }
-    }
-    // Do not clear pending_command_lists or timeline_values here; this is done in BeginFrame().
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR, "Exception in command recorder cleanup: {}", ex.what());
+      }
+      delete rec;
+    } };
 }
 
-void RenderController::BeginFrame()
+auto RenderController::FlushPendingCommandLists() -> void
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
-
-    if (surface_weak_.expired()) {
-        throw std::runtime_error("Cannot BeginFrame when surface is not valid");
-    }
-
-    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
-
-    LOG_SCOPE_FUNCTION(1);
-    DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
-
-    // NB: Must handle surface resize early as it may affect the current frame
-    // index.
-
-    if (const auto surface = surface_weak_.lock(); surface->ShouldResize()) {
-        // This will flush the command queues and wait for all pending work to
-        // finish for all frames, release all deferred resources and resize the
-        // swapchain.
-        HandleSurfaceResize(*surface);
-        DLOG_F(1, "Frame index after resize: {}", CurrentFrameIndex());
-    } else {
-        // Wait for the GPU to finish executing the previous frame (only for the
-        // current frame index).
-        for (const auto& [queue, fence_value] : timeline_values) {
-            const auto gfx = gfx_weak_.lock();
-            DCHECK_NOTNULL_F(queue, "Command queue is null");
-            if (queue) {
-                queue->Wait(fence_value);
-            }
+  auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+  if (pending_command_lists.empty())
+    return;
+  if (!gfx_weak_.expired()) {
+    auto it = pending_command_lists.begin();
+    while (it != pending_command_lists.end()) {
+      CommandQueue* current_queue = it->second;
+      std::vector<CommandList*> batch;
+      auto batch_start = it;
+      // Collect contiguous command lists for the same queue, only if closed and
+      // not submitted
+      while (it != pending_command_lists.end() && it->second == current_queue) {
+        if (it->first && it->first->IsClosed() && !it->first->IsSubmitted()) {
+          batch.push_back(it->first.get());
         }
-
-        // Process all deferred releases for the current frame
-        per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex());
+        ++it;
+      }
+      if (!batch.empty()) {
+        current_queue->Submit(std::span<CommandList*> { batch });
+        uint64_t timeline_value = current_queue->Signal();
+        timeline_values[current_queue] = timeline_value;
+        for (auto* cmd_list : batch) {
+          cmd_list->OnSubmitted();
+        }
+      }
     }
-
-    // Release all completed command lists and call OnExecuted
-    for (const auto& cmd_list : pending_command_lists | std::views::keys) {
-        cmd_list->OnExecuted();
-    }
-    pending_command_lists.clear();
-    timeline_values.clear();
+  }
+  // Do not clear pending_command_lists or timeline_values here; this is done in
+  // BeginFrame().
 }
 
-void RenderController::EndFrame()
+auto RenderController::BeginFrame() -> void
 {
-    CHECK_F(!surface_weak_.expired(), "Cannot BeginFrame when surface is not valid");
+  CHECK_F(!gfx_weak_.expired(),
+    "Unexpected use of RenderController when the Graphics backend is no longer "
+    "valid");
 
-    LOG_SCOPE_FUNCTION(1);
-    DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
+  if (surface_weak_.expired()) {
+    throw std::runtime_error("Cannot BeginFrame when surface is not valid");
+  }
 
-    // Always flush before presenting
-    FlushPendingCommandLists();
+  auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
 
-    const auto surface = surface_weak_.lock();
-    try {
-        surface->Present();
-    } catch (const std::exception& e) {
-        LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}", surface->GetName(), e.what());
+  LOG_SCOPE_FUNCTION(1);
+  DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
+
+  // NB: Must handle surface resize early as it may affect the current frame
+  // index.
+
+  if (const auto surface = surface_weak_.lock(); surface->ShouldResize()) {
+    // This will flush the command queues and wait for all pending work to
+    // finish for all frames, release all deferred resources and resize the
+    // swapchain.
+    HandleSurfaceResize(*surface);
+    DLOG_F(1, "Frame index after resize: {}", CurrentFrameIndex());
+  } else {
+    // Wait for the GPU to finish executing the previous frame (only for the
+    // current frame index).
+    for (const auto& [queue, fence_value] : timeline_values) {
+      const auto gfx = gfx_weak_.lock();
+      DCHECK_NOTNULL_F(queue, "Command queue is null");
+      if (queue) {
+        queue->Wait(fence_value);
+      }
     }
 
-    current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
+    // Process all deferred releases for the current frame
+    per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex());
+  }
+
+  // Release all completed command lists and call OnExecuted
+  for (const auto& cmd_list : pending_command_lists | std::views::keys) {
+    cmd_list->OnExecuted();
+  }
+  pending_command_lists.clear();
+  timeline_values.clear();
 }
 
-void RenderController::HandleSurfaceResize(Surface& surface)
+auto RenderController::EndFrame() -> void
 {
-    DCHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
+  CHECK_F(
+    !surface_weak_.expired(), "Cannot BeginFrame when surface is not valid");
 
-    // Collect all queues that have pending work across any frame
-    std::unordered_set<CommandQueue*> active_queues;
+  LOG_SCOPE_FUNCTION(1);
+  DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
 
-    // Check all frames for pending work
-    for (uint32_t i = 0; i < frame_count_; ++i) {
-        if (i != CurrentFrameIndex()) { // Already processed current frame above
-            for (const auto& queue : frames_[i].timeline_values | std::views::keys) {
-                active_queues.insert(queue);
-            }
-        }
+  // Always flush before presenting
+  FlushPendingCommandLists();
+
+  const auto surface = surface_weak_.lock();
+  try {
+    surface->Present();
+  } catch (const std::exception& e) {
+    LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",
+      surface->GetName(), e.what());
+  }
+
+  current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
+}
+
+auto RenderController::HandleSurfaceResize(Surface& surface) -> void
+{
+  DCHECK_F(!gfx_weak_.expired(),
+    "Unexpected use of RenderController when the Graphics backend is no longer "
+    "valid");
+
+  // Collect all queues that have pending work across any frame
+  std::unordered_set<CommandQueue*> active_queues;
+
+  // Check all frames for pending work
+  for (uint32_t i = 0; i < frame_count_; ++i) {
+    if (i != CurrentFrameIndex()) { // Already processed current frame above
+      for (const auto& queue : frames_[i].timeline_values | std::views::keys) {
+        active_queues.insert(queue);
+      }
     }
+  }
 
-    // Only flush queues with pending work from this renderer
-    if (!active_queues.empty()) {
-        const auto gfx = gfx_weak_.lock();
-        // We don't really care about the order of flushing queues.
-        // NOLINTNEXTLINE(bugprone-nondeterministic-pointer-iteration-order)
-        for (const auto& queue : active_queues) {
-            DLOG_F(INFO, "Flushing queue '{}' during resize", queue->GetName());
-            queue->Flush();
-        }
+  // Only flush queues with pending work from this renderer
+  if (!active_queues.empty()) {
+    const auto gfx = gfx_weak_.lock();
+    // We don't really care about the order of flushing queues.
+    // NOLINTNEXTLINE(bugprone-nondeterministic-pointer-iteration-order)
+    for (const auto& queue : active_queues) {
+      DLOG_F(INFO, "Flushing queue '{}' during resize", queue->GetName());
+      queue->Flush();
     }
+  }
 
-    // Process all deferred releases for all frames since we have flushed all
-    // pending work for all frames and we are going to reset the swapchain.
-    per_frame_resource_manager_.ProcessAllDeferredReleases();
+  // Process all deferred releases for all frames since we have flushed all
+  // pending work for all frames and we are going to reset the swapchain.
+  per_frame_resource_manager_.ProcessAllDeferredReleases();
 
-    surface.Resize();
-    current_frame_index_ = surface.GetCurrentBackBufferIndex();
+  surface.Resize();
+  current_frame_index_ = surface.GetCurrentBackBufferIndex();
 }
 
 namespace oxygen::graphics {
@@ -308,28 +326,31 @@ namespace oxygen::graphics {
 // Generic no-op implementation for any render pass type.
 class NullRenderPass final : public RenderPass {
 public:
-    explicit NullRenderPass(const std::string_view name = "NullRenderPass")
-        : RenderPass(name)
-    {
-    }
+  explicit NullRenderPass(const std::string_view name = "NullRenderPass")
+    : RenderPass(name)
+  {
+  }
 
-    ~NullRenderPass() noexcept override = default;
+  ~NullRenderPass() noexcept override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(NullRenderPass)
-    OXYGEN_DEFAULT_MOVABLE(NullRenderPass)
+  OXYGEN_DEFAULT_COPYABLE(NullRenderPass)
+  OXYGEN_DEFAULT_MOVABLE(NullRenderPass)
 
-    auto PrepareResources(CommandRecorder&) -> co::Co<> override { co_return; }
-    auto Execute(CommandRecorder&) -> co::Co<> override { co_return; }
-    void SetViewport(const ViewPort&) override { }
-    void SetScissors(const Scissors&) override { }
-    void SetClearColor(const Color&) override { }
-    void SetEnabled(bool) override { }
-    auto IsEnabled() const -> bool override { return false; }
-    auto GetName() const noexcept -> std::string_view override { return name_; }
-    void SetName(const std::string_view name) noexcept override { name_ = std::string(name); }
+  auto PrepareResources(CommandRecorder&) -> co::Co<> override { co_return; }
+  auto Execute(CommandRecorder&) -> co::Co<> override { co_return; }
+  auto SetViewport(const ViewPort&) -> void override { }
+  auto SetScissors(const Scissors&) -> void override { }
+  auto SetClearColor(const Color&) -> void override { }
+  auto SetEnabled(bool) -> void override { }
+  auto IsEnabled() const -> bool override { return false; }
+  auto GetName() const noexcept -> std::string_view override { return name_; }
+  auto SetName(const std::string_view name) noexcept -> void override
+  {
+    name_ = std::string(name);
+  }
 
 private:
-    std::string name_;
+  std::string name_;
 };
 
 } // namespace oxygen::graphics
@@ -337,5 +358,5 @@ private:
 // ReSharper disable once CppMemberFunctionMayBeStatic
 auto RenderController::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
 {
-    return std::make_shared<NullRenderPass>();
+  return std::make_shared<NullRenderPass>();
 }

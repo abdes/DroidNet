@@ -11,8 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -51,8 +50,9 @@ public:
   [[nodiscard]] auto GetRegistry() -> ResourceRegistry& { return *registry_; }
 
 protected:
-  void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) override
+  auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override
   {
     const auto& meta_data = static_cast<ObjectMetaData&>(
       get_component(ObjectMetaData::ClassTypeId()));

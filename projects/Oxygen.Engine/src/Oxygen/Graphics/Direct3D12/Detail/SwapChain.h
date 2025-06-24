@@ -15,8 +15,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
@@ -48,14 +47,15 @@ namespace detail {
 
     [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
 
-    void AttachRenderer(std::shared_ptr<graphics::RenderController> renderer);
-    void DetachRenderer();
+    auto AttachRenderer(std::shared_ptr<graphics::RenderController> renderer)
+      -> void;
+    auto DetachRenderer() -> void;
 
     // Present the current frame to the screen.
-    void Present() const;
+    auto Present() const -> void;
 
     [[nodiscard]] auto GetFormat() const { return format_; }
-    void SetFormat(const DXGI_FORMAT format) { format_ = format; }
+    auto SetFormat(const DXGI_FORMAT format) -> void { format_ = format; }
 
     auto GetCurrentBackBufferIndex() const -> uint32_t
     {
@@ -77,16 +77,17 @@ namespace detail {
     }
 
   protected:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) override;
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override;
 
   private:
     friend class WindowSurface;
-    void CreateSwapChain();
-    void CreateRenderTargets();
-    void ReleaseRenderTargets();
-    void Resize();
-    void ReleaseSwapChain();
+    auto CreateSwapChain() -> void;
+    auto CreateRenderTargets() -> void;
+    auto ReleaseRenderTargets() -> void;
+    auto Resize() -> void;
+    auto ReleaseSwapChain() -> void;
 
     DXGI_FORMAT format_ { kDefaultBackBufferFormat };
     dx::ICommandQueue* command_queue_;

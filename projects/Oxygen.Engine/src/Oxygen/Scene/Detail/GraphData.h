@@ -6,8 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -45,13 +44,19 @@ public:
   {
     return prev_sibling_;
   }
-  void SetParent(const NodeHandle& parent) noexcept { parent_ = parent; }
-  void SetFirstChild(const NodeHandle& child) noexcept { first_child_ = child; }
-  void SetNextSibling(const NodeHandle& sibling) noexcept
+  auto SetParent(const NodeHandle& parent) noexcept -> void
+  {
+    parent_ = parent;
+  }
+  auto SetFirstChild(const NodeHandle& child) noexcept -> void
+  {
+    first_child_ = child;
+  }
+  auto SetNextSibling(const NodeHandle& sibling) noexcept -> void
   {
     next_sibling_ = sibling;
   }
-  void SetPrevSibling(const NodeHandle& sibling) noexcept
+  auto SetPrevSibling(const NodeHandle& sibling) noexcept -> void
   {
     prev_sibling_ = sibling;
   }

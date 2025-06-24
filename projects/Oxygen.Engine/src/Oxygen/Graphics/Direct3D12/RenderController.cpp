@@ -28,60 +28,61 @@ using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::RenderController;
 using oxygen::graphics::detail::Bindless;
 
-RenderController::RenderController(
-    const std::string_view name,
-    const std::weak_ptr<oxygen::Graphics>& gfx_weak,
-    std::weak_ptr<Surface> surface_weak,
-    const uint32_t frames_in_flight)
-    : graphics::RenderController(name, gfx_weak, std::move(surface_weak), frames_in_flight)
+RenderController::RenderController(const std::string_view name,
+  const std::weak_ptr<oxygen::Graphics>& gfx_weak,
+  std::weak_ptr<Surface> surface_weak, const uint32_t frames_in_flight)
+  : graphics::RenderController(
+      name, gfx_weak, std::move(surface_weak), frames_in_flight)
 {
-    DCHECK_F(!gfx_weak.expired(), "Graphics object is expired");
+  DCHECK_F(!gfx_weak.expired(), "Graphics object is expired");
 
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-    auto* gfx = static_cast<Graphics*>(gfx_weak.lock().get());
-    auto allocator = std::make_unique<DescriptorAllocator>(
-        std::make_shared<D3D12HeapAllocationStrategy>(),
-        gfx->GetCurrentDevice());
-    AddComponent<Bindless>(std::move(allocator)); // TODO: make strategy configurable
-    AddComponent<detail::PipelineStateCache>(gfx);
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  auto* gfx = static_cast<Graphics*>(gfx_weak.lock().get());
+  auto allocator = std::make_unique<DescriptorAllocator>(
+    std::make_shared<D3D12HeapAllocationStrategy>(), gfx->GetCurrentDevice());
+  AddComponent<Bindless>(
+    std::move(allocator)); // TODO: make strategy configurable
+  AddComponent<detail::PipelineStateCache>(gfx);
 }
 
-auto RenderController::GetGraphics() -> d3d12::Graphics&
+auto RenderController::GetGraphics() -> Graphics&
 {
-    // Hides base GetGraphics(), returns d3d12::Graphics&
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-    return static_cast<Graphics&>(Base::GetGraphics());
+  // Hides base GetGraphics(), returns d3d12::Graphics&
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  return static_cast<Graphics&>(Base::GetGraphics());
 }
 
-auto RenderController::GetGraphics() const -> const d3d12::Graphics&
+auto RenderController::GetGraphics() const -> const Graphics&
 {
-    // Hides base GetGraphics(), returns d3d12::Graphics&
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-    return static_cast<const Graphics&>(Base::GetGraphics());
+  // Hides base GetGraphics(), returns d3d12::Graphics&
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  return static_cast<const Graphics&>(Base::GetGraphics());
 }
 
-auto RenderController::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
-    -> std::unique_ptr<graphics::CommandRecorder>
+auto RenderController::CreateCommandRecorder(
+  graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+  -> std::unique_ptr<graphics::CommandRecorder>
 {
-    return std::make_unique<CommandRecorder>(this, command_list, target_queue);
+  return std::make_unique<CommandRecorder>(this, command_list, target_queue);
 }
 
-auto RenderController::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, const size_t hash) const
-    -> detail::PipelineStateCache::Entry
+auto RenderController::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,
+  const size_t hash) -> detail::PipelineStateCache::Entry
 {
-    auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
+  auto& cache = GetComponent<detail::PipelineStateCache>();
+  return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
 }
 
-auto RenderController::GetOrCreateComputePipeline(ComputePipelineDesc desc, const size_t hash) const
-    -> detail::PipelineStateCache::Entry
+auto RenderController::GetOrCreateComputePipeline(ComputePipelineDesc desc,
+  const size_t hash) -> detail::PipelineStateCache::Entry
 {
-    auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
+  auto& cache = GetComponent<detail::PipelineStateCache>();
+  return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }
 
-auto RenderController::CreateDepthPrePass(std::shared_ptr<DepthPrePassConfig> config)
-    -> std::shared_ptr<RenderPass>
+auto RenderController::CreateDepthPrePass(
+  std::shared_ptr<DepthPrePassConfig> config) -> std::shared_ptr<RenderPass>
 {
-    return std::static_pointer_cast<RenderPass>(std::make_shared<DepthPrePass>(this, std::move(config)));
+  return std::static_pointer_cast<RenderPass>(
+    std::make_shared<DepthPrePass>(this, std::move(config)));
 }

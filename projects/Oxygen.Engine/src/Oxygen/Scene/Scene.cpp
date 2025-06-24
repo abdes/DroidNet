@@ -85,8 +85,8 @@ auto SceneIdManager::Instance() -> SceneIdManager&
 //------------------------------------------------------------------------------
 
 Scene::Scene(const std::string& name, size_t initial_capacity)
-  : nodes_(
-      std::make_shared<NodeTable>(SceneNode::kResourceType, initial_capacity))
+  : nodes_(std::make_shared<NodeTable>(
+      SceneNode::GetResourceType(), initial_capacity))
 {
   LOG_SCOPE_F(INFO, "Scene creation");
   LOG_F(2, "name: '{}'", name);

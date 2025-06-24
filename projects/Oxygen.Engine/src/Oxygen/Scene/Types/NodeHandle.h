@@ -67,10 +67,12 @@ namespace oxygen::scene {
 */
 class NodeHandle : public ResourceHandle {
 public:
-  using SceneId = ResourceHandle::CustomT;
+  static constexpr ResourceHandle::ResourceTypeT ResourceTypeId
+    = oxygen::IndexOf<SceneNode, ResourceTypeList>::value;
+  using SceneId = CustomT;
 
   //! Maximum valid Scene ID value (255 for 8-bit Custom field).
-  constexpr static SceneId kMaxSceneId = ResourceHandle::kCustomMax;
+  constexpr static SceneId kMaxSceneId = kCustomMax;
 
   //! Invalid/unassigned Scene ID (0 is reserved as invalid).
   constexpr static SceneId kInvalidSceneId = 0;
@@ -89,7 +91,7 @@ public:
   }
   //! Creates a node handle with the given \p index and \p scene_id.
   constexpr NodeHandle(IndexT index, SceneId scene_id)
-    : ResourceHandle(index, GetResourceTypeId<SceneNode, ResourceTypeList>())
+    : ResourceHandle(index, ResourceTypeId)
   {
     SetSceneId(scene_id);
   }
@@ -103,8 +105,7 @@ public:
   constexpr NodeHandle(const ResourceHandle& handle, SceneId scene_id)
     : ResourceHandle(handle)
   {
-    assert(handle.ResourceType()
-      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
+    assert(handle.ResourceType() == ResourceTypeId);
 
     SetSceneId(scene_id);
   }
@@ -118,8 +119,7 @@ public:
   constexpr NodeHandle(ResourceHandle&& handle, SceneId scene_id) noexcept
     : ResourceHandle(std::move(handle))
   {
-    assert(
-      ResourceType() == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
+    assert(ResourceType() == ResourceTypeId);
 
     SetSceneId(scene_id);
   }
@@ -128,8 +128,7 @@ public:
   //! type of the original handle must match this handle expected resource type.
   constexpr auto operator=(const ResourceHandle& handle) -> NodeHandle&
   {
-    assert(handle.ResourceType()
-      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
+    assert(handle.ResourceType() == ResourceTypeId);
 
     ResourceHandle::operator=(handle);
     SetSceneId(kInvalidSceneId);
@@ -140,8 +139,7 @@ public:
   //! type of the original handle must match this handle expected resource type.
   constexpr auto operator=(ResourceHandle&& handle) noexcept -> NodeHandle&
   {
-    assert(handle.ResourceType()
-      == (GetResourceTypeId<SceneNode, ResourceTypeList>()));
+    assert(handle.ResourceType() == ResourceTypeId);
 
     ResourceHandle::operator=(std::move(handle));
     SetSceneId(kInvalidSceneId);
@@ -154,7 +152,10 @@ public:
 
   //! Sets the Scene ID in the Custom bits (must be <= kMaxSceneId, 0 indicates
   //! no scene association).
-  constexpr void SetSceneId(SceneId scene_id) noexcept { SetCustom(scene_id); }
+  constexpr auto SetSceneId(SceneId scene_id) noexcept -> void
+  {
+    SetCustom(scene_id);
+  }
 
   //! Checks if this node handle belongs to the specified scene (\p scene_id).
   [[nodiscard]] constexpr auto BelongsToScene(SceneId scene_id) const noexcept
