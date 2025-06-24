@@ -97,29 +97,4 @@ struct IndexOf<T, TypeList<U, Ts...>>
   : std::integral_constant<std::size_t,
       1 + IndexOf<T, TypeList<Ts...>>::value> { };
 
-/*!
- Get the compile-time unique resource type ID for any registered type.
-
- Returns the zero-based index of type T within ResourceTypeList, providing zero
- runtime overhead type resolution through template metaprogramming.
-
- @tparam T The type for which to get a resource type ID for (must be in
- ResourceTypeList)
- @tparam ResourceTypeList Centralized TypeList, defined with all all types that
- require a unique resource type ID
- @return Compile-time constant resource type ID (0-255)
-
- @see @ref ResourceTypeList.h "Compile Time Resource Type System for usage and
- requirements"
-*/
-template <typename T, typename ResourceTypeList>
-constexpr auto GetResourceTypeId() noexcept -> ResourceHandle::ResourceTypeT
-{
-  static_assert(
-    IndexOf<T, ResourceTypeList>::value <= ResourceHandle::kResourceTypeMax,
-    "Too many resource types for ResourceHandle::ResourceTypeT!");
-  return static_cast<ResourceHandle::ResourceTypeT>(
-    IndexOf<T, ResourceTypeList>::value);
-}
-
 } // namespace oxygen

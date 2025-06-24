@@ -8,7 +8,6 @@
 
 #include <Oxygen/Base/Resource.h>
 
-using oxygen::GetResourceTypeId;
 using oxygen::Resource;
 using oxygen::ResourceHandle;
 using oxygen::TypeList;
@@ -54,7 +53,7 @@ NOLINT_TEST(ResourceTest, DefaultConstructor_CreatesInvalidResource)
 
   // Assert
   EXPECT_FALSE(resource.IsValid());
-  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
+  EXPECT_EQ(resource.GetResourceType(), TestResource::GetResourceType());
 }
 
 //! Test parameterized constructor with valid handle
@@ -65,7 +64,7 @@ NOLINT_TEST(ResourceTest, DefaultConstructor_CreatesInvalidResource)
 NOLINT_TEST(ResourceTest, ParameterizedConstructor_WithValidHandle)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
 
   // Act
   const TestResource resource(handle);
@@ -73,7 +72,7 @@ NOLINT_TEST(ResourceTest, ParameterizedConstructor_WithValidHandle)
   // Assert
   EXPECT_TRUE(resource.IsValid());
   EXPECT_EQ(resource.GetHandle(), handle);
-  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
+  EXPECT_EQ(resource.GetResourceType(), TestResource::GetResourceType());
 }
 
 //=== Copy Semantics Tests ===------------------------------------------------//
@@ -86,7 +85,7 @@ NOLINT_TEST(ResourceTest, ParameterizedConstructor_WithValidHandle)
 NOLINT_TEST(ResourceTest, CopyConstructor_PreservesState)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
   const TestResource resource1(handle);
 
   // Act
@@ -106,7 +105,7 @@ NOLINT_TEST(ResourceTest, CopyConstructor_PreservesState)
 NOLINT_TEST(ResourceTest, CopyAssignment_PreservesState)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
   const TestResource resource1(handle);
 
   // Act
@@ -128,7 +127,7 @@ NOLINT_TEST(ResourceTest, CopyAssignment_PreservesState)
 NOLINT_TEST(ResourceTest, MoveConstructor_TransfersOwnership)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
   TestResource resource1(handle);
 
   // Act
@@ -149,7 +148,7 @@ NOLINT_TEST(ResourceTest, MoveConstructor_TransfersOwnership)
 NOLINT_TEST(ResourceTest, MoveAssignment_TransfersOwnership)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
   TestResource resource1(handle);
 
   // Act
@@ -172,7 +171,7 @@ NOLINT_TEST(ResourceTest, MoveAssignment_TransfersOwnership)
 NOLINT_TEST(ResourceTest, Invalidate_ChangesValidityState)
 {
   // Arrange
-  const ResourceHandle handle(1U, TestResource::kResourceType);
+  const ResourceHandle handle(1U, TestResource::GetResourceType());
   TestResource resource(handle);
   EXPECT_TRUE(resource.IsValid());
 
@@ -181,7 +180,7 @@ NOLINT_TEST(ResourceTest, Invalidate_ChangesValidityState)
 
   // Assert
   EXPECT_FALSE(resource.IsValid());
-  EXPECT_EQ(resource.GetResourceType(), TestResource::kResourceType);
+  EXPECT_EQ(resource.GetResourceType(), TestResource::GetResourceType());
 }
 
 //=== Compile-Time Resource Type Tests ===------------------------------------//
@@ -196,29 +195,11 @@ NOLINT_TEST(ResourceTest, CompileTimeResourceTypes_AreUnique)
   using ::testing::Ne;
 
   // Arrange & Act
-  constexpr auto test_resource_type = TestResource::kResourceType;
-  constexpr auto another_resource_type = AnotherTestResource::kResourceType;
+  constexpr auto test_resource_type = TestResource::GetResourceType();
+  constexpr auto another_resource_type = AnotherTestResource::GetResourceType();
 
   // Assert
   EXPECT_THAT(test_resource_type, Ne(another_resource_type));
-}
-
-//! Test GetResourceTypeId function returns correct compile-time values
-/*!
- Verify that the GetResourceTypeId template function returns
- the same values as the class static constants.
-*/
-NOLINT_TEST(ResourceTest, GetResourceTypeId_ReturnsCorrectValues)
-{
-  // Arrange & Act
-  constexpr auto test_resource_type_func
-    = GetResourceTypeId<TestResource, TestResourceTypeList>();
-  constexpr auto another_resource_type_func
-    = GetResourceTypeId<AnotherTestResource, TestResourceTypeList>();
-
-  // Assert
-  EXPECT_EQ(test_resource_type_func, TestResource::kResourceType);
-  EXPECT_EQ(another_resource_type_func, AnotherTestResource::kResourceType);
 }
 
 } // namespace base::resources

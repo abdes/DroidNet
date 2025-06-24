@@ -8,9 +8,18 @@
 
 #include <Oxygen/Base/ResourceTypeList.h>
 
-using oxygen::GetResourceTypeId;
+using oxygen::IndexOf;
+using oxygen::ResourceHandle;
+using oxygen::TypeList;
 
 namespace {
+
+template <typename T, typename ResourceTypeList>
+constexpr auto GetResourceTypeId() noexcept -> ResourceHandle::ResourceTypeT
+{
+  return static_cast<ResourceHandle::ResourceTypeT>(
+    IndexOf<T, ResourceTypeList>::value);
+}
 
 //=== ResourceTypeId Tests ===----------------------------------------------//
 
