@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <iostream>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -338,8 +339,10 @@ template <typename T>
 template <typename... Params>
 auto ResourceTable<T>::Emplace(Params&&... args) -> ResourceHandle
 {
-  return InsertImpl(
-    [&]() { items_.emplace_back(std::forward<Params>(args)...); });
+  return InsertImpl([&]() {
+    // Use perfect forwarding to construct the item in place
+    items_.emplace_back(std::forward<Params>(args)...);
+  });
 }
 
 template <typename T>
