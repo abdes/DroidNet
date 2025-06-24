@@ -99,14 +99,32 @@ public:
   //! The centralized TypeList containing all valid resource types.
   using ResourceTypeList = ResourceTypeListT;
 
-  //! Compile-time allocated resource type ID
-  static constexpr ResourceHandle::ResourceTypeT kResourceType
-    = GetResourceTypeId<ResourceT, ResourceTypeList>();
+  //! Get the compile-time unique resource type ID for the `ResourceT` type,
+  //! provided it has been registered in the global `ResourceTypeList`.
+  /*!
+   Returns the zero-based index of Resource concreter type within
+   ResourceTypeList, providing zero runtime overhead type resolution through
+   template metaprogramming.
+
+   @return Compile-time constant resource type ID (0-255)
+
+   @see @ref ResourceTypeList.h "Compile Time Resource Type System for usage and
+   requirements"
+  */
+  static constexpr auto GetResourceType() noexcept
+    -> ResourceHandle::ResourceTypeT
+  {
+    static_assert(IndexOf<ResourceT, ResourceTypeList>::value
+        <= ResourceHandle::kResourceTypeMax,
+      "Too many resource types for ResourceHandle::ResourceTypeT!");
+    return static_cast<ResourceHandle::ResourceTypeT>(
+      IndexOf<ResourceT, ResourceTypeList>::value);
+  }
 
   constexpr explicit Resource(HandleT handle)
     : handle_(std::move(handle))
   {
-    assert(handle_.ResourceType() == kResourceType);
+    assert(handle_.ResourceType() == GetResourceType());
   }
 
   virtual ~Resource() = default;
@@ -119,12 +137,6 @@ public:
     return handle_;
   }
 
-  [[nodiscard]] constexpr auto GetResourceType() const noexcept
-    -> ResourceHandle::ResourceTypeT
-  {
-    return kResourceType;
-  }
-
   [[nodiscard]] virtual auto IsValid() const noexcept -> bool
   {
     return handle_.IsValid();
@@ -132,11 +144,11 @@ public:
 
 protected:
   constexpr Resource()
-    : handle_(HandleT::kInvalidIndex, kResourceType)
+    : handle_(HandleT::kInvalidIndex, GetResourceType())
   {
   }
 
-  constexpr void Invalidate() { handle_.Invalidate(); }
+  constexpr auto Invalidate() -> void { handle_.Invalidate(); }
 
 private:
   HandleT handle_;
