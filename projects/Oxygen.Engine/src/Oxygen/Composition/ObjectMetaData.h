@@ -8,8 +8,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Unreachable.h>
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <unordered_map>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Detail/FastIntMap.h>
 #include <Oxygen/Composition/Detail/GetTrulySingleInstance.h>
@@ -24,6 +26,7 @@ class TypeRegistry::Impl {
 public:
   using TypeKey = size_t;
   FastIntMap type_map_;
+  std::unordered_map<TypeId, std::string> id_to_name_;
   TypeId next_type_id_ = 1;
   std::shared_mutex mutex_;
 };
@@ -55,6 +58,7 @@ auto TypeRegistry::RegisterType(const char* name) const -> TypeId
   const auto id = impl_->next_type_id_++;
   CHECK_F(id != kInvalidTypeId, "TypeId overflow, aborting...");
   impl_->type_map_.Insert(name_hash, id);
+  impl_->id_to_name_[id] = name;
   return id;
 }
 
@@ -68,4 +72,37 @@ auto TypeRegistry::GetTypeId(const char* name) const -> TypeId
       std::string("no type with name=`{") + name + "}` is registered");
   }
   return out_id;
+}
+
+auto TypeRegistry::GetTypeName(TypeId id) const -> std::string_view
+{
+  std::shared_lock lock(impl_->mutex_);
+  auto it = impl_->id_to_name_.find(id);
+  if (it == impl_->id_to_name_.end()) {
+    throw std::invalid_argument("no type with given id is registered");
+  }
+  return it->second.c_str();
+}
+
+auto TypeRegistry::GetTypeNamePretty(TypeId id) const -> std::string_view
+{
+  return ExtractQualifiedClassName(GetTypeName(id));
+}
+
+auto TypeRegistry::ExtractQualifiedClassName(std::string_view signature)
+  -> std::string_view
+{
+  // Find the start of the fully qualified class
+  auto method_pos = signature.rfind("::");
+  if (method_pos == std::string_view::npos)
+    return {};
+
+  // Walk backward to find the start of the class name
+  std::size_t start = method_pos;
+  while (
+    start > 0 && signature[start - 1] != ' ' && signature[start - 1] != '`') {
+    --start;
+  }
+
+  return signature.substr(start, method_pos - start);
 }

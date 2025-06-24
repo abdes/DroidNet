@@ -88,12 +88,11 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "ComponentMacros.h"
+      "Detail/ComponentMacros.h"
       "Component.h"
       "Composition.h"
       "ComponentPool.h"
       "ComponentPoolRegistry.h"
-      "Concepts.h"
       "Named.h"
       "Object.h"
       "ObjectMetaData.h"

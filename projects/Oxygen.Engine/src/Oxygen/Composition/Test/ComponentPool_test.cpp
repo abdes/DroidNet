@@ -12,12 +12,13 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Resource.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ComponentPool.h>
 
-using ::testing::AllOf;
-using ::testing::Contains;
-using ::testing::IsSupersetOf;
-using ::testing::SizeIs;
+using testing::AllOf;
+using testing::Contains;
+using testing::IsSupersetOf;
+using testing::SizeIs;
 
 namespace {
 
@@ -33,10 +34,9 @@ using TestResourceTypeList = oxygen::TypeList<TestTransformComponent,
   TestRenderComponent, TestPhysicsComponent>;
 
 //! Test pooled component with basic functionality
-class TestTransformComponent
-  : public oxygen::Resource<TestTransformComponent, TestResourceTypeList> {
+class TestTransformComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(TestTransformComponent, TestResourceTypeList)
 public:
-  using ResourceTypeList = TestResourceTypeList;
   static constexpr std::size_t kExpectedPoolSize = 512;
 
   explicit TestTransformComponent(int x = 0, int y = 0, int z = 0)
@@ -50,7 +50,7 @@ public:
   auto GetY() const noexcept -> int { return y_; }
   auto GetZ() const noexcept -> int { return z_; }
 
-  void SetPosition(int x, int y, int z) noexcept
+  auto SetPosition(int x, int y, int z) noexcept -> void
   {
     x_ = x;
     y_ = y;
@@ -64,34 +64,28 @@ public:
     return a.x_ < b.x_;
   }
 
-private:
   int x_, y_, z_;
 };
 
 //! Test pooled component without comparison method
-class TestRenderComponent
-  : public oxygen::Resource<TestRenderComponent, TestResourceTypeList> {
+class TestRenderComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(TestRenderComponent, TestResourceTypeList)
 public:
-  using ResourceTypeList = TestResourceTypeList;
-
   explicit TestRenderComponent(std::string name = "default")
     : name_(std::move(name))
   {
   }
 
   auto GetName() const -> const std::string& { return name_; }
-  void SetName(std::string name) { name_ = std::move(name); }
+  auto SetName(std::string name) -> void { name_ = std::move(name); }
 
-private:
   std::string name_;
 };
 
 //! Test pooled component for threading tests
-class TestPhysicsComponent
-  : public oxygen::Resource<TestPhysicsComponent, TestResourceTypeList> {
+class TestPhysicsComponent : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(TestPhysicsComponent, TestResourceTypeList)
 public:
-  using ResourceTypeList = TestResourceTypeList;
-
   explicit TestPhysicsComponent(double mass = 1.0)
     : mass_(mass)
     , velocity_x_(0.0)
@@ -100,7 +94,7 @@ public:
   }
 
   auto GetMass() const noexcept -> double { return mass_; }
-  void SetVelocity(double x, double y) noexcept
+  auto SetVelocity(double x, double y) noexcept -> void
   {
     velocity_x_ = x;
     velocity_y_ = y;
@@ -116,22 +110,22 @@ private:
 //=== Test Fixtures ===-------------------------------------------------------//
 
 //! Basic ComponentPool fixture for simple operations
-class ComponentPoolBasicTest : public ::testing::Test {
+class ComponentPoolBasicTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     pool_ = std::make_unique<oxygen::ComponentPool<TestTransformComponent>>(64);
   }
 
-  void TearDown() override { pool_.reset(); }
+  auto TearDown() -> void override { pool_.reset(); }
 
   std::unique_ptr<oxygen::ComponentPool<TestTransformComponent>> pool_;
 };
 
 //! Threading fixture for concurrent access tests
-class ComponentPoolThreadingTest : public ::testing::Test {
+class ComponentPoolThreadingTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     physics_pool_
       = std::make_unique<oxygen::ComponentPool<TestPhysicsComponent>>(1024);
@@ -139,7 +133,7 @@ protected:
       = std::make_unique<oxygen::ComponentPool<TestTransformComponent>>(1024);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     physics_pool_.reset();
     transform_pool_.reset();
@@ -151,9 +145,9 @@ protected:
 };
 
 //! Complex scenario fixture for edge cases and performance
-class ComponentPoolComplexTest : public ::testing::Test {
+class ComponentPoolComplexTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     small_pool_
       = std::make_unique<oxygen::ComponentPool<TestRenderComponent>>(4);
@@ -161,7 +155,7 @@ protected:
       = std::make_unique<oxygen::ComponentPool<TestTransformComponent>>(2048);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     small_pool_.reset();
     large_pool_.reset();
@@ -198,9 +192,7 @@ NOLINT_TEST_F(ComponentPoolBasicTest, Construction_InitialStateIsValid)
   EXPECT_EQ(pool_->Size(), 0);
 
   auto type_id = pool_->GetComponentType();
-  constexpr auto expected_type_id
-    = oxygen::GetResourceTypeId<TestTransformComponent, TestResourceTypeList>();
-  EXPECT_EQ(type_id, expected_type_id);
+  EXPECT_EQ(type_id, TestTransformComponent::GetResourceType());
 }
 
 //! Test single component allocation and access

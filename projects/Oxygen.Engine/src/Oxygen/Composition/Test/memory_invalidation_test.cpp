@@ -6,7 +6,6 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 
@@ -30,11 +29,12 @@ private:
 };
 
 class DependentComponent final : public oxygen::Component {
-  OXYGEN_TYPED(DependentComponent)
+  OXYGEN_COMPONENT(DependentComponent)
   OXYGEN_COMPONENT_REQUIRES(BaseComponent)
 public:
-  void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) override
+  auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override
   {
     base_ptr_ = &static_cast<BaseComponent&>(
       get_component(BaseComponent::ClassTypeId()));
@@ -65,16 +65,14 @@ class DummyComponent3 final : public oxygen::Component {
 
 class TestComposition : public oxygen::Composition {
 public:
+  using Base = Composition;
+
   explicit TestComposition(std::size_t capacity)
-    : oxygen::Composition(capacity)
+    : Composition(capacity)
   {
   }
 
-  template <typename T, typename... Args>
-  auto AddComponent(Args&&... args) -> T&
-  {
-    return oxygen::Composition::AddComponent<T>(std::forward<Args>(args)...);
-  }
+  using Base::AddComponent;
 };
 
 //=== Test Case ===-----------------------------------------------------------//

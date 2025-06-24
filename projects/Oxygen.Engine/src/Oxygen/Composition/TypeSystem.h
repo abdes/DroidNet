@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/api_export.h>
@@ -28,6 +29,11 @@ public:
 
   OXGN_COM_API auto RegisterType(const char* name) const -> TypeId;
   OXGN_COM_API auto GetTypeId(const char* name) const -> TypeId;
+  OXGN_COM_API auto GetTypeName(TypeId id) const -> std::string_view;
+  OXGN_COM_API auto GetTypeNamePretty(TypeId id) const -> std::string_view;
+
+  OXGN_COM_API static auto ExtractQualifiedClassName(std::string_view signature)
+    -> std::string_view;
 
 private:
   class Impl;

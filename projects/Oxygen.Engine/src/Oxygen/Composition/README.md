@@ -11,18 +11,17 @@
 | ✅ | **COMPLETED**: Implement thread-safe ComponentPool template with compile-time type resolution and contiguous storage |
 | ✅ | **COMPLETED**: Implement ComponentPoolRegistry class that manages ComponentPool instances using GetTrulySingleInstance |
 | ✅ | **COMPLETED**: Add ComponentPoolRegistry initialization function to cs_init.cpp for global singleton system |
-| ❌ | Refactor `Composition::ComponentManager`: Add dual storage containers (unique and pooled). |
-| ❌ | Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage. |
+| ✅ | **COMPLETED**: Refactor `Composition` for hybrid storage: add dual containers (unique and pooled) |
+| ✅ | **COMPLETED**: Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage. |
 | ✅ | **COMPLETED**: Update component declaration macros: Ensure `OXYGEN_COMPONENT` and (if needed) `OXYGEN_RESOURCE_COMPONENT` macros correctly detect and register pooled vs. non-pooled components. |
-| ❌ | Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust. |
-| ❌ | Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types. |
+| ✅ | **COMPLETED**: Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust. |
+| ✅ | **COMPLETED**: Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types. |
 | ❌ | Write and run unit tests for hybrid storage: Cover all scenarios—adding, removing, accessing, and dependency management for both pooled and non-pooled components. |
 | ❌ | Profile component usage: Identify which components are performance-critical and should be pooled, using real-world or synthetic benchmarks. |
 | ❌ | Benchmark pooled vs. non-pooled performance: Measure and compare access times, memory usage, and cache locality for both storage types. |
 | ❌ | Optimize pool sizing and growth: Tune initial pool sizes and growth strategies based on profiling data; document best practices. |
 | ❌ | Improve handle and pointer validation: Enhance cached pointer validation and handle-based access performance, especially for pooled components. |
 | ❌ | Expand pooling to additional components: Based on profiling, migrate more components to pooled storage as appropriate. |
-| ❌ | Implement advanced lifecycle management: Add support for component dependencies, lifecycle hooks, and cross-component interactions. |
 | ❌ | Document usage guidelines and performance recommendations: Provide clear documentation for engine users on when and how to use pooled vs. non-pooled components, and how to declare new components. |
 
 ## Overview
