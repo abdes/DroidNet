@@ -145,17 +145,17 @@ constexpr auto GetResourceTypeId() noexcept -> ResourceHandle::ResourceTypeT
 
  @see ResourceTable, ResourceHandle, GetResourceTypeId
 */
-template <typename ResourceT, typename ResourceTypeList,
+template <typename ResourceT, typename ResourceTypeListT,
   typename HandleT = ResourceHandle>
   requires(std::is_base_of_v<ResourceHandle, HandleT>)
 class Resource {
 public:
   //! The centralized TypeList containing all valid resource types.
-  using ResourceTypeList_t = ResourceTypeList;
+  using ResourceTypeList = ResourceTypeListT;
 
   //! Compile-time allocated resource type ID
   static constexpr ResourceHandle::ResourceTypeT kResourceType
-    = GetResourceTypeId<ResourceT, ResourceTypeList_t>();
+    = GetResourceTypeId<ResourceT, ResourceTypeList>();
 
   constexpr explicit Resource(HandleT handle)
     : handle_(std::move(handle))
