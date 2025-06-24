@@ -51,12 +51,15 @@ namespace platform {
 
     auto PollOne() -> size_t { return io_.poll(); }
 
-    void Stop() override;
+    auto Stop() -> void override;
 
     [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {})
       -> co::Co<> override;
 
-    [[nodiscard]] auto IsRunning() const -> bool { return nursery_ != nullptr; }
+    [[nodiscard]] auto IsRunning() const -> bool override
+    {
+      return nursery_ != nullptr;
+    }
 
     [[nodiscard]] auto Nursery() const -> co::Nursery&
     {
@@ -67,7 +70,7 @@ namespace platform {
     [[nodiscard]] auto OnTerminate() -> co::Event& { return terminate_; }
 
   private:
-    void HandleSignal(const std::error_code& error, int signal_number);
+    auto HandleSignal(const std::error_code& error, int signal_number) -> void;
 
     asio::io_context io_;
     asio::signal_set signals_;
@@ -138,8 +141,9 @@ namespace platform {
     auto ForRead() { return channel_.ForRead(); }
 
   protected:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) override
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override
     {
       async_ = &static_cast<AsyncOps&>(get_component(AsyncOps::ClassTypeId()));
       event_pump_
@@ -173,8 +177,9 @@ namespace platform {
     }
 
   protected:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) override
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override
     {
       async_ = &static_cast<AsyncOps&>(get_component(AsyncOps::ClassTypeId()));
       event_pump_
@@ -205,24 +210,24 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(Platform)
 
   [[nodiscard]] OXYGEN_PLATFORM_API auto ActivateAsync(
-    co::TaskStarted<> started = {}) -> co::Co<>;
-  OXYGEN_PLATFORM_API void Run();
-  [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
-  OXYGEN_PLATFORM_API void Stop();
+    co::TaskStarted<> started = {}) -> co::Co<> override;
+  OXYGEN_PLATFORM_API auto Run() -> void override;
+  [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool override;
+  OXYGEN_PLATFORM_API auto Stop() -> void override;
 
-  auto Async() const -> platform::AsyncOps&
+  auto Async() -> platform::AsyncOps&
   {
     return GetComponent<platform::AsyncOps>();
   }
-  auto Events() const -> platform::EventPump&
+  auto Events() -> platform::EventPump&
   {
     return GetComponent<platform::EventPump>();
   }
-  auto Input() const -> platform::InputEvents&
+  auto Input() -> platform::InputEvents&
   {
     return GetComponent<platform::InputEvents>();
   }
-  auto Windows() const -> platform::WindowManager&
+  auto Windows() -> platform::WindowManager&
   {
     return GetComponent<platform::WindowManager>();
   }
@@ -231,7 +236,7 @@ public:
     -> platform::InputSlot;
 
 private:
-  void Compose(const PlatformConfig& config);
+  auto Compose(const PlatformConfig& config) -> void;
 };
 
 #if 0

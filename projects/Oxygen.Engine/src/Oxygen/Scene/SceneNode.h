@@ -59,7 +59,7 @@ class Scene;
  Scene methods for creating, destroying, or re-parenting nodes.
 */
 class SceneNode : public Object, public Resource<SceneNode, ResourceTypeList> {
-  OXYGEN_TYPED(SceneNode)
+  OXYGEN_POOLED_COMPONENT(SceneNode, ResourceTypeList)
 
 public:
   using Flags = SceneNodeImpl::Flags;
@@ -148,14 +148,14 @@ public:
 private:
   // We need this to allow Scene to lazily invalidate the node even when it is
   // const.
-  void Invalidate() const
+  auto Invalidate() const -> void
   {
     // NOLINTNEXTLINE(*-pro-type-const-cast)
     const_cast<SceneNode*>(this)->Resource::Invalidate();
   }
 
   // Logging for SafeCall errors using DLOG_F
-  void LogSafeCallError(const char* reason) const noexcept;
+  auto LogSafeCallError(const char* reason) const noexcept -> void;
 
   std::weak_ptr<const Scene> scene_weak_ {};
 
@@ -368,7 +368,7 @@ private:
   };
 
   // Logging for SafeCall errors using DLOG_F
-  OXGN_SCN_API void LogSafeCallError(const char* reason) const noexcept;
+  OXGN_SCN_API auto LogSafeCallError(const char* reason) const noexcept -> void;
 
   // Validators for SafeCall operations
   class BaseTransformValidator;

@@ -9,7 +9,6 @@
 #include <optional>
 #include <string>
 
-#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
@@ -105,10 +104,12 @@ public:
     OXGN_SCN_NDAPI auto GetNextSibling() const noexcept -> const NodeHandle&;
     OXGN_SCN_NDAPI auto GetPrevSibling() const noexcept -> const NodeHandle&;
 
-    OXGN_SCN_API void SetParent(const NodeHandle& parent) noexcept;
-    OXGN_SCN_API void SetFirstChild(const NodeHandle& child) noexcept;
-    OXGN_SCN_API void SetNextSibling(const NodeHandle& sibling) noexcept;
-    OXGN_SCN_API void SetPrevSibling(const NodeHandle& sibling) noexcept;
+    OXGN_SCN_API auto SetParent(const NodeHandle& parent) noexcept -> void;
+    OXGN_SCN_API auto SetFirstChild(const NodeHandle& child) noexcept -> void;
+    OXGN_SCN_API auto SetNextSibling(const NodeHandle& sibling) noexcept
+      -> void;
+    OXGN_SCN_API auto SetPrevSibling(const NodeHandle& sibling) noexcept
+      -> void;
 
     OXGN_SCN_NDAPI auto IsRoot() const noexcept -> bool;
     OXGN_SCN_NDAPI auto IsValid() const noexcept -> bool
@@ -123,7 +124,7 @@ public:
     {
     }
 
-    void Invalidate() noexcept
+    auto Invalidate() noexcept -> void
     {
       impl_ = nullptr;
       graph_data_ = nullptr;
@@ -145,7 +146,7 @@ public:
   OXGN_SCN_API auto operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&;
 
   OXGN_SCN_NDAPI auto GetName() const noexcept -> std::string_view;
-  OXGN_SCN_API void SetName(std::string_view name) noexcept;
+  OXGN_SCN_API auto SetName(std::string_view name) noexcept -> void;
 
   //=== Node Flags Accessors ===----------------------------------------------//
 
@@ -160,13 +161,13 @@ public:
   //=== Transform management ===----------------------------------------------//
 
   //! Marks the node's transform as requiring recalculation.
-  OXGN_SCN_API void MarkTransformDirty() noexcept;
+  OXGN_SCN_API auto MarkTransformDirty() noexcept -> void;
 
   //! Checks whether the node's transform requires recalculation.
   OXGN_SCN_NDAPI auto IsTransformDirty() const noexcept -> bool;
 
   //! Updates the node's world transformation matrices.
-  OXGN_SCN_API void UpdateTransforms(const Scene& scene);
+  OXGN_SCN_API auto UpdateTransforms(const Scene& scene) -> void;
 
   //=== Cloning Support ===---------------------------------------------------//
 
@@ -186,7 +187,7 @@ protected:
    The proper way remains to call UpdateTransforms() to ensure the transform
    matrices are up to date.
   */
-  OXGN_SCN_API void ClearTransformDirty() noexcept;
+  OXGN_SCN_API auto ClearTransformDirty() noexcept -> void;
 
 private:
   [[nodiscard]] constexpr auto ShouldIgnoreParentTransform() const

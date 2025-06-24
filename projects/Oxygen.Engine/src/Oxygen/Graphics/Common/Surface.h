@@ -10,7 +10,6 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>

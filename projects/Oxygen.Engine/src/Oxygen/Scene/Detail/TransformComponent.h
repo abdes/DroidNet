@@ -168,7 +168,7 @@ protected:
    dependencies are properly set up in the cloned component.
    */
   void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) override
+    const std::function<Component&(TypeId)>& get_component) noexcept override
   {
     meta_data_ = &static_cast<ObjectMetaData&>(
       get_component(ObjectMetaData::ClassTypeId()));

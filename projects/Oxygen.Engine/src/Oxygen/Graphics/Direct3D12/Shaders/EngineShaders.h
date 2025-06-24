@@ -9,8 +9,7 @@
 #include <memory>
 #include <string_view>
 
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Component.h>
 
 namespace oxygen::graphics {
 
@@ -20,18 +19,19 @@ class IShaderByteCode;
 
 namespace d3d12 {
 
-    class EngineShaders : public Component {
-        OXYGEN_COMPONENT(EngineShaders)
-    public:
-        EngineShaders();
-        ~EngineShaders() override;
+  class EngineShaders : public Component {
+    OXYGEN_COMPONENT(EngineShaders)
+  public:
+    EngineShaders();
+    ~EngineShaders() override;
 
-        [[nodiscard]] auto GetShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>;
+    [[nodiscard]] auto GetShader(std::string_view unique_id) const
+      -> std::shared_ptr<IShaderByteCode>;
 
-    private:
-        std::shared_ptr<graphics::ShaderCompiler> compiler_ {};
-        std::unique_ptr<ShaderManager> shaders_ {};
-    };
+  private:
+    std::shared_ptr<ShaderCompiler> compiler_ {};
+    std::unique_ptr<ShaderManager> shaders_ {};
+  };
 
 } // namespace d3d12
 

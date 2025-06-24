@@ -48,7 +48,7 @@ void SwapChain::Present() const
 }
 
 void SwapChain::UpdateDependencies(
-  const std::function<Component&(TypeId)>& get_component)
+  const std::function<Component&(TypeId)>& get_component) noexcept
 {
   using WindowComponent = graphics::detail::WindowComponent;
   window_ = &static_cast<WindowComponent&>(

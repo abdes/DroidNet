@@ -495,8 +495,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
   ASSERT_TRUE(parent_impl_opt.has_value());
   ASSERT_TRUE(child_impl_opt.has_value());
 
-  const auto& parent_impl = parent_impl_opt->get();
-  const auto& child_impl = child_impl_opt->get();
+  auto& parent_impl = parent_impl_opt->get();
+  auto& child_impl = child_impl_opt->get();
 
   // Update parent transform first (root)
   parent_impl.GetComponent<TransformComponent>().UpdateWorldTransformAsRoot();
