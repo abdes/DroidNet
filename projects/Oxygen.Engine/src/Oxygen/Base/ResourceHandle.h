@@ -107,7 +107,7 @@ public:
   explicit constexpr ResourceHandle(
     IndexT index, ResourceTypeT type = kTypeNotInitialized);
 
-    ~ResourceHandle() = default;
+  ~ResourceHandle() = default;
 
   constexpr ResourceHandle(const ResourceHandle&) = default;
   constexpr auto operator=(const ResourceHandle&) -> ResourceHandle&;
@@ -179,16 +179,16 @@ private:
   static_assert(sizeof(GenerationT) * 8 >= kGenerationBits,
     "GenerationT size is insufficient for kGenerationBits");
 
-    static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits,
+  static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits,
     "ResourceTypeT size is insufficient for kResourceTypeBits");
 
-    static_assert(sizeof(IndexT) * 8 >= kIndexBits,
+  static_assert(sizeof(IndexT) * 8 >= kIndexBits,
     "IndexT size is insufficient for kIndexBits");
 
-    static_assert(sizeof(CustomT) * 8 >= kCustomBits,
+  static_assert(sizeof(CustomT) * 8 >= kCustomBits,
     "CustomT size is insufficient for kCustomBits");
 
-    static_assert(sizeof(ReservedT) * 8 >= kReservedBits,
+  static_assert(sizeof(ReservedT) * 8 >= kReservedBits,
     "ReservedT size is insufficient for kReservedBits");
 };
 
