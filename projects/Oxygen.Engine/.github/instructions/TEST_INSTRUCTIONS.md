@@ -49,6 +49,3 @@ applyTo: '**/*.cpp;**/*.h'
 - Add using ::testing::MatcherName declarations at test start.
 - Use expectation helpers (e.g., ExpectVisitedNodes, ExpectContainsExactlyNodes)
   for clarity and reuse.
-- Use GCHECK_F or TRACE_GCHECK_F for all critical assertions to improve
-  traceability (TRACE_GCHECK_F only for ambiguous failure locations, with
-  concise tags).
