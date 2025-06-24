@@ -100,7 +100,8 @@
     "string_view": "cpp",
     "*.ipp": "cpp",
     "valarray": "cpp",
-    "strstream": "cpp"
+    "strstream": "cpp",
+    "*.impl": "cpp"
   },
   "editor.rulers": [
     80,
