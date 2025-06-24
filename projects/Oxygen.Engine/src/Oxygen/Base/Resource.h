@@ -8,63 +8,9 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
-#include <type_traits>
+#include <Oxygen/Base/ResourceTypeList.h>
 
 namespace oxygen {
-
-//=== Compile-Time Resource Type System ===-----------------------------------//
-
-/*!
- Template metaprogramming-based resource type system. Provides compile-time
- unique resource type IDs without RTTI or runtime overhead.
-*/
-template <typename... Ts> struct TypeList { };
-
-/*!
- Template metaprogramming helper to find the index of a type in a TypeList.
-
- Recursively searches through the TypeList at compile time and returns the
- zero-based index where the type is found. Generates a compile error if the type
- is not found, providing type safety.
-
- @tparam T The type to search for
- @tparam List The TypeList to search in
-
- @see GetResourceTypeId for usage in the resource type system
-*/
-template <typename T, typename List> struct IndexOf;
-
-template <typename T, typename... Ts>
-struct IndexOf<T, TypeList<T, Ts...>> : std::integral_constant<std::size_t, 0> {
-};
-
-template <typename T, typename U, typename... Ts>
-struct IndexOf<T, TypeList<U, Ts...>>
-  : std::integral_constant<std::size_t,
-      1 + IndexOf<T, TypeList<Ts...>>::value> { };
-
-/*!
- Get compile-time unique resource type ID for any registered type.
-
- Returns the zero-based index of type T within ResourceTypeList, providing zero
- runtime overhead type resolution through template metaprogramming.
-
- @tparam T The resource type to get ID for (must exist in ResourceTypeList)
- @tparam ResourceTypeList Centralized TypeList containing all valid resource
- types
- @return Compile-time constant resource type ID (0-255)
-
- @see Resource class documentation for detailed usage patterns, performance
-      characteristics, and binary compatibility requirements
-*/
-template <typename T, typename ResourceTypeList>
-constexpr auto GetResourceTypeId() noexcept -> ResourceHandle::ResourceTypeT
-{
-  static_assert(IndexOf<T, ResourceTypeList>::value < 256,
-    "Too many resource types for ResourceHandle::ResourceTypeT!");
-  return static_cast<ResourceHandle::ResourceTypeT>(
-    IndexOf<T, ResourceTypeList>::value);
-}
 
 /*!
  Base class for objects that require handle-based access into a ResourceTable

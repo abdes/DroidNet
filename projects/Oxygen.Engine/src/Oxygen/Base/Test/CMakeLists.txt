@@ -64,6 +64,7 @@ m_gtest_program(
     "Resource_test.cpp"
     "ResourceHandle_test.cpp"
     "ResourceTable_test.cpp"
+    "ResourceTypeList_test.cpp"
 )
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
