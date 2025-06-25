@@ -106,6 +106,7 @@ public:
   }
 
   OXGN_COM_API auto PrintComponents(std::ostream& out) const -> void;
+  OXGN_COM_API auto LogComponents() const -> void;
 
 protected:
   OXGN_COM_API explicit Composition(std::size_t initial_capacity = 4);
@@ -284,6 +285,9 @@ private:
   auto PrintComponentInfo(std::ostream& out, TypeId type_id,
     std::string_view type_name, std::string_view kind,
     const Component* comp) const -> void;
+  auto GetDebugName() const -> std::string;
+  auto LogComponentInfo(TypeId type_id, std::string_view type_name,
+    std::string_view kind, const Component* comp) const -> void;
 
   mutable std::shared_mutex mutex_;
 };

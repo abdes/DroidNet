@@ -407,12 +407,8 @@ auto Composition::PrintComponentInfo(std::ostream& out, const TypeId type_id,
   out << "\n";
 }
 
-auto Composition::PrintComponents(std::ostream& out) const -> void
+auto Composition::GetDebugName() const -> std::string
 {
-  std::shared_lock lock(mutex_);
-
-  // Favor the object name from ObjectMetaData if available; otherwise, use the
-  // type name of the composition.
   std::string object_name = "Unknown";
   if (HasComponent<ObjectMetaData>()) {
     object_name = static_cast<const ObjectMetaData&>(
@@ -421,10 +417,44 @@ auto Composition::PrintComponents(std::ostream& out) const -> void
   } else {
     object_name = GetTypeNamePretty();
   }
+  return object_name;
+}
+auto Composition::LogComponentInfo(TypeId type_id, std::string_view type_name,
+  std::string_view kind, const Component* comp) const -> void
+{
+  if (!comp) {
+    DLOG_F(INFO, "[{}] {} ({}) [INVALID]", type_id, type_name, kind);
+    return;
+  }
+
+  DLOG_F(INFO, "[{}] {} ({})", type_id, type_name, kind);
+  if (comp->HasDependencies() && !comp->Dependencies().empty()) {
+    DLOG_SCOPE_F(INFO, "Requires");
+    const auto& type_registry = TypeRegistry::Get();
+    for (size_t i = 0; i < comp->Dependencies().size(); ++i) {
+      const auto dep_type_id = comp->Dependencies()[i];
+      std::string_view dep_name;
+      try {
+        dep_name = GetComponentImpl(dep_type_id).GetTypeNamePretty();
+      } catch (...) {
+        try {
+          dep_name = type_registry.GetTypeNamePretty(dep_type_id);
+        } catch (...) {
+          dep_name = "<missing>";
+        }
+      }
+      DLOG_F(INFO, "{}", dep_name);
+    }
+  }
+}
+
+auto Composition::PrintComponents(std::ostream& out) const -> void
+{
+  std::shared_lock lock(mutex_);
 
   const std::size_t total_count
     = local_components_.size() + pooled_components_.size();
-  out << "> Object \"" << object_name << "\" has " << total_count
+  out << "> Object \"" << GetDebugName() << "\" has " << total_count
       << " components:\n";
 
   // Print direct (non-pooled) components
@@ -449,4 +479,38 @@ auto Composition::PrintComponents(std::ostream& out) const -> void
     PrintComponentInfo(out, type_id, type_name, "Pooled", comp);
   }
   out << "\n";
+}
+auto Composition::LogComponents() const -> void
+{
+  DLOG_SCOPE_F(INFO, "Composition");
+  std::shared_lock lock(mutex_);
+  DLOG_F(INFO, "name: {}", GetDebugName());
+
+  {
+    DLOG_SCOPE_F(INFO, "Local Components");
+    DLOG_F(INFO, "count: {}", local_components_.size());
+    for (const auto& entry : local_components_) {
+      LogComponentInfo(
+        entry->GetTypeId(), entry->GetTypeNamePretty(), "Direct", entry.get());
+    }
+  }
+
+  {
+    DLOG_SCOPE_F(INFO, "Pooled Components");
+    DLOG_F(INFO, "count: {}", pooled_components_.size());
+    for (const auto& [type_id, pooled_entry] : pooled_components_) {
+      std::string_view type_name;
+      try {
+        type_name = TypeRegistry::Get().GetTypeNamePretty(type_id);
+      } catch (...) {
+        type_name = "<unknown>";
+      }
+      const Component* comp = nullptr;
+      if (pooled_entry && pooled_entry->pool_ptr
+        && pooled_entry->handle.IsValid()) {
+        comp = pooled_entry->GetComponent();
+      }
+      LogComponentInfo(type_id, type_name, "Pooled", comp);
+    }
+  }
 }
