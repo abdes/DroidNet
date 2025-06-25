@@ -273,7 +273,8 @@ auto Composition::GetComponentImpl(const TypeId type_id) -> Component&
   return const_cast<Component&>(std::as_const(*this).GetComponentImpl(type_id));
 }
 
-auto Composition::GetPooledComponentImpl(const IComponentPoolUntyped& pool,
+auto Composition::GetPooledComponentImpl(
+  const composition::detail::ComponentPoolUntyped& pool,
   const TypeId type_id) const -> const Component&
 {
   const auto it = pooled_components_.find(type_id);
@@ -289,7 +290,8 @@ auto Composition::GetPooledComponentImpl(const IComponentPoolUntyped& pool,
 }
 
 auto Composition::GetPooledComponentImpl(
-  const IComponentPoolUntyped& pool, const TypeId type_id) -> Component&
+  const composition::detail::ComponentPoolUntyped& pool, const TypeId type_id)
+  -> Component&
 {
   return const_cast<Component&>(
     std::as_const(*this).GetPooledComponentImpl(pool, type_id));
@@ -343,7 +345,7 @@ auto Composition::DeepCopyPooledComponentsFrom(const Composition& other) -> void
   pooled_components_.reserve(other.pooled_components_.size());
 
   for (const auto& [type_id, entry] : other.pooled_components_) {
-    IComponentPoolUntyped* pool = entry->pool_ptr;
+    composition::detail::ComponentPoolUntyped* pool = entry->pool_ptr;
     ResourceHandle src_handle = entry->handle;
     if (!pool || !src_handle.IsValid()) {
       throw ComponentError("Invalid pooled entry in source composition");
