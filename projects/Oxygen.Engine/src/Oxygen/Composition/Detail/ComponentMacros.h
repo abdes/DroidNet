@@ -6,10 +6,8 @@
 
 #pragma once
 
-#if defined(DOXYGEN_DOCUMENTATION_BUILD)
-//! @def OXYGEN_COMPONENT
-//! Declares a class as an Oxygen Engine component type.
 /*!
+ @def OXYGEN_COMPONENT
  Declares all required type information and registration hooks for a class to be
  used as a component in the Oxygen Engine composition system. This macro must be
  placed inside the declaration of a class derived from `oxygen::Component`.
@@ -32,19 +30,15 @@
 
  @see OXYGEN_POOLED, OXYGEN_COMPONENT_REQUIRES, oxygen::Component
 */
-#else // DOXYGEN_DOCUMENTATION_BUILD
-#  define OXYGEN_COMPONENT(type)                                               \
-  public:                                                                      \
-    friend class oxygen::Composition;                                          \
-    OXYGEN_TYPED(type)                                                         \
-  private:
-#endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(DOXYGEN_DOCUMENTATION_BUILD)
-//! @def OXYGEN_POOLED
-//! Declares a component as a pooled component, associated with a resource type
-//! list.
+#define OXYGEN_COMPONENT(type)                                                 \
+public:                                                                        \
+  friend class oxygen::Composition;                                            \
+  OXYGEN_TYPED(type)                                                           \
+private:
+
 /*!
+ @def OXYGEN_POOLED_COMPONENT
  Marks a component class as a pooled component, enabling it to be managed by a
  component pool for efficient storage and handle-based access. This macro must
  be placed inside the declaration of a class derived from `oxygen::Component`.
@@ -72,29 +66,25 @@
  @note The type list must be defined and registered elsewhere in the codebase.
  @see OXYGEN_COMPONENT, oxygen::ComponentPoolRegistry
 */
-#else // DOXYGEN_DOCUMENTATION_BUILD
-#  define OXYGEN_POOLED_COMPONENT(type, type_list)                             \
-    OXYGEN_COMPONENT(type)                                                     \
-  public:                                                                      \
-    static constexpr bool is_pooled = true;                                    \
-    using ResourceTypeList = type_list;                                        \
-    static constexpr auto GetResourceType() noexcept                           \
-      -> oxygen::ResourceHandle::ResourceTypeT                                 \
-    {                                                                          \
-      constexpr auto rt = oxygen::IndexOf<type, ResourceTypeList>::value;      \
-      static_assert(rt <= oxygen::ResourceHandle::kResourceTypeMax,            \
-        "Too many resource types for ResourceHandle::ResourceTypeT!");         \
-      return static_cast<oxygen::ResourceHandle::ResourceTypeT>(rt);           \
-    }                                                                          \
-                                                                               \
-  private:
-#endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(DOXYGEN_DOCUMENTATION_BUILD)
-//! @def OXYGEN_COMPONENT_REQUIRES(...)
-//! Declares required Component dependencies that must exist before this
-//! Component can be created.
+#define OXYGEN_POOLED_COMPONENT(type, type_list)                               \
+  OXYGEN_COMPONENT(type)                                                       \
+public:                                                                        \
+  static constexpr bool is_pooled = true;                                      \
+  using ResourceTypeList = type_list;                                          \
+  static constexpr auto GetResourceType() noexcept                             \
+    -> oxygen::ResourceHandle::ResourceTypeT                                   \
+  {                                                                            \
+    constexpr auto rt = oxygen::IndexOf<type, ResourceTypeList>::value;        \
+    static_assert(rt <= oxygen::ResourceHandle::kResourceTypeMax,              \
+      "Too many resource types for ResourceHandle::ResourceTypeT!");           \
+    return static_cast<oxygen::ResourceHandle::ResourceTypeT>(rt);             \
+  }                                                                            \
+                                                                               \
+private:
+
 /*!
+ @def OXYGEN_COMPONENT_REQUIRES(...)
  Declares that this component type requires one or more other component types to
  be present in the same composition before it can be created or used. This macro
  generates all necessary static and virtual methods for dependency introspection
@@ -124,42 +114,40 @@
  @see oxygen::Component, oxygen::Composition, OXYGEN_COMPONENT
  @see https://www.scs.stanford.edu/~dm/blog/va-opt.html for macro expansion
 */
-#else // DOXYGEN_DOCUMENTATION_BUILD
-#  define OXYGEN_COMPONENT_REQUIRES(...)                                       \
-    OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
-#  define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                 \
-  private:                                                                     \
-    inline static const oxygen::TypeId dependencies[]                          \
-      = { __VA_OPT__(OXYGEN_EXPAND(FOR_EACH_HELPER(__VA_ARGS__))) };           \
+
+#define OXYGEN_COMPONENT_REQUIRES(...)                                         \
+  OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
+#define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                   \
+private:                                                                       \
+  inline static const oxygen::TypeId dependencies[]                            \
+    = { __VA_OPT__(OXYGEN_EXPAND(FOR_EACH_HELPER(__VA_ARGS__))) };             \
                                                                                \
-  public:                                                                      \
-    static constexpr auto ClassDependencies()                                  \
-      -> std::span<const oxygen::TypeId>                                       \
-    {                                                                          \
-      return { dependencies };                                                 \
-    }                                                                          \
-    auto HasDependencies() const noexcept -> bool override { return true; }    \
-    auto Dependencies() const noexcept -> std::span<const oxygen::TypeId>      \
-      override                                                                 \
-    {                                                                          \
-      return { dependencies };                                                 \
-    }                                                                          \
+public:                                                                        \
+  static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> \
+  {                                                                            \
+    return { dependencies };                                                   \
+  }                                                                            \
+  auto HasDependencies() const noexcept -> bool override { return true; }      \
+  auto Dependencies() const noexcept -> std::span<const oxygen::TypeId>        \
+    override                                                                   \
+  {                                                                            \
+    return { dependencies };                                                   \
+  }                                                                            \
                                                                                \
-  private:
+private:
 
-#  define FOR_EACH_HELPER(a1, ...)                                             \
-    a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
-#  define FOR_EACH_AGAIN() FOR_EACH_HELPER
+#define FOR_EACH_HELPER(a1, ...)                                               \
+  a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
+#define FOR_EACH_AGAIN() FOR_EACH_HELPER
 
-#  define PARENS ()
+#define PARENS ()
 
-#  define OXYGEN_EXPAND(...)                                                   \
-    OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
-#  define OXYGEN_EXPAND4(...)                                                  \
-    OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
-#  define OXYGEN_EXPAND3(...)                                                  \
-    OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
-#  define OXYGEN_EXPAND2(...)                                                  \
-    OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
-#  define OXYGEN_EXPAND1(...) __VA_ARGS__
-#endif // !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#define OXYGEN_EXPAND(...)                                                     \
+  OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
+#define OXYGEN_EXPAND4(...)                                                    \
+  OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
+#define OXYGEN_EXPAND3(...)                                                    \
+  OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
+#define OXYGEN_EXPAND2(...)                                                    \
+  OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
+#define OXYGEN_EXPAND1(...) __VA_ARGS__
