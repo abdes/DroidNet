@@ -39,7 +39,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_CORE_EXPORTS"
+      "OXGN_CORE_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -54,17 +54,18 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Version.cpp"
+    "Detail/ToStringConverters.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "api_export.h" "version-info.h" "Resources.h" "Version.h" "SafeCall.h"
+    FILES "api_export.h" "version-info.h" "Resources.h" "Version.h" "SafeCall.h" "ViewPort.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_CORE_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_CORE_STATIC>
 )
 
 target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)

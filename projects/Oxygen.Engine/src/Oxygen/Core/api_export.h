@@ -7,21 +7,23 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
-#  ifdef OXYGEN_CORE_STATIC
-#    define OXYGEN_CORE_API
+#  ifdef OXGN_CORE_STATIC
+#    define OXGN_CORE_API
 #  else
-#    ifdef OXYGEN_CORE_EXPORTS
-#      define OXYGEN_CORE_API __declspec(dllexport)
+#    ifdef OXGN_CORE_EXPORTS
+#      define OXGN_CORE_API __declspec(dllexport)
 #    else
-#      define OXYGEN_CORE_API __declspec(dllimport)
+#      define OXGN_CORE_API __declspec(dllimport)
 #    endif
 #  endif
 #elif defined(__APPLE__) || defined(__linux__)
-#  ifdef OXYGEN_CORE_EXPORTS
-#    define OXYGEN_CORE_API __attribute__((visibility("default")))
+#  ifdef OXGN_CORE_EXPORTS
+#    define OXGN_CORE_API __attribute__((visibility("default")))
 #  else
-#    define OXYGEN_CORE_API
+#    define OXGN_CORE_API
 #  endif
 #else
-#  define OXYGEN_CORE_API
+#  define OXGN_CORE_API
 #endif
+
+#define OXGN_CORE_NDAPI [[nodiscard]] OXGN_CORE_API

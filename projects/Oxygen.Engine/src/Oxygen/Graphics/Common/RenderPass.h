@@ -13,45 +13,48 @@
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
-namespace oxygen::graphics {
-
-class CommandRecorder;
-struct Color;
-struct Scissors;
+namespace oxygen {
 struct ViewPort;
 
-//! Abstract base class for a modular, coroutine-based render pass.
-/*!
- RenderPass encapsulates a single stage of the rendering pipeline, such as
- geometry, shading, or post-processing. It is designed for use with modern,
- explicit graphics APIs (D3D12, Vulkan) and supports asynchronous (coroutine)
- resource preparation and execution, enabling fine-grained scheduling,
- parallelism, and non-blocking GPU work.
+namespace graphics {
+  class CommandRecorder;
+  struct Color;
+  struct Scissors;
 
- Key design points:
-  - Passes are modular and composable, supporting Forward+, deferred, or custom
-    pipelines.
-  - Resource state transitions and barriers are explicit and handled in
-    PrepareResources.
-  - Execution is coroutine-based, allowing for async GPU work, resource uploads,
-    and synchronization.
-  - Viewport, scissors, and clear color are set independently for flexibility
-    and API consistency.
-  - Passes can be enabled/disabled at runtime for debugging or feature toggling.
+  //! Abstract base class for a modular, coroutine-based render pass.
+  /*!
+   RenderPass encapsulates a single stage of the rendering pipeline, such as
+   geometry, shading, or post-processing. It is designed for use with modern,
+   explicit graphics APIs (D3D12, Vulkan) and supports asynchronous (coroutine)
+   resource preparation and execution, enabling fine-grained scheduling,
+   parallelism, and non-blocking GPU work.
 
- Best practices for Forward+ and modern rendering:
-  - Use PrepareResources to declare and transition all resources needed by the
-    pass (framebuffers, buffers, etc.).
-  - Use Execute for the main rendering logic, including pipeline setup, resource
-    binding, and draw/dispatch calls.
-  - Keep passes focused and modular (e.g., geometry pass, light culling pass,
-    shading pass).
-  - Use coroutines to compose passes, enable async GPU waits, and maximize
-    parallelism.
-  - Explicitly manage resource states to avoid hazards and maximize performance.
-*/
-class RenderPass : public oxygen::Composition, public oxygen::Named {
-public:
+   Key design points:
+    - Passes are modular and composable, supporting Forward+, deferred, or
+   custom pipelines.
+    - Resource state transitions and barriers are explicit and handled in
+      PrepareResources.
+    - Execution is coroutine-based, allowing for async GPU work, resource
+   uploads, and synchronization.
+    - Viewport, scissors, and clear color are set independently for flexibility
+      and API consistency.
+    - Passes can be enabled/disabled at runtime for debugging or feature
+   toggling.
+
+   Best practices for Forward+ and modern rendering:
+    - Use PrepareResources to declare and transition all resources needed by the
+      pass (framebuffers, buffers, etc.).
+    - Use Execute for the main rendering logic, including pipeline setup,
+   resource binding, and draw/dispatch calls.
+    - Keep passes focused and modular (e.g., geometry pass, light culling pass,
+      shading pass).
+    - Use coroutines to compose passes, enable async GPU waits, and maximize
+      parallelism.
+    - Explicitly manage resource states to avoid hazards and maximize
+   performance.
+  */
+  class RenderPass : public oxygen::Composition, public oxygen::Named {
+  public:
     explicit RenderPass(const std::string_view name);
     virtual ~RenderPass() = default;
 
@@ -118,10 +121,13 @@ public:
     virtual auto IsEnabled() const -> bool = 0;
 
     //! Get the name of this pass (from Named interface).
-    [[nodiscard]] OXYGEN_GFX_API virtual auto GetName() const noexcept -> std::string_view override;
+    [[nodiscard]] OXYGEN_GFX_API virtual auto GetName() const noexcept
+      -> std::string_view override;
 
     //! Set the name of this pass (from Named interface).
-    virtual void OXYGEN_GFX_API SetName(std::string_view name) noexcept override;
-};
+    virtual void OXYGEN_GFX_API SetName(
+      std::string_view name) noexcept override;
+  };
 
-} // namespace oxygen::graphics
+} // namespace graphics
+} // namespace oxygen
