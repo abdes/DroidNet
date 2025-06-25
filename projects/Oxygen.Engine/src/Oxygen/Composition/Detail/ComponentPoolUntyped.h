@@ -9,16 +9,17 @@
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/Component.h>
 
-namespace oxygen {
+namespace oxygen::composition::detail {
 
-class IComponentPoolUntyped {
+class ComponentPoolUntyped {
 public:
+  virtual ~ComponentPoolUntyped() = default;
+
   virtual auto GetUntyped(ResourceHandle handle) const noexcept
     -> const Component* = 0;
   virtual auto GetUntyped(ResourceHandle handle) noexcept -> Component* = 0;
   virtual auto Allocate(Component&& src) -> ResourceHandle = 0;
   virtual auto Deallocate(ResourceHandle handle) noexcept -> size_t = 0;
-  virtual ~IComponentPoolUntyped() = default;
 };
 
-} // namespace oxygen
+} // namespace oxygen::composition::detail

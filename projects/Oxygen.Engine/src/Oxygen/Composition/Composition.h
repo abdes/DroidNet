@@ -68,10 +68,13 @@ class Composition : public virtual Object {
   //! pointer to the component pool.
   struct PooledEntry {
     ResourceHandle handle { ResourceHandle::kInvalidIndex };
-    IComponentPoolUntyped* pool_ptr { nullptr }; // type-erased pointer to pool
+    composition::detail::ComponentPoolUntyped* pool_ptr {
+      nullptr
+    }; // type-erased pointer to pool
 
     PooledEntry() = default;
-    PooledEntry(const ResourceHandle& handle, IComponentPoolUntyped* pool_ptr)
+    PooledEntry(const ResourceHandle& handle,
+      composition::detail::ComponentPoolUntyped* pool_ptr)
       : handle(handle)
       , pool_ptr(pool_ptr)
     {
@@ -435,10 +438,12 @@ private:
   OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) const
     -> const Component&;
   OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) -> Component&;
-  OXGN_COM_NDAPI auto GetPooledComponentImpl(const IComponentPoolUntyped& pool,
-    TypeId type_id) const -> const Component&;
   OXGN_COM_NDAPI auto GetPooledComponentImpl(
-    const IComponentPoolUntyped& pool, TypeId type_id) -> Component&;
+    const composition::detail::ComponentPoolUntyped& pool, TypeId type_id) const
+    -> const Component&;
+  OXGN_COM_NDAPI auto GetPooledComponentImpl(
+    const composition::detail::ComponentPoolUntyped& pool, TypeId type_id)
+    -> Component&;
 
   OXGN_COM_API auto DeepCopyComponentsFrom(const Composition& other) -> void;
   OXGN_COM_API auto DeepCopyLocalComponentsFrom(const Composition& other)

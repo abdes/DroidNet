@@ -89,6 +89,7 @@ target_sources(
     FILES
       "api_export.h"
       "Detail/ComponentMacros.h"
+      "Detail/ComponentPoolUntyped.h"
       "Component.h"
       "Composition.h"
       "ComponentPool.h"

@@ -14,7 +14,7 @@
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Composition/IComponentPoolUntyped.h>
+#include <Oxygen/Composition/Detail/ComponentPoolUntyped.h>
 
 namespace oxygen {
 
@@ -60,7 +60,7 @@ namespace oxygen {
  @see ComponentPoolRegistry for global pool management
 */
 template <IsPooledComponent PooledComponentType>
-class ComponentPool : public IComponentPoolUntyped {
+class ComponentPool : public composition::detail::ComponentPoolUntyped {
 public:
   using Handle = ResourceHandle;
 
