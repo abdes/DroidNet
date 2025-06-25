@@ -18,8 +18,6 @@
 
 namespace oxygen {
 
-//=== ComponentPool ===-------------------------------------------------------//
-
 /*!
  Thread-safe pool for high-frequency pooled components using ResourceTable.
 
@@ -68,7 +66,7 @@ public:
    Construct component pool with specified initial capacity.
 
    @param reserve_count Initial capacity for the pool
-   */
+  */
   explicit ComponentPool(std::size_t reserve_count = 1024)
     : table_(PooledComponentType::GetResourceType(), reserve_count)
   {
@@ -76,28 +74,36 @@ public:
 
   //! Thread-safe component allocation
   /*!
-   Creates a new component instance in the pool.
+   Allocates a new component in the pool, forwarding arguments to the
+   component's constructor.
 
-   @param args Constructor arguments for the component
-   @return Handle to the allocated component
+   @tparam Args Argument types for the component's constructor
 
-   @note Thread-safe operation with exclusive locking
-   */
+   @param args Arguments to forward to the component's constructor
+   @return Handle to the newly allocated component
+
+   @note Thread-safe (exclusive lock). May invalidate pointers if pool grows.
+
+   @see Deallocate, Get
+  */
   template <typename... Args> auto Allocate(Args&&... args) -> Handle
   {
     std::lock_guard lock(mutex_);
     return table_.Emplace(std::forward<Args>(args)...);
   }
 
-  //! Allocate a new component, using the provided \p comp as value.
   /*!
-   Allocates a new component in the pool by copying the given source component.
-   If the type does not match, throws.
-   @param comp The component to value. Will be moved into the pool table.
-   @return Handle to the new component.
+   Allocates a new component in the pool by moving the given component.
+
+   @param comp Component to move into the pool. Must match the pool's type.
+   @return Handle to the new component
+   @throws std::invalid_argument if the type does not match
+
+   @note Thread-safe (exclusive lock). May invalidate pointers if pool grows.
+
+   @see Allocate, Deallocate
   */
-  auto Allocate(Component&& comp) // NOLINT(*-rvalue-reference-param-not-moved)
-    -> ResourceHandle override
+  auto Allocate(Component&& comp) -> ResourceHandle override
   {
     // Attempt to dynamic_cast to the correct type
     DCHECK_F(comp.GetTypeId() == PooledComponentType::ClassTypeId(),
@@ -113,12 +119,15 @@ public:
 
   //! Thread-safe component deallocation
   /*!
-   Removes component from the pool and invalidates the handle.
+   Removes a component from the pool and invalidates its handle.
 
-   @param handle Handle to the component to deallocate
+   @param handle Handle to the component to remove
+   @return 1 if the component was removed, 0 if not found
 
-   @note Thread-safe operation with exclusive locking
-   */
+   @note Thread-safe (exclusive lock). May invalidate pointers if pool grows.
+
+   @see Allocate
+  */
   auto Deallocate(Handle handle) noexcept -> size_t override
   {
     std::lock_guard lock(mutex_);
@@ -142,23 +151,34 @@ public:
 
   //! Thread-safe component access - returns nullptr if handle is invalid
   /*!
-   @param handle Handle to the component
-   @return Pointer to component or nullptr if handle is invalid
+   Returns a pointer to the component for the given handle, or nullptr if the
+   handle is invalid.
 
-   @note Thread-safe operation with shared locking
-   */
+   @param handle Handle to the component
+   @return Pointer to the component, or nullptr if not found or invalid
+
+   @note Thread-safe (shared lock)
+   @warning Returned pointer is only valid as long as the pool is not modified
+
+   @see Allocate, Deallocate
+  */
   auto Get(Handle handle) noexcept -> PooledComponentType*
   {
     return const_cast<PooledComponentType*>(std::as_const(*this).Get(handle));
   }
 
-  //! Thread-safe const component access
   /*!
-   @param handle Handle to the component
-   @return Const pointer to component or nullptr if handle is invalid
+   Returns a const pointer to the component for the given handle, or nullptr if
+   the handle is invalid.
 
-   @note Thread-safe operation with shared locking
-   */
+   @param handle Handle to the component
+   @return Const pointer to the component, or nullptr if not found or invalid
+
+   @note Thread-safe (shared lock)
+   @warning Returned pointer is only valid as long as the pool is not modified
+
+   @see Allocate, Deallocate
+  */
   auto Get(Handle handle) const noexcept -> const PooledComponentType*
   {
     std::shared_lock lock(mutex_);
@@ -177,12 +197,18 @@ public:
 
   //! Leverage ResourceTable's defragmentation with thread safety
   /*!
-   @param comp Comparison function for ordering during defragmentation
+   Defragments the pool using a custom comparison function.
+
+   @tparam Compare Comparison function type
+
+   @param comp Comparison function for ordering components
    @param max_swaps Maximum number of swaps to perform (0 = unlimited)
    @return Number of swaps performed
 
-   @note Thread-safe operation with exclusive locking
-   */
+   @note Thread-safe (exclusive lock). Will invalidate pointers.
+
+   @see Defragment(std::size_t)
+  */
   template <typename Compare>
   auto Defragment(Compare comp, std::size_t max_swaps = 0) -> std::size_t
   {
@@ -190,15 +216,17 @@ public:
     return table_.Defragment(comp, max_swaps);
   }
 
-  //! Defragment using component's default ordering (if available)
   /*!
-   Uses component's static Compare method if available, otherwise no-op.
+   Defragments the pool using the component's static Compare method if
+   available.
 
    @param max_swaps Maximum number of swaps to perform (0 = unlimited)
    @return Number of swaps performed
 
-   @note Thread-safe operation with exclusive locking
-   */
+   @note Thread-safe (exclusive lock). Will invalidate pointers.
+
+   @see Defragment(Compare, std::size_t)
+  */
   auto Defragment(std::size_t max_swaps = 0) -> std::size_t
   {
     if constexpr (requires(const PooledComponentType& a,
@@ -216,48 +244,73 @@ public:
     }
   }
 
-  //! Thread-safe access to dense component array
   /*!
-   @return Read-only span of all components in dense storage order
+   Applies a callable to every component in the pool in dense storage order,
+   holding a shared lock for the duration of the iteration.
 
-   @note Thread-safe operation with shared locking
-   @warning Span becomes invalid when lock is released
-   */
-  auto GetDenseComponents() const -> std::span<const PooledComponentType>
+   @tparam Func Callable type; must accept a const reference to the component
+
+   @param func Callable to invoke for each component
+
+   @note Thread-safe (shared lock). The pool is read-locked for the duration of
+   the call, so no modifications can occur concurrently.
+
+   @see Size, IsEmpty
+  */
+  template <typename Func> void ForEach(Func&& func) const
   {
     std::shared_lock lock(mutex_);
-    return table_.Items();
+    std::ranges::for_each(table_.Items(), std::forward<Func>(func));
   }
 
-  //! Thread-safe size queries
   /*!
-   @return Number of components currently in the pool
+   Applies a callable to every component in the pool in dense storage order,
+   holding a shared lock for the duration of the iteration. This allows mutation
+   of the component being visited, but will not work if the table is mutated (by
+   adding or removing items for example).
 
-   @note Thread-safe operation with shared locking
-   */
+   @tparam Func Callable type; must accept a const reference to the component
+
+   @param func Callable to invoke for each component
+
+   @note Thread-safe (shared lock). The pool is read-locked for the duration of
+   the call, so no modifications can occur concurrently.
+
+   @see Size, IsEmpty
+  */
+  template <typename Func> void ForEachMut(Func&& func)
+  {
+    std::lock_guard lock(mutex_);
+    std::ranges::for_each(table_.Items(), std::forward<Func>(func));
+  }
+
+  //! Returns the number of components currently in the pool.
+  /*!
+   @return Number of components
+   @note Thread-safe (shared lock)
+  */
   auto Size() const noexcept -> std::size_t
   {
     std::shared_lock lock(mutex_);
     return table_.Size();
   }
 
-  //! Check if pool is empty
+  //! Check if the pool is empty.
   /*!
-   @return true if pool contains no components
-
-   @note Thread-safe operation with shared locking
-   */
+   @return True if empty, false otherwise
+   @note Thread-safe (shared lock)
+  */
   auto IsEmpty() const noexcept -> bool
   {
     std::shared_lock lock(mutex_);
     return table_.IsEmpty();
   }
-  //! Get the resource type for this component pool
-  /*!
-   @return Resource type ID for this component type
 
-   @note No locking required - resource type is immutable
-   */
+  //! Get the resource type for this component pool.
+  /*!
+   @return Resource type ID
+   @note No locking required; resource type is immutable
+  */
   auto GetComponentType() const noexcept -> ResourceHandle::ResourceTypeT
   {
     return table_.GetItemType();
@@ -265,27 +318,47 @@ public:
 
   //! Clear all components from the pool, invalidating all handles.
   /*!
-   Under normal circumstances, the lifecycle of components in the pool is
-   managed by the owning compositions. There is no need to call this method.
-   However, when recovering from critical errors, it may be necessary to put the
-   global pools in a clean state. This is the only reasonable use case for
-   calling this method.
+   Removes all components from the pool, invalidating all handles.
 
-   @note Thread-safe operation with exclusive locking
-   */
+   @note Thread-safe (exclusive lock)
+   @warning Only use in error recovery or test scenarios; normal lifecycle is
+   managed by compositions
+  */
   auto ForceClear() noexcept -> void
   {
     std::lock_guard lock(mutex_);
     table_.Clear();
   }
 
-  // Type-erased access for pooled lookup
+  //! Type-erased access for pooled lookup (non-const).
+  /*!
+   Returns a pointer to the component for the given handle, as a base
+   `Component*`. Used by type-erased pool interfaces and the registry.
+
+   @param handle Handle to the component
+   @return Pointer to component or nullptr if handle is invalid
+
+   @note Used internally for type-erased access; not intended for direct use.
+
+   @see ComponentPoolUntyped
+  */
   auto GetUntyped(ResourceHandle handle) noexcept -> Component* override
   {
     return static_cast<Component*>(Get(handle));
   }
 
-  // Type-erased access for pooled lookup
+  //! Type-erased access for pooled lookup (const).
+  /*!
+   Returns a const pointer to the component for the given handle, as a base
+   `const Component*`. Used by type-erased pool interfaces and the registry.
+
+   @param handle Handle to the component
+   @return Const pointer to component or nullptr if handle is invalid
+
+   @note Used internally for type-erased access; not intended for direct use.
+
+   @see ComponentPoolUntyped
+  */
   auto GetUntyped(ResourceHandle handle) const noexcept
     -> const Component* override
   {
@@ -293,8 +366,9 @@ public:
   }
 
 private:
-  mutable std::shared_mutex mutex_; // Thread safety for all operations
   ResourceTable<PooledComponentType> table_;
+
+  mutable std::shared_mutex mutex_; // Thread safety for all operations
 };
 
 } // namespace oxygen

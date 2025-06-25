@@ -329,12 +329,16 @@ NOLINT_TEST_F(ComponentPoolBasicTest, DefragmentWithComparison_OrdersComponents)
 
   // Assert - descending order due to reverse insertion sort
   EXPECT_GT(swaps_performed, 0);
-  auto dense_components = pool_->GetDenseComponents();
-  EXPECT_EQ(dense_components.size(), 5);
-
-  for (std::size_t i = 1; i < dense_components.size(); ++i) {
-    EXPECT_GE(dense_components[i - 1].GetX(), dense_components[i].GetX());
-  }
+  std::size_t count = 0;
+  int prev_x = std::numeric_limits<int>::max();
+  pool_->ForEach([&](const TestTransformComponent& component) {
+    if (count > 0) {
+      EXPECT_GE(prev_x, component.GetX());
+    }
+    prev_x = component.GetX();
+    ++count;
+  });
+  EXPECT_EQ(count, 5);
 }
 
 //! Test defragmentation with custom comparison lambda
@@ -361,11 +365,23 @@ NOLINT_TEST_F(
 
   // Assert - still produces descending order
   EXPECT_GT(swaps_performed, 0);
-  auto dense_components = pool_->GetDenseComponents();
-  EXPECT_EQ(dense_components.size(), 3);
-  EXPECT_EQ(dense_components[0].GetY(), 20); // Largest first
-  EXPECT_EQ(dense_components[1].GetY(), 10);
-  EXPECT_EQ(dense_components[2].GetY(), 5); // Smallest last
+  std::size_t count = 0;
+  int prev_y = std::numeric_limits<int>::max();
+  pool_->ForEach([&](const TestTransformComponent& component) {
+    if (count == 0) {
+      EXPECT_EQ(component.GetY(), 20); // Largest first
+    } else if (count == 1) {
+      EXPECT_EQ(component.GetY(), 10);
+    } else if (count == 2) {
+      EXPECT_EQ(component.GetY(), 5); // Smallest last
+    }
+    if (count > 0) {
+      EXPECT_GE(prev_y, component.GetY());
+    }
+    prev_y = component.GetY();
+    ++count;
+  });
+  EXPECT_EQ(count, 3);
 }
 
 //=== Threading and Concurrency Tests ===-------------------------------------//
@@ -510,11 +526,13 @@ NOLINT_TEST_F(ComponentPoolComplexTest, GrowthBeyondCapacity_HandledCorrectly)
   EXPECT_EQ(small_pool_->Size(), 10);
 
   // Verify all components are accessible
-  for (std::size_t i = 0; i < handles.size(); ++i) {
-    auto* component = small_pool_->Get(handles[i]);
-    EXPECT_NE(component, nullptr);
-    EXPECT_EQ(component->GetName(), "component_" + std::to_string(i));
-  }
+  std::size_t verified_count = 0;
+  small_pool_->ForEach([&](const TestRenderComponent& component) {
+    EXPECT_EQ(
+      component.GetName(), "component_" + std::to_string(verified_count));
+    ++verified_count;
+  });
+  EXPECT_EQ(verified_count, handles.size());
 }
 
 //! Test dense component access with large dataset
@@ -525,24 +543,20 @@ NOLINT_TEST_F(ComponentPoolComplexTest, DenseAccess_LargeDataset_PerformsWell)
   auto handles = CreateMultipleComponents(large_count);
 
   // Act
-  auto dense_components = large_pool_->GetDenseComponents();
-
   // Assert
-  EXPECT_THAT(dense_components, SizeIs(large_count));
+  EXPECT_EQ(large_pool_->Size(), large_count);
 
   // Verify data integrity in dense access
   std::size_t verified_count = 0;
-  for (const auto& component : dense_components) {
+  large_pool_->ForEach([&](const TestTransformComponent& component) {
     // Components were created with pattern: x=i, y=i*2, z=i*3
     auto x = component.GetX();
     auto expected_y = x * 2;
     auto expected_z = x * 3;
-
     EXPECT_EQ(component.GetY(), expected_y);
     EXPECT_EQ(component.GetZ(), expected_z);
     ++verified_count;
-  }
-
+  });
   EXPECT_EQ(verified_count, large_count);
 }
 

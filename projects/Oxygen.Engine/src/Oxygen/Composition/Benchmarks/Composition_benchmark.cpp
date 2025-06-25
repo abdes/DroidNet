@@ -432,22 +432,21 @@ BENCHMARK_F(CompositionBenchmark, PoolDirectIteration)(benchmark::State& state)
   for (auto _ : state) {
     // Iterate over all pooled components of type A
     size_t idxA = 0;
-    for (const auto& a : poolA.GetDenseComponents()) {
+    poolA.ForEach([&](const PooledComponentA& a) {
       benchmark::DoNotOptimize(a.value);
       benchmark::DoNotOptimize(a.name);
       if (a.value != static_cast<int>(idxA) + 100)
         benchmark::DoNotOptimize(false);
       ++idxA;
-    }
+    });
     size_t idxB = 0;
-    // Iterate over all pooled components of type B
-    for (const auto& b : poolB.GetDenseComponents()) {
+    poolB.ForEach([&](const PooledComponentB& b) {
       benchmark::DoNotOptimize(b.x);
       benchmark::DoNotOptimize(b.desc);
       if (b.x != idxB * 2.0)
         benchmark::DoNotOptimize(false);
       ++idxB;
-    }
+    });
   }
 }
 
@@ -493,21 +492,21 @@ BENCHMARK_F(CompositionBenchmark, FragmentedPoolDirectIteration)(
     = oxygen::ComponentPoolRegistry::GetComponentPool<PooledComponentB>();
   for (auto _ : state) {
     size_t idxA = 0;
-    for (const auto& a : poolA.GetDenseComponents()) {
+    poolA.ForEach([&](const PooledComponentA& a) {
       benchmark::DoNotOptimize(a.value);
       benchmark::DoNotOptimize(a.name);
       if (a.value != static_cast<int>(idxA) + 100)
         benchmark::DoNotOptimize(false);
       ++idxA;
-    }
+    });
     size_t idxB = 0;
-    for (const auto& b : poolB.GetDenseComponents()) {
+    poolB.ForEach([&](const PooledComponentB& b) {
       benchmark::DoNotOptimize(b.x);
       benchmark::DoNotOptimize(b.desc);
       if (b.x != idxB * 2.0)
         benchmark::DoNotOptimize(false);
       ++idxB;
-    }
+    });
   }
 }
 
