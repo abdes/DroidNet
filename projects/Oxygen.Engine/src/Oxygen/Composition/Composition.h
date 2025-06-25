@@ -23,18 +23,49 @@
 
 namespace oxygen {
 
-// NOTE: The Composition class is not thread-safe during cloning, shallow
-// copying, moving or assignment. The standard C++ practice is for the caller to
-// ensure exclusive access to the source object being copied (e.g., by
-// externally synchronizing access, or by not sharing the object across threads
-// during copy).
+//! Manages a collection of components, supporting both pooled and non-pooled
+//! types.
+/*!
+ Composition is the core container for managing components within an object. It
+ supports both direct (local) and pooled (shared) components, enforces
+ dependency relationships, and provides robust copy, move, and deep clone
+ semantics. Thread safety is provided for most operations except for copy/
+ move/clone, which require external synchronization.
 
+ ### Key Features
+ - **Component Management**: Add, remove, replace, and query components by type.
+ - **Dependency Enforcement**: Ensures required dependencies are present and not
+   violated.
+ - **Pooled Component Support**: Integrates with type-erased component pools for
+   memory efficiency.
+ - **Deep and Shallow Copy**: Supports both shallow and deep copying of
+   component state.
+ - **Thread Safety**: Uses shared mutex for safe concurrent access (except
+   copy/move/clone).
+
+ ### Usage Patterns
+ - Use `AddComponent<T>()` to add a new component of type T.
+ - Use `RemoveComponent<T>()` to remove a component.
+ - Use `GetComponent<T>()` to access a component by type.
+ - Use `ReplaceComponent<OldT, NewT>()` to swap component types.
+
+ ### Architecture Notes
+ - Local components are stored as shared pointers for flexible ownership.
+ - Pooled components are managed via handles and type-erased pools.
+ - Dependency checks are enforced at add/replace/remove time.
+
+ @warning Not thread-safe during copy, move, or clone operations; caller must
+          ensure exclusive access.
+ @see Component, IComponentPoolUntyped, CloneableMixin
+*/
 class Composition : public virtual Object {
   OXYGEN_TYPED(Composition)
 
-  // Single storage for non-pooled components - optimal for <8 components
+  // Storage for non-pooled components - optimal for <8 components
   std::vector<std::shared_ptr<Component>> local_components_;
 
+  //! Entry in the pooled components map, storing a handle and a type-erased
+  //! pointer to the component pool.
   struct PooledEntry {
     ResourceHandle handle { ResourceHandle::kInvalidIndex };
     IComponentPoolUntyped* pool_ptr { nullptr }; // type-erased pointer to pool
@@ -55,14 +86,20 @@ class Composition : public virtual Object {
     // Helper to get the component from the pool
     OXGN_COM_NDAPI auto GetComponent() const -> Component*;
   };
+
   // Storage for pooled components, using the type-erased pool interface for a
   // generic lookup
   std::unordered_map<TypeId, std::shared_ptr<PooledEntry>> pooled_components_;
+
+  //! Mutex for thread-safe access to components.
+  mutable std::shared_mutex mutex_;
 
   // Allow access to components from CloneableMixin to make a deep copy.
   template <typename T> friend class CloneableMixin;
 
 public:
+  //! Destructor. Destroys all components after topological sort, ensuring
+  //! dependencies are destroyed after their dependents.
   OXGN_COM_API ~Composition() noexcept override;
 
   //! Copy constructor, make a shallow copy of the composition.
@@ -79,6 +116,7 @@ public:
   //! empty state.
   OXGN_COM_API auto operator=(Composition&& other) noexcept -> Composition&;
 
+  //! Checks if a component of type T exists in the composition.
   template <typename T> [[nodiscard]] auto HasComponent() const -> bool
   {
     std::shared_lock lock(mutex_);
@@ -89,6 +127,18 @@ public:
     }
   }
 
+  //! Retrieves a component of type T from the composition.
+  /*!
+   Returns a reference to the component of type T, if present. For pooled
+   components, the reference is obtained from the associated component pool;
+   for non-pooled components, it is returned from local storage. Throws if the
+   component does not exist.
+
+   @tparam T The component type to retrieve.
+   @return Reference to the component of type T.
+
+   @see AddComponent, RemoveComponent, HasComponent
+  */
   template <typename T> [[nodiscard]] auto GetComponent() const -> const T&
   {
     std::shared_lock lock(mutex_);
@@ -100,17 +150,68 @@ public:
       return static_cast<const T&>(GetComponentImpl(T::ClassTypeId()));
     }
   }
+
+  //! @copydoc GetComponent
   template <typename T> [[nodiscard]] auto GetComponent() -> T&
   {
     return const_cast<T&>(std::as_const(*this).GetComponent<T>());
   }
 
+  //! Prints a summary of all components to the given output stream.
   OXGN_COM_API auto PrintComponents(std::ostream& out) const -> void;
+
+  //! Logs a summary of all components using the logging system (using debug
+  //! logs at INFO verbosity).
   OXGN_COM_API auto LogComponents() const -> void;
 
 protected:
-  OXGN_COM_API explicit Composition(std::size_t initial_capacity = 4);
+  //! Constructs a new empty composition.
+  /*!
+   @note Compositions can only be constructed from their concrete subclasses.
+  */
+  Composition() = default;
 
+  //! Constructs a new empty composition with an initial capacity for local and
+  //! pooled components.
+  /*!
+   @note Compositions can only be constructed from their concrete subclasses.
+
+   @param local_capacity Initial capacity for local components.
+   @param pooled_capacity Initial capacity for pooled components.
+  */
+  OXGN_COM_API explicit Composition(
+    std::size_t local_capacity, std::size_t pooled_capacity);
+
+  /*!
+   Adds a new component of type `T` to the composition, constructing it in-place
+   with the provided arguments. Supports both pooled and non-pooled components.
+   Enforces dependency requirements and prevents duplicate components of the
+   same type. For pooled components, allocates from the associated component
+   pool; for non-pooled, stores a shared pointer locally.
+
+   @tparam Args Argument types for the component's constructor.
+   @tparam T    The component type to add. Must satisfy `IsComponent`.
+   @param args  Arguments forwarded to the component's constructor.
+   @return      Reference to the newly added component of type `T`.
+
+   @throw ComponentError if the component already exists or if dependencies are
+   missing.
+
+   ### Performance Characteristics
+   - Time Complexity: O(1) for both pooled and local components (amortized).
+   - Memory: Allocates memory for the component (from pool or heap).
+   - Optimization: Uses in-place construction and type-erased storage.
+
+   ### Usage Examples
+   ```cpp
+   // Add a local component
+   auto& comp = composition.AddComponent<MyComponent>(42, "init");
+   // Add a pooled component
+   auto& pooled = composition.AddComponent<PooledType>(param1, param2);
+   ```
+
+   @see RemoveComponent, ReplaceComponent, HasComponent, GetComponent
+  */
   template <IsComponent T, typename... Args>
   auto AddComponent(Args&&... args) -> T&
   {
@@ -145,6 +246,32 @@ protected:
     return static_cast<T&>(*component);
   }
 
+  /*!
+   Removes the component of type `T` from the composition, if present. For
+   pooled components, releases the handle and removes the entry from the pooled
+   components map. For non-pooled components, erases the shared pointer from
+   local storage. If the component is required by another component, throws an
+   exception and does not remove it.
+
+   @tparam T   The component type to remove.
+
+   @throw ComponentError if the component is required by another component.
+
+   ### Performance Characteristics
+   - Time Complexity: O(N).
+   - Memory: Releases memory for the removed component.
+   - Optimization: Uses type-erased lookup for pooled components.
+
+   ### Usage Examples
+   ```cpp
+   // Remove a local component
+   composition.RemoveComponent<MyComponent>();
+   // Remove a pooled component
+   composition.RemoveComponent<PooledType>();
+   ```
+
+   @see AddComponent, ReplaceComponent, HasComponent, GetComponent
+  */
   template <typename T> auto RemoveComponent() -> void
   {
     std::unique_lock lock(mutex_);
@@ -169,6 +296,39 @@ protected:
     }
   }
 
+  /*!
+   Replaces an existing component of type `OldT` with a new component of type
+   `NewT`, constructing the new component in-place with the provided arguments.
+   Supports both pooled and non-pooled components, but does not allow replacing
+   a pooled component with a non-pooled one or vice versa. Ensures that the old
+   component exists, the new component does not already exist, and that
+   dependencies are not violated. Throws if the replacement would break
+   dependency requirements or if allocation fails.
+
+   @tparam OldT   The type of the component to be replaced.
+   @tparam NewT   The type of the new component (defaults to OldT).
+   @tparam Args   Argument types for the new component's constructor.
+   @param args    Arguments forwarded to the new component's constructor.
+   @return        Reference to the newly added component of type `NewT`.
+
+   @throw ComponentError if replacement is invalid, dependencies are violated,
+   or allocation fails.
+
+   ### Performance Characteristics
+   - Time Complexity: O(N).
+   - Memory: Allocates memory for the new component and releases the old one.
+   - Optimization: Uses in-place construction and type-erased storage.
+
+   ### Usage Examples
+   ```cpp
+   // Replace a local component with another type
+   auto& new_comp = composition.ReplaceComponent<OldType, NewType>(arg1, arg2);
+   // Replace a pooled component with a new instance
+   auto& pooled = composition.ReplaceComponent<PooledType>(param1, param2);
+   ```
+
+   @see AddComponent, RemoveComponent, HasComponent, GetComponent
+  */
   template <typename OldT, typename NewT = OldT, typename... Args>
   auto ReplaceComponent(Args&&... args) -> NewT&
   {
@@ -229,7 +389,9 @@ protected:
   OXGN_COM_API auto HasComponents() const noexcept -> bool;
 
 private:
-  template <IsComponent T> auto EnsureExistence(bool state) -> void
+  OXGN_COM_API auto DestroyComponents() noexcept -> void;
+
+  template <IsComponent T> auto EnsureExistence(const bool state) -> void
   {
     auto type_id = T::ClassTypeId();
     const bool exists = [&] {
@@ -255,16 +417,21 @@ private:
     return EnsureExistence<T>(false);
   }
 
-  OXGN_COM_API auto DestroyComponents() noexcept -> void;
+  OXGN_COM_API auto EnsureDependencies(
+    TypeId comp_id, std::span<const TypeId> dependencies) const -> void;
+
+  OXGN_COM_API auto EnsureNotRequired(TypeId type_id) const -> void;
 
   OXGN_COM_NDAPI auto HasLocalComponentImpl(TypeId id) const -> bool;
+
   OXGN_COM_NDAPI auto HasPooledComponentImpl(TypeId id) const -> bool;
+
   OXGN_COM_API auto UpdateComponentDependencies(Component& component) noexcept
     -> void;
 
-  OXGN_COM_NDAPI auto ReplaceComponentImpl(
-    TypeId old_id, std::shared_ptr<Component> new_component) -> Component&;
-  // Unified: GetComponentImpl handles both pooled and non-pooled components
+  // Lock-free component access methods, used in the getter lambda passed to
+  // components with dependencies during the call to their UpdateDependencies()
+  // method.
   OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) const
     -> const Component&;
   OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) -> Component&;
@@ -273,28 +440,27 @@ private:
   OXGN_COM_NDAPI auto GetPooledComponentImpl(
     const IComponentPoolUntyped& pool, TypeId type_id) -> Component&;
 
-  OXGN_COM_API auto EnsureDependencies(
-    TypeId comp_id, std::span<const TypeId> dependencies) const -> void;
-  OXGN_COM_API auto EnsureNotRequired(TypeId type_id) const -> void;
-
   OXGN_COM_API auto DeepCopyComponentsFrom(const Composition& other) -> void;
+  OXGN_COM_API auto DeepCopyLocalComponentsFrom(const Composition& other)
+    -> void;
+  OXGN_COM_API auto DeepCopyPooledComponentsFrom(const Composition& other)
+    -> void;
 
-  auto TopologicallySortedPooledEntries() -> std::vector<TypeId>;
-
+  auto GetDebugName() const -> std::string;
   // Helper to print a component's one-line info, and dependencies if present
   auto PrintComponentInfo(std::ostream& out, TypeId type_id,
     std::string_view type_name, std::string_view kind,
     const Component* comp) const -> void;
-  auto GetDebugName() const -> std::string;
   auto LogComponentInfo(TypeId type_id, std::string_view type_name,
     std::string_view kind, const Component* comp) const -> void;
-
-  mutable std::shared_mutex mutex_;
+  auto TopologicallySortedPooledEntries() -> std::vector<TypeId>;
 };
 
+//! Specifies the requirements on a type to be considered as a Composition.
 template <typename T>
 concept IsComposition = std::derived_from<T, Composition>;
 
+//! Base class for cloneable objects, providing a virtual Clone method.
 class Cloneable {
 public:
   Cloneable() = default;
@@ -306,6 +472,8 @@ public:
   [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<Cloneable> = 0;
 };
 
+//! Mixin class for cloneable compositions using CRTP (Curiously Recurring
+//! Template
 template <typename Derived> class CloneableMixin {
   friend Derived;
   CloneableMixin() = default; // prevent instantiation (CRTP)
@@ -328,7 +496,7 @@ public:
 
     auto* original = static_cast<const Derived*>(this);
     // Make a shallow copy of the object
-    auto clone = std::make_unique<Derived>(*original);
+    auto clone = std::unique_ptr<Derived>(new Derived());
     // Make a deep copy of the components
     clone->DeepCopyComponentsFrom(*original);
     return clone;

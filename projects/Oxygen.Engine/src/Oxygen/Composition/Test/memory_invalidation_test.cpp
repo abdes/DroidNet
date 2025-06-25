@@ -68,7 +68,7 @@ public:
   using Base = Composition;
 
   explicit TestComposition(std::size_t capacity)
-    : Composition(capacity)
+    : Composition(capacity, capacity)
   {
   }
 

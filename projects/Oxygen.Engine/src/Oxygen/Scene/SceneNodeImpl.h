@@ -176,6 +176,11 @@ public:
   OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
 
 protected:
+  // Used primarily for testing, and for creating an empty object when cloning
+  // from another one.
+  SceneNodeImpl() = default;
+  friend class CloneableMixin;
+
   //! Marks the node transform matrices as clean, without updating them.
   /*!
    This method is used to reset the dirty state of the node's transform
