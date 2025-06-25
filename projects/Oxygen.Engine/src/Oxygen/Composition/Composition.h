@@ -14,6 +14,8 @@
 #include <utility> // std::as_const
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ComponentPool.h>
