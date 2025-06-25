@@ -1,7 +1,10 @@
 ---
 applyTo: '**/*.cpp;**/*.h'
 ---
-//=== STRUCTURE ===-----------------------------------------------------------//
+# UNIT TEST RULES
+
+## TEST CASES
+
 - Use Google Test; use Google Mock only if required.
 - Write scenario-based tests with clear, descriptive names.
 - Group tests by functionality with detailed comment headers (describe
@@ -10,11 +13,12 @@ applyTo: '**/*.cpp;**/*.h'
 - Follow the AAA pattern (Arrange, Act, Assert) with clear comments and empty
   lines between phases.
 - Use NOLINT_* macros from GTest.h for all test cases.
-- Use GCHECK_F for custom assertion messages. Use TRACE_GCHECK_F only when the
-  failure location is ambiguous, and always provide a concise tag. Never use
-  SCOPED_TRACE directly.
+- Use GCHECK_F for assertion that use helper methods with EXPECT_ inside of
+  them. Use TRACE_GCHECK_F only when the failure location is ambiguous, and
+  always provide a concise tag. Never use SCOPED_TRACE directly.
 
-//=== FIXTURES AND HELPERS ===------------------------------------------------//
+## FIXTURES AND HELPERS
+
 - Derive all fixtures from ::testing::Test for shared setup/teardown.
 - Create separate fixtures for different test types (basic, error, death, edge,
   complex).
@@ -25,9 +29,10 @@ applyTo: '**/*.cpp;**/*.h'
   presence, filtering).
 - Manage all state within fixtures or locally; never use global or static state.
 
-//=== TEST CASE DESIGN ===----------------------------------------------------//
+## TEST CASE DESIGN
+
 - Test one behavior per test; use the format TestCase_WhatIsTested.
-- Add detailed doc comments (//! or /*! ... */) above each test to describe
+- Add detailed doc comments (//! or /*! ...*/) above each test to describe
   intent and scenario.
 - Cover normal, boundary, error, edge, and cross-object scenarios.
 - Merge related positive/negative cases into comprehensive tests when possible.
@@ -38,8 +43,9 @@ applyTo: '**/*.cpp;**/*.h'
 - Use expressive, scenario-driven test design; avoid trivial or assumption-based
   tests.
 
-//=== ASSERTIONS AND MATCHERS ===---------------------------------------------//
-- Use EXPECT_* and ASSERT_* with custom failure messages.
+## ASSERTIONS AND MATCHERS
+
+- Use EXPECT_*and ASSERT_* with custom failure messages.
 - Check both state and side effects; verify node order, presence, and filtering
   as appropriate.
 - Always use Google Test collection matchers: using ::testing::AllOf; using
