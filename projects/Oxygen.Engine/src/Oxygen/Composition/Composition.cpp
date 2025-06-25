@@ -25,9 +25,11 @@ Composition::PooledEntry::~PooledEntry() noexcept
   }
 
   try {
-    const auto* comp = GetComponent();
+#if !defined(NDEBUG)
+    const auto* comp = pool_ptr->GetUntyped(handle);
     DLOG_F(1, "Destroying pooled component(t={}/{}, h={})", comp->GetTypeId(),
       comp->GetTypeNamePretty(), oxygen::to_string_compact(handle));
+#endif // NDEBUG
     pool_ptr->Deallocate(handle); // destroys component
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "exception caught while freeing pooled component({}): {}",
@@ -461,17 +463,18 @@ auto Composition::GetDebugName() const -> std::string
   }
   return object_name;
 }
-auto Composition::LogComponentInfo(TypeId type_id, std::string_view type_name,
-  std::string_view kind, const Component* comp) const -> void
+auto Composition::LogComponentInfo(const TypeId type_id,
+  const std::string_view type_name, const std::string_view kind,
+  const Component* comp) const -> void
 {
   if (!comp) {
-    DLOG_F(INFO, "[{}] {} ({}) [INVALID]", type_id, type_name, kind);
+    LOG_F(INFO, "[{}] {} ({}) [INVALID]", type_id, type_name, kind);
     return;
   }
 
-  DLOG_F(INFO, "[{}] {} ({})", type_id, type_name, kind);
+  LOG_F(INFO, "[{}] {} ({})", type_id, type_name, kind);
   if (comp->HasDependencies() && !comp->Dependencies().empty()) {
-    DLOG_SCOPE_F(INFO, "Requires");
+    LOG_SCOPE_F(INFO, "Requires");
     const auto& type_registry = TypeRegistry::Get();
     for (size_t i = 0; i < comp->Dependencies().size(); ++i) {
       const auto dep_type_id = comp->Dependencies()[i];
@@ -485,7 +488,7 @@ auto Composition::LogComponentInfo(TypeId type_id, std::string_view type_name,
           dep_name = "<missing>";
         }
       }
-      DLOG_F(INFO, "{}", dep_name);
+      LOG_F(INFO, "{}", dep_name);
     }
   }
 }
@@ -524,13 +527,13 @@ auto Composition::PrintComponents(std::ostream& out) const -> void
 }
 auto Composition::LogComponents() const -> void
 {
-  DLOG_SCOPE_F(INFO, "Composition");
+  LOG_SCOPE_F(INFO, "Composition");
   std::shared_lock lock(mutex_);
-  DLOG_F(INFO, "name: {}", GetDebugName());
+  LOG_F(INFO, "name: {}", GetDebugName());
 
   {
-    DLOG_SCOPE_F(INFO, "Local Components");
-    DLOG_F(INFO, "count: {}", local_components_.size());
+    LOG_SCOPE_F(INFO, "Local Components");
+    LOG_F(INFO, "count: {}", local_components_.size());
     for (const auto& entry : local_components_) {
       LogComponentInfo(
         entry->GetTypeId(), entry->GetTypeNamePretty(), "Direct", entry.get());
@@ -538,8 +541,8 @@ auto Composition::LogComponents() const -> void
   }
 
   {
-    DLOG_SCOPE_F(INFO, "Pooled Components");
-    DLOG_F(INFO, "count: {}", pooled_components_.size());
+    LOG_SCOPE_F(INFO, "Pooled Components");
+    LOG_F(INFO, "count: {}", pooled_components_.size());
     for (const auto& [type_id, pooled_entry] : pooled_components_) {
       std::string_view type_name;
       try {
