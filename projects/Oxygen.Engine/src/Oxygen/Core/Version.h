@@ -13,12 +13,12 @@
 
 namespace oxygen::version {
 
-OXYGEN_CORE_API auto Major() -> std::uint8_t;
-OXYGEN_CORE_API auto Minor() -> std::uint8_t;
-OXYGEN_CORE_API auto Patch() -> std::uint8_t;
+OXGN_CORE_NDAPI auto Major() -> std::uint8_t;
+OXGN_CORE_NDAPI auto Minor() -> std::uint8_t;
+OXGN_CORE_NDAPI auto Patch() -> std::uint8_t;
 
-OXYGEN_CORE_API auto Version() -> std::string;
-OXYGEN_CORE_API auto VersionFull() -> std::string;
-OXYGEN_CORE_API auto NameVersion() -> std::string;
+OXGN_CORE_NDAPI auto Version() -> std::string;
+OXGN_CORE_NDAPI auto VersionFull() -> std::string;
+OXGN_CORE_NDAPI auto NameVersion() -> std::string;
 
 } // namespace oxygen::version

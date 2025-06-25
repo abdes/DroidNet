@@ -130,7 +130,6 @@ target_sources(
       "Types/ResourceViewType.h"
       "Types/Scissors.h"
       "Types/TrackableResource.h"
-      "Types/ViewPort.h"
       "Types/DescriptorVisibility.h"
       "Types/IndexRange.h"
 )
@@ -149,6 +148,7 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
+    oxygen::core
     oxygen::config
     oxygen::platform
 )
