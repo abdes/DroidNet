@@ -155,8 +155,9 @@ private:
     // Allow components to specify their expected pool size
     if constexpr (requires { PooledComponentType::kExpectedPoolSize; }) {
       return PooledComponentType::kExpectedPoolSize;
+    } else {
+      return 1024; // Default reserve count
     }
-    return 1024; // Default reserve count
   }
   std::mutex pools_mutex_; // Protects pools_ map during lazy initialization
 

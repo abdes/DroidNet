@@ -108,7 +108,7 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_COM_STATIC>
 )
 
-target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen::base)
+target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
 
 # ------------------------------------------------------------------------------
 # Dedicated DLL for the composition system `Initialize*` entry points.
@@ -189,6 +189,7 @@ endif()
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+  add_subdirectory("Benchmarks")
 endif()
 
 # ==============================================================================
