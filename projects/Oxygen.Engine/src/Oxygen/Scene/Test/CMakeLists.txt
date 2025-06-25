@@ -74,6 +74,8 @@ m_gtest_program(
     "PathMatcher/PathParser_test.cpp"
 )
 
+add_subdirectory("Camera")
+
 # -- Complex Scene Tests -------------------------------------------------------
 
 # Macro to add common dependencies and libraries for TestSceneFactory-based tests

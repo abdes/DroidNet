@@ -50,6 +50,8 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "Camera/Orthographic.cpp"
+    "Camera/Perspective.cpp"
     "Detail/GraphData.h"
     "Detail/NodeData.h"
     "Detail/PathMatcher.h"
@@ -63,11 +65,11 @@ target_sources(
     "Scene_node_factory.cpp"
     "Scene_reparent.cpp"
     "Scene.cpp"
-    "ScenePrettyPrinter.cpp"
     "SceneFlags.cpp"
     "SceneNode_Transform.cpp"
     "SceneNode.cpp"
     "SceneNodeImpl.cpp"
+    "ScenePrettyPrinter.cpp"
     "SceneQuery.cpp"
     "SceneQueryBatch.cpp"
   PUBLIC
@@ -75,6 +77,9 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
+      "Camera/Orthographic.h"
+      "Camera/Perspective.h"
+      "Camera/ProjectionConvention.h"
       "Scene.h"
       "SceneFlags.h"
       "SceneNode.h"
