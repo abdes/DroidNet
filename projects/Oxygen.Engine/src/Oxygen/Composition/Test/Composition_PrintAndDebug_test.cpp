@@ -18,14 +18,19 @@ namespace {
 class PooledComponent;
 // ResourceTypeList after forward declaration
 using ResourceTypeList = oxygen::TypeList<PooledComponent>;
-// Full definition of pooled type
-class PooledComponent final
-  : public oxygen::Component,
-    public oxygen::Resource<PooledComponent, ResourceTypeList> {
-  OXYGEN_COMPONENT(PooledComponent)
+
+class SimpleComponent1 final : public oxygen::Component {
+  OXYGEN_COMPONENT(SimpleComponent1)
+};
+
+class SimpleComponent2 final : public oxygen::Component {
+  OXYGEN_COMPONENT(SimpleComponent2)
+};
+
+class PooledComponent final : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(PooledComponent, ResourceTypeList)
+  OXYGEN_COMPONENT_REQUIRES(SimpleComponent1)
 public:
-  using ResourceTypeList = ::ResourceTypeList;
-  PooledComponent() = default;
   explicit PooledComponent(int v)
     : value_(v)
   {
@@ -33,27 +38,31 @@ public:
   int value_;
 };
 
+class NonPooledComponent final : public oxygen::Component {
+  OXYGEN_COMPONENT(NonPooledComponent)
+  OXYGEN_COMPONENT_REQUIRES(SimpleComponent1, SimpleComponent2)
+public:
+  explicit NonPooledComponent(int v)
+    : value_(v)
+  {
+  }
+  int value_;
+};
+
+class TestComposition : public oxygen::Composition {
+  OXYGEN_TYPED(TestComposition)
+public:
+  using Base = Composition;
+
+  // Expose protected methods for testing
+  using Base::AddComponent;
+  using Base::RemoveComponent;
+  using Base::ReplaceComponent;
+};
+
 class PrintAndDebugTest
   : public oxygen::composition::testing::BaseCompositionTest {
 protected:
-  class NonPooledComponent final : public oxygen::Component {
-    OXYGEN_COMPONENT(NonPooledComponent)
-  public:
-    explicit NonPooledComponent(int v)
-      : value_(v)
-    {
-    }
-    int value_;
-  };
-  class TestComposition : public oxygen::Composition {
-  public:
-    using Base = Composition;
-
-    // Expose protected methods for testing
-    using Base::AddComponent;
-    using Base::RemoveComponent;
-    using Base::ReplaceComponent;
-  };
   TestComposition composition_;
 };
 
@@ -62,6 +71,8 @@ protected:
 NOLINT_TEST_F(PrintAndDebugTest, PrintHybridComponents)
 {
   // Arrange
+  composition_.AddComponent<SimpleComponent1>();
+  composition_.AddComponent<SimpleComponent2>();
   composition_.AddComponent<PooledComponent>(1);
   composition_.AddComponent<NonPooledComponent>(2);
 
@@ -69,9 +80,9 @@ NOLINT_TEST_F(PrintAndDebugTest, PrintHybridComponents)
   std::ostringstream os;
   composition_.PrintComponents(os);
   const std::string output = os.str();
-  using testing::HasSubstr;
 
   // Assert
+  using testing::HasSubstr;
   EXPECT_THAT(output, HasSubstr("PooledComponent"))
     << "Should print pooled component type name";
   EXPECT_THAT(output, HasSubstr("NonPooledComponent"))

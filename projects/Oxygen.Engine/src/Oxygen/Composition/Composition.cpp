@@ -25,7 +25,7 @@ Composition::PooledEntry::~PooledEntry() noexcept
   }
 
   try {
-    const auto* comp = pool_ptr->GetUntyped(handle);
+    const auto* comp = GetComponent();
     DLOG_F(1, "Destroying pooled component(t={}/{}, h={})", comp->GetTypeId(),
       comp->GetTypeNamePretty(), oxygen::to_string_compact(handle));
     pool_ptr->Deallocate(handle); // destroys component
@@ -33,6 +33,11 @@ Composition::PooledEntry::~PooledEntry() noexcept
     LOG_F(ERROR, "exception caught while freeing pooled component({}): {}",
       oxygen::to_string_compact(handle), ex.what());
   }
+}
+
+auto Composition::PooledEntry::GetComponent() const -> Component*
+{
+  return pool_ptr ? pool_ptr->GetUntyped(handle) : nullptr;
 }
 
 Composition::~Composition() noexcept
@@ -46,20 +51,34 @@ auto Composition::HasComponents() const noexcept -> bool
   std::shared_lock lock(mutex_);
   return !local_components_.empty();
 }
-auto Composition::TopologicallySortedPooledEntries()
-  -> std::vector<std::shared_ptr<PooledEntry>>
+
+auto Composition::TopologicallySortedPooledEntries() -> std::vector<TypeId>
 {
   std::unordered_map<TypeId, size_t> in_degree;
   in_degree.reserve(pooled_components_.size());
   std::unordered_map<TypeId, std::vector<TypeId>> graph;
 
+  // Collect all local entries
+  for (const auto& local_comp : local_components_) {
+    DCHECK_NOTNULL_F(local_comp, "corrupted entry, component is null");
+    auto type_id = local_comp->GetTypeId();
+    if (local_comp->HasDependencies()) {
+      auto dependencies = local_comp->Dependencies();
+      for (const auto dep : dependencies) {
+        graph[type_id].push_back(dep);
+        in_degree[dep]++;
+      }
+    }
+    // Ensure all nodes are in the in-degree map
+    in_degree.try_emplace(type_id, 0U);
+  }
+
   // Collect all pooled entries
   for (const auto& [type_id, entry] : pooled_components_) {
-    const auto& comp = entry->pool_ptr->GetUntyped(entry->handle);
+    const auto* comp = entry->pool_ptr->GetUntyped(entry->handle);
     DCHECK_NOTNULL_F(comp, "corrupted entry, component is null");
     if (comp->HasDependencies()) {
-      auto dependencies
-        = entry->pool_ptr->GetUntyped(entry->handle)->Dependencies();
+      auto dependencies = comp->Dependencies();
       for (const auto dep : dependencies) {
         graph[type_id].push_back(dep);
         in_degree[dep]++;
@@ -77,11 +96,11 @@ auto Composition::TopologicallySortedPooledEntries()
     }
   }
 
-  std::vector<std::shared_ptr<PooledEntry>> sorted;
+  std::vector<TypeId> sorted;
   while (!q.empty()) {
     auto type_id = q.front();
     q.pop();
-    sorted.push_back(pooled_components_[type_id]);
+    sorted.push_back(type_id);
 
     for (auto neighbor : graph[type_id]) {
       if (--in_degree[neighbor] == 0) {
@@ -90,7 +109,8 @@ auto Composition::TopologicallySortedPooledEntries()
     }
   }
 
-  DCHECK_EQ_F(sorted.size(), pooled_components_.size());
+  DCHECK_EQ_F(
+    sorted.size(), local_components_.size() + pooled_components_.size());
 
   return sorted;
 }
@@ -98,34 +118,27 @@ auto Composition::TopologicallySortedPooledEntries()
 auto Composition::DestroyComponents() noexcept -> void
 {
   std::unique_lock lock(mutex_);
-  // Clear in reverse order - dependents before dependencies
-  while (!local_components_.empty()) {
-    // Absorb all exceptions
-    try {
-      const auto& comp = local_components_.back();
-      if (comp.use_count() == 1) {
-        DLOG_F(1, "Destroying local component(t={}/{})", comp->GetTypeId(),
-          comp->GetTypeNamePretty());
-      }
-      local_components_.pop_back();
-    } catch (const std::exception& e) {
-      LOG_F(
-        ERROR, "Exception caught while destructing components: %s", e.what());
-    }
-  }
-
-  if (pooled_components_.empty()) {
-    return; // Nothing to destroy
-  }
 
   // Destroy pooled components, dependencies first, using a topological sort
-  auto sorted_entries = TopologicallySortedPooledEntries();
-  for (auto& entry : sorted_entries) {
-    DCHECK_NOTNULL_F(entry, "corrupted sorted entry, pointer is null");
-    const auto* comp = entry->pool_ptr->GetUntyped(entry->handle);
-    DCHECK_NOTNULL_F(comp, "corrupted entry, component is null");
-    auto type_id = comp->GetTypeId();
-    pooled_components_.erase(type_id);
+  // that merges both local and pooled components
+  const auto sorted_entries = TopologicallySortedPooledEntries();
+  for (auto type_id : sorted_entries) {
+    // Try to find in pooled components first
+    const auto pooled_it = pooled_components_.find(type_id);
+    if (pooled_it != pooled_components_.end()) {
+      DCHECK_NOTNULL_F(pooled_it->second, "corrupted pooled entry, null");
+      pooled_components_.erase(pooled_it);
+      continue;
+    }
+    // Fallback: non-pooled
+    const auto local_it = std::ranges::find_if(local_components_,
+      [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
+    DCHECK_NE_F(local_it, local_components_.end());
+    if (local_it->use_count() == 1) {
+      DLOG_F(1, "Destroying local component(t={}/{})", (*local_it)->GetTypeId(),
+        (*local_it)->GetTypeNamePretty());
+    }
+    local_components_.erase(local_it);
   }
 }
 
@@ -159,18 +172,20 @@ auto Composition::operator=(Composition&& other) noexcept -> Composition&
   return *this;
 }
 
-Composition::Composition(std::size_t initial_capacity)
+Composition::Composition(const std::size_t initial_capacity)
 {
   // Reserve capacity to prevent reallocations that would invalidate pointers
   // stored during UpdateDependencies calls
   local_components_.reserve(initial_capacity);
 }
 
-auto Composition::ValidateDependencies(
+namespace {
+auto ValidateDependencies(
   const TypeId comp_id, const std::span<const TypeId> dependencies) -> void
 {
   DCHECK_F(!dependencies.empty(), "Dependencies must not be empty");
 
+  using oxygen::ComponentError;
   for (size_t i = 0; i < dependencies.size(); ++i) {
     const auto dep_id = dependencies[i];
 
@@ -187,6 +202,7 @@ auto Composition::ValidateDependencies(
     }
   }
 }
+} // namespace
 
 auto Composition::EnsureDependencies(const TypeId comp_id,
   const std::span<const TypeId> dependencies) const -> void
@@ -227,7 +243,7 @@ auto Composition::UpdateComponentDependencies(Component& component) noexcept
 {
   if (component.HasDependencies()) {
     component.UpdateDependencies(
-      [this](TypeId id) -> Component& { return GetComponentImpl(id); });
+      [this](const TypeId id) -> Component& { return GetComponentImpl(id); });
   }
 }
 
@@ -235,7 +251,7 @@ auto Composition::ReplaceComponentImpl(
   const TypeId old_id, std::shared_ptr<Component> new_component) -> Component&
 {
   DCHECK_NOTNULL_F(new_component, "Component must not be null");
-  auto it = std::ranges::find_if(local_components_,
+  const auto it = std::ranges::find_if(local_components_,
     [old_id](const auto& comp) { return comp->GetTypeId() == old_id; });
   DCHECK_F(it != local_components_.end(), "Old component must exist");
 
@@ -243,9 +259,10 @@ auto Composition::ReplaceComponentImpl(
   return **it;
 }
 
-auto Composition::GetComponentImpl(const TypeId id) const -> const Component&
+auto Composition::GetComponentImpl(const TypeId type_id) const
+  -> const Component&
 {
-  auto pooled_it = pooled_components_.find(id);
+  const auto pooled_it = pooled_components_.find(type_id);
   if (pooled_it != pooled_components_.end()) {
     auto* pool = pooled_it->second->pool_ptr;
     if (!pool)
@@ -256,8 +273,8 @@ auto Composition::GetComponentImpl(const TypeId id) const -> const Component&
     return *ptr;
   }
   // Fallback: non-pooled
-  auto it = std::ranges::find_if(local_components_,
-    [id](const auto& comp) { return comp->GetTypeId() == id; });
+  const auto it = std::ranges::find_if(local_components_,
+    [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
   if (it == local_components_.end()) {
     throw ComponentError("Missing dependency component");
   }
@@ -272,7 +289,7 @@ auto Composition::GetComponentImpl(const TypeId type_id) -> Component&
 auto Composition::GetPooledComponentImpl(const IComponentPoolUntyped& pool,
   const TypeId type_id) const -> const Component&
 {
-  auto it = pooled_components_.find(type_id);
+  const auto it = pooled_components_.find(type_id);
   if (it == pooled_components_.end()) {
     throw ComponentError("Component not found");
   }
@@ -285,10 +302,10 @@ auto Composition::GetPooledComponentImpl(const IComponentPoolUntyped& pool,
 }
 
 auto Composition::GetPooledComponentImpl(
-  const IComponentPoolUntyped& pool, const TypeId id) -> Component&
+  const IComponentPoolUntyped& pool, const TypeId type_id) -> Component&
 {
   return const_cast<Component&>(
-    std::as_const(*this).GetPooledComponentImpl(pool, id));
+    std::as_const(*this).GetPooledComponentImpl(pool, type_id));
 }
 
 auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
@@ -310,10 +327,8 @@ auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
   // Update dependencies AFTER all components are added to prevent invalidation
   for (const auto& comp : local_components_) {
     if (comp->HasDependencies()) {
-      comp->UpdateDependencies([this](TypeId id) -> Component& {
-        // Nollocking needed here
-        return GetComponentImpl(id);
-      });
+      comp->UpdateDependencies(
+        [this](const TypeId id) -> Component& { return GetComponentImpl(id); });
     }
   }
 }
@@ -356,51 +371,82 @@ auto Composition::EnsureNotRequired(const TypeId type_id) const -> void
   }
 }
 
+// Helper to print a component's one-line info, and dependencies if present
+auto Composition::PrintComponentInfo(std::ostream& out, const TypeId type_id,
+  const std::string_view type_name, const std::string_view kind,
+  const Component* comp) const -> void
+{
+  if (!comp) {
+    out << "   [" << type_id << "] " << type_name << " (" << kind
+        << ") [INVALID]\n";
+    return;
+  }
+
+  out << "   [" << type_id << "] " << type_name << " (" << kind << ")";
+  if (comp->HasDependencies() && !comp->Dependencies().empty()) {
+    out << " << Requires: ";
+    const auto& type_registry = TypeRegistry::Get();
+    for (size_t i = 0; i < comp->Dependencies().size(); ++i) {
+      const auto dep_type_id = comp->Dependencies()[i];
+      std::string_view dep_name;
+      try {
+        dep_name = GetComponentImpl(dep_type_id).GetTypeNamePretty();
+      } catch (...) {
+        try {
+          dep_name = type_registry.GetTypeNamePretty(dep_type_id);
+        } catch (...) {
+          dep_name = "<missing>";
+        }
+      }
+      out << dep_name;
+      if (i < comp->Dependencies().size() - 1) {
+        out << ", ";
+      }
+    }
+  }
+  out << "\n";
+}
+
 auto Composition::PrintComponents(std::ostream& out) const -> void
 {
   std::shared_lock lock(mutex_);
 
+  // Favor the object name from ObjectMetaData if available; otherwise, use the
+  // type name of the composition.
   std::string object_name = "Unknown";
   if (HasComponent<ObjectMetaData>()) {
     object_name = static_cast<const ObjectMetaData&>(
       GetComponentImpl(ObjectMetaData::ClassTypeId()))
                     .GetName();
+  } else {
+    object_name = GetTypeNamePretty();
   }
 
-  std::size_t total_count
+  const std::size_t total_count
     = local_components_.size() + pooled_components_.size();
   out << "> Object \"" << object_name << "\" has " << total_count
       << " components:\n";
 
   // Print direct (non-pooled) components
   for (const auto& entry : local_components_) {
-    out << "   [" << entry->GetTypeId() << "] " << entry->GetTypeNamePretty()
-        << " (Direct)";
-    if (!entry->Dependencies().empty()) {
-      out << " << Requires: ";
-      for (size_t i = 0; i < entry->Dependencies().size(); ++i) {
-        const auto& dep_component = GetComponentImpl(entry->Dependencies()[i]);
-        out << dep_component.GetTypeNamePretty();
-        if (i < entry->Dependencies().size() - 1) {
-          out << ", ";
-        }
-      }
-    }
-    out << "\n";
+    PrintComponentInfo(out, entry->GetTypeId(), entry->GetTypeNamePretty(),
+      "Direct", entry.get());
   }
 
   // Print pooled components
-  const auto& type_registry = TypeRegistry::Get();
-  for (const auto& [type_id, handle] : pooled_components_) {
-    // Print the class name using TypeRegistry
-    std::string_view type_name {};
+  for (const auto& [type_id, pooled_entry] : pooled_components_) {
+    std::string_view type_name;
     try {
-      type_name = type_registry.GetTypeNamePretty(type_id);
+      type_name = TypeRegistry::Get().GetTypeNamePretty(type_id);
     } catch (...) {
       type_name = "<unknown>";
     }
-    out << "   [" << type_id << "] " << type_name << " (Pooled)";
-    out << "\n";
+    const Component* comp = nullptr;
+    if (pooled_entry && pooled_entry->pool_ptr
+      && pooled_entry->handle.IsValid()) {
+      comp = pooled_entry->GetComponent();
+    }
+    PrintComponentInfo(out, type_id, type_name, "Pooled", comp);
   }
   out << "\n";
 }

@@ -40,7 +40,7 @@ class Composition : public virtual Object {
     IComponentPoolUntyped* pool_ptr { nullptr }; // type-erased pointer to pool
 
     PooledEntry() = default;
-    PooledEntry(ResourceHandle handle, IComponentPoolUntyped* pool_ptr)
+    PooledEntry(const ResourceHandle& handle, IComponentPoolUntyped* pool_ptr)
       : handle(handle)
       , pool_ptr(pool_ptr)
     {
@@ -51,6 +51,9 @@ class Composition : public virtual Object {
 
     OXYGEN_DEFAULT_COPYABLE(PooledEntry)
     OXYGEN_DEFAULT_MOVABLE(PooledEntry)
+
+    // Helper to get the component from the pool
+    OXGN_COM_NDAPI auto GetComponent() const -> Component*;
   };
   // Storage for pooled components, using the type-erased pool interface for a
   // generic lookup
@@ -66,7 +69,7 @@ public:
   OXGN_COM_API Composition(const Composition& other);
 
   //! Copy assignment operator, make a shallow copy of the composition.
-  OXGN_COM_API auto operator=(const Composition& rhs) -> Composition&;
+  OXGN_COM_API auto operator=(const Composition& other) -> Composition&;
 
   //! Moves the composition to the new object and leaves the original in an
   //! empty state.
@@ -74,7 +77,7 @@ public:
 
   //! Moves the composition to the new object and leaves the original in an
   //! empty state.
-  OXGN_COM_API auto operator=(Composition&& rhs) noexcept -> Composition&;
+  OXGN_COM_API auto operator=(Composition&& other) noexcept -> Composition&;
 
   template <typename T> [[nodiscard]] auto HasComponent() const -> bool
   {
@@ -253,8 +256,6 @@ private:
 
   OXGN_COM_API auto DestroyComponents() noexcept -> void;
 
-  OXGN_COM_API static auto ValidateDependencies(
-    TypeId comp_id, std::span<const TypeId> dependencies) -> void;
   OXGN_COM_NDAPI auto HasLocalComponentImpl(TypeId id) const -> bool;
   OXGN_COM_NDAPI auto HasPooledComponentImpl(TypeId id) const -> bool;
   OXGN_COM_API auto UpdateComponentDependencies(Component& component) noexcept
@@ -263,12 +264,13 @@ private:
   OXGN_COM_NDAPI auto ReplaceComponentImpl(
     TypeId old_id, std::shared_ptr<Component> new_component) -> Component&;
   // Unified: GetComponentImpl handles both pooled and non-pooled components
-  OXGN_COM_NDAPI auto GetComponentImpl(TypeId id) const -> const Component&;
+  OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) const
+    -> const Component&;
   OXGN_COM_NDAPI auto GetComponentImpl(TypeId type_id) -> Component&;
   OXGN_COM_NDAPI auto GetPooledComponentImpl(const IComponentPoolUntyped& pool,
     TypeId type_id) const -> const Component&;
   OXGN_COM_NDAPI auto GetPooledComponentImpl(
-    const IComponentPoolUntyped& pool, TypeId id) -> Component&;
+    const IComponentPoolUntyped& pool, TypeId type_id) -> Component&;
 
   OXGN_COM_API auto EnsureDependencies(
     TypeId comp_id, std::span<const TypeId> dependencies) const -> void;
@@ -276,8 +278,12 @@ private:
 
   OXGN_COM_API auto DeepCopyComponentsFrom(const Composition& other) -> void;
 
-  auto TopologicallySortedPooledEntries()
-    -> std::vector<std::shared_ptr<PooledEntry>>;
+  auto TopologicallySortedPooledEntries() -> std::vector<TypeId>;
+
+  // Helper to print a component's one-line info, and dependencies if present
+  auto PrintComponentInfo(std::ostream& out, TypeId type_id,
+    std::string_view type_name, std::string_view kind,
+    const Component* comp) const -> void;
 
   mutable std::shared_mutex mutex_;
 };

@@ -12,10 +12,6 @@
 
 namespace oxygen::composition::testing {
 
-class BaseCompositionTest : public ::testing::Test {
-  // void SetUp() override { oxygen::ComponentPoolRegistry::ClearAllPools(); }
-  // void TearDown() override { oxygen::ComponentPoolRegistry::ClearAllPools();
-  // }
-};
+class BaseCompositionTest : public ::testing::Test { };
 
 } // namespace oxygen::composition::testing
