@@ -89,6 +89,28 @@ public:
     return table_.Emplace(std::forward<Args>(args)...);
   }
 
+  //! Allocate a new component, using the provided \p comp as value.
+  /*!
+   Allocates a new component in the pool by copying the given source component.
+   If the type does not match, throws.
+   @param comp The component to value. Will be moved into the pool table.
+   @return Handle to the new component.
+  */
+  auto Allocate(Component&& comp) // NOLINT(*-rvalue-reference-param-not-moved)
+    -> ResourceHandle override
+  {
+    // Attempt to dynamic_cast to the correct type
+    DCHECK_F(comp.GetTypeId() == PooledComponentType::ClassTypeId(),
+      "ComponentPool::Allocate: type mismatch, expected {}, got {}",
+      PooledComponentType::ClassTypeId(), comp.GetTypeId());
+    auto* typed = static_cast<PooledComponentType*>(&comp);
+    if (!typed) {
+      throw std::invalid_argument("ComponentPool::Allocate: type mismatch");
+    }
+    std::lock_guard lock(mutex_);
+    return table_.Insert(std::move(*typed));
+  }
+
   //! Thread-safe component deallocation
   /*!
    Removes component from the pool and invalidates the handle.

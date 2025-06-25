@@ -172,11 +172,11 @@ auto Composition::operator=(Composition&& other) noexcept -> Composition&
   return *this;
 }
 
-Composition::Composition(const std::size_t initial_capacity)
+Composition::Composition(
+  const std::size_t local_capacity, const size_t pooled_capacity)
 {
-  // Reserve capacity to prevent reallocations that would invalidate pointers
-  // stored during UpdateDependencies calls
-  local_components_.reserve(initial_capacity);
+  local_components_.reserve(local_capacity);
+  pooled_components_.reserve(pooled_capacity);
 }
 
 namespace {
@@ -246,19 +246,6 @@ auto Composition::UpdateComponentDependencies(Component& component) noexcept
       [this](const TypeId id) -> Component& { return GetComponentImpl(id); });
   }
 }
-
-auto Composition::ReplaceComponentImpl(
-  const TypeId old_id, std::shared_ptr<Component> new_component) -> Component&
-{
-  DCHECK_NOTNULL_F(new_component, "Component must not be null");
-  const auto it = std::ranges::find_if(local_components_,
-    [old_id](const auto& comp) { return comp->GetTypeId() == old_id; });
-  DCHECK_F(it != local_components_.end(), "Old component must exist");
-
-  *it = std::move(new_component);
-  return **it;
-}
-
 auto Composition::GetComponentImpl(const TypeId type_id) const
   -> const Component&
 {
@@ -308,21 +295,13 @@ auto Composition::GetPooledComponentImpl(
     std::as_const(*this).GetPooledComponentImpl(pool, type_id));
 }
 
+// TODO: must deep copy local and pooled components
 auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
 {
   std::unique_lock lock(mutex_);
 
-  // Resize to fit the actual number of components being copied
-  const auto component_count = other.local_components_.size();
-  local_components_.clear();
-  local_components_.reserve(component_count);
-  for (const auto& entry : other.local_components_) {
-    if (const Component* comp = entry.get(); comp->IsCloneable()) {
-      local_components_.emplace_back(std::shared_ptr<Component>(comp->Clone()));
-    } else {
-      throw ComponentError("Component must be cloneable");
-    }
-  }
+  DeepCopyLocalComponentsFrom(other);
+  DeepCopyPooledComponentsFrom(other);
 
   // Update dependencies AFTER all components are added to prevent invalidation
   for (const auto& comp : local_components_) {
@@ -330,6 +309,67 @@ auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
       comp->UpdateDependencies(
         [this](const TypeId id) -> Component& { return GetComponentImpl(id); });
     }
+  }
+  for (const auto& entry : pooled_components_ | std::views::values) {
+    auto* comp = entry->GetComponent();
+    if (comp->HasDependencies()) {
+      comp->UpdateDependencies(
+        [this](const TypeId id) -> Component& { return GetComponentImpl(id); });
+    }
+  }
+}
+auto Composition::DeepCopyLocalComponentsFrom(const Composition& other) -> void
+{
+  local_components_.clear();
+  // Resize to fit the actual number of components being copied
+  const auto component_count = other.local_components_.size();
+  local_components_.reserve(component_count);
+  for (const auto& entry : other.local_components_) {
+    if (const Component* comp = entry.get(); comp->IsCloneable()) {
+      // Clone the component
+      std::shared_ptr clone = comp->Clone();
+      if (!clone) {
+        throw ComponentError("Failed to clone pooled component");
+      }
+      local_components_.emplace_back(clone);
+    } else {
+      throw ComponentError("Component must be cloneable");
+    }
+  }
+}
+auto Composition::DeepCopyPooledComponentsFrom(const Composition& other) -> void
+{
+  pooled_components_.clear();
+  pooled_components_.reserve(other.pooled_components_.size());
+
+  for (const auto& [type_id, entry] : other.pooled_components_) {
+    IComponentPoolUntyped* pool = entry->pool_ptr;
+    ResourceHandle src_handle = entry->handle;
+    if (!pool || !src_handle.IsValid()) {
+      throw ComponentError("Invalid pooled entry in source composition");
+    }
+
+    // Get the source component
+    const Component* src_comp = pool->GetUntyped(src_handle);
+    DCHECK_NOTNULL_F(src_comp); // valid handle -> valid component
+    if (!src_comp->IsCloneable()) {
+      throw ComponentError("Pooled component must be cloneable");
+    }
+
+    // Clone the component
+    std::unique_ptr clone = src_comp->Clone();
+    if (!clone) {
+      throw ComponentError("Failed to clone pooled component");
+    }
+
+    // Allocate a new instance in the same pool using the type-erased Allocate
+    ResourceHandle new_handle = pool->Allocate(std::move(*clone));
+    if (!new_handle.IsValid()) {
+      throw ComponentError("Failed to allocate pooled component clone");
+    }
+
+    pooled_components_[type_id]
+      = std::make_shared<PooledEntry>(new_handle, pool);
   }
 }
 
