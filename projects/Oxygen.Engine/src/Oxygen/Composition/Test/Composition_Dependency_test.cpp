@@ -39,7 +39,7 @@ class SimplePooledComponent final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(SimplePooledComponent, PooledTestResourceTypeList);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
   SimplePooledComponent() = default;
 };
 class DependentPooledComponent final : public oxygen::Component {
@@ -47,10 +47,11 @@ class DependentPooledComponent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(SimplePooledComponent);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
   DependentPooledComponent() = default;
-  void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) noexcept override
+  auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override
   {
     simple_ = &static_cast<SimplePooledComponent&>(
       get_component(SimplePooledComponent::ClassTypeId()));
@@ -62,10 +63,11 @@ class ComplexPooledComponent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(SimplePooledComponent, DependentPooledComponent);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
   ComplexPooledComponent() = default;
-  void UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) noexcept override
+  auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override
   {
     simple_ = &static_cast<SimplePooledComponent&>(
       get_component(SimplePooledComponent::ClassTypeId()));
@@ -79,7 +81,7 @@ class PooledDep final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(PooledDep, PooledTestResourceTypeList);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
   ~PooledDep() override { PooledTracker::destroyed.push_back("Dep"); }
 };
 class PooledDependent final : public oxygen::Component {
@@ -87,7 +89,7 @@ class PooledDependent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(PooledDep);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
   ~PooledDependent() override
   {
     PooledTracker::destroyed.push_back("Dependent");
@@ -98,7 +100,7 @@ class PooledA final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(PooledA);
 
 public:
-  using ResourceTypeList = ::PooledTestResourceTypeList;
+  using ResourceTypeList = PooledTestResourceTypeList;
 };
 
 //=== DependencyIntegrityTest ===---------------------------------------------//
@@ -113,8 +115,9 @@ protected:
     OXYGEN_COMPONENT(DependentComponent)
     OXYGEN_COMPONENT_REQUIRES(SimpleComponent)
   public:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) noexcept override
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override
     {
       simple_ = &static_cast<SimpleComponent&>(
         get_component(SimpleComponent::ClassTypeId()));
@@ -125,8 +128,9 @@ protected:
     OXYGEN_COMPONENT(ComplexComponent)
     OXYGEN_COMPONENT_REQUIRES(SimpleComponent, DependentComponent)
   public:
-    void UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) noexcept override
+    auto UpdateDependencies(
+      const std::function<Component&(TypeId)>& get_component) noexcept
+      -> void override
     {
       simple_ = &static_cast<SimpleComponent&>(
         get_component(SimpleComponent::ClassTypeId()));
@@ -296,7 +300,7 @@ public:
 //=== PooledDependencyIntegrityTest Fixture ===-------------------------------//
 
 class PooledDependencyIntegrityTest
-  : public ::oxygen::composition::testing::BaseCompositionTest {
+  : public oxygen::composition::testing::BaseCompositionTest {
 protected:
   PooledTestComp composition_;
 };
@@ -308,8 +312,6 @@ NOLINT_TEST_F(PooledDependencyIntegrityTest, PooledDependencyValidation)
 {
   // Arrange
   composition_.AddComponent<SimplePooledComponent>();
-  bool has_simple = composition_.HasComponent<SimplePooledComponent>();
-  const auto& simple = composition_.GetComponent<SimplePooledComponent>();
   // Act & Assert
   [[maybe_unused]] auto& _
     = composition_.AddComponent<DependentPooledComponent>();

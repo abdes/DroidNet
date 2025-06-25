@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- Visualize oxygen::Component and derived types -->
+  <Type Name="oxygen::Component">
+    <DisplayString>
+      TypeId={GetTypeId()}, {GetTypeNamePretty()}
+    </DisplayString>
+    <Expand>
+      <Item Name="TypeId">GetTypeId()</Item>
+      <Item Name="TypeName">GetTypeNamePretty()</Item>
+    </Expand>
+  </Type>
+
+  <!-- Visualize std::shared_ptr<oxygen::Component> (MSVC STL only) -->
+  <Type Name="std::shared_ptr&lt;oxygen::Component&gt;">
+    <DisplayString>
+      TypeId={_Ptr->GetTypeId()}, {_Ptr->GetTypeNamePretty()}
+    </DisplayString>
+    <Expand>
+      <Item Name="TypeId">_Ptr->GetTypeId()</Item>
+      <Item Name="TypeName">_Ptr->GetTypeNamePretty()</Item>
+      <Item Name="Pointer">_Ptr</Item>
+    </Expand>
+  </Type>
+
+  <!-- Visualize std::shared_ptr<oxygen::Composition::PooledEntry> (MSVC STL only) -->
+  <Type Name="std::shared_ptr&lt;oxygen::Composition::PooledEntry&gt;">
+    <Expand>
+      <Item Name="Handle">_Ptr->handle</Item>
+      <Item Name="Pool">_Ptr->pool_ptr</Item>
+    </Expand>
+  </Type>
+
+  <!-- Visualize oxygen::Composition -->
+  <Type Name="oxygen::Composition">
+    <DisplayString>
+      Composition
+    </DisplayString>
+    <Expand>
+      <Item Name="Local Components">local_components_</Item>
+      <Item Name="Pooled Components">pooled_components_</Item>
+    </Expand>
+  </Type>
+
+</AutoVisualizer>
