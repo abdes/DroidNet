@@ -41,9 +41,8 @@ namespace oxygen {
  }
  \endcode
 */
-template <class... Ts>
-struct Overloads : Ts... {
-    using Ts::operator()...;
+template <class... Ts> struct Overloads : Ts... {
+  using Ts::operator()...;
 };
 
 } // namespace oxygen

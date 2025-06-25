@@ -39,80 +39,88 @@ OXYGEN_BASE_API auto ComCategory() noexcept -> const std::error_category&;
 // Function to create std::error_code from com_error_enum
 inline auto make_error_code(ComErrorEnum e) noexcept -> std::error_code
 {
-    return { static_cast<int>(e), ComCategory() };
+  return { static_cast<int>(e), ComCategory() };
 }
 
 // Custom error category for COM errors
 class ComErrorCategory final : public std::error_category {
 public:
-    [[nodiscard]] auto name() const noexcept -> const char* override { return "com"; }
-    [[nodiscard]] auto default_error_condition(const int hr) const noexcept -> std::error_condition override
-    {
-        return (HRESULT_CODE(hr) || hr == 0)
-            ? std::system_category().default_error_condition(HRESULT_CODE(hr))
-            : std::error_condition { hr, ComCategory() };
-    }
-    [[nodiscard]] OXYGEN_BASE_API auto message(int hr) const -> std::string override;
+  [[nodiscard]] auto name() const noexcept -> const char* override
+  {
+    return "com";
+  }
+  [[nodiscard]] auto default_error_condition(const int hr) const noexcept
+    -> std::error_condition override
+  {
+    return (HRESULT_CODE(hr) || hr == 0)
+      ? std::system_category().default_error_condition(HRESULT_CODE(hr))
+      : std::error_condition { hr, ComCategory() };
+  }
+  [[nodiscard]] OXYGEN_BASE_API auto message(int hr) const
+    -> std::string override;
 };
 
 // ComError class derived from std::system_error
 class ComError final : public std::system_error {
 public:
-    explicit ComError(const ComErrorEnum error_code)
-        : std::system_error(static_cast<int>(error_code), ComCategory())
-    {
-    }
+  explicit ComError(const ComErrorEnum error_code)
+    : std::system_error(static_cast<int>(error_code), ComCategory())
+  {
+  }
 
-    ComError(ComErrorEnum error_code, const char* msg)
-        : std::system_error(static_cast<int>(error_code), ComCategory(), msg)
-    {
-    }
+  ComError(ComErrorEnum error_code, const char* msg)
+    : std::system_error(static_cast<int>(error_code), ComCategory(), msg)
+  {
+  }
 
-    ComError(ComErrorEnum error_code, std::string msg)
-        : std::system_error(static_cast<int>(error_code), ComCategory(), std::move(msg))
-    {
-    }
+  ComError(ComErrorEnum error_code, std::string msg)
+    : std::system_error(
+        static_cast<int>(error_code), ComCategory(), std::move(msg))
+  {
+  }
 
-    static void __declspec(noreturn) Throw(const ComErrorEnum error_code, std::string utf8_message)
-    {
-        throw ComError(error_code, std::move(utf8_message));
-    }
+  static void __declspec(noreturn) Throw(
+    const ComErrorEnum error_code, std::string utf8_message)
+  {
+    throw ComError(error_code, std::move(utf8_message));
+  }
 
-    auto GetHR() const noexcept -> HRESULT { return code().value(); }
+  auto GetHR() const noexcept -> HRESULT { return code().value(); }
 
-    //
-    // private:
-    //    mutable std::optional<std::string> message_;
+  //
+  // private:
+  //    mutable std::optional<std::string> message_;
 };
 
 namespace detail {
 
-    // Non-templated function to handle COM errors with a UTF-8 message
-    OXYGEN_BASE_API void HandleComErrorImpl(HRESULT hr, const std::string& utf8_message);
+  // Non-templated function to handle COM errors with a UTF-8 message
+  OXYGEN_BASE_API void HandleComErrorImpl(
+    HRESULT hr, const std::string& utf8_message);
 
-    // Define a concept for nullable types
-    template <typename T>
-    concept Nullable = requires(T t) {
-        { t == nullptr } -> std::convertible_to<bool>;
-    };
+  // Define a concept for nullable types
+  template <typename T>
+  concept Nullable = requires(T t) {
+    { t == nullptr } -> std::convertible_to<bool>;
+  };
 
-    // Function to handle COM errors
-    template <oxygen::string_utils::StringType T>
-    void HandleComError(const HRESULT hr, T message = nullptr)
-    {
-        std::string utf8_message {};
-        if constexpr (Nullable<T>) {
-            HandleComErrorImpl(hr, utf8_message);
-            return;
-        } else {
-            try {
-                string_utils::WideToUtf8(message, utf8_message);
-            } catch (const std::exception& e) {
-                utf8_message.append("__not_available__ (").append(e.what()).append(")");
-            }
-            HandleComErrorImpl(hr, utf8_message);
-        }
+  // Function to handle COM errors
+  template <oxygen::string_utils::StringType T>
+  void HandleComError(const HRESULT hr, T message = nullptr)
+  {
+    std::string utf8_message {};
+    if constexpr (Nullable<T>) {
+      HandleComErrorImpl(hr, utf8_message);
+      return;
+    } else {
+      try {
+        string_utils::WideToUtf8(message, utf8_message);
+      } catch (const std::exception& e) {
+        utf8_message.append("__not_available__ (").append(e.what()).append(")");
+      }
+      HandleComErrorImpl(hr, utf8_message);
     }
+  }
 
 } // namespace detail
 
@@ -120,16 +128,16 @@ namespace detail {
 template <oxygen::string_utils::StringType T>
 void ThrowOnFailed(const HRESULT hr, T message)
 {
-    if (FAILED(hr)) {
-        detail::HandleComError(hr, message);
-    }
+  if (FAILED(hr)) {
+    detail::HandleComError(hr, message);
+  }
 }
 
 inline void ThrowOnFailed(const HRESULT hr)
 {
-    if (FAILED(hr)) {
-        detail::HandleComError<const char*>(hr);
-    }
+  if (FAILED(hr)) {
+    detail::HandleComError<const char*>(hr);
+  }
 }
 
 } // namespace oxygen::windows

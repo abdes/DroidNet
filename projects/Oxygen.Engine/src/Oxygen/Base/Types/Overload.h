@@ -8,11 +8,9 @@
 
 namespace oxygen {
 
-template <class... Ts>
-struct Overload : Ts... {
-    using Ts::operator()...;
+template <class... Ts> struct Overload : Ts... {
+  using Ts::operator()...;
 };
-template <class... Ts>
-Overload(Ts...) -> Overload<Ts...>;
+template <class... Ts> Overload(Ts...) -> Overload<Ts...>;
 
 } // namespace oxygen

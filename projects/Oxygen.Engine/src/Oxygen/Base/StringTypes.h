@@ -17,15 +17,15 @@ namespace oxygen::string_utils {
 //! Any form of a string, UTF-8 string or wide string r-value object.
 template <typename T>
 concept StringType = std::convertible_to<T, std::string_view>
-    || std::convertible_to<T, std::u8string_view>
-    || std::convertible_to<T, std::wstring_view>;
+  || std::convertible_to<T, std::u8string_view>
+  || std::convertible_to<T, std::wstring_view>;
 
 //! Any form of literal string, literal UTF-8 string or literal wide string
 template <typename T>
 concept LiteralStringType = requires(T t) {
-    { std::string(t) } -> std::convertible_to<std::string>;
-    { std::wstring(t) } -> std::convertible_to<std::wstring>;
-    { std::u8string(t) } -> std::convertible_to<std::u8string>;
+  { std::string(t) } -> std::convertible_to<std::string>;
+  { std::wstring(t) } -> std::convertible_to<std::wstring>;
+  { std::u8string(t) } -> std::convertible_to<std::u8string>;
 };
 
 //! Any form of string, literal or not.

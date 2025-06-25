@@ -13,22 +13,19 @@
 namespace oxygen::detail {
 [[nodiscard]] inline void* GetReturnAddress() noexcept
 {
-    return _ReturnAddress();
+  return _ReturnAddress();
 }
 } // namespace oxygen::detail
 #elif defined(__GNUC__) || defined(__clang__)
 namespace oxygen::detail {
 [[nodiscard]] inline void* GetReturnAddress() noexcept
 {
-    return __builtin_return_address(0);
+  return __builtin_return_address(0);
 }
 } // namespace oxygen::detail
 #else
 namespace oxygen::detail {
-[[nodiscard]] inline void* GetReturnAddress() noexcept
-{
-    return nullptr;
-}
+[[nodiscard]] inline void* GetReturnAddress() noexcept { return nullptr; }
 } // namespace oxygen::detail
 #endif
 
@@ -38,9 +35,9 @@ template <typename T = void>
 [[nodiscard]] constexpr void* ReturnAddress() noexcept
 {
 #if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
-    return detail::GetReturnAddress();
+  return detail::GetReturnAddress();
 #else
-    return nullptr;
+  return nullptr;
 #endif
 }
 

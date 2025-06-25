@@ -15,22 +15,21 @@ namespace oxygen {
 
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkViewport.html
 struct Viewport {
-    SubPixelBounds bounds;
-    struct
-    {
-        float min;
-        float max;
-    } depth;
+  SubPixelBounds bounds;
+  struct {
+    float min;
+    float max;
+  } depth;
 
-    friend auto to_string(Viewport const& self)
-    {
-        std::string out = to_string(self.bounds);
-        out.append(", min depth: ");
-        out.append(nostd::to_string(self.depth.min));
-        out.append(", max depth: ");
-        out.append(nostd::to_string(self.depth.max));
-        return out;
-    }
+  friend auto to_string(Viewport const& self)
+  {
+    std::string out = to_string(self.bounds);
+    out.append(", min depth: ");
+    out.append(nostd::to_string(self.depth.min));
+    out.append(", max depth: ");
+    out.append(nostd::to_string(self.depth.max));
+    return out;
+  }
 };
 
 } // namespace oxygen

@@ -13,55 +13,55 @@
 
 NOLINT_TEST(CommonMacros, NonCopyable)
 {
-    // NOLINTNEXTLINE
-    class NonCopyable {
-    public:
-        OXYGEN_MAKE_NON_COPYABLE(NonCopyable)
-    };
+  // NOLINTNEXTLINE
+  class NonCopyable {
+  public:
+    OXYGEN_MAKE_NON_COPYABLE(NonCopyable)
+  };
 
-    static_assert(!std::is_copy_constructible_v<NonCopyable>);
-    static_assert(!std::is_assignable_v<NonCopyable, NonCopyable>);
+  static_assert(!std::is_copy_constructible_v<NonCopyable>);
+  static_assert(!std::is_assignable_v<NonCopyable, NonCopyable>);
 }
 
 NOLINT_TEST(CommonMacros, NonMoveable)
 {
-    // NOLINTNEXTLINE
-    class NonMoveable {
-    public:
-        OXYGEN_MAKE_NON_MOVABLE(NonMoveable)
-    };
+  // NOLINTNEXTLINE
+  class NonMoveable {
+  public:
+    OXYGEN_MAKE_NON_MOVABLE(NonMoveable)
+  };
 
-    static_assert(!std::is_move_constructible_v<NonMoveable>);
-    static_assert(!std::is_move_assignable_v<NonMoveable>);
+  static_assert(!std::is_move_constructible_v<NonMoveable>);
+  static_assert(!std::is_move_assignable_v<NonMoveable>);
 }
 
 NOLINT_TEST(CommonMacros, DefaultCopyable)
 {
-    // NOLINTNEXTLINE
-    class DefaultCopyable {
-    public:
-        OXYGEN_DEFAULT_COPYABLE(DefaultCopyable)
-    };
+  // NOLINTNEXTLINE
+  class DefaultCopyable {
+  public:
+    OXYGEN_DEFAULT_COPYABLE(DefaultCopyable)
+  };
 
-    static_assert(std::is_copy_constructible_v<DefaultCopyable>);
-    static_assert(std::is_assignable_v<DefaultCopyable, DefaultCopyable>);
+  static_assert(std::is_copy_constructible_v<DefaultCopyable>);
+  static_assert(std::is_assignable_v<DefaultCopyable, DefaultCopyable>);
 }
 
 NOLINT_TEST(CommonMacros, DefaultMoveable)
 {
-    // NOLINTNEXTLINE
-    class DefaultMoveable {
-    public:
-        DefaultMoveable() = default;
-        OXYGEN_DEFAULT_MOVABLE(DefaultMoveable)
+  // NOLINTNEXTLINE
+  class DefaultMoveable {
+  public:
+    DefaultMoveable() = default;
+    OXYGEN_DEFAULT_MOVABLE(DefaultMoveable)
 
-    private:
-        std::string member_ { "Hello World!" };
-    };
+  private:
+    std::string member_ { "Hello World!" };
+  };
 
-    const DefaultMoveable movable;
-    (void)movable;
+  const DefaultMoveable movable;
+  (void)movable;
 
-    static_assert(std::is_move_constructible_v<DefaultMoveable>);
-    static_assert(std::is_move_assignable_v<DefaultMoveable>);
+  static_assert(std::is_move_constructible_v<DefaultMoveable>);
+  static_assert(std::is_move_assignable_v<DefaultMoveable>);
 }

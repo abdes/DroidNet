@@ -20,15 +20,15 @@ OXYGEN_DIAGNOSTIC_DISABLE(4702) // For MSVC
 #endif
 TEST_CASE("Unreachable code", "[Unreachable]")
 {
-    SECTION("is never reached")
-    {
-        // ReSharper disable All
-        bool unreachable = false;
-        if (unreachable) {
-            oxygen::Unreachable();
-            FAIL_CHECK("Unreachable code was reached");
-        }
+  SECTION("is never reached")
+  {
+    // ReSharper disable All
+    bool unreachable = false;
+    if (unreachable) {
+      oxygen::Unreachable();
+      FAIL_CHECK("Unreachable code was reached");
     }
+  }
 }
 OXYGEN_DIAGNOSTIC_POP
 

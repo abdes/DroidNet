@@ -11,39 +11,38 @@
 namespace oxygen {
 
 //! FinalAction ensures something gets run at the end of a scope.
-template <class F>
-class FinalAction {
+template <class F> class FinalAction {
 public:
-    explicit FinalAction(const F& ff) noexcept
-        : f_ { ff }
-    {
-    }
-    explicit FinalAction(F&& ff) noexcept
-        : f_ { std::move(ff) }
-    {
-    }
+  explicit FinalAction(const F& ff) noexcept
+    : f_ { ff }
+  {
+  }
+  explicit FinalAction(F&& ff) noexcept
+    : f_ { std::move(ff) }
+  {
+  }
 
-    ~FinalAction() noexcept
-    {
-        // Invoke only if fully constructed or not moved from
-        if (invoke_) {
-            f_();
-        }
+  ~FinalAction() noexcept
+  {
+    // Invoke only if fully constructed or not moved from
+    if (invoke_) {
+      f_();
     }
+  }
 
-    FinalAction(FinalAction&& other) noexcept
-        : f_(std::move(other.f_))
-        , invoke_(std::exchange(other.invoke_, false))
-    {
-    }
+  FinalAction(FinalAction&& other) noexcept
+    : f_(std::move(other.f_))
+    , invoke_(std::exchange(other.invoke_, false))
+  {
+  }
 
-    FinalAction(const FinalAction&) = delete;
-    void operator=(const FinalAction&) = delete;
-    void operator=(FinalAction&&) = delete;
+  FinalAction(const FinalAction&) = delete;
+  void operator=(const FinalAction&) = delete;
+  void operator=(FinalAction&&) = delete;
 
 private:
-    F f_;
-    bool invoke_ = true;
+  F f_;
+  bool invoke_ = true;
 };
 
 //! Convenience function to generate a `FinalAction`, which gets executed at the
@@ -66,10 +65,9 @@ private:
     }
  \endcode
 */
-template <class F>
-[[nodiscard]] auto Finally(F&& f) noexcept
+template <class F> [[nodiscard]] auto Finally(F&& f) noexcept
 {
-    return FinalAction<std::decay_t<F>> { std::forward<F>(f) };
+  return FinalAction<std::decay_t<F>> { std::forward<F>(f) };
 }
 
 } // namespace oxygen
