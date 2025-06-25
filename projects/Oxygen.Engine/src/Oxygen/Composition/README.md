@@ -1,28 +1,39 @@
 # Oxygen Engine Composition System
 
-# Implementation Plan
+## Table of Contents
+
+- [Implementation Status](#implementation-status)
+- [Overview](#overview)
+- [The Global Type System](#the-global-type-system)
+- [Resource Types List](#resource-types-list)
+- [ComponentPool](#componentpool)
+- [The Global Component Pool Registry](#the-global-component-pool-registry)
+- [Hybrid Storage Architecture and Usage](#hybrid-storage-architecture-and-usage)
+- [Copy, Move, and Clone Semantics](#copy-move-and-clone-semantics)
+- [Error Handling](#error-handling)
+- [Diagnostics: Printing and Logging Components](#diagnostics-printing-and-logging-components)
+- [Composition Capacity Tuning](#composition-capacity-tuning)
+- [Performance Benchmarks](#performance-benchmarks)
+
+## Implementation Status
 
 | Done | Description |
 |:----:|-------------|
-| ✅ | **COMPLETED**: Implement template metaprogramming resource type system using TypeList and IndexOf |
-| ✅ | **COMPLETED**: Update Resource.h with compile-time type ID generation system |
-| ✅ | **COMPLETED**: Design centralized ResourceTypeList for consistent type ID allocation |
-| ✅ | **COMPLETED**: Create comprehensive test suite for Resource template metaprogramming system |
-| ✅ | **COMPLETED**: Implement thread-safe ComponentPool template with compile-time type resolution and contiguous storage |
-| ✅ | **COMPLETED**: Implement ComponentPoolRegistry class that manages ComponentPool instances using GetTrulySingleInstance |
-| ✅ | **COMPLETED**: Add ComponentPoolRegistry initialization function to cs_init.cpp for global singleton system |
-| ✅ | **COMPLETED**: Refactor `Composition` for hybrid storage: add dual containers (unique and pooled) |
-| ✅ | **COMPLETED**: Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage. |
-| ✅ | **COMPLETED**: Update component declaration macros: Ensure `OXYGEN_COMPONENT` and (if needed) `OXYGEN_RESOURCE_COMPONENT` macros correctly detect and register pooled vs. non-pooled components. |
-| ✅ | **COMPLETED**: Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust. |
-| ✅ | **COMPLETED**: Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types. |
-| ❌ | Write and run unit tests for hybrid storage: Cover all scenarios—adding, removing, accessing, and dependency management for both pooled and non-pooled components. |
-| ❌ | Profile component usage: Identify which components are performance-critical and should be pooled, using real-world or synthetic benchmarks. |
-| ❌ | Benchmark pooled vs. non-pooled performance: Measure and compare access times, memory usage, and cache locality for both storage types. |
-| ❌ | Optimize pool sizing and growth: Tune initial pool sizes and growth strategies based on profiling data; document best practices. |
-| ❌ | Improve handle and pointer validation: Enhance cached pointer validation and handle-based access performance, especially for pooled components. |
-| ❌ | Expand pooling to additional components: Based on profiling, migrate more components to pooled storage as appropriate. |
-| ❌ | Document usage guidelines and performance recommendations: Provide clear documentation for engine users on when and how to use pooled vs. non-pooled components, and how to declare new components. |
+| ✅ | Implement template metaprogramming resource type system using TypeList and IndexOf |
+| ✅ | Update Resource.h with compile-time type ID generation system |
+| ✅ | Design centralized ResourceTypeList for consistent type ID allocation |
+| ✅ | Create comprehensive test suite for Resource template metaprogramming system |
+| ✅ | Implement thread-safe ComponentPool template with compile-time type resolution and contiguous storage |
+| ✅ | Implement ComponentPoolRegistry class that manages ComponentPool instances using GetTrulySingleInstance |
+| ✅ | Add ComponentPoolRegistry initialization function to cs_init.cpp for global singleton system |
+| ✅ | Refactor `Composition` for hybrid storage: add dual containers (unique and pooled) |
+| ✅ | Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage. |
+| ✅ | Update component declaration macros: Ensure `OXYGEN_COMPONENT` and (if needed) `OXYGEN_RESOURCE_COMPONENT` macros correctly detect and register pooled vs. non-pooled components. |
+| ✅ | Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust. |
+| ✅ | Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types. |
+| ✅ | Write and run unit tests for hybrid storage: Cover all scenarios—adding, removing, accessing, and dependency management for both pooled and non-pooled components. |
+| ✅ | Benchmark pooled vs. non-pooled performance: Measure and compare access times, memory usage, and cache locality for both storage types. |
+| ✅ | Document usage guidelines and performance recommendations: Provide clear documentation for engine users on when and how to use pooled vs. non-pooled components, and how to declare new components. |
 
 ## Overview
 
@@ -35,9 +46,11 @@ The engine makes clear distinction between different categories of objects it
 manipulates:
 
 **Objects** (inherit from `Object`)
+
 - Have a `TypeId` and a type name
 
 **Components** (inherit from `Component`, which extends `Object`)
+
 - Represent a data-oriented part of a larger object
 - Can be composed into a `Composition`
 - Can use different storage strategies:
@@ -70,6 +83,7 @@ namespace oxygen {
 ```
 
 **Compositions** (inherit from `Composition`, which extends `Object`)
+
 - Built from one or more `Components`, specified at construction time or at
   runtime
 - Supports adding, removing and querying for components
@@ -77,6 +91,7 @@ namespace oxygen {
 - Examples: `SceneNode`, `Renderer`, `Graphics`
 
 **Resources** (inherit from `Resource<ResourceT, ResourceTypeList>`):
+
 - Use ResourceTable for storage with ResourceHandle-based access
 - Have compile-time resource type IDs (limited to 256 types)
 - Examples: `SceneNode`, `TransformComponent` (pooled)
@@ -114,59 +129,11 @@ created through the composition system.
 The implemented solution uses template metaprogramming instead of runtime mechanisms to ensure:
 
 1. **Zero Runtime Overhead**: All type resolution happens at compile time
-2. **MSVC Compatibility**: No reliance on compiler-specific macros like `__COUNTER__`
-3. **No RTTI Dependency**: Works in environments where RTTI is disabled
-4. **Cross-Module Consistency**: Type IDs are consistent across DLL boundaries
+2. **No RTTI Dependency**: Works in environments where RTTI is disabled
+3. **Cross-Module Consistency**: Type IDs are consistent across DLL boundaries
 
 ComponentPoolRegistry provides a truly global singleton for managing component
 pools across all modules:
-
-```cpp
-//=== Component Pool Architecture ===----------------------------------------//
-
-#include <Oxygen/Base/ResourceHandle.h>
-#include <Oxygen/Base/ResourceTable.h>
-#include <Oxygen/Composition/Detail/GetTrulySingleInstance.h>
-#include <Oxygen/Composition/ResourceTypes.h>  // Global resource type registry
-#include <shared_mutex>
-
-//=== Compile-Time Resource Type System ===----------------------------------//
-
-/*!
- Template metaprogramming-based resource type system.
- Provides compile-time unique type IDs without RTTI or runtime overhead.
-*/
-template <typename... Ts>
-struct TypeList {};
-
-/*!
- Helper to get the index of a type in a TypeList.
- Returns compile-time constant index for O(1) type resolution.
-*/
-template <typename T, typename List>
-struct IndexOf;
-
-template <typename T, typename... Ts>
-struct IndexOf<T, TypeList<T, Ts...>> : std::integral_constant<std::size_t, 0> {};
-
-template <typename T, typename U, typename... Ts>
-struct IndexOf<T, TypeList<U, Ts...>> : std::integral_constant<std::size_t, 1 + IndexOf<T, TypeList<Ts...>>::value> {};
-
-/*!
- Get compile-time unique resource type ID for any registered type.
- Zero runtime overhead - all type resolution happens at compile time.
-
- @tparam T The resource type to get ID for
- @tparam ResourceTypeList The centralized TypeList containing all valid resource types
- @return Compile-time constant resource type ID
-*/
-template <typename T, typename ResourceTypeList>
-constexpr auto GetResourceTypeId() noexcept -> ResourceHandle::ResourceTypeT {
-    static_assert(IndexOf<T, ResourceTypeList>::value < 256,
-                  "Too many resource types for ResourceHandle::ResourceTypeT!");
-    return static_cast<ResourceHandle::ResourceTypeT>(IndexOf<T, ResourceTypeList>::value);
-}
-```
 
 ### Global Resource Type Registration
 
@@ -299,9 +266,9 @@ The registry manages the complete lifecycle of component pools from creation to
 cleanup:
 
 **Pool Creation**: When a component type is first accessed, the registry creates
-a new `ComponentPool` instance with appropriate initial capacity. The pool is
-stored in a type-erased container with custom deleter functions to ensure proper
-cleanup.
+a new `ComponentPool` instance with appropriate initial capacity. The initial
+capacity can be specified, in the class representing the component type stored
+in the pool, by having a class member named `kExpectedPoolSize`.
 
 **Pool Reuse**: Subsequent requests for the same component type return the
 existing pool instance. This ensures all parts of the application access the
@@ -327,288 +294,9 @@ preventing state pollution across test cases.
 startup through exported C functions that establish the singleton instance in a
 predictable manner, ensuring proper cross-module access.
 
-## Composition with Hybrid Component Storage
+## Hybrid Storage Architecture and Usage
 
-The Composition class supports hybrid component storage, automatically routing components to appropriate storage based on their inheritance hierarchy. This provides transparent performance optimization for high-frequency components while maintaining simplicity for occasional-use components.
-
-### **Storage Architecture**
-
-**Dual Container System**: The `ComponentManager` maintains separate storage for different component types:
-
-```cpp
-struct Composition::ComponentManager {
-    // Existing non-pooled storage
-    ComponentsCollection components_;
-    std::unordered_map<TypeId, size_t> component_index_;
-
-    // New pooled component storage
-    std::unordered_map<TypeId, ResourceHandle> pooled_components_;
-
-    // Thread safety for read-heavy workload
-    mutable std::shared_mutex access_mutex_;
-};
-```
-
-**Automatic Storage Selection**: Components are automatically routed to appropriate storage based on inheritance:
-- **Pooled Components**: Inherit from both `Component` and `Resource<T, ResourceTypeList>` → stored in global `ComponentPool`
-- **Non-Pooled Components**: Inherit only from `Component` → stored directly in composition
-
-### **Component Declaration Macros**
-
-**Single Macro with Automatic Detection**: The `OXYGEN_COMPONENT` macro automatically detects Resource inheritance and generates appropriate integration code:
-
-```cpp
-// Non-pooled component (simple inheritance)
-class SettingsComponent : public oxygen::Component {
-    OXYGEN_COMPONENT(SettingsComponent)
-public:
-    explicit SettingsComponent(const std::string& config) : config_(config) {}
-
-private:
-    std::string config_;
-};
-
-// Pooled component (dual inheritance)
-class TransformComponent : public oxygen::Component,
-                          public oxygen::Resource<TransformComponent, ResourceTypeList> {
-    OXYGEN_COMPONENT(TransformComponent)
-public:
-    explicit TransformComponent(const Vector3& position) : position_(position) {}
-
-    auto GetHandle() const -> ResourceHandle { return Resource::GetHandle(); }
-
-private:
-    Vector3 position_;
-};
-```
-
-### 4. Component Declaration Macros
-
- - `OXYGEN_COMPONENT(T)` works for both pooled and non-pooled components.
- - No fallback macro is required: with the `PooledComponent` concept, `OXYGEN_COMPONENT` is sufficient for all component types. Only use a fallback macro (e.g., `OXYGEN_RESOURCE_COMPONENT`) if you encounter a rare case where automatic detection fails due to unusual inheritance or template instantiation issues.
-
-### **Unified Component Access**
-
-**Transparent API**: All component access uses the same interface regardless of storage type:
-
-```cpp
-// Template metaprogramming routes to appropriate storage
-template<typename T>
-auto Composition::GetComponent() -> T& {
-    std::shared_lock lock(pimpl_->access_mutex_);
-
-    if constexpr (std::is_base_of_v<Resource<T, ResourceTypeList>, T>) {
-        // Pooled component - access via ComponentPoolRegistry
-        auto& registry = ComponentPoolRegistry::GetInstance();
-        auto& pool = registry.GetPool<T>();
-        auto handle = pimpl_->pooled_components_.at(T::ClassTypeId());
-        return pool.Get(handle);  // Throws if handle invalid
-    } else {
-        // Non-pooled component - existing direct access
-        return static_cast<T&>(GetComponentImpl(T::ClassTypeId()));
-    }
-}
-```
-
-**Consistent Error Handling**: Both storage types throw `ComponentError` for missing or invalid components, maintaining existing behavior patterns.
-
-### **Smart Dependency Resolution**
-
-**Automatic Dependency Storage**: Components use `if constexpr` to automatically adapt to dependency storage types:
-
-```cpp
-class RenderComponent : public oxygen::Component {
-    OXYGEN_COMPONENT(RenderComponent)
-    OXYGEN_COMPONENT_REQUIRES(TransformComponent, MaterialComponent)
-
-public:
-    void UpdateDependencies(const oxygen::Composition& composition) override {
-        // Automatically detect and store appropriate reference type
-        auto& transform = composition.GetComponent<TransformComponent>();
-        auto& material = composition.GetComponent<MaterialComponent>();
-
-        if constexpr (requires { transform.GetHandle(); }) {
-            transform_handle_ = transform.GetHandle();  // Store handle for pooled
-        } else {
-            transform_ptr_ = &transform;                // Store pointer for non-pooled
-        }
-
-        if constexpr (requires { material.GetHandle(); }) {
-            material_handle_ = material.GetHandle();
-        } else {
-            material_ptr_ = &material;
-        }
-    }
-
-private:
-    // Dependency storage adapts to component type
-    std::optional<ResourceHandle> transform_handle_;
-    TransformComponent* transform_ptr_{nullptr};
-
-    std::optional<ResourceHandle> material_handle_;
-    MaterialComponent* material_ptr_{nullptr};
-};
-```
-
-### **Thread Safety Model**
-
-**Read-Heavy Optimization**: The system is optimized for frequent `GetComponent()` calls with rare composition modifications:
-
-- **Shared Locks**: Multiple threads can access components simultaneously
-- **Exclusive Locks**: Component addition/removal requires exclusive access
-- **Pool Thread Safety**: `ComponentPool` provides its own thread-safe operations
-- **Handle Validation**: Stale handle detection works across thread boundaries
-
-### **Component Lifecycle Management**
-
-**Dependency-Aware Removal**: Components cannot be removed if other components depend on them (existing `IsComponentRequired()` validation):
-
-```cpp
-// Existing validation prevents removal of required components
-if (IsComponentRequired(component_id)) {
-    throw ComponentError("Cannot remove component: other components depend on it");
-}
-```
-
-**Handle Invalidation**: When pooled components are removed, existing handles become invalid but are not actively invalidated (standard game engine behavior). Components detect stale handles via nullptr returns during access.
-
-### **Enhanced Debug Output**
-
-**Storage Type Indication**: The `PrintComponents()` method distinguishes between storage types and provides developer-focused information:
-
-```cpp
-void Composition::PrintComponents(std::ostream& out) const {
-    // ...existing object name logic...
-
-    // Print non-pooled components
-    for (const auto& entry : pimpl_->components_) {
-        out << "   [" << entry->GetTypeId() << "] " << entry->GetTypeName()
-            << " (Direct)";
-        PrintDependencyInfo(out, *entry);
-        out << "\n";
-    }
-
-    // Print pooled components with handle information
-    for (const auto& [type_id, handle] : pimpl_->pooled_components_) {
-        auto& registry = ComponentPoolRegistry::GetInstance();
-        auto* component = registry.GetComponentByHandle(handle);
-        if (component) {
-            out << "   [" << type_id << "] " << component->GetTypeName()
-                << " (Pooled, Handle: " << handle.GetIndex()
-                << ", Gen: " << handle.GetGeneration() << ")";
-            PrintDependencyInfo(out, *component);
-        } else {
-            out << "   [" << type_id << "] <Invalid Handle: "
-                << handle.GetIndex() << ">";
-        }
-        out << "\n";
-    }
-}
-```
-
-**Dependency Resolution Details**: Debug output indicates whether dependencies are accessed via handles or pointers, helping developers understand the performance characteristics of their composition structure.
-
-### **Performance Benefits**
-
-**Optimized Access Patterns**:
-- **Pooled Components**: O(1) access with handle validation, cache-friendly memory layout
-- **Non-Pooled Components**: Direct pointer access, minimal overhead
-- **Thread Safety**: Reader-writer locks favor the common read-heavy access pattern
-- **Zero Runtime Overhead**: Storage routing determined at compile-time via template metaprogramming
-
-**Memory Efficiency**:
-- **Pooled Storage**: Contiguous memory layout improves cache locality for frequently accessed components
-- **Direct Storage**: Minimal overhead for components that don't benefit from pooling
-- **Handle Validation**: Automatic detection of stale references prevents memory corruption bugs
-
-## Writing Components
-
-Components are the building blocks of the Oxygen composition system. They
-encapsulate specific functionality that can be combined to create complex game
-objects. Writing a component involves inheriting from the `oxygen::Component`
-base class and following a few key patterns to integrate with the type system
-and composition framework.
-
-Every component should:
-- Inherit from `oxygen::Component`
-- Use the `OXYGEN_COMPONENT` macro for proper integration
-- Have a protected constructor (enforced by the macro)
-- Be instantiated only through the `Composition::AddComponent<T>()` method
-- Optionally declare dependencies on other components
-
-Components come in two flavors: **non-pooled** (stored directly in compositions)
-and **pooled** (stored in global ResourceTable for high-frequency access). Most
-components are non-pooled unless they require the performance benefits of
-contiguous memory layout.
-
-### OXYGEN_COMPONENT Macro
-
-The `OXYGEN_COMPONENT` macro is the standard way to declare a component class.
-It combines type system registration with component-specific functionality:
-
-```cpp
-class MyComponent : public oxygen::Component {
-    OXYGEN_COMPONENT(MyComponent)  // Generates type info + component integration
-public:
-    explicit MyComponent(int value) : value_(value) {}
-
-    int GetValue() const { return value_; }
-
-private:
-    int value_;
-};
-```
-
-What `OXYGEN_COMPONENT(MyComponent)` generates:
-
-1. **Type System Integration**: Calls `OXYGEN_TYPED(MyComponent)` to generate:
-   - `static constexpr auto ClassTypeName()` - Returns compiler-specific type name string
-   - `static auto ClassTypeId()` - Returns unique TypeId from global TypeRegistry
-   - `auto GetTypeId() const override` - Instance method returning ClassTypeId()
-   - `auto GetTypeName() const override` - Instance method returning ClassTypeName()
-
-2. **Component-Specific Features**:
-   - `friend class oxygen::Composition` - Allows Composition to access protected constructor
-   - Protected section placement - Ensures components can only be instantiated by Composition
-
-### Component Dependencies
-
-Components can declare dependencies on other components using `OXYGEN_COMPONENT_REQUIRES`:
-
-```cpp
-class DependentComponent : public oxygen::Component {
-    OXYGEN_COMPONENT(DependentComponent)
-    OXYGEN_COMPONENT_REQUIRES(FirstDependency, SecondDependency)
-public:
-    void UpdateDependencies(const oxygen::Composition& composition) override {
-        first_ = &composition.GetComponent<FirstDependency>();
-        second_ = &composition.GetComponent<SecondDependency>();
-    }
-
-private:
-    FirstDependency* first_{nullptr};
-    SecondDependency* second_{nullptr};
-};
-```
-
-The dependency system ensures:
-- Dependencies are created before dependent components
-- Dependencies are destroyed after dependent components
-- `UpdateDependencies()` is called after all dependencies exist
-- Circular dependencies are detected at runtime
-
-For performance-critical scenarios involving ResourceTable storage, a separate
-resource type system operates alongside the general type registry. This
-specialized system assigns compile-time resource type identifiers to classes
-that inherit from `Resource<T, ResourceTypeList>`. Unlike the general type
-system, resource types face a practical constraint of 256 maximum types due to
-the underlying ResourceHandle structure, but they benefit from
-zero-runtime-overhead type resolution and optimal memory layout for
-high-frequency operations.
-
-# Hybrid Storage Architecture for Composition
-
-The hybrid storage system in Oxygen Engine's Composition class enables
+Oxygen Engine's Composition class supports a hybrid storage system, enabling
 transparent, high-performance management of both pooled and unique (non-pooled)
 components. This architecture leverages C++20 concepts and type traits to
 distinguish component storage strategies at compile time, ensuring zero runtime
@@ -617,115 +305,223 @@ overhead and a unified API.
 ### 1. Compile-Time Component Type Distinction
 
 - The concept `PooledComponent<T>` determines if a component is pooled:
+
   ```cpp
   template <typename T>
   concept PooledComponent = std::is_base_of_v<Resource<T, ResourceTypeList>, T>;
   ```
+
   If `PooledComponent<T>` is true, T is stored in a global ComponentPool.
   Otherwise, T is stored directly in the composition instance.
 
-### 2. ComponentManager Storage Layout
+### 2. Storage Layout and Automatic Routing
 
-- Dual containers:
+- **Dual containers** in `ComponentManager`:
   - `std::unordered_map<TypeId, ResourceHandle> pooled_components_` for pooled.
   - `ComponentsCollection components_` and `std::unordered_map<TypeId, size_t>
     component_index_` for unique.
 - All access is protected by a `mutable std::shared_mutex mutex_` in the
-  `Composition` class (not in `ComponentManager`).
-
-### 3. API Routing Using Concepts
-
+  `Composition` class.
 - All major APIs (`AddComponent`, `GetComponent`, `RemoveComponent`) use `if
-  constexpr (PooledComponent<T>)` to select the correct storage path.
-- Locking is performed in the `Composition` class before any routing or dispatch
-  to `ComponentManager`.
-- Example for `GetComponent`:
+  constexpr (PooledComponent<T>)` to select the correct storage path. Locking is
+  performed in the `Composition` class before any routing or dispatch to
+  `ComponentManager`.
 
-  ```cpp
-  template <typename T>
-  auto Composition::GetComponent() -> T& {
-      std::shared_lock lock(mutex_);
-      if constexpr (PooledComponent<T>) {
-          auto handle = pimpl_->pooled_components_.at(T::ClassTypeId());
-          auto& pool = ComponentPoolRegistry::GetInstance().GetPool<T>();
-          return pool.Get(handle); // Throws if handle invalid
-      } else {
-          return static_cast<T&>(GetComponentImpl(T::ClassTypeId()));
-      }
-  }
-  ```
+**Example for `GetComponent`:**
 
-  - `AddComponent` and `RemoveComponent` follow the same pattern, routing to the
-    pool or direct storage as appropriate, with locking always performed in
-    `Composition`.
+```cpp
+// Template metaprogramming routes to appropriate storage
+template<typename T>
+auto Composition::GetComponent() -> T& {
+    std::shared_lock lock(pimpl_->access_mutex_);
+    if constexpr (PooledComponent<T>) {
+        auto handle = pimpl_->pooled_components_.at(T::ClassTypeId());
+        auto& pool = ComponentPoolRegistry::GetInstance().GetPool<T>();
+        return pool.Get(handle); // Throws if handle invalid
+    } else {
+        return static_cast<T&>(GetComponentImpl(T::ClassTypeId()));
+    }
+}
+```
 
-### 4. Component Declaration Macros
+### 3. Component Declaration and Usage
 
-- `OXYGEN_COMPONENT(T)` works for both pooled and non-pooled components.
-- No fallback macro is required: with the `PooledComponent` concept,
-  `OXYGEN_COMPONENT` is sufficient for all component types. Only use a fallback
-  macro (e.g., `OXYGEN_RESOURCE_COMPONENT`) if you encounter a rare case where
-  automatic detection fails due to unusual inheritance or template instantiation
-  issues.
+- Use `OXYGEN_COMPONENT(T)` for unique (non-pooled) components.
+- Use `OXYGEN_POOLED_COMPONENT(T, ResourceTypeList)` for pooled components. This
+  macro both declares the component and associates it with a resource type list
+  for pooling.
 
-### 5. Dependency Resolution
-
-- Use `if constexpr (PooledComponent<DependencyType>)` to store either a
-  handle (for pooled) or pointer (for unique) to dependencies.
-  Example:
-  ```cpp
-  if constexpr (PooledComponent<TransformComponent>) {
-      transform_handle_ = transform.GetHandle();
-  } else {
-      transform_ptr_ = &transform;
-  }
-  ```
-
-### 6. Error Handling and Diagnostics
-
-- If a type is not in the resource list but is used as pooled, a static_assert
-  will fail at compile time.
-- If a handle is invalid or missing, `ComponentError` is thrown at runtime.
-- Concepts provide clear diagnostics if a type does not meet pooled requirements.
-
-### 7. Extensibility and Maintenance
-
-- New component types require no API changes—just inherit from the correct base
-  and use the macro.
-- If the pooled trait changes, only the concept definition needs updating.
-
-### 8. Summary Table
-
-| Component Type   | Concept/Inheritance Pattern                      | Storage Location         | Access Pattern         |
-|------------------|--------------------------------------------------|-------------------------|-----------------------|
-| Pooled           | `PooledComponent<T>` (inherits Resource<...>)    | Global ComponentPool    | Handle via pool       |
-| Unique/Non-pooled| Not `PooledComponent<T>` (inherits Component)    | Per-composition         | Direct pointer        |
-
-### 9. Example: Macro Usage
+**Examples:**
 
 ```cpp
 // Pooled component
-class TransformComponent
-  : public oxygen::Component
-  , public oxygen::Resource<TransformComponent, ResourceTypeList> {
-    OXYGEN_COMPONENT(TransformComponent)
-    // ...
+class TransformComponent final : public oxygen::Component {
+  OXYGEN_POOLED_COMPONENT(TransformComponent, ResourceTypeList)
+  // ...
 };
-// Unique component
+
+// Unique (non-pooled) component
 class SettingsComponent : public oxygen::Component {
-    OXYGEN_COMPONENT(SettingsComponent)
-    // ...
+  OXYGEN_COMPONENT(SettingsComponent)
+  // ...
 };
 ```
 
-### 10. Example: Dependency-Aware Removal
+### 4. Dependencies Between Components
 
-- Before removing a component, check if it is required by others (dependency graph).
-- If required, throw `ComponentError`.
+- Specify component dependencies using the `OXYGEN_COMPONENT_REQUIRES(...)`
+  macro inside your component class. This ensures dependencies are declared at
+  compile time and validated at runtime.
+- Store dependencies as either handles (for pooled) or pointers (for unique),
+  using `if constexpr (PooledComponent<T>)`.
+- Use the `UpdateDependencies()` method to resolve dependencies after all
+  components are constructed.
 
-### 11. Benefits
+**Example:**
 
-- Zero runtime overhead for storage selection.
-- Unified, expressive API for all component types.
-- Improved compile-time safety and diagnostics via concepts.
-- Extensible and maintainable.
+```cpp
+class DependentComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(DependentComponent)
+  OXYGEN_COMPONENT_REQUIRES(TransformComponent)
+public:
+  void UpdateDependencies(const Composition& composition) override {
+    if constexpr (PooledComponent<TransformComponent>) {
+      transform_handle_ = composition.GetComponentHandle<TransformComponent>();
+    } else {
+      transform_ptr_ = &composition.GetComponent<TransformComponent>();
+    }
+  }
+  // ...
+private:
+  // Use handle or pointer depending on storage type
+  std::conditional_t<PooledComponent<TransformComponent>,
+    ResourceHandle, TransformComponent*> transform_dep_;
+};
+```
+
+- The `OXYGEN_COMPONENT_REQUIRES` macro lists all required component types. The
+  system will enforce that these dependencies exist before the component is
+  created.
+- The `UpdateDependencies` method is called after all dependencies are
+  available, allowing you to cache handles or pointers as appropriate.
+
+### 5. Best Practices
+
+- Use pooled components for high-frequency, bulk-accessed data.
+- Use unique components for per-entity or rarely accessed data.
+- Always use the provided macros and registration lists to ensure correct storage and type safety.
+- Avoid storing raw pointers to pooled components; always use handles for pooled types.
+
+## Copy, Move, and Clone Semantics
+
+The `Composition` class supports shallow copy, move, and clone operations. These
+allow you to duplicate or transfer entire compositions, including all components
+and their dependencies.
+
+- **Copy/Move:**
+  - Copy: duplicates an existing composition, but keeps shared ownership of the
+    components.
+  - Move: transfers all components, preserving dependencies, making the source
+    composition empty.
+
+- **Clone:**
+  - Clone: deep copies the entire composition, with independent components for
+    the source and the target. Requires **all** components to support cloning.
+  - Use the `CloneableMixin` CRTP to enable deep cloning for your custom
+    composition types.
+  - The `Clone()` method returns a `std::unique_ptr` to a new, deep-copied
+    composition.
+
+**Thread Safety:** Copy, move, and clone operations are *not* thread-safe. You
+must ensure exclusive access to the composition during these operations from
+outside.
+
+**Locally Cached Dependencies:** similarly to a standalone composition
+construction, the components with dependencies will have a chance to cache their
+dependencies when their `UpdateDependencies()` method gets called.
+
+### Making Components Cloneable
+
+To make a component cloneable:
+
+- Override the `Clone()` method in your component class to return a new
+  instance.
+- Override `IsCloneable()` to return `true`.
+- The default implementation throws if cloning is not supported.
+
+**Example:**
+
+```cpp
+class MyComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(MyComponent)
+public:
+  std::unique_ptr<Component> Clone() const override {
+    return std::make_unique<MyComponent>(*this);
+  }
+  bool IsCloneable() const noexcept override { return true; }
+};
+```
+
+## Error Handling
+
+The composition system throws `oxygen::ComponentError` exceptions for error
+conditions such as:
+
+- Adding a duplicate component
+- Missing required dependencies
+- Removing a component that is still required by another
+- Failing to allocate a pooled component
+
+Always catch `ComponentError` when performing operations that may fail, and
+handle errors appropriately in your application logic.
+
+## Diagnostics: Printing and Logging Components
+
+You can inspect the state of a composition using the following methods:
+
+- `PrintComponents(std::ostream&)`: Prints a summary of all components and their
+  dependencies to the given output stream.
+- `LogComponents()`: Logs a summary of all components using the engine's logging
+  system.
+
+These utilities are useful for debugging and verifying the state of your
+compositions at runtime.
+
+## Composition Capacity Tuning
+
+When constructing a `Composition`, you can specify the initial capacity for
+local and pooled components to optimize memory usage and performance:
+
+```cpp
+Composition my_comp(/*local_capacity=*/8, /*pooled_capacity=*/16);
+```
+
+This avoids unnecessary reallocations if you know the expected number of components in advance.
+
+## Performance Benchmarks
+
+| Benchmark                          | Time (ns) | Relative to PoolDirect | Relative to Fragmented | Notes                        |
+|-------------------------------------|-----------|-----------------------|------------------------|------------------------------|
+| RandomAccessLocalComponents         | 77,853    | 22.1x slower          | 18.4x slower           | Fastest random access        |
+| RandomAccessPooledComponents        | 227,061   | 64.5x slower          | 53.8x slower           | Slowest random access        |
+| RandomAccessHybridComponents        | 133,704   | 38.0x slower          | 31.7x slower           | Hybrid: in between           |
+| SequentialAccessGetComponents       | 89,790    | 25.5x slower          | 21.3x slower           | Sequential, cache-friendly   |
+| PoolDirectIteration                 | 3,519     | 1x (baseline)         | 0.83x (faster)         | Dense, contiguous pool       |
+| FragmentedPoolDirectIteration       | 4,224     | 1.2x slower           | 1x (baseline)          | Fragmented pool              |
+
+### Key Takeaways
+
+- **Direct pool iteration** is the fastest access pattern by a wide margin, even with fragmentation.
+- **Fragmentation** increases iteration time by about 20%, but the absolute cost is still very low.
+- **Random access to pooled components** is the slowest pattern, due to indirection and poor cache locality.
+- **Hybrid and local random access** are faster, but still much slower than direct pool iteration.
+- **Sequential access** is always better than random for pooled/hybrid, but for local, the difference is small due to good cache locality.
+
+### Summary
+
+- For maximum performance, prefer direct pool iteration for pooled components.
+- Fragmentation has a moderate but manageable impact on iteration speed.
+- Use local (non-pooled) components for data that is not accessed in bulk or does not benefit from pooling.
+- Use pooled components for high-frequency, bulk-accessed data to maximize cache locality and minimize access overhead.
+
+For more details or to see the benchmark code, see `src/Oxygen/Composition/Benchmarks/composition_benchmark.cpp`.
