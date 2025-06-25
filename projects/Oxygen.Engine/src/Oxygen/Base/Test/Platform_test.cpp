@@ -17,21 +17,21 @@ const auto kUnsupportedPlatform = "__UNSUPPORTED__";
 auto PlatformInfo() -> std::string
 {
 #if defined(OXYGEN_LINUX)
-    return "Linux";
+  return "Linux";
 #elif defined(OXYGEN_WINDOWS)
-    return "Windows";
+  return "Windows";
 #elif defined(OXYGEN_APPLE_OSX)
-    return "Apple OS X";
+  return "Apple OS X";
 #else
-    return cUnsupportedPlatform;
+  return cUnsupportedPlatform;
 #endif
 }
 
 NOLINT_TEST(Platform, PlatformDefinitionExists)
 {
-    const auto platform = PlatformInfo();
+  const auto platform = PlatformInfo();
 
-    EXPECT_STRNE(kUnsupportedPlatform, platform.c_str());
+  EXPECT_STRNE(kUnsupportedPlatform, platform.c_str());
 }
 
 } // namespace

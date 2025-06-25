@@ -9,18 +9,15 @@
 
 namespace {
 
-auto TestReturnAddress() -> void*
-{
-    return oxygen::ReturnAddress<>();
-}
+auto TestReturnAddress() -> void* { return oxygen::ReturnAddress<>(); }
 
 TEST_CASE("ReturnAddress macro", "[ReturnAddress]")
 {
-    SECTION("returns non null address")
-    {
-        void* address = TestReturnAddress();
-        REQUIRE(address != nullptr);
-    }
+  SECTION("returns non null address")
+  {
+    void* address = TestReturnAddress();
+    REQUIRE(address != nullptr);
+  }
 }
 
 } // namespace

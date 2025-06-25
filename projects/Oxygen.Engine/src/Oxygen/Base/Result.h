@@ -73,99 +73,82 @@ namespace oxygen::serio {
   provides methods to check if the operation was successful and to retrieve
   the value or error.
 */
-template <typename T>
-class Result {
+template <typename T> class Result {
 public:
-    //! Constructor that initializes the Result with a value.
-    explicit(false) constexpr Result(T value) noexcept(std::is_nothrow_move_constructible_v<T>)
-        : value_(std::move(value))
-    {
-    }
+  //! Constructor that initializes the Result with a value.
+  explicit(false) constexpr Result(T value) noexcept(
+    std::is_nothrow_move_constructible_v<T>)
+    : value_(std::move(value))
+  {
+  }
 
-    //! Constructor that initializes the Result with an error code.
-    explicit(false) Result(std::error_code error) noexcept
-        : value_(error)
-    {
-    }
+  //! Constructor that initializes the Result with an error code.
+  explicit(false) Result(std::error_code error) noexcept
+    : value_(error)
+  {
+  }
 
-    //! Checks if the Result contains a value.
-    [[nodiscard]] constexpr auto has_value() const noexcept -> bool
-    {
-        return std::holds_alternative<T>(value_);
-    }
+  //! Checks if the Result contains a value.
+  [[nodiscard]] constexpr auto has_value() const noexcept -> bool
+  {
+    return std::holds_alternative<T>(value_);
+  }
 
-    //! Retrieves the value from the Result as a constant reference.
-    [[nodiscard]] constexpr auto value() const& -> const T&
-    {
-        return std::get<T>(value_);
-    }
+  //! Retrieves the value from the Result as a constant reference.
+  [[nodiscard]] constexpr auto value() const& -> const T&
+  {
+    return std::get<T>(value_);
+  }
 
-    //! Retrieves the value from the Result as an rvalue reference.
-    constexpr auto value() && -> T&&
-    {
-        return std::get<T>(std::move(value_));
-    }
+  //! Retrieves the value from the Result as an rvalue reference.
+  constexpr auto value() && -> T&& { return std::get<T>(std::move(value_)); }
 
-    //! Moves the value from the Result.
-    constexpr auto move_value() noexcept -> T
-    {
-        return std::get<T>(std::move(value_));
-    }
+  //! Moves the value from the Result.
+  constexpr auto move_value() noexcept -> T
+  {
+    return std::get<T>(std::move(value_));
+  }
 
-    //! Retrieves the error code from the Result.
-    [[nodiscard]] constexpr auto error() const -> const std::error_code&
-    {
-        return std::get<std::error_code>(value_);
-    }
+  //! Retrieves the error code from the Result.
+  [[nodiscard]] constexpr auto error() const -> const std::error_code&
+  {
+    return std::get<std::error_code>(value_);
+  }
 
-    //! Checks if the Result contains a value.
-    constexpr explicit operator bool() const noexcept
-    {
-        return has_value();
-    }
+  //! Checks if the Result contains a value.
+  constexpr explicit operator bool() const noexcept { return has_value(); }
 
-    //! @{
-    //! Retrieves the value or a default value if the Result contains an error.
-    /*!
-      \param default_value The value to return if the Result contains an error.
-    */
-    template <typename U>
-    constexpr auto value_or(U&& default_value) const& noexcept -> T
-    {
-        return has_value()
-            ? value()
-            : static_cast<T>(std::forward<U>(default_value));
-    }
+  //! @{
+  //! Retrieves the value or a default value if the Result contains an error.
+  /*!
+    \param default_value The value to return if the Result contains an error.
+  */
+  template <typename U>
+  constexpr auto value_or(U&& default_value) const& noexcept -> T
+  {
+    return has_value() ? value()
+                       : static_cast<T>(std::forward<U>(default_value));
+  }
 
-    template <typename U>
-    constexpr auto value_or(U&& default_value) && noexcept -> T
-    {
-        return has_value()
-            ? std::move(value())
-            : static_cast<T>(std::forward<U>(default_value));
-    }
-    //! @}
+  template <typename U>
+  constexpr auto value_or(U&& default_value) && noexcept -> T
+  {
+    return has_value() ? std::move(value())
+                       : static_cast<T>(std::forward<U>(default_value));
+  }
+  //! @}
 
-    //! @{
-    //! Retrieves a reference to the contained value if the Result holds a value.
-    constexpr auto operator*() const& noexcept -> const T&
-    {
-        return value();
-    }
+  //! @{
+  //! Retrieves a reference to the contained value if the Result holds a value.
+  constexpr auto operator*() const& noexcept -> const T& { return value(); }
 
-    constexpr auto operator*() & -> T&
-    {
-        return std::get<T>(value_);
-    }
+  constexpr auto operator*() & -> T& { return std::get<T>(value_); }
 
-    constexpr auto operator*() && noexcept -> T&&
-    {
-        return std::move(value());
-    }
-    //! @}
+  constexpr auto operator*() && noexcept -> T&& { return std::move(value()); }
+  //! @}
 
 private:
-    std::variant<T, std::error_code> value_;
+  std::variant<T, std::error_code> value_;
 };
 
 //! Specialization of the Result class for void.
@@ -173,47 +156,43 @@ private:
   This specialization is used for operations that do not return a value but
   still need to indicate success or failure.
 */
-template <>
-class Result<void> {
+template <> class Result<void> {
 public:
-    //! Default constructor that initializes the Result with a success state.
-    constexpr Result() noexcept
-        : value_(std::monostate {})
-    {
-    }
+  //! Default constructor that initializes the Result with a success state.
+  constexpr Result() noexcept
+    : value_(std::monostate {})
+  {
+  }
 
-    //! Constructor that initializes the Result with an error code.
-    explicit(false) Result(std::error_code error) noexcept
-        : value_(error)
-    {
-    }
+  //! Constructor that initializes the Result with an error code.
+  explicit(false) Result(std::error_code error) noexcept
+    : value_(error)
+  {
+  }
 
-    //! Checks if the Result indicates success.
-    [[nodiscard]] constexpr auto has_value() const noexcept -> bool
-    {
-        return std::holds_alternative<std::monostate>(value_);
-    }
+  //! Checks if the Result indicates success.
+  [[nodiscard]] constexpr auto has_value() const noexcept -> bool
+  {
+    return std::holds_alternative<std::monostate>(value_);
+  }
 
-    //! Retrieves the error code from the Result.
-    [[nodiscard]] constexpr auto error() const -> const std::error_code&
-    {
-        return std::get<std::error_code>(value_);
-    }
+  //! Retrieves the error code from the Result.
+  [[nodiscard]] constexpr auto error() const -> const std::error_code&
+  {
+    return std::get<std::error_code>(value_);
+  }
 
-    //! Checks if the Result indicates success.
-    constexpr explicit operator bool() const noexcept
-    {
-        return has_value();
-    }
+  //! Checks if the Result indicates success.
+  constexpr explicit operator bool() const noexcept { return has_value(); }
 
 private:
-    std::variant<std::monostate, std::error_code> value_;
+  std::variant<std::monostate, std::error_code> value_;
 };
 
 //! Helper macro to evaluate and expression that returns a result, and if the
 //! result has an error, propagates the error.
-#define CHECK_RESULT(expr)                 \
-    if (const auto result = expr; !result) \
-    return result.error()
+#define CHECK_RESULT(expr)                                                     \
+  if (const auto result = expr; !result)                                       \
+  return result.error()
 
 } // namespace oxygen::serio

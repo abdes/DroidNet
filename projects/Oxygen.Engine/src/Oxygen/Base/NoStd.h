@@ -12,19 +12,17 @@ namespace nostd {
 
 namespace adl_helper {
 
-    template <class T>
-    auto as_string(T&& value)
-    {
-        using std::to_string;
-        return to_string(std::forward<T>(value));
-    }
+  template <class T> auto as_string(T&& value)
+  {
+    using std::to_string;
+    return to_string(std::forward<T>(value));
+  }
 
 } // namespace adl_helper
 
-template <class T>
-auto to_string(T&& value)
+template <class T> auto to_string(T&& value)
 {
-    return adl_helper::as_string(std::forward<T>(value));
+  return adl_helper::as_string(std::forward<T>(value));
 }
 
 } // namespace nostd

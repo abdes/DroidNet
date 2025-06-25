@@ -8,15 +8,15 @@
 
 auto main(int argc, char** argv) -> int
 {
-    loguru::g_preamble_date = false;
-    loguru::g_preamble_time = false;
-    loguru::g_preamble_uptime = false;
-    loguru::g_preamble_thread = false;
-    loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
-    loguru::init(argc, argv);
+  loguru::g_preamble_date = false;
+  loguru::g_preamble_time = false;
+  loguru::g_preamble_uptime = false;
+  loguru::g_preamble_thread = false;
+  loguru::g_preamble_header = false;
+  loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+  loguru::init(argc, argv);
 
-    LOG_F(INFO, "Hello {}", "World!");
+  LOG_F(INFO, "Hello {}", "World!");
 
-    loguru::shutdown();
+  loguru::shutdown();
 }

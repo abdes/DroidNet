@@ -22,11 +22,10 @@ namespace oxygen {
  \param seed The existing hash value to be combined with the new value's hash.
  \param v The value to be hashed and combined with the seed.
 */
-template <class T>
-void HashCombine(size_t& seed, const T& v)
+template <class T> void HashCombine(size_t& seed, const T& v)
 {
-    std::hash<T> hasher;
-    seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  std::hash<T> hasher;
+  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
 } // namespace oxygen

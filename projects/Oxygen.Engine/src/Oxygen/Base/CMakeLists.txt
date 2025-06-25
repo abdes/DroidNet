@@ -131,6 +131,20 @@ if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
 endif()
 
+# ------------------------------------------------------------------------------
+# API Documentation
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
+  asap_with_doxygen(
+    MODULE_NAME ${META_MODULE_TARGET}
+    VERSION ${META_VERSION}
+    TITLE "\"Base\""
+    BRIEF "\"Base infrastructure for Oxygen\""
+    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+endif()
+
 # ==============================================================================
 # Deployment instructions
 # ==============================================================================

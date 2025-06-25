@@ -18,70 +18,70 @@ namespace {
 // Helper type to track construction/destruction counts
 class Counter {
 public:
-    // Thread-local static counters ensure isolation between tests
-    static thread_local int default_constructs_;
-    static thread_local int copy_constructs_;
-    static thread_local int move_constructs_;
-    static thread_local int destructs_;
+  // Thread-local static counters ensure isolation between tests
+  static thread_local int default_constructs_;
+  static thread_local int copy_constructs_;
+  static thread_local int move_constructs_;
+  static thread_local int destructs_;
 
-    int value_;
+  int value_;
 
-    Counter()
-        : value_(0)
-    {
-        ++default_constructs_;
+  Counter()
+    : value_(0)
+  {
+    ++default_constructs_;
+  }
+
+  explicit Counter(const int val)
+    : value_(val)
+  {
+    ++default_constructs_;
+  }
+
+  Counter(const Counter& other)
+    : value_(other.value_)
+  {
+    ++copy_constructs_;
+  }
+
+  Counter(Counter&& other) noexcept
+    : value_(other.value_)
+  {
+    other.value_ = 0;
+    ++move_constructs_;
+  }
+
+  ~Counter() { ++destructs_; }
+
+  auto operator=(const Counter& other) -> Counter&
+  {
+    if (this != &other) {
+      value_ = other.value_;
     }
+    return *this;
+  }
 
-    explicit Counter(const int val)
-        : value_(val)
-    {
-        ++default_constructs_;
+  [[maybe_unused]] auto operator=(Counter&& other) noexcept -> Counter&
+  {
+    if (this != &other) {
+      value_ = other.value_;
+      other.value_ = 0;
     }
+    return *this;
+  }
 
-    Counter(const Counter& other)
-        : value_(other.value_)
-    {
-        ++copy_constructs_;
-    }
+  [[maybe_unused]] auto operator==(const Counter& other) const -> bool
+  {
+    return value_ == other.value_;
+  }
 
-    Counter(Counter&& other) noexcept
-        : value_(other.value_)
-    {
-        other.value_ = 0;
-        ++move_constructs_;
-    }
-
-    ~Counter() { ++destructs_; }
-
-    auto operator=(const Counter& other) -> Counter&
-    {
-        if (this != &other) {
-            value_ = other.value_;
-        }
-        return *this;
-    }
-
-    [[maybe_unused]] auto operator=(Counter&& other) noexcept -> Counter&
-    {
-        if (this != &other) {
-            value_ = other.value_;
-            other.value_ = 0;
-        }
-        return *this;
-    }
-
-    [[maybe_unused]] auto operator==(const Counter& other) const -> bool
-    {
-        return value_ == other.value_;
-    }
-
-    static void reset()
-    {
-        default_constructs_ = 0;
-        copy_constructs_ = 0;
-        move_constructs_ = 0;
-        destructs_ = 0;
-    }
+  static void reset()
+  {
+    default_constructs_ = 0;
+    copy_constructs_ = 0;
+    move_constructs_ = 0;
+    destructs_ = 0;
+  }
 };
 
 thread_local int Counter::default_constructs_ = 0;
@@ -91,292 +91,300 @@ thread_local int Counter::destructs_ = 0;
 
 NOLINT_TEST(StaticVectorTest, DefaultConstructor)
 {
-    StaticVector<int, 5> vec;
-    EXPECT_EQ(vec.size(), 0);
-    EXPECT_TRUE(vec.empty());
-    EXPECT_EQ(vec.capacity(), 5);
-    EXPECT_EQ(vec.max_size(), 5);
+  StaticVector<int, 5> vec;
+  EXPECT_EQ(vec.size(), 0);
+  EXPECT_TRUE(vec.empty());
+  EXPECT_EQ(vec.capacity(), 5);
+  EXPECT_EQ(vec.max_size(), 5);
 }
 
 NOLINT_TEST(StaticVectorTest, FillConstructor)
 {
-    StaticVector<int, 5> vec(3, 42);
-    EXPECT_EQ(vec.size(), 3);
-    EXPECT_FALSE(vec.empty());
-    EXPECT_EQ(vec[0], 42);
-    EXPECT_EQ(vec[1], 42);
-    EXPECT_EQ(vec[2], 42);
+  StaticVector<int, 5> vec(3, 42);
+  EXPECT_EQ(vec.size(), 3);
+  EXPECT_FALSE(vec.empty());
+  EXPECT_EQ(vec[0], 42);
+  EXPECT_EQ(vec[1], 42);
+  EXPECT_EQ(vec[2], 42);
 }
 
 NOLINT_TEST(StaticVectorTest, CountConstructor)
 {
-    Counter::reset();
-    {
-        StaticVector<Counter, 5> vec(3);
-        EXPECT_EQ(vec.size(), 3);
-        // Check the actual count matches our expectation
-        EXPECT_EQ(Counter::default_constructs_, 3);
+  Counter::reset();
+  {
+    StaticVector<Counter, 5> vec(3);
+    EXPECT_EQ(vec.size(), 3);
+    // Check the actual count matches our expectation
+    EXPECT_EQ(Counter::default_constructs_, 3);
 
-        // Additional checks to verify the objects were properly constructed
-        EXPECT_EQ(vec[0].value_, 0);
-        EXPECT_EQ(vec[1].value_, 0);
-        EXPECT_EQ(vec[2].value_, 0);
-    }
-    // Also verify that destructors are called when the vector goes out of scope
-    EXPECT_EQ(Counter::destructs_, 3);
+    // Additional checks to verify the objects were properly constructed
+    EXPECT_EQ(vec[0].value_, 0);
+    EXPECT_EQ(vec[1].value_, 0);
+    EXPECT_EQ(vec[2].value_, 0);
+  }
+  // Also verify that destructors are called when the vector goes out of scope
+  EXPECT_EQ(Counter::destructs_, 3);
 }
 
 NOLINT_TEST(StaticVectorTest, RangeConstructor)
 {
-    std::array<int, 7> arr = { 1, 2, 3, 4, 5, 6, 7 };
+  std::array<int, 7> arr = { 1, 2, 3, 4, 5, 6, 7 };
 
-    // Normal case
-    StaticVector<int, 10> vec1(arr.begin(), arr.end());
-    EXPECT_EQ(vec1.size(), 7);
-    EXPECT_EQ(vec1[0], 1);
-    EXPECT_EQ(vec1[6], 7);
+  // Normal case
+  StaticVector<int, 10> vec1(arr.begin(), arr.end());
+  EXPECT_EQ(vec1.size(), 7);
+  EXPECT_EQ(vec1[0], 1);
+  EXPECT_EQ(vec1[6], 7);
 
-    // Exceeding capacity should assert/fail in debug
-    EXPECT_DEATH(([&] { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(), "range constructor input exceeds maximum size");
+  // Exceeding capacity should assert/fail in debug
+  EXPECT_DEATH(([&] { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(),
+    "range constructor input exceeds maximum size");
 }
 
 NOLINT_TEST(StaticVectorTest, InitializerListConstructor)
 {
-    StaticVector<int, 10> vec1 = { 1, 2, 3, 4, 5 };
-    EXPECT_EQ(vec1.size(), 5);
-    EXPECT_EQ(vec1[0], 1);
-    EXPECT_EQ(vec1[4], 5);
+  StaticVector<int, 10> vec1 = { 1, 2, 3, 4, 5 };
+  EXPECT_EQ(vec1.size(), 5);
+  EXPECT_EQ(vec1[0], 1);
+  EXPECT_EQ(vec1[4], 5);
 
-    // Exceeding capacity should assert/fail in debug
-    EXPECT_DEATH(([] { StaticVector<int, 3> vec2 = { 1, 2, 3, 4, 5 }; })(), "initializer list size exceeds maximum size");
+  // Exceeding capacity should assert/fail in debug
+  EXPECT_DEATH(([] { StaticVector<int, 3> vec2 = { 1, 2, 3, 4, 5 }; })(),
+    "initializer list size exceeds maximum size");
 }
 
 NOLINT_TEST(StaticVectorTest, CopyConstructor)
 {
-    const StaticVector<int, 5> vec1 = { 1, 2, 3 };
-    StaticVector vec2(vec1); // NOLINT(*-unnecessary-copy-initialization) - testing
+  const StaticVector<int, 5> vec1 = { 1, 2, 3 };
+  StaticVector vec2(
+    vec1); // NOLINT(*-unnecessary-copy-initialization) - testing
 
-    EXPECT_EQ(vec2.size(), 3);
-    EXPECT_EQ(vec2[0], 1);
-    EXPECT_EQ(vec2[1], 2);
-    EXPECT_EQ(vec2[2], 3);
+  EXPECT_EQ(vec2.size(), 3);
+  EXPECT_EQ(vec2[0], 1);
+  EXPECT_EQ(vec2[1], 2);
+  EXPECT_EQ(vec2[2], 3);
 }
 
 NOLINT_TEST(StaticVectorTest, MoveConstructor)
 {
-    Counter::reset();
+  Counter::reset();
 
-    StaticVector<Counter, 5> vec1;
-    vec1.emplace_back(1);
-    vec1.emplace_back(2);
-    vec1.emplace_back(3);
+  StaticVector<Counter, 5> vec1;
+  vec1.emplace_back(1);
+  vec1.emplace_back(2);
+  vec1.emplace_back(3);
 
-    Counter::reset();
-    StaticVector<Counter, 5> vec2(std::move(vec1));
-    EXPECT_EQ(vec2.size(), 3);
-    EXPECT_EQ(vec1.size(), 0); // NOLINT(bugprone-use-after-move) - leave other in good state
-    EXPECT_EQ(vec2[0].value_, 1);
-    EXPECT_EQ(vec2[2].value_, 3);
-    EXPECT_EQ(Counter::move_constructs_, 3);
+  Counter::reset();
+  StaticVector<Counter, 5> vec2(std::move(vec1));
+  EXPECT_EQ(vec2.size(), 3);
+  EXPECT_EQ(vec1.size(),
+    0); // NOLINT(bugprone-use-after-move) - leave other in good state
+  EXPECT_EQ(vec2[0].value_, 1);
+  EXPECT_EQ(vec2[2].value_, 3);
+  EXPECT_EQ(Counter::move_constructs_, 3);
 }
 
 NOLINT_TEST(StaticVectorTest, AssignmentOperators)
 {
-    // Copy assignment
-    const StaticVector<int, 5> vec1 = { 1, 2, 3 };
-    StaticVector<int, 5> vec2 = vec1; // NOLINT(*-unnecessary-copy-initialization) - testing
+  // Copy assignment
+  const StaticVector<int, 5> vec1 = { 1, 2, 3 };
+  StaticVector<int, 5> vec2
+    = vec1; // NOLINT(*-unnecessary-copy-initialization) - testing
 
-    EXPECT_EQ(vec2.size(), 3);
-    EXPECT_EQ(vec2[0], 1);
-    EXPECT_EQ(vec2[2], 3); // Move assignment
-    Counter::reset();
-    StaticVector<Counter, 5> vec3;
-    vec3.emplace_back(1);
-    vec3.emplace_back(2);
+  EXPECT_EQ(vec2.size(), 3);
+  EXPECT_EQ(vec2[0], 1);
+  EXPECT_EQ(vec2[2], 3); // Move assignment
+  Counter::reset();
+  StaticVector<Counter, 5> vec3;
+  vec3.emplace_back(1);
+  vec3.emplace_back(2);
 
-    StaticVector<Counter, 5> vec4;
-    Counter::reset();
-    // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
-    vec4 = std::move(vec3);
-    EXPECT_EQ(vec4.size(), 2);
-    EXPECT_EQ(vec3.size(), 0); // NOLINT(bugprone-use-after-move) - leave other in good state
-    EXPECT_EQ(vec4[0].value_, 1);
-    EXPECT_EQ(vec4[1].value_, 2);
-    EXPECT_EQ(Counter::move_constructs_, 2);
+  StaticVector<Counter, 5> vec4;
+  Counter::reset();
+  // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
+  vec4 = std::move(vec3);
+  EXPECT_EQ(vec4.size(), 2);
+  EXPECT_EQ(vec3.size(),
+    0); // NOLINT(bugprone-use-after-move) - leave other in good state
+  EXPECT_EQ(vec4[0].value_, 1);
+  EXPECT_EQ(vec4[1].value_, 2);
+  EXPECT_EQ(Counter::move_constructs_, 2);
 
-    // Initializer list assignment
-    StaticVector<int, 5> vec5 = { 5, 6, 7, 8 };
+  // Initializer list assignment
+  StaticVector<int, 5> vec5 = { 5, 6, 7, 8 };
 
-    EXPECT_EQ(vec5.size(), 4);
-    EXPECT_EQ(vec5[0], 5);
-    EXPECT_EQ(vec5[3], 8);
+  EXPECT_EQ(vec5.size(), 4);
+  EXPECT_EQ(vec5[0], 5);
+  EXPECT_EQ(vec5[3], 8);
 }
 
 NOLINT_TEST(StaticVectorTest, ElementAccess)
 {
-    StaticVector<int, 5> vec = { 1, 2, 3, 4, 5 };
+  StaticVector<int, 5> vec = { 1, 2, 3, 4, 5 };
 
-    // at() with bounds checking
-    EXPECT_EQ(vec.at(0), 1);
-    EXPECT_EQ(vec.at(4), 5);
-    NOLINT_EXPECT_THROW([[maybe_unused]] auto& _ = vec.at(5), std::out_of_range);
+  // at() with bounds checking
+  EXPECT_EQ(vec.at(0), 1);
+  EXPECT_EQ(vec.at(4), 5);
+  NOLINT_EXPECT_THROW([[maybe_unused]] auto& _ = vec.at(5), std::out_of_range);
 
-    // operator[]
-    EXPECT_EQ(vec[0], 1);
-    EXPECT_EQ(vec[4], 5);
+  // operator[]
+  EXPECT_EQ(vec[0], 1);
+  EXPECT_EQ(vec[4], 5);
 
-    // front() and back()
-    EXPECT_EQ(vec.front(), 1);
-    EXPECT_EQ(vec.back(), 5);
+  // front() and back()
+  EXPECT_EQ(vec.front(), 1);
+  EXPECT_EQ(vec.back(), 5);
 
-    // Const versions
-    const StaticVector<int, 5>& const_vec = vec;
-    EXPECT_EQ(const_vec.at(2), 3);
-    EXPECT_EQ(const_vec[3], 4);
-    EXPECT_EQ(const_vec.front(), 1);
-    EXPECT_EQ(const_vec.back(), 5);
+  // Const versions
+  const StaticVector<int, 5>& const_vec = vec;
+  EXPECT_EQ(const_vec.at(2), 3);
+  EXPECT_EQ(const_vec[3], 4);
+  EXPECT_EQ(const_vec.front(), 1);
+  EXPECT_EQ(const_vec.back(), 5);
 
-    // data()
-    EXPECT_EQ(vec.data()[2], 3);
-    EXPECT_EQ(const_vec.data()[2], 3);
+  // data()
+  EXPECT_EQ(vec.data()[2], 3);
+  EXPECT_EQ(const_vec.data()[2], 3);
 }
 
 NOLINT_TEST(StaticVectorTest, Iterators)
 {
-    StaticVector<int, 5> vec = { 1, 2, 3, 4, 5 };
+  StaticVector<int, 5> vec = { 1, 2, 3, 4, 5 };
 
-    // Test begin/end
-    int sum = 0;
-    for (const int& it : vec) {
-        sum += it;
-    }
-    EXPECT_EQ(sum, 15);
+  // Test begin/end
+  int sum = 0;
+  for (const int& it : vec) {
+    sum += it;
+  }
+  EXPECT_EQ(sum, 15);
 
-    // Test const iterators
-    const StaticVector<int, 5>& const_vec = vec;
-    sum = 0;
-    for (const int it : const_vec) {
-        sum += it;
-    }
-    EXPECT_EQ(sum, 15);
+  // Test const iterators
+  const StaticVector<int, 5>& const_vec = vec;
+  sum = 0;
+  for (const int it : const_vec) {
+    sum += it;
+  }
+  EXPECT_EQ(sum, 15);
 
-    // Test cbegin/cend
-    sum = 0;
-    for (const int it : vec) {
-        sum += it;
-    }
-    EXPECT_EQ(sum, 15);
+  // Test cbegin/cend
+  sum = 0;
+  for (const int it : vec) {
+    sum += it;
+  }
+  EXPECT_EQ(sum, 15);
 
-    // Test range-based for
-    sum = 0;
-    for (const auto& val : vec) {
-        sum += val;
-    }
-    EXPECT_EQ(sum, 15);
+  // Test range-based for
+  sum = 0;
+  for (const auto& val : vec) {
+    sum += val;
+  }
+  EXPECT_EQ(sum, 15);
 }
 
 NOLINT_TEST(StaticVectorTest, Modifiers)
 { // clear
-    Counter::reset();
-    {
-        StaticVector<Counter, 5> vec;
-        vec.emplace_back(1);
-        vec.emplace_back(2);
-        vec.emplace_back(3);
+  Counter::reset();
+  {
+    StaticVector<Counter, 5> vec;
+    vec.emplace_back(1);
+    vec.emplace_back(2);
+    vec.emplace_back(3);
 
-        EXPECT_EQ(vec.size(), 3);
-        vec.clear();
-        EXPECT_EQ(vec.size(), 0);
-        EXPECT_TRUE(vec.empty());
-    } // Check proper destruction
-    EXPECT_EQ(Counter::destructs_,
-        Counter::default_constructs_ + Counter::copy_constructs_ + Counter::move_constructs_);
+    EXPECT_EQ(vec.size(), 3);
+    vec.clear();
+    EXPECT_EQ(vec.size(), 0);
+    EXPECT_TRUE(vec.empty());
+  } // Check proper destruction
+  EXPECT_EQ(Counter::destructs_,
+    Counter::default_constructs_ + Counter::copy_constructs_
+      + Counter::move_constructs_);
 
-    // push_back
-    StaticVector<int, 3> vec1;
-    vec1.push_back(1);
-    vec1.push_back(2);
-    EXPECT_EQ(vec1.size(), 2);
-    EXPECT_EQ(vec1[1], 2); // push_back with move
-    Counter::reset();
-    StaticVector<Counter, 3> vec2;
-    Counter c(42);
-    vec2.push_back(std::move(c));
-    EXPECT_EQ(vec2.size(), 1);
-    EXPECT_EQ(vec2[0].value_, 42);
-    EXPECT_EQ(c.value_, 0); // NOLINT(bugprone-use-after-move) - leave other in good state
-    EXPECT_EQ(Counter::move_constructs_, 1);
+  // push_back
+  StaticVector<int, 3> vec1;
+  vec1.push_back(1);
+  vec1.push_back(2);
+  EXPECT_EQ(vec1.size(), 2);
+  EXPECT_EQ(vec1[1], 2); // push_back with move
+  Counter::reset();
+  StaticVector<Counter, 3> vec2;
+  Counter c(42);
+  vec2.push_back(std::move(c));
+  EXPECT_EQ(vec2.size(), 1);
+  EXPECT_EQ(vec2[0].value_, 42);
+  EXPECT_EQ(
+    c.value_, 0); // NOLINT(bugprone-use-after-move) - leave other in good state
+  EXPECT_EQ(Counter::move_constructs_, 1);
 
-    // Test vector full case
-    vec1.push_back(3);
-    EXPECT_EQ(vec1.size(), 3);
-    NOLINT_EXPECT_THROW(vec1.push_back(4), std::length_error);
+  // Test vector full case
+  vec1.push_back(3);
+  EXPECT_EQ(vec1.size(), 3);
+  NOLINT_EXPECT_THROW(vec1.push_back(4), std::length_error);
 
-    // emplace_back
-    StaticVector<std::pair<int, std::string>, 3> vec3;
-    auto& [first, second] = vec3.emplace_back(42, "test");
-    EXPECT_EQ(vec3.size(), 1);
-    EXPECT_EQ(first, 42);
-    EXPECT_EQ(second, "test");
+  // emplace_back
+  StaticVector<std::pair<int, std::string>, 3> vec3;
+  auto& [first, second] = vec3.emplace_back(42, "test");
+  EXPECT_EQ(vec3.size(), 1);
+  EXPECT_EQ(first, 42);
+  EXPECT_EQ(second, "test");
 
-    // pop_back
-    vec3.pop_back();
-    EXPECT_EQ(vec3.size(), 0);
+  // pop_back
+  vec3.pop_back();
+  EXPECT_EQ(vec3.size(), 0);
 }
 
 NOLINT_TEST(StaticVectorTest, Resize)
 {
-    // Resize with default value
-    StaticVector<int, 10> vec1;
-    vec1.resize(5);
-    EXPECT_EQ(vec1.size(), 5);
-    EXPECT_EQ(vec1[0], 0); // Default int value
+  // Resize with default value
+  StaticVector<int, 10> vec1;
+  vec1.resize(5);
+  EXPECT_EQ(vec1.size(), 5);
+  EXPECT_EQ(vec1[0], 0); // Default int value
 
-    // Resize with provided value
-    StaticVector<int, 10> vec2;
-    vec2.resize(5, 42);
-    EXPECT_EQ(vec2.size(), 5);
-    EXPECT_EQ(vec2[0], 42);
-    EXPECT_EQ(vec2[4], 42); // Resize to smaller size
-    Counter::reset();
-    {
-        StaticVector<Counter, 10> vec3;
-        vec3.resize(5);
-        EXPECT_EQ(vec3.size(), 5);
-        EXPECT_EQ(Counter::default_constructs_, 5);
+  // Resize with provided value
+  StaticVector<int, 10> vec2;
+  vec2.resize(5, 42);
+  EXPECT_EQ(vec2.size(), 5);
+  EXPECT_EQ(vec2[0], 42);
+  EXPECT_EQ(vec2[4], 42); // Resize to smaller size
+  Counter::reset();
+  {
+    StaticVector<Counter, 10> vec3;
+    vec3.resize(5);
+    EXPECT_EQ(vec3.size(), 5);
+    EXPECT_EQ(Counter::default_constructs_, 5);
 
-        vec3.resize(2);
-        EXPECT_EQ(vec3.size(), 2);
-        // Should have destroyed 3 elements
-    }
+    vec3.resize(2);
+    EXPECT_EQ(vec3.size(), 2);
+    // Should have destroyed 3 elements
+  }
 
-    // Resize exceeding capacity
-    StaticVector<int, 5> vec4;
-    NOLINT_EXPECT_THROW(vec4.resize(10), std::length_error);
+  // Resize exceeding capacity
+  StaticVector<int, 5> vec4;
+  NOLINT_EXPECT_THROW(vec4.resize(10), std::length_error);
 }
 
 NOLINT_TEST(StaticVectorTest, ComparisonOperators)
 {
-    const StaticVector<int, 5> vec1 = { 1, 2, 3 };
-    const StaticVector<int, 5> vec2 = { 1, 2, 3 };
-    const StaticVector<int, 5> vec3 = { 1, 2, 4 };
-    const StaticVector<int, 5> vec4 = { 1, 2 };
+  const StaticVector<int, 5> vec1 = { 1, 2, 3 };
+  const StaticVector<int, 5> vec2 = { 1, 2, 3 };
+  const StaticVector<int, 5> vec3 = { 1, 2, 4 };
+  const StaticVector<int, 5> vec4 = { 1, 2 };
 
-    EXPECT_TRUE(vec1 == vec2);
-    EXPECT_FALSE(vec1 == vec3);
-    EXPECT_FALSE(vec1 == vec4);
+  EXPECT_TRUE(vec1 == vec2);
+  EXPECT_FALSE(vec1 == vec3);
+  EXPECT_FALSE(vec1 == vec4);
 
-    EXPECT_TRUE(vec1 < vec3);
-    EXPECT_FALSE(vec1 < vec2);
-    EXPECT_FALSE(vec1 < vec4);
-    EXPECT_TRUE(vec4 < vec1);
+  EXPECT_TRUE(vec1 < vec3);
+  EXPECT_FALSE(vec1 < vec2);
+  EXPECT_FALSE(vec1 < vec4);
+  EXPECT_TRUE(vec4 < vec1);
 
-    // Other comparisons use the spaceship operator internally
-    EXPECT_TRUE(vec1 <= vec2);
-    EXPECT_TRUE(vec1 >= vec2);
-    EXPECT_TRUE(vec1 != vec3);
-    EXPECT_TRUE(vec1 > vec4);
-    EXPECT_TRUE(vec1 >= vec4);
+  // Other comparisons use the spaceship operator internally
+  EXPECT_TRUE(vec1 <= vec2);
+  EXPECT_TRUE(vec1 >= vec2);
+  EXPECT_TRUE(vec1 != vec3);
+  EXPECT_TRUE(vec1 > vec4);
+  EXPECT_TRUE(vec1 >= vec4);
 }
 
 } // namespace

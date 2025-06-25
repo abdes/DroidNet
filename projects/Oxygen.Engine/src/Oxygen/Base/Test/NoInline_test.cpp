@@ -9,15 +9,12 @@
 
 namespace {
 
-OXYGEN_NOINLINE auto NoInlineFunction(const int x) -> int
-{
-    return x * 2;
-}
+OXYGEN_NOINLINE auto NoInlineFunction(const int x) -> int { return x * 2; }
 
 TEST_CASE("NoInline compiles", "[NoInline]")
 {
-    REQUIRE(NoInlineFunction(2) == 4);
-    REQUIRE(NoInlineFunction(3) == 6);
+  REQUIRE(NoInlineFunction(2) == 4);
+  REQUIRE(NoInlineFunction(3) == 6);
 }
 
 } // namespace
