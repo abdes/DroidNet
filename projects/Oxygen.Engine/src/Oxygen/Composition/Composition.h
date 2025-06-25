@@ -70,14 +70,13 @@ class Composition : public virtual Object {
   //! pointer to the component pool.
   struct PooledEntry {
     ResourceHandle handle { ResourceHandle::kInvalidIndex };
-    composition::detail::ComponentPoolUntyped* pool_ptr {
-      nullptr
-    }; // type-erased pointer to pool
+    //! Type-erased pointer to pool
+    composition::detail::ComponentPoolUntyped* pool_ptr { nullptr };
 
     PooledEntry() = default;
-    PooledEntry(ResourceHandle handle,
+    PooledEntry(ResourceHandle _handle,
       composition::detail::ComponentPoolUntyped* pool_ptr)
-      : handle(std::move(handle))
+      : handle(std::move(_handle))
       , pool_ptr(pool_ptr)
     {
       DCHECK_F(handle.IsValid());
