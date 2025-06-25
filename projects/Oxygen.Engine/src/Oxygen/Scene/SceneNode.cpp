@@ -6,6 +6,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -17,11 +19,15 @@ using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
 
+// Camera type aliases for brevity and clarity
+using PerspectiveCamera = oxygen::scene::PerspectiveCamera;
+using OrthographicCamera = oxygen::scene::OrthographicCamera;
+
 // =============================================================================
 // SceneNode Validator Implementations
 // =============================================================================
 
-void SceneNode::LogSafeCallError(const char* reason) const noexcept
+auto SceneNode::LogSafeCallError(const char* reason) const noexcept -> void
 {
   try {
     DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",
@@ -380,11 +386,149 @@ auto SceneNode::GetName() const noexcept -> std::string
 auto SceneNode::SetName(const std::string& name) noexcept -> bool
 {
   return SafeCall(
-    NodeIsValidAndInScene(), [&](SafeCallState& state) noexcept -> bool {
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
       DCHECK_EQ_F(state.node, this);
       DCHECK_NOTNULL_F(state.scene);
       DCHECK_NOTNULL_F(state.node_impl);
+
       state.node_impl->SetName(name);
       return true;
+    });
+}
+
+//! Attaches a camera component to this SceneNode. If a camera already exists,
+//! this will fail.
+auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) -> bool
+{
+  if (!camera) {
+    LOG_F(ERROR, "Cannot attach a null camera. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+
+  // TODO: update Composition to add using an already constructed object in
+  // a std::unique_ptr
+
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      const auto type_id = camera->GetTypeId();
+      bool already_exists;
+      if (type_id == PerspectiveCamera::ClassTypeId()) {
+        already_exists = state.node_impl->HasComponent<PerspectiveCamera>();
+      } else if (type_id == OrthographicCamera::ClassTypeId()) {
+        already_exists = state.node_impl->HasComponent<OrthographicCamera>();
+      } else {
+        // Only PerspectiveCamera and OrthographicCamera are supported
+        LOG_F(ERROR, "Unsupported camera type: {}/{}. SceneNode: {}", type_id,
+          camera->GetTypeNamePretty(), nostd::to_string(*this));
+        return false;
+      }
+      if (already_exists) {
+        LOG_F(ERROR,
+          "SceneNode {} already has a camera component of type {}. Cannot "
+          "attach another.",
+          nostd::to_string(*this), camera->GetTypeNamePretty());
+        return false;
+      }
+
+      if (type_id == PerspectiveCamera::ClassTypeId()) {
+        // Static cast unique_ptr<Component> to unique_ptr<PerspectiveCamera>
+        // and move the object
+        const auto cam_ptr = std::unique_ptr<PerspectiveCamera>(
+          static_cast<PerspectiveCamera*>(camera.release()));
+        state.node_impl->AddComponent<PerspectiveCamera>(std::move(*cam_ptr));
+      } else if (type_id == OrthographicCamera::ClassTypeId()) {
+        const auto cam_ptr = std::unique_ptr<OrthographicCamera>(
+          static_cast<OrthographicCamera*>(camera.release()));
+        state.node_impl->AddComponent<OrthographicCamera>(std::move(*cam_ptr));
+      }
+      return true;
+    });
+}
+
+//! Detaches the camera component from this SceneNode, if present.
+auto SceneNode::DetachCamera() -> bool
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      bool removed = false;
+      if (state.node_impl->HasComponent<PerspectiveCamera>()) {
+        state.node_impl->RemoveComponent<PerspectiveCamera>();
+        removed = true;
+      }
+      if (state.node_impl->HasComponent<OrthographicCamera>()) {
+        state.node_impl->RemoveComponent<OrthographicCamera>();
+        removed = true;
+      }
+      return removed;
+    });
+}
+
+//! Replaces the current camera component with a new one. If no camera exists,
+//! this acts as attach.
+auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) -> bool
+{
+  if (!camera) {
+    LOG_F(ERROR, "Cannot attach a null camera. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+
+  // TODO: use ReplaceComponent()
+  // TODO: update Composition to replace using an already constructed object in
+  // a std::unique_ptr
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      // Remove any existing camera
+      if (state.node_impl->HasComponent<PerspectiveCamera>()) {
+        state.node_impl->RemoveComponent<PerspectiveCamera>();
+      }
+      if (state.node_impl->HasComponent<OrthographicCamera>()) {
+        state.node_impl->RemoveComponent<OrthographicCamera>();
+      }
+      const auto type_id = camera->GetTypeId();
+      if (type_id == PerspectiveCamera::ClassTypeId()) {
+        state.node_impl->AddComponent<PerspectiveCamera>(
+          std::move(*static_cast<PerspectiveCamera*>(camera.get())));
+      } else if (type_id == OrthographicCamera::ClassTypeId()) {
+        state.node_impl->AddComponent<OrthographicCamera>(
+          std::move(*static_cast<OrthographicCamera*>(camera.get())));
+      } else {
+        return false;
+      }
+      return true;
+    });
+}
+
+//! Gets the attached camera component if present.
+auto SceneNode::GetCamera() noexcept
+  -> std::optional<std::reference_wrapper<Component>>
+{
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](SafeCallState& state) noexcept
+      -> std::optional<std::reference_wrapper<Component>> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      if (state.node_impl->HasComponent<PerspectiveCamera>()) {
+        return std::ref(state.node_impl->GetComponent<PerspectiveCamera>());
+      }
+      if (state.node_impl->HasComponent<OrthographicCamera>()) {
+        return std::ref(state.node_impl->GetComponent<OrthographicCamera>());
+      }
+      return std::nullopt;
     });
 }

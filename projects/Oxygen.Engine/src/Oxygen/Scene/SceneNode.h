@@ -137,6 +137,44 @@ public:
   OXGN_SCN_NDAPI auto GetTransform() noexcept -> Transform;
   OXGN_SCN_NDAPI auto GetTransform() const noexcept -> Transform;
 
+  //=== Camera Attachment ===-------------------------------------------------//
+
+  //! Attaches a camera component to this SceneNode. If a camera already exists,
+  //! this will fail.
+  OXGN_SCN_API auto AttachCamera(std::unique_ptr<Component> camera) -> bool;
+
+  //! Detaches the camera component from this SceneNode, if present.
+  OXGN_SCN_API auto DetachCamera() -> bool;
+
+  //! Replaces the current camera component with a new one. If no camera exists,
+  //! this acts as attach.
+  OXGN_SCN_API auto ReplaceCamera(std::unique_ptr<Component> camera) -> bool;
+
+  //! Gets the attached camera component if present.
+  OXGN_SCN_NDAPI auto GetCamera() noexcept
+    -> std::optional<std::reference_wrapper<Component>>;
+
+  //! Gets the attached camera as the specified type T (PerspectiveCamera or
+  //! OrthographicCamera).
+  /*! Throws std::runtime_error if the attached camera exists but is not of type
+   * T. */
+  template <typename T>
+  auto GetCameraAs() noexcept -> std::optional<std::reference_wrapper<T>>
+  {
+    auto camera_opt = GetCamera();
+    if (!camera_opt) {
+      return std::nullopt;
+    }
+    Component& camera = camera_opt->get();
+    if (camera.GetTypeId() != T::ClassTypeId()) {
+      throw std::runtime_error(
+        "SceneNode: attached camera type mismatch (expected: "
+        + std::string(T::ClassTypeNamePretty())
+        + ", actual: " + std::string(camera.GetTypeNamePretty()) + ")");
+    }
+    return std::ref(static_cast<T&>(camera));
+  }
+
   //=== Name Access ===-------------------------------------------------------//
 
   //! Gets the name of this SceneNode, or an empty string if invalid.
