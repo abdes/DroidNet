@@ -175,6 +175,14 @@ public:
   // ReSharper disable once CppHidingFunction
   OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
 
+  //=== Dynamic Components Support ===----------------------------------------//
+
+  // SceneNodeImpl supports adding, removing and replacing certain components
+  // after construction.
+  using Composition::AddComponent;
+  using Composition::RemoveComponent;
+  using Composition::ReplaceComponent;
+
 protected:
   // Used primarily for testing, and for creating an empty object when cloning
   // from another one.
