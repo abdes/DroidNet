@@ -75,9 +75,9 @@ class Composition : public virtual Object {
     }; // type-erased pointer to pool
 
     PooledEntry() = default;
-    PooledEntry(const ResourceHandle& handle,
+    PooledEntry(ResourceHandle handle,
       composition::detail::ComponentPoolUntyped* pool_ptr)
-      : handle(handle)
+      : handle(std::move(handle))
       , pool_ptr(pool_ptr)
     {
       DCHECK_F(handle.IsValid());
