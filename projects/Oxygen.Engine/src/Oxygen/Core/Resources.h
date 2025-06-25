@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/ResourceTypeList.h>
 
 namespace oxygen {
 
@@ -15,6 +15,9 @@ namespace oxygen {
 // Scene graph and world objects
 namespace scene {
   class SceneNode;
+  namespace detail {
+    class TransformComponent;
+  } // namespace detail
 } // namespace scene
 
 // Reserved slots for future engine resource types
@@ -82,8 +85,10 @@ using ResourceTypeList = TypeList<
   EngineReserved8, // ID 8 - Reserved for future use
   EngineReserved9, // ID 9 - Reserved for future use
 
-  // Core scene graph objects
-  scene::SceneNode // ID 10 - Scene hierarchy nodes
+  // ID 10 - Scene hierarchy nodes
+  scene::SceneNode,
+  // ID 11 - Scene hierarchy nodes
+  scene::detail::TransformComponent
 
   // Add new resource types here at the end only
   // DO NOT add non-pooled components here!

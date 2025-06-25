@@ -10,6 +10,7 @@
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Core/Resources.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::detail {
@@ -35,7 +36,7 @@ namespace oxygen::scene::detail {
  @note All GLM data types are 16-byte aligned for optimal SIMD performance.
 */
 class TransformComponent final : public Component {
-  OXYGEN_COMPONENT(TransformComponent)
+  OXYGEN_POOLED_COMPONENT(TransformComponent, ResourceTypeList)
   OXYGEN_COMPONENT_REQUIRES(ObjectMetaData)
 
 public:
