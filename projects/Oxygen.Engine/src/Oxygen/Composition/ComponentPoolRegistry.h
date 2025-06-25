@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <unordered_map>
 
 #include <Oxygen/Base/ResourceHandle.h>
@@ -134,7 +135,7 @@ private:
   auto ClearAllPoolsImpl() -> void
   {
     std::lock_guard lock(pools_mutex_);
-    for (auto& [type_id, pool_entry] : pools_) {
+    for (auto& pool_entry : pools_ | std::views::values) {
       // Call the stored clear function on the type-erased pool
       pool_entry.clear_fn(pool_entry.pool_ptr.get());
     }
