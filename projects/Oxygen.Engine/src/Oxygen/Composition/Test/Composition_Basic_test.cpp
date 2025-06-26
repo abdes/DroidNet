@@ -7,9 +7,7 @@
 #include <atomic>
 #include <optional>
 #include <ranges>
-#include <sstream>
 #include <thread>
-#include <vector>
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
@@ -47,7 +45,6 @@ using LocalComponent = LocalValueComponent;
 class PooledLocalValueComponent final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(PooledLocalValueComponent, ResourceTypeList)
 public:
-  PooledLocalValueComponent() = default;
   explicit PooledLocalValueComponent(int v)
     : value_(v)
   {
@@ -61,7 +58,7 @@ using PooledComponent = PooledLocalValueComponent;
 
 //=== TestComposition (file scope) ===----------------------------------------//
 
-class TestComposition : public oxygen::Composition {
+class TestComposition final : public oxygen::Composition {
 public:
   using Base = Composition;
 
@@ -93,8 +90,8 @@ public:
 class BasicCompositionTest : public BaseCompositionTest {
 public:
   TestComposition composition_;
-  static constexpr int local_v = 5;
-  static constexpr int pooled_v = 10;
+  static constexpr int local_v_ = 5;
+  static constexpr int pooled_v_ = 10;
 };
 
 //=== Test Cases: BasicCompositionTest ===------------------------------------//
@@ -117,20 +114,60 @@ NOLINT_TEST_F(BasicCompositionTest, EmptyCompositionOperations)
 }
 
 //! Add and verify a component is present and retrievable.
-NOLINT_TEST_F(BasicCompositionTest, AddAndVerifyComponent)
+NOLINT_TEST_F(BasicCompositionTest, AddComponentInPlace)
 {
   // Arrange
   // Act
-  auto& local_c = composition_.AddComponent<LocalComponent>(local_v);
-  auto& pooled_c = composition_.AddComponent<PooledComponent>(pooled_v);
+  auto& local_c = composition_.AddComponent<LocalComponent>(local_v_);
+  auto& pooled_c = composition_.AddComponent<PooledComponent>(pooled_v_);
   // Assert
   EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
   EXPECT_EQ(&local_c, &composition_.GetComponent<LocalComponent>());
-  EXPECT_EQ(local_c.Value(), local_v);
+  EXPECT_EQ(local_c.Value(), local_v_);
 
   EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
   EXPECT_EQ(&pooled_c, &composition_.GetComponent<PooledComponent>());
-  EXPECT_EQ(pooled_c.Value(), pooled_v);
+  EXPECT_EQ(pooled_c.Value(), pooled_v_);
+}
+
+//! Add and verify a pre-created component passed by value.
+NOLINT_TEST_F(BasicCompositionTest, AddComponentByValue)
+{
+  // Arrange
+
+  // Act
+  auto& local_c
+    = composition_.AddComponent<LocalComponent>(LocalComponent(local_v_));
+  auto& pooled_c
+    = composition_.AddComponent<PooledComponent>(PooledComponent(pooled_v_));
+  // Assert
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_EQ(&local_c, &composition_.GetComponent<LocalComponent>());
+  EXPECT_EQ(local_c.Value(), local_v_);
+
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(&pooled_c, &composition_.GetComponent<PooledComponent>());
+  EXPECT_EQ(pooled_c.Value(), pooled_v_);
+}
+
+//! Add and verify a pre-created component passed by value.
+NOLINT_TEST_F(BasicCompositionTest, AddComponentFromUniquePtr)
+{
+  // Arrange
+
+  // Act
+  auto& local_c = composition_.AddComponent<LocalComponent>(
+    std::make_unique<LocalComponent>(local_v_));
+  auto& pooled_c = composition_.AddComponent<PooledComponent>(
+    std::make_unique<PooledComponent>(pooled_v_));
+  // Assert
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_EQ(&local_c, &composition_.GetComponent<LocalComponent>());
+  EXPECT_EQ(local_c.Value(), local_v_);
+
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(&pooled_c, &composition_.GetComponent<PooledComponent>());
+  EXPECT_EQ(pooled_c.Value(), pooled_v_);
 }
 
 //! Remove a component and verify it is no longer present.
@@ -149,17 +186,17 @@ NOLINT_TEST_F(BasicCompositionTest, RemoveComponent)
 NOLINT_TEST_F(BasicCompositionTest, CopyConstructor)
 {
   // Arrange
-  composition_.AddComponent<LocalComponent>(local_v);
-  composition_.AddComponent<PooledComponent>(pooled_v);
+  composition_.AddComponent<LocalComponent>(local_v_);
+  composition_.AddComponent<PooledComponent>(pooled_v_);
   // Act
   const TestComposition copy(composition_);
   // Assert
   EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
   EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
   EXPECT_TRUE(copy.HasComponent<LocalComponent>());
-  EXPECT_EQ(copy.LocalValue(), local_v);
+  EXPECT_EQ(copy.LocalValue(), local_v_);
   EXPECT_TRUE(copy.HasComponent<PooledComponent>());
-  EXPECT_EQ(copy.PooledValue(), pooled_v);
+  EXPECT_EQ(copy.PooledValue(), pooled_v_);
 }
 
 //! Move constructor moves all components.
@@ -171,6 +208,51 @@ NOLINT_TEST_F(BasicCompositionTest, MoveConstructor)
   const TestComposition moved(std::move(composition_));
   // Assert
   EXPECT_TRUE(moved.HasComponent<SimpleComponent>());
+}
+
+//! Copy assignment operator copies all components.
+NOLINT_TEST_F(BasicCompositionTest, CopyAssignmentOperator)
+{
+  // Arrange
+  composition_.AddComponent<LocalComponent>(local_v_);
+  composition_.AddComponent<PooledComponent>(pooled_v_);
+
+  TestComposition copy;
+  // Act
+  copy = composition_;
+
+  // Assert
+  EXPECT_TRUE(copy.HasComponent<LocalComponent>());
+  EXPECT_TRUE(copy.HasComponent<PooledComponent>());
+  EXPECT_EQ(copy.LocalValue(), local_v_);
+  EXPECT_EQ(copy.PooledValue(), pooled_v_);
+
+  // Original remains unchanged
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+}
+
+//! Move assignment operator moves all components and leaves the source empty.
+NOLINT_TEST_F(BasicCompositionTest, MoveAssignmentOperator)
+{
+  // Arrange
+  composition_.AddComponent<LocalComponent>(local_v_);
+  composition_.AddComponent<PooledComponent>(pooled_v_);
+
+  TestComposition moved;
+  // Act
+  moved = std::move(composition_);
+
+  // Assert
+  EXPECT_TRUE(moved.HasComponent<LocalComponent>());
+  EXPECT_TRUE(moved.HasComponent<PooledComponent>());
+  EXPECT_EQ(moved.LocalValue(), local_v_);
+  EXPECT_EQ(moved.PooledValue(), pooled_v_);
+
+  // Source should be empty after move
+  EXPECT_FALSE(composition_.HasComponent<LocalComponent>());
+  EXPECT_FALSE(composition_.HasComponent<PooledComponent>());
+  EXPECT_FALSE(composition_.HasComponents());
 }
 
 //! Adding a duplicate component throws an error.
@@ -202,6 +284,38 @@ NOLINT_TEST_F(BasicCompositionTest, MultipleComponents)
   // Assert
   EXPECT_TRUE(composition_.HasComponent<SimpleComponent>());
   EXPECT_TRUE(composition_.HasComponent<LocalValueComponent>());
+}
+
+//! Replace a local component with in-place construction.
+NOLINT_TEST_F(BasicCompositionTest, ReplaceLocalComponentInPlace)
+{
+  composition_.AddComponent<LocalComponent>(local_v_);
+  int new_value = 42;
+  const auto& replaced
+    = composition_.ReplaceComponent<LocalComponent>(new_value);
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_EQ(replaced.Value(), new_value);
+}
+
+//! Replace a local component by value.
+NOLINT_TEST_F(BasicCompositionTest, ReplaceLocalComponentByValue)
+{
+  composition_.AddComponent<LocalComponent>(local_v_);
+  LocalComponent new_comp(123);
+  const auto& replaced
+    = composition_.ReplaceComponent<LocalComponent>(new_comp);
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_EQ(replaced.Value(), 123);
+}
+
+//! Replace a local component with a unique_ptr.
+NOLINT_TEST_F(BasicCompositionTest, ReplaceLocalComponentFromUniquePtr)
+{
+  composition_.AddComponent<LocalComponent>(local_v_);
+  const auto& replaced = composition_.ReplaceComponent<LocalComponent>(
+    std::make_unique<LocalComponent>(321));
+  EXPECT_TRUE(composition_.HasComponent<LocalComponent>());
+  EXPECT_EQ(replaced.Value(), 321);
 }
 
 } // namespace

@@ -25,8 +25,7 @@ using ResourceTypeList = oxygen::TypeList<PooledComponent>;
 class PooledComponent final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(PooledComponent, ResourceTypeList)
 public:
-  PooledComponent() = default;
-  explicit PooledComponent(int v)
+  explicit PooledComponent(const int v)
     : value_(v)
   {
   }
@@ -61,17 +60,33 @@ protected:
   TestComposition composition_;
 };
 
-//! Add and access a pooled component.
-NOLINT_TEST_F(PooledComponentTest, AddAndAccessPooledComponent)
+//! Add a pooled component with in-place construction.
+NOLINT_TEST_F(PooledComponentTest, AddPooledComponentInPlace)
 {
-  // Arrange & Act
-  auto& pooled = composition_.AddComponent<PooledComponent>(42);
-  // Assert
-  EXPECT_EQ(pooled.value_, 42);
+  const auto& pooled = composition_.AddComponent<PooledComponent>(123);
   EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
-  auto& get_ref = composition_.GetComponent<PooledComponent>();
-  EXPECT_EQ(get_ref.value_, 42);
-  EXPECT_EQ(&pooled, &get_ref);
+  EXPECT_EQ(pooled.value_, 123);
+  EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 123);
+}
+
+//! Add a pooled component by value.
+NOLINT_TEST_F(PooledComponentTest, AddPooledComponentByValue)
+{
+  PooledComponent new_comp(456);
+  const auto& pooled = composition_.AddComponent<PooledComponent>(new_comp);
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(pooled.value_, 456);
+  EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 456);
+}
+
+//! Add a pooled component from a unique_ptr.
+NOLINT_TEST_F(PooledComponentTest, AddPooledComponentFromUniquePtr)
+{
+  const auto& pooled = composition_.AddComponent<PooledComponent>(
+    std::make_unique<PooledComponent>(789));
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(pooled.value_, 789);
+  EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 789);
 }
 
 //! Remove a pooled component and verify it is gone.
@@ -111,20 +126,37 @@ NOLINT_TEST_F(PooledComponentTest, RemoveDependentThenDependency)
     << "Should allow removing pooled component after dependents are gone";
 }
 
-//! Replace a pooled component and verify new instance.
-NOLINT_TEST_F(PooledComponentTest, ReplacePooledComponent)
+//! Replace a pooled component with in-place construction.
+NOLINT_TEST_F(PooledComponentTest, ReplacePooledComponentInPlace)
 {
-  // Arrange
   composition_.AddComponent<PooledComponent>(5);
-
-  // Act
-  auto& pooled2 = composition_.ReplaceComponent<PooledComponent>(10);
-
-  auto& test = composition_.GetComponent<PooledComponent>();
-  EXPECT_EQ(test.value_, 10);
-
-  // Assert
-  EXPECT_EQ(pooled2.value_, 10);
+  const auto& replaced = composition_.ReplaceComponent<PooledComponent>(10);
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(replaced.value_, 10);
   EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 10);
 }
+
+//! Replace a pooled component by value.
+NOLINT_TEST_F(PooledComponentTest, ReplacePooledComponentByValue)
+{
+  composition_.AddComponent<PooledComponent>(7);
+  PooledComponent new_comp(42);
+  const auto& replaced
+    = composition_.ReplaceComponent<PooledComponent>(new_comp);
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(replaced.value_, 42);
+  EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 42);
+}
+
+//! Replace a pooled component with a unique_ptr.
+NOLINT_TEST_F(PooledComponentTest, ReplacePooledComponentFromUniquePtr)
+{
+  composition_.AddComponent<PooledComponent>(8);
+  const auto& replaced = composition_.ReplaceComponent<PooledComponent>(
+    std::make_unique<PooledComponent>(99));
+  EXPECT_TRUE(composition_.HasComponent<PooledComponent>());
+  EXPECT_EQ(replaced.value_, 99);
+  EXPECT_EQ(composition_.GetComponent<PooledComponent>().value_, 99);
+}
+
 } // namespace
