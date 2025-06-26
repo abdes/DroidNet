@@ -10,6 +10,8 @@ applyTo: '**/*.cpp;**/*.h'
 - Use `#pragma once` for include guards in all headers.
 - Prefix all standard library types and functions with `std::`.
 - Use `#include <...>` syntax for all includes.
+- Use designated initializers for struct initialization whenever possible.
+- Use trailing commas in aggregate initializations (e.g., structs, arrays, enums) when applicable.
 - All new files must start with the BSD license preamble:
   //===----------------------------------------------------------------------===//
   // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
