@@ -122,6 +122,9 @@ protected:
   std::unique_ptr<oxygen::ComponentPool<TestTransformComponent>> pool_;
 };
 
+//! Error handling fixture for testing exceptions and invalid states
+class ComponentPoolErrorTest : public ComponentPoolBasicTest { };
+
 //! Threading fixture for concurrent access tests
 class ComponentPoolThreadingTest : public testing::Test {
 protected:
@@ -213,6 +216,43 @@ NOLINT_TEST_F(ComponentPoolBasicTest, AllocateAndGet_SingleComponent_Success)
   EXPECT_EQ(component->GetZ(), z);
   EXPECT_EQ(pool_->Size(), 1);
   EXPECT_FALSE(pool_->IsEmpty());
+}
+
+//! Test Allocate(&&) with correct type
+NOLINT_TEST_F(ComponentPoolBasicTest, Allocate_RValue_CorrectType_Success)
+{
+  // Arrange
+  TestTransformComponent comp(42, 43, 44);
+
+  // Act
+  auto handle = pool_->Allocate(std::move(comp));
+  auto* component = pool_->Get(handle);
+
+  // Assert
+  EXPECT_TRUE(handle.IsValid());
+  ASSERT_NE(component, nullptr);
+  EXPECT_EQ(component->GetX(), 42);
+  EXPECT_EQ(component->GetY(), 43);
+  EXPECT_EQ(component->GetZ(), 44);
+}
+
+//! Test Allocate(&&) with correct type
+NOLINT_TEST_F(ComponentPoolBasicTest, Allocate_UniquePtr_CorrectType_Success)
+{
+  // Arrange
+  std::unique_ptr<oxygen::Component> comp
+    = std::make_unique<TestTransformComponent>(42, 43, 44);
+
+  // Act
+  auto handle = pool_->Allocate(std::move(comp));
+  auto* component = pool_->Get(handle);
+
+  // Assert
+  EXPECT_TRUE(handle.IsValid());
+  ASSERT_NE(component, nullptr);
+  EXPECT_EQ(component->GetX(), 42);
+  EXPECT_EQ(component->GetY(), 43);
+  EXPECT_EQ(component->GetZ(), 44);
 }
 
 //! Test const access to components
@@ -509,7 +549,7 @@ TEST_F(ComponentPoolThreadingTest, ConcurrentReadWrite_ThreadSafe)
   EXPECT_EQ(transform_pool_->Size(), component_count);
 }
 
-//=== Edge Cases and Error Handling Tests ===---------------------------------//
+//=== Edge Cases ===----------------------------------------------------------//
 
 //! Test pool growth beyond initial capacity
 NOLINT_TEST_F(ComponentPoolComplexTest, GrowthBeyondCapacity_HandledCorrectly)
@@ -599,6 +639,38 @@ NOLINT_TEST_F(ComponentPoolComplexTest, MixedOperations_MaintainsIntegrity)
 
   EXPECT_EQ(valid_handles, accessible_components);
   EXPECT_EQ(large_pool_->Size(), accessible_components);
+}
+
+//=== Error Handling Tests ===------------------------------------------------//
+
+//! Test Allocate(&&) with wrong type
+NOLINT_TEST_F(ComponentPoolErrorTest, Allocate_RValue_WrongType_ThrowsOrDies)
+{
+  // Arrange
+  TestRenderComponent wrong_type("bad");
+  auto* wrong_type_ptr = static_cast<oxygen::Component*>(&wrong_type);
+#ifdef NDEBUG
+  // In release, expect exception
+  EXPECT_THROW(pool_->Allocate(std::move(*wrong_type_ptr)), std::exception);
+#else
+  // In debug, expect death
+  EXPECT_DEATH(pool_->Allocate(std::move(*wrong_type_ptr)), "");
+#endif
+}
+
+//! Test Allocate(&&) with wrong type
+NOLINT_TEST_F(ComponentPoolErrorTest, Allocate_UniquePtr_WrongType_ThrowsOrDies)
+{
+  // Arrange
+  std::unique_ptr<oxygen::Component> wrong_type
+    = std::make_unique<TestRenderComponent>("bad");
+#ifdef NDEBUG
+  // In release, expect exception
+  EXPECT_THROW(pool_->Allocate(std::move(*wrong_type_ptr)), std::exception);
+#else
+  // In debug, expect death
+  EXPECT_DEATH(pool_->Allocate(std::move(wrong_type)), "");
+#endif
 }
 
 } // anonymous namespace

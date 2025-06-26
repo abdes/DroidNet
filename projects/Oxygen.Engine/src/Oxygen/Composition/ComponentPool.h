@@ -105,14 +105,24 @@ public:
   */
   auto Allocate(Component&& comp) -> ResourceHandle override
   {
-    // Attempt to dynamic_cast to the correct type
-    DCHECK_F(comp.GetTypeId() == PooledComponentType::ClassTypeId(),
-      "ComponentPool::Allocate: type mismatch, expected {}, got {}",
-      PooledComponentType::ClassTypeId(), comp.GetTypeId());
+    // Ensure the component is of the correct type.
+    EnsureCorrectType(&comp);
+    // NB: important to cast to the correct type before moving to avoid slicing.
     auto* typed = static_cast<PooledComponentType*>(&comp);
-    if (!typed) {
-      throw std::invalid_argument("ComponentPool::Allocate: type mismatch");
+    std::lock_guard lock(mutex_);
+    return table_.Insert(std::move(*typed));
+  }
+
+  auto Allocate(std::unique_ptr<Component> comp) -> ResourceHandle override
+  {
+    if (!comp) {
+      throw std::invalid_argument("invalid nullptr component");
     }
+    EnsureCorrectType(comp.get());
+    // Insert the moved component into the pool, and just let the unique_ptr
+    // release the memory of the moved from component.
+    // NB: important to cast to the correct type before moving to avoid slicing.
+    auto* typed = static_cast<PooledComponentType*>(comp.get());
     std::lock_guard lock(mutex_);
     return table_.Insert(std::move(*typed));
   }
@@ -366,6 +376,24 @@ public:
   }
 
 private:
+  void EnsureCorrectType(Component* comp_ptr) const
+  {
+    DCHECK_NOTNULL_F(comp_ptr);
+    if (comp_ptr->GetTypeId() != PooledComponentType::ClassTypeId()) {
+      auto msg = fmt::format(
+        "ComponentPool::Allocate: type mismatch; expected {}/{} but got {}/{}",
+        PooledComponentType::ClassTypeId(),
+        PooledComponentType::ClassTypeNamePretty(), comp_ptr->GetTypeId(),
+        comp_ptr->GetTypeNamePretty());
+#if !defined(NDEBUG)
+      // In DEBUG builds, we will assert to force fixing this programming error.
+      ABORT_F(msg.c_str());
+#else
+      throw std::invalid_argument("ComponentPool::Allocate: type mismatch");
+#endif // NDEBUG
+    }
+  }
+
   ResourceTable<PooledComponentType> table_;
 
   mutable std::shared_mutex mutex_; // Thread safety for all operations
