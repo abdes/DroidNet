@@ -14,7 +14,7 @@ using oxygen::data::MakeCubeMeshAsset;
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   // Create a simple cube mesh using the procedural mesh factory
-  auto mesh = MakeCubeMeshAsset();
+  const auto mesh = MakeCubeMeshAsset();
   if (!mesh) {
     std::cerr << "Failed to create mesh.\n";
     return EXIT_FAILURE;

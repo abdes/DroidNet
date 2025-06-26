@@ -14,12 +14,12 @@ using oxygen::data::QuantizedVertexHash;
 
 namespace {
 // VertexBasicTest: epsilon-based equality, quantized hash consistency
-class VertexBasicTest : public ::testing::Test { };
+class VertexBasicTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
 {
   // Arrange
-  const Vertex v1 {
+  constexpr Vertex v1 {
     .position = { 1.0f, 2.0f, 3.0f },
     .normal = { 0.0f, 1.0f, 0.0f },
     .texcoord = { 0.5f, 0.5f },
@@ -27,7 +27,7 @@ NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
     .bitangent = {},
     .color = {},
   };
-  const Vertex v2 {
+  constexpr Vertex v2 {
     .position = { 1.0f + 1e-6f, 2.0f - 1e-6f, 3.0f + 1e-6f },
     .normal = { 0.0f, 1.0f, 0.0f },
     .texcoord = { 0.5f, 0.5f },
@@ -44,7 +44,7 @@ NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
 NOLINT_TEST_F(VertexBasicTest, QuantizedHash_Consistency)
 {
   // Arrange
-  const Vertex v1 {
+  constexpr Vertex v1 {
     .position = { 1.0f, 2.0f, 3.0f },
     .normal = { 0.0f, 1.0f, 0.0f },
     .texcoord = { 0.5f, 0.5f },
@@ -52,7 +52,7 @@ NOLINT_TEST_F(VertexBasicTest, QuantizedHash_Consistency)
     .bitangent = {},
     .color = {},
   };
-  const Vertex v2 {
+  constexpr Vertex v2 {
     .position = { 1.0f + 1e-6f, 2.0f - 1e-6f, 3.0f + 1e-6f },
     .normal = { 0.0f, 1.0f, 0.0f },
     .texcoord = { 0.5f, 0.5f },
@@ -72,7 +72,7 @@ NOLINT_TEST_F(VertexBasicTest, QuantizedHash_Consistency)
 }
 
 // VertexEdgeTest: NaN, Inf, zero vectors
-class VertexEdgeTest : public ::testing::Test { };
+class VertexEdgeTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexEdgeTest, HandlesNaN)
 {
@@ -150,7 +150,7 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesZeroVectors)
 }
 
 // VertexHashTest: Vertex in hash-based containers with custom hash/equality
-class VertexHashTest : public ::testing::Test { };
+class VertexHashTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexHashTest, HashSet_AlmostEqualKey)
 {

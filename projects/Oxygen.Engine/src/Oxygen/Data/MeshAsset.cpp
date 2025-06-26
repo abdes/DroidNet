@@ -44,9 +44,10 @@ MeshAsset::MeshAsset(std::string name, std::vector<Vertex> vertices,
 
   @warning No validation is performed; caller must ensure ranges are valid.
 */
-auto MeshAsset::CreateView(std::string_view name, std::size_t vertex_offset,
-  std::size_t vertex_count, std::size_t index_offset,
-  std::size_t index_count) noexcept -> void
+auto MeshAsset::CreateView(std::string_view name,
+  const std::size_t vertex_offset, const std::size_t vertex_count,
+  const std::size_t index_offset, const std::size_t index_count) noexcept
+  -> void
 {
   CHECK_F(vertex_offset + vertex_count <= vertices_.size(),
     "MeshView vertex range out of bounds");
@@ -60,10 +61,10 @@ auto MeshAsset::CreateView(std::string_view name, std::size_t vertex_offset,
 
 //! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
 /*!
-  Scans all vertex positions and updates bbox_min_ and bbox_max_ to enclose all
-  vertices. If the mesh is empty, both min and max are set to zero.
+  Scans all vertex positions and updates `bbox_min_` and `bbox_max_` to enclose
+  all vertices. If the mesh is empty, both min and max are set to zero.
 */
-void MeshAsset::ComputeBoundingBox()
+auto MeshAsset::ComputeBoundingBox() -> void
 {
   if (vertices_.empty()) {
     bbox_min_ = bbox_max_ = glm::vec3(0.0f);

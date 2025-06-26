@@ -13,10 +13,10 @@
 namespace {
 
 // MeshAssetBasicTest: immutability, bounding box correctness, shared ownership
-class MeshAssetBasicTest : public ::testing::Test {
+class MeshAssetBasicTest : public testing::Test {
 protected:
   // Helper to create a simple mesh asset
-  std::shared_ptr<oxygen::data::MeshAsset> MakeSimpleMesh()
+  static auto MakeSimpleMesh() -> std::shared_ptr<oxygen::data::MeshAsset>
   {
     std::vector<Vertex> vertices = {
       { .position = { 0, 0, 0 },
@@ -48,9 +48,9 @@ protected:
 NOLINT_TEST_F(MeshAssetBasicTest, Immutability)
 {
   // Arrange
-  auto mesh = MakeSimpleMesh();
-  auto vertices_before = mesh->Vertices();
-  auto indices_before = mesh->Indices();
+  const auto mesh = MakeSimpleMesh();
+  const auto vertices_before = mesh->Vertices();
+  const auto indices_before = mesh->Indices();
 
   // Act
   // Try to mutate the returned spans (should not compile if attempted)
@@ -66,7 +66,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, Immutability)
 NOLINT_TEST_F(MeshAssetBasicTest, BoundingBoxCorrectness)
 {
   // Arrange
-  auto mesh = MakeSimpleMesh();
+  const auto mesh = MakeSimpleMesh();
 
   // Act
   const auto& min = mesh->BoundingBoxMin();
@@ -82,7 +82,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, SharedOwnership)
 {
   // Arrange
   auto mesh = MakeSimpleMesh();
-  std::shared_ptr<oxygen::data::MeshAsset> mesh2 = mesh;
+  const std::shared_ptr<oxygen::data::MeshAsset> mesh2 = mesh;
 
   // Act
   mesh.reset();
@@ -123,9 +123,9 @@ NOLINT_TEST_F(MeshAssetBasicTest, ConstructorRejectsEmpty)
 }
 
 // MeshAssetViewTest: view validity, in-bounds checks
-class MeshAssetViewTest : public ::testing::Test {
+class MeshAssetViewTest : public testing::Test {
 protected:
-  std::shared_ptr<oxygen::data::MeshAsset> MakeSimpleMesh()
+  static auto MakeSimpleMesh() -> std::shared_ptr<oxygen::data::MeshAsset>
   {
     std::vector<Vertex> vertices = {
       { .position = { 0, 0, 0 },
@@ -157,7 +157,7 @@ protected:
 NOLINT_TEST_F(MeshAssetViewTest, ViewValidity)
 {
   // Arrange
-  auto mesh = MakeSimpleMesh();
+  const auto mesh = MakeSimpleMesh();
 
   // Act
   mesh->CreateView("main", 0, 3, 0, 3);
@@ -172,7 +172,7 @@ NOLINT_TEST_F(MeshAssetViewTest, ViewValidity)
 NOLINT_TEST_F(MeshAssetViewTest, InBoundsChecks)
 {
   // Arrange
-  auto mesh = MakeSimpleMesh();
+  const auto mesh = MakeSimpleMesh();
 
   // Act & Assert
   EXPECT_DEATH(mesh->CreateView("bad", 0, 10, 0, 3), "");

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -60,28 +59,31 @@ public:
   OXYGEN_DEFAULT_MOVABLE(MeshAsset)
 
   //! Returns the name of the mesh asset.
-  [[nodiscard]] const std::string& Name() const noexcept { return name_; }
+  [[nodiscard]] auto Name() const noexcept -> const std::string&
+  {
+    return name_;
+  }
 
   //! Returns a span of all vertices.
-  [[nodiscard]] std::span<const Vertex> Vertices() const noexcept
+  [[nodiscard]] auto Vertices() const noexcept -> std::span<const Vertex>
   {
     return vertices_;
   }
 
   //! Returns a span of all indices.
-  [[nodiscard]] std::span<const std::uint32_t> Indices() const noexcept
+  [[nodiscard]] auto Indices() const noexcept -> std::span<const std::uint32_t>
   {
     return indices_;
   }
 
   //! Returns the number of vertices.
-  [[nodiscard]] std::size_t VertexCount() const noexcept
+  [[nodiscard]] auto VertexCount() const noexcept -> std::size_t
   {
     return vertices_.size();
   }
 
   //! Returns the number of indices.
-  [[nodiscard]] std::size_t IndexCount() const noexcept
+  [[nodiscard]] auto IndexCount() const noexcept -> std::size_t
   {
     return indices_.size();
   }
@@ -113,19 +115,19 @@ public:
    @note The returned span is always valid and reflects the immutable set of
    submeshes.
   */
-  [[nodiscard]] std::span<const MeshView> Views() const noexcept
+  [[nodiscard]] auto Views() const noexcept -> std::span<const MeshView>
   {
     return views_;
   }
 
   //! Returns the minimum corner of the mesh's axis-aligned bounding box (AABB).
-  [[nodiscard]] const glm::vec3& BoundingBoxMin() const noexcept
+  [[nodiscard]] auto BoundingBoxMin() const noexcept -> const glm::vec3&
   {
     return bbox_min_;
   }
 
   //! Returns the maximum corner of the mesh's axis-aligned bounding box (AABB).
-  [[nodiscard]] const glm::vec3& BoundingBoxMax() const noexcept
+  [[nodiscard]] auto BoundingBoxMax() const noexcept -> const glm::vec3&
   {
     return bbox_max_;
   }
@@ -138,7 +140,7 @@ private:
    data.
    @note This is a private utility for internal use only.
   */
-  void ComputeBoundingBox();
+  auto ComputeBoundingBox() -> void;
 
   std::string name_;
   std::vector<Vertex> vertices_;
