@@ -108,14 +108,17 @@ NOLINT_TEST_F(MeshAssetBasicTest, ConstructorRejectsEmpty)
   std::vector<std::uint32_t> one_index = { 0 };
 
   // Act & Assert
-  EXPECT_DEATH(std::make_shared<oxygen::data::MeshAsset>(
-                 "fail1", empty_vertices, one_index),
+  EXPECT_DEATH(
+    [[maybe_unused]] auto _ = std::make_shared<oxygen::data::MeshAsset>(
+      "fail1", empty_vertices, one_index),
     "");
-  EXPECT_DEATH(std::make_shared<oxygen::data::MeshAsset>(
-                 "fail2", one_vertex, empty_indices),
+  EXPECT_DEATH(
+    [[maybe_unused]] auto _ = std::make_shared<oxygen::data::MeshAsset>(
+      "fail2", one_vertex, empty_indices),
     "");
-  EXPECT_DEATH(std::make_shared<oxygen::data::MeshAsset>(
-                 "fail3", empty_vertices, empty_indices),
+  EXPECT_DEATH(
+    [[maybe_unused]] auto _ = std::make_shared<oxygen::data::MeshAsset>(
+      "fail3", empty_vertices, empty_indices),
     "");
 }
 
