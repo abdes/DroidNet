@@ -10,12 +10,16 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
 using oxygen::scene::NodeHandle;
+using oxygen::scene::OrthographicCamera;
+using oxygen::scene::PerspectiveCamera;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
@@ -31,10 +35,14 @@ namespace {
 //------------------------------------------------------------------------------
 // Base Fixture for All SceneNode Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeTestBase : public testing::Test {
 protected:
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestScene", 1024); }
-  void TearDown() override { scene_.reset(); }
+  auto SetUp() -> void override
+  {
+    scene_ = std::make_shared<Scene>("TestScene", 1024);
+  }
+  auto TearDown() -> void override { scene_.reset(); }
 
   std::shared_ptr<Scene> scene_;
 };
@@ -42,6 +50,7 @@ protected:
 //------------------------------------------------------------------------------
 // Basic Construction and Handle Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeBasicTest : public SceneNodeTestBase { };
 
 NOLINT_TEST_F(SceneNodeBasicTest, Constructor_CreatesValidNodeHandle)
@@ -115,6 +124,7 @@ NOLINT_TEST_F(SceneNodeBasicTest, MoveAssignment_TransfersHandle)
 //------------------------------------------------------------------------------
 // Implementation Object Access Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeImplObjectTest : public SceneNodeTestBase { };
 
 NOLINT_TEST_F(SceneNodeImplObjectTest, GetObject_ReturnsValidImplementation)
@@ -161,6 +171,7 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObjectWithInvalidNode_ReturnsEmpty)
 //------------------------------------------------------------------------------
 // Flags Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeFlagsTest : public SceneNodeTestBase { };
 
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlags_ReturnsValidFlagsWithDefaults)
@@ -214,6 +225,7 @@ NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithInvalidNode_ReturnsEmpty)
 //------------------------------------------------------------------------------
 // Graph/Hierarchy Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeGraphTest : public SceneNodeTestBase { };
 
 NOLINT_TEST_F(SceneNodeGraphTest, ParentChildRelationship_NavigationWorks)
@@ -332,6 +344,7 @@ NOLINT_TEST_F(SceneNodeGraphTest, MultipleHandlesToSameNode_ShareUnderlyingData)
 //------------------------------------------------------------------------------
 // Lazy Invalidation and Scene Expiration Tests
 //------------------------------------------------------------------------------
+
 class SceneNodeLifetimeTest : public SceneNodeTestBase { };
 
 NOLINT_TEST_F(SceneNodeLifetimeTest, LazyInvalidation_HandlesDestroyedNodes)
@@ -414,12 +427,220 @@ NOLINT_TEST_F(
   // Assert: Root node should become invalid
   EXPECT_FALSE(parent.IsValid()); // Immediately invalidated
 
-  // Assert: Descendents are lazily invalidated
+  // Assert: Descendants are lazily invalidated
   EXPECT_FALSE(child1.GetParent().has_value());
   EXPECT_FALSE(child1.IsValid());
 
   EXPECT_FALSE(child2.GetParent().has_value());
   EXPECT_FALSE(child2.IsValid());
+}
+
+//------------------------------------------------------------------------------
+// Camera Component Tests
+//------------------------------------------------------------------------------
+
+class SceneNodeCameraTest : public SceneNodeTestBase { };
+
+NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesPerspectiveCamera)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  EXPECT_FALSE(node.HasCamera());
+
+  // Act: Attach camera
+  const bool attached = node.AttachCamera(std::move(camera));
+
+  // Assert
+  EXPECT_TRUE(attached);
+  EXPECT_TRUE(node.HasCamera());
+  const auto camera_ref = node.GetCamera();
+  ASSERT_TRUE(camera_ref.has_value());
+  EXPECT_EQ(camera_ref->get().GetTypeId(),
+    oxygen::scene::PerspectiveCamera::ClassTypeId());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesOrthographicCamera)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<OrthographicCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  EXPECT_FALSE(node.HasCamera());
+
+  // Act: Attach camera
+  const bool attached = node.AttachCamera(std::move(camera));
+
+  // Assert
+  EXPECT_TRUE(attached);
+  EXPECT_TRUE(node.HasCamera());
+  const auto camera_ref = node.GetCamera();
+  ASSERT_TRUE(camera_ref.has_value());
+  EXPECT_EQ(camera_ref->get().GetTypeId(),
+    oxygen::scene::OrthographicCamera::ClassTypeId());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_FailsIfCameraAlreadyExists)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera1 = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera2 = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+
+  EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
+  EXPECT_TRUE(node.HasCamera());
+
+  // Act: Try to attach another camera
+  const bool attached = node.AttachCamera(std::move(camera2));
+
+  // Assert
+  EXPECT_FALSE(attached);
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, DetachCamera_RemovesCameraComponent)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  EXPECT_TRUE(node.AttachCamera(std::move(camera)));
+  EXPECT_TRUE(node.HasCamera());
+
+  // Act: Detach camera
+  const bool detached = node.DetachCamera();
+
+  // Assert
+  EXPECT_TRUE(detached);
+  EXPECT_FALSE(node.HasCamera());
+  EXPECT_FALSE(node.GetCamera().has_value());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, DetachCamera_NoCamera_ReturnsFalse)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  EXPECT_FALSE(node.HasCamera());
+
+  // Act: Detach camera when none is attached
+  const bool detached = node.DetachCamera();
+
+  // Assert
+  EXPECT_FALSE(detached);
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_ReplacesExistingCamera)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera1 = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera2 = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+
+  EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
+  EXPECT_TRUE(node.HasCamera());
+
+  // Act: Replace with a new camera
+  const bool replaced = node.ReplaceCamera(std::move(camera2));
+
+  // Assert
+  EXPECT_TRUE(replaced);
+  EXPECT_TRUE(node.HasCamera());
+  const auto camera_ref = node.GetCamera();
+  ASSERT_TRUE(camera_ref.has_value());
+  EXPECT_EQ(camera_ref->get().GetTypeId(),
+    oxygen::scene::PerspectiveCamera::ClassTypeId());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_NoCamera_ReturnsFalse)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  EXPECT_FALSE(node.HasCamera());
+
+  // Act: Replace camera when none is attached
+  const bool replaced = node.ReplaceCamera(std::move(camera));
+
+  // Assert
+  EXPECT_FALSE(replaced);
+  EXPECT_FALSE(node.HasCamera());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, GetCamera_ReturnsNulloptIfNoCamera)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  EXPECT_FALSE(node.HasCamera());
+
+  // Act & Assert
+  EXPECT_FALSE(node.GetCamera().has_value());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, HasCamera_ReturnsTrueIfCameraAttached)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  EXPECT_FALSE(node.HasCamera());
+
+  node.AttachCamera(std::move(camera));
+  EXPECT_TRUE(node.HasCamera());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_Nullptr_ReturnsFalse)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  std::unique_ptr<oxygen::Component> null_camera;
+  EXPECT_FALSE(node.AttachCamera(std::move(null_camera)));
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Perspective)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
+
+  // Act: Get camera as PerspectiveCamera
+  const auto cam_ref = node.GetCameraAs<PerspectiveCamera>();
+
+  // Assert
+  ASSERT_TRUE(cam_ref.has_value());
+  EXPECT_EQ(cam_ref->get().GetTypeId(), PerspectiveCamera::ClassTypeId());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Orthographic)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<OrthographicCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
+
+  // Act: Get camera as OrthographicCamera
+  const auto cam_ref = node.GetCameraAs<OrthographicCamera>();
+
+  // Assert
+  ASSERT_TRUE(cam_ref.has_value());
+  EXPECT_EQ(cam_ref->get().GetTypeId(), OrthographicCamera::ClassTypeId());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsNulloptIfNoCamera)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  // Act
+  const auto cam_ref = node.GetCameraAs<PerspectiveCamera>();
+  // Assert
+  EXPECT_FALSE(cam_ref.has_value());
+}
+
+NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsNullOptOnTypeMismatch)
+{
+  auto node = scene_->CreateNode("CameraNode");
+  auto camera = std::make_unique<PerspectiveCamera>(
+    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
+
+  // Act
+  const auto cam_ref = node.GetCameraAs<OrthographicCamera>();
+  // Assert
+  EXPECT_FALSE(cam_ref.has_value());
 }
 
 } // namespace
