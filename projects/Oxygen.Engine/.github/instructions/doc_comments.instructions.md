@@ -111,6 +111,7 @@ specified.
 - Use `@note` for important usage info.
 - Use `@warning` for critical safety/limitation info.
 - Reference parameters with `@param` and return values with `@return`.
+- Use `@throw` to document exceptions thrown by a function, if any. Example: `@throw std::invalid_argument if the input is invalid.`
 
 ## PERFORMANCE DOCUMENTATION
 
@@ -126,9 +127,15 @@ specified.
 ## MAINTENANCE AND CONSISTENCY
 
 - All public APIs must have complete documentation.
-- Private methods need only brief descriptions unless complex.
+- Private methods need only brief descriptions unless complex (if a private method has nontrivial logic, document it with a detailed comment block as for public APIs).
 - Document all template parameters with `@tparam`.
 - Document all parameters and return values.
+- Document all exceptions thrown with `@throw` if applicable.
 - Update documentation when method signatures change or code is refactored.
 - Move documentation as needed when relocating code between header/implementation.
 - Maintain consistent terminology and update cross-references on renames/moves.
+
+## LANGUAGE AND AUTOMATION
+
+- All documentation comments must be written in English.
+- If automated tools are used to check documentation coverage or formatting, ensure compliance before submitting changes.
