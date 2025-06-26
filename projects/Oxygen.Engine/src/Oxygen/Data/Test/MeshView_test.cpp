@@ -12,9 +12,9 @@
 namespace {
 
 // MeshViewBasicTest: encapsulation, accessors, comparison, copy/move semantics
-class MeshViewBasicTest : public ::testing::Test {
+class MeshViewBasicTest : public testing::Test {
 protected:
-  std::vector<Vertex> MakeVertices()
+  static auto MakeVertices() -> std::vector<Vertex>
   {
     return {
       { .position = { 0, 0, 0 },
@@ -37,7 +37,10 @@ protected:
         .color = {} },
     };
   }
-  std::vector<std::uint32_t> MakeIndices() { return { 0, 1, 2 }; }
+  static auto MakeIndices() -> std::vector<std::uint32_t>
+  {
+    return { 0, 1, 2 };
+  }
 };
 
 //! Checks that MeshView encapsulates its data and is immutable.
@@ -46,7 +49,7 @@ NOLINT_TEST_F(MeshViewBasicTest, Encapsulation)
   // Arrange
   auto vertices = MakeVertices();
   auto indices = MakeIndices();
-  oxygen::data::MeshView view("main", vertices, indices);
+  const oxygen::data::MeshView view("main", vertices, indices);
 
   // Act & Assert
   EXPECT_EQ(view.Name(), "main");
@@ -60,7 +63,7 @@ NOLINT_TEST_F(MeshViewBasicTest, Accessors)
   // Arrange
   auto vertices = MakeVertices();
   auto indices = MakeIndices();
-  oxygen::data::MeshView view("main", vertices, indices);
+  const oxygen::data::MeshView view("main", vertices, indices);
 
   // Act & Assert
   EXPECT_EQ(view.VertexCount(), 3);
@@ -75,9 +78,9 @@ NOLINT_TEST_F(MeshViewBasicTest, Comparison)
   // Arrange
   auto vertices = MakeVertices();
   auto indices = MakeIndices();
-  oxygen::data::MeshView view1("main", vertices, indices);
-  oxygen::data::MeshView view2("main", vertices, indices);
-  oxygen::data::MeshView view3("other", vertices, indices);
+  const oxygen::data::MeshView view1("main", vertices, indices);
+  const oxygen::data::MeshView view2("main", vertices, indices);
+  const oxygen::data::MeshView view3("other", vertices, indices);
 
   // Act & Assert
   EXPECT_EQ(view1, view2);
@@ -90,11 +93,11 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMoveSemantics)
   // Arrange
   auto vertices = MakeVertices();
   auto indices = MakeIndices();
-  oxygen::data::MeshView view1("main", vertices, indices);
+  const oxygen::data::MeshView view1("main", vertices, indices);
 
   // Act
-  oxygen::data::MeshView copy = view1;
-  oxygen::data::MeshView moved = std::move(view1);
+  const oxygen::data::MeshView copy = view1;
+  const oxygen::data::MeshView moved = view1;
 
   // Assert
   EXPECT_EQ(copy.Name(), "main");

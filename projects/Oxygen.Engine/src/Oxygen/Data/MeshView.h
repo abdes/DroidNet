@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
@@ -32,8 +31,8 @@ public:
   MeshView() = default;
 
   //! Only MeshAsset can construct MeshView instances.
-  MeshView(std::string_view name, std::span<const Vertex> vertices,
-    std::span<const std::uint32_t> indices) noexcept
+  MeshView(const std::string_view name, const std::span<const Vertex> vertices,
+    const std::span<const std::uint32_t> indices) noexcept
     : name_(name)
     , vertices_(vertices)
     , indices_(indices)
@@ -46,39 +45,41 @@ public:
   OXYGEN_DEFAULT_MOVABLE(MeshView)
 
   //! Returns the name of the mesh view (for debugging/identification).
-  [[nodiscard]] constexpr std::string_view Name() const noexcept
+  [[nodiscard]] constexpr auto Name() const noexcept -> std::string_view
   {
     return name_;
   }
 
   //! Returns a span of vertices for this mesh view.
-  [[nodiscard]] constexpr std::span<const Vertex> Vertices() const noexcept
+  [[nodiscard]] constexpr auto Vertices() const noexcept
+    -> std::span<const Vertex>
   {
     return vertices_;
   }
 
   //! Returns a span of indices for this mesh view.
-  [[nodiscard]] constexpr std::span<const std::uint32_t>
-  Indices() const noexcept
+  [[nodiscard]] constexpr auto Indices() const noexcept
+    -> std::span<const std::uint32_t>
   {
     return indices_;
   }
 
   //! Returns the number of vertices in this mesh view.
-  [[nodiscard]] constexpr std::size_t VertexCount() const noexcept
+  [[nodiscard]] constexpr auto VertexCount() const noexcept -> std::size_t
   {
     return vertices_.size();
   }
 
   //! Returns the number of indices in this mesh view.
-  [[nodiscard]] constexpr std::size_t IndexCount() const noexcept
+  [[nodiscard]] constexpr auto IndexCount() const noexcept -> std::size_t
   {
     return indices_.size();
   }
 
   // Manual equality and inequality operators (defaulted comparison not
   // supported for std::span)
-  friend bool operator==(const MeshView& lhs, const MeshView& rhs) noexcept
+  friend auto operator==(const MeshView& lhs, const MeshView& rhs) noexcept
+    -> bool
   {
     return lhs.name_ == rhs.name_
       && lhs.vertices_.data() == rhs.vertices_.data()
@@ -87,7 +88,8 @@ public:
       && lhs.indices_.size() == rhs.indices_.size();
   }
 
-  friend bool operator!=(const MeshView& lhs, const MeshView& rhs) noexcept
+  friend auto operator!=(const MeshView& lhs, const MeshView& rhs) noexcept
+    -> bool
   {
     return !(lhs == rhs);
   }

@@ -6,6 +6,10 @@
 
 #include <Oxygen/Data/ProceduralMeshes.h>
 
+#include <numbers>
+
+// ReSharper disable CppClangTidyModernizeUseDesignatedInitializers
+
 namespace oxygen::data {
 
 /*!
@@ -25,7 +29,7 @@ namespace oxygen::data {
  ### Usage Examples
 
  ```cpp
- // Create a cube mesh asset
+// Create a cube mesh asset
  auto cube = MakeCubeMeshAsset();
  for (const auto& v : cube->Vertices()) { ... }
  ```
@@ -34,7 +38,7 @@ namespace oxygen::data {
        using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeCubeMeshAsset()
+auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
 {
   // Vertices for a unit cube centered at the origin
   constexpr float h = 0.5f;
@@ -87,7 +91,7 @@ std::shared_ptr<MeshAsset> MakeCubeMeshAsset()
  ### Usage Examples
 
  ```cpp
- // Create a sphere mesh asset
+// Create a sphere mesh asset
  auto sphere = MakeSphereMeshAsset(16, 32);
  for (const auto& v : sphere->Vertices()) { ... }
  ```
@@ -96,21 +100,23 @@ std::shared_ptr<MeshAsset> MakeCubeMeshAsset()
        using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeSphereMeshAsset(
-  unsigned int latitude_segments, unsigned int longitude_segments)
+auto MakeSphereMeshAsset(unsigned int latitude_segments,
+  unsigned int longitude_segments) -> std::shared_ptr<MeshAsset>
 {
   if (latitude_segments < 3 || longitude_segments < 3) {
     return nullptr;
   }
-  constexpr float PI = 3.14159265358979323846f;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   for (unsigned int lat = 0; lat <= latitude_segments; ++lat) {
-    float theta = PI * lat / latitude_segments;
+    constexpr float pi = std::numbers::pi_v<float>;
+    float theta
+      = pi * static_cast<float>(lat) / static_cast<float>(latitude_segments);
     float sin_theta = std::sin(theta);
     float cos_theta = std::cos(theta);
     for (unsigned int lon = 0; lon <= longitude_segments; ++lon) {
-      float phi = 2.0f * PI * lon / longitude_segments;
+      float phi = 2.0f * pi * static_cast<float>(lon)
+        / static_cast<float>(longitude_segments);
       float sin_phi = std::sin(phi);
       float cos_phi = std::cos(phi);
       float x = sin_theta * cos_phi;
@@ -119,8 +125,10 @@ std::shared_ptr<MeshAsset> MakeSphereMeshAsset(
       Vertex v {
         .position = { x * 0.5f, y * 0.5f, z * 0.5f },
         .normal = { x, y, z },
-        .texcoord = { static_cast<float>(lon) / longitude_segments,
-          1.0f - static_cast<float>(lat) / latitude_segments },
+        .texcoord
+        = { static_cast<float>(lon) / static_cast<float>(longitude_segments),
+          1.0f
+            - static_cast<float>(lat) / static_cast<float>(latitude_segments) },
         .tangent = { -sin_phi, 0.0f, cos_phi },
         .bitangent = { -cos_theta * cos_phi, sin_theta, -cos_theta * sin_phi },
         .color = { 1, 1, 1, 1 },
@@ -170,7 +178,7 @@ std::shared_ptr<MeshAsset> MakeSphereMeshAsset(
  ### Usage Examples
 
  ```cpp
- // Create a 2x2 plane mesh asset of size 1.0
+// Create a 2x2 plane mesh asset of size 1.0
  auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
  for (const auto& v : plane->Vertices()) { ... }
  ```
@@ -179,8 +187,8 @@ std::shared_ptr<MeshAsset> MakeSphereMeshAsset(
  using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakePlaneMeshAsset(
-  unsigned int x_segments, unsigned int z_segments, float size)
+auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
+  float size) -> std::shared_ptr<MeshAsset>
 {
   if (x_segments < 1 || z_segments < 1 || size <= 0.0f) {
     return nullptr;
@@ -189,10 +197,10 @@ std::shared_ptr<MeshAsset> MakePlaneMeshAsset(
   std::vector<uint32_t> indices;
   float half_size = size * 0.5f;
   for (unsigned int z = 0; z <= z_segments; ++z) {
-    float z_frac = static_cast<float>(z) / z_segments;
+    float z_frac = static_cast<float>(z) / static_cast<float>(z_segments);
     float z_pos = -half_size + z_frac * size;
     for (unsigned int x = 0; x <= x_segments; ++x) {
-      float x_frac = static_cast<float>(x) / x_segments;
+      float x_frac = static_cast<float>(x) / static_cast<float>(x_segments);
       float x_pos = -half_size + x_frac * size;
       Vertex v {
         .position = { x_pos, 0.0f, z_pos },
@@ -247,34 +255,35 @@ std::shared_ptr<MeshAsset> MakePlaneMeshAsset(
  ### Usage Examples
 
  ```cpp
- // Create a cylinder mesh asset
- auto cylinder = MakeCylinderMeshAsset(32, 1.0f, 0.5f);
- for (const auto& v : cylinder->Vertices()) { ... }
+// Create a cylinder mesh asset
+auto cylinder = MakeCylinderMeshAsset(32, 1.0f, 0.5f);
+for (const auto& v : cylinder->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
  using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeCylinderMeshAsset(
-  unsigned int segments, float height, float radius)
+auto MakeCylinderMeshAsset(const unsigned int segments, const float height,
+  const float radius) -> std::shared_ptr<MeshAsset>
 {
   if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
     return nullptr;
   }
-  constexpr float PI = 3.14159265358979323846f;
+  constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   float half_height = height * 0.5f;
   // Side vertices
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta = 2.0f * PI * i / segments;
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
     glm::vec3 normal = { x, 0.0f, z };
     glm::vec3 tangent = { -z, 0.0f, x };
     glm::vec3 bitangent = { 0.0f, 1.0f, 0.0f };
-    float u = static_cast<float>(i) / segments;
+    float u = static_cast<float>(i) / static_cast<float>(segments);
     // Bottom
     vertices.push_back(Vertex {
       .position = { x * radius, -half_height, z * radius },
@@ -367,9 +376,9 @@ std::shared_ptr<MeshAsset> MakeCylinderMeshAsset(
  ### Usage Examples
 
  ```cpp
- // Create a cone mesh asset
- auto cone = MakeConeMeshAsset(32, 1.0f, 0.5f);
- for (const auto& v : cone->Vertices()) { ... }
+// Create a cone mesh asset
+auto cone = MakeConeMeshAsset(32, 1.0f, 0.5f);
+for (const auto& v : cone->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
@@ -382,17 +391,18 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
   if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
     return nullptr;
   }
-  constexpr float PI = 3.14159265358979323846f;
+  constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   float half_height = height * 0.5f;
   glm::vec3 apex = { 0.0f, half_height, 0.0f };
   // Side vertices (base ring)
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta = 2.0f * PI * i / segments;
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
-    float u = static_cast<float>(i) / segments;
+    float u = static_cast<float>(i) / static_cast<float>(segments);
     glm::vec3 pos = { x * radius, -half_height, z * radius };
     glm::vec3 dir = glm::normalize(glm::vec3(x, radius / height, z));
     glm::vec3 tangent = { -z, 0.0f, x };
@@ -467,40 +477,44 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
  ### Usage Examples
 
  ```cpp
- // Create a torus mesh asset
- auto torus = MakeTorusMeshAsset(32, 16, 1.0f, 0.25f);
- for (const auto& v : torus->Vertices()) { ... }
+// Create a torus mesh asset
+auto torus = MakeTorusMeshAsset(32, 16, 1.0f, 0.25f);
+for (const auto& v : torus->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
        using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeTorusMeshAsset(unsigned int major_segments,
+auto MakeTorusMeshAsset(unsigned int major_segments,
   unsigned int minor_segments, float major_radius, float minor_radius)
+  -> std::shared_ptr<MeshAsset>
 {
   if (major_segments < 3 || minor_segments < 3 || major_radius <= 0.0f
     || minor_radius <= 0.0f) {
     return nullptr;
   }
-  constexpr float PI = 3.14159265358979323846f;
+  constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   for (unsigned int i = 0; i <= major_segments; ++i) {
-    float major_theta = 2.0f * PI * i / major_segments;
+    float major_theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(major_segments);
     float cos_major = std::cos(major_theta);
     float sin_major = std::sin(major_theta);
     glm::vec3 major_center
       = { major_radius * cos_major, 0.0f, major_radius * sin_major };
     for (unsigned int j = 0; j <= minor_segments; ++j) {
-      float minor_theta = 2.0f * PI * j / minor_segments;
+      float minor_theta = 2.0f * pi * static_cast<float>(j)
+        / static_cast<float>(minor_segments);
       float cos_minor = std::cos(minor_theta);
       float sin_minor = std::sin(minor_theta);
       glm::vec3 normal
         = { cos_major * cos_minor, sin_minor, sin_major * cos_minor };
       glm::vec3 pos = major_center + normal * minor_radius;
-      glm::vec2 texcoord = { static_cast<float>(i) / major_segments,
-        static_cast<float>(j) / minor_segments };
+      glm::vec2 texcoord
+        = { static_cast<float>(i) / static_cast<float>(major_segments),
+            static_cast<float>(j) / static_cast<float>(minor_segments) };
       glm::vec3 tangent
         = { -sin_major * cos_minor, 0.0f, cos_major * cos_minor };
       glm::vec3 bitangent = glm::cross(normal, tangent);
@@ -553,16 +567,17 @@ std::shared_ptr<MeshAsset> MakeTorusMeshAsset(unsigned int major_segments,
  ### Usage Examples
 
  ```cpp
- // Create a quad mesh asset
- auto quad = MakeQuadMeshAsset(2.0f, 1.0f);
- for (const auto& v : quad->Vertices()) { ... }
+// Create a quad mesh asset
+auto quad = MakeQuadMeshAsset(2.0f, 1.0f);
+for (const auto& v : quad->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
        using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeQuadMeshAsset(float width, float height)
+auto MakeQuadMeshAsset(const float width, const float height)
+  -> std::shared_ptr<MeshAsset>
 {
   if (width <= 0.0f || height <= 0.0f) {
     return nullptr;
@@ -605,39 +620,39 @@ std::shared_ptr<MeshAsset> MakeQuadMeshAsset(float width, float height)
  ### Usage Examples
 
  ```cpp
- // Create an arrow gizmo mesh asset
- auto arrow = MakeArrowGizmoMeshAsset();
- for (const auto& v : arrow->Vertices()) { ... }
+// Create an arrow gizmo mesh asset
+auto arrow = MakeArrowGizmoMeshAsset();
+for (const auto& v : arrow->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
        using MeshAsset::CreateView.
  @see MeshAsset, MeshView, Vertex
 */
-std::shared_ptr<MeshAsset> MakeArrowGizmoMeshAsset()
+auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<MeshAsset>
 {
   constexpr unsigned int segments = 16;
-  constexpr float shaft_radius = 0.025f;
   constexpr float shaft_length = 0.7f;
-  constexpr float head_radius = 0.06f;
   constexpr float head_length = 0.18f;
   constexpr float base_y = -0.1f;
   constexpr float shaft_top_y = base_y + shaft_length;
   constexpr float head_top_y = shaft_top_y + head_length;
   constexpr glm::vec4 shaft_color = { 0.2f, 0.6f, 1.0f, 1.0f }; // blueish
   constexpr glm::vec4 head_color = { 1.0f, 0.8f, 0.2f, 1.0f }; // yellowish
-  constexpr float PI = 3.14159265358979323846f;
+  constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   // Shaft (cylinder)
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta = 2.0f * PI * i / segments;
+    constexpr float shaft_radius = 0.025f;
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
     glm::vec3 normal = { x, 0.0f, z };
     glm::vec3 tangent = { -z, 0.0f, x };
     glm::vec3 bitangent = { 0.0f, 1.0f, 0.0f };
-    float u = static_cast<float>(i) / segments;
+    float u = static_cast<float>(i) / static_cast<float>(segments);
     // Bottom ring
     vertices.push_back(Vertex {
       .position = { x * shaft_radius, base_y, z * shaft_radius },
@@ -673,10 +688,12 @@ std::shared_ptr<MeshAsset> MakeArrowGizmoMeshAsset()
   // Head (cone)
   uint32_t cone_base_start = static_cast<uint32_t>(vertices.size());
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta = 2.0f * PI * i / segments;
+    constexpr float head_radius = 0.06f;
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
-    float u = static_cast<float>(i) / segments;
+    float u = static_cast<float>(i) / static_cast<float>(segments);
     glm::vec3 pos = { x * head_radius, shaft_top_y, z * head_radius };
     glm::vec3 dir = glm::normalize(glm::vec3(x, head_radius / head_length, z));
     glm::vec3 tangent = { -z, 0.0f, x };

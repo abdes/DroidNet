@@ -33,7 +33,7 @@ struct Vertex {
 };
 
 //! Strict bitwise equality for Vertex (all fields, no epsilon tolerance)
-inline bool StrictlyEqual(const Vertex& a, const Vertex& b) noexcept
+inline auto StrictlyEqual(const Vertex& a, const Vertex& b) noexcept -> bool
 {
   return a.position == b.position && a.normal == b.normal
     && a.texcoord == b.texcoord && a.tangent == b.tangent
@@ -42,7 +42,7 @@ inline bool StrictlyEqual(const Vertex& a, const Vertex& b) noexcept
 
 //! Epsilon-based equality operator for Vertex (quantized, matches
 //! QuantizedVertexHash)
-inline bool operator==(const Vertex& lhs, const Vertex& rhs) noexcept
+inline auto operator==(const Vertex& lhs, const Vertex& rhs) noexcept -> bool
 {
   constexpr float epsilon = 1e-5f;
   return glm::all(glm::epsilonEqual(lhs.position, rhs.position, epsilon))
@@ -69,31 +69,29 @@ inline bool operator==(const Vertex& lhs, const Vertex& rhs) noexcept
 namespace oxygen::data {
 struct QuantizedVertexHash {
   float epsilon = 1e-5f;
-  std::size_t operator()(const Vertex& v) const noexcept
+  auto operator()(const Vertex& v) const noexcept -> std::size_t
   {
-    auto quantize = [e = epsilon](float x) -> int32_t {
+    auto quantize = [e = epsilon](const float x) -> int32_t {
       return static_cast<int32_t>(std::round(x / e));
     };
     std::size_t h = 0;
     // clang-format off
-    for (int i = 0; i < 3; ++i) oxygen::HashCombine(h, quantize(v.position[i]));
-    for (int i = 0; i < 3; ++i) oxygen::HashCombine(h, quantize(v.normal[i]));
-    for (int i = 0; i < 2; ++i) oxygen::HashCombine(h, quantize(v.texcoord[i]));
-    for (int i = 0; i < 3; ++i) oxygen::HashCombine(h, quantize(v.tangent[i]));
-    for (int i = 0; i < 3; ++i) oxygen::HashCombine(h, quantize(v.bitangent[i]));
-    for (int i = 0; i < 4; ++i) oxygen::HashCombine(h, quantize(v.color[i]));
+    for (int i = 0; i < 3; ++i) {HashCombine(h, quantize(v.position[i]));}
+    for (int i = 0; i < 3; ++i) {HashCombine(h, quantize(v.normal[i]));}
+    for (int i = 0; i < 2; ++i) {HashCombine(h, quantize(v.texcoord[i]));}
+    for (int i = 0; i < 3; ++i) {HashCombine(h, quantize(v.tangent[i]));}
+    for (int i = 0; i < 3; ++i) {HashCombine(h, quantize(v.bitangent[i]));}
+    for (int i = 0; i < 4; ++i) {HashCombine(h, quantize(v.color[i]));}
     // clang-format on
     return h;
   }
 };
 } // namespace oxygen::data
 
-namespace std {
 //! std::hash specialization for Vertex using quantized hash (epsilon = 1e-5f)
-template <> struct hash<::Vertex> {
-  std::size_t operator()(const ::Vertex& v) const noexcept
+template <> struct std::hash<Vertex> {
+  auto operator()(const Vertex& v) const noexcept -> std::size_t
   {
-    return ::oxygen::data::QuantizedVertexHash {}(v);
+    return oxygen::data::QuantizedVertexHash {}(v);
   }
-};
-} // namespace std
+}; // namespace std

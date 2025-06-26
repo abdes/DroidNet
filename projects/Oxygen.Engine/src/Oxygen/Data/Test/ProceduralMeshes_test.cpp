@@ -13,12 +13,12 @@ namespace {
 
 // ProceduralMeshTest: valid/invalid input, mesh validity, bounding box, default
 // view, per-mesh-type
-class ProceduralMeshTest : public ::testing::Test { };
+class ProceduralMeshTest : public testing::Test { };
 
-using ::testing::AllOf;
-using ::testing::IsNull;
-using ::testing::NotNull;
-using ::testing::SizeIs;
+using testing::AllOf;
+using testing::IsNull;
+using testing::NotNull;
+using testing::SizeIs;
 
 //! Checks that all procedural mesh factories reject invalid input and succeed
 //! on valid input.
@@ -74,12 +74,12 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
     { "ArrowGizmo", &MakeArrowGizmoMeshAsset },
   };
   // Factories with params
-  auto sphere = MakeSphereMeshAsset(8, 8);
-  auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
-  auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
-  auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
-  auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
-  auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
+  const auto sphere = MakeSphereMeshAsset(8, 8);
+  const auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
+  const auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
+  const auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
+  const auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
+  const auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
   std::shared_ptr<MeshAsset> assets[]
     = { sphere, plane, cylinder, cone, torus, quad };
 
@@ -110,7 +110,7 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 {
   // Arrange
   using namespace oxygen::data;
-  auto mesh = MakeCubeMeshAsset();
+  const auto mesh = MakeCubeMeshAsset();
   ASSERT_NE(mesh, nullptr);
 
   // Act
@@ -131,7 +131,7 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
 {
   // Arrange
   using namespace oxygen::data;
-  auto mesh = MakeCubeMeshAsset();
+  const auto mesh = MakeCubeMeshAsset();
   ASSERT_NE(mesh, nullptr);
   const auto& view = mesh->Views().front();
 
