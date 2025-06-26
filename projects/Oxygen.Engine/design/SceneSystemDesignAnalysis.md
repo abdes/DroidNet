@@ -26,9 +26,9 @@ for future enhancement.
 | Component Attachment System | ✅ Complete         | Full Composition system                      |
 | Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists                |
 | Camera Component            | ✅ Complete         | Perspective & Orthographic, runtime attach   |
-| Mesh/Renderable Component   | ❌ Not Started      | No rendering components                      |
-| Light Component             | ❌ Not Started      | Empty Light/ directory exists                |
-| Scene Serialization         | ❌ Not Started      | No save/load functionality                   |
+| Mesh/Renderable Component   | 🚧 In Progress      | **Next priority: implement for rendering**   |
+| Light Component             | 🚧 In Progress      | **Next priority: implement for rendering**   |
+| Scene Serialization         | ❌ Not Started      | Deferred until after rendering components    |
 | Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                  |
 | Culling/Visibility System   | ❌ Not Started      | No spatial partitioning                      |
 | Multi-threaded Update       | ❌ Not Started      | Single-threaded only (tests exist)           |
@@ -42,8 +42,7 @@ for future enhancement.
 4. [Performance Architecture](#performance-architecture)
 5. [Gap Analysis & Limitations](#gap-analysis--limitations)
 6. [Enhancement Recommendations](#enhancement-recommendations)
-7. [Technical Specifications](#technical-specifications)
-8. [Conclusion](#conclusion)
+7. [Conclusion](#conclusion)
 
 ---
 
@@ -575,33 +574,29 @@ void Scene::Update() {
 
 #### Critical Missing Infrastructure
 
-1. Serialization Infrastructure
+1. **Mesh/Renderable and Light Components**
+    - **Missing Capabilities**: No rendering or lighting components implemented yet.
+    - **Impact**: Scene graph cannot be visualized or rendered; blocks integration with renderer and content pipeline.
+    - **Priority**: Highest. These are the next features to implement, as they unlock rendering and engine integration.
 
+2. Serialization Infrastructure
     - **Missing Capabilities**: Scene save/load functionality, node state
       persistence, hierarchy restoration, cross-session compatibility
     - **Impact**: Limits content pipeline integration and scene persistence
+    - **Priority**: Deferred. Not urgent due to presence of TestSceneFactory and current focus on rendering.
 
-2. Multi-threading Support
-
+3. Multi-threading Support
     - **Current Limitations**: Single-threaded update cycle, no parallel
       transform processing, sequential flag propagation, synchronization
       primitives absent
     - **Impact**: Cannot leverage multi-core systems for large scenes
 
-3. Advanced Culling Integration
-
+4. Advanced Culling Integration
     - **Missing Systems**: Frustum culling integration, occlusion culling
       support, LOD system integration, spatial partitioning
     - **Impact**: Performance limitations for complex scenes with many objects
 
-4. Animation System Integration
-
-    - **Current State**: No keyframe interpolation, missing animation blending,
-      no timeline management, manual transform updates required
-    - **Impact**: Requires external animation system integration
-
 5. Event System Architecture
-
     - **Missing Infrastructure**: Node change notifications, hierarchy
       modification events, property change callbacks, observer pattern
       implementation
@@ -645,304 +640,44 @@ void Scene::Update() {
 
 ## Enhancement Recommendations
 
-### Priority 1: Critical Infrastructure (High Impact, Medium Complexity)
+### Priority 1: Rendering Component Implementations (Highest Priority)
 
-#### Serialization System
+**Rationale:**
 
-**Architecture Design:**
-
-```cpp
-class SceneSerializer {
-public:
-    void Serialize(const Scene& scene, OutputStream& stream);
-    std::unique_ptr<Scene> Deserialize(InputStream& stream);
-
-private:
-    void SerializeNode(const SceneNodeImpl& node, OutputStream& stream);
-    void SerializeHierarchy(const Scene& scene, OutputStream& stream);
-    void SerializeComponent(const Component& component, OutputStream& stream);
-};
-```
-
-**Features:**
-
-- Binary format for performance with component-aware serialization
-- Incremental save/load support for large scenes
-- Version compatibility with migration support
-- Integration with existing Composition system for automatic component serialization
-- Support for component dependencies during deserialization
-
-**Timeline**: 2-3 months
-
-#### Rendering Component Implementations
+The component system infrastructure is complete and robust. The most urgent next step is to implement the Mesh/Renderable and Light components, enabling actual scene rendering and visual output. This will unlock the ability to test, validate, and demonstrate the scene system in real-world rendering scenarios. Serialization and other infrastructure are deferred until after rendering support is in place.
 
 **Implementation Strategy:**
 
-Since the component system is already complete, the focus should be on
-implementing specific rendering components:
-
-```cpp
-class CameraComponent : public Component {
-    OXYGEN_COMPONENT(CameraComponent)
-public:
-    explicit CameraComponent(float fov, float aspect_ratio);
-
-    auto GetViewMatrix() const -> Mat4;
-    auto GetProjectionMatrix() const -> Mat4;
-    void SetFieldOfView(float fov) noexcept;
-    // ... camera-specific API
-};
-
-class MeshComponent : public Component {
-    OXYGEN_COMPONENT(MeshComponent)
-    OXYGEN_COMPONENT_REQUIRES(TransformComponent)  // Dependency example
-public:
-    explicit MeshComponent(MeshResource mesh);
-
-    auto GetMesh() const -> const MeshResource&;
-    auto GetBoundingBox() const -> BoundingBox;
-    // ... mesh-specific API
-};
-
-class DirectionalLight : public Component {
-    OXYGEN_COMPONENT(DirectionalLight)
-public:
-    DirectionalLight(Vec3 direction, Vec3 color);
-    // ... light-specific API
-};
-```
+- Implement Mesh/Renderable and Light components as first-class scene components.
+- Integrate with the existing component attachment, dependency, and update systems.
+- Ensure type-safe APIs and support for runtime attachment/detachment.
+- Provide basic test coverage and documentation for new components.
 
 **Benefits:**
 
-- Leverage existing component system infrastructure
-- Type-safe component attachment with dependency management
-- Thread-safe operations already implemented
-- Deep cloning support for scene copying
+- Enables rendering of scene content (geometry, lighting) for the first time.
+- Validates the extensibility and performance of the component system.
+- Provides a foundation for further rendering, culling, and visibility features.
 
-**Timeline**: 1-2 months per component type
+**Timeline:** 1-2 months per component type (Mesh, Light)
 
-### Priority 2: Performance Optimization (High Impact, Medium Complexity)
+### Priority 2: Serialization Infrastructure (Deferred)
 
-#### Multi-threading Support
+- Design and implement scene save/load with component-aware serialization.
+- Integrate with the Composition system for automatic component serialization.
+- Add versioning and migration support for future compatibility.
+- Timeline: After rendering components are functional and tested.
 
-**Implementation Strategy:**
+### Priority 3: Performance Optimization and Feature Extensions
 
-```cpp
-class ThreadedSceneUpdater {
-    void UpdateParallel() {
-        // Phase 1: Parallel flag processing
-        ProcessFlagsParallel();
-
-        // Phase 2: Parallel transform updates by depth level
-        UpdateTransformsByLevel();
-    }
-
-private:
-    void ProcessFlagsParallel();
-    void UpdateTransformsByLevel();
-    std::vector<std::vector<NodeHandle>> levels_; // Nodes by depth
-};
-```
-
-**Benefits:**
-
-- 4-8x performance improvement on multi-core systems
-- Better utilization of modern CPU architectures
-- Scalable to very large scenes
-
-**Timeline**: 3-4 months
-
-#### Enhanced Dirty Tracking
-
-**Optimization Strategy:**
-
-```cpp
-class OptimizedDirtyTracking {
-    BitSet dirty_flags_;           // One bit per node
-    BitSet dirty_transforms_;      // Separate transform tracking
-    std::vector<NodeHandle> dirty_list_; // Cache-friendly iteration
-
-public:
-    void MarkFlagDirty(NodeHandle node, SceneNodeFlags flag);
-    void MarkTransformDirty(NodeHandle node);
-    void ProcessDirtyBatch();
-};
-```
-
-**Benefits:**
-
-- Reduced iteration over clean nodes
-- Better cache utilization
-- Faster dirty state queries
-
-#### Memory Pool Integration
-
-**Design:**
-
-```cpp
-class PooledResourceTable {
-    MemoryPool<SceneNodeImpl> node_pool_;
-    MemoryPool<NodeHandle> handle_pool_;
-
-public:
-    NodeHandle AllocateNode();
-    void DeallocateNode(NodeHandle handle);
-};
-```
-
-**Benefits:**
-
-- Reduced allocation overhead
-- Better memory locality
-- Reduced fragmentation
-
-### Priority 3: Feature Extensions (Medium Impact, Various Complexity)
-
-#### Event System Integration
-
-**Architecture:**
-
-```cpp
-class SceneEventSystem {
-public:
-    void Subscribe(SceneEventType type, EventCallback callback);
-    void NotifyNodeCreated(const SceneNode& node);
-    void NotifyHierarchyChanged(const SceneNode& node);
-    void NotifyTransformChanged(const SceneNode& node);
-
-private:
-    std::unordered_map<SceneEventType, std::vector<EventCallback>> callbacks_;
-};
-```
-
-#### Advanced Culling Integration
-
-**Design:**
-
-```cpp
-class SceneCullingSystem {
-public:
-    void UpdateVisibility(const Camera& camera);
-    void SetCullingStrategy(std::unique_ptr<CullingStrategy> strategy);
-
-private:
-    std::unique_ptr<SpatialIndex> spatial_index_;
-    std::unique_ptr<CullingStrategy> culling_strategy_;
-};
-```
-
-#### Animation System Bridge
-
-**Interface:**
-
-```cpp
-class SceneAnimationBridge {
-public:
-    void RegisterAnimatableProperty(NodeHandle node, PropertyType type);
-    void UpdateAnimatedNodes(float deltaTime);
-    void SetKeyframes(NodeHandle node, const KeyframeSet& keyframes);
-};
-```
-
-### Priority 4: Quality of Life (Low Impact, Low Complexity)
-
-#### Development Tools
-
-- Scene graph visualization
-- Performance profiling integration
-- Memory usage analysis
-- Validation and diagnostic tools
-
-#### Utility Extensions
-
-- Deep cloning API
-- Scene merging operations
-- Batch operations for multiple nodes
-- Query and filtering systems
-
----
-
-## Technical Specifications
-
-### Memory Layout Analysis
-
-**Current Memory Footprint per Node:**
-
-```cpp
-SceneNodeImpl Components:       ~128 bytes
-├── ObjectMetaData:             ~32 bytes
-├── NodeData (SceneFlags):      ~16 bytes
-├── GraphData (Hierarchy):      ~32 bytes
-└── TransformComponent:         ~48 bytes
-
-Additional Overhead:            ~24 bytes
-├── ResourceTable Entry:        ~16 bytes
-└── Handle Management:          ~8 bytes
-
-Total per Node:                 ~152 bytes
-```
-
-### API Stability and Future Compatibility
-
-**Stable Public API:**
-
-- SceneNode interface guaranteed stable
-- Scene management methods locked
-- Transform API finalized
-
-**Evolution Areas:**
-
-- Internal implementation may change
-- Performance optimizations transparent
-- New features additive only
+- Multi-threading support for update and traversal (after rendering is in place).
+- Event system for notifications and editor integration.
+- Spatial partitioning and culling systems for rendering optimization.
+- Animation system bridge for transform/scene animation.
+- Quality-of-life tools and utility extensions.
 
 ---
 
 ## Conclusion
 
-The Oxygen Engine Scene System represents a **mature, high-performance
-implementation** with sophisticated architectural patterns and optimization
-strategies.
-
-### System Strengths
-
-- Robust and mature core scene graph implementation with comprehensive testing
-- Excellent performance characteristics with two-pass update optimization
-- Clean architectural separation with handle/view pattern providing memory
-  safety
-- Efficient ResourceTable storage with automatic defragmentation
-- Sophisticated 5-bit flag system supporting inheritance and deferred updates
-- Complete traversal and query APIs with const-correctness guarantees
-- Cross-scene operations (adoption) for complex scene management
-- Non-recursive traversal algorithms preventing stack overflow on deep
-  hierarchies
-- **Full Component System**: Complete Composition-based architecture with
-  runtime component attachment, dependency management, and thread-safe
-  operations
-
-### Areas for Growth
-
-- **Specific Component Implementations**: Camera, Mesh, Light component classes
-  (infrastructure exists)
-- **Serialization Infrastructure**: Save/load with component-aware serialization
-- **Multi-threading Support**: Parallel processing for large-scale scenes
-- **Event System**: Reactive programming and observer notifications
-- **Spatial Partitioning**: Culling and visibility optimization systems
-- **Animation Integration**: Keyframe animation system bridge
-
-### Recommended Next Steps
-
-1. **Implement specific rendering components** (Camera, Mesh, Light) using
-   existing component system
-2. **Add serialization infrastructure** for content pipelines and scene
-   persistence with component-aware serialization
-3. **Develop multi-threading support** for performance scaling on large scenes
-4. **Create event system** for reactive components and editor integration
-5. **Add spatial partitioning and culling systems** for rendering optimization
-
-The system provides a **complete, production-ready foundation** for a modern
-game engine. The component architecture is fully implemented and ready for
-extension with rendering-specific components. The clear architectural patterns
-can support these enhancements while maintaining the existing performance and
-stability characteristics that make it effective for high-performance 3D
-applications.
+The Oxygen Engine Scene System provides a mature, extensible, and high-performance foundation for 3D scene management. With the core architecture, component system, and camera support complete, the immediate next step is to implement Mesh/Renderable and Light components. This will enable rendering, unlock further system validation, and provide a basis for future enhancements such as serialization, multi-threading, and advanced culling. The system is well-positioned for production use and further growth.
