@@ -115,7 +115,8 @@ public:
 
   //=== NodeHandle Access ===-------------------------------------------------//
 
-  auto GetHandle() const noexcept -> const NodeHandle&
+  // ReSharper disable once CppHidingFunction - casts to NodeHandle
+  [[nodiscard]] auto GetHandle() const noexcept -> const NodeHandle&
   {
     return static_cast<const NodeHandle&>(Resource::GetHandle());
   }
@@ -154,25 +155,41 @@ public:
   OXGN_SCN_NDAPI auto GetCamera() noexcept
     -> std::optional<std::reference_wrapper<Component>>;
 
+  OXGN_SCN_NDAPI auto HasCamera() noexcept -> bool;
+
   //! Gets the attached camera as the specified type T (PerspectiveCamera or
   //! OrthographicCamera).
-  /*! Throws std::runtime_error if the attached camera exists but is not of type
-   * T. */
+  /*!
+   Returns the attached camera component as the specified type T if present and
+   of the correct type. Throws std::runtime_error if the attached camera exists
+   but is not of type T.
+
+   @tparam T The camera type to cast to (PerspectiveCamera or
+   OrthographicCamera).
+   @return An optional reference to the attached camera as type T, or
+   std::nullopt if no camera is attached or the requested type does not match
+   the actual camera type.
+
+   ### Usage Examples
+   ```cpp
+   auto cam = node.GetCameraAs<PerspectiveCamera>();
+   if (cam) {
+     // Use cam->get() as PerspectiveCamera
+   }
+   ```
+
+   @see GetCamera, AttachCamera, DetachCamera
+  */
   template <typename T>
   auto GetCameraAs() noexcept -> std::optional<std::reference_wrapper<T>>
   {
-    auto camera_opt = GetCamera();
+    const auto camera_opt = GetCamera();
     if (!camera_opt) {
       return std::nullopt;
     }
-    Component& camera = camera_opt->get();
-    if (camera.GetTypeId() != T::ClassTypeId()) {
-      throw std::runtime_error(
-        "SceneNode: attached camera type mismatch (expected: "
-        + std::string(T::ClassTypeNamePretty())
-        + ", actual: " + std::string(camera.GetTypeNamePretty()) + ")");
-    }
-    return std::ref(static_cast<T&>(camera));
+    return camera_opt->get().GetTypeId() == T::ClassTypeId()
+      ? std::optional { std::ref(static_cast<T&>(camera_opt->get())) }
+      : std::nullopt;
   }
 
   //=== Name Access ===-------------------------------------------------------//
@@ -192,7 +209,7 @@ private:
     const_cast<SceneNode*>(this)->Resource::Invalidate();
   }
 
-  // Logging for SafeCall errors using DLOG_F
+  // Logging for SafeCall errors
   auto LogSafeCallError(const char* reason) const noexcept -> void;
 
   std::weak_ptr<const Scene> scene_weak_ {};
@@ -286,15 +303,16 @@ auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
  auto transform = node.GetTransform();
 
  // Basic transform operations
- transform.SetLocalPosition({1, 2, 3});
- transform.SetLocalRotation(glm::angleAxis(glm::radians(45.0f), glm::vec3(0, 1,
- 0))); transform.SetLocalScale({2, 2, 2});
+ transform.SetLocalPosition({ 1, 2, 3 });
+ transform.SetLocalRotation(
+   glm::angleAxis(glm::radians(45.0f), glm::vec3(0, 1, 0)));
+ transform.SetLocalScale({ 2, 2, 2 });
  // Scene-aware operations
- transform.LookAt({0, 0, 0});  // Point toward origin
+ transform.LookAt({ 0, 0, 0 }); // Point toward origin
 
  // Safe access to world transforms (computed lazily during scene updates)
  if (auto worldPos = transform.GetWorldPosition()) {
-     // Use world position...
+   // Use world position...
  }
  ```
 
@@ -405,7 +423,7 @@ private:
     detail::TransformComponent* transform_component = nullptr;
   };
 
-  // Logging for SafeCall errors using DLOG_F
+  // Logging for SafeCall errors
   OXGN_SCN_API auto LogSafeCallError(const char* reason) const noexcept -> void;
 
   // Validators for SafeCall operations
