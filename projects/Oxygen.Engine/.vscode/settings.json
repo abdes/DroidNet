@@ -156,5 +156,25 @@
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "testMate.cpp.test.executables": "out/build/bin/Debug/*.Tests.exe",
   "testMate.cpp.log.logpanel": true,
-  "testMate.cpp.test.stderrDecorator": false
+  "testMate.cpp.test.stderrDecorator": false,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Use conventional commit message format."
+    }
+  ],
+  "github.copilot.chat.codeGeneration.instructions": [
+    {
+      "file": ".github/instructions/unit_tests.instructions.md",
+    },
+    {
+      "file": ".github/instructions/cpp_coding_style.instructions.md",
+    },
+    {
+      "file": ".github/instructions/doc_comments.instructions.md",
+    },
+    {
+      "text": "Refrein from useless praises. Challenge my assumptions and provide constructive counter arguments. Rephrase implicit questions. Ask for clarifications if needed, before you start answering."
+    }
+  ],
+  "github.copilot.chat.agent.thinkingTool": true
 }
