@@ -53,6 +53,7 @@ target_sources(
     "Camera/Orthographic.cpp"
     "Camera/Perspective.cpp"
     "Detail/GraphData.h"
+    "Detail/MeshData.h"
     "Detail/NodeData.h"
     "Detail/PathMatcher.h"
     "Detail/PathParser.cpp"
@@ -112,6 +113,7 @@ target_link_libraries(
     oxygen::base
     oxygen::composition
     oxygen::core
+    oxygen::data
     oxygen::oxco
 )
 

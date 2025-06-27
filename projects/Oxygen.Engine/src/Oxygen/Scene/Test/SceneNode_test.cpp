@@ -4,55 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <memory>
-#include <string>
-
-#include <Oxygen/Testing/GTest.h>
+#include "./SceneNode_test.h"
 
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Scene/Camera/Orthographic.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-using oxygen::ObjectMetaData;
-using oxygen::scene::NodeHandle;
-using oxygen::scene::OrthographicCamera;
-using oxygen::scene::PerspectiveCamera;
-using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
-using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
-using oxygen::scene::SceneNodeImpl;
 
-//------------------------------------------------------------------------------
-// Anonymous namespace for test isolation
-//------------------------------------------------------------------------------
+using oxygen::scene::testing::SceneNodeTestBase;
+
 namespace {
-
-//------------------------------------------------------------------------------
-// Base Fixture for All SceneNode Tests
-//------------------------------------------------------------------------------
-
-class SceneNodeTestBase : public testing::Test {
-protected:
-  auto SetUp() -> void override
-  {
-    scene_ = std::make_shared<Scene>("TestScene", 1024);
-  }
-  auto TearDown() -> void override { scene_.reset(); }
-
-  std::shared_ptr<Scene> scene_;
-};
 
 //------------------------------------------------------------------------------
 // Basic Construction and Handle Tests
 //------------------------------------------------------------------------------
 
+//! Test fixture for SceneNode basic construction and handle scenarios.
 class SceneNodeBasicTest : public SceneNodeTestBase { };
 
+/*! Test that constructor creates a valid node handle.
+    Scenario: Create a node and verify handle validity and type. */
 NOLINT_TEST_F(SceneNodeBasicTest, Constructor_CreatesValidNodeHandle)
 {
   // Arrange: Scene is ready (done in SetUp)
@@ -65,18 +40,22 @@ NOLINT_TEST_F(SceneNodeBasicTest, Constructor_CreatesValidNodeHandle)
   EXPECT_EQ(node.GetHandle().ResourceType(), SceneNode::GetResourceType());
 }
 
+/*! Test that copy constructor preserves node handle.
+    Scenario: Copy a node and verify handle identity. */
 NOLINT_TEST_F(SceneNodeBasicTest, CopyConstructor_PreservesHandle)
 {
   // Arrange: Create a test node
   const auto node1 = scene_->CreateNode("TestNode1");
 
   // Act: Copy construct new node
-  const auto node1_copy(node1); // NOLINT(*-unnecessary-copy-initialization)
+  const auto node1_copy(node1); // NOLINT(*-unnecessary-copy-in-initialization)
 
   // Assert: Copy should have same handle
   EXPECT_EQ(node1.GetHandle(), node1_copy.GetHandle());
 }
 
+/*! Test that copy assignment updates node handle.
+    Scenario: Assign one node to another and verify handle update. */
 NOLINT_TEST_F(SceneNodeBasicTest, CopyAssignment_UpdatesHandle)
 {
   // Arrange: Create two different nodes
@@ -92,6 +71,8 @@ NOLINT_TEST_F(SceneNodeBasicTest, CopyAssignment_UpdatesHandle)
   EXPECT_NE(node1.GetHandle(), node1_copy.GetHandle());
 }
 
+/*! Test that move constructor transfers node handle.
+    Scenario: Move a node and verify handle transfer. */
 NOLINT_TEST_F(SceneNodeBasicTest, MoveConstructor_TransfersHandle)
 {
   // Arrange: Create a test node
@@ -106,6 +87,8 @@ NOLINT_TEST_F(SceneNodeBasicTest, MoveConstructor_TransfersHandle)
   EXPECT_EQ(node1_moved.GetHandle(), expected_handle);
 }
 
+/*! Test that move assignment transfers node handle.
+    Scenario: Move assign one node to another and verify handle transfer. */
 NOLINT_TEST_F(SceneNodeBasicTest, MoveAssignment_TransfersHandle)
 {
   // Arrange: Create two nodes
@@ -125,8 +108,11 @@ NOLINT_TEST_F(SceneNodeBasicTest, MoveAssignment_TransfersHandle)
 // Implementation Object Access Tests
 //------------------------------------------------------------------------------
 
+//! Test fixture for SceneNode implementation object access scenarios.
 class SceneNodeImplObjectTest : public SceneNodeTestBase { };
 
+/*! Test that GetObject returns a valid implementation for a valid node.
+    Scenario: Create node and access its implementation object. */
 NOLINT_TEST_F(SceneNodeImplObjectTest, GetObject_ReturnsValidImplementation)
 {
   // Arrange: Create a test node
@@ -140,6 +126,8 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObject_ReturnsValidImplementation)
   EXPECT_EQ(impl->get().GetName(), "TestNode");
 }
 
+/*! Test that GetObject with valid node accesses implementation methods.
+    Scenario: Create node and access implementation methods. */
 NOLINT_TEST_F(
   SceneNodeImplObjectTest, GetObjectWithValidNode_AccessesImplementation)
 {
@@ -155,6 +143,8 @@ NOLINT_TEST_F(
   EXPECT_TRUE(impl->get().IsTransformDirty());
 }
 
+/*! Test that GetObject with invalid node returns empty optional.
+    Scenario: Destroy node and verify GetObject returns empty. */
 NOLINT_TEST_F(SceneNodeImplObjectTest, GetObjectWithInvalidNode_ReturnsEmpty)
 {
   // Arrange: Create a node then destroy it to make it invalid
@@ -172,8 +162,11 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObjectWithInvalidNode_ReturnsEmpty)
 // Flags Tests
 //------------------------------------------------------------------------------
 
+//! Test fixture for SceneNode flags scenarios.
 class SceneNodeFlagsTest : public SceneNodeTestBase { };
 
+/*! Test that GetFlags returns valid flags with default values.
+    Scenario: Create node and verify default flag values. */
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlags_ReturnsValidFlagsWithDefaults)
 {
   // Arrange: Create a test node
@@ -189,6 +182,8 @@ NOLINT_TEST_F(SceneNodeFlagsTest, GetFlags_ReturnsValidFlagsWithDefaults)
   EXPECT_FALSE(flag_ref.GetEffectiveValue(SceneNodeFlags::kStatic));
 }
 
+/*! Test that GetFlags with valid node accesses custom flags.
+    Scenario: Create node with custom flags and verify values. */
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithValidNode_AccessesCustomFlags)
 {
   // Arrange: Create node with custom flags
@@ -209,6 +204,8 @@ NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithValidNode_AccessesCustomFlags)
   EXPECT_TRUE(flag_ref.GetEffectiveValue(SceneNodeFlags::kStatic));
 }
 
+/*! Test that GetFlags with invalid node returns empty optional.
+    Scenario: Destroy node and verify GetFlags returns empty. */
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithInvalidNode_ReturnsEmpty)
 {
   // Arrange: Create a node then destroy it
@@ -223,130 +220,14 @@ NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithInvalidNode_ReturnsEmpty)
 }
 
 //------------------------------------------------------------------------------
-// Graph/Hierarchy Tests
-//------------------------------------------------------------------------------
-
-class SceneNodeGraphTest : public SceneNodeTestBase { };
-
-NOLINT_TEST_F(SceneNodeGraphTest, ParentChildRelationship_NavigationWorks)
-{
-  // Arrange: Create parent and child nodes
-  auto parent = scene_->CreateNode("Parent");
-  auto child_opt = scene_->CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto& child = child_opt.value();
-
-  // Act & Assert: Test parent navigation from child
-  const auto child_parent = child.GetParent();
-  ASSERT_TRUE(child_parent.has_value());
-  EXPECT_EQ(child_parent->GetHandle(), parent.GetHandle());
-
-  // Act & Assert: Test child navigation from parent
-  const auto parent_first_child = parent.GetFirstChild();
-  ASSERT_TRUE(parent_first_child.has_value());
-  EXPECT_EQ(parent_first_child->GetHandle(), child.GetHandle());
-
-  // Act & Assert: Test hierarchy queries
-  EXPECT_TRUE(child.HasParent());
-  EXPECT_FALSE(child.IsRoot());
-  EXPECT_TRUE(parent.HasChildren());
-  EXPECT_TRUE(parent.IsRoot());
-}
-
-NOLINT_TEST_F(SceneNodeGraphTest, SiblingRelationships_NavigationWorks)
-{
-  // Arrange: Create parent with multiple children
-  auto parent = scene_->CreateNode("Parent");
-  auto child1_opt = scene_->CreateChildNode(parent, "Child1");
-  auto child2_opt = scene_->CreateChildNode(parent, "Child2");
-  auto child3_opt = scene_->CreateChildNode(parent, "Child3");
-
-  ASSERT_TRUE(child1_opt.has_value());
-  ASSERT_TRUE(child2_opt.has_value());
-  ASSERT_TRUE(child3_opt.has_value());
-
-  // Act: Get first child and navigate through siblings
-  auto first_child = parent.GetFirstChild();
-  ASSERT_TRUE(first_child.has_value());
-
-  auto next_sibling = first_child->GetNextSibling();
-  ASSERT_TRUE(next_sibling.has_value());
-
-  auto third_sibling = next_sibling->GetNextSibling();
-  ASSERT_TRUE(third_sibling.has_value());
-
-  // Act: Navigate back using previous sibling
-  auto prev_sibling = third_sibling->GetPrevSibling();
-  ASSERT_TRUE(prev_sibling.has_value());
-
-  // Assert: Sibling navigation should be consistent
-  EXPECT_EQ(prev_sibling->GetHandle(), next_sibling->GetHandle());
-}
-
-NOLINT_TEST_F(SceneNodeGraphTest, RootNode_BehavesCorrectly)
-{
-  // Arrange: Create a root node
-  auto root = scene_->CreateNode("Root");
-
-  // Act & Assert: Root node should have expected properties
-  EXPECT_TRUE(root.IsRoot());
-  EXPECT_FALSE(root.HasParent());
-  EXPECT_FALSE(root.HasChildren());
-
-  // Act & Assert: Navigation should return empty optional
-  EXPECT_FALSE(root.GetParent().has_value());
-  EXPECT_FALSE(root.GetFirstChild().has_value());
-  EXPECT_FALSE(root.GetNextSibling().has_value());
-  EXPECT_FALSE(root.GetPrevSibling().has_value());
-}
-
-NOLINT_TEST_F(SceneNodeGraphTest, Navigation_WithInvalidNodes_ReturnsEmpty)
-{
-  // Arrange: Create a node then destroy it
-  auto node = scene_->CreateNode("TestNode");
-  scene_->DestroyNode(node);
-
-  // Act & Assert: Navigation should return empty optional for invalid nodes
-  EXPECT_FALSE(node.GetParent().has_value());
-  EXPECT_FALSE(node.GetFirstChild().has_value());
-  EXPECT_FALSE(node.GetNextSibling().has_value());
-  EXPECT_FALSE(node.GetPrevSibling().has_value());
-
-  // Act & Assert: Hierarchy queries should be false for invalid nodes
-  EXPECT_FALSE(node.HasParent());
-  EXPECT_FALSE(node.HasChildren());
-  EXPECT_TRUE(node.IsRoot()); // invalid parent means no parent, so it is root
-}
-
-NOLINT_TEST_F(SceneNodeGraphTest, MultipleHandlesToSameNode_ShareUnderlyingData)
-{
-  // Arrange: Create node and get second handle to same node
-  auto node1 = scene_->CreateNode("TestNode");
-  const auto handle = node1.GetHandle();
-  const auto node2_opt = scene_->GetNode(handle);
-
-  ASSERT_TRUE(node2_opt.has_value());
-  auto node2 = node2_opt.value();
-
-  // Act & Assert: Handles should be identical
-  EXPECT_EQ(node1.GetHandle(), node2.GetHandle());
-
-  // Act: Get implementations from both handles
-  const auto impl1 = node1.GetObject();
-  const auto impl2 = node2.GetObject();
-
-  // Assert: Both should access the same underlying data
-  ASSERT_TRUE(impl1.has_value());
-  ASSERT_TRUE(impl2.has_value());
-  EXPECT_EQ(&impl1->get(), &impl2->get());
-}
-
-//------------------------------------------------------------------------------
 // Lazy Invalidation and Scene Expiration Tests
 //------------------------------------------------------------------------------
 
+//! Test fixture for SceneNode lifetime and invalidation scenarios.
 class SceneNodeLifetimeTest : public SceneNodeTestBase { };
 
+/*! Test that lazy invalidation handles destroyed nodes.
+    Scenario: Destroy node and verify lazy invalidation. */
 NOLINT_TEST_F(SceneNodeLifetimeTest, LazyInvalidation_HandlesDestroyedNodes)
 {
   // Arrange: Create node and copy handle
@@ -366,6 +247,8 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, LazyInvalidation_HandlesDestroyedNodes)
   EXPECT_FALSE(impl.has_value());
 }
 
+/*! Test that nodes fail gracefully after scene expiration.
+    Scenario: Destroy scene and verify node operations fail. */
 NOLINT_TEST_F(SceneNodeLifetimeTest, SceneExpiration_NodesFailGracefully)
 {
   // Arrange: Create a node in valid scene
@@ -387,6 +270,8 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, SceneExpiration_NodesFailGracefully)
   EXPECT_FALSE(node.GetFirstChild().has_value());
 }
 
+/*! Test that nodes in an empty scene fail gracefully.
+    Scenario: Clear scene and verify node becomes invalid. */
 NOLINT_TEST_F(SceneNodeLifetimeTest, EmptyScene_NodesFailGracefully)
 {
   // Arrange: Create node in valid scene
@@ -403,6 +288,9 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, EmptyScene_NodesFailGracefully)
   EXPECT_FALSE(impl.has_value());
 }
 
+/*! Test that hierarchical destruction invalidates all nodes.
+    Scenario: Destroy parent hierarchy and verify all descendants are invalid.
+ */
 NOLINT_TEST_F(
   SceneNodeLifetimeTest, HierarchicalDestruction_InvalidatesAllNodes)
 {
@@ -433,214 +321,6 @@ NOLINT_TEST_F(
 
   EXPECT_FALSE(child2.GetParent().has_value());
   EXPECT_FALSE(child2.IsValid());
-}
-
-//------------------------------------------------------------------------------
-// Camera Component Tests
-//------------------------------------------------------------------------------
-
-class SceneNodeCameraTest : public SceneNodeTestBase { };
-
-NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesPerspectiveCamera)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  EXPECT_FALSE(node.HasCamera());
-
-  // Act: Attach camera
-  const bool attached = node.AttachCamera(std::move(camera));
-
-  // Assert
-  EXPECT_TRUE(attached);
-  EXPECT_TRUE(node.HasCamera());
-  const auto camera_ref = node.GetCamera();
-  ASSERT_TRUE(camera_ref.has_value());
-  EXPECT_EQ(camera_ref->get().GetTypeId(),
-    oxygen::scene::PerspectiveCamera::ClassTypeId());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesOrthographicCamera)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<OrthographicCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  EXPECT_FALSE(node.HasCamera());
-
-  // Act: Attach camera
-  const bool attached = node.AttachCamera(std::move(camera));
-
-  // Assert
-  EXPECT_TRUE(attached);
-  EXPECT_TRUE(node.HasCamera());
-  const auto camera_ref = node.GetCamera();
-  ASSERT_TRUE(camera_ref.has_value());
-  EXPECT_EQ(camera_ref->get().GetTypeId(),
-    oxygen::scene::OrthographicCamera::ClassTypeId());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_FailsIfCameraAlreadyExists)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera1 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  auto camera2 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-
-  EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
-  EXPECT_TRUE(node.HasCamera());
-
-  // Act: Try to attach another camera
-  const bool attached = node.AttachCamera(std::move(camera2));
-
-  // Assert
-  EXPECT_FALSE(attached);
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, DetachCamera_RemovesCameraComponent)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  EXPECT_TRUE(node.AttachCamera(std::move(camera)));
-  EXPECT_TRUE(node.HasCamera());
-
-  // Act: Detach camera
-  const bool detached = node.DetachCamera();
-
-  // Assert
-  EXPECT_TRUE(detached);
-  EXPECT_FALSE(node.HasCamera());
-  EXPECT_FALSE(node.GetCamera().has_value());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, DetachCamera_NoCamera_ReturnsFalse)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  EXPECT_FALSE(node.HasCamera());
-
-  // Act: Detach camera when none is attached
-  const bool detached = node.DetachCamera();
-
-  // Assert
-  EXPECT_FALSE(detached);
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_ReplacesExistingCamera)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera1 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  auto camera2 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-
-  EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
-  EXPECT_TRUE(node.HasCamera());
-
-  // Act: Replace with a new camera
-  const bool replaced = node.ReplaceCamera(std::move(camera2));
-
-  // Assert
-  EXPECT_TRUE(replaced);
-  EXPECT_TRUE(node.HasCamera());
-  const auto camera_ref = node.GetCamera();
-  ASSERT_TRUE(camera_ref.has_value());
-  EXPECT_EQ(camera_ref->get().GetTypeId(),
-    oxygen::scene::PerspectiveCamera::ClassTypeId());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_NoCamera_ReturnsFalse)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  EXPECT_FALSE(node.HasCamera());
-
-  // Act: Replace camera when none is attached
-  const bool replaced = node.ReplaceCamera(std::move(camera));
-
-  // Assert
-  EXPECT_FALSE(replaced);
-  EXPECT_FALSE(node.HasCamera());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, GetCamera_ReturnsNulloptIfNoCamera)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  EXPECT_FALSE(node.HasCamera());
-
-  // Act & Assert
-  EXPECT_FALSE(node.GetCamera().has_value());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, HasCamera_ReturnsTrueIfCameraAttached)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  EXPECT_FALSE(node.HasCamera());
-
-  node.AttachCamera(std::move(camera));
-  EXPECT_TRUE(node.HasCamera());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_Nullptr_ReturnsFalse)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  std::unique_ptr<oxygen::Component> null_camera;
-  EXPECT_FALSE(node.AttachCamera(std::move(null_camera)));
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Perspective)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
-
-  // Act: Get camera as PerspectiveCamera
-  const auto cam_ref = node.GetCameraAs<PerspectiveCamera>();
-
-  // Assert
-  ASSERT_TRUE(cam_ref.has_value());
-  EXPECT_EQ(cam_ref->get().GetTypeId(), PerspectiveCamera::ClassTypeId());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Orthographic)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<OrthographicCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
-
-  // Act: Get camera as OrthographicCamera
-  const auto cam_ref = node.GetCameraAs<OrthographicCamera>();
-
-  // Assert
-  ASSERT_TRUE(cam_ref.has_value());
-  EXPECT_EQ(cam_ref->get().GetTypeId(), OrthographicCamera::ClassTypeId());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsNulloptIfNoCamera)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  // Act
-  const auto cam_ref = node.GetCameraAs<PerspectiveCamera>();
-  // Assert
-  EXPECT_FALSE(cam_ref.has_value());
-}
-
-NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsNullOptOnTypeMismatch)
-{
-  auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  ASSERT_TRUE(node.AttachCamera(std::move(camera)));
-
-  // Act
-  const auto cam_ref = node.GetCameraAs<OrthographicCamera>();
-  // Assert
-  EXPECT_FALSE(cam_ref.has_value());
 }
 
 } // namespace

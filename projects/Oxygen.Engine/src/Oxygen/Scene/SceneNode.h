@@ -23,6 +23,10 @@
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
 
+namespace oxygen::data {
+class MeshAsset;
+} // namespace oxygen::data
+
 namespace oxygen::scene {
 
 class SceneNode;
@@ -142,19 +146,18 @@ public:
 
   //! Attaches a camera component to this SceneNode. If a camera already exists,
   //! this will fail.
-  OXGN_SCN_API auto AttachCamera(std::unique_ptr<Component> camera) -> bool;
+  OXGN_SCN_API auto AttachCamera(std::unique_ptr<Component> camera) noexcept
+    -> bool;
 
   //! Detaches the camera component from this SceneNode, if present.
-  OXGN_SCN_API auto DetachCamera() -> bool;
+  OXGN_SCN_API auto DetachCamera() noexcept -> bool;
 
   //! Replaces the current camera component with a new one. If no camera exists,
   //! this acts as attach.
-  OXGN_SCN_API auto ReplaceCamera(std::unique_ptr<Component> camera) -> bool;
+  OXGN_SCN_API auto ReplaceCamera(std::unique_ptr<Component> camera) noexcept
+    -> bool;
 
-  //! Gets the attached camera component if present.
-  OXGN_SCN_NDAPI auto GetCamera() noexcept
-    -> std::optional<std::reference_wrapper<Component>>;
-
+  //! Checks if this SceneNode has an attached camera component.
   OXGN_SCN_NDAPI auto HasCamera() noexcept -> bool;
 
   //! Gets the attached camera as the specified type T (PerspectiveCamera or
@@ -192,6 +195,28 @@ public:
       : std::nullopt;
   }
 
+  //=== Mesh Attachment ===---------------------------------------------------//
+
+  //! Attaches a mesh component to this SceneNode. If a mesh component
+  //! already exists, this will fail.
+  OXGN_SCN_API auto AttachMesh(
+    std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool;
+
+  //! Detaches the camera component from this SceneNode, if present.
+  OXGN_SCN_API auto DetachMesh() noexcept -> bool;
+
+  //! Replaces the current mesh component with a new one. If no mesh component
+  //! exists, this acts as attach.
+  OXGN_SCN_API auto ReplaceMesh(
+    std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool;
+
+  //! Gets the attached mesh if present.
+  OXGN_SCN_NDAPI auto GetMesh() noexcept
+    -> std::shared_ptr<const data::MeshAsset>;
+
+  //! Checks if this SceneNode has an attached mesh component.
+  OXGN_SCN_NDAPI auto HasMesh() noexcept -> bool;
+
   //=== Name Access ===-------------------------------------------------------//
 
   //! Gets the name of this SceneNode, or an empty string if invalid.
@@ -208,6 +233,10 @@ private:
     // NOLINTNEXTLINE(*-pro-type-const-cast)
     const_cast<SceneNode*>(this)->Resource::Invalidate();
   }
+
+  //! Gets the attached camera component if present.
+  OXGN_SCN_NDAPI auto GetCamera() noexcept
+    -> std::optional<std::reference_wrapper<Component>>;
 
   // Logging for SafeCall errors
   auto LogSafeCallError(const char* reason) const noexcept -> void;

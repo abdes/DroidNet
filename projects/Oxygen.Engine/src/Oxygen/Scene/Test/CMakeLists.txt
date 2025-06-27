@@ -53,7 +53,11 @@ m_gtest_program(SceneNodeImpl SOURCES "SceneNodeImpl_test.cpp")
 m_gtest_program(
   SceneNode
   SOURCES
+    "SceneNode_camera_test.cpp"
+    "SceneNode_graph_test.cpp"
+    "SceneNode_mesh_test.cpp"
     "SceneNode_test.cpp"
+    "SceneNode_test.h"
     "SceneNode_Transform_test.cpp"
 )
 
