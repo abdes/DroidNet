@@ -29,6 +29,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/RenderItem.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 #include <MainModule.h>
 
@@ -151,20 +152,23 @@ MainModule::~MainModule()
 
   // Un-register the vertex buffer view if it's valid
   // (No need to release descriptor handle, ResourceRegistry manages it)
-  if (vertex_buffer_ && !gfx_weak_.expired() && renderer_) {
+  if (render_controller_ && !render_items_.empty()
+    && render_items_.front().mesh) {
     try {
-      auto& registry = renderer_->GetResourceRegistry();
-      registry.UnRegisterViews(*vertex_buffer_);
+      auto& registry = render_controller_->GetResourceRegistry();
+      auto vertex_buffer
+        = renderer_->GetVertexBuffer(*render_items_.front().mesh);
+      registry.UnRegisterViews(*vertex_buffer);
     } catch (const std::exception& e) {
       LOG_F(
         ERROR, "Error while un-registering vertex buffer view: {}", e.what());
     }
   }
 
-  vertex_buffer_.reset();
   framebuffers_.clear();
   surface_->DetachRenderer();
   renderer_.reset();
+  render_controller_.reset();
   surface_.reset();
   platform_.reset();
 }
@@ -177,14 +181,15 @@ void MainModule::Run()
   SetupSurface();
   SetupRenderer();
   SetupShaders();
-  surface_->AttachRenderer(renderer_);
+  surface_->AttachRenderer(render_controller_);
 
   nursery_->Start([this]() -> co::Co<> {
     while (!window_weak_.expired() && !gfx_weak_.expired()) {
       const auto gfx = gfx_weak_.lock();
       co_await gfx->OnRenderStart();
       // Submit the render task to the renderer
-      renderer_->Submit([this]() -> co::Co<> { co_await RenderScene(); });
+      render_controller_->Submit(
+        [this]() -> co::Co<> { co_await RenderScene(); });
     }
   });
 }
@@ -272,135 +277,11 @@ void MainModule::SetupRenderer()
   CHECK_F(!gfx_weak_.expired());
 
   const auto gfx = gfx_weak_.lock();
-  renderer_ = gfx->CreateRenderer(
+  render_controller_ = gfx->CreateRenderController(
     "Main Window Renderer", surface_, kFrameBufferCount - 1);
-  CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
-}
-
-void MainModule::CreateTriangleVertexBuffer()
-{
-  if (vertex_buffer_)
-    return;
-
-  CHECK_F(!gfx_weak_.expired());
-  const auto gfx = gfx_weak_.lock();
-
-  // Use the mesh vertices from the RenderItem's mesh asset
-  if (render_items_.empty() || !render_items_.front().mesh) {
-    LOG_F(ERROR, "No mesh asset available for vertex buffer creation");
-    return;
-  }
-  const auto& mesh = render_items_.front().mesh;
-  const auto& vertices = mesh->Vertices();
-
-  graphics::BufferDesc vb_desc;
-  vb_desc.size_bytes = sizeof(Vertex) * vertices.size();
-  vb_desc.usage = graphics::BufferUsage::kStorage;
-  vb_desc.memory = graphics::BufferMemory::kDeviceLocal;
-  vb_desc.debug_name = "Triangle Structured Vertex Buffer";
-  vertex_buffer_ = gfx->CreateBuffer(vb_desc);
-  vertex_buffer_->SetName("Triangle Structured Vertex Buffer");
-
-  auto& resource_registry = renderer_->GetResourceRegistry();
-  resource_registry.Register(vertex_buffer_);
-
-  // === Index buffer creation ===
-  if (!index_buffer_) {
-    const auto& indices = mesh->Indices();
-    if (!indices.empty()) {
-      graphics::BufferDesc ib_desc;
-      ib_desc.size_bytes = sizeof(uint32_t) * indices.size();
-      ib_desc.usage = graphics::BufferUsage::kIndex;
-      ib_desc.memory = graphics::BufferMemory::kDeviceLocal;
-      ib_desc.debug_name = "Triangle Index Buffer";
-      index_buffer_ = gfx->CreateBuffer(ib_desc);
-      index_buffer_->SetName("Triangle Index Buffer");
-      resource_registry.Register(index_buffer_);
-    }
-  }
-
-  recreate_cbv_ = true;
-}
-
-void MainModule::UploadTriangleVertexBuffer(
-  graphics::CommandRecorder& recorder) const
-{
-  if (!vertex_buffer_)
-    return;
-
-  CHECK_F(!gfx_weak_.expired());
-  const auto gfx = gfx_weak_.lock();
-
-  // Use the mesh vertices from the RenderItem's mesh asset
-  if (render_items_.empty() || !render_items_.front().mesh) {
-    LOG_F(ERROR, "No mesh asset available for vertex buffer upload");
-    return;
-  }
-  const auto& mesh = render_items_.front().mesh;
-  const auto& vertices = mesh->Vertices();
-
-  graphics::BufferDesc upload_desc;
-  upload_desc.size_bytes = sizeof(Vertex) * vertices.size();
-  upload_desc.usage = graphics::BufferUsage::kNone;
-  upload_desc.memory = graphics::BufferMemory::kUpload;
-  upload_desc.debug_name = "Triangle Vertex Upload Buffer";
-  auto upload_buffer = gfx->CreateBuffer(upload_desc);
-
-  recorder.BeginTrackingResourceState(
-    *vertex_buffer_, ResourceStates::kCommon, true);
-  recorder.RequireResourceState(*vertex_buffer_, ResourceStates::kCopyDest);
-
-  recorder.FlushBarriers();
-
-  // Map and copy mesh vertex data
-  void* mapped = upload_buffer->Map();
-  memcpy(mapped, vertices.data(), sizeof(Vertex) * vertices.size());
-  upload_buffer->UnMap();
-
-  // Copy to GPU buffer (dst, dst_offset, src, src_offset, size)
-  recorder.CopyBuffer(
-    *vertex_buffer_, 0, *upload_buffer, 0, sizeof(Vertex) * vertices.size());
-
-  // Transition the vertex buffer from CopyDest to ShaderResource state
-  recorder.RequireResourceState(
-    *vertex_buffer_, ResourceStates::kShaderResource);
-  recorder.FlushBarriers();
-
-  // Keep the upload buffer alive until the command list is executed
-  DeferredObjectRelease(upload_buffer, renderer_->GetPerFrameResourceManager());
-
-  // === Index buffer upload ===
-  if (index_buffer_) {
-    const auto& indices = mesh->Indices();
-    if (!indices.empty()) {
-      graphics::BufferDesc index_upload_desc;
-      index_upload_desc.size_bytes = sizeof(uint32_t) * indices.size();
-      index_upload_desc.usage = graphics::BufferUsage::kNone;
-      index_upload_desc.memory = graphics::BufferMemory::kUpload;
-      index_upload_desc.debug_name = "Triangle Index Upload Buffer";
-      auto index_upload_buffer = gfx->CreateBuffer(index_upload_desc);
-
-      recorder.BeginTrackingResourceState(
-        *index_buffer_, ResourceStates::kCommon, true);
-      recorder.RequireResourceState(*index_buffer_, ResourceStates::kCopyDest);
-      recorder.FlushBarriers();
-
-      void* mapped_index = index_upload_buffer->Map();
-      memcpy(mapped_index, indices.data(), sizeof(uint32_t) * indices.size());
-      index_upload_buffer->UnMap();
-
-      recorder.CopyBuffer(*index_buffer_, 0, *index_upload_buffer, 0,
-        sizeof(uint32_t) * indices.size());
-
-      // Transition the index buffer to IndexBuffer state
-      recorder.RequireResourceState(
-        *index_buffer_, ResourceStates::kIndexBuffer);
-      recorder.FlushBarriers();
-
-      DeferredObjectRelease(
-        index_upload_buffer, renderer_->GetPerFrameResourceManager());
-    }
-  }
+  CHECK_NOTNULL_F(
+    render_controller_, "Failed to create renderer for main window");
+  renderer_ = std::make_shared<engine::Renderer>(render_controller_);
 }
 
 void MainModule::SetupFramebuffers()
@@ -414,7 +295,7 @@ void MainModule::SetupFramebuffers()
   for (auto i = 0U; i < kFrameBufferCount; ++i) {
     auto desc = graphics::FramebufferDesc {}.AddColorAttachment(
       surface_->GetBackBuffer(i));
-    framebuffers_.push_back(gfx->CreateFramebuffer(desc, *renderer_));
+    framebuffers_.push_back(gfx->CreateFramebuffer(desc, *render_controller_));
     CHECK_NOTNULL_F(
       framebuffers_[i], "Failed to create framebuffer for main window");
   }
@@ -451,29 +332,30 @@ void MainModule::SetupShaders() const
 // vertex buffer SRV in the heap (always 1 for this draw).
 // - The root signature and shader are designed to match this layout. See
 // PipelineStateCache.cpp and FullScreenTriangle.hlsl for details.
-
 void MainModule::EnsureVertexBufferSrv()
 {
   if (!recreate_cbv_) {
     return;
   }
 
-  auto& resource_registry = renderer_->GetResourceRegistry();
+  auto& resource_registry = render_controller_->GetResourceRegistry();
 
-  // The SRV for the vertex buffer is always allocated at heap index 1.
-  // This index must match the value written to the CBV for the shader to access
-  // the correct buffer.
+  // Use the mesh from the first render item
+  if (render_items_.empty() || !render_items_.front().mesh) {
+    LOG_F(ERROR, "No mesh asset available for SRV registration");
+    recreate_cbv_ = false;
+    return;
+  }
+  const auto& mesh = render_items_.front().mesh;
+  auto vertex_buffer = renderer_->GetVertexBuffer(*mesh);
+
   graphics::BufferViewDescription srv_view_desc;
   srv_view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
   srv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
   srv_view_desc.format = graphics::Format::kUnknown;
   srv_view_desc.stride = sizeof(Vertex);
 
-  // This will create the SRV in the backend and return the handle
-  // The correct way is to call GetNativeView with a DescriptorHandle and the
-  // view description. However, to get a DescriptorHandle, you typically
-  // allocate it from the DescriptorAllocator. Let's do this properly:
-  auto& descriptor_allocator = renderer_->GetDescriptorAllocator();
+  auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
   auto srv_handle = descriptor_allocator.Allocate(
     graphics::ResourceViewType::kStructuredBuffer_SRV,
     graphics::DescriptorVisibility::kShaderVisible);
@@ -485,17 +367,13 @@ void MainModule::EnsureVertexBufferSrv()
   }
 
   // Actually create the native view (SRV) in the backend
-  const auto view = vertex_buffer_->GetNativeView(srv_handle, srv_view_desc);
+  const auto view = vertex_buffer->GetNativeView(srv_handle, srv_view_desc);
 
-  // Assumes that we are direct binding the SRV to the shader, and that the
-  // descriptor table is bound as a single range, including the index mapping
-  // CBV.
   vertex_srv_shader_visible_index_
     = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
 
-  // Register the view if not already registered
   resource_registry.RegisterView(
-    *vertex_buffer_, view, std::move(srv_handle), srv_view_desc);
+    *vertex_buffer, view, std::move(srv_handle), srv_view_desc);
 
   LOG_F(INFO, "Vertex buffer SRV registered at index {}",
     vertex_srv_shader_visible_index_);
@@ -536,15 +414,14 @@ void MainModule::EnsureBindlessIndexingBuffer()
   recreate_cbv_ = false; // Reset the flag after creating/updating the CBV
 }
 
-void MainModule::EnsureTriangleDrawResources()
+void MainModule::EnsureMeshDrawResources()
 {
   DCHECK_F(
     constant_buffer_ || recreate_cbv_, "Constant buffer must be created first");
   if (!constant_buffer_) {
     try {
       EnsureBindlessIndexingBuffer();
-      recreate_cbv_
-        = true; // Set the flag after creating the CBV for the first time
+      recreate_cbv_ = true;
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
       throw;
@@ -554,16 +431,12 @@ void MainModule::EnsureTriangleDrawResources()
   DCHECK_F(
     constant_buffer_ != nullptr, "Constant buffer must be created first");
   try {
-    // 1. Ensure the vertex buffer SRV is allocated and registered, get its
-    // index
     EnsureVertexBufferSrv();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring vertex buffer SRV: {}", e.what());
     throw;
   }
   try {
-    // 2. Ensure the constant buffer is created, registered, and updated with
-    // the SRV index
     EnsureBindlessIndexingBuffer();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
@@ -583,12 +456,10 @@ auto MainModule::RenderScene() -> co::Co<>
     SetupFramebuffers();
   }
 
-  DLOG_F(
-    1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());
+  DLOG_F(1, "Rendering scene in frame index {}",
+    render_controller_->CurrentFrameIndex());
 
-  // === Data-driven quad mesh RenderItem setup ===
   if (render_items_.empty()) {
-    // Quad only (no triangle)
     auto quad_mesh = MakeQuadMeshAsset();
     RenderItem quad_item {
       .mesh = quad_mesh,
@@ -609,32 +480,20 @@ auto MainModule::RenderScene() -> co::Co<>
     }
   }
 
-  // 2. Create/ensure vertex buffer and descriptors
-  try {
-    // 3. Allocate and write descriptor handles
-    CreateTriangleVertexBuffer();
-
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Error while creating triangle vertex buffer: {}", e.what());
-    co_return;
+  // Ensure renderer has uploaded mesh resources
+  if (!render_items_.empty() && render_items_.front().mesh) {
+    renderer_->GetVertexBuffer(*render_items_.front().mesh);
+    renderer_->GetIndexBuffer(*render_items_.front().mesh);
   }
-  EnsureTriangleDrawResources();
+  EnsureMeshDrawResources();
 
-  // 3. Reset/Begin the command list.
   auto gfx = gfx_weak_.lock();
-  const auto recorder = renderer_->AcquireCommandRecorder(
+  const auto recorder = render_controller_->AcquireCommandRecorder(
     graphics::SingleQueueStrategy().GraphicsQueueName(),
     "Main Window Command List");
 
-  // 4. Upload vertex buffer data
-  UploadTriangleVertexBuffer(*recorder);
-
-  // 5. Prepare framebuffer, set viewport/scissors, pipeline, bindless, clear,
-  // draw
-  const auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
+  const auto fb = framebuffers_[render_controller_->CurrentFrameIndex()];
   fb->PrepareForRender(*recorder);
-
-  // Set the framebuffer as the render target.
   recorder->BindFrameBuffer(*fb);
 
   const ViewPort viewport {
@@ -647,12 +506,7 @@ auto MainModule::RenderScene() -> co::Co<>
     .bottom = static_cast<int32_t>(surface_->Height()) };
   recorder->SetScissors(scissors);
 
-  // 6. Set the root signature and pipeline state.
-
-  // Create a framebuffer layout descriptor
   graphics::FramebufferLayoutDesc fb_layout;
-
-  // Extract formats from the current framebuffer
   const auto& fb_desc = fb->GetDescriptor();
   for (const auto& color_attachment : fb_desc.color_attachments) {
     if (color_attachment.IsValid()) {
@@ -662,8 +516,6 @@ auto MainModule::RenderScene() -> co::Co<>
           : color_attachment.texture->GetDescriptor().format);
     }
   }
-
-  // Add depth format if present
   if (fb_desc.depth_attachment.IsValid()) {
     fb_layout.depth_stencil_format
       = fb_desc.depth_attachment.format != graphics::Format::kUnknown
@@ -671,43 +523,19 @@ auto MainModule::RenderScene() -> co::Co<>
       : fb_desc.depth_attachment.texture->GetDescriptor().format;
   }
 
-  constexpr graphics::RootBindingDesc srv_table_desc {
-        // t0, space0
-        .binding_slot_desc = graphics::BindingSlotDesc {
-            .register_index = 0,
-            .register_space = 0 },
-        .visibility = graphics::ShaderStageFlags::kAll,
-        .data = graphics::DescriptorTableBinding {
-            .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-            .base_index = 0, // If the CBV is bound as a range, this would start at 1 after the CBV
-            // unbounded
-        }
-    };
-
-  constexpr graphics::RootBindingDesc index_mapping_cbv_desc { // b0, space0
+  constexpr graphics::RootBindingDesc srv_table_desc { .binding_slot_desc
+    = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
+    .visibility = graphics::ShaderStageFlags::kAll,
+    .data = graphics::DescriptorTableBinding {
+      .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+      .base_index = 0,
+    } };
+  constexpr graphics::RootBindingDesc index_mapping_cbv_desc {
     .binding_slot_desc
     = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
     .visibility = graphics::ShaderStageFlags::kAll,
     .data = graphics::DirectBufferBinding {}
   };
-
-  // We could also bind the index mapping CBV as a DescriptorTableBinding, to
-  // add a range of 1 item to the CBV_SRV_UAV table. The shader visible index
-  // of the SRV will have to account for the CBV, and become 0 (first within
-  // its range) instead of 1 though.
-  //
-  // constexpr graphics::RootBindingDesc index_mapping_cbv_desc {
-  //     // b0, space0
-  //     .binding_slot_desc = graphics::BindingSlotDesc {
-  //         .register_index = 0,
-  //         .register_space = 0 },
-  //     .visibility = graphics::ShaderStageFlags::kAll,
-  //     .data = graphics::DescriptorTableBinding {
-  //         .view_type = graphics::ResourceViewType::kConstantBuffer,
-  //         .base_index = 0,
-  //         .count = 1  // Only one CBV for the index mapping
-  //      }
-  // };
 
   const auto pipeline_desc
     = graphics::GraphicsPipelineDesc::Builder()
@@ -721,26 +549,17 @@ auto MainModule::RenderScene() -> co::Co<>
         .SetRasterizerState(RasterizerStateDesc::NoCulling())
         .SetDepthStencilState(DepthStencilStateDesc::Disabled())
         .SetFramebufferLayout(std::move(fb_layout))
-        .AddRootBinding(graphics::RootBindingItem(srv_table_desc)) // binding 0
-        .AddRootBinding(
-          graphics::RootBindingItem(index_mapping_cbv_desc)) // binding 1
+        .AddRootBinding(graphics::RootBindingItem(srv_table_desc))
+        .AddRootBinding(graphics::RootBindingItem(index_mapping_cbv_desc))
         .Build();
 
-  // Set the pipeline state. Should be called after framebuffer, viewport, and
-  // scissors are set, and before resource binding and draw calls.
   recorder->SetPipelineState(pipeline_desc);
-
-  // Direct binding for the CBV. Not needed if we bind it as a range in the
-  // descriptor table.
   recorder->SetGraphicsRootConstantBufferView(
-    pipeline_desc.RootBindings()[1]
-      .GetRootParameterIndex(), // binding 1 (b0, space0)
+    pipeline_desc.RootBindings()[1].GetRootParameterIndex(),
     constant_buffer_->GetGPUVirtualAddress());
 
-  // Instead of legacy vertex buffer, use mesh from RenderItem
   bool cleared = false;
   for (const auto* item : draw_list_) {
-    // Clear only once before first draw
     if (!cleared) {
       recorder->ClearFramebuffer(*fb,
         std::vector<std::optional<graphics::Color>> {
@@ -748,14 +567,15 @@ auto MainModule::RenderScene() -> co::Co<>
         std::nullopt, std::nullopt);
       cleared = true;
     }
-    // Draw triangle (non-indexed)
-    if (item->mesh->Indices().empty()) {
-      recorder->Draw(static_cast<uint32_t>(item->mesh->VertexCount()), 1, 0, 0);
+    const auto& mesh = item->mesh;
+    auto vertex_buffer = renderer_->GetVertexBuffer(*mesh);
+    auto index_buffer = renderer_->GetIndexBuffer(*mesh);
+    if (mesh->Indices().empty()) {
+      recorder->Draw(static_cast<uint32_t>(mesh->VertexCount()), 1, 0, 0);
     } else {
-      // Draw quad (indexed)
-      recorder->BindIndexBuffer(*index_buffer_, graphics::Format::kR32UInt);
+      recorder->BindIndexBuffer(*index_buffer, graphics::Format::kR32UInt);
       recorder->DrawIndexed(
-        static_cast<uint32_t>(item->mesh->IndexCount()), 1, 0, 0, 0);
+        static_cast<uint32_t>(mesh->IndexCount()), 1, 0, 0, 0);
     }
   }
   co_return;

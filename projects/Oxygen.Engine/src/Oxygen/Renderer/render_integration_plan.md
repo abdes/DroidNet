@@ -72,17 +72,20 @@ Data (resource/asset) systems.
     at construction time.
   - After construction, RenderItem must not reference the SceneNode or any
     mutable scene data; all required data must be cached or owned by the
-    RenderItem.
-- [ ] Remove or refactor any direct references to SceneNode from RenderItem if
-  Option A is chosen.
-- [ ] Ensure all transform logic in RenderItem uses the cached or owned data,
-  not live queries to the scene graph.
+    RenderItem. // ✔ Already enforced by RenderItem design and code
+- [x] Remove or refactor any direct references to SceneNode from RenderItem if
+  Option A is chosen. // ✔ No direct references exist in RenderItem
+- [x] Ensure all transform logic in RenderItem uses the cached or owned data,
+  not live queries to the scene graph. // ✔ All transform logic uses cached data
 - [ ] Update all usages and documentation to reflect that RenderItem is an
   immutable, self-sufficient snapshot for rendering.
 
-**Note:** This approach enables thread safety and allows scene updates and
-rendering to occur in parallel, as RenderItem is immutable and decoupled from
-the scene graph after construction.
+**Progress Note:**
+
+- RenderItem struct and its invariants are implemented and enforce immutability and self-sufficiency.
+- No references to SceneNode or mutable scene data exist in RenderItem.
+- All transform logic in RenderItem uses cached/owned data.
+- **Pending:** The actual construction logic from SceneNode (or equivalent) and updates to usages/documentation are not yet implemented.
 
 **Deliverable:** Every RenderItem is a self-sufficient, immutable (for the
 frame) representation of a renderable entity, constructed from the scene system,
@@ -168,13 +171,6 @@ The integrated system is robust, efficient, and ready for production use.
 - Use the checkboxes above to track completion of each subtask.
 - Add notes, blockers, or design decisions below each step as needed.
 - Update this document as the migration proceeds.
-
----
-
-- [Migration Plan Discussion](#)
-- [RenderItem.h](src/Oxygen/Graphics/Common/RenderItem.h)
-- [Scene System Documentation](#)
-- [Data System Documentation](#)
 
 ---
 

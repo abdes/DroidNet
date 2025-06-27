@@ -205,7 +205,7 @@ void MainModule::SetupRenderer()
   CHECK_F(!gfx_weak_.expired());
 
   const auto gfx = gfx_weak_.lock();
-  renderer_ = gfx->CreateRenderer(
+  renderer_ = gfx->CreateRenderController(
     "Main Window Renderer", surface_, kFrameBufferCount - 1);
   CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }

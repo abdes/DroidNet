@@ -52,6 +52,7 @@ target_sources(
   PRIVATE
     "DepthPrepass.cpp"
     "RenderItem.cpp"
+    "Renderer.cpp"
     "RenderPass.cpp"
   PUBLIC
     FILE_SET HEADERS
@@ -59,7 +60,8 @@ target_sources(
     FILES
       "api_export.h"
       "DepthPrePass.h"
-      "RenderGraph.h"
+      "RenderContext.h"
+      "Renderer.h"
       "RenderItem.h"
       "RenderPass.h"
 )
