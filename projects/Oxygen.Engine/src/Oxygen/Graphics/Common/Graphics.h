@@ -80,7 +80,7 @@ public:
 
   //=== Global & pooled objects ===-----------------------------------------//
 
-  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(
+  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderController(
     std::string_view name, std::weak_ptr<graphics::Surface> surface,
     uint32_t frames_in_flight) -> std::shared_ptr<graphics::RenderController>;
 

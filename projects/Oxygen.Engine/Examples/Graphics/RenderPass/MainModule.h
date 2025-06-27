@@ -16,11 +16,12 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
 
 namespace oxygen {
+class Platform;
 namespace platform {
-  class Platform;
   class Window;
 } // namespace platform
 class Graphics;
@@ -32,9 +33,6 @@ namespace graphics {
   class Framebuffer;
   class Buffer;
 } // namespace graphics
-namespace co {
-  class Nursery;
-} // namespace co
 } // namespace oxygen
 
 namespace oxygen::examples {

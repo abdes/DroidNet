@@ -33,6 +33,9 @@ namespace graphics {
 namespace co {
   class Nursery;
 } // namespace co
+namespace engine {
+  class Renderer;
+} // namespace engine
 } // namespace oxygen
 
 namespace oxygen::examples {
@@ -67,7 +70,8 @@ private:
   std::weak_ptr<Graphics> gfx_weak_;
   std::weak_ptr<platform::Window> window_weak_;
   std::shared_ptr<graphics::Surface> surface_;
-  std::shared_ptr<graphics::RenderController> renderer_;
+  std::shared_ptr<graphics::RenderController> render_controller_;
+  std::shared_ptr<engine::Renderer> renderer_;
   StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount>
     framebuffers_ {};
 
@@ -86,7 +90,7 @@ private:
   void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder) const;
   void EnsureBindlessIndexingBuffer();
   void EnsureVertexBufferSrv();
-  void EnsureTriangleDrawResources();
+  void EnsureMeshDrawResources();
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
   bool recreate_cbv_ { true };
