@@ -9,6 +9,7 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
+#include <Oxygen/Scene/Detail/MeshData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -396,6 +397,8 @@ auto SceneNode::SetName(const std::string& name) noexcept -> bool
     });
 }
 
+//=== Camera Attachment ===---------------------------------------------------//
+
 /*!
  Attaches a camera component to this SceneNode. Only one camera component
  (either PerspectiveCamera or OrthographicCamera) can be attached at a time.
@@ -406,18 +409,18 @@ auto SceneNode::SetName(const std::string& name) noexcept -> bool
  @return True if the camera was successfully attached; false if a camera
  already exists, the node is invalid, or the camera type is unsupported.
 
- ### Performance Characteristics
- - Time Complexity: O(1)
- - Memory: Adds a component to the node's composition.
+ ### Usage Examples
+ ```cpp
+ auto node = scene->CreateNode("CameraNode");
+ auto camera = std::make_unique<PerspectiveCamera>(...);
+ bool attached = node.AttachCamera(std::move(camera));
+ ```
 
- ### Usage Examplesauto node = scene->CreateNode("CameraNode");
-auto camera = std::make_unique<PerspectiveCamera>(...);
-bool attached = node.AttachCamera(std::move(camera));
  @note Only one camera component can be attached at a time.
  @warning Passing a null pointer or an unsupported camera type will fail.
  @see DetachCamera, ReplaceCamera, GetCamera
 */
-auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) -> bool
+auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) noexcept -> bool
 {
   if (!camera) {
     LOG_F(ERROR, "Cannot attach a null camera. SceneNode: {}",
@@ -466,17 +469,17 @@ auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) -> bool
  @return True if a camera component was detached; false if no camera was
  attached or the node is invalid.
 
- ### Performance Characteristics
- - Time Complexity: O(1)
- - Memory: Removes a component from the node's composition.
+ ### Usage Examples
+ ```cpp
+ auto node = scene->CreateNode("CameraNode");
+ node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
+ bool detached = node.DetachCamera();
+ ```
 
- ### Usage Examplesauto node = scene->CreateNode("CameraNode");
-node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
-bool detached = node.DetachCamera();
  @note Safe to call even if no camera is attached.
  @see AttachCamera, ReplaceCamera, GetCamera
 */
-auto SceneNode::DetachCamera() -> bool
+auto SceneNode::DetachCamera() noexcept -> bool
 {
   return SafeCall(
     NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
@@ -507,18 +510,19 @@ auto SceneNode::DetachCamera() -> bool
  @return True if the camera was successfully replaced or attached; false if
  the node is invalid, the camera is null, or the camera type is unsupported.
 
- ### Performance Characteristics
- - Time Complexity: O(1)
- - Memory: Replaces or adds a component in the node's composition.
+ ### Usage Examples
+ ```cpp
+ auto node = scene->CreateNode("CameraNode");
+ node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
+ bool replaced = node.ReplaceCamera(std::make_unique<OrthographicCamera>(...));
+ ```
 
- ### Usage Examplesauto node = scene->CreateNode("CameraNode");
-node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
-bool replaced = node.ReplaceCamera(std::make_unique<OrthographicCamera>(...));
  @note If no camera is attached, this method acts like AttachCamera.
  @warning Passing a null pointer or an unsupported camera type will fail.
  @see AttachCamera, DetachCamera, GetCamera
 */
-auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) -> bool
+auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) noexcept
+  -> bool
 {
   if (!camera) {
     LOG_F(ERROR, "Cannot attach a null camera. SceneNode: {}",
@@ -542,10 +546,14 @@ auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) -> bool
           std::move(camera));
         return true;
       }
-      LOG_F(ERROR,
-        "SceneNode {} has no camera component to replace. Use AttachCamera().",
-        nostd::to_string(*this));
-      return false;
+      // If no camera exists, act as AttachCamera
+      const auto type_id = camera->GetTypeId();
+      if (type_id == PerspectiveCamera::ClassTypeId()) {
+        state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
+      } else if (type_id == OrthographicCamera::ClassTypeId()) {
+        state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
+      }
+      return true;
     });
 }
 
@@ -556,16 +564,16 @@ auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) -> bool
  PerspectiveCamera or OrthographicCamera), or std::nullopt if no camera is
  attached or the node is invalid.
 
- ### Performance Characteristics
- - Time Complexity: O(1)
- - Memory: None
-
- ### Usage Examplesauto node = scene->CreateNode("CameraNode");
-node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
-auto camera_opt = node.GetCamera();
-if (camera_opt) {
-  // Use camera_opt->get()
+ ### Usage Examples
+ ```cpp
+ auto node = scene->CreateNode("CameraNode");
+ node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
+ auto camera_opt = node.GetCamera();
+ if (camera_opt) {
+   // Use camera_opt->get()
  }
+ ```
+
  @see AttachCamera, DetachCamera, ReplaceCamera
 */
 auto SceneNode::GetCamera() noexcept
@@ -591,17 +599,17 @@ auto SceneNode::GetCamera() noexcept
 /*!
  Checks if a camera component is attached to this SceneNode.
 
- @return True if a camera component (PerspectiveCamera or OrthographicCamera)
- is attached; false otherwise or if the node is invalid.
+ @return True if a camera component (PerspectiveCamera or OrthographicCamera) is
+ attached; false otherwise or if the node is invalid.
 
- ### Performance Characteristics
- - Time Complexity: O(1)
- - Memory: None
-
- ### Usage Examplesauto node = scene->CreateNode("CameraNode");
-if (!node.HasCamera()) {
-  node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
+ ### Usage Examples
+ ```cpp
+ auto node = scene->CreateNode("CameraNode");
+ if (!node.HasCamera()) {
+   node.AttachCamera(std::make_unique<PerspectiveCamera>(...));
  }
+ ```
+
  @see AttachCamera, DetachCamera, ReplaceCamera, GetCamera
 */
 auto SceneNode::HasCamera() noexcept -> bool
@@ -614,5 +622,132 @@ auto SceneNode::HasCamera() noexcept -> bool
 
       return state.node_impl->HasComponent<PerspectiveCamera>()
         || state.node_impl->HasComponent<OrthographicCamera>();
+    });
+}
+
+//=== Mesh Attachment ===-----------------------------------------------------//
+
+/*!
+ Attaches a mesh component to this SceneNode. Only one MeshData component can be
+ attached at a time. If a mesh component already exists, this method will fail
+ and return false.
+
+ @param mesh Shared pointer to the MeshAsset to attach. Must not be null.
+ @return True if the mesh was successfully attached; false if a mesh already
+ exists, the node is invalid, or the mesh is null.
+*/
+auto SceneNode::AttachMesh(std::shared_ptr<const data::MeshAsset> mesh) noexcept
+  -> bool
+{
+  if (!mesh) {
+    LOG_F(ERROR, "Cannot attach a null mesh. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      if (state.node_impl->HasComponent<detail::MeshData>()) {
+        LOG_F(ERROR,
+          "SceneNode {} already has a MeshData component. Cannot attach "
+          "another.",
+          nostd::to_string(*this));
+        return false;
+      }
+      state.node_impl->AddComponent<detail::MeshData>(std::move(mesh));
+      return true;
+    });
+}
+
+/*!
+ Detaches the mesh component from this SceneNode, if present.
+
+ @return True if a mesh component was detached; false if no mesh was attached or
+ the node is invalid.
+*/
+auto SceneNode::DetachMesh() noexcept -> bool
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      if (state.node_impl->HasComponent<detail::MeshData>()) {
+        state.node_impl->RemoveComponent<detail::MeshData>();
+        return true;
+      }
+      return false;
+    });
+}
+
+/*!
+ Replaces the current mesh component with a new one. If no mesh component
+ exists, this acts as attach.
+
+ @param mesh Shared pointer to the new MeshAsset. Must not be null.
+ @return True if the mesh was successfully replaced or attached; false if the
+ node is invalid or the mesh is null.
+*/
+auto SceneNode::ReplaceMesh(
+  std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool
+{
+  if (!mesh) {
+    LOG_F(ERROR, "Cannot attach a null mesh. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+      if (state.node_impl->HasComponent<detail::MeshData>()) {
+        state.node_impl->ReplaceComponent<detail::MeshData>(std::move(mesh));
+        return true;
+      }
+      state.node_impl->AddComponent<detail::MeshData>(std::move(mesh));
+      return true;
+    });
+}
+
+/*!
+ Gets the attached mesh if present.
+
+ @return Shared pointer to the attached MeshAsset, or nullptr if no mesh is
+ attached or the node is invalid.
+*/
+auto SceneNode::GetMesh() noexcept -> std::shared_ptr<const data::MeshAsset>
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      if (state.node_impl->HasComponent<detail::MeshData>()) {
+        return state.node_impl->GetComponent<detail::MeshData>().GetMeshAsset();
+      }
+      return std::shared_ptr<const data::MeshAsset> {};
+    });
+}
+
+/*!
+ Checks if this SceneNode has an attached mesh component.
+ @return True if a MeshData component is attached; false otherwise or if the
+ node is invalid.
+*/
+auto SceneNode::HasMesh() noexcept -> bool
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.node_impl->HasComponent<detail::MeshData>();
     });
 }
