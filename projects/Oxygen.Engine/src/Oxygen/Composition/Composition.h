@@ -199,14 +199,19 @@ protected:
    missing.
 
    ### Performance Characteristics
+
    - Time Complexity: O(1) for both pooled and local components (amortized).
    - Memory: Allocates memory for the component (from pool or heap).
    - Optimization: Uses in-place construction and type-erased storage.
 
-   ### Usage Examples// Add a local component
+   ### Usage Examples
+   ```cpp
+   // Add a local component
    auto& comp = composition.AddComponent<MyComponent>(42, "init");
    // Add a pooled component
    auto& pooled = composition.AddComponent<PooledType>(param1, param2);
+   ```
+
    @see RemoveComponent, ReplaceComponent, HasComponent, GetComponent
   */
   template <IsComponent T, typename... Args>
@@ -307,21 +312,28 @@ protected:
    @tparam OldT   The type of the component to be replaced.
    @tparam NewT   The type of the new component (defaults to OldT).
    @tparam Args   Argument types for the new component's constructor.
+
    @param args    Arguments forwarded to the new component's constructor.
    @return        Reference to the newly added component of type `NewT`.
 
    @throw ComponentError if replacement is invalid, dependencies are violated,
-   or allocation fails.
+   the component to replace does not exist, or allocation fails.
 
    ### Performance Characteristics
+
    - Time Complexity: O(N).
    - Memory: Allocates memory for the new component and releases the old one.
    - Optimization: Uses in-place construction and type-erased storage.
 
-   ### Usage Examples// Replace a local component with another type
+   ### Usage Examples
+
+   ```cpp
+   // Replace a local component with another type
    auto& new_comp = composition.ReplaceComponent<OldType, NewType>(arg1, arg2);
    // Replace a pooled component with a new instance
    auto& pooled = composition.ReplaceComponent<PooledType>(param1, param2);
+   ```
+
    @see AddComponent, RemoveComponent, HasComponent, GetComponent
   */
   template <typename OldT, typename NewT = OldT, typename... Args>
