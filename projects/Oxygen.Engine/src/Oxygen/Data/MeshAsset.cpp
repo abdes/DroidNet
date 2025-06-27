@@ -27,6 +27,7 @@ MeshAsset::MeshAsset(std::string name, std::vector<Vertex> vertices,
   CHECK_F(!vertices_.empty(), "MeshAsset must have at least one vertex");
   CHECK_F(!indices_.empty(), "MeshAsset must have at least one index");
   ComputeBoundingBox();
+  ComputeBoundingSphere();
 }
 
 //! Creates and stores a MeshView for a subrange of the mesh data.
@@ -75,6 +76,41 @@ auto MeshAsset::ComputeBoundingBox() -> void
     bbox_min_ = glm::min(bbox_min_, v.position);
     bbox_max_ = glm::max(bbox_max_, v.position);
   }
+}
+
+//! Computes the bounding sphere for the mesh in local space.
+/*!
+  Computes a bounding sphere that encloses the mesh in local space by
+  fitting a sphere to the AABB corners.
+
+  @note This is used for culling and render list construction.
+*/
+auto MeshAsset::ComputeBoundingSphere() -> void
+{
+  // Use Ritter's algorithm or fit sphere to AABB corners (simple, conservative)
+  // Here: fit sphere to AABB corners
+  const glm::vec3& min = bbox_min_;
+  const glm::vec3& max = bbox_max_;
+  glm::vec3 corners[8] = {
+    { min.x, min.y, min.z },
+    { max.x, min.y, min.z },
+    { min.x, max.y, min.z },
+    { max.x, max.y, min.z },
+    { min.x, min.y, max.z },
+    { max.x, min.y, max.z },
+    { min.x, max.y, max.z },
+    { max.x, max.y, max.z },
+  };
+  glm::vec3 center(0.0f);
+  for (int i = 0; i < 8; ++i) {
+    center += corners[i];
+  }
+  center /= 8.0f;
+  float radius = 0.0f;
+  for (int i = 0; i < 8; ++i) {
+    radius = std::max(radius, glm::distance(center, corners[i]));
+  }
+  bounding_sphere_ = glm::vec4(center, radius);
 }
 
 } // namespace oxygen::data

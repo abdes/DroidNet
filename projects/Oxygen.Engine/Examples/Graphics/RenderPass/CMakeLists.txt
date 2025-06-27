@@ -55,6 +55,8 @@ target_link_libraries(
     oxygen::oxco
     oxygen::platform
     oxygen::loader
+    oxygen::scene
+    oxygen::renderer
     oxygen::graphics-direct3d12
 )
 

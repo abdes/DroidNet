@@ -18,7 +18,11 @@
 // Define vertex structure to match the CPU-side Vertex struct
 struct Vertex {
     float3 position;
-    float3 color;
+    float3 normal;
+    float2 texcoord;
+    float3 tangent;
+    float3 bitangent;
+    float4 color;
 };
 
 // Define constant buffer explicitly to match our root signature
@@ -43,7 +47,7 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     Vertex vertex = g_BindlessVertexBuffers[g_VertexBufferIndex][vertexID];
 
     output.position = float4(vertex.position, 1.0);
-    output.color = vertex.color;
+    output.color = vertex.color.rgb;
     return output;
 }
 

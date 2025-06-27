@@ -9,8 +9,8 @@
 # ------------------------------------------------------------------------------
 
 asap_module_declare(
-  MODULE_NAME "Oxygen.Data"
-  DESCRIPTION "Oxygen immutable,shareable assets module."
+  MODULE_NAME "Oxygen.Renderer"
+  DESCRIPTION "Oxygen rendering layer"
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -19,6 +19,7 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+find_package(fmt CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 # ==============================================================================
@@ -35,7 +36,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXGN_DATA_EXPORTS"
+      "OXGN_RNDR_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -49,39 +50,44 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "MeshAsset.cpp"
-    "ProceduralMeshes.cpp"
+    "DepthPrepass.cpp"
+    "RenderItem.cpp"
+    "RenderPass.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "MeshAsset.h"
-      "MeshView.h"
-      "ProceduralMeshes.h"
-      "Vertex.h"
+      "DepthPrePass.h"
+      "RenderGraph.h"
+      "RenderItem.h"
+      "RenderPass.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_DATA_STATIC>
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_RNDR_STATIC>
 )
 
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
-    oxygen::base
-    oxygen::graphics-common
     glm::glm
+    oxygen::base
+    oxygen::oxco
+    oxygen::data
+    oxygen::graphics-common
 )
 
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
+if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
 endif()
 

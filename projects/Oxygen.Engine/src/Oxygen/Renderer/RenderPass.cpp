@@ -5,21 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Common/RenderPass.h>
+#include <Oxygen/Renderer/RenderPass.h>
 
-using oxygen::graphics::RenderPass;
+using oxygen::engine::RenderPass;
 
 RenderPass::RenderPass(const std::string_view name)
 {
-    AddComponent<oxygen::ObjectMetaData>(name);
+  AddComponent<oxygen::ObjectMetaData>(name);
 }
 
 auto RenderPass::GetName() const noexcept -> std::string_view
 {
-    return GetComponent<oxygen::ObjectMetaData>().GetName();
+  return GetComponent<oxygen::ObjectMetaData>().GetName();
 }
 
 void RenderPass::SetName(std::string_view name) noexcept
 {
-    GetComponent<oxygen::ObjectMetaData>().SetName(name);
+  GetComponent<oxygen::ObjectMetaData>().SetName(name);
 }

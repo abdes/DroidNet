@@ -7,9 +7,11 @@
 #include <Oxygen/Data/MeshView.h>
 #include <Oxygen/Testing/GTest.h>
 
-//=== Test Fixtures ===-------------------------------------------------------//
+using oxygen::data::Vertex;
 
 namespace {
+
+//=== Test Fixtures ===-------------------------------------------------------//
 
 // MeshViewBasicTest: encapsulation, accessors, comparison, copy/move semantics
 class MeshViewBasicTest : public testing::Test {

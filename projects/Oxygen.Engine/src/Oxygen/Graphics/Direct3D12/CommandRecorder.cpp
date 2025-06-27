@@ -9,10 +9,10 @@
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
 #include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
-#include <Oxygen/Core/ViewPort.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
@@ -367,6 +367,22 @@ void CommandRecorder::Draw(const uint32_t vertex_num,
     vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
+void CommandRecorder::DrawIndexed(uint32_t index_count, uint32_t instance_count,
+  uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+{
+  const auto* command_list = GetConcreteCommandList();
+  DCHECK_NOTNULL_F(command_list);
+  DCHECK_EQ_F(
+    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+
+  // Prepare for DrawIndexed
+  command_list->GetCommandList()->IASetPrimitiveTopology(
+    D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+  command_list->GetCommandList()->DrawIndexedInstanced(
+    index_count, instance_count, first_index, vertex_offset, first_instance);
+}
+
 void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
   uint32_t thread_group_count_y, uint32_t thread_group_count_z)
 {
@@ -587,15 +603,15 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
 auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
   return static_cast<CommandList*>(
-    GetCommandList()); // NOLINT(*-pro-type-static-cast_downcast)
+    GetCommandList()); // NOLINT(*-pro-type-static-cast_down_cast)
 }
 
 // TODO: legacy - should be replaced once render passes are implemented
 void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
   const auto& fb = static_cast<const Framebuffer&>(framebuffer);
   StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
   for (const auto& rtv : fb.GetRenderTargetViews()) {
@@ -782,4 +798,33 @@ void CommandRecorder::SetRenderTargets(
 
   d3d12_command_list->OMSetRenderTargets(static_cast<UINT>(rtv_handles.size()),
     rtv_handles.data(), dsv_handle_ptr != nullptr ? 1 : 0, dsv_handle_ptr);
+}
+
+void CommandRecorder::BindIndexBuffer(
+  const graphics::Buffer& buffer, graphics::Format format)
+{
+  const auto* command_list = GetConcreteCommandList();
+  DCHECK_NOTNULL_F(command_list);
+  DCHECK_EQ_F(
+    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+
+  const auto* d3d12_buffer = static_cast<const d3d12::Buffer*>(&buffer);
+  DCHECK_NOTNULL_F(d3d12_buffer, "Buffer must be a D3D12 buffer");
+
+  D3D12_INDEX_BUFFER_VIEW ib_view = {};
+  ib_view.BufferLocation = d3d12_buffer->GetResource()->GetGPUVirtualAddress();
+  ib_view.SizeInBytes = static_cast<UINT>(d3d12_buffer->GetSize());
+  switch (format) {
+  case graphics::Format::kR16UInt:
+    ib_view.Format = DXGI_FORMAT_R16_UINT;
+    break;
+  case graphics::Format::kR32UInt:
+    ib_view.Format = DXGI_FORMAT_R32_UINT;
+    break;
+  default:
+    DCHECK_F(false, "Unsupported index buffer format");
+    ib_view.Format = DXGI_FORMAT_UNKNOWN;
+    break;
+  }
+  command_list->GetCommandList()->IASetIndexBuffer(&ib_view);
 }

@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include "ShaderManager.h"
-
 #include <memory>
 #include <string_view>
 
@@ -16,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -29,13 +28,11 @@ namespace graphics {
   class CommandList;
   class CommandQueue;
   class CommandRecorder;
-  class DepthPrePass;
   class DescriptorAllocationStrategy;
   class DescriptorAllocator;
   class RenderPass;
   class ResourceRegistry;
   class Surface;
-  struct DepthPrePassConfig;
 
   //! Orchestrates the frame render loop.
   /*!
@@ -193,13 +190,6 @@ namespace graphics {
     }
 
     OXYGEN_GFX_API virtual auto FlushPendingCommandLists() -> void;
-
-    virtual auto CreateDepthPrePass(std::shared_ptr<DepthPrePassConfig> config)
-      -> std::shared_ptr<RenderPass>
-      = 0;
-
-    // Returns a generic no-op render pass (NullRenderPass).
-    OXYGEN_GFX_API auto CreateNullRenderPass() -> std::shared_ptr<RenderPass>;
 
   protected:
     [[nodiscard]] virtual auto CreateCommandRecorder(CommandList* command_list,

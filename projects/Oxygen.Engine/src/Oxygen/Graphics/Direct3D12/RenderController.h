@@ -61,10 +61,6 @@ public:
   [[nodiscard]] auto GetOrCreateComputePipeline(
     ComputePipelineDesc desc, size_t hash) -> detail::PipelineStateCache::Entry;
 
-  [[nodiscard]] auto CreateDepthPrePass(
-    std::shared_ptr<DepthPrePassConfig> config)
-    -> std::shared_ptr<RenderPass> override;
-
 protected:
   [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(
     graphics::CommandList* command_list, graphics::CommandQueue* target_queue)

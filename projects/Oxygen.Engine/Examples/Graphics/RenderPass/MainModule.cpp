@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -24,13 +25,16 @@
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/RenderItem.h>
 
 #include <MainModule.h>
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
-using oxygen::ViewPort;
+using oxygen::engine::DepthPrePass;
+using oxygen::engine::DepthPrePassConfig;
+using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::DeferredObjectRelease;
 using oxygen::graphics::DepthStencilStateDesc;
@@ -38,6 +42,7 @@ using oxygen::graphics::Framebuffer;
 using oxygen::graphics::RasterizerStateDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Scissors;
+using oxygen::graphics::ViewPort;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -309,15 +314,39 @@ void MainModule::SetupFramebuffers()
 
 void MainModule::SetupRenderPasses()
 {
-  // Create triangle RenderItem
+  // Create quad mesh asset using the Data system
+  CHECK_F(!gfx_weak_.expired());
+  const auto gfx = gfx_weak_.lock();
+
+  // Generate a simple quad mesh asset (XY plane, 1x1)
+  auto quad_mesh = oxygen::data::MakeQuadMeshAsset(1.0f, 1.0f);
+  CHECK_NOTNULL_F(quad_mesh, "Failed to create quad mesh asset");
+
+  // TODO: Material asset
+  // std::shared_ptr<oxygen::data::MaterialAsset> material = nullptr;
+
+  // Set up world and normal transforms (identity for this example)
+  const glm::mat4 world_transform = glm::mat4(1.0f);
+  const glm::mat3 normal_transform = glm::mat3(1.0f);
+
+  // Create RenderItem (data-driven, immutable)
+  RenderItem quad_item {
+    .mesh = quad_mesh,
+    .material = nullptr, // TODO: replace with actual material asset
+    .world_transform = world_transform,
+    .normal_transform = normal_transform,
+    .cast_shadows = false,
+    .receive_shadows = false,
+    .render_layer = 0u,
+    .render_flags = 0u,
+    // transformed bounding sphere and bounding boxes will be set by
+    // UpdateComputedProperties
+  };
+  quad_item.UpdateComputedProperties();
+
   render_items_.clear();
   draw_list_.clear();
-  graphics::RenderItem triangle;
-  triangle.vertices = { { { -0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-    { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } } };
-  triangle.vertex_count = static_cast<uint32_t>(triangle.vertices.size());
-  render_items_.push_back(triangle);
+  render_items_.push_back(quad_item);
   for (auto& item : render_items_) {
     draw_list_.push_back(&item);
   }
@@ -331,9 +360,6 @@ void MainModule::SetupRenderPasses()
     cb_desc.memory = graphics::BufferMemory::kUpload;
     cb_desc.debug_name = "SceneConstantsBuffer";
 
-    CHECK_F(!gfx_weak_.expired());
-    const auto gfx = gfx_weak_.lock();
-
     constant_buffer_ = gfx->CreateBuffer(cb_desc);
     constant_buffer_->SetName("SceneConstantsBuffer");
   }
@@ -343,13 +369,13 @@ void MainModule::SetupRenderPasses()
   const auto first_fb = framebuffers_[0];
   const auto& fb_desc = first_fb->GetDescriptor();
   const auto depth_tex = fb_desc.depth_attachment.texture;
-  depth_pre_pass_config_ = std::make_shared<graphics::DepthPrePassConfig>();
-  depth_pre_pass_config_->draw_list = std::span<const graphics::RenderItem*>(
-    draw_list_.data(), draw_list_.size());
+  depth_pre_pass_config_ = std::make_shared<DepthPrePassConfig>();
+  depth_pre_pass_config_->draw_list
+    = std::span<const RenderItem*>(draw_list_.data(), draw_list_.size());
   depth_pre_pass_config_->depth_texture = depth_tex;
   depth_pre_pass_config_->framebuffer = first_fb;
   depth_pre_pass_config_->scene_constants = constant_buffer_;
   depth_pre_pass_config_->debug_name = "DepthPrePass";
-  depth_pre_pass_ = std::make_unique<graphics::DepthPrePass>(
-    renderer_.get(), depth_pre_pass_config_);
+  depth_pre_pass_
+    = std::make_unique<DepthPrePass>(renderer_.get(), depth_pre_pass_config_);
 }
