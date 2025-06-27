@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Renderer/DepthPrepass.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
 using oxygen::data::Vertex;
@@ -51,7 +52,6 @@ using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::PrimitiveType;
 using oxygen::graphics::RasterizerStateDesc;
-using oxygen::graphics::RenderController;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::RootBindingDesc;
@@ -65,18 +65,15 @@ using oxygen::graphics::TextureDimension;
 using oxygen::graphics::TextureViewDescription;
 using oxygen::graphics::ViewPort;
 
-DepthPrePass::DepthPrePass(
-  RenderController* renderer, std::shared_ptr<Config> config)
+DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
   : RenderPass(config->debug_name)
   , config_(std::move(config))
-  , renderer_(renderer)
   , last_built_pso_desc_(DepthPrePass::CreatePipelineStateDesc())
 {
-  DCHECK_NOTNULL_F(renderer_, "RenderController must not be null.");
-  DepthPrePass::ValidateConfig();
 }
 
-void DepthPrePass::SetViewport(const ViewPort& viewport)
+//! Sets the viewport for the depth pre-pass.
+auto DepthPrePass::SetViewport(const ViewPort& viewport) -> void
 {
   if (!viewport.IsValid()) {
     throw std::invalid_argument(
@@ -98,7 +95,7 @@ void DepthPrePass::SetViewport(const ViewPort& viewport)
   viewport_.emplace(viewport);
 }
 
-void DepthPrePass::SetScissors(const Scissors& scissors)
+auto DepthPrePass::SetScissors(const Scissors& scissors) -> void
 {
   if (!scissors.IsValid()) {
     throw std::invalid_argument(
@@ -123,17 +120,23 @@ void DepthPrePass::SetScissors(const Scissors& scissors)
   scissors_.emplace(scissors);
 }
 
-void DepthPrePass::SetClearColor(const Color& color)
+auto DepthPrePass::SetClearColor(const Color& color) -> void
 {
   clear_color_.emplace(color);
 }
 
-void DepthPrePass::SetEnabled(const bool enabled) { enabled_ = enabled; }
+auto DepthPrePass::SetEnabled(const bool enabled) -> void
+{
+  enabled_ = enabled;
+}
 
 auto DepthPrePass::IsEnabled() const -> bool { return enabled_; }
 
-auto DepthPrePass::PrepareResources(CommandRecorder& recorder) -> co::Co<>
+auto DepthPrePass::PrepareResources(
+  const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
+  ValidateConfig();
+
   // Check if we need to rebuild the pipeline state and the root signature.
   if (NeedRebuildPipelineState()) {
     last_built_pso_desc_ = CreatePipelineStateDesc();
@@ -153,7 +156,7 @@ auto DepthPrePass::PrepareResources(CommandRecorder& recorder) -> co::Co<>
   co_return;
 }
 
-void DepthPrePass::ValidateConfig()
+auto DepthPrePass::ValidateConfig() -> void
 {
   if (!config_ || !config_->depth_texture) {
     throw std::runtime_error(
@@ -190,8 +193,8 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
   return false; // No need to rebuild
 }
 
-void DepthPrePass::PrepareSceneConstantsBuffer(
-  CommandRecorder& command_recorder) const
+auto DepthPrePass::PrepareSceneConstantsBuffer(
+  CommandRecorder& command_recorder) const -> void
 {
   const auto& root_param = last_built_pso_desc_.RootBindings()[2];
   DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
@@ -203,7 +206,8 @@ void DepthPrePass::PrepareSceneConstantsBuffer(
     config_->scene_constants->GetGPUVirtualAddress());
 }
 
-auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
+auto DepthPrePass::Execute(
+  const RenderContext& context, CommandRecorder& command_recorder) -> co::Co<>
 {
   DCHECK_F(!NeedRebuildPipelineState(),
     "Depth PSO should have been built by constructor or PrepareResources");
@@ -215,14 +219,14 @@ auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
     last_built_pso_desc_); // It also sets the bindless root signature.
 
   try {
-    const auto dsv = PrepareDepthStencilView(GetDepthTexture());
+    const auto dsv = PrepareDepthStencilView(context, GetDepthTexture());
     DCHECK_F(dsv.IsValid(), "DepthStencilView must be valid after preparation");
 
     ClearDepthStencilView(command_recorder, dsv);
     SetViewAsRenderTarget(command_recorder, dsv);
     SetupViewPortAndScissors(command_recorder);
     PrepareSceneConstantsBuffer(command_recorder);
-    IssueDrawCalls(command_recorder);
+    IssueDrawCalls(context, command_recorder);
   } catch (const std::exception& e) {
     DLOG_F(ERROR, "DepthPrePass::Execute failed: %s", e.what());
     throw; // Re-throw to propagate the error
@@ -233,11 +237,13 @@ auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
 
 // --- Private helper implementations for Execute() ---
 
-auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
-  -> NativeObject
+auto DepthPrePass::PrepareDepthStencilView(const RenderContext& context,
+  const Texture& depth_texture_ref) -> NativeObject
 {
-  auto& registry = renderer_->GetResourceRegistry();
-  auto& allocator = renderer_->GetDescriptorAllocator();
+  DCHECK_NOTNULL_F(context.render_controller);
+
+  auto& registry = context.render_controller->GetResourceRegistry();
+  auto& allocator = context.render_controller->GetDescriptorAllocator();
 
   // 1. Prepare TextureViewDescription
   const auto& depth_tex_desc = depth_texture_ref.GetDescriptor();
@@ -282,8 +288,8 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
   return dsv;
 }
 
-void DepthPrePass::ClearDepthStencilView(
-  CommandRecorder& command_recorder, const NativeObject& dsv_handle) const
+auto DepthPrePass::ClearDepthStencilView(CommandRecorder& command_recorder,
+  const NativeObject& dsv_handle) const -> void
 {
   command_recorder.ClearDepthStencilView(GetDepthTexture(), dsv_handle,
     ClearFlags::kDepth, // only depth, as the depth pre-pass does not use the
@@ -291,8 +297,8 @@ void DepthPrePass::ClearDepthStencilView(
     1.0f, 0);
 }
 
-void DepthPrePass::SetViewAsRenderTarget(
-  CommandRecorder& command_recorder, const NativeObject& dsv) const
+auto DepthPrePass::SetViewAsRenderTarget(
+  CommandRecorder& command_recorder, const NativeObject& dsv) const -> void
 {
   DCHECK_F(dsv.IsValid(),
     "DepthStencilView must be valid before setting render targets");
@@ -300,8 +306,8 @@ void DepthPrePass::SetViewAsRenderTarget(
   command_recorder.SetRenderTargets({}, dsv);
 }
 
-void DepthPrePass::SetupViewPortAndScissors(
-  CommandRecorder& command_recorder) const
+auto DepthPrePass::SetupViewPortAndScissors(
+  CommandRecorder& command_recorder) const -> void
 {
   // Use the depth texture. It is already validated consistent with the
   // framebuffer if provided.
@@ -324,8 +330,11 @@ void DepthPrePass::SetupViewPortAndScissors(
   command_recorder.SetScissors(scissors);
 }
 
-void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
+auto DepthPrePass::IssueDrawCalls(
+  const RenderContext& context, CommandRecorder& command_recorder) const -> void
 {
+  DCHECK_NOTNULL_F(context.render_controller);
+
   // Note on D3D12 Upload Heap Resource States:
   // Buffers created on D3D12_HEAP_TYPE_UPLOAD (like these temporary vertex
   // buffers) are typically implicitly in a state
@@ -363,7 +372,8 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
     vb_upload_desc.memory = BufferMemory::kUpload;
     vb_upload_desc.debug_name = "DepthPrePass_TempVB";
 
-    auto temp_vb = renderer_->GetGraphics().CreateBuffer(vb_upload_desc);
+    auto temp_vb
+      = context.render_controller->GetGraphics().CreateBuffer(vb_upload_desc);
     DCHECK_NOTNULL_F(
       temp_vb, "Failed to create temporary vertex buffer for DepthPrePass");
     if (!temp_vb) {
@@ -380,7 +390,8 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
 
     // 3. Bind the vertex buffer using the abstract CommandRecorder interface
     const std::shared_ptr<Buffer> buffer_array[1] = { temp_vb };
-    const uint32_t stride_array[1] = { static_cast<uint32_t>(sizeof(Vertex)) };
+    constexpr uint32_t stride_array[1]
+      = { static_cast<uint32_t>(sizeof(Vertex)) };
 
     command_recorder.SetVertexBuffers(
       1, // num: number of vertex buffers to bind
@@ -395,7 +406,8 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
 
     // The renderer will manage the lifetime of this temporary buffer until the
     // GPU is done.
-    DeferredObjectRelease(temp_vb, renderer_->GetPerFrameResourceManager());
+    DeferredObjectRelease(
+      temp_vb, context.render_controller->GetPerFrameResourceManager());
   }
 }
 

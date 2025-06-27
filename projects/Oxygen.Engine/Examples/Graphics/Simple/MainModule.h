@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
 namespace oxygen {
@@ -42,8 +43,8 @@ namespace oxygen::examples {
 
 class MainModule final {
 public:
-  MainModule(std::shared_ptr<oxygen::Platform> platform,
-    std::weak_ptr<oxygen::Graphics> gfx_weak);
+  MainModule(
+    std::shared_ptr<Platform> platform, std::weak_ptr<Graphics> gfx_weak);
   ~MainModule();
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
@@ -54,15 +55,15 @@ public:
     return OpenNursery(nursery_, std::move(started));
   }
 
-  void Run();
+  auto Run() -> void;
 
 private:
-  void SetupCommandQueues() const;
-  void SetupMainWindow();
-  void SetupSurface();
-  void SetupRenderer();
-  void SetupFramebuffers();
-  void SetupShaders() const;
+  auto SetupCommandQueues() const -> void;
+  auto SetupMainWindow() -> void;
+  auto SetupSurface() -> void;
+  auto SetupRenderer() -> void;
+  auto SetupFramebuffers() -> void;
+  auto SetupShaders() const -> void;
 
   auto RenderScene() -> co::Co<>;
 
@@ -74,6 +75,7 @@ private:
   std::shared_ptr<engine::Renderer> renderer_;
   StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount>
     framebuffers_ {};
+  engine::RenderContext context_ {};
 
   std::shared_ptr<graphics::Buffer> vertex_buffer_;
   std::shared_ptr<graphics::Buffer> index_buffer_;
@@ -81,16 +83,13 @@ private:
   graphics::NativeObject index_mapping_cbv_ {};
 
   // === Data-driven RenderItem/scene system members ===
-  std::vector<oxygen::engine::RenderItem> render_items_;
-  std::vector<oxygen::engine::RenderItem*> draw_list_;
+  std::vector<engine::RenderItem> render_items_;
 
   co::Nursery* nursery_ { nullptr };
   float rotation_angle_ { 0.0f };
-  void CreateTriangleVertexBuffer();
-  void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder) const;
-  void EnsureBindlessIndexingBuffer();
-  void EnsureVertexBufferSrv();
-  void EnsureMeshDrawResources();
+  auto EnsureBindlessIndexingBuffer() -> void;
+  auto EnsureVertexBufferSrv() -> void;
+  auto EnsureMeshDrawResources() -> void;
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
   bool recreate_cbv_ { true };

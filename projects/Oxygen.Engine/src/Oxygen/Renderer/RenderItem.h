@@ -38,10 +38,10 @@ namespace oxygen::engine {
 */
 struct RenderItem {
   // === Geometry Data ===
-  std::shared_ptr<const oxygen::data::MeshAsset> mesh;
+  std::shared_ptr<const data::MeshAsset> mesh;
 
   // === Material and Shading ===
-  std::shared_ptr<const oxygen::data::MaterialAsset> material;
+  std::shared_ptr<const data::MaterialAsset> material;
 
   // === Transformation ===
   //! Object to world transformation
@@ -66,11 +66,11 @@ struct RenderItem {
   // === Utility Methods ===
   //! Update only the world-space properties (bounding volumes, normal
   //! transform)
-  OXGN_RNDR_API void UpdatedTransformedProperties();
+  OXGN_RNDR_API auto UpdatedTransformedProperties() -> void;
 
   //! Update all computed properties (including world-space and any other
   //! derived data)
-  OXGN_RNDR_API void UpdateComputedProperties();
+  OXGN_RNDR_API auto UpdateComputedProperties() -> void;
 };
 
 } // namespace oxygen::engine

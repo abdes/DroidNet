@@ -127,11 +127,9 @@ public:
    theirs and the base class's implementation, to ensure the configuration is
    valid out of the constructor.
 
-   \param renderer The renderer that creates this depth pre-pass.
    \param config The configuration settings for this depth pre-pass.
   */
-  OXGN_RNDR_API DepthPrePass(
-    graphics::RenderController* renderer, std::shared_ptr<Config> config);
+  OXGN_RNDR_API explicit DepthPrePass(std::shared_ptr<Config> config);
 
   //! Destructor.
   ~DepthPrePass() override = default;
@@ -158,8 +156,8 @@ public:
      relevant to the backend operation (e.g., for binding or coordinated
      transitions).
   */
-  OXGN_RNDR_API auto PrepareResources(graphics::CommandRecorder& recorder)
-    -> co::Co<> override;
+  OXGN_RNDR_API auto PrepareResources(const RenderContext& context,
+    graphics::CommandRecorder& recorder) -> co::Co<> override;
 
   //! Execute the main rendering logic for this pass.
   /*!
@@ -171,17 +169,17 @@ public:
    - Applying the `viewport_` and `scissors_` if they have been set.
    - Issuing draw calls for the specified geometry.
   */
-  auto Execute(graphics::CommandRecorder& command_recorder)
-    -> co::Co<> override;
+  auto Execute(const RenderContext& context,
+    graphics::CommandRecorder& command_recorder) -> co::Co<> override;
 
-  OXGN_RNDR_API void SetViewport(const graphics::ViewPort& viewport) override;
+  OXGN_RNDR_API auto SetViewport(const graphics::ViewPort& viewport) -> void;
   auto GetViewport() const -> std::optional<graphics::ViewPort>
   {
     return viewport_;
   }
   auto HasViewport() const -> bool { return viewport_.has_value(); }
 
-  OXGN_RNDR_API void SetScissors(const graphics::Scissors& scissors) override;
+  OXGN_RNDR_API auto SetScissors(const graphics::Scissors& scissors) -> void;
   auto GetScissors() const -> std::optional<graphics::Scissors>
   {
     return scissors_;
@@ -195,29 +193,17 @@ public:
    should be handled within backend-specific `PrepareResources`
    implementations.
   */
-  OXGN_RNDR_API void SetClearColor(const graphics::Color& color) override;
+  OXGN_RNDR_API auto SetClearColor(const graphics::Color& color) -> void;
   auto GetClearColor() const -> std::optional<graphics::Color>
   {
     return clear_color_;
   }
   auto HasClearColor() const -> bool { return clear_color_.has_value(); }
 
-  OXGN_RNDR_API void SetEnabled(bool enabled) override;
+  OXGN_RNDR_API auto SetEnabled(bool enabled) -> void;
   OXGN_RNDR_API auto IsEnabled() const -> bool override;
 
 protected:
-  DepthPrePass(graphics::RenderController* renderer,
-    std::shared_ptr<Config> config,
-    graphics::GraphicsPipelineDesc pipeline_desc)
-    : RenderPass(config->debug_name)
-    , config_(std::move(config))
-    , renderer_(renderer)
-    , last_built_pso_desc_(std::move(pipeline_desc))
-  {
-    // No call to ValidateConfig() here, as it should be called by the
-    // derived class.
-  }
-
   //! Provides const access to the depth texture specified in the configuration.
   [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture&
   {
@@ -248,26 +234,26 @@ protected:
    can override this to add further validation logic.
    Throws std::runtime_error if validation fails.
   */
-  OXGN_RNDR_API virtual void ValidateConfig();
+  OXGN_RNDR_API virtual auto ValidateConfig() -> void;
 
   virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc;
   virtual auto NeedRebuildPipelineState() const -> bool;
 
   // Helper methods for Execute()
-  virtual auto PrepareDepthStencilView(
+  virtual auto PrepareDepthStencilView(const RenderContext& context,
     const graphics::Texture& depth_texture_ref) -> graphics::NativeObject;
-  virtual void ClearDepthStencilView(
+  virtual auto ClearDepthStencilView(
     graphics::CommandRecorder& command_recorder,
-    const graphics::NativeObject& dsv_handle) const;
-  virtual void SetViewAsRenderTarget(
+    const graphics::NativeObject& dsv_handle) const -> void;
+  virtual auto SetViewAsRenderTarget(
     graphics::CommandRecorder& command_recorder,
-    const graphics::NativeObject& dsv) const;
-  virtual void SetupViewPortAndScissors(
-    graphics::CommandRecorder& command_recorder) const;
-  virtual void IssueDrawCalls(
-    graphics::CommandRecorder& command_recorder) const;
-  virtual void PrepareSceneConstantsBuffer(
-    graphics::CommandRecorder& command_recorder) const;
+    const graphics::NativeObject& dsv) const -> void;
+  virtual auto SetupViewPortAndScissors(
+    graphics::CommandRecorder& command_recorder) const -> void;
+  virtual auto IssueDrawCalls(const RenderContext& context,
+    graphics::CommandRecorder& command_recorder) const -> void;
+  virtual auto PrepareSceneConstantsBuffer(
+    graphics::CommandRecorder& command_recorder) const -> void;
 
 private:
   //! Configuration for the depth pre-pass.
@@ -286,13 +272,9 @@ private:
   //! Flag indicating if the pass is enabled.
   bool enabled_ = true;
 
-  //! Pointer to the renderer that created this depth pre-pass.
-  graphics::RenderController* renderer_ { nullptr };
-
   // Track the last built pipeline state object (PSO) description and hash, so
   // we can properly manage their caching and retrieval.
   graphics::GraphicsPipelineDesc last_built_pso_desc_;
-  size_t last_built_pso_hash_ { 0 };
 };
 
 } // namespace oxygen::engine

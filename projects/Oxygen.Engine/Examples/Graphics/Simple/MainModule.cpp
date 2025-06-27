@@ -15,7 +15,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -24,12 +23,13 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/ShaderPass.h>
 
 #include <MainModule.h>
 
@@ -40,13 +40,7 @@ using oxygen::data::MeshAsset;
 using oxygen::data::Vertex;
 using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
-using oxygen::graphics::DeferredObjectRelease;
-using oxygen::graphics::DepthStencilStateDesc;
 using oxygen::graphics::Framebuffer;
-using oxygen::graphics::RasterizerStateDesc;
-using oxygen::graphics::ResourceStates;
-using oxygen::graphics::Scissors;
-using oxygen::graphics::ViewPort;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -81,11 +75,9 @@ using oxygen::graphics::ViewPort;
 
 namespace {
 
-}
-
 //! Creates a new MeshAsset representing a single triangle (for demo/testing
 //! only).
-inline std::shared_ptr<MeshAsset> MakeTriangleMeshAsset()
+auto MakeTriangleMeshAsset() -> std::shared_ptr<MeshAsset>
 {
   // The shader expects only position (vec3) and color (vec3) tightly packed.
   // We must ensure the buffer layout matches exactly.
@@ -110,7 +102,7 @@ inline std::shared_ptr<MeshAsset> MakeTriangleMeshAsset()
 }
 
 //! Creates a new MeshAsset representing a single quad (for demo/testing only).
-inline std::shared_ptr<MeshAsset> MakeQuadMeshAsset()
+auto MakeQuadMeshAsset() -> std::shared_ptr<MeshAsset>
 {
   // CCW order for D3D12 default culling
   constexpr float kHalfSize = 0.5f; // 50% of viewport (from -0.25 to +0.25)
@@ -129,6 +121,8 @@ inline std::shared_ptr<MeshAsset> MakeQuadMeshAsset()
   asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
   return asset;
 }
+
+} // namespace
 
 MainModule::MainModule(
   std::shared_ptr<Platform> platform, std::weak_ptr<Graphics> gfx_weak)
@@ -165,6 +159,7 @@ MainModule::~MainModule()
     }
   }
 
+  context_.framebuffer.reset(); // Do not hold onto the framebuffer
   framebuffers_.clear();
   surface_->DetachRenderer();
   renderer_.reset();
@@ -173,7 +168,7 @@ MainModule::~MainModule()
   platform_.reset();
 }
 
-void MainModule::Run()
+auto MainModule::Run() -> void
 {
   DCHECK_NOTNULL_F(nursery_);
   SetupCommandQueues();
@@ -194,7 +189,7 @@ void MainModule::Run()
   });
 }
 
-void MainModule::SetupCommandQueues() const
+auto MainModule::SetupCommandQueues() const -> void
 {
   CHECK_F(!gfx_weak_.expired());
 
@@ -202,7 +197,7 @@ void MainModule::SetupCommandQueues() const
   gfx->CreateCommandQueues(graphics::SingleQueueStrategy());
 }
 
-void MainModule::SetupSurface()
+auto MainModule::SetupSurface() -> void
 {
   CHECK_F(!gfx_weak_.expired());
   CHECK_F(!window_weak_.expired());
@@ -217,7 +212,7 @@ void MainModule::SetupSurface()
     window_weak_.lock()->Id());
 }
 
-void MainModule::SetupMainWindow()
+auto MainModule::SetupMainWindow() -> void
 {
   // Set up the main window
   WindowProps props("Oxygen Graphics Example");
@@ -272,7 +267,7 @@ void MainModule::SetupMainWindow()
   });
 }
 
-void MainModule::SetupRenderer()
+auto MainModule::SetupRenderer() -> void
 {
   CHECK_F(!gfx_weak_.expired());
 
@@ -282,9 +277,13 @@ void MainModule::SetupRenderer()
   CHECK_NOTNULL_F(
     render_controller_, "Failed to create renderer for main window");
   renderer_ = std::make_shared<engine::Renderer>(render_controller_);
+
+  // Update render context
+  context_.renderer = renderer_.get();
+  context_.render_controller = render_controller_.get();
 }
 
-void MainModule::SetupFramebuffers()
+auto MainModule::SetupFramebuffers() -> void
 {
   CHECK_F(!gfx_weak_.expired());
   auto gfx = gfx_weak_.lock();
@@ -295,13 +294,14 @@ void MainModule::SetupFramebuffers()
   for (auto i = 0U; i < kFrameBufferCount; ++i) {
     auto desc = graphics::FramebufferDesc {}.AddColorAttachment(
       surface_->GetBackBuffer(i));
+
     framebuffers_.push_back(gfx->CreateFramebuffer(desc, *render_controller_));
     CHECK_NOTNULL_F(
       framebuffers_[i], "Failed to create framebuffer for main window");
   }
 }
 
-void MainModule::SetupShaders() const
+auto MainModule::SetupShaders() const -> void
 {
   CHECK_F(!gfx_weak_.expired());
   const auto gfx = gfx_weak_.lock();
@@ -332,7 +332,7 @@ void MainModule::SetupShaders() const
 // vertex buffer SRV in the heap (always 1 for this draw).
 // - The root signature and shader are designed to match this layout. See
 // PipelineStateCache.cpp and FullScreenTriangle.hlsl for details.
-void MainModule::EnsureVertexBufferSrv()
+auto MainModule::EnsureVertexBufferSrv() -> void
 {
   if (!recreate_cbv_) {
     return;
@@ -379,7 +379,7 @@ void MainModule::EnsureVertexBufferSrv()
     vertex_srv_shader_visible_index_);
 }
 
-void MainModule::EnsureBindlessIndexingBuffer()
+auto MainModule::EnsureBindlessIndexingBuffer() -> void
 {
   if (!recreate_cbv_) {
     // No need to create the constant buffer if we don't have a renderer or
@@ -414,7 +414,7 @@ void MainModule::EnsureBindlessIndexingBuffer()
   recreate_cbv_ = false; // Reset the flag after creating/updating the CBV
 }
 
-void MainModule::EnsureMeshDrawResources()
+auto MainModule::EnsureMeshDrawResources() -> void
 {
   DCHECK_F(
     constant_buffer_ || recreate_cbv_, "Constant buffer must be created first");
@@ -474,10 +474,6 @@ auto MainModule::RenderScene() -> co::Co<>
     };
     quad_item.UpdateComputedProperties();
     render_items_.push_back(quad_item);
-    draw_list_.clear();
-    for (auto& item : render_items_) {
-      draw_list_.push_back(&item);
-    }
   }
 
   // Ensure renderer has uploaded mesh resources
@@ -496,87 +492,33 @@ auto MainModule::RenderScene() -> co::Co<>
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 
-  const ViewPort viewport {
-    .width = static_cast<float>(surface_->Width()),
-    .height = static_cast<float>(surface_->Height()),
-  };
-  recorder->SetViewport(viewport);
+  // All viewport, scissors, and pipeline state setup is now handled by
+  // ShaderPass
 
-  const Scissors scissors { .right = static_cast<int32_t>(surface_->Width()),
-    .bottom = static_cast<int32_t>(surface_->Height()) };
-  recorder->SetScissors(scissors);
+  context_.framebuffer = fb;
 
-  graphics::FramebufferLayoutDesc fb_layout;
-  const auto& fb_desc = fb->GetDescriptor();
-  for (const auto& color_attachment : fb_desc.color_attachments) {
-    if (color_attachment.IsValid()) {
-      fb_layout.color_target_formats.push_back(
-        color_attachment.format != graphics::Format::kUnknown
-          ? color_attachment.format
-          : color_attachment.texture->GetDescriptor().format);
-    }
-  }
-  if (fb_desc.depth_attachment.IsValid()) {
-    fb_layout.depth_stencil_format
-      = fb_desc.depth_attachment.format != graphics::Format::kUnknown
-      ? fb_desc.depth_attachment.format
-      : fb_desc.depth_attachment.texture->GetDescriptor().format;
+  // FIXME: better way to handle this?
+  context_.opaque_draw_list.clear();
+  for (auto& item : render_items_) {
+    context_.opaque_draw_list.push_back(&item);
   }
 
-  constexpr graphics::RootBindingDesc srv_table_desc { .binding_slot_desc
-    = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
-    .visibility = graphics::ShaderStageFlags::kAll,
-    .data = graphics::DescriptorTableBinding {
-      .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-      .base_index = 0,
-    } };
-  constexpr graphics::RootBindingDesc index_mapping_cbv_desc {
-    .binding_slot_desc
-    = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
-    .visibility = graphics::ShaderStageFlags::kAll,
-    .data = graphics::DirectBufferBinding {}
-  };
-
-  const auto pipeline_desc
-    = graphics::GraphicsPipelineDesc::Builder()
-        .SetVertexShader(graphics::ShaderStageDesc {
-          .shader = graphics::MakeShaderIdentifier(
-            graphics::ShaderType::kVertex, "FullScreenTriangle.hlsl") })
-        .SetPixelShader(graphics::ShaderStageDesc {
-          .shader = graphics::MakeShaderIdentifier(
-            graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
-        .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-        .SetRasterizerState(RasterizerStateDesc::NoCulling())
-        .SetDepthStencilState(DepthStencilStateDesc::Disabled())
-        .SetFramebufferLayout(std::move(fb_layout))
-        .AddRootBinding(graphics::RootBindingItem(srv_table_desc))
-        .AddRootBinding(graphics::RootBindingItem(index_mapping_cbv_desc))
-        .Build();
-
-  recorder->SetPipelineState(pipeline_desc);
-  recorder->SetGraphicsRootConstantBufferView(
-    pipeline_desc.RootBindings()[1].GetRootParameterIndex(),
-    constant_buffer_->GetGPUVirtualAddress());
-
-  bool cleared = false;
-  for (const auto* item : draw_list_) {
-    if (!cleared) {
-      recorder->ClearFramebuffer(*fb,
-        std::vector<std::optional<graphics::Color>> {
-          graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f } },
-        std::nullopt, std::nullopt);
-      cleared = true;
-    }
-    const auto& mesh = item->mesh;
-    auto vertex_buffer = renderer_->GetVertexBuffer(*mesh);
-    auto index_buffer = renderer_->GetIndexBuffer(*mesh);
-    if (mesh->Indices().empty()) {
-      recorder->Draw(static_cast<uint32_t>(mesh->VertexCount()), 1, 0, 0);
-    } else {
-      recorder->BindIndexBuffer(*index_buffer, graphics::Format::kR32UInt);
-      recorder->DrawIndexed(
-        static_cast<uint32_t>(mesh->IndexCount()), 1, 0, 0, 0);
-    }
+  // --- ShaderPass integration ---
+  static std::shared_ptr<engine::ShaderPass> shader_pass;
+  static std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
+  if (!shader_pass_config) {
+    shader_pass_config = std::make_shared<engine::ShaderPassConfig>();
+    shader_pass_config->color_texture = nullptr;
+    shader_pass_config->clear_color
+      = graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f }; // Custom clear color
+    shader_pass_config->enabled = true;
+    shader_pass_config->debug_name = "ShaderPass";
   }
+  if (!shader_pass) {
+    shader_pass = std::make_shared<engine::ShaderPass>(shader_pass_config);
+  }
+  co_await shader_pass->PrepareResources(context_, *recorder);
+  co_await shader_pass->Execute(context_, *recorder);
+
   co_return;
 }

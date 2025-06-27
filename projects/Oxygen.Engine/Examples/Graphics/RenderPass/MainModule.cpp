@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
 #include <MainModule.h>
@@ -34,6 +35,7 @@ using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 using oxygen::engine::DepthPrePass;
 using oxygen::engine::DepthPrePassConfig;
+using oxygen::engine::RenderContext;
 using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::DeferredObjectRelease;
@@ -276,8 +278,13 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   // Prepare and execute depth pre-pass
-  co_await depth_pre_pass_->PrepareResources(*recorder);
-  co_await depth_pre_pass_->Execute(*recorder);
+  RenderContext context {
+    .opaque_draw_list = draw_list_,
+    .render_controller = renderer_.get(),
+    .framebuffer = fb,
+  };
+  co_await depth_pre_pass_->PrepareResources(context, *recorder);
+  co_await depth_pre_pass_->Execute(context, *recorder);
 
   co_return;
 }
@@ -376,6 +383,5 @@ void MainModule::SetupRenderPasses()
   depth_pre_pass_config_->framebuffer = first_fb;
   depth_pre_pass_config_->scene_constants = constant_buffer_;
   depth_pre_pass_config_->debug_name = "DepthPrePass";
-  depth_pre_pass_
-    = std::make_unique<DepthPrePass>(renderer_.get(), depth_pre_pass_config_);
+  depth_pre_pass_ = std::make_unique<DepthPrePass>(depth_pre_pass_config_);
 }
