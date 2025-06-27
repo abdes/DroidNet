@@ -6,6 +6,7 @@ applyTo: '**/*.cpp;**/*.h'
 ## TEST CASES
 
 - Use Google Test; use Google Mock only if required.
+- Include src/Oxygen/Testing/GTest.h, when not already included, instead of gtest.h and gmock.h.
 - Write scenario-based tests with clear, descriptive names.
 - Group tests by functionality with detailed comment headers (describe hierarchy, scenario, or feature).
 - Place all tests in anonymous namespaces to avoid symbol clashes.
@@ -15,12 +16,11 @@ applyTo: '**/*.cpp;**/*.h'
 
 ## FIXTURES AND HELPERS
 
-- Derive all fixtures from ::testing::Test for shared setup/teardown.
 - Create separate fixtures for different test types (basic, error, death, edge, complex).
 - Implement helper methods for common actions, node creation, and expectations.
-- Use SetUp() and TearDown() for resource management and clean state.
-- Use and extend existing helper methods and base class patterns as needed.
 - Create reusable helpers for logic and expectation checks (e.g., node order, presence, filtering).
+- Use and extend existing helper methods and base class patterns as needed.
+- Use SetUp() and TearDown() for resource management and clean state.
 - Manage all state within fixtures or locally; never use global or static state.
 
 ## TEST CASE DESIGN
@@ -36,13 +36,13 @@ applyTo: '**/*.cpp;**/*.h'
 
 ## ASSERTIONS AND MATCHERS
 
-- Use EXPECT_*and ASSERT_* with custom failure messages.
+- Use EXPECT_*and ASSERT_*, custom failure messages only when they add valuable information not shown by gtest diagnostics already.
 - Check both state and side effects; verify node order, presence, and filtering
   as appropriate.
-- Always use Google Test collection matchers: using ::testing::AllOf; using
+- Use Google Test collection matchers when applicable instead of hand writing the expectations: using ::testing::AllOf; using
   ::testing::Contains; using ::testing::IsSupersetOf; using ::testing::SizeIs;
   EXPECT_THAT(collection, AllOf( SizeIs(expected_count), IsSupersetOf({"item1",
   "item2"}) ));
-- Add using ::testing::MatcherName declarations at test start.
+- Add using ::testing::MatcherName declarations at test start for the matchers used in the tests.
 - Use expectation helpers (e.g., ExpectVisitedNodes, ExpectContainsExactlyNodes)
   for clarity and reuse.
