@@ -15,7 +15,6 @@
 #include <Oxygen/Base/Macros.h>
 // ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
-#include <Oxygen/Core/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -24,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -112,13 +112,16 @@ public:
     std::span<NativeObject> rtvs, std::optional<NativeObject> dsv)
     = 0;
 
-  virtual void SetViewport(const oxygen::ViewPort& viewport) = 0;
+  virtual void SetViewport(const ViewPort& viewport) = 0;
   virtual void SetScissors(const Scissors& scissors) = 0;
 
   //=== Draw and Resource Binding Commands ===------------------------------//
 
   virtual void Draw(uint32_t vertex_num, uint32_t instances_num,
     uint32_t vertex_offset, uint32_t instance_offset)
+    = 0;
+  virtual void DrawIndexed(uint32_t index_count, uint32_t instance_count,
+    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
     = 0;
   virtual void Dispatch(uint32_t thread_group_count_x,
     uint32_t thread_group_count_y, uint32_t thread_group_count_z)
@@ -127,6 +130,7 @@ public:
     const std::shared_ptr<Buffer>* vertex_buffers,
     const uint32_t* strides) const
     = 0;
+  virtual void BindIndexBuffer(const Buffer& buffer, Format format) = 0;
 
   //=== Framebuffer and Resource Operations ===-----------------------------//
 

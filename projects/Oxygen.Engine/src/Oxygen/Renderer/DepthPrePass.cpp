@@ -11,24 +11,59 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Core/ViewPort.h>
+#include <Oxygen/Data/MeshAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
-#include <Oxygen/Graphics/Common/DepthPrepass.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
-#include <Oxygen/Graphics/Common/RenderItem.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
+#include <Oxygen/Renderer/DepthPrepass.h>
+#include <Oxygen/Renderer/RenderItem.h>
 
-using oxygen::ViewPort;
-using oxygen::graphics::DepthPrePass;
+using oxygen::data::Vertex;
+using oxygen::engine::DepthPrePass;
+using oxygen::graphics::BindingSlotDesc;
+using oxygen::graphics::Buffer;
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferUsage;
+using oxygen::graphics::ClearFlags;
+using oxygen::graphics::Color;
+using oxygen::graphics::CommandRecorder;
+using oxygen::graphics::CompareOp;
+using oxygen::graphics::CullMode;
+using oxygen::graphics::DepthStencilStateDesc;
+using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorTableBinding;
+using oxygen::graphics::DescriptorVisibility;
+using oxygen::graphics::DirectBufferBinding;
+using oxygen::graphics::FillMode;
+using oxygen::graphics::FramebufferLayoutDesc;
+using oxygen::graphics::GraphicsPipelineDesc;
+using oxygen::graphics::NativeObject;
+using oxygen::graphics::PrimitiveType;
+using oxygen::graphics::RasterizerStateDesc;
+using oxygen::graphics::RenderController;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::RootBindingDesc;
+using oxygen::graphics::RootBindingItem;
+using oxygen::graphics::Scissors;
+using oxygen::graphics::ShaderStageDesc;
+using oxygen::graphics::ShaderStageFlags;
+using oxygen::graphics::ShaderType;
+using oxygen::graphics::Texture;
+using oxygen::graphics::TextureDimension;
+using oxygen::graphics::TextureViewDescription;
+using oxygen::graphics::ViewPort;
 
 DepthPrePass::DepthPrePass(
   RenderController* renderer, std::shared_ptr<Config> config)
@@ -41,7 +76,7 @@ DepthPrePass::DepthPrePass(
   DepthPrePass::ValidateConfig();
 }
 
-void DepthPrePass::SetViewport(const oxygen::ViewPort& viewport)
+void DepthPrePass::SetViewport(const ViewPort& viewport)
 {
   if (!viewport.IsValid()) {
     throw std::invalid_argument(
@@ -304,27 +339,27 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
   for (const auto* item : GetDrawList()) {
     DCHECK_NOTNULL_F(item);
 
-    if (item->vertex_count == 0) {
-      continue; // Nothing to draw
-    }
-
-    // Validate RenderItem data consistency
-    if (item->vertices.empty() || item->vertex_count > item->vertices.size()) {
-      DLOG_F(WARNING,
-        "DepthPrePass::IssueDrawCalls: RenderItem has inconsistent vertex "
-        "data. "
-        "vertex_count: {}, vertices.size(): {}. Skipping item.",
-        item->vertex_count, item->vertices.size());
+    // Skip items with no mesh or no vertices
+    if (!item->mesh || item->mesh->VertexCount() == 0) {
+      LOG_F(WARNING,
+        "DepthPrePass::IssueDrawCalls: Skipping RenderItem with no mesh or no "
+        "vertices. Mesh ptr: {}, VertexCount: {}",
+        fmt::ptr(item->mesh.get()),
+        item->mesh ? item->mesh->VertexCount() : 0u);
       continue;
     }
 
-    const uint32_t num_vertices_to_draw = item->vertex_count;
+    // Get mesh vertex/index data
+    const auto& mesh = item->mesh;
+    const auto& vertices = mesh->Vertices();
+    const uint32_t num_vertices_to_draw
+      = static_cast<uint32_t>(vertices.size());
     const size_t data_size_bytes = num_vertices_to_draw * sizeof(Vertex);
 
     // 1. Create a temporary upload buffer for the vertex data
     BufferDesc vb_upload_desc;
     vb_upload_desc.size_bytes = data_size_bytes;
-    vb_upload_desc.usage = BufferUsage::kVertex; // Corrected from kVertex
+    vb_upload_desc.usage = BufferUsage::kVertex;
     vb_upload_desc.memory = BufferMemory::kUpload;
     vb_upload_desc.debug_name = "DepthPrePass_TempVB";
 
@@ -341,12 +376,11 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
     // 2. Update the buffer with vertex data.
     // The Buffer::Update method for an kUpload buffer should handle mapping &
     // copying.
-    temp_vb->Update(item->vertices.data(), data_size_bytes, 0);
+    temp_vb->Update(vertices.data(), data_size_bytes, 0);
 
     // 3. Bind the vertex buffer using the abstract CommandRecorder interface
     const std::shared_ptr<Buffer> buffer_array[1] = { temp_vb };
-    constexpr uint32_t stride_array[1]
-      = { static_cast<uint32_t>(sizeof(Vertex)) };
+    const uint32_t stride_array[1] = { static_cast<uint32_t>(sizeof(Vertex)) };
 
     command_recorder.SetVertexBuffers(
       1, // num: number of vertex buffers to bind
@@ -367,7 +401,8 @@ void DepthPrePass::IssueDrawCalls(CommandRecorder& command_recorder) const
 
 auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 {
-  constexpr RasterizerStateDesc raster_desc { .fill_mode = FillMode::kSolid,
+  constexpr RasterizerStateDesc raster_desc {
+    .fill_mode = FillMode::kSolid,
     .cull_mode = CullMode::kBack,
     .front_counter_clockwise = true, // Default winding order for front faces
 
@@ -379,7 +414,8 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     //
     // Or `depth_texture.GetDesc().sample_count > 1` if specifically needed
     // for rasterizer stage
-    .multisample_enable = false };
+    .multisample_enable = false,
+  };
 
   constexpr DepthStencilStateDesc ds_desc {
     .depth_test_enable = true, // Enable depth testing
@@ -389,7 +425,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .stencil_read_mask
     = 0xFF, // Default full-mask value for reading stencil buffer
     .stencil_write_mask
-    = 0xFF // Default full-mask value for writing to stencil buffer
+    = 0xFF, // Default full-mask value for writing to stencil buffer
   };
 
   auto& depth_texture_desc = GetDepthTexture().GetDescriptor();

@@ -8,9 +8,9 @@
 
 #include <fmt/format.h>
 
-#include <Oxygen/Core/ViewPort.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 
-auto oxygen::to_string(const ViewPort& viewport) -> std::string
+auto oxygen::graphics::to_string(const ViewPort& viewport) -> std::string
 {
   return fmt::format(
     "ViewPort{{tl.x={}, tl.y={}, w={}, h={}, min_depth={}, max_depth={}}}",

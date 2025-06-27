@@ -14,6 +14,8 @@
 
 #include <Oxygen/Base/Hash.h>
 
+namespace oxygen::data {
+
 //! Defines a single vertex with common attributes for mesh geometry.
 /*!
  Defines the per-vertex attributes used for mesh geometry in the Oxygen Engine.
@@ -66,7 +68,6 @@ inline auto operator==(const Vertex& lhs, const Vertex& rhs) noexcept -> bool
 
  @see Vertex, AlmostEqual
 */
-namespace oxygen::data {
 struct QuantizedVertexHash {
   float epsilon = 1e-5f;
   auto operator()(const Vertex& v) const noexcept -> std::size_t
@@ -86,12 +87,13 @@ struct QuantizedVertexHash {
     return h;
   }
 };
+
 } // namespace oxygen::data
 
 //! std::hash specialization for Vertex using quantized hash (epsilon = 1e-5f)
-template <> struct std::hash<Vertex> {
-  auto operator()(const Vertex& v) const noexcept -> std::size_t
+template <> struct std::hash<oxygen::data::Vertex> {
+  auto operator()(const oxygen::data::Vertex& v) const noexcept -> std::size_t
   {
     return oxygen::data::QuantizedVertexHash {}(v);
   }
-}; // namespace std
+};

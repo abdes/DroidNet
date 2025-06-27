@@ -10,6 +10,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -26,13 +28,16 @@
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/RenderItem.h>
 
 #include <MainModule.h>
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
-using oxygen::ViewPort;
+using oxygen::data::MeshAsset;
+using oxygen::data::Vertex;
+using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::DeferredObjectRelease;
 using oxygen::graphics::DepthStencilStateDesc;
@@ -40,6 +45,7 @@ using oxygen::graphics::Framebuffer;
 using oxygen::graphics::RasterizerStateDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Scissors;
+using oxygen::graphics::ViewPort;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -73,43 +79,54 @@ using oxygen::graphics::Scissors;
 // ===========================================================================
 
 namespace {
-struct Vertex {
-  float position[3];
-  float color[3];
-};
 
-// Store the initial triangle vertices (CCW order for D3D12 default culling)
-Vertex initial_triangle_vertices[3] = {
-  { .position = { -0.5f, -0.5f, 0.0f },
-    .color = { 0.0f, 1.0f, 0.0f } }, // Bottom left (green)
-  { .position = { 0.0f, 0.5f, 0.0f },
-    .color = { 1.0f, 0.0f, 0.0f } }, // Top (red)
-  { .position = { 0.5f, -0.5f, 0.0f },
-    .color = { 0.0f, 0.0f, 1.0f } } // Bottom right (blue)
-};
-
-// Helper to rotate a triangle in NDC, centered at (cx, cy), with given height
-// (NDC units, 1.0 = full framebuffer height) and rotation
-void RotateTriangle(const Vertex (&in_vertices)[3], Vertex (&out_vertices)[3],
-  const float cx, const float cy, const float angle_rad)
-{
-  const float cos_a = std::cos(angle_rad);
-  const float sin_a = std::sin(angle_rad);
-  for (int i = 0; i < 3; ++i) {
-    const float x = in_vertices[i].position[0] - cx;
-    const float y = in_vertices[i].position[1] - cy;
-    const float xr = x * cos_a - y * sin_a;
-    const float yr = x * sin_a + y * cos_a;
-    out_vertices[i].position[0] = cx + xr;
-    out_vertices[i].position[1] = cy + yr;
-    out_vertices[i].position[2] = in_vertices[i].position[2];
-    out_vertices[i].color[0] = in_vertices[i].color[0];
-    out_vertices[i].color[1] = in_vertices[i].color[1];
-    out_vertices[i].color[2] = in_vertices[i].color[2];
-  }
 }
 
-Vertex triangle_vertices[3];
+//! Creates a new MeshAsset representing a single triangle (for demo/testing
+//! only).
+inline std::shared_ptr<MeshAsset> MakeTriangleMeshAsset()
+{
+  // The shader expects only position (vec3) and color (vec3) tightly packed.
+  // We must ensure the buffer layout matches exactly.
+  std::vector<Vertex> vertices = {
+    // CCW order for D3D12 default culling
+    // clang-format off
+    // position                normal     texcoord     tangent     bitangent    color (only .xyz used)
+    { { -0.5f, -0.5f, 0.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0, 1 } }, // Red
+    { {  0.0f,  0.5f, 0.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 0, 1 } }, // Green
+    { {  0.5f, -0.5f, 0.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1, 1 } }, // Blue
+    // clang-format on
+  };
+  // NOTE: The shader will only read position and color (first 6 floats).
+  // If the buffer is created from Vertex, ensure the stride matches the
+  // shader's expectation. If not, create a tightly packed struct or buffer for
+  // demo.
+  std::vector<uint32_t> indices = { 0, 1, 2 };
+  auto asset = std::make_shared<MeshAsset>(
+    "Triangle", std::move(vertices), std::move(indices));
+  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  return asset;
+}
+
+//! Creates a new MeshAsset representing a single quad (for demo/testing only).
+inline std::shared_ptr<MeshAsset> MakeQuadMeshAsset()
+{
+  // CCW order for D3D12 default culling
+  constexpr float kHalfSize = 0.5f; // 50% of viewport (from -0.25 to +0.25)
+  std::vector<Vertex> vertices = {
+    // clang-format off
+    // position                  normal     texcoord   tangent     bitangent    color
+    { { -kHalfSize, -kHalfSize, 0.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 0, 1 } }, // Bottom-left
+    { {  kHalfSize, -kHalfSize, 0.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 1, 1 } }, // Bottom-right
+    { {  kHalfSize,  kHalfSize, 0.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 0, 1, 1 } }, // Top-right
+    { { -kHalfSize,  kHalfSize, 0.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } }, // Top-left
+    // clang-format on
+  };
+  std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0 };
+  auto asset = std::make_shared<MeshAsset>(
+    "Quad", std::move(vertices), std::move(indices));
+  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  return asset;
 }
 
 MainModule::MainModule(
@@ -268,19 +285,39 @@ void MainModule::CreateTriangleVertexBuffer()
   CHECK_F(!gfx_weak_.expired());
   const auto gfx = gfx_weak_.lock();
 
+  // Use the mesh vertices from the RenderItem's mesh asset
+  if (render_items_.empty() || !render_items_.front().mesh) {
+    LOG_F(ERROR, "No mesh asset available for vertex buffer creation");
+    return;
+  }
+  const auto& mesh = render_items_.front().mesh;
+  const auto& vertices = mesh->Vertices();
+
   graphics::BufferDesc vb_desc;
-  vb_desc.size_bytes = sizeof(triangle_vertices);
-  // For bindless rendering, use a structured buffer instead of vertex buffer
+  vb_desc.size_bytes = sizeof(Vertex) * vertices.size();
   vb_desc.usage = graphics::BufferUsage::kStorage;
-  vb_desc.memory
-    = graphics::BufferMemory::kDeviceLocal; // FIX: must be device local for
-                                            // UAV/storage
+  vb_desc.memory = graphics::BufferMemory::kDeviceLocal;
   vb_desc.debug_name = "Triangle Structured Vertex Buffer";
   vertex_buffer_ = gfx->CreateBuffer(vb_desc);
   vertex_buffer_->SetName("Triangle Structured Vertex Buffer");
 
   auto& resource_registry = renderer_->GetResourceRegistry();
   resource_registry.Register(vertex_buffer_);
+
+  // === Index buffer creation ===
+  if (!index_buffer_) {
+    const auto& indices = mesh->Indices();
+    if (!indices.empty()) {
+      graphics::BufferDesc ib_desc;
+      ib_desc.size_bytes = sizeof(uint32_t) * indices.size();
+      ib_desc.usage = graphics::BufferUsage::kIndex;
+      ib_desc.memory = graphics::BufferMemory::kDeviceLocal;
+      ib_desc.debug_name = "Triangle Index Buffer";
+      index_buffer_ = gfx->CreateBuffer(ib_desc);
+      index_buffer_->SetName("Triangle Index Buffer");
+      resource_registry.Register(index_buffer_);
+    }
+  }
 
   recreate_cbv_ = true;
 }
@@ -294,31 +331,35 @@ void MainModule::UploadTriangleVertexBuffer(
   CHECK_F(!gfx_weak_.expired());
   const auto gfx = gfx_weak_.lock();
 
-  // Create a temporary upload buffer
+  // Use the mesh vertices from the RenderItem's mesh asset
+  if (render_items_.empty() || !render_items_.front().mesh) {
+    LOG_F(ERROR, "No mesh asset available for vertex buffer upload");
+    return;
+  }
+  const auto& mesh = render_items_.front().mesh;
+  const auto& vertices = mesh->Vertices();
+
   graphics::BufferDesc upload_desc;
-  upload_desc.size_bytes = sizeof(triangle_vertices);
-  // The upload buffer must NOT have kStorage usage! Only use kNone or
-  // kVertex/kIndex if needed for upload.
+  upload_desc.size_bytes = sizeof(Vertex) * vertices.size();
   upload_desc.usage = graphics::BufferUsage::kNone;
   upload_desc.memory = graphics::BufferMemory::kUpload;
   upload_desc.debug_name = "Triangle Vertex Upload Buffer";
   auto upload_buffer = gfx->CreateBuffer(upload_desc);
 
-  // The initial state for vertex_buffer_ is COMMON (kCommon)
   recorder.BeginTrackingResourceState(
     *vertex_buffer_, ResourceStates::kCommon, true);
   recorder.RequireResourceState(*vertex_buffer_, ResourceStates::kCopyDest);
 
   recorder.FlushBarriers();
 
-  // Map and copy data
+  // Map and copy mesh vertex data
   void* mapped = upload_buffer->Map();
-  memcpy(mapped, triangle_vertices, sizeof(triangle_vertices));
+  memcpy(mapped, vertices.data(), sizeof(Vertex) * vertices.size());
   upload_buffer->UnMap();
 
   // Copy to GPU buffer (dst, dst_offset, src, src_offset, size)
   recorder.CopyBuffer(
-    *vertex_buffer_, 0, *upload_buffer, 0, sizeof(triangle_vertices));
+    *vertex_buffer_, 0, *upload_buffer, 0, sizeof(Vertex) * vertices.size());
 
   // Transition the vertex buffer from CopyDest to ShaderResource state
   recorder.RequireResourceState(
@@ -327,6 +368,39 @@ void MainModule::UploadTriangleVertexBuffer(
 
   // Keep the upload buffer alive until the command list is executed
   DeferredObjectRelease(upload_buffer, renderer_->GetPerFrameResourceManager());
+
+  // === Index buffer upload ===
+  if (index_buffer_) {
+    const auto& indices = mesh->Indices();
+    if (!indices.empty()) {
+      graphics::BufferDesc index_upload_desc;
+      index_upload_desc.size_bytes = sizeof(uint32_t) * indices.size();
+      index_upload_desc.usage = graphics::BufferUsage::kNone;
+      index_upload_desc.memory = graphics::BufferMemory::kUpload;
+      index_upload_desc.debug_name = "Triangle Index Upload Buffer";
+      auto index_upload_buffer = gfx->CreateBuffer(index_upload_desc);
+
+      recorder.BeginTrackingResourceState(
+        *index_buffer_, ResourceStates::kCommon, true);
+      recorder.RequireResourceState(*index_buffer_, ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+
+      void* mapped_index = index_upload_buffer->Map();
+      memcpy(mapped_index, indices.data(), sizeof(uint32_t) * indices.size());
+      index_upload_buffer->UnMap();
+
+      recorder.CopyBuffer(*index_buffer_, 0, *index_upload_buffer, 0,
+        sizeof(uint32_t) * indices.size());
+
+      // Transition the index buffer to IndexBuffer state
+      recorder.RequireResourceState(
+        *index_buffer_, ResourceStates::kIndexBuffer);
+      recorder.FlushBarriers();
+
+      DeferredObjectRelease(
+        index_upload_buffer, renderer_->GetPerFrameResourceManager());
+    }
+  }
 }
 
 void MainModule::SetupFramebuffers()
@@ -497,6 +571,8 @@ void MainModule::EnsureTriangleDrawResources()
   }
 }
 
+// === Data-driven RenderItem/scene system integration ===
+
 auto MainModule::RenderScene() -> co::Co<>
 {
   if (gfx_weak_.expired()) {
@@ -510,12 +586,28 @@ auto MainModule::RenderScene() -> co::Co<>
   DLOG_F(
     1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());
 
-  // 1. Update triangle data (rotating every frame)
-  rotation_angle_ += 0.01f;
-  if (rotation_angle_ > glm::two_pi<float>())
-    rotation_angle_ -= glm::two_pi<float>();
-  RotateTriangle(
-    initial_triangle_vertices, triangle_vertices, 0.0f, 0.0f, rotation_angle_);
+  // === Data-driven quad mesh RenderItem setup ===
+  if (render_items_.empty()) {
+    // Quad only (no triangle)
+    auto quad_mesh = MakeQuadMeshAsset();
+    RenderItem quad_item {
+      .mesh = quad_mesh,
+      .material = nullptr,
+      .world_transform
+      = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.7f, 0.0f)),
+      .normal_transform = glm::mat4(1.0f),
+      .cast_shadows = false,
+      .receive_shadows = false,
+      .render_layer = 0u,
+      .render_flags = 0u,
+    };
+    quad_item.UpdateComputedProperties();
+    render_items_.push_back(quad_item);
+    draw_list_.clear();
+    for (auto& item : render_items_) {
+      draw_list_.push_back(&item);
+    }
+  }
 
   // 2. Create/ensure vertex buffer and descriptors
   try {
@@ -645,13 +737,26 @@ auto MainModule::RenderScene() -> co::Co<>
       .GetRootParameterIndex(), // binding 1 (b0, space0)
     constant_buffer_->GetGPUVirtualAddress());
 
-  // 7. Draw the triangle
-  recorder->ClearFramebuffer(*fb,
-    std::vector<std::optional<graphics::Color>> {
-      graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f } },
-    std::nullopt, std::nullopt);
-
-  recorder->Draw(static_cast<uint32_t>(std::size(triangle_vertices)), 1, 0, 0);
-
+  // Instead of legacy vertex buffer, use mesh from RenderItem
+  bool cleared = false;
+  for (const auto* item : draw_list_) {
+    // Clear only once before first draw
+    if (!cleared) {
+      recorder->ClearFramebuffer(*fb,
+        std::vector<std::optional<graphics::Color>> {
+          graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f } },
+        std::nullopt, std::nullopt);
+      cleared = true;
+    }
+    // Draw triangle (non-indexed)
+    if (item->mesh->Indices().empty()) {
+      recorder->Draw(static_cast<uint32_t>(item->mesh->VertexCount()), 1, 0, 0);
+    } else {
+      // Draw quad (indexed)
+      recorder->BindIndexBuffer(*index_buffer_, graphics::Format::kR32UInt);
+      recorder->DrawIndexed(
+        static_cast<uint32_t>(item->mesh->IndexCount()), 1, 0, 0, 0);
+    }
+  }
   co_return;
 }

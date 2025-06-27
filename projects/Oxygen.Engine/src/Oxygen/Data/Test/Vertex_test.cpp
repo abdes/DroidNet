@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 using oxygen::data::QuantizedVertexHash;
+using oxygen::data::Vertex;
 
 namespace {
 // VertexBasicTest: epsilon-based equality, quantized hash consistency

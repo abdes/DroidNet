@@ -23,7 +23,6 @@
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
-#include <Oxygen/Graphics/Common/RenderPass.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/OxCo/Co.h>
@@ -319,44 +318,4 @@ auto RenderController::HandleSurfaceResize(Surface& surface) -> void
 
   surface.Resize();
   current_frame_index_ = surface.GetCurrentBackBufferIndex();
-}
-
-namespace oxygen::graphics {
-
-// Generic no-op implementation for any render pass type.
-class NullRenderPass final : public RenderPass {
-public:
-  explicit NullRenderPass(const std::string_view name = "NullRenderPass")
-    : RenderPass(name)
-  {
-  }
-
-  ~NullRenderPass() noexcept override = default;
-
-  OXYGEN_DEFAULT_COPYABLE(NullRenderPass)
-  OXYGEN_DEFAULT_MOVABLE(NullRenderPass)
-
-  auto PrepareResources(CommandRecorder&) -> co::Co<> override { co_return; }
-  auto Execute(CommandRecorder&) -> co::Co<> override { co_return; }
-  auto SetViewport(const ViewPort&) -> void override { }
-  auto SetScissors(const Scissors&) -> void override { }
-  auto SetClearColor(const Color&) -> void override { }
-  auto SetEnabled(bool) -> void override { }
-  auto IsEnabled() const -> bool override { return false; }
-  auto GetName() const noexcept -> std::string_view override { return name_; }
-  auto SetName(const std::string_view name) noexcept -> void override
-  {
-    name_ = std::string(name);
-  }
-
-private:
-  std::string name_;
-};
-
-} // namespace oxygen::graphics
-
-// ReSharper disable once CppMemberFunctionMayBeStatic
-auto RenderController::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
-{
-  return std::make_shared<NullRenderPass>();
 }

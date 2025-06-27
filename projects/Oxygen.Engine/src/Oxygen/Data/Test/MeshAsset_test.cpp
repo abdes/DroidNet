@@ -8,9 +8,13 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
-//=== Test Fixtures ===-------------------------------------------------------//
+using oxygen::data::MeshAsset;
+using oxygen::data::MeshView;
+using oxygen::data::Vertex;
 
 namespace {
+
+//=== Test Fixtures ===-------------------------------------------------------//
 
 // MeshAssetBasicTest: immutability, bounding box correctness, shared ownership
 class MeshAssetBasicTest : public testing::Test {

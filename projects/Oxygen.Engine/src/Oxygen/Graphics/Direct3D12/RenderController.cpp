@@ -10,7 +10,6 @@
 #include <type_traits>
 #include <utility>
 
-#include <Oxygen/Graphics/Common/DepthPrePass.h>
 #include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
@@ -78,11 +77,4 @@ auto RenderController::GetOrCreateComputePipeline(ComputePipelineDesc desc,
 {
   auto& cache = GetComponent<detail::PipelineStateCache>();
   return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
-}
-
-auto RenderController::CreateDepthPrePass(
-  std::shared_ptr<DepthPrePassConfig> config) -> std::shared_ptr<RenderPass>
-{
-  return std::static_pointer_cast<RenderPass>(
-    std::make_shared<DepthPrePass>(this, std::move(config)));
 }

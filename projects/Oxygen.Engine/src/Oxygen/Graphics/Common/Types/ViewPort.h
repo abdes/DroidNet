@@ -11,7 +11,7 @@
 
 #include <Oxygen/Core/api_export.h>
 
-namespace oxygen {
+namespace oxygen::graphics {
 
 struct ViewPort {
   float top_left_x { 0.f };
@@ -31,4 +31,4 @@ struct ViewPort {
 
 OXGN_CORE_NDAPI auto to_string(const ViewPort& viewport) -> std::string;
 
-} // namespace oxygen
+} // namespace oxygen::graphics

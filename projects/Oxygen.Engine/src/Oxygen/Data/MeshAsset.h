@@ -88,6 +88,12 @@ public:
     return indices_.size();
   }
 
+  //! Returns true if the mesh uses an index buffer (i.e., has indices).
+  [[nodiscard]] auto IsIndexed() const noexcept -> bool
+  {
+    return !indices_.empty();
+  }
+
   //! Creates and stores a MeshView for a subrange of the mesh data.
   OXGN_DATA_API auto CreateView(std::string_view name,
     std::size_t vertex_offset, std::size_t vertex_count,
@@ -132,6 +138,12 @@ public:
     return bbox_max_;
   }
 
+  //! Returns the local-space bounding sphere (center.xyz, radius.w)
+  [[nodiscard]] auto BoundingSphere() const noexcept -> const glm::vec4&
+  {
+    return bounding_sphere_;
+  }
+
 private:
   //! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
   /*!
@@ -141,6 +153,7 @@ private:
    @note This is a private utility for internal use only.
   */
   auto ComputeBoundingBox() -> void;
+  auto ComputeBoundingSphere() -> void;
 
   std::string name_;
   std::vector<Vertex> vertices_;
@@ -148,6 +161,7 @@ private:
   std::vector<MeshView> views_;
   glm::vec3 bbox_min_ {};
   glm::vec3 bbox_max_ {};
+  glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
 };
 
 } // namespace oxygen::data
