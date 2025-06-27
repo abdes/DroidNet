@@ -22,6 +22,8 @@ struct Scissors;
 
 namespace oxygen::engine {
 
+struct RenderContext;
+
 //! Abstract base class for a modular, coroutine-based render pass.
 /*!
  RenderPass encapsulates a single stage of the rendering pipeline, such as
@@ -54,10 +56,10 @@ namespace oxygen::engine {
   - Explicitly manage resource states to avoid hazards and maximize
  performance.
 */
-class RenderPass : public oxygen::Composition, public oxygen::Named {
+class RenderPass : public Composition, public Named {
 public:
-  explicit RenderPass(const std::string_view name);
-  virtual ~RenderPass() = default;
+  explicit RenderPass(std::string_view name);
+  ~RenderPass() override = default;
 
   OXYGEN_DEFAULT_COPYABLE(RenderPass)
   OXYGEN_DEFAULT_MOVABLE(RenderPass)
@@ -78,7 +80,9 @@ public:
 
    \return Coroutine handle (co::Co<>)
   */
-  virtual co::Co<> PrepareResources(graphics::CommandRecorder& recorder) = 0;
+  virtual auto PrepareResources(const RenderContext& context,
+    graphics::CommandRecorder& recorder) -> co::Co<>
+    = 0;
 
   //! Execute the main rendering logic for this pass.
   /*!
@@ -94,39 +98,20 @@ public:
 
    \return Coroutine handle (co::Co<>)
   */
-  virtual co::Co<> Execute(graphics::CommandRecorder& recorder) = 0;
-
-  //! Sets the viewport for this render pass.
-  /*!
-   The viewport is applied by backend-specific `Execute` implementations.
-
-   \param viewport The viewport dimensions and depth range.
-  */
-  virtual void SetViewport(const graphics::ViewPort& viewport) = 0;
-
-  //! Sets the viewport for this render pass.
-  /*!
-   The viewport is applied by backend-specific `Execute` implementations.
-
-   \param viewport The viewport dimensions and depth range.
-  */
-  virtual void SetScissors(const graphics::Scissors& scissors) = 0;
-
-  //! Set the clear color for this pass's framebuffer.
-  virtual void SetClearColor(const graphics::Color& color) = 0;
-
-  //! Enable or disable this pass at runtime.
-  virtual void SetEnabled(bool enabled) = 0;
+  virtual auto Execute(const RenderContext& context,
+    graphics::CommandRecorder& recorder) -> co::Co<>
+    = 0;
 
   //! Query whether this pass is enabled.
   virtual auto IsEnabled() const -> bool = 0;
 
   //! Get the name of this pass (from Named interface).
-  [[nodiscard]] OXGN_RNDR_API virtual auto GetName() const noexcept
+  [[nodiscard]] OXGN_RNDR_API auto GetName() const noexcept
     -> std::string_view override;
 
   //! Set the name of this pass (from Named interface).
-  virtual void OXGN_RNDR_API SetName(std::string_view name) noexcept override;
+  virtual OXGN_RNDR_API auto SetName(std::string_view name) noexcept
+    -> void override;
 };
 
 } // namespace oxygen::engine

@@ -11,15 +11,15 @@ using oxygen::engine::RenderPass;
 
 RenderPass::RenderPass(const std::string_view name)
 {
-  AddComponent<oxygen::ObjectMetaData>(name);
+  AddComponent<ObjectMetaData>(name);
 }
 
 auto RenderPass::GetName() const noexcept -> std::string_view
 {
-  return GetComponent<oxygen::ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetaData>().GetName();
 }
 
-void RenderPass::SetName(std::string_view name) noexcept
+auto RenderPass::SetName(std::string_view name) noexcept -> void
 {
-  GetComponent<oxygen::ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetaData>().SetName(name);
 }

@@ -25,7 +25,7 @@ class MeshAsset;
 
 namespace oxygen::engine {
 
-class RenderContext;
+struct RenderContext;
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
@@ -40,12 +40,12 @@ using MeshID = std::size_t;
 class IEvictionPolicy {
 public:
   virtual ~IEvictionPolicy() = default;
-  virtual void OnMeshAccess(MeshID id) = 0;
-  virtual std::vector<MeshID> SelectResourcesToEvict(
+  virtual auto OnMeshAccess(MeshID id) -> void = 0;
+  virtual auto SelectResourcesToEvict(
     const std::unordered_map<MeshID, MeshGpuResources>& currentResources,
-    std::size_t currentFrame)
+    std::size_t currentFrame) -> std::vector<MeshID>
     = 0;
-  virtual void OnMeshRemoved(MeshID id) = 0;
+  virtual auto OnMeshRemoved(MeshID id) -> void = 0;
 };
 
 //! Renderer: backend-agnostic, manages mesh-to-GPU resource mapping and
@@ -58,29 +58,29 @@ public:
   OXGN_RNDR_API ~Renderer();
 
   //! Returns the vertex buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API std::shared_ptr<graphics::Buffer> GetVertexBuffer(
-    const data::MeshAsset& mesh);
+  OXGN_RNDR_API auto GetVertexBuffer(const data::MeshAsset& mesh)
+    -> std::shared_ptr<graphics::Buffer>;
 
   //! Returns the index buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API std::shared_ptr<graphics::Buffer> GetIndexBuffer(
-    const data::MeshAsset& mesh);
+  OXGN_RNDR_API auto GetIndexBuffer(const data::MeshAsset& mesh)
+    -> std::shared_ptr<graphics::Buffer>;
 
   //! Explicitly unregisters a mesh and its GPU resources.
-  OXGN_RNDR_API void UnregisterMesh(const data::MeshAsset& mesh);
+  OXGN_RNDR_API auto UnregisterMesh(const data::MeshAsset& mesh) -> void;
 
   //! Evicts unused mesh resources according to the eviction policy.
-  OXGN_RNDR_API void EvictUnusedMeshResources(std::size_t currentFrame);
+  OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t currentFrame) -> void;
 
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
-  oxygen::co::Co<> ExecuteRenderGraph(
-    RenderGraphCoroutine&& graphCoroutine, RenderContext& ctx)
+  auto ExecuteRenderGraph(
+    RenderGraphCoroutine&& graphCoroutine, RenderContext& ctx) -> co::Co<>
   {
     co_await std::forward<RenderGraphCoroutine>(graphCoroutine)(ctx);
   }
 
 private:
-  MeshGpuResources& EnsureMeshResources(const data::MeshAsset& mesh);
+  auto EnsureMeshResources(const data::MeshAsset& mesh) -> MeshGpuResources&;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshID, MeshGpuResources> mesh_resources_;

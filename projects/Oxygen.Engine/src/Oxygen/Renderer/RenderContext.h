@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <typeindex>
 #include <unordered_map>
 #include <vector>
 
@@ -18,6 +17,7 @@ namespace oxygen::graphics {
 class Framebuffer;
 class Buffer;
 class CommandRecorder;
+class RenderController;
 } // namespace oxygen::graphics
 
 namespace oxygen::scene {
@@ -27,7 +27,7 @@ class Light;
 namespace oxygen::engine {
 
 class Renderer;
-class RenderItem;
+struct RenderItem;
 class RenderPass;
 
 //=== Pass Type List and Compile-Time Indexing ===-------------------------//
@@ -99,14 +99,19 @@ struct RenderContext {
   std::vector<const RenderItem*> transparent_draw_list;
   // ... add more lists for decals, particles, etc. as needed ...
 
-  // Light lists
-  std::vector<scene::Light> light_list;
+  // TODO: Light lists
+  // std::vector<scene::Light> light_list;
 
   // Pass enable/disable flags (by pass name or type)
   std::unordered_map<std::string, bool> pass_enable_flags;
 
-  // Shared resources
-  std::shared_ptr<Renderer> renderer;
+  //! The current rendererexecuting the render graph. Guaranteed to be non-null
+  //! during the render graph execution.
+  Renderer* renderer;
+
+  //! The render controller managing the frame rendering process. Guaranteed to
+  //! be non-null during the render graph execution.
+  graphics::RenderController* render_controller;
 
   //! Framebuffer object for broader rendering context.
   std::shared_ptr<const graphics::Framebuffer> framebuffer = nullptr;
@@ -143,7 +148,7 @@ struct RenderContext {
    @note Compile-time error if PassT is not in KnownPassTypes.
    @see RegisterPass
   */
-  template <typename PassT> PassT* GetPass() const
+  template <typename PassT> auto GetPass() const -> PassT*
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
@@ -163,7 +168,7 @@ struct RenderContext {
    @note Compile-time error if PassT is not in KnownPassTypes.
    @see GetPass
   */
-  template <typename PassT> void RegisterPass(PassT* pass)
+  template <typename PassT> auto RegisterPass(PassT* pass) -> void
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");

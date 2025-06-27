@@ -54,6 +54,7 @@ target_sources(
     "RenderItem.cpp"
     "Renderer.cpp"
     "RenderPass.cpp"
+    "ShaderPass.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -64,6 +65,7 @@ target_sources(
       "Renderer.h"
       "RenderItem.h"
       "RenderPass.h"
+      "ShaderPass.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
