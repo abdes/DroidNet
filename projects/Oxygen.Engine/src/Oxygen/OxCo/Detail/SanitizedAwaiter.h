@@ -30,97 +30,97 @@ namespace oxygen::co::detail {
 
 \see GetAwaiter()
 */
-template <class T, class Awaiter = AwaiterType<T>>
-class SanitizedAwaiter {
-    using Ret = decltype(std::declval<Awaiter>().await_resume());
+template <class T, class Awaiter = AwaiterType<T>> class SanitizedAwaiter {
+  using Ret = decltype(std::declval<Awaiter>().await_resume());
 
 public:
-    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-    explicit SanitizedAwaiter(T&& object)
-        : awaiter_(GetAwaiter<T>(std::forward<T>(object)))
-    {
-    }
+  // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
+  explicit SanitizedAwaiter(T&& object)
+    : awaiter_(GetAwaiter<T>(std::forward<T>(object)))
+  {
+  }
 
-    [[nodiscard]] auto await_ready() const noexcept -> bool
-    {
-        return checker_.ReadyReturned(awaiter_.await_ready());
-    }
+  [[nodiscard]] auto await_ready() const noexcept -> bool
+  {
+    return checker_.ReadyReturned(awaiter_.await_ready());
+  }
 
-    [[nodiscard]] auto await_suspend(Handle h) -> Handle
-    {
+  [[nodiscard]] auto await_suspend(Handle h) -> Handle
+  {
 #if defined(OXCO_AWAITABLE_STATE_DEBUG)
-        try {
-            return AwaitSuspend(awaiter_, checker_.AboutToSuspend(h));
-        } catch (...) {
-            checker_.SuspendThrew();
-            throw;
-        }
+    try {
+      return AwaitSuspend(awaiter_, checker_.AboutToSuspend(h));
+    } catch (...) {
+      checker_.SuspendThrew();
+      throw;
+    }
 #else
-        return AwaitSuspend(awaiter_, h);
+    return AwaitSuspend(awaiter_, h);
 #endif
-    }
+  }
 
-    auto await_resume() -> decltype(auto)
-    {
-        checker_.AboutToResume();
-        if constexpr (std::is_same_v<Ret, void>) {
-            std::forward<Awaiter>(awaiter_).await_resume();
-            return Void {};
-        } else {
-            return std::forward<Awaiter>(awaiter_).await_resume();
-        }
+  auto await_resume() -> decltype(auto)
+  {
+    checker_.AboutToResume();
+    if constexpr (std::is_same_v<Ret, void>) {
+      std::forward<Awaiter>(awaiter_).await_resume();
+      return Void {};
+    } else {
+      return std::forward<Awaiter>(awaiter_).await_resume();
     }
+  }
 
-    auto await_early_cancel() noexcept
-    {
-        return checker_.EarlyCancelReturned(AwaitEarlyCancel(awaiter_));
+  auto await_early_cancel() noexcept
+  {
+    return checker_.EarlyCancelReturned(AwaitEarlyCancel(awaiter_));
+  }
+
+  auto await_cancel(const Handle h) noexcept
+  {
+    return checker_.CancelReturned(
+      AwaitCancel(awaiter_, checker_.AboutToCancel(h)));
+  }
+
+  [[nodiscard]] auto await_must_resume() const noexcept
+  {
+    return checker_.MustResumeReturned(AwaitMustResume(awaiter_));
+  }
+
+  void await_set_executor(Executor* ex) noexcept
+  {
+    checker_.AboutToSetExecutor();
+    if constexpr (NeedsExecutor<Awaiter>) {
+      awaiter_.await_set_executor(ex);
     }
+  }
 
-    auto await_cancel(const Handle h) noexcept
-    {
-        return checker_.CancelReturned(
-            AwaitCancel(awaiter_, checker_.AboutToCancel(h)));
-    }
-
-    [[nodiscard]] auto await_must_resume() const noexcept
-    {
-        return checker_.MustResumeReturned(AwaitMustResume(awaiter_));
-    }
-
-    void await_set_executor(Executor* ex) noexcept
-    {
-        checker_.AboutToSetExecutor();
-        if constexpr (NeedsExecutor<Awaiter>) {
-            awaiter_.await_set_executor(ex);
-        }
-    }
-
-    // Used by `Runner::Run()` if the event loop stops before the
-    // awaitable completes. Disables the awaitable checker (if any),
-    // allowing the awaitable to be destroyed even in states where it
-    // shouldn't be.
-    void Abandon() { checker_.ForceReset(); }
+  // Used by `Runner::Run()` if the event loop stops before the
+  // awaitable completes. Disables the awaitable checker (if any),
+  // allowing the awaitable to be destroyed even in states where it
+  // shouldn't be.
+  void Abandon() { checker_.ForceReset(); }
 
 private:
-    [[no_unique_address]] AwaiterStateChecker checker_;
-    Awaiter awaiter_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
+  [[no_unique_address]] AwaiterStateChecker checker_;
+  Awaiter awaiter_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
 };
 
-template <class T, class... Args>
-class AwaiterMaker {
-public:
-    explicit AwaiterMaker(Args&&... args)
-        : args_(std::forward<Args>(args)...)
-    {
-    }
+template <class T> SanitizedAwaiter(T&&) -> SanitizedAwaiter<T>;
 
-    auto operator co_await() && -> T
-    {
-        return std::make_from_tuple<T>(std::move(args_));
-    }
+template <class T, class... Args> class AwaiterMaker {
+public:
+  explicit AwaiterMaker(Args&&... args)
+    : args_(std::forward<Args>(args)...)
+  {
+  }
+
+  auto operator co_await() && -> T
+  {
+    return std::make_from_tuple<T>(std::move(args_));
+  }
 
 private:
-    std::tuple<Args...> args_;
+  std::tuple<Args...> args_;
 };
 
 } // namespace oxygen::co::detail
