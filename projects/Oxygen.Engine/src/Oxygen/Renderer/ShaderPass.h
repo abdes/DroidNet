@@ -56,26 +56,21 @@ public:
 
   OXGN_RNDR_API explicit ShaderPass(std::shared_ptr<ShaderPassConfig> config);
 
-  OXGN_RNDR_API auto PrepareResources(const RenderContext& context,
-    graphics::CommandRecorder& recorder) -> co::Co<> override;
-
-  OXGN_RNDR_API auto Execute(const RenderContext& context,
-    graphics::CommandRecorder& recorder) -> co::Co<> override;
-
   auto IsEnabled() const -> bool override
   {
     return config_ && config_->enabled;
   }
 
+protected:
+  auto DoPrepareResources(graphics::CommandRecorder& recorder)
+    -> co::Co<> override;
+  auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
+  auto ValidateConfig() -> void override;
+  auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
+  auto NeedRebuildPipelineState() const -> bool override;
+
 private:
-  //! Validates the current configuration.
-  auto ValidateConfig() -> void;
-
-  //! Creates the pipeline state description for this pass.
-  virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc;
-
-  //! Determines if the pipeline state needs to be rebuilt.
-  virtual auto NeedRebuildPipelineState() const -> bool;
+  auto SetupRenderTargets(graphics::CommandRecorder& recorder) const -> void;
 
   //! Convenience method to get the target texture for this pass. Prefers the
   //! texture explicitly specified in the configuration, falling back to the
@@ -84,7 +79,7 @@ private:
 
   //! Convenience method to get the draw list specified in the context.
   [[nodiscard]] auto GetDrawList() const
-    -> const std::vector<const RenderItem*>&;
+    -> std::span<const RenderItem> override;
 
   //! Convenience method to get the framebuffer specified in the context.
   [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
@@ -95,21 +90,8 @@ private:
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
 
-  //! Current render context.
-  const RenderContext* context_ { nullptr };
-
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;
-
-  //! Current viewport for the pass.
-  std::optional<graphics::ViewPort> viewport_ {};
-
-  //! Current scissor rectangle for the pass.
-  std::optional<graphics::Scissors> scissors_ {};
-
-  // Track the last built pipeline state object (PSO) description and hash, so
-  // we can properly manage their caching and retrieval.
-  std::optional<graphics::GraphicsPipelineDesc> last_built_pso_desc_;
 };
 
 } // namespace oxygen::engine

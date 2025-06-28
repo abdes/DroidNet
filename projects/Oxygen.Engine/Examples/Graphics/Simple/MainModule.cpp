@@ -498,10 +498,9 @@ auto MainModule::RenderScene() -> co::Co<>
   context_.framebuffer = fb;
 
   // FIXME: better way to handle this?
-  context_.opaque_draw_list.clear();
-  for (auto& item : render_items_) {
-    context_.opaque_draw_list.push_back(&item);
-  }
+  context_.opaque_draw_list
+    = std::span<const RenderItem> { render_items_.data(),
+        render_items_.size() };
 
   // --- ShaderPass integration ---
   static std::shared_ptr<engine::ShaderPass> shader_pass;

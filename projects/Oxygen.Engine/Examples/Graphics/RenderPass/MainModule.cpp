@@ -105,7 +105,7 @@ MainModule::~MainModule()
   platform_.reset();
 }
 
-void MainModule::Run()
+auto MainModule::Run() -> void
 {
   DCHECK_NOTNULL_F(nursery_);
   SetupCommandQueues();
@@ -124,7 +124,7 @@ void MainModule::Run()
   });
 }
 
-void MainModule::SetupCommandQueues() const
+auto MainModule::SetupCommandQueues() const -> void
 {
   CHECK_F(!gfx_weak_.expired());
 
@@ -132,7 +132,7 @@ void MainModule::SetupCommandQueues() const
   gfx->CreateCommandQueues(graphics::SingleQueueStrategy());
 }
 
-void MainModule::SetupSurface()
+auto MainModule::SetupSurface() -> void
 {
   CHECK_F(!gfx_weak_.expired());
   CHECK_F(!window_weak_.expired());
@@ -147,7 +147,7 @@ void MainModule::SetupSurface()
     window_weak_.lock()->Id());
 }
 
-void MainModule::SetupMainWindow()
+auto MainModule::SetupMainWindow() -> void
 {
   // Set up the main window
   WindowProps props("Oxygen Graphics Example");
@@ -202,7 +202,7 @@ void MainModule::SetupMainWindow()
   });
 }
 
-void MainModule::SetupRenderer()
+auto MainModule::SetupRenderer() -> void
 {
   CHECK_F(!gfx_weak_.expired());
 
@@ -256,8 +256,6 @@ auto MainModule::RenderScene() -> co::Co<>
   // Update the shared config for this frame
   const auto& fb_desc = fb->GetDescriptor();
   const auto depth_tex = fb_desc.depth_attachment.texture;
-  depth_pre_pass_config_->draw_list
-    = std::span(draw_list_.data(), draw_list_.size());
   depth_pre_pass_config_->depth_texture = depth_tex;
   depth_pre_pass_config_->framebuffer = fb;
 
@@ -279,7 +277,8 @@ auto MainModule::RenderScene() -> co::Co<>
 
   // Prepare and execute depth pre-pass
   RenderContext context {
-    .opaque_draw_list = draw_list_,
+    .opaque_draw_list
+    = std::span<const RenderItem>(render_items_.data(), render_items_.size()),
     .render_controller = renderer_.get(),
     .framebuffer = fb,
   };
@@ -289,7 +288,7 @@ auto MainModule::RenderScene() -> co::Co<>
   co_return;
 }
 
-void MainModule::SetupFramebuffers()
+auto MainModule::SetupFramebuffers() -> void
 {
   CHECK_F(!gfx_weak_.expired());
   const auto gfx = gfx_weak_.lock();
@@ -319,22 +318,22 @@ void MainModule::SetupFramebuffers()
   }
 }
 
-void MainModule::SetupRenderPasses()
+auto MainModule::SetupRenderPasses() -> void
 {
   // Create quad mesh asset using the Data system
   CHECK_F(!gfx_weak_.expired());
   const auto gfx = gfx_weak_.lock();
 
   // Generate a simple quad mesh asset (XY plane, 1x1)
-  auto quad_mesh = oxygen::data::MakeQuadMeshAsset(1.0f, 1.0f);
+  auto quad_mesh = data::MakeQuadMeshAsset(1.0f, 1.0f);
   CHECK_NOTNULL_F(quad_mesh, "Failed to create quad mesh asset");
 
   // TODO: Material asset
   // std::shared_ptr<oxygen::data::MaterialAsset> material = nullptr;
 
   // Set up world and normal transforms (identity for this example)
-  const glm::mat4 world_transform = glm::mat4(1.0f);
-  const glm::mat3 normal_transform = glm::mat3(1.0f);
+  constexpr auto world_transform = glm::mat4(1.0f);
+  constexpr auto normal_transform = glm::mat3(1.0f);
 
   // Create RenderItem (data-driven, immutable)
   RenderItem quad_item {
@@ -352,11 +351,7 @@ void MainModule::SetupRenderPasses()
   quad_item.UpdateComputedProperties();
 
   render_items_.clear();
-  draw_list_.clear();
-  render_items_.push_back(quad_item);
-  for (auto& item : render_items_) {
-    draw_list_.push_back(&item);
-  }
+  render_items_.push_back(std::move(quad_item));
 
   // Create constant buffer for scene constants if not already created
   if (!constant_buffer_) {
@@ -377,8 +372,6 @@ void MainModule::SetupRenderPasses()
   const auto& fb_desc = first_fb->GetDescriptor();
   const auto depth_tex = fb_desc.depth_attachment.texture;
   depth_pre_pass_config_ = std::make_shared<DepthPrePassConfig>();
-  depth_pre_pass_config_->draw_list
-    = std::span<const RenderItem*>(draw_list_.data(), draw_list_.size());
   depth_pre_pass_config_->depth_texture = depth_tex;
   depth_pre_pass_config_->framebuffer = first_fb;
   depth_pre_pass_config_->scene_constants = constant_buffer_;

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include <Oxygen/Data/MeshAsset.h>
-#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -24,7 +23,6 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 
-using oxygen::engine::RenderContext;
 using oxygen::engine::ShaderPass;
 using oxygen::engine::ShaderPassConfig;
 using oxygen::graphics::CommandRecorder;
@@ -37,6 +35,12 @@ using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Scissors;
 using oxygen::graphics::Texture;
 using oxygen::graphics::ViewPort;
+
+ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
+  : RenderPass(config ? config->debug_name : "ShaderPass")
+  , config_(std::move(config))
+{
+}
 
 /*!
  This method is called by the constructor to ensure that the provided
@@ -58,33 +62,13 @@ auto ShaderPass::ValidateConfig() -> void
   // TODO: validate DepthPrePass dependency.
 }
 
-ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
-  : RenderPass(config ? config->debug_name : "ShaderPass")
-  , config_(std::move(config))
+auto ShaderPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
-}
-
-auto ShaderPass::PrepareResources(
-  const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
-{
-  DCHECK_NOTNULL_F(context.render_controller);
-  DCHECK_NOTNULL_F(context.renderer);
-
-  context_ = &context;
-
-  ValidateConfig();
-
-  // Check if we need to rebuild the pipeline state and the root signature.
-  if (NeedRebuildPipelineState()) {
-    last_built_pso_desc_ = CreatePipelineStateDesc();
-  }
-
+  LOG_SCOPE_FUNCTION(2);
   // Transition the color target to RENDER_TARGET state
   recorder.RequireResourceState(
     GetColorTexture(), graphics::ResourceStates::kRenderTarget);
   recorder.FlushBarriers();
-
-  context_ = nullptr; // Clear context to avoid dangling pointer issues
 
   co_return;
 }
@@ -130,60 +114,29 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
 }
 } // namespace
 
-auto ShaderPass::Execute(
-  const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
+auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 {
-  DCHECK_NOTNULL_F(context.render_controller);
-  DCHECK_NOTNULL_F(context.renderer);
-
-  context_ = &context;
-
-  DCHECK_F(!NeedRebuildPipelineState(),
-    "ShaderPass PSO should have been built by constructor or PrepareResources");
-
-  if (last_built_pso_desc_) {
-    recorder.SetPipelineState(*last_built_pso_desc_);
-  }
-
-  // Prepare render target view(s) using the registry and allocator, like
-  // DepthPrePass
-  auto& registry = context_->render_controller->GetResourceRegistry();
-  auto& allocator = context_->render_controller->GetDescriptorAllocator();
+  // Prepare render target view(s)
+  auto& registry = Context().render_controller->GetResourceRegistry();
+  auto& allocator = Context().render_controller->GetDescriptorAllocator();
   auto& color_texture = const_cast<Texture&>(GetColorTexture());
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);
-  std::array<NativeObject, 1> rtvs { color_rtv };
+  std::array rtvs { color_rtv };
   recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
 
-  SetupViewPortAndScissors(recorder);
-
-  recorder.ClearFramebuffer(*context_->framebuffer,
+  recorder.ClearFramebuffer(*Context().framebuffer,
     std::vector<std::optional<graphics::Color>> { GetClearColor() },
     std::nullopt, std::nullopt);
+}
 
-  for (const auto* item : GetDrawList()) {
-    if (!item || !item->mesh) {
-      continue;
-    }
-    auto vertex_buffer = context_->renderer->GetVertexBuffer(*item->mesh);
-    auto index_buffer = context_->renderer->GetIndexBuffer(*item->mesh);
-    if (!vertex_buffer) {
-      continue;
-    }
-    const std::shared_ptr<graphics::Buffer> vb_array[1] = { vertex_buffer };
-    constexpr uint32_t stride_array[1]
-      = { static_cast<uint32_t>(sizeof(data::Vertex)) };
-    recorder.SetVertexBuffers(1, vb_array, stride_array);
-    if (item->mesh->Indices().empty()) {
-      recorder.Draw(static_cast<uint32_t>(item->mesh->VertexCount()), 1, 0, 0);
-    } else {
-      recorder.BindIndexBuffer(*index_buffer, graphics::Format::kR32UInt);
-      recorder.DrawIndexed(
-        static_cast<uint32_t>(item->mesh->IndexCount()), 1, 0, 0, 0);
-    }
-  }
+auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
+{
+  LOG_SCOPE_FUNCTION(2);
 
-  context_ = nullptr; // Clear context to avoid dangling pointer issues
+  SetupViewPortAndScissors(recorder);
+  SetupRenderTargets(recorder);
+  IssueDrawCalls(recorder);
 
   co_return;
 }
@@ -201,19 +154,17 @@ auto ShaderPass::GetColorTexture() const -> const Texture&
   throw std::runtime_error("ShaderPass: No valid color texture found.");
 }
 
-auto ShaderPass::GetDrawList() const -> const std::vector<const RenderItem*>&
-
+auto ShaderPass::GetDrawList() const -> std::span<const RenderItem>
 {
-  DCHECK_NOTNULL_F(context_);
   // FIXME: For now, always use the opaque_draw_list from the context.
-  return context_->opaque_draw_list;
+  return Context().opaque_draw_list;
 }
 
 auto ShaderPass::GetFramebuffer() const -> const Framebuffer*
 {
-  DCHECK_NOTNULL_F(context_);
-  return context_->framebuffer.get();
+  return Context().framebuffer.get();
 }
+
 auto ShaderPass::GetClearColor() const -> const graphics::Color&
 {
   if (config_ && config_->clear_color.has_value()) {
@@ -226,8 +177,6 @@ auto ShaderPass::GetClearColor() const -> const graphics::Color&
 auto ShaderPass::SetupViewPortAndScissors(
   CommandRecorder& command_recorder) const -> void
 {
-  // Use the depth texture. It is already validated consistent with the
-  // framebuffer if provided.
   const auto& common_tex_desc = GetColorTexture().GetDescriptor();
   const auto width = common_tex_desc.width;
   const auto height = common_tex_desc.height;
@@ -322,18 +271,19 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 */
 auto ShaderPass::NeedRebuildPipelineState() const -> bool
 {
-  if (!last_built_pso_desc_) {
+  const auto& last_built = LastBuiltPsoDesc();
+  if (!last_built) {
     return true;
   }
 
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
-  if (last_built_pso_desc_->FramebufferLayout().color_target_formats.empty()
-    || last_built_pso_desc_->FramebufferLayout().color_target_formats[0]
+  if (last_built->FramebufferLayout().color_target_formats.empty()
+    || last_built->FramebufferLayout().color_target_formats[0]
       != color_tex_desc.format) {
     return true;
   }
 
-  if (last_built_pso_desc_->FramebufferLayout().sample_count
+  if (last_built->FramebufferLayout().sample_count
     != color_tex_desc.sample_count) {
     return true;
   }

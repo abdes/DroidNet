@@ -18,11 +18,13 @@ class CommandRecorder;
 struct ViewPort;
 struct Color;
 struct Scissors;
+class GraphicsPipelineDesc;
 } // namespace oxygen::graphics
 
 namespace oxygen::engine {
 
 struct RenderContext;
+struct RenderItem;
 
 //! Abstract base class for a modular, coroutine-based render pass.
 /*!
@@ -80,9 +82,8 @@ public:
 
    \return Coroutine handle (co::Co<>)
   */
-  virtual auto PrepareResources(const RenderContext& context,
-    graphics::CommandRecorder& recorder) -> co::Co<>
-    = 0;
+  OXGN_RNDR_NDAPI auto PrepareResources(const RenderContext& context,
+    graphics::CommandRecorder& recorder) -> co::Co<>;
 
   //! Execute the main rendering logic for this pass.
   /*!
@@ -98,9 +99,8 @@ public:
 
    \return Coroutine handle (co::Co<>)
   */
-  virtual auto Execute(const RenderContext& context,
-    graphics::CommandRecorder& recorder) -> co::Co<>
-    = 0;
+  OXGN_RNDR_NDAPI auto Execute(const RenderContext& context,
+    graphics::CommandRecorder& recorder) -> co::Co<>;
 
   //! Query whether this pass is enabled.
   virtual auto IsEnabled() const -> bool = 0;
@@ -110,8 +110,31 @@ public:
     -> std::string_view override;
 
   //! Set the name of this pass (from Named interface).
-  virtual OXGN_RNDR_API auto SetName(std::string_view name) noexcept
-    -> void override;
+  OXGN_RNDR_API auto SetName(std::string_view name) noexcept -> void override;
+
+protected:
+  auto Context() const -> const RenderContext&;
+  auto LastBuiltPsoDesc() const -> const auto& { return last_built_pso_desc_; }
+
+  virtual auto DoPrepareResources(graphics::CommandRecorder& recorder)
+    -> co::Co<>
+    = 0;
+  virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
+  virtual auto ValidateConfig() -> void = 0;
+  virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc = 0;
+  virtual auto NeedRebuildPipelineState() const -> bool = 0;
+
+  virtual auto GetDrawList() const -> std::span<const RenderItem> = 0;
+  virtual auto IssueDrawCalls(graphics::CommandRecorder& command_recorder) const
+    -> void;
+
+private:
+  //! Current render context.
+  const RenderContext* context_ { nullptr };
+
+  // Track the last built pipeline state object (PSO) description and hash, so
+  // we can properly manage their caching and retrieval.
+  std::optional<graphics::GraphicsPipelineDesc> last_built_pso_desc_;
 };
 
 } // namespace oxygen::engine

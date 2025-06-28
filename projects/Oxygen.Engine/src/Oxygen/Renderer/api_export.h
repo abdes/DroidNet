@@ -25,3 +25,5 @@
 #else
 #  define OXGN_RNDR_API
 #endif
+
+#define OXGN_RNDR_NDAPI [[nodiscard]] OXGN_RNDR_API
