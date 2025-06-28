@@ -277,10 +277,6 @@ auto MainModule::SetupRenderer() -> void
   CHECK_NOTNULL_F(
     render_controller_, "Failed to create renderer for main window");
   renderer_ = std::make_shared<engine::Renderer>(render_controller_);
-
-  // Update render context
-  context_.renderer = renderer_.get();
-  context_.render_controller = render_controller_.get();
 }
 
 auto MainModule::SetupFramebuffers() -> void
@@ -460,7 +456,7 @@ auto MainModule::RenderScene() -> co::Co<>
     render_controller_->CurrentFrameIndex());
 
   if (render_items_.empty()) {
-    auto quad_mesh = MakeQuadMeshAsset();
+    const auto quad_mesh = MakeQuadMeshAsset();
     RenderItem quad_item {
       .mesh = quad_mesh,
       .material = nullptr,

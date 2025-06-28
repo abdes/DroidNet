@@ -26,9 +26,6 @@ RenderPass::RenderPass(const std::string_view name)
 auto RenderPass::PrepareResources(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
-  DCHECK_NOTNULL_F(context.render_controller);
-  DCHECK_NOTNULL_F(context.renderer);
-
   detail::ContextScope ctx_scope(context_, context);
 
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
@@ -49,8 +46,6 @@ auto RenderPass::PrepareResources(
 auto RenderPass::Execute(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
-  DCHECK_NOTNULL_F(context.render_controller);
-  DCHECK_NOTNULL_F(context.renderer);
   DCHECK_F(!NeedRebuildPipelineState()); // built in PrepareResources
 
   detail::ContextScope ctx_scope(context_, context);
@@ -92,8 +87,6 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
   using data::Vertex;
   using graphics::Buffer;
 
-  DCHECK_NOTNULL_F(Context().render_controller);
-
   // Note on D3D12 Upload Heap Resource States:
   //
   // Buffers created on D3D12_HEAP_TYPE_UPLOAD (like these temporary vertex
@@ -111,7 +104,8 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
     }
 
     // Use cached vertex buffer from renderer
-    const auto vertex_buffer = context.renderer->GetVertexBuffer(*item.mesh);
+    const auto vertex_buffer
+      = context.GetRenderer().GetVertexBuffer(*item.mesh);
     if (!vertex_buffer) {
       LOG_F(WARNING, "Could not get the vertex buffer for mesh {}. Skipping.",
         item.mesh.get()->Name());
@@ -125,7 +119,7 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
 
     // Use index buffer if present
     if (item.mesh->IsIndexed()) {
-      auto index_buffer = context.renderer->GetIndexBuffer(*item.mesh);
+      auto index_buffer = context.GetRenderer().GetIndexBuffer(*item.mesh);
       if (!index_buffer) {
         LOG_F(WARNING, "Could not get the index buffer for mesh {}. Skipping.",
           item.mesh.get()->Name());

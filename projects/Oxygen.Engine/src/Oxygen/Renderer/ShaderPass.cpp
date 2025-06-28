@@ -117,8 +117,9 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
 auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 {
   // Prepare render target view(s)
-  auto& registry = Context().render_controller->GetResourceRegistry();
-  auto& allocator = Context().render_controller->GetDescriptorAllocator();
+  auto& render_controller = Context().GetRenderController();
+  auto& registry = render_controller.GetResourceRegistry();
+  auto& allocator = render_controller.GetDescriptorAllocator();
   auto& color_texture = const_cast<Texture&>(GetColorTexture());
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);
@@ -137,6 +138,7 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
   IssueDrawCalls(recorder);
+  Context().RegisterPass(this);
 
   co_return;
 }

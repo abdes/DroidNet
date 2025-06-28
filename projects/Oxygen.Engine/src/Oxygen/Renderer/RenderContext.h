@@ -9,9 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
-#include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace oxygen::graphics {
 class Framebuffer;
@@ -30,34 +28,12 @@ class Renderer;
 struct RenderItem;
 class RenderPass;
 
-//=== Pass Type List and Compile-Time Indexing ===-------------------------//
+//=== Pass Type List and Compile-Time Indexing ===----------------------------//
 
-/*!
- Defines the list of all known render pass types for the current render graph.
- The order of types determines their index. Only append new types to maintain
- binary compatibility. Update this list as new passes are added.
-*/
 template <typename... Ts> struct PassTypeList {
   static constexpr std::size_t size = sizeof...(Ts);
 };
 
-// Example: forward declare your pass types here
-class DepthPrePass;
-// class LightingPass;
-// class PostProcessPass;
-// ... add more as needed ...
-
-using KnownPassTypes = PassTypeList<DepthPrePass
-  //, LightingPass
-  //, PostProcessPass
-  // ...
-  >;
-
-static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
-
-/*!\
- Compile-time metafunction to get the index of a pass type in KnownPassTypes.
-*/
 template <typename T, typename List> struct PassIndexOf;
 
 template <typename T, typename... Ts>
@@ -68,6 +44,21 @@ template <typename T, typename U, typename... Ts>
 struct PassIndexOf<T, PassTypeList<U, Ts...>>
   : std::integral_constant<std::size_t,
       1 + PassIndexOf<T, PassTypeList<Ts...>>::value> { };
+
+// Forward declare the know pass classes here.
+class DepthPrePass;
+class ShaderPass;
+
+/*!
+ Defines the list of all known render pass types for the current render graph.
+ The order of types determines their index. Only append new types to maintain
+ binary compatibility. Update this list as new passes are added.
+*/
+using KnownPassTypes = PassTypeList<DepthPrePass, ShaderPass>;
+
+//! The number of known pass types, used for static array sizing and sanity
+//! checks.
+static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
 
 //=== Render Context Definition ===-------------------------------------------//
 
@@ -102,16 +93,8 @@ struct RenderContext {
   // TODO: Light lists
   // std::vector<scene::Light> light_list;
 
-  // Pass enable/disable flags (by pass name or type)
-  std::unordered_map<std::string, bool> pass_enable_flags;
-
-  //! The renderer executing the render graph. Guaranteed to be non-null during
-  //! the render graph execution.
-  Renderer* renderer;
-
-  //! The render controller managing the frame rendering process. Guaranteed to
-  //! be non-null during the render graph execution.
-  graphics::RenderController* render_controller;
+  // Pass enable/disable flags (by pass index in the KnownKnownPassTypes)
+  std::unordered_map<size_t, bool> pass_enable_flags;
 
   //! Framebuffer object for broader rendering context.
   std::shared_ptr<const graphics::Framebuffer> framebuffer = nullptr;
@@ -125,11 +108,17 @@ struct RenderContext {
   */
   std::shared_ptr<const graphics::Buffer> scene_constants;
 
-  //=== Pass Management ===---------------------------------------------------//
+  //=== Renderer / RenderController ===---------------------------------------//
 
-  //! Pass pointer registry for pass-to-pass data flow (O(1) array,
-  //! type-indexed)
-  std::array<RenderPass*, kNumPassTypes> pass_ptrs { { nullptr } };
+  //! The renderer executing the render graph. Guaranteed to be non-null during
+  //! the render graph execution.
+  auto GetRenderer() const -> auto& { return *renderer; }
+
+  //! The render controller managing the frame rendering process. Guaranteed to
+  //! be non-null during the render graph execution.
+  auto GetRenderController() const -> auto& { return *render_controller; }
+
+  //=== Pass Management ===---------------------------------------------------//
 
   /*!
    Returns a pointer to the registered pass of type PassT, or nullptr if not
@@ -152,13 +141,13 @@ struct RenderContext {
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    return static_cast<PassT*>(pass_ptrs[idx]);
+    return static_cast<PassT*>(known_passes[idx]);
   }
 
   /*!
    Registers a pass pointer for type PassT in the pass pointer registry.
 
-   Typically called by the the render graph code, responsible for setting up and
+   Typically called by the render graph code, responsible for setting up and
    executing the pass, after it completes. Registering the pass makes it
    available for cross-pass access.
 
@@ -168,12 +157,44 @@ struct RenderContext {
    @note Compile-time error if PassT is not in KnownPassTypes.
    @see GetPass
   */
-  template <typename PassT> auto RegisterPass(PassT* pass) -> void
+  template <typename PassT> auto RegisterPass(PassT* pass) const -> void
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    pass_ptrs[idx] = pass;
+    known_passes[idx] = pass;
   }
+
+private:
+  friend class Renderer;
+
+  //! Sets the renderer and render controller for the current render graph run.
+  auto SetRenderer(Renderer* the_renderer,
+    graphics::RenderController* the_render_controller) const
+  {
+    renderer = the_renderer;
+    render_controller = the_render_controller;
+  }
+
+  //! Resets the render context for a new graph run.
+  /*!
+   Called at the start of each graph run only by the Renderer.
+   - Clears the pass pointer registry.
+   - Resets the renderer and render controller pointers to null.
+  */
+  auto Reset() const -> void
+  {
+    std::ranges::fill(known_passes, nullptr);
+    renderer = nullptr;
+    render_controller = nullptr;
+  }
+
+  mutable Renderer* renderer { nullptr };
+  mutable graphics::RenderController* render_controller { nullptr };
+
+  //! Pass pointer registry for pass-to-pass data flow (O(1) array,
+  //! type-indexed). Non-null if the pass has been registered in the current
+  //! graph run.
+  mutable std::array<RenderPass*, kNumPassTypes> known_passes { { nullptr } };
 };
 
 } // namespace oxygen::engine

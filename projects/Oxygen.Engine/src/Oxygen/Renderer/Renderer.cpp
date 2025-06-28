@@ -21,12 +21,13 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 using oxygen::data::MeshAsset;
-using oxygen::engine::IEvictionPolicy;
+using oxygen::engine::EvictionPolicy;
 using oxygen::engine::MeshGpuResources;
-using oxygen::engine::MeshID;
+using oxygen::engine::MeshId;
 using oxygen::engine::Renderer;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
@@ -37,33 +38,33 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
 namespace {
-auto GetMeshID(const MeshAsset& mesh) -> MeshID
+auto GetMeshId(const MeshAsset& mesh) -> MeshId
 {
   // Use pointer value or a unique mesh identifier if available
-  return reinterpret_cast<MeshID>(&mesh);
+  return reinterpret_cast<MeshId>(&mesh);
 }
 
 //===----------------------------------------------------------------------===//
 // LRU Eviction Policy Implementation
 //===----------------------------------------------------------------------===//
 
-class LruEvictionPolicy : public IEvictionPolicy {
+class LruEvictionPolicy : public EvictionPolicy {
 public:
   static constexpr std::size_t kDefaultLruAge = 60; // frames
   explicit LruEvictionPolicy(std::size_t max_age_frames = kDefaultLruAge)
     : max_age_(max_age_frames)
   {
   }
-  auto OnMeshAccess(MeshID id) -> void override
+  auto OnMeshAccess(MeshId id) -> void override
   {
     last_used_[id] = current_frame_;
   }
   auto SelectResourcesToEvict(
-    const std::unordered_map<MeshID, MeshGpuResources>& currentResources,
-    std::size_t currentFrame) -> std::vector<MeshID> override
+    const std::unordered_map<MeshId, MeshGpuResources>& currentResources,
+    std::size_t currentFrame) -> std::vector<MeshId> override
   {
     current_frame_ = currentFrame;
-    std::vector<MeshID> evict;
+    std::vector<MeshId> evict;
     for (const auto& id : currentResources | std::views::keys) {
       auto it = last_used_.find(id);
       if (it == last_used_.end() || currentFrame - it->second > max_age_) {
@@ -72,12 +73,12 @@ public:
     }
     return evict;
   }
-  auto OnMeshRemoved(MeshID id) -> void override { last_used_.erase(id); }
+  auto OnMeshRemoved(MeshId id) -> void override { last_used_.erase(id); }
 
 private:
   std::size_t current_frame_ = 0;
   std::size_t max_age_;
-  std::unordered_map<MeshID, std::size_t> last_used_;
+  std::unordered_map<MeshId, std::size_t> last_used_;
 };
 
 //===----------------------------------------------------------------------===//
@@ -85,7 +86,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 auto MakeLruEvictionPolicy(std::size_t max_age_frames
-  = LruEvictionPolicy::kDefaultLruAge) -> std::shared_ptr<IEvictionPolicy>
+  = LruEvictionPolicy::kDefaultLruAge) -> std::shared_ptr<EvictionPolicy>
 {
   return std::make_shared<LruEvictionPolicy>(max_age_frames);
 }
@@ -96,7 +97,7 @@ auto MakeLruEvictionPolicy(std::size_t max_age_frames
 //===----------------------------------------------------------------------===//
 
 Renderer::Renderer(std::weak_ptr<RenderController> render_controller,
-  std::shared_ptr<IEvictionPolicy> eviction_policy)
+  std::shared_ptr<EvictionPolicy> eviction_policy)
   : render_controller_(std::move(render_controller))
   , eviction_policy_(
       eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
@@ -117,7 +118,7 @@ auto Renderer::GetIndexBuffer(const MeshAsset& mesh) -> std::shared_ptr<Buffer>
 
 auto Renderer::UnregisterMesh(const MeshAsset& mesh) -> void
 {
-  const MeshID id = GetMeshID(mesh);
+  const MeshId id = GetMeshId(mesh);
   const auto it = mesh_resources_.find(id);
   if (it != mesh_resources_.end()) {
     mesh_resources_.erase(it);
@@ -134,10 +135,18 @@ auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
   }
   const auto to_evict
     = eviction_policy_->SelectResourcesToEvict(mesh_resources_, current_frame);
-  for (MeshID id : to_evict) {
+  for (MeshId id : to_evict) {
     mesh_resources_.erase(id);
     eviction_policy_->OnMeshRemoved(id);
   }
+}
+auto Renderer::PreExecute(const RenderContext& context) -> void
+{
+  context.SetRenderer(this, render_controller_.lock().get());
+}
+auto Renderer::PostExecute(const RenderContext& context) -> void
+{
+  context.Reset();
 }
 
 namespace {
@@ -255,7 +264,7 @@ auto UploadIndexBuffer(const MeshAsset& mesh,
 
 auto Renderer::EnsureMeshResources(const MeshAsset& mesh) -> MeshGpuResources&
 {
-  MeshID id = GetMeshID(mesh);
+  MeshId id = GetMeshId(mesh);
   const auto it = mesh_resources_.find(id);
   if (it != mesh_resources_.end()) {
     if (eviction_policy_) {

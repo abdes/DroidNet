@@ -36,9 +36,6 @@ struct ShaderPassConfig {
   //! set).
   std::shared_ptr<const graphics::Texture> color_texture = nullptr;
 
-  //! Whether this pass is enabled for the current frame.
-  bool enabled = true;
-
   //! Optional clear color for the color attachment. If present, will override
   //! the default clear value in the texture's descriptor.
   std::optional<graphics::Color> clear_color {};
@@ -55,11 +52,6 @@ public:
   using Config = ShaderPassConfig;
 
   OXGN_RNDR_API explicit ShaderPass(std::shared_ptr<ShaderPassConfig> config);
-
-  auto IsEnabled() const -> bool override
-  {
-    return config_ && config_->enabled;
-  }
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)

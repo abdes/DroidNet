@@ -102,9 +102,6 @@ public:
   OXGN_RNDR_NDAPI auto Execute(const RenderContext& context,
     graphics::CommandRecorder& recorder) -> co::Co<>;
 
-  //! Query whether this pass is enabled.
-  virtual auto IsEnabled() const -> bool = 0;
-
   //! Get the name of this pass (from Named interface).
   [[nodiscard]] OXGN_RNDR_API auto GetName() const noexcept
     -> std::string_view override;

@@ -98,13 +98,6 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
   clear_color_.emplace(color);
 }
 
-auto DepthPrePass::SetEnabled(const bool enabled) -> void
-{
-  enabled_ = enabled;
-}
-
-auto DepthPrePass::IsEnabled() const -> bool { return enabled_; }
-
 auto DepthPrePass::GetDrawList() const -> std::span<const RenderItem>
 {
   // FIXME: For now, always use the opaque_draw_list from the context.
@@ -226,6 +219,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   SetupRenderTargets(recorder, dsv);
   SetupSceneConstantsBuffer(recorder);
   IssueDrawCalls(recorder);
+  Context().RegisterPass(this);
 
   co_return;
 }
@@ -240,9 +234,9 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
   using graphics::TextureDimension;
   using graphics::TextureViewDescription;
 
-  const auto& context = Context();
-  auto& registry = context.render_controller->GetResourceRegistry();
-  auto& allocator = context.render_controller->GetDescriptorAllocator();
+  auto& render_controller = Context().GetRenderController();
+  auto& registry = render_controller.GetResourceRegistry();
+  auto& allocator = render_controller.GetDescriptorAllocator();
 
   // 1. Prepare TextureViewDescription
   const auto& depth_tex_desc = depth_texture_ref.GetDescriptor();
