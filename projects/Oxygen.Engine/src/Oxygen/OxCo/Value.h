@@ -19,9 +19,11 @@ namespace oxygen::co {
  thereof, satisfies a predicate.
 */
 template <class T> class Value {
-  class AwaitableBase;
-  template <class Fn> class UntilMatchesAwaitable;
-  template <class Fn> class UntilChangedAwaitable;
+  class AwaiterBase;
+  template <class Fn> class UntilMatchesAwaiter;
+  template <class Fn> class UntilChangedAwaiter;
+
+  template <class Fn> class Comparison;
 
 public:
   Value() = default;
@@ -45,6 +47,14 @@ public:
 
   void Set(T value);
   auto operator=(T value) -> Value&;
+
+  //! Runs `fn` on a stored value (which can modify it in-place),
+  //! then wakes up awaiters as appropriate.
+  /*!
+   Returns the modified value (which may be different from the stored
+   one if any immediately resumed awaiters modified it further).
+  */
+  T Modify(std::invocable<T&> auto&& fn);
 
   //! Suspends the caller until the stored value matches the predicate.
   //! (or resumes it immediately if it already does).
@@ -91,9 +101,114 @@ public:
                           const T& t) { return f == from && t == to; });
   }
 
+  // Shorthands for comparison operations.
+  // Each of these yields an object which is convertible to bool,
+  // but also can yield an awaitable through a friend `until()` function:
+  //
+  //     corral::Value<int> v;
+  //     bool b = (v >= 42);  // works
+  //     co_await until(v >= 42);  // also works
+  //
+  // Note that unlike `untilMatches()` above, such awaitables do not yield
+  // the value which triggered the resumption.
+#define OXCO_DEFINE_COMPARISON_OP(op)                                          \
+  template <class U>                                                           \
+    requires(requires(const T t, const U u) {                                  \
+      { t op u } -> std::convertible_to<bool>;                                 \
+    })                                                                         \
+  auto operator op(U&& u)                                                      \
+  {                                                                            \
+    return MakeComparison([u](const T& t) { return t op u; });                 \
+  }                                                                            \
+                                                                               \
+  template <class U>                                                           \
+    requires(requires(const T t, const U u) {                                  \
+      { t op u } -> std::convertible_to<bool>;                                 \
+    })                                                                         \
+  bool operator op(U&& u) const                                                \
+  {                                                                            \
+    return value_ op std::forward<U>(u);                                       \
+  }
+
+  OXCO_DEFINE_COMPARISON_OP(==)
+  OXCO_DEFINE_COMPARISON_OP(!=)
+  OXCO_DEFINE_COMPARISON_OP(<)
+  OXCO_DEFINE_COMPARISON_OP(<=)
+  OXCO_DEFINE_COMPARISON_OP(>)
+  OXCO_DEFINE_COMPARISON_OP(>=)
+#undef OXCO_DEFINE_COMPARISON_OP
+
+  template <class U>
+    requires(requires(const T t, const U u) { t <=> u; })
+  auto operator<=>(U&& rhs) const
+  {
+    return value_ <=> std::forward<U>(rhs);
+  }
+
+  //
+  // Shorthands proxying arithmetic operations to the stored value.
+  //
+
+  T operator++()
+    requires(requires(T t) { ++t; })
+  {
+    return Modify([](T& v) { ++v; });
+  }
+
+  T operator++(int)
+    requires(requires(T t) { t++; })
+  {
+    auto ret = value_;
+    Modify([](T& v) { ++v; });
+    return ret;
+  }
+
+  T operator--()
+    requires(requires(T t) { --t; })
+  {
+    return Modify([](T& v) { --v; });
+  }
+
+  T operator--(int)
+    requires(requires(T t) { t--; })
+  {
+    auto ret = value_;
+    Modify([](T& v) { --v; });
+    return ret;
+  }
+
+#define OXCO_DEFINE_ARITHMETIC_OP(op)                                          \
+  template <class U>                                                           \
+  T operator op(U&& rhs)                                                       \
+    requires(requires(T t, U u) { t op u; })                                   \
+  {                                                                            \
+    return Modify([&rhs](T& v) { v op std::forward<U>(rhs); });                \
+  }
+
+  OXCO_DEFINE_ARITHMETIC_OP(+=)
+  OXCO_DEFINE_ARITHMETIC_OP(-=)
+  OXCO_DEFINE_ARITHMETIC_OP(*=)
+  OXCO_DEFINE_ARITHMETIC_OP(/=)
+  OXCO_DEFINE_ARITHMETIC_OP(%=)
+  OXCO_DEFINE_ARITHMETIC_OP(&=)
+  OXCO_DEFINE_ARITHMETIC_OP(|=)
+  OXCO_DEFINE_ARITHMETIC_OP(^=)
+  OXCO_DEFINE_ARITHMETIC_OP(<<=)
+  OXCO_DEFINE_ARITHMETIC_OP(>>=)
+
+#undef OXCO_DEFINE_ARITHMETIC_OP
+
+private:
+  template <class Fn> Comparison<Fn> MakeComparison(Fn&& fn)
+  {
+    // gcc-14 fails to CTAD Comparison signature here,
+    // so wrap its construction into a helper function.
+    return Comparison<Fn>(*this, std::forward<Fn>(fn));
+  }
+
 private:
   T value_;
-  detail::IntrusiveList<AwaitableBase> parked_;
+  detail::IntrusiveList<AwaiterBase> parked_;
 };
 
 //
@@ -101,8 +216,7 @@ private:
 //
 
 template <class T>
-class Value<T>::AwaitableBase
-  : public detail::IntrusiveListItem<AwaitableBase> {
+class Value<T>::AwaiterBase : public detail::IntrusiveListItem<AwaiterBase> {
 public:
   void await_suspend(const detail::Handle h)
   {
@@ -117,13 +231,12 @@ public:
   }
 
 protected:
-  explicit AwaitableBase(Value& cond)
+  explicit AwaiterBase(Value& cond)
     : cond_(cond)
   {
   }
 
   void Park() { cond_.parked_.PushBack(*this); }
-  void DoResume() const { handle_.resume(); }
 
   [[nodiscard]] auto GetValue() const noexcept -> const T&
   {
@@ -131,7 +244,16 @@ protected:
   }
 
 private:
-  virtual void OnChanged(const T& from, const T& to) = 0;
+  virtual bool Matches(const T& from, const T& to) = 0;
+
+  virtual void OnChanged(const T& from, const T& to)
+  {
+    if (Matches(from, to)) {
+      handle_.resume();
+    } else {
+      Park();
+    }
+  }
 
   Value& cond_; // NOLINT(*-avoid-const-or-ref-data-members)
   detail::Handle handle_;
@@ -140,10 +262,10 @@ private:
 
 template <class T>
 template <class Fn>
-class Value<T>::UntilMatchesAwaitable final : public AwaitableBase {
+class Value<T>::UntilMatchesAwaiter final : public AwaiterBase {
 public:
-  UntilMatchesAwaitable(Value& cond, Fn fn)
-    : AwaitableBase(cond)
+  UntilMatchesAwaiter(Value& cond, Fn fn)
+    : AwaiterBase(cond)
     , fn_(std::move(fn))
   {
     if (fn_(cond.value_)) {
@@ -158,13 +280,13 @@ public:
   auto await_resume() && -> T { return std::move(*result_); }
 
 private:
-  void OnChanged(const T& /*from*/, const T& to) override
+  auto Matches(const T& /*from*/, const T& to) -> bool override
   {
     if (fn_(to)) {
       result_ = to;
-      this->DoResume();
+      return true;
     } else {
-      this->Park();
+      return false;
     }
   }
 
@@ -172,12 +294,49 @@ private:
   std::optional<T> result_;
 };
 
+template <class T> template <class Fn> class Value<T>::Comparison {
+  class Awaiter : public AwaiterBase {
+  public:
+    Awaiter(Value& cond, Fn fn)
+      : AwaiterBase(cond)
+      , fn_(std::move(fn))
+    {
+    }
+    bool await_ready() const noexcept { return fn_(this->GetValue()); }
+    void await_resume() { }
+
+  private:
+    bool Matches(const T& /*from*/, const T& to) override { return fn_(to); }
+
+  private:
+    Fn fn_;
+  };
+
+public:
+  Comparison(Value& cond, Fn fn)
+    : cond_(cond)
+    , fn_(std::move(fn))
+  {
+  }
+
+  operator bool() const noexcept { return fn_(cond_.value_); }
+
+  friend Awaiter Until(Comparison&& self)
+  {
+    return Awaiter(self.cond_, std::move(self.fn_));
+  }
+
+private:
+  Value& cond_;
+  Fn fn_;
+};
+
 template <class T>
 template <class Fn>
-class Value<T>::UntilChangedAwaitable final : public AwaitableBase {
+class Value<T>::UntilChangedAwaiter final : public AwaiterBase {
 public:
-  explicit UntilChangedAwaitable(Value& cond, Fn fn)
-    : AwaitableBase(cond)
+  explicit UntilChangedAwaiter(Value& cond, Fn fn)
+    : AwaiterBase(cond)
     , fn_(std::move(fn))
   {
   }
@@ -188,13 +347,13 @@ public:
   // ReSharper restore CppMemberFunctionMayBeStatic
 
 private:
-  void OnChanged(const T& from, const T& to) override
+  bool Matches(const T& from, const T& to) override
   {
     if (fn_(from, to)) {
       result_ = std::make_pair(from, to);
-      this->DoResume();
+      return true;
     } else {
-      this->Park();
+      return false;
     }
   }
 
@@ -202,9 +361,11 @@ private:
   std::optional<std::pair<T, T>> result_;
 };
 
-template <class T> void Value<T>::Set(T value)
+template <class T> T Value<T>::Modify(std::invocable<T&> auto&& fn)
 {
-  T prev = std::exchange(value_, value);
+  T prev = value_;
+  std::forward<decltype(fn)>(fn)(value_);
+  T value = value_;
   auto parked = std::move(parked_);
   while (!parked.Empty()) {
     auto& p = parked.Front();
@@ -215,6 +376,12 @@ template <class T> void Value<T>::Set(T value)
     // awaiting tasks, which could cause `value_` to change further.
     p.OnChanged(prev, value);
   }
+  return value;
+}
+
+template <class T> void Value<T>::Set(T value)
+{
+  Modify([&](T& v) { v = std::move(value); });
 }
 
 template <class T> auto Value<T>::operator=(T value) -> Value&
@@ -227,14 +394,14 @@ template <class T>
 template <std::invocable<const T&> Fn>
 auto Value<T>::UntilMatches(Fn&& predicate) -> Awaitable<T> auto
 {
-  return UntilMatchesAwaitable<Fn>(*this, std::forward<Fn>(predicate));
+  return UntilMatchesAwaiter<Fn>(*this, std::forward<Fn>(predicate));
 }
 
 template <class T>
 template <std::invocable<const T& /*from*/, const T& /*to*/> Fn>
 auto Value<T>::UntilChanged(Fn&& predicate) -> Awaitable<std::pair<T, T>> auto
 {
-  return UntilChangedAwaitable<Fn>(*this, std::forward<Fn>(predicate));
+  return UntilChangedAwaiter<Fn>(*this, std::forward<Fn>(predicate));
 }
 
 } // namespace oxygen::co

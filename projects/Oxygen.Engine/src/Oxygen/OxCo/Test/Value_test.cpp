@@ -28,165 +28,166 @@ namespace {
 
 TEST_CASE("Value")
 {
-    TestEventLoop el;
-    SECTION("wakes tasks when its value changes")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+  TestEventLoop el;
+  SECTION("wakes tasks when its value changes")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    co_await v.UntilEquals(0);
-                    CHECK(el.Now() == 0ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          co_await Until(v <= 0);
+          CHECK(el.Now() == 0ms);
 
-                    auto [from, to] = co_await v.UntilChanged();
-                    CHECK(el.Now() == 1ms);
-                    CHECK(from == 0);
-                    CHECK(to == 3);
+          auto [from, to] = co_await v.UntilChanged();
+          CHECK(el.Now() == 1ms);
+          CHECK(from == 0);
+          CHECK(to == 3);
 
-                    std::tie(from, to) = co_await v.UntilChanged();
-                    // Should skip the 3->3 change
-                    CHECK(el.Now() == 3ms);
-                    CHECK(from == 3);
-                    CHECK(to == 4);
+          std::tie(from, to) = co_await v.UntilChanged();
+          // Should skip the 3->3 change
+          CHECK(el.Now() == 3ms);
+          CHECK(from == 3);
+          CHECK(to == 4);
 
-                    to = co_await v.UntilEquals(5);
-                    CHECK(el.Now() == 4ms);
-                    CHECK(to == 5);
-                    CHECK(v == 7);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v = 3;
+          to = co_await v.UntilEquals(5);
+          CHECK(el.Now() == 4ms);
+          CHECK(to == 5);
+          CHECK(v == 7);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v = 3;
 
-                    co_await el.Sleep(1ms);
-                    v = 3;
-                    co_await el.Sleep(1ms);
-                    v = 4;
+          co_await el.Sleep(1ms);
+          v = 3;
+          co_await el.Sleep(1ms);
+          ++v;
 
-                    co_await el.Sleep(1ms);
-                    v = 7;
-                    v = 5;
-                    v = 7;
-                });
-
-            CHECK(el.Now() == 4ms);
+          co_await el.Sleep(1ms);
+          v = 7;
+          v -= 2;
+          v += 2;
         });
-    }
 
-    SECTION("updates value and wakes tasks when Set() is called")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+      CHECK(el.Now() == 4ms);
+    });
+  }
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    co_await v.UntilEquals(1);
-                    CHECK(v.Get() == 1);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v.Set(1);
-                });
+  SECTION("updates value and wakes tasks when Set() is called")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            CHECK(el.Now() == 1ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          co_await v.UntilEquals(1);
+          CHECK(v.Get() == 1);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v.Set(1);
         });
-    }
 
-    SECTION("updates value and wakes tasks when assigned another object")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+      CHECK(el.Now() == 1ms);
+    });
+  }
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    co_await v.UntilEquals(2);
-                    CHECK(v.Get() == 2);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v = 2;
-                });
+  SECTION("updates value and wakes tasks when assigned another object")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            CHECK(el.Now() == 1ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          co_await v.UntilEquals(2);
+          CHECK(v.Get() == 2);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v = 2;
         });
-    }
 
-    SECTION("`UntilMatches` suspends until predicate matches")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+      CHECK(el.Now() == 1ms);
+    });
+  }
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    co_await v.UntilMatches([](const int& value) { return value > 2; });
-                    CHECK(v.Get() == 3);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v = 1;
-                    co_await el.Sleep(1ms);
-                    v = 2;
-                    co_await el.Sleep(1ms);
-                    v = 3;
-                });
+  SECTION("`UntilMatches` suspends until predicate matches")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            CHECK(el.Now() == 3ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          co_await v.UntilMatches([](const int& value) { return value > 2; });
+          CHECK(v.Get() == 3);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v = 1;
+          co_await el.Sleep(1ms);
+          v = 2;
+          co_await el.Sleep(1ms);
+          v = 3;
         });
-    }
 
-    SECTION("`UntilChanged` with custom predicate")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+      CHECK(el.Now() == 3ms);
+    });
+  }
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    auto [from, to] = co_await v.UntilChanged([](const int& f, const int& t) { return f < t; });
-                    CHECK(from == 0);
-                    CHECK(to == 2);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v = 2;
-                });
+  SECTION("`UntilChanged` with custom predicate")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            CHECK(el.Now() == 1ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          auto [from, to] = co_await v.UntilChanged(
+            [](const int& f, const int& t) { return f < t; });
+          CHECK(from == 0);
+          CHECK(to == 2);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v = 2;
         });
-    }
 
-    SECTION("`UntilChanged` with specific from and to values")
-    {
-        Run(el, [&]() -> Co<> {
-            Value v { 0 };
+      CHECK(el.Now() == 1ms);
+    });
+  }
 
-            co_await AllOf(
-                [&]() -> Co<> {
-                    auto [from, to] = co_await v.UntilChanged(0, 3);
-                    CHECK(from == 0);
-                    CHECK(to == 3);
-                },
-                [&]() -> Co<> {
-                    co_await el.Sleep(1ms);
-                    v = 3;
-                });
+  SECTION("`UntilChanged` with specific from and to values")
+  {
+    Run(el, [&]() -> Co<> {
+      Value v { 0 };
 
-            CHECK(el.Now() == 1ms);
+      co_await AllOf(
+        [&]() -> Co<> {
+          auto [from, to] = co_await v.UntilChanged(0, 3);
+          CHECK(from == 0);
+          CHECK(to == 3);
+        },
+        [&]() -> Co<> {
+          co_await el.Sleep(1ms);
+          v = 3;
         });
-    }
 
-    SECTION("`Get` method returns current value")
-    {
-        Value v { 5 };
-        CHECK(v.Get() == 5);
-    }
+      CHECK(el.Now() == 1ms);
+    });
+  }
 
-    SECTION("`conversion operator` returns current value")
-    {
-        const Value v { 7 };
-        const int& value = v;
-        CHECK(value == 7);
-    }
+  SECTION("`Get` method returns current value")
+  {
+    Value v { 5 };
+    CHECK(v.Get() == 5);
+  }
+
+  SECTION("`conversion operator` returns current value")
+  {
+    const Value v { 7 };
+    const int& value = v;
+    CHECK(value == 7);
+  }
 }
 
 } // namespace
