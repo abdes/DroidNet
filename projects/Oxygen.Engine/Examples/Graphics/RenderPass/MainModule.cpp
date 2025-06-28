@@ -276,12 +276,11 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   // Prepare and execute depth pre-pass
-  RenderContext context {
-    .opaque_draw_list
-    = std::span<const RenderItem>(render_items_.data(), render_items_.size()),
-    .render_controller = renderer_.get(),
-    .framebuffer = fb,
-  };
+  RenderContext context {};
+  context.opaque_draw_list
+    = std::span<const RenderItem>(render_items_.data(), render_items_.size());
+  context.framebuffer = fb;
+
   co_await depth_pre_pass_->PrepareResources(context, *recorder);
   co_await depth_pre_pass_->Execute(context, *recorder);
 

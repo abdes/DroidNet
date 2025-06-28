@@ -156,9 +156,6 @@ public:
   }
   auto HasClearColor() const -> bool { return clear_color_.has_value(); }
 
-  OXGN_RNDR_API auto SetEnabled(bool enabled) -> void;
-  OXGN_RNDR_API auto IsEnabled() const -> bool override;
-
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
@@ -220,9 +217,6 @@ private:
   //! Current clear color for the pass (interpreted for depth/stencil).
   std::optional<graphics::Color>
     clear_color_ {}; // Default clear color (e.g., black, full alpha)
-
-  //! Flag indicating if the pass is enabled.
-  bool enabled_ = true;
 };
 
 } // namespace oxygen::engine
