@@ -58,6 +58,13 @@ public:
   auto Run() -> void;
 
 private:
+  alignas(16) struct SceneConstants {
+    glm::mat4 world_matrix { 1.0f };
+    glm::mat4 view_matrix { 1.0f };
+    glm::mat4 projection_matrix { 1.0f };
+    glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
+  } scene_constants_;
+
   auto SetupCommandQueues() const -> void;
   auto SetupMainWindow() -> void;
   auto SetupSurface() -> void;
@@ -79,20 +86,22 @@ private:
 
   std::shared_ptr<graphics::Buffer> vertex_buffer_;
   std::shared_ptr<graphics::Buffer> index_buffer_;
-  std::shared_ptr<graphics::Buffer> constant_buffer_;
-  graphics::NativeObject index_mapping_cbv_ {};
+  std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
+  std::shared_ptr<graphics::Buffer> indices_buffer_;
 
   // === Data-driven RenderItem/scene system members ===
   std::vector<engine::RenderItem> render_items_;
 
   co::Nursery* nursery_ { nullptr };
-  float rotation_angle_ { 0.0f };
   auto EnsureBindlessIndexingBuffer() -> void;
   auto EnsureVertexBufferSrv() -> void;
   auto EnsureMeshDrawResources() -> void;
+  auto EnsureSceneConstantsBuffer() -> void;
+  auto UpdateSceneConstantsBuffer(const SceneConstants& constants) const
+    -> void;
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
-  bool recreate_cbv_ { true };
+  bool recreate_indices_cbv_ { true };
 };
 
 } // namespace oxygen::examples

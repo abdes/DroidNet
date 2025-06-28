@@ -32,6 +32,7 @@ using oxygen::engine::DepthPrePass;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Color;
 using oxygen::graphics::CommandRecorder;
+using oxygen::graphics::Framebuffer;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
@@ -103,6 +104,10 @@ auto DepthPrePass::GetDrawList() const -> std::span<const RenderItem>
   // FIXME: For now, always use the opaque_draw_list from the context.
   return Context().opaque_draw_list;
 }
+auto DepthPrePass::GetFramebuffer() const -> const Framebuffer*
+{
+  return Context().framebuffer.get();
+}
 
 /*!
  The base implementation of this method ensures that the `depth_texture`
@@ -140,25 +145,8 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
 auto DepthPrePass::ValidateConfig() -> void
 {
-  if (!config_ || !config_->depth_texture) {
-    throw std::runtime_error(
-      "invalid DepthPrePassConfig: depth_texture cannot be null.");
-  }
-  if (!config_->scene_constants) {
-    throw std::runtime_error(
-      "invalid DepthPrePassConfig: scene_constants cannot be null.");
-  }
-  if (config_->framebuffer) {
-    const auto& fb_desc = config_->framebuffer->GetDescriptor();
-    if (fb_desc.depth_attachment.texture
-      && fb_desc.depth_attachment.texture != config_->depth_texture) {
-      throw std::runtime_error(
-        "invalid DepthPrePassConfig: framebuffer depth attachment "
-        "texture must match depth_texture when both are provided and "
-        "framebuffer has a depth attachment.");
-    }
-  }
-  // Backend-specific derived classes can override this to add more checks.
+  // Will throw if no valid color texture is found.
+  [[maybe_unused]] const auto& _ = GetDepthTexture();
 }
 
 auto DepthPrePass::NeedRebuildPipelineState() const -> bool
@@ -179,22 +167,30 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
   }
   return false; // No need to rebuild
 }
-
-auto DepthPrePass::SetupSceneConstantsBuffer(
-  CommandRecorder& command_recorder) const -> void
+auto DepthPrePass::GetDepthTexture() const -> const Texture&
 {
-  using graphics::DescriptorHandle;
-  using graphics::DirectBufferBinding;
+  const Texture* depth_texture { nullptr };
+  if (config_ && config_->depth_texture) {
+    depth_texture = config_->depth_texture.get();
+  }
+  const auto* fb = GetFramebuffer();
+  if (fb && fb->GetDescriptor().depth_attachment.IsValid()) {
+    const auto* fb_depth_texture
+      = fb->GetDescriptor().depth_attachment.texture.get();
+    // Ensure if both are present, then both are the same
+    if (depth_texture && depth_texture != fb_depth_texture) {
+      throw std::runtime_error(
+        "DepthPrePass: Config depth_texture and framebuffer depth attachment "
+        "texture must match when both are provided.");
+    }
+    return *fb_depth_texture;
+  }
 
-  DCHECK_F(LastBuiltPsoDesc().has_value());
-  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[2];
-  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
-    "Expected root parameter 1's data to be DirectBufferBinding");
+  if (depth_texture) {
+    return *depth_texture;
+  }
 
-  // Bind the buffer as a root CBV (direct GPU virtual address)
-  command_recorder.SetGraphicsRootConstantBufferView(
-    root_param.GetRootParameterIndex(), // binding 2 (b1, space0)
-    config_->scene_constants->GetGPUVirtualAddress());
+  throw std::runtime_error("ShaderPass: No valid depth texture found.");
 }
 
 /*!
@@ -217,7 +213,6 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   SetupViewPortAndScissors(recorder);
   ClearDepthStencilView(recorder, dsv);
   SetupRenderTargets(recorder, dsv);
-  SetupSceneConstantsBuffer(recorder);
   IssueDrawCalls(recorder);
   Context().RegisterPass(this);
 

@@ -30,6 +30,15 @@ cbuffer VertexBufferConstants : register(b0) {
     uint g_VertexBufferIndex;
 };
 
+// Scene constants buffer (matches C++ struct layout)
+cbuffer SceneConstants : register(b1) {
+    float4x4 world_matrix;
+    float4x4 view_matrix;
+    float4x4 projection_matrix;
+    float3 camera_position;
+    float _pad0; // Padding to match C++ struct alignment
+}
+
 // Access to the bindless descriptor heap
 StructuredBuffer<Vertex> g_BindlessVertexBuffers[] : register(t0, space0);
 
@@ -43,10 +52,13 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     VSOutput output;
 
     // Access vertex data from the structured buffer using the index
-    // Use the correct SRV index from the CBV
     Vertex vertex = g_BindlessVertexBuffers[g_VertexBufferIndex][vertexID];
 
-    output.position = float4(vertex.position, 1.0);
+    // Apply world, view, and projection transforms
+    float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
+    float4 view_pos = mul(view_matrix, world_pos);
+    float4 proj_pos = mul(projection_matrix, view_pos);
+    output.position = proj_pos;
     output.color = vertex.color.rgb;
     return output;
 }

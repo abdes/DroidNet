@@ -56,6 +56,9 @@ auto RenderPass::Execute(
   // This will try to get a cached pipeline state or create a new one if needed.
   // It also sets the bindless root signature.
   recorder.SetPipelineState(*last_built_pso_desc_);
+  // Do these after the pipeline state is set.
+  BindIndicesBuffer(recorder);
+  BindSceneConstantsBuffer(recorder);
 
   try {
     co_await DoExecute(recorder);
@@ -80,6 +83,51 @@ auto RenderPass::Context() const -> const RenderContext&
 {
   DCHECK_NOTNULL_F(context_);
   return *context_;
+}
+
+auto RenderPass::BindSceneConstantsBuffer(CommandRecorder& recorder) const
+  -> void
+{
+  using graphics::DirectBufferBinding;
+
+  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_F(LastBuiltPsoDesc().has_value());
+
+  constexpr auto root_param_index
+    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
+      RootBindings::kSceneConstantsCbv);
+  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
+
+  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
+    "Expected root parameter {}'s data to be DirectBufferBinding",
+    root_param_index);
+
+  // Bind the buffer as a root CBV (direct GPU virtual address)
+  recorder.SetGraphicsRootConstantBufferView(
+    root_param.GetRootParameterIndex(), // should be binding 2 (b1, space0)
+    Context().scene_constants->GetGPUVirtualAddress());
+}
+
+auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
+{
+  using graphics::DirectBufferBinding;
+
+  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_F(LastBuiltPsoDesc().has_value());
+
+  constexpr auto root_param_index
+    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
+      RootBindings::kIndicesCbv);
+  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
+
+  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
+    "Expected root parameter {}'s data to be DirectBufferBinding",
+    root_param_index);
+
+  // Bind the buffer as a root CBV (direct GPU virtual address)
+  recorder.SetGraphicsRootConstantBufferView(
+    root_param.GetRootParameterIndex(), // should be binding 1 (b0, space0)
+    Context().bindless_indices->GetGPUVirtualAddress());
 }
 
 auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
