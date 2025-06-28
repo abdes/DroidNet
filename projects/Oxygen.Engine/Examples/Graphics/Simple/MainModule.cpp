@@ -492,12 +492,7 @@ auto MainModule::RenderScene() -> co::Co<>
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 
-  // All viewport, scissors, and pipeline state setup is now handled by
-  // ShaderPass
-
   context_.framebuffer = fb;
-
-  // FIXME: better way to handle this?
   context_.opaque_draw_list
     = std::span<const RenderItem> { render_items_.data(),
         render_items_.size() };
@@ -507,17 +502,22 @@ auto MainModule::RenderScene() -> co::Co<>
   static std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   if (!shader_pass_config) {
     shader_pass_config = std::make_shared<engine::ShaderPassConfig>();
-    shader_pass_config->color_texture = nullptr;
     shader_pass_config->clear_color
       = graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f }; // Custom clear color
-    shader_pass_config->enabled = true;
     shader_pass_config->debug_name = "ShaderPass";
   }
   if (!shader_pass) {
     shader_pass = std::make_shared<engine::ShaderPass>(shader_pass_config);
   }
-  co_await shader_pass->PrepareResources(context_, *recorder);
-  co_await shader_pass->Execute(context_, *recorder);
+
+  // Assemble and run the render graph
+  co_await renderer_->ExecuteRenderGraph(
+    [&](const engine::RenderContext& context) -> co::Co<> {
+      // Shader Pass
+      co_await shader_pass->PrepareResources(context, *recorder);
+      co_await shader_pass->Execute(context, *recorder);
+    },
+    context_);
 
   co_return;
 }
