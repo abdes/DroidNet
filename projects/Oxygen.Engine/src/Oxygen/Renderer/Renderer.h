@@ -69,14 +69,15 @@ public:
   OXGN_RNDR_API auto UnregisterMesh(const data::MeshAsset& mesh) -> void;
 
   //! Evicts unused mesh resources according to the eviction policy.
-  OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t currentFrame) -> void;
+  OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t current_frame)
+    -> void;
 
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
   auto ExecuteRenderGraph(
-    RenderGraphCoroutine&& graphCoroutine, RenderContext& ctx) -> co::Co<>
+    RenderGraphCoroutine&& graph_coroutine, RenderContext& ctx) -> co::Co<>
   {
-    co_await std::forward<RenderGraphCoroutine>(graphCoroutine)(ctx);
+    co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(ctx);
   }
 
 private:

@@ -127,13 +127,13 @@ auto Renderer::UnregisterMesh(const MeshAsset& mesh) -> void
   }
 }
 
-auto Renderer::EvictUnusedMeshResources(std::size_t currentFrame) -> void
+auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
 {
   if (!eviction_policy_) {
     return;
   }
   const auto to_evict
-    = eviction_policy_->SelectResourcesToEvict(mesh_resources_, currentFrame);
+    = eviction_policy_->SelectResourcesToEvict(mesh_resources_, current_frame);
   for (MeshID id : to_evict) {
     mesh_resources_.erase(id);
     eviction_policy_->OnMeshRemoved(id);
