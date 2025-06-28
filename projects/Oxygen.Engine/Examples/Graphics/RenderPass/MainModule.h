@@ -39,8 +39,8 @@ namespace oxygen::examples {
 
 class MainModule final {
 public:
-  MainModule(std::shared_ptr<oxygen::Platform> platform,
-    std::weak_ptr<oxygen::Graphics> gfx_weak);
+  MainModule(
+    std::shared_ptr<Platform> platform, std::weak_ptr<Graphics> gfx_weak);
   ~MainModule();
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
@@ -51,15 +51,15 @@ public:
     return OpenNursery(nursery_, std::move(started));
   }
 
-  void Run();
+  auto Run() -> void;
 
 private:
-  void SetupCommandQueues() const;
-  void SetupMainWindow();
-  void SetupSurface();
-  void SetupRenderer();
-  void SetupFramebuffers();
-  void SetupRenderPasses();
+  auto SetupCommandQueues() const -> void;
+  auto SetupMainWindow() -> void;
+  auto SetupSurface() -> void;
+  auto SetupRenderer() -> void;
+  auto SetupFramebuffers() -> void;
+  auto SetupRenderPasses() -> void;
 
   auto RenderScene() -> co::Co<>;
 
@@ -77,10 +77,9 @@ private:
   co::Nursery* nursery_ { nullptr };
   float rotation_angle_ { 0.0f };
 
-  std::vector<oxygen::engine::RenderItem> render_items_;
-  std::vector<const oxygen::engine::RenderItem*> draw_list_;
-  std::shared_ptr<oxygen::engine::DepthPrePassConfig> depth_pre_pass_config_;
-  std::unique_ptr<oxygen::engine::DepthPrePass> depth_pre_pass_;
+  std::vector<engine::RenderItem> render_items_;
+  std::shared_ptr<engine::DepthPrePassConfig> depth_pre_pass_config_;
+  std::unique_ptr<engine::DepthPrePass> depth_pre_pass_;
 };
 
 } // namespace oxygen::examples

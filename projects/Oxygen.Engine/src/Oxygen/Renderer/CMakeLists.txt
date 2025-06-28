@@ -55,6 +55,7 @@ target_sources(
     "Renderer.cpp"
     "RenderPass.cpp"
     "ShaderPass.cpp"
+    "Detail/ContextScope.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"

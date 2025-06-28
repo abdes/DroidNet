@@ -45,15 +45,6 @@ struct RenderItem;
  object that can provide a broader rendering context.
 */
 struct DepthPrePassConfig {
-  //! List of mesh or draw call identifiers to render in the pre-pass.
-  /*!
-   In a Forward+ rendering pipeline, this list should contain all geometry
-   that needs to contribute to the depth buffer for accurate light culling.
-   This typically includes all opaque and alpha-tested geometry that will
-   be rendered in the main shading pass. Consistent geometry and transformations
-   between this pass and the main shading pass are crucial.
-  */
-  std::span<const RenderItem*> draw_list;
 
   //! The primary and authoritative depth target texture for this pass.
   /*!
@@ -137,41 +128,6 @@ public:
   OXYGEN_DEFAULT_COPYABLE(DepthPrePass)
   OXYGEN_DEFAULT_MOVABLE(DepthPrePass)
 
-  //! Prepare and transition all resources needed for this pass.
-  /*!
-   The base implementation of this method ensures that the `depth_texture`
-   (specified in `Config`) is transitioned to a state suitable for
-   depth-stencil attachment (e.g., `ResourceStates::kDepthWrite`) using the
-   provided `CommandRecorder`. It then flushes any pending resource barriers.
-
-   Flushing barriers here is crucial to ensure the `depth_texture` is
-   definitively in the `kDepthWrite` state before any subsequent operations by
-   derived classes (e.g., clearing the texture) or later render stages.
-
-   Backend-specific derived classes should call this base method and can then
-   perform additional preparations, such as:
-   - Interpreting `clear_color_` to derive depth and/or stencil clear values
-     and applying them to the `depth_texture`.
-   - Preparing the optional `framebuffer` if it's provided in `Config` and is
-     relevant to the backend operation (e.g., for binding or coordinated
-     transitions).
-  */
-  OXGN_RNDR_API auto PrepareResources(const RenderContext& context,
-    graphics::CommandRecorder& recorder) -> co::Co<> override;
-
-  //! Execute the main rendering logic for this pass.
-  /*!
-   For a DepthPrePass, this involves rendering the geometry from the
-   `draw_list` (specified in `Config`) to populate the `depth_texture`.
-   Key responsibilities include:
-   - Setting up a pipeline state configured for depth-only rendering
-     (no color writes).
-   - Applying the `viewport_` and `scissors_` if they have been set.
-   - Issuing draw calls for the specified geometry.
-  */
-  auto Execute(const RenderContext& context,
-    graphics::CommandRecorder& command_recorder) -> co::Co<> override;
-
   OXGN_RNDR_API auto SetViewport(const graphics::ViewPort& viewport) -> void;
   auto GetViewport() const -> std::optional<graphics::ViewPort>
   {
@@ -204,6 +160,14 @@ public:
   OXGN_RNDR_API auto IsEnabled() const -> bool override;
 
 protected:
+  auto DoPrepareResources(graphics::CommandRecorder& recorder)
+    -> co::Co<> override;
+  auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
+  auto ValidateConfig() -> void override;
+  auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
+  auto NeedRebuildPipelineState() const -> bool override;
+
+private:
   //! Provides const access to the depth texture specified in the configuration.
   [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture&
   {
@@ -212,12 +176,16 @@ protected:
     return *config_->depth_texture;
   }
 
-  //! Provides const access to the draw list specified in the configuration.
-  [[nodiscard]] auto GetDrawList() const -> std::span<const RenderItem*>
-  {
-    assert(config_);
-    return config_->draw_list;
-  }
+  //! List of mesh or draw call identifiers to render in the pre-pass.
+  /*!
+   In a Forward+ rendering pipeline, this list should contain all geometry
+   that needs to contribute to the depth buffer for accurate light culling.
+   This typically includes all opaque and alpha-tested geometry that will
+   be rendered in the main shading pass. Consistent geometry and transformations
+   between this pass and the main shading pass are crucial.
+  */
+  [[nodiscard]] auto GetDrawList() const
+    -> std::span<const RenderItem> override;
 
   //! Provides const access to the framebuffer specified in the configuration,
   //! if any.
@@ -227,35 +195,19 @@ protected:
                                            : nullptr;
   }
 
-  //! Validates the current configuration.
-  /*!
-   This method is called by the constructor to ensure that the provided
-   configuration is valid and consistent. Backend-specific implementations
-   can override this to add further validation logic.
-   Throws std::runtime_error if validation fails.
-  */
-  OXGN_RNDR_API virtual auto ValidateConfig() -> void;
-
-  virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc;
-  virtual auto NeedRebuildPipelineState() const -> bool;
-
   // Helper methods for Execute()
-  virtual auto PrepareDepthStencilView(const RenderContext& context,
+  virtual auto PrepareDepthStencilView(
     const graphics::Texture& depth_texture_ref) -> graphics::NativeObject;
   virtual auto ClearDepthStencilView(
     graphics::CommandRecorder& command_recorder,
     const graphics::NativeObject& dsv_handle) const -> void;
-  virtual auto SetViewAsRenderTarget(
-    graphics::CommandRecorder& command_recorder,
+  virtual auto SetupRenderTargets(graphics::CommandRecorder& command_recorder,
     const graphics::NativeObject& dsv) const -> void;
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
-  virtual auto IssueDrawCalls(const RenderContext& context,
-    graphics::CommandRecorder& command_recorder) const -> void;
-  virtual auto PrepareSceneConstantsBuffer(
+  virtual auto SetupSceneConstantsBuffer(
     graphics::CommandRecorder& command_recorder) const -> void;
 
-private:
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;
 
@@ -271,68 +223,6 @@ private:
 
   //! Flag indicating if the pass is enabled.
   bool enabled_ = true;
-
-  // Track the last built pipeline state object (PSO) description and hash, so
-  // we can properly manage their caching and retrieval.
-  graphics::GraphicsPipelineDesc last_built_pso_desc_;
 };
 
 } // namespace oxygen::engine
-
-/*
-== Design Note: draw_list type in DepthPrePassConfig ==
-
-The `draw_list` member of `DepthPrePassConfig` is currently `std::span<const
-void*>`. This is a highly generic type that, while flexible, sacrifices type
-safety and clarity. Backend implementations of `DepthPrePass::Execute` would
-need to perform unsafe casts and make assumptions about the actual data being
-pointed to.
-
-Future Refinement: Ideally, `draw_list` should be a span of pointers to a more
-concrete type that represents a renderable entity for the purpose of a depth
-pass.
-
-Recommended Alternatives (in order of preference, depending on engine
-structure):
-
-1. `std::span<const RenderItem*>` or `std::span<const Renderable*>`:
-   - If a `RenderItem` or `Renderable` struct/class exists that encapsulates all
-     necessary information for a draw call (e.g., Mesh, Transform, potentially
-     instance data). This is a good high-level, object-oriented approach.
-   - The `DepthPrePass` would primarily use the geometry and transformation
-     aspects.
-
-2. `std::span<const MeshInstance*>` (or similar e.g. `SceneObject*`,
-   `RenderPrimitive*`):
-   - If there's a type that specifically pairs a `Mesh` (geometry) with its
-     world `Transform` and other relevant per-instance data for rendering, but
-     is less comprehensive than a full `RenderItem` (e.g., might exclude
-     material details not needed for depth-only rendering).
-
-3. `std::span<const DrawCommand>`:
-   - Where `DrawCommand` is a custom struct tailored for this pass, containing
-     minimal data like `std::shared_ptr<const Mesh> mesh` and potentially
-     transformation data if not handled globally or per-instance.
-
-4. `std::span<const Mesh*>` (or `std::span<std::shared_ptr<const Mesh>>`):
-   - If the pass operates primarily on raw mesh geometry, and transformations
-     are managed externally (e.g., via a parallel list of transforms or a global
-     instance buffer accessible during `Execute`). This is simpler but shifts
-     transformation handling responsibility.
-
-Considerations for choosing a type:
-- Essential data for `Execute`: Geometry (vertex/index buffers, often via
-  `Mesh`) and its world transformation.
-- Type safety: Avoid `void*` to prevent runtime errors and improve code
-  maintainability.
-- Clarity: The type should clearly indicate what kind of entities are expected.
-- Existing engine structures: Leverage existing types like `MeshInstance` or
-  `RenderItem` if they fit the requirements.
-
-For now, `std::span<const void*>` is a placeholder. When the higher-level scene
-representation and render item management are more defined, this should be
-revisited to use a more specific and type-safe alternative. The most suitable
-choice will depend on how the engine structures its scene graph and prepares
-lists of objects for rendering, particularly how meshes are associated with
-their transformations.
-*/

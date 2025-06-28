@@ -95,8 +95,8 @@ struct RenderContext {
   // Add your scene constant struct or fields here as needed
 
   // Render item lists
-  std::vector<const RenderItem*> opaque_draw_list;
-  std::vector<const RenderItem*> transparent_draw_list;
+  std::span<const RenderItem> opaque_draw_list;
+  std::span<const RenderItem> transparent_draw_list;
   // ... add more lists for decals, particles, etc. as needed ...
 
   // TODO: Light lists
@@ -105,8 +105,8 @@ struct RenderContext {
   // Pass enable/disable flags (by pass name or type)
   std::unordered_map<std::string, bool> pass_enable_flags;
 
-  //! The current rendererexecuting the render graph. Guaranteed to be non-null
-  //! during the render graph execution.
+  //! The renderer executing the render graph. Guaranteed to be non-null during
+  //! the render graph execution.
   Renderer* renderer;
 
   //! The render controller managing the frame rendering process. Guaranteed to
