@@ -68,6 +68,15 @@ auto ShaderPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   // Transition the color target to RENDER_TARGET state
   recorder.RequireResourceState(
     GetColorTexture(), graphics::ResourceStates::kRenderTarget);
+
+  // Transition the depth target to DEPTH_READ or DEPTH_WRITE as needed
+  const auto* fb = GetFramebuffer();
+  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
+    && fb->GetDescriptor().depth_attachment.texture) {
+    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
+      graphics::ResourceStates::kDepthRead);
+  }
+
   recorder.FlushBarriers();
 
   co_return;
@@ -112,6 +121,45 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   }
   return rtv;
 }
+
+// Helper to prepare a depth stencil view for the depth texture
+auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
+  DescriptorAllocator& allocator) -> NativeObject
+{
+  const auto& tex_desc = depth_texture.GetDescriptor();
+  oxygen::graphics::TextureViewDescription dsv_view_desc {
+    .view_type = ResourceViewType::kTexture_DSV,
+    .visibility = DescriptorVisibility::kCpuOnly,
+    .format = tex_desc.format,
+    .dimension = tex_desc.dimension,
+    .sub_resources = { .base_mip_level = 0,
+      .num_mip_levels = tex_desc.mip_levels,
+      .base_array_slice = 0,
+      .num_array_slices
+      = (tex_desc.dimension == oxygen::graphics::TextureDimension::kTexture3D
+          ? tex_desc.depth
+          : tex_desc.array_size) },
+    .is_read_only_dsv = true,
+  };
+
+  if (const auto dsv = registry.Find(depth_texture, dsv_view_desc);
+    dsv.IsValid()) {
+    return dsv;
+  }
+  auto dsv_desc_handle = allocator.Allocate(
+    ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+  if (!dsv_desc_handle.IsValid()) {
+    throw std::runtime_error(
+      "Failed to allocate DSV descriptor handle for depth texture");
+  }
+  const auto dsv = registry.RegisterView(
+    depth_texture, std::move(dsv_desc_handle), dsv_view_desc);
+  if (!dsv.IsValid()) {
+    throw std::runtime_error("Failed to register DSV with resource registry "
+                             "even after successful allocation.");
+  }
+  return dsv;
+}
 } // namespace
 
 auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
@@ -124,7 +172,22 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);
   std::array rtvs { color_rtv };
-  recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+
+  // Prepare DSV if depth attachment is present
+  NativeObject dsv = {};
+  const auto* fb = GetFramebuffer();
+  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
+    && fb->GetDescriptor().depth_attachment.texture) {
+    auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
+    dsv = PrepareDepthStencilView(depth_texture, registry, allocator);
+  }
+
+  // Bind both RTV(s) and DSV if present
+  if (dsv.IsValid()) {
+    recorder.SetRenderTargets(std::span(rtvs), dsv);
+  } else {
+    recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+  }
 
   recorder.ClearFramebuffer(*Context().framebuffer,
     std::vector<std::optional<graphics::Color>> { GetClearColor() },
@@ -149,7 +212,7 @@ auto ShaderPass::GetColorTexture() const -> const Texture&
     return *config_->color_texture;
   }
   const auto* fb = GetFramebuffer();
-  if (fb && fb->GetDescriptor().color_attachments.size() > 0
+  if (fb && !fb->GetDescriptor().color_attachments.empty()
     && fb->GetDescriptor().color_attachments[0].texture) {
     return *fb->GetDescriptor().color_attachments[0].texture;
   }
@@ -174,6 +237,11 @@ auto ShaderPass::GetClearColor() const -> const graphics::Color&
   }
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
   return color_tex_desc.clear_value;
+}
+auto ShaderPass::HasDepth() const -> bool
+{
+  const auto* fb = GetFramebuffer();
+  return fb && fb->GetDescriptor().depth_attachment.IsValid();
 }
 
 auto ShaderPass::SetupViewPortAndScissors(
@@ -211,59 +279,115 @@ auto ShaderPass::SetupViewPortAndScissors(
 */
 auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 {
+  using graphics::BindingSlotDesc;
+  using graphics::CompareOp;
+  using graphics::CullMode;
+  using graphics::DepthStencilStateDesc;
+  using graphics::DescriptorTableBinding;
+  using graphics::DirectBufferBinding;
+  using graphics::FillMode;
+  using graphics::FramebufferLayoutDesc;
+  using graphics::PrimitiveType;
+  using graphics::RasterizerStateDesc;
+  using graphics::RootBindingDesc;
+  using graphics::RootBindingItem;
+  using graphics::ShaderStageDesc;
+  using graphics::ShaderStageFlags;
+  using graphics::ShaderType;
+
   // Set up rasterizer and blend state for standard color rendering
-  constexpr graphics::RasterizerStateDesc raster_desc {
-    .fill_mode = graphics::FillMode::kSolid,
-    .cull_mode = graphics::CullMode::kBack,
+  constexpr RasterizerStateDesc raster_desc {
+    .fill_mode = FillMode::kSolid,
+    .cull_mode = CullMode::kNone,
     .front_counter_clockwise = true,
     .multisample_enable = false,
   };
 
-  constexpr graphics::DepthStencilStateDesc ds_desc {
-    .depth_test_enable = false, // No depth for this simple pass
+  // Determine if a depth attachment is present
+  const auto* fb = GetFramebuffer();
+  bool has_depth = false;
+  auto depth_format = graphics::Format::kUnknown;
+  uint32_t sample_count = 1;
+  if (fb) {
+    const auto& fb_desc = fb->GetDescriptor();
+    if (fb_desc.depth_attachment.IsValid()
+      && fb_desc.depth_attachment.texture) {
+      has_depth = true;
+      depth_format = fb_desc.depth_attachment.texture->GetDescriptor().format;
+      sample_count
+        = fb_desc.depth_attachment.texture->GetDescriptor().sample_count;
+    } else if (!fb_desc.color_attachments.empty()
+      && fb_desc.color_attachments[0].IsValid()
+      && fb_desc.color_attachments[0].texture) {
+      sample_count
+        = fb_desc.color_attachments[0].texture->GetDescriptor().sample_count;
+    }
+  }
+
+  DepthStencilStateDesc ds_desc {
+    .depth_test_enable = has_depth,
     .depth_write_enable = false,
-    .depth_func = graphics::CompareOp::kAlways,
+    .depth_func = CompareOp::kLessOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,
   };
 
-  // Get color target format and sample count from the color texture
+  // Get color target format from the color texture
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
-  const graphics::FramebufferLayoutDesc fb_layout_desc {
+  const FramebufferLayoutDesc fb_layout_desc {
     .color_target_formats = { color_tex_desc.format },
-    .depth_stencil_format = graphics::Format::kUnknown,
-    .sample_count = color_tex_desc.sample_count,
+    .depth_stencil_format = depth_format,
+    .sample_count = sample_count,
   };
 
   // Root binding for SRV descriptor table (bindless vertex buffer)
-  constexpr graphics::RootBindingDesc srv_table_desc { .binding_slot_desc
-    = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
-    .visibility = graphics::ShaderStageFlags::kAll,
-    .data = graphics::DescriptorTableBinding {
+  constexpr RootBindingDesc srv_table_desc {
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 0,
+      .register_space = 0,
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DescriptorTableBinding {
       .view_type = ResourceViewType::kStructuredBuffer_SRV,
       .base_index = 0,
-    } };
-  // Root binding for per-draw constants (CBV)
-  constexpr graphics::RootBindingDesc per_draw_cbv_desc { .binding_slot_desc
-    = graphics::BindingSlotDesc { .register_index = 0, .register_space = 0 },
-    .visibility = graphics::ShaderStageFlags::kAll,
-    .data = graphics::DirectBufferBinding {} };
+    },
+  };
+
+  constexpr RootBindingDesc resource_indices_cbv_desc { // b0, space0
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 0,
+      .register_space = 0,
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {}
+  };
+
+  constexpr RootBindingDesc scene_constants_cbv_desc { // b1, space0
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 1,
+      .register_space = 0,
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {}
+  };
 
   return graphics::GraphicsPipelineDesc::Builder()
-    .SetVertexShader(graphics::ShaderStageDesc {
-      .shader = MakeShaderIdentifier(
-        graphics::ShaderType::kVertex, "FullScreenTriangle.hlsl") })
-    .SetPixelShader(graphics::ShaderStageDesc {
-      .shader = MakeShaderIdentifier(
-        graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
-    .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
+    .SetVertexShader(ShaderStageDesc { .shader
+      = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
+    .SetPixelShader(ShaderStageDesc { .shader
+      = MakeShaderIdentifier(ShaderType::kPixel, "FullScreenTriangle.hlsl") })
+    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)
     .SetDepthStencilState(ds_desc)
     .SetBlendState({})
     .SetFramebufferLayout(fb_layout_desc)
-    .AddRootBinding(graphics::RootBindingItem(srv_table_desc))
-    .AddRootBinding(graphics::RootBindingItem(per_draw_cbv_desc))
+    // binding 0: SRV table
+    .AddRootBinding(RootBindingItem(srv_table_desc))
+    // binding 1: ResourceIndices CBV (b0)
+    .AddRootBinding(RootBindingItem(resource_indices_cbv_desc))
+    // binding 2: SceneConstants CBV (b1)
+    .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
     .Build();
 }
 

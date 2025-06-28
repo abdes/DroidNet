@@ -53,33 +53,6 @@ struct DepthPrePassConfig {
   */
   std::shared_ptr<const graphics::Texture> depth_texture;
 
-  //! Optional: A complete Framebuffer object for broader rendering context.
-  /*!
-   If provided, this Framebuffer can be used by backend implementations to
-   satisfy API requirements (e.g., needing a full Framebuffer object for
-   binding) or for coordinated resource management (e.g., calling
-   `Framebuffer::PrepareForRender()` on it).
-
-   For coherent behavior, if a `framebuffer` is supplied, its
-   `depth_attachment.texture` should ideally refer to the same underlying
-   texture resource as `depth_texture`. The `DepthPrePass` will always
-   prioritize rendering to the `depth_texture` specified above.
-
-   A `DepthPrePass` can be validly executed without a `framebuffer` (i.e.,
-   when this is `nullptr`), rendering directly to the `depth_texture`.
-  */
-  std::shared_ptr<const graphics::Framebuffer> framebuffer = nullptr;
-
-  //! The constant buffer containing scene-wide constants (e.g., camera, frame
-  //! data) for this pass.
-  /*!
-   This buffer must be provided for the depth pre-pass. It should be prepared
-   and updated by the caller before the pass executes. It is bound directly as
-   a root CBV (using its GPU virtual address) and does not require a
-   descriptor in the descriptor heap. This field is mandatory.
-  */
-  std::shared_ptr<const graphics::Buffer> scene_constants;
-
   //! Optional name for debugging purposes.
   std::string debug_name { "DepthPrePass" };
 };
@@ -166,12 +139,7 @@ protected:
 
 private:
   //! Provides const access to the depth texture specified in the configuration.
-  [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture&
-  {
-    assert(config_ && config_->depth_texture != nullptr
-      && "Depth texture is null in GetDepthTexture");
-    return *config_->depth_texture;
-  }
+  [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture&;
 
   //! List of mesh or draw call identifiers to render in the pre-pass.
   /*!
@@ -186,11 +154,7 @@ private:
 
   //! Provides const access to the framebuffer specified in the configuration,
   //! if any.
-  [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*
-  {
-    return config_ && config_->framebuffer ? config_->framebuffer.get()
-                                           : nullptr;
-  }
+  [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
 
   // Helper methods for Execute()
   virtual auto PrepareDepthStencilView(
@@ -201,8 +165,6 @@ private:
   virtual auto SetupRenderTargets(graphics::CommandRecorder& command_recorder,
     const graphics::NativeObject& dsv) const -> void;
   virtual auto SetupViewPortAndScissors(
-    graphics::CommandRecorder& command_recorder) const -> void;
-  virtual auto SetupSceneConstantsBuffer(
     graphics::CommandRecorder& command_recorder) const -> void;
 
   //! Configuration for the depth pre-pass.

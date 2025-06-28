@@ -142,6 +142,8 @@ auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
 }
 auto Renderer::PreExecute(const RenderContext& context) -> void
 {
+  CHECK_NOTNULL_F(
+    context.scene_constants, "Scene constants buffer is required");
   context.SetRenderer(this, render_controller_.lock().get());
 }
 auto Renderer::PostExecute(const RenderContext& context) -> void

@@ -40,13 +40,13 @@ using oxygen::examples::MainModule;
 namespace {
 
 struct MyEngine {
-  std::shared_ptr<oxygen::Platform> platform;
+  std::shared_ptr<Platform> platform;
   std::weak_ptr<Graphics> gfx_weak;
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 bool is_running { false };
-void EventLoopRun(const MyEngine& engine)
+auto EventLoopRun(const MyEngine& engine) -> void
 {
   // TODO: This is the game engine main loop.
 
@@ -63,7 +63,7 @@ void EventLoopRun(const MyEngine& engine)
 
     // Physics
     // Sleep for a while to simulate physics
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     // Input Events
     engine.platform->Async().PollOne();
@@ -71,7 +71,7 @@ void EventLoopRun(const MyEngine& engine)
 
     // Game logic
     // Sleep for a while to simulate game logic updates
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     // Render (only if at least 1000 milliseconds has passed since the last
     // render)
@@ -79,7 +79,7 @@ void EventLoopRun(const MyEngine& engine)
     if (std::chrono::duration_cast<std::chrono::milliseconds>(
           now - last_render_time)
           .count()
-      >= 1000) {
+      >= 10) {
       try {
         gfx->Render();
         last_render_time = now;
@@ -97,8 +97,8 @@ void EventLoopRun(const MyEngine& engine)
 } // namespace
 
 template <> struct oxygen::co::EventLoopTraits<MyEngine> {
-  static void Run(const MyEngine& engine) { EventLoopRun(engine); }
-  static void Stop(MyEngine& /*engine*/) { is_running = false; }
+  static auto Run(const MyEngine& engine) -> void { EventLoopRun(engine); }
+  static auto Stop(MyEngine& /*engine*/) -> void { is_running = false; }
   static auto IsRunning(const MyEngine& /*engine*/) -> bool
   {
     return is_running;
@@ -170,7 +170,7 @@ auto AsyncMain(std::shared_ptr<Platform> platform,
 
 } // namespace
 
-extern "C" void MainImpl(std::span<const char*> /*args*/)
+extern "C" auto MainImpl(std::span<const char*> /*args*/) -> void
 {
   // Create the platform
   auto platform

@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -72,57 +73,6 @@ using oxygen::graphics::Framebuffer;
 //
 // If you see a blank screen or missing geometry, check these invariants first!
 // ===========================================================================
-
-namespace {
-
-//! Creates a new MeshAsset representing a single triangle (for demo/testing
-//! only).
-auto MakeTriangleMeshAsset() -> std::shared_ptr<MeshAsset>
-{
-  // The shader expects only position (vec3) and color (vec3) tightly packed.
-  // We must ensure the buffer layout matches exactly.
-  std::vector<Vertex> vertices = {
-    // CCW order for D3D12 default culling
-    // clang-format off
-    // position                normal     texcoord     tangent     bitangent    color (only .xyz used)
-    { { -0.5f, -0.5f, 0.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0, 1 } }, // Red
-    { {  0.0f,  0.5f, 0.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 0, 1 } }, // Green
-    { {  0.5f, -0.5f, 0.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1, 1 } }, // Blue
-    // clang-format on
-  };
-  // NOTE: The shader will only read position and color (first 6 floats).
-  // If the buffer is created from Vertex, ensure the stride matches the
-  // shader's expectation. If not, create a tightly packed struct or buffer for
-  // demo.
-  std::vector<uint32_t> indices = { 0, 1, 2 };
-  auto asset = std::make_shared<MeshAsset>(
-    "Triangle", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
-  return asset;
-}
-
-//! Creates a new MeshAsset representing a single quad (for demo/testing only).
-auto MakeQuadMeshAsset() -> std::shared_ptr<MeshAsset>
-{
-  // CCW order for D3D12 default culling
-  constexpr float kHalfSize = 0.5f; // 50% of viewport (from -0.25 to +0.25)
-  std::vector<Vertex> vertices = {
-    // clang-format off
-    // position                  normal     texcoord   tangent     bitangent    color
-    { { -kHalfSize, -kHalfSize, 0.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 0, 1 } }, // Bottom-left
-    { {  kHalfSize, -kHalfSize, 0.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 1, 1 } }, // Bottom-right
-    { {  kHalfSize,  kHalfSize, 0.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 0, 1, 1 } }, // Top-right
-    { { -kHalfSize,  kHalfSize, 0.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } }, // Top-left
-    // clang-format on
-  };
-  std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0 };
-  auto asset = std::make_shared<MeshAsset>(
-    "Quad", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
-  return asset;
-}
-
-} // namespace
 
 MainModule::MainModule(
   std::shared_ptr<Platform> platform, std::weak_ptr<Graphics> gfx_weak)
@@ -284,12 +234,22 @@ auto MainModule::SetupFramebuffers() -> void
   CHECK_F(!gfx_weak_.expired());
   auto gfx = gfx_weak_.lock();
 
-  auto fb_desc = graphics::FramebufferDesc {}.AddColorAttachment(
-    surface_->GetCurrentBackBuffer());
-
   for (auto i = 0U; i < kFrameBufferCount; ++i) {
-    auto desc = graphics::FramebufferDesc {}.AddColorAttachment(
-      surface_->GetBackBuffer(i));
+    graphics::TextureDesc depth_desc;
+    depth_desc.width = 800;
+    depth_desc.height = 800;
+    depth_desc.format = graphics::Format::kDepth32;
+    depth_desc.dimension = graphics::TextureDimension::kTexture2D;
+    depth_desc.is_shader_resource = true;
+    depth_desc.is_render_target = true;
+    depth_desc.use_clear_value = true;
+    depth_desc.clear_value = { 1.0f, 0.0f, 0.0f, 0.0f };
+    depth_desc.initial_state = graphics::ResourceStates::kDepthWrite;
+    const auto depth_tex = gfx->CreateTexture(depth_desc);
+
+    auto desc = graphics::FramebufferDesc {}
+                  .AddColorAttachment(surface_->GetBackBuffer(i))
+                  .SetDepthAttachment(depth_tex);
 
     framebuffers_.push_back(gfx->CreateFramebuffer(desc, *render_controller_));
     CHECK_NOTNULL_F(
@@ -330,7 +290,7 @@ auto MainModule::SetupShaders() const -> void
 // PipelineStateCache.cpp and FullScreenTriangle.hlsl for details.
 auto MainModule::EnsureVertexBufferSrv() -> void
 {
-  if (!recreate_cbv_) {
+  if (!recreate_indices_cbv_) {
     return;
   }
 
@@ -339,17 +299,18 @@ auto MainModule::EnsureVertexBufferSrv() -> void
   // Use the mesh from the first render item
   if (render_items_.empty() || !render_items_.front().mesh) {
     LOG_F(ERROR, "No mesh asset available for SRV registration");
-    recreate_cbv_ = false;
+    recreate_indices_cbv_ = false;
     return;
   }
   const auto& mesh = render_items_.front().mesh;
   auto vertex_buffer = renderer_->GetVertexBuffer(*mesh);
 
-  graphics::BufferViewDescription srv_view_desc;
-  srv_view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  srv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  srv_view_desc.format = graphics::Format::kUnknown;
-  srv_view_desc.stride = sizeof(Vertex);
+  graphics::BufferViewDescription srv_view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = graphics::Format::kUnknown,
+    .stride = sizeof(Vertex),
+  };
 
   auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
   auto srv_handle = descriptor_allocator.Allocate(
@@ -358,7 +319,7 @@ auto MainModule::EnsureVertexBufferSrv() -> void
 
   if (!srv_handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate descriptor handle for vertex buffer SRV!");
-    recreate_cbv_ = false;
+    recreate_indices_cbv_ = false;
     return;
   }
 
@@ -377,7 +338,7 @@ auto MainModule::EnsureVertexBufferSrv() -> void
 
 auto MainModule::EnsureBindlessIndexingBuffer() -> void
 {
-  if (!recreate_cbv_) {
+  if (!recreate_indices_cbv_) {
     // No need to create the constant buffer if we don't have a renderer or
     // if we don't need to recreate it
     return;
@@ -385,47 +346,89 @@ auto MainModule::EnsureBindlessIndexingBuffer() -> void
 
   // Only create and update the buffer. No descriptor/view registration needed
   // for direct root CBV binding.
-  if (!constant_buffer_) {
+  if (!indices_buffer_) {
     DLOG_F(INFO, "Creating constant buffer for vertex buffer SRV index {}",
       vertex_srv_shader_visible_index_);
-    graphics::BufferDesc cb_desc;
-    cb_desc.size_bytes = 256; // D3D12 CBV alignment
-    cb_desc.usage = graphics::BufferUsage::kConstant;
-    cb_desc.memory = graphics::BufferMemory::kUpload;
-    cb_desc.debug_name = "Vertex Buffer Index Constant Buffer";
+    graphics::BufferDesc cb_desc { .size_bytes = 256,
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = "Vertex Buffer Index Constant Buffer" };
 
     CHECK_F(!gfx_weak_.expired());
     const auto gfx = gfx_weak_.lock();
 
-    constant_buffer_ = gfx->CreateBuffer(cb_desc);
-    constant_buffer_->SetName("Vertex Buffer Index Constant Buffer");
+    indices_buffer_ = gfx->CreateBuffer(cb_desc);
+    indices_buffer_->SetName("Indices Buffer");
+
+    context_.bindless_indices = indices_buffer_;
   }
 
   // Always update the buffer contents (SRV index may change per frame)
-  void* mapped_data = constant_buffer_->Map();
+  void* mapped_data = indices_buffer_->Map();
   memcpy(mapped_data, &vertex_srv_shader_visible_index_,
     sizeof(vertex_srv_shader_visible_index_));
-  constant_buffer_->UnMap();
+  indices_buffer_->UnMap();
+  recreate_indices_cbv_ = false; // Reset the flag
+}
 
-  recreate_cbv_ = false; // Reset the flag after creating/updating the CBV
+auto MainModule::EnsureSceneConstantsBuffer() -> void
+{
+  // Only create and update the buffer. No descriptor/view registration needed
+  // for direct root CBV binding.
+  if (!scene_constants_buffer_) {
+    DLOG_F(INFO, "Creating scene constants buffer");
+    const graphics::BufferDesc cb_desc {
+      .size_bytes = sizeof(SceneConstants),
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = "Scene Constants Buffer",
+    };
+
+    CHECK_F(!gfx_weak_.expired());
+    const auto gfx = gfx_weak_.lock();
+
+    scene_constants_buffer_ = gfx->CreateBuffer(cb_desc);
+    scene_constants_buffer_->SetName("Scene Constants Buffer");
+
+    context_.scene_constants = scene_constants_buffer_;
+  }
+}
+
+auto MainModule::UpdateSceneConstantsBuffer(
+  const SceneConstants& constants) const -> void
+{
+  if (!scene_constants_buffer_) {
+    LOG_F(ERROR, "Scene constants buffer is not initialized");
+    return;
+  }
+  // Map the buffer and copy the constants
+  if (void* mapped = scene_constants_buffer_->Map()) {
+    memcpy(mapped, &constants, sizeof(SceneConstants));
+    scene_constants_buffer_->UnMap();
+  } else {
+    LOG_F(ERROR, "Failed to map scene constants buffer for update");
+  }
+  DLOG_F(2, "Scene constants buffer updated");
 }
 
 auto MainModule::EnsureMeshDrawResources() -> void
 {
-  DCHECK_F(
-    constant_buffer_ || recreate_cbv_, "Constant buffer must be created first");
-  if (!constant_buffer_) {
+  // This is not strictly necessary, but ensures that shaders that are looking
+  // for the index mapping CBV at b0s0 will always be able to find it even if
+  // the render pass omits binding it explicitly at the root.
+  DCHECK_F(indices_buffer_ || recreate_indices_cbv_,
+    "Constant buffer must be created first");
+  if (!indices_buffer_) {
     try {
       EnsureBindlessIndexingBuffer();
-      recreate_cbv_ = true;
+      recreate_indices_cbv_ = true;
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
       throw;
     }
   }
 
-  DCHECK_F(
-    constant_buffer_ != nullptr, "Constant buffer must be created first");
+  DCHECK_F(indices_buffer_ != nullptr, "Constant buffer must be created first");
   try {
     EnsureVertexBufferSrv();
   } catch (const std::exception& e) {
@@ -434,6 +437,12 @@ auto MainModule::EnsureMeshDrawResources() -> void
   }
   try {
     EnsureBindlessIndexingBuffer();
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
+    throw;
+  }
+  try {
+    EnsureSceneConstantsBuffer();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
     throw;
@@ -456,20 +465,19 @@ auto MainModule::RenderScene() -> co::Co<>
     render_controller_->CurrentFrameIndex());
 
   if (render_items_.empty()) {
-    const auto quad_mesh = MakeQuadMeshAsset();
-    RenderItem quad_item {
-      .mesh = quad_mesh,
+    const auto cube_mesh = data::MakeCubeMeshAsset();
+    RenderItem cube_item {
+      .mesh = cube_mesh,
       .material = nullptr,
-      .world_transform
-      = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.7f, 0.0f)),
+      .world_transform = glm::mat4(1.0f), // Not used directly in shader
       .normal_transform = glm::mat4(1.0f),
       .cast_shadows = false,
       .receive_shadows = false,
       .render_layer = 0u,
       .render_flags = 0u,
     };
-    quad_item.UpdateComputedProperties();
-    render_items_.push_back(quad_item);
+    cube_item.UpdateComputedProperties();
+    render_items_.push_back(cube_item);
   }
 
   // Ensure renderer has uploaded mesh resources
@@ -493,6 +501,17 @@ auto MainModule::RenderScene() -> co::Co<>
     = std::span<const RenderItem> { render_items_.data(),
         render_items_.size() };
 
+  // --- DepthPrePass integration ---
+  static std::shared_ptr<engine::DepthPrePass> depth_pass;
+  static std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config;
+  if (!depth_pass_config) {
+    depth_pass_config = std::make_shared<engine::DepthPrePassConfig>();
+    depth_pass_config->debug_name = "ShaderPass";
+  }
+  if (!depth_pass) {
+    depth_pass = std::make_shared<engine::DepthPrePass>(depth_pass_config);
+  }
+
   // --- ShaderPass integration ---
   static std::shared_ptr<engine::ShaderPass> shader_pass;
   static std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
@@ -506,9 +525,38 @@ auto MainModule::RenderScene() -> co::Co<>
     shader_pass = std::make_shared<engine::ShaderPass>(shader_pass_config);
   }
 
+  // Animate rotation angle
+  static float rotation_angle = 0.0f; // radians
+  // rotation_angle += 0.01f; // radians per frame, adjust as needed
+
+  scene_constants_.world_matrix
+    = glm::rotate(glm::mat4(1.0f), rotation_angle, glm::vec3(0.5f, 1.0f, 0.0f));
+
+  auto corner = glm::vec3(-0.5f, 0.5f, 0.5f);
+  glm::vec3 view_dir = glm::normalize(corner); // Diagonal direction from origin
+  float distance = 3.0f; // Move camera back from the corner
+  glm::vec3 camera_position = corner + view_dir * distance;
+  auto up = glm::vec3(0, 1, 0);
+
+  scene_constants_.view_matrix = glm::lookAt(camera_position, corner, up);
+  const float aspect = static_cast<float>(surface_->Width())
+    / static_cast<float>(surface_->Height());
+  scene_constants_.projection_matrix
+    = glm::perspective(glm::radians(45.0f), // fov y
+      aspect, // aspect
+      0.1f, // zNear
+      600.0f // zFar
+    );
+  scene_constants_.camera_position = { 0.0f, 0.0f, -3.5f };
+
+  UpdateSceneConstantsBuffer(scene_constants_);
+
   // Assemble and run the render graph
   co_await renderer_->ExecuteRenderGraph(
     [&](const engine::RenderContext& context) -> co::Co<> {
+      // Depth Pre-Pass
+      co_await depth_pass->PrepareResources(context, *recorder);
+      co_await depth_pass->Execute(context, *recorder);
       // Shader Pass
       co_await shader_pass->PrepareResources(context, *recorder);
       co_await shader_pass->Execute(context, *recorder);

@@ -55,12 +55,20 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
     // clang-format on
   };
   std::vector<uint32_t> indices = {
-    0, 1, 2, 2, 3, 0, // -Z
-    4, 5, 6, 6, 7, 4, // +Z
-    0, 4, 7, 7, 3, 0, // -X
-    1, 5, 6, 6, 2, 1, // +X
-    0, 1, 5, 5, 4, 0, // -Y
-    3, 2, 6, 6, 7, 3, // +Y
+    // clang-format off
+    // -Z face (back)
+    0, 2, 1, 0, 3, 2,
+    // +Z face (front)
+    4, 5, 6, 4, 6, 7,
+    // -X face (left)
+    0, 7, 3, 0, 4, 7,
+    // +X face (right)
+    1, 2, 6, 1, 6, 5,
+    // -Y face (bottom)
+    0, 1, 5, 0, 5, 4,
+    // +Y face (top)
+    3, 7, 6, 3, 6, 2,
+    // clang-format on
   };
   auto asset = std::make_shared<MeshAsset>(
     "Cube", std::move(vertices), std::move(indices));
@@ -442,11 +450,11 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
     .color = { 1, 1, 1, 1 },
   });
   uint32_t base_center = static_cast<uint32_t>(vertices.size() - 1);
-  // Base cap indices
+  // Base cap indices (CCW: i, i+1, center)
   for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(base_center);
-    indices.push_back(i + 1);
     indices.push_back(i);
+    indices.push_back(i + 1);
+    indices.push_back(base_center);
   }
   auto asset = std::make_shared<MeshAsset>(
     "Cone", std::move(vertices), std::move(indices));
@@ -733,11 +741,11 @@ auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<MeshAsset>
     .color = head_color,
   });
   uint32_t base_center = static_cast<uint32_t>(vertices.size() - 1);
-  // Cone base cap indices
+  // Cone base cap indices (CCW: i, i+1, center)
   for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(base_center);
-    indices.push_back(cone_base_start + i + 1);
     indices.push_back(cone_base_start + i);
+    indices.push_back(cone_base_start + i + 1);
+    indices.push_back(base_center);
   }
   auto asset = std::make_shared<MeshAsset>(
     "ArrowGizmo", std::move(vertices), std::move(indices));

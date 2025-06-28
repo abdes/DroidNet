@@ -125,7 +125,19 @@ protected:
   virtual auto IssueDrawCalls(graphics::CommandRecorder& command_recorder) const
     -> void;
 
+  //! This enumeration defines the order of root signature bindings used by
+  //! render passes.
+  enum class RootBindings : uint8_t {
+    kBindlessTableSrv = 0, // t0,s0 Bindless descriptor table for SRV/CBV/UAV
+    kIndicesCbv = 1, // b0,s0 Indices in the descriptor table (constant buffer)
+    kSceneConstantsCbv = 2, // b1,s0 Scene constants (constant buffer)
+  };
+
 private:
+  auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
+    -> void;
+  auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;
+
   //! Current render context.
   const RenderContext* context_ { nullptr };
 

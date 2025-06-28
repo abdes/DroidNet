@@ -29,9 +29,6 @@ struct RenderContext;
 
 //! Configuration for a shading pass (main geometry + lighting).
 struct ShaderPassConfig {
-  //! Optional per-draw constant buffer (e.g., world matrices).
-  std::shared_ptr<const graphics::Buffer> per_draw_constants = nullptr;
-
   //! Optional explicit color texture to render into (overrides framebuffer if
   //! set).
   std::shared_ptr<const graphics::Texture> color_texture = nullptr;
@@ -78,6 +75,8 @@ private:
 
   //! Convenience method to get the clear color for the pass.
   [[nodiscard]] auto GetClearColor() const -> const graphics::Color&;
+
+  [[nodiscard]] auto HasDepth() const -> bool;
 
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
