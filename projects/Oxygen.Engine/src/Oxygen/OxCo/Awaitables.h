@@ -21,7 +21,7 @@ namespace oxygen::co {
 template <class T>
 Awaitable<T> auto Just(T value) // NOLINT(modernize-use-trailing-return-type)
 {
-    return detail::ReadyAwaiter<T>(std::forward<T>(value));
+  return detail::ReadyAwaiter<T>(std::forward<T>(value));
 }
 
 //! A no-op task. Always await_ready(), and `co_await`ing on it is a no-op
@@ -40,7 +40,7 @@ Awaitable<T> auto Just(T value) // NOLINT(modernize-use-trailing-return-type)
 */
 inline Awaitable<void> auto NoOp() // NOLINT(modernize-use-trailing-return-type)
 {
-    return detail::ReadyAwaiter<void>();
+  return detail::ReadyAwaiter<void>();
 }
 
 static constexpr detail::CoAwaitFactory<SuspendForever> kSuspendForever;
@@ -49,14 +49,18 @@ static constexpr detail::CoAwaitFactory<Yield> kYield;
 //! A utility function which allows delayed construction of non-moveable
 //! immediate awaitables.
 /*!
- The returned class is moveable (assuming the arguments are moveable),
- and has a one-shot `operator co_await() &&`, which will construct
+ The returned class is moveable (assuming the arguments are moveable), and has a
+ one-shot `operator co_await() &&`, which will construct
  `T(forward<Args>(args...))` and return it.
+
+ @note: MakeAwaitable() takes its arguments by value (since passing references
+ may easily lead to dangling references). To pass a reference, either use
+ `std::ref()` (or `std::cref()`) or provide explicit template arguments.
 */
 template <ImmediateAwaitable T, class... Args>
-auto MakeAwaitable(Args&&... args) -> Awaitable auto
+auto MakeAwaitable(Args... args) -> Awaitable auto
 {
-    return detail::AwaiterMaker<T, Args...>(std::forward<Args>(args)...);
+  return detail::AwaiterMaker<T, Args...>(std::forward<Args>(args)...);
 }
 
 //! A wrapper around an awaitable suppressing its cancellation.
@@ -71,11 +75,10 @@ auto MakeAwaitable(Args&&... args) -> Awaitable auto
    // ... and so is this one
  \endcode
 */
-template <class Awaitable>
-auto NonCancellable(Awaitable awaitable)
+template <class Awaitable> auto NonCancellable(Awaitable awaitable)
 {
-    return MakeAwaitable<detail::NonCancellableAdapter<Awaitable>>(
-        std::forward<Awaitable>(awaitable));
+  return MakeAwaitable<detail::NonCancellableAdapter<Awaitable>>(
+    std::forward<Awaitable>(awaitable));
 }
 
 //! A wrapper around an awaitable declaring that its return value is safe to
@@ -86,11 +89,10 @@ auto NonCancellable(Awaitable awaitable)
  any faster when cancelled; it only affects what happens _after the awaitable
  completes_ when a cancellation has been requested.
 */
-template <class Awaitable>
-auto Disposable(Awaitable awaitable)
+template <class Awaitable> auto Disposable(Awaitable awaitable)
 {
-    return MakeAwaitable<detail::DisposableAdapter<Awaitable>>(
-        std::forward<Awaitable>(awaitable));
+  return MakeAwaitable<detail::DisposableAdapter<Awaitable>>(
+    std::forward<Awaitable>(awaitable));
 }
 
 //! Chains multiple awaitables together, without having to allocate a coroutine
@@ -148,10 +150,9 @@ auto Disposable(Awaitable awaitable)
      });
  \endcode
 */
-template <class ThenFn>
-auto Then(ThenFn&& then_fn)
+template <class ThenFn> auto Then(ThenFn&& then_fn)
 {
-    return detail::SequenceBuilder<ThenFn>(std::forward<ThenFn>(then_fn));
+  return detail::SequenceBuilder<ThenFn>(std::forward<ThenFn>(then_fn));
 }
 
 } // namespace oxygen::co

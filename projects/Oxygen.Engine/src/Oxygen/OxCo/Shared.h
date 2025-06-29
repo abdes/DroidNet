@@ -500,7 +500,7 @@ auto Shared<Awaitable>::operator co_await() -> co::Awaiter auto
 template <class Awaitable> //
 auto Shared<Awaitable>::AsOptional() -> co::Awaitable auto
 {
-  return MakeAwaitable<Awaiter<OptionalRef>>(state_);
+  return MakeAwaitable<Awaiter<OptionalRef>>(std::ref(state_));
 }
 
 } // namespace oxygen::co

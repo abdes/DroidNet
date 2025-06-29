@@ -16,10 +16,9 @@ namespace oxygen::co {
 
 //! Return an awaitable which runs the given callable and then resumes the
 //! caller immediately, evaluating to the result thereof.
-template <class Callable>
-auto YieldToRun(Callable cb)
+template <class Callable> auto YieldToRun(Callable cb)
 {
-    return detail::YieldToRunAwaitable<Callable>(std::move(cb));
+  return detail::YieldToRunAwaitable<Callable>(std::move(cb));
 }
 
 //! A wrapper that adapts an awaitable so it runs upon cancellation instead of
@@ -46,10 +45,9 @@ auto YieldToRun(Callable cb)
  Make sure not to throw any exceptions from the awaitable, as they will
  `terminate()` the process.
 */
-template <Awaitable<void> Aw>
-auto UntilCancelledAnd(Aw&& awaitable)
+template <Awaitable<void> Aw> auto UntilCancelledAnd(Aw&& awaitable)
 {
-    return MakeAwaitable<detail::RunOnCancel<Aw>>(std::forward<Aw>(awaitable));
+  return MakeAwaitable<detail::RunOnCancel<Aw>>(std::forward<Aw>(awaitable));
 }
 
 //! Run multiple awaitables concurrently. Upon completion of any one, request
@@ -64,24 +62,23 @@ auto UntilCancelledAnd(Aw&& awaitable)
  applies even if all awaitables return void, so one can use
  `std::get<N>(result).has_value()` to figure out which awaitable(s) completed.
 */
-template <Awaitable... Ts>
-auto AnyOf(Ts&&... awaitables) -> Awaitable auto
+template <Awaitable... Ts> auto AnyOf(Ts&&... awaitables) -> Awaitable auto
 {
-    static_assert(
-        sizeof...(Ts) == 0
-            || (detail::Cancellable<detail::AwaiterType<Ts>> || ...),
-        "AnyOf() makes no sense if all awaitables are non-cancellable");
+  static_assert(
+    sizeof...(Ts) == 0 || (detail::Cancellable<detail::AwaiterType<Ts>> || ...),
+    "AnyOf() makes no sense if all awaitables are non-cancellable");
 
-    return MakeAwaitable<detail::AnyOfMux<Ts...>>(std::forward<Ts>(awaitables)...);
+  return MakeAwaitable<detail::AnyOfMux<Ts...>, Ts...>(
+    std::forward<Ts>(awaitables)...);
 }
 
 //! Run multiple awaitables concurrently, but for variable-length ranges of
 //! awaitables.
 //! \see AnyOf(Ts&&...)
-template <AwaitableRange<> Range>
-auto AnyOf(Range&& range) -> Awaitable auto
+template <AwaitableRange<> Range> auto AnyOf(Range&& range) -> Awaitable auto
 {
-    return MakeAwaitable<detail::AnyOfRange<Range>>(std::forward<Range>(range));
+  return MakeAwaitable<detail::AnyOfRange<Range>, Range>(
+    std::forward<Range>(range));
 }
 
 //! Run multiple awaitables concurrently; once all of them complete or are
@@ -91,19 +88,19 @@ auto AnyOf(Range&& range) -> Awaitable auto
  complete before cancellation and others get cancelled, may return a partial
  result. Hence, returns a `std::tuple<Optional<R>...>`.
 */
-template <Awaitable... Ts>
-auto MostOf(Ts&&... awaitables) -> Awaitable auto
+template <Awaitable... Ts> auto MostOf(Ts&&... awaitables) -> Awaitable auto
 {
-    return MakeAwaitable<detail::MostOfMux<Ts...>>(std::forward<Ts>(awaitables)...);
+  return MakeAwaitable<detail::MostOfMux<Ts...>, Ts...>(
+    std::forward<Ts>(awaitables)...);
 }
 
 //! Run multiple awaitables concurrently with `MostOf`, but for variable-length
 //! ranges of awaitables.
 //! \see MostOf(Ts&&...)
-template <AwaitableRange<> Range>
-auto MostOf(Range&& range) -> Awaitable auto
+template <AwaitableRange<> Range> auto MostOf(Range&& range) -> Awaitable auto
 {
-    return MakeAwaitable<detail::MostOfRange<Range>>(std::forward<Range>(range));
+  return MakeAwaitable<detail::MostOfRange<Range>, Range>(
+    std::forward<Range>(range));
 }
 
 //! Run multiple awaitables concurrently; once all of them complete, return a
@@ -113,19 +110,19 @@ auto MostOf(Range&& range) -> Awaitable auto
  of the awaitables that did complete before the cancellation may be
  discarded. If that's not desirable, use `co::MostOf()` instead.
 */
-template <Awaitable... Ts>
-auto AllOf(Ts&&... awaitables) -> Awaitable auto
+template <Awaitable... Ts> auto AllOf(Ts&&... awaitables) -> Awaitable auto
 {
-    return MakeAwaitable<detail::AllOfMux<Ts...>>(std::forward<Ts>(awaitables)...);
+  return MakeAwaitable<detail::AllOfMux<Ts...>, Ts...>(
+    std::forward<Ts>(awaitables)...);
 }
 
 //! Run multiple awaitables concurrently with `AllOf`, but for variable-length
 //! ranges of awaitables.
 //! \see AllOf(Ts&&...)
-template <AwaitableRange<> Range>
-auto AllOf(Range&& range) -> Awaitable auto
+template <AwaitableRange<> Range> auto AllOf(Range&& range) -> Awaitable auto
 {
-    return MakeAwaitable<detail::AllOfRange<Range>>(std::forward<Range>(range));
+  return MakeAwaitable<detail::AllOfRange<Range>, Range>(
+    std::forward<Range>(range));
 }
 
 } // namespace oxygen::co
