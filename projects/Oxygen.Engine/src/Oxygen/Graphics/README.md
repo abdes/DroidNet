@@ -1,12 +1,15 @@
 # Oxygen Graphics Engine Architecture
 
 ## Overview
+
 The Oxygen Graphics Engine implements a modern, modular graphics system supporting Vulkan and Direct3D 12. The architecture consists of 15 specialized components organized into a hierarchical structure.
 
 ## Architecture Components
 
 #### 🎮 Graphics Context
+
 Central access point for all graphics subsystems.
+
 - **Core Responsibilities**:
   - Subsystem initialization and shutdown coordination
   - Component lifetime management
@@ -17,7 +20,9 @@ Central access point for all graphics subsystems.
 ### Subsystems
 
 #### 🖥️ Devices
+
 Hardware interface and capability management.
+
 - **Core Responsibilities**:
   - **Physical Device Management**
     - D3D12: Adapter enumeration and capability querying, holds DXGIFactory
@@ -36,7 +41,9 @@ Hardware interface and capability management.
     - Vulkan: Physical device feature queries and extensions
 
 #### 🔍 Debugger
+
 Development and profiling tools.
+
 - **Core Responsibilities**:
   - **Performance Analysis**
     - D3D12: PIX integration
@@ -55,7 +62,9 @@ Development and profiling tools.
     - Pipeline statistics
 
 #### 💾 Allocator
+
 GPU memory management system.
+
 - **Core Responsibilities**:
   - **Memory Allocation**
     - D3D12: Heap allocation and suballocation
@@ -78,57 +87,59 @@ GPU memory management system.
 #### Core Responsibilities
 
 - **Work Synchronization:**
-    - **Fence Management**
+  - **Fence Management**
       In Direct3D 12, create an **ID3D12Fence** for each command queue, then
       signal or wait on specific fence values to coordinate when tasks begin or
       end. The Coordinator tracks these fence values to ensure that each
       subsystem’s work completes in the correct order and avoids unintended
       overlaps.
 
-    - **Timeline Semaphores**
+  - **Timeline Semaphores**
       While D3D12 doesn’t provide native timeline semaphores (as Vulkan does),
       the Coordinator can mimic timeline behavior by incrementing fence values
       each submission and waiting on specific thresholds. This keeps multi-queue
       workloads in sync without explicitly tying into resource operations.
 
 - **Execution Timeline Coordination:**
-    - **Global Timeline**
+  - **Global Timeline**
       Maintain a global counter to represent the last completed segment of work.
       Each time the Coordinator processes submitted tasks, it updates the fence
       value and checks if any tasks depend on previous completions.
-    - **Dependency Graph**
+  - **Dependency Graph**
       If a subsystem needs other work to finish first, the Coordinator inserts
       waits on the relevant fence value. This ensures the correct sequence of
       steps—for instance, finishing a compute pass before a rendering pass that
       consumes its results.
 
 - **Periodic Events Management:**
-    - **RenderFrameBegin**
+  - **RenderFrameBegin**
       The Coordinator triggers this event at the start of each frame, notifying
       subsystems that it’s safe to queue up draw commands, refresh dynamic data,
       or perform any pre-render setup.
-    - **RenderFrameEnd**
+  - **RenderFrameEnd**
       Once all rendering for the frame is submitted, the Coordinator signals the
       *end* event. Higher-level logic may use this signal to handle post-frame
       operations, like capturing frame stats or triggering GPU-side analytics.
 
 - **Frame Buffering and Vsync Management:**
-    - **Buffer Count Configuration**
+  - **Buffer Count Configuration**
       For double or triple buffering, the Coordinator instructs the swap chain
       (via `DXGI_SWAP_CHAIN_DESC1::BufferCount`) but doesn’t allocate or manage
       the buffers itself—that remains with the Renderer module.
-    - **In-Flight Frames**
+  - **In-Flight Frames**
       The Coordinator tracks fence values associated with each buffer to ensure
       that the GPU has finished work on a given buffer before reusing it. This
       prevents overwriting a buffer that’s still in use on the GPU.
-    - **Vsync Coordination**
+  - **Vsync Coordination**
       Vsync is handled by specifying the correct swap chain parameters (e.g.,
       sync interval for `Present`). The Coordinator ensures the present call
       respects the selected intervals and that fences are signaled so the engine
       smoothly proceeds to the next frame without tearing.
 
 #### 📦 Resources
+
 Resource creation and state tracking.
+
 - **Core Responsibilities**:
   - **Resource State Management**
     - D3D12: Resource state barriers and transition tracking
@@ -147,7 +158,9 @@ Resource creation and state tracking.
     - Vulkan: Sparse binding and memory aliasing
 
 #### 🔧 PipelineArchitect
+
 Pipeline state and binding management.
+
 - **Core Responsibilities**:
   - **Pipeline State Objects**
     - D3D12: ID3D12PipelineState creation and caching
@@ -166,7 +179,9 @@ Pipeline state and binding management.
     - Vulkan: Pipeline derivatives and specialization constants
 
 #### ⚡ Commander
+
 Command submission and execution.
+
 - **Core Responsibilities**:
   - **Command Pool Management**
     - D3D12: Command allocator pooling
@@ -182,7 +197,9 @@ Command submission and execution.
     - Vulkan: Command buffer submission
 
 #### 🎬 Renderer
+
 Display and presentation system.
+
 - **Core Responsibilities**:
   - **Display Management**
     - D3D12:
@@ -222,7 +239,9 @@ Display and presentation system.
     - Resource barrier management
 
 #### 📚 ShaderLibrary
+
 Shader management system.
+
 - **Core Responsibilities**:
   - **Shader Management**
     - D3D12: DXIL shader management
@@ -237,7 +256,9 @@ Shader management system.
     - Dynamic feature toggles
 
 #### ⚙️ ShaderCompiler
+
 Shader compilation pipeline.
+
 - **Core Responsibilities**:
   - **Cross-Platform Compilation**
     - D3D12: HLSL to DXIL using DXC compiler
@@ -276,7 +297,9 @@ Shader compilation pipeline.
     - Runtime shader validation
 
 #### 🌳 SceneOrganizer
+
 Scene hierarchy and visibility management.
+
 - **Core Responsibilities**:
   - **Acceleration Structures**
     - D3D12: DirectX Raytracing (DXR) BVH
@@ -296,7 +319,9 @@ Scene hierarchy and visibility management.
     - Instance data management for LOD transitions
 
 #### 🎨 MaterialManager
+
 Material and texture system.
+
 - **Core Responsibilities**:
   - **Texture Management**
     - D3D12: Tiled resource management
@@ -316,7 +341,9 @@ Material and texture system.
     - Dynamic shader permutation handling
 
 #### 💡 LightMaster
+
 Lighting and shadow system.
+
 - **Core Responsibilities**:
   - **Light Management**
     - Clustered light assignment
@@ -337,7 +364,9 @@ Lighting and shadow system.
     - Light scattering computation
 
 #### ✨ Effects
+
 Post-processing framework.
+
 - **Core Responsibilities**:
   - **Effect Chain**
     - D3D12: UAV barriers between effects
@@ -358,7 +387,9 @@ Post-processing framework.
     - Temporal stability
 
 #### 🎭 Animation
+
 Animation processing system.
+
 - **Core Responsibilities**:
   - **Skeletal Animation**
     - D3D12: Structured buffer for bone matrices
@@ -408,18 +439,21 @@ Resources creates descriptor views based on shader reflection data
 ## Implementation Guidelines
 
 ### Memory Management
+
 - Use custom allocators for different resource types
 - Implement residency management for large datasets
 - Pool frequently allocated resources
 - Track memory budget per heap type
 
 ### Threading Model
+
 - Main thread: Frame orchestration and presentation
 - Render thread: Command list generation
 - Worker threads: Asset loading and processing
 - Background thread: Resource streaming
 
 ### Performance Considerations
+
 - Minimize state changes and barriers
 - Batch similar operations
 - Use GPU-driven rendering techniques
@@ -427,18 +461,21 @@ Resources creates descriptor views based on shader reflection data
 - Profile and optimize hot paths
 
 ### API Abstraction
+
 - Backend-agnostic resource handles
 - Unified synchronization primitives
 - Common shader interface
 - Shared resource formats
 
 ### Debug Support
+
 - Per-component debug markers
 - Resource naming conventions
 - Performance counters
 - Validation layers
 
 ## Design Patterns
+
 - Command pattern for render operations
 - Factory pattern for resource creation
 - Observer pattern for state changes
@@ -446,6 +483,7 @@ Resources creates descriptor views based on shader reflection data
 - Pool pattern for resource management
 
 ## Future Considerations
+
 - Ray tracing integration
 - Machine learning acceleration
 - Variable rate shading
@@ -499,6 +537,7 @@ tasks, with natural suspension points where operations await GPU completion:
    - New frame coroutines can begin while previous frame finalization continues in parallel
 
 ### Resource Creation Flow
+
 1. **Graphics Context** receives resource creation request
 2. **Resources** creates the resource descriptor
 3. **Allocator** provides memory for the resource
@@ -506,6 +545,7 @@ tasks, with natural suspension points where operations await GPU completion:
 5. **Resources** creates necessary views
 
 ### Shader Pipeline Flow
+
 1. **ShaderCompiler** compiles shader code
 2. **ShaderLibrary** stores compiled shaders
 3. **PipelineArchitect** uses shader bytecode for pipeline creation
