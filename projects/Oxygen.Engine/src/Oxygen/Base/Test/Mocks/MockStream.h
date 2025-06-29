@@ -112,6 +112,39 @@ public:
     return {};
   }
 
+  auto backward(size_t offset) noexcept -> Result<void>
+  {
+    if (force_fail_) {
+      return std::make_error_code(std::errc::io_error);
+    }
+    if (offset > pos_) {
+      return std::make_error_code(std::errc::io_error);
+    }
+    pos_ -= offset;
+    return {};
+  }
+
+  auto forward(size_t offset) noexcept -> Result<void>
+  {
+    if (force_fail_) {
+      return std::make_error_code(std::errc::io_error);
+    }
+    if (pos_ + offset > data_.size()) {
+      return std::make_error_code(std::errc::io_error);
+    }
+    pos_ += offset;
+    return {};
+  }
+
+  auto seek_end() noexcept -> Result<void>
+  {
+    if (force_fail_) {
+      return std::make_error_code(std::errc::io_error);
+    }
+    pos_ = data_.size();
+    return {};
+  }
+
   [[nodiscard]] auto size() const noexcept -> Result<size_t>
   {
     if (force_fail_) {

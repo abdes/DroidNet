@@ -305,6 +305,55 @@ NOLINT_TEST_F(MemoryStreamTest, DataIntegrity_MultipleOperations)
   }
 }
 
+NOLINT_TEST_F(MemoryStreamTest, Backward_Success)
+{
+  EXPECT_TRUE(sut_.seek(4));
+  auto result = sut_.backward(2);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(sut_.position().value(), 2);
+  char buffer[3] = {};
+  EXPECT_TRUE(sut_.read(buffer, 3));
+  EXPECT_EQ(std::string_view(buffer, 3), "cde");
+}
+
+NOLINT_TEST_F(MemoryStreamTest, Backward_Fails_BeforeBegin)
+{
+  EXPECT_TRUE(sut_.seek(1));
+  auto result = sut_.backward(2);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
+
+NOLINT_TEST_F(MemoryStreamTest, Forward_Success)
+{
+  EXPECT_TRUE(sut_.seek(0));
+  auto result = sut_.forward(3);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(sut_.position().value(), 3);
+  char buffer[2] = {};
+  EXPECT_TRUE(sut_.read(buffer, 2));
+  EXPECT_EQ(std::string_view(buffer, 2), "de");
+}
+
+NOLINT_TEST_F(MemoryStreamTest, Forward_Fails_PastEnd)
+{
+  EXPECT_TRUE(sut_.seek(4));
+  auto result = sut_.forward(10);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
+
+NOLINT_TEST_F(MemoryStreamTest, SeekEnd_Success)
+{
+  auto result = sut_.seek_end();
+  EXPECT_TRUE(result);
+  EXPECT_EQ(sut_.position().value(), buffer_.size());
+  char buffer[1] = {};
+  auto read_result = sut_.read(buffer, 1);
+  EXPECT_FALSE(read_result);
+  EXPECT_EQ(read_result.error(), std::make_error_code(std::errc::io_error));
+}
+
 class InternalBufferMemoryStreamTest : public Test {
 protected:
   MemoryStream sut_; // Uses internal buffer

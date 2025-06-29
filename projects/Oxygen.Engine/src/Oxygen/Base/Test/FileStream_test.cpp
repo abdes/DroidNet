@@ -328,3 +328,68 @@ NOLINT_TEST_F(FileStreamTest, EOFHandling_Success)
   EXPECT_FALSE(eof_result);
   EXPECT_EQ(eof_buffer[0], 0); // Buffer should be unchanged
 }
+
+NOLINT_TEST_F(FileStreamTest, Backward_Success)
+{
+  mock_stream_->set_data("abcdef");
+  ASSERT_TRUE(sut_->seek(5));
+  // Move back by 2
+  auto result = sut_->backward(2);
+  EXPECT_TRUE(result);
+  char buffer[3] = {};
+  EXPECT_TRUE(sut_->read(buffer, 3));
+  EXPECT_EQ(std::string_view(buffer, 3), "def");
+}
+
+NOLINT_TEST_F(FileStreamTest, Backward_Fails_BeforeBegin)
+{
+  mock_stream_->set_data("abcdef");
+  ASSERT_TRUE(sut_->seek(1));
+  // Try to move back by 2 (should fail)
+  auto result = sut_->backward(2);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
+
+NOLINT_TEST_F(FileStreamTest, Forward_Success)
+{
+  mock_stream_->set_data("abcdef");
+  ASSERT_TRUE(sut_->seek(0));
+  // Move forward by 3
+  auto result = sut_->forward(3);
+  EXPECT_TRUE(result);
+  char buffer[3] = {};
+  EXPECT_TRUE(sut_->read(buffer, 3));
+  EXPECT_EQ(std::string_view(buffer, 3), "def");
+}
+
+NOLINT_TEST_F(FileStreamTest, Forward_Fails_PastEnd)
+{
+  mock_stream_->set_data("abcdef");
+  ASSERT_TRUE(sut_->seek(4));
+  // Try to move forward by 10 (should fail)
+  auto result = sut_->forward(10);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
+
+NOLINT_TEST_F(FileStreamTest, SeekEnd_Success)
+{
+  mock_stream_->set_data("abcdef");
+  auto result = sut_->seek_end();
+  EXPECT_TRUE(result);
+  // Should be at end, so reading should fail with no_buffer_space
+  char buffer[1] = {};
+  auto read_result = sut_->read(buffer, 1);
+  EXPECT_FALSE(read_result);
+  EXPECT_EQ(
+    read_result.error(), std::make_error_code(std::errc::no_buffer_space));
+}
+
+NOLINT_TEST_F(FileStreamTest, SeekEnd_Fails_OnStreamError)
+{
+  mock_stream_->set_force_fail(true);
+  auto result = sut_->seek_end();
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
