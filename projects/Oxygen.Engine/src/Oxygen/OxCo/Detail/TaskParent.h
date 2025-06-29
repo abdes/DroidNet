@@ -29,27 +29,27 @@ class BasePromise;
  */
 class BaseTaskParent {
 public:
-    //! Called when a task finishes execution (either `StoreValue()` or
-    //! `StoreException()` would have been called before).
-    /*!
-     \returns A coroutine handle to chain execute to (or std::noop_coroutine()).
-    */
-    virtual auto Continuation(BasePromise*) noexcept -> Handle = 0;
+  //! Called when a task finishes execution (either `StoreValue()` or
+  //! `StoreException()` would have been called before).
+  /*!
+   \returns A coroutine handle to chain execute to (or std::noop_coroutine()).
+  */
+  virtual auto Continuation(BasePromise*) noexcept -> Handle = 0;
 
-    //! Called when task execution ended with an unhandled exception
-    //! (available through `std::current_exception()`).
-    virtual void StoreException() = 0;
+  //! Called when task execution ended with an unhandled exception
+  //! (available through `std::current_exception()`).
+  virtual void StoreException() = 0;
 
-    //! Called when task confirms its cancellation.
-    virtual void Cancelled() { }
+  //! Called when task confirms its cancellation.
+  virtual void Cancelled() { }
 
 protected:
-    BaseTaskParent() = default;
-    OXYGEN_DEFAULT_COPYABLE(BaseTaskParent)
-    OXYGEN_DEFAULT_MOVABLE(BaseTaskParent)
+  BaseTaskParent() = default;
+  OXYGEN_DEFAULT_COPYABLE(BaseTaskParent)
+  OXYGEN_DEFAULT_MOVABLE(BaseTaskParent)
 
-    // Prevent deletion of derived objects through a base pointer.
-    /*non-virtual*/ ~BaseTaskParent() = default;
+  // Prevent deletion of derived objects through a base pointer.
+  /*non-virtual*/ ~BaseTaskParent() = default;
 };
 
 //! Represents the parent of an async task that returns an object of type `T`.
@@ -59,19 +59,18 @@ protected:
  Implements the result storage part of the `BaseTaskParent` interface and serves
  as an explicitly typed parent for an async task that returns `T`.
 */
-template <class T>
-class TaskParent : public BaseTaskParent {
+template <class T> class TaskParent : public BaseTaskParent {
 public:
-    //! Called when task exited normally and returned a value.
-    virtual void StoreValue(T t) { result_.StoreValue(std::forward<T>(t)); }
+  //! Called when task exited normally and returned a value.
+  virtual void StoreValue(T t) { result_.StoreValue(std::forward<T>(t)); }
 
 protected:
-    TaskParent() = default;
-    OXYGEN_DEFAULT_COPYABLE(TaskParent)
-    OXYGEN_DEFAULT_MOVABLE(TaskParent)
-    ~TaskParent() = default;
+  TaskParent() = default;
+  OXYGEN_DEFAULT_COPYABLE(TaskParent)
+  OXYGEN_DEFAULT_MOVABLE(TaskParent)
+  ~TaskParent() = default;
 
-    Result<T> result_; // NOLINT(*-non-private-member-variables-in-classes)
+  Result<T> result_; // NOLINT(*-non-private-member-variables-in-classes)
 };
 
 //! Represents the parent of an async task that returns `void`.
@@ -80,19 +79,18 @@ protected:
  the `BaseTaskParent` interface and serves as an explicitly typed parent for an
  async task that returns `void`.
 */
-template <>
-class TaskParent<void> : public BaseTaskParent {
+template <> class TaskParent<void> : public BaseTaskParent {
 public:
-    //! Called when task exited normally.
-    virtual void StoreSuccess() { result_.StoreSuccess(); }
+  //! Called when task exited normally.
+  virtual void StoreSuccess() { result_.StoreSuccess(); }
 
 protected:
-    TaskParent() = default;
-    OXYGEN_DEFAULT_COPYABLE(TaskParent)
-    OXYGEN_DEFAULT_MOVABLE(TaskParent)
-    ~TaskParent() = default;
+  TaskParent() = default;
+  OXYGEN_DEFAULT_COPYABLE(TaskParent)
+  OXYGEN_DEFAULT_MOVABLE(TaskParent)
+  ~TaskParent() = default;
 
-    Result<void> result_; // NOLINT(*-non-private-member-variables-in-classes)
+  Result<void> result_; // NOLINT(*-non-private-member-variables-in-classes)
 };
 
 } // namespace oxygen::co::detail

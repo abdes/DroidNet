@@ -13,34 +13,31 @@ namespace oxygen::co {
 
 //! A wait queue, entered when its `Awaiter` is awaited with `co_await`.
 /*!
- To enter `co_await parking_lot.Park();`. Once parked, the coroutine is suspended
- until explicitly resumed by calling `UnParkOne()` or `UnParkAll()`.
+ To enter `co_await parking_lot.Park();`. Once parked, the coroutine is
+ suspended until explicitly resumed by calling `UnParkOne()` or `UnParkAll()`.
 */
 class ParkingLot : public detail::ParkingLotImpl<ParkingLot> {
 public:
-    using Base = ParkingLotImpl;
-    class Awaiter final : public Parked {
-    public:
-        using Parked::Parked;
-        // ReSharper disable CppMemberFunctionMayBeStatic
-        // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-        [[nodiscard]] auto await_ready() const noexcept { return false; }
-        void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
-        void await_resume() { }
-        // ReSharper restore CppMemberFunctionMayBeStatic
-    };
+  using Base = ParkingLotImpl;
+  class Awaiter final : public Parked {
+  public:
+    using Parked::Parked;
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+    [[nodiscard]] auto await_ready() const noexcept { return false; }
+    void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
+    void await_resume() { }
+    // ReSharper restore CppMemberFunctionMayBeStatic
+  };
 
-    //! Returns an `Awaiter` which, when `co_await`'ed, suspends the caller
-    //! until any of `UnPark()` or `UnParkAll()` methods are called.
-    [[nodiscard]] auto Park()
-    {
-        return Awaiter(*this);
-    }
+  //! Returns an `Awaiter` which, when `co_await`'ed, suspends the caller
+  //! until any of `UnPark()` or `UnParkAll()` methods are called.
+  [[nodiscard]] auto Park() { return Awaiter(*this); }
 
-    using Base::Empty;
-    using Base::ParkedCount;
-    using Base::UnParkAll;
-    using Base::UnParkOne;
+  using Base::Empty;
+  using Base::ParkedCount;
+  using Base::UnParkAll;
+  using Base::UnParkOne;
 };
 
 static_assert(Awaiter<ParkingLot::Awaiter>);

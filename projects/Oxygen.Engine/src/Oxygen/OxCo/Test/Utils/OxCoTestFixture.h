@@ -17,21 +17,20 @@ namespace oxygen::co::testing {
 
 class OxCoTestFixture : public ::testing::Test {
 protected:
-    std::unique_ptr<TestEventLoop> el_ {};
+  std::unique_ptr<TestEventLoop> el_ {};
 
-    void SetUp() override
-    {
-        ::testing::internal::CaptureStderr();
-        el_ = std::make_unique<TestEventLoop>();
-    }
+  void SetUp() override
+  {
+    ::testing::internal::CaptureStderr();
+    el_ = std::make_unique<TestEventLoop>();
+  }
 
-    void TearDown() override
-    {
-        el_.reset();
-        const auto captured_stderr = ::testing::internal::GetCapturedStderr();
-        std::cout << "Captured stderr:\n"
-                  << captured_stderr << '\n';
-    }
+  void TearDown() override
+  {
+    el_.reset();
+    const auto captured_stderr = ::testing::internal::GetCapturedStderr();
+    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
+  }
 };
 
 } // namespace oxygen::co::testing

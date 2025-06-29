@@ -15,93 +15,93 @@ using oxygen::co::ParkingLot;
 
 class MockCoroutine {
 public:
-    struct promise_type {
-        // ReSharper disable CppMemberFunctionMayBeStatic
-        // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-        auto get_return_object() -> MockCoroutine { return {}; }
-        // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-        auto initial_suspend() -> std::suspend_never { return {}; }
-        // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-        auto final_suspend() noexcept -> std::suspend_never { return {}; }
-        void unhandled_exception() { }
-        void return_void() { }
-        // ReSharper restore CppMemberFunctionMayBeStatic
-    };
+  struct promise_type {
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+    auto get_return_object() -> MockCoroutine { return {}; }
+    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+    auto initial_suspend() -> std::suspend_never { return {}; }
+    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+    auto final_suspend() noexcept -> std::suspend_never { return {}; }
+    void unhandled_exception() { }
+    void return_void() { }
+    // ReSharper restore CppMemberFunctionMayBeStatic
+  };
 };
 
 NOLINT_TEST(ParkingLotTest, ParkAndUnParkOne)
 {
-    ParkingLot lot;
-    constexpr size_t num_coroutines = 10;
-    std::array<bool, num_coroutines> parked_flags { true };
+  ParkingLot lot;
+  constexpr size_t num_coroutines = 10;
+  std::array<bool, num_coroutines> parked_flags { true };
 
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
-    auto create_coroutine = [&](const size_t index) -> MockCoroutine {
-        co_await lot.Park();
-        parked_flags[index] = false;
-    };
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
+  auto create_coroutine = [&](const size_t index) -> MockCoroutine {
+    co_await lot.Park();
+    parked_flags[index] = false;
+  };
 
-    std::array<MockCoroutine, num_coroutines> coroutines {};
-    for (size_t i = 0; i < num_coroutines; ++i) {
-        parked_flags[i] = true;
-        coroutines[i] = create_coroutine(i);
-    }
+  std::array<MockCoroutine, num_coroutines> coroutines {};
+  for (size_t i = 0; i < num_coroutines; ++i) {
+    parked_flags[i] = true;
+    coroutines[i] = create_coroutine(i);
+  }
 
-    EXPECT_FALSE(lot.Empty());
+  EXPECT_FALSE(lot.Empty());
 
-    for (size_t i = 0; i < num_coroutines; ++i) {
-        lot.UnParkOne();
-        EXPECT_EQ(parked_flags[i], false);
-    }
+  for (size_t i = 0; i < num_coroutines; ++i) {
+    lot.UnParkOne();
+    EXPECT_EQ(parked_flags[i], false);
+  }
 
-    EXPECT_TRUE(lot.Empty());
+  EXPECT_TRUE(lot.Empty());
 }
 
 NOLINT_TEST(ParkingLotTest, ParkAndUnParkAll)
 {
-    ParkingLot lot;
-    constexpr size_t num_coroutines = 10;
-    std::array<bool, num_coroutines> parked_flags { true };
+  ParkingLot lot;
+  constexpr size_t num_coroutines = 10;
+  std::array<bool, num_coroutines> parked_flags { true };
 
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
-    auto create_coroutine = [&](const size_t index) -> MockCoroutine {
-        co_await lot.Park();
-        parked_flags[index] = false;
-    };
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
+  auto create_coroutine = [&](const size_t index) -> MockCoroutine {
+    co_await lot.Park();
+    parked_flags[index] = false;
+  };
 
-    std::array<MockCoroutine, num_coroutines> coroutines {};
-    for (size_t i = 0; i < num_coroutines; ++i) {
-        parked_flags[i] = true;
-        coroutines[i] = create_coroutine(i);
-    }
+  std::array<MockCoroutine, num_coroutines> coroutines {};
+  for (size_t i = 0; i < num_coroutines; ++i) {
+    parked_flags[i] = true;
+    coroutines[i] = create_coroutine(i);
+  }
 
-    EXPECT_FALSE(lot.Empty());
+  EXPECT_FALSE(lot.Empty());
 
-    lot.UnParkAll();
+  lot.UnParkAll();
 
-    EXPECT_TRUE(lot.Empty());
-    for (size_t i = 0; i < num_coroutines; ++i) {
-        EXPECT_FALSE(parked_flags[i]);
-    }
+  EXPECT_TRUE(lot.Empty());
+  for (size_t i = 0; i < num_coroutines; ++i) {
+    EXPECT_FALSE(parked_flags[i]);
+  }
 }
 
 NOLINT_TEST(ParkingLotTest, Empty)
 {
-    ParkingLot lot;
-    bool parked { true };
+  ParkingLot lot;
+  bool parked { true };
 
-    EXPECT_TRUE(lot.Empty());
+  EXPECT_TRUE(lot.Empty());
 
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
-    auto coro = [&lot, &parked]() -> MockCoroutine {
-        co_await lot.Park();
-        parked = false;
-    };
-    coro();
-    EXPECT_FALSE(lot.Empty());
-    EXPECT_TRUE(parked);
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)s
+  auto coro = [&lot, &parked]() -> MockCoroutine {
+    co_await lot.Park();
+    parked = false;
+  };
+  coro();
+  EXPECT_FALSE(lot.Empty());
+  EXPECT_TRUE(parked);
 
-    lot.UnParkOne();
-    EXPECT_TRUE(lot.Empty());
-    EXPECT_FALSE(parked);
+  lot.UnParkOne();
+  EXPECT_TRUE(lot.Empty());
+  EXPECT_FALSE(parked);
 }

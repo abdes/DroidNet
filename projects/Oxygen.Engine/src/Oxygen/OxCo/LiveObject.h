@@ -85,19 +85,21 @@ namespace oxygen::co {
 */
 class LiveObject {
 public:
-    LiveObject() = default;
-    virtual ~LiveObject() = default;
+  LiveObject() = default;
+  virtual ~LiveObject() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(LiveObject);
-    OXYGEN_DEFAULT_MOVABLE(LiveObject);
+  OXYGEN_MAKE_NON_COPYABLE(LiveObject);
+  OXYGEN_DEFAULT_MOVABLE(LiveObject);
 
-    [[nodiscard]] virtual auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> = 0;
+  [[nodiscard]] virtual auto ActivateAsync(co::TaskStarted<> started = {})
+    -> co::Co<>
+    = 0;
 
-    virtual void Run() { }
+  virtual void Run() { }
 
-    virtual void Stop() = 0;
+  virtual void Stop() = 0;
 
-    [[nodiscard]] virtual auto IsRunning() const -> bool = 0;
+  [[nodiscard]] virtual auto IsRunning() const -> bool = 0;
 };
 
 } // namespace oxygen::co

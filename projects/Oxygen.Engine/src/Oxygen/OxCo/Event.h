@@ -52,38 +52,38 @@ namespace oxygen::co {
  */
 class Event final : public detail::ParkingLotImpl<Event> {
 public:
-    Event() = default;
+  Event() = default;
 
-    //! Trigger the event, waking any tasks that are waiting for it to occur.
-    void Trigger()
+  //! Trigger the event, waking any tasks that are waiting for it to occur.
+  void Trigger()
+  {
+    triggered_ = true;
+    UnParkAll();
+  }
+
+  //! Returns true if the event has happened yet.
+  [[nodiscard]] auto Triggered() const noexcept { return triggered_; }
+
+  class Awaiter final : public Parked {
+  public:
+    using Parked::Parked;
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    explicit operator bool() { return this->Object().Triggered(); }
+    [[nodiscard]] auto await_ready() const noexcept
     {
-        triggered_ = true;
-        UnParkAll();
+      return this->Object().Triggered();
     }
+    void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
+    void await_resume() { }
+    // ReSharper restore CppMemberFunctionMayBeStatic
+  };
 
-    //! Returns true if the event has happened yet.
-    [[nodiscard]] auto Triggered() const noexcept { return triggered_; }
-
-    class Awaiter final : public Parked {
-    public:
-        using Parked::Parked;
-        // ReSharper disable CppMemberFunctionMayBeStatic
-        explicit operator bool() { return this->Object().Triggered(); }
-        [[nodiscard]] auto await_ready() const noexcept { return this->Object().Triggered(); }
-        void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
-        void await_resume() { }
-        // ReSharper restore CppMemberFunctionMayBeStatic
-    };
-
-    //! Returns an awaitable which becomes ready when the event is triggered
-    //! and is immediately ready if that has already happened.
-    auto operator co_await()
-    {
-        return Awaiter(*this);
-    }
+  //! Returns an awaitable which becomes ready when the event is triggered
+  //! and is immediately ready if that has already happened.
+  auto operator co_await() { return Awaiter(*this); }
 
 private:
-    bool triggered_ = false;
+  bool triggered_ = false;
 };
 
 static_assert(Awaitable<Event>);

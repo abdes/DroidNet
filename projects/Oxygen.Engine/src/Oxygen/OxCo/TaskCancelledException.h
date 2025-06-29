@@ -12,11 +12,11 @@ namespace oxygen::co {
 
 class TaskCancelledException final : public std::logic_error {
 public:
-    TaskCancelledException()
-        : std::logic_error("invalid co_await on cancelled task")
-    {
-    }
-    using logic_error::logic_error;
+  TaskCancelledException()
+    : std::logic_error("invalid co_await on cancelled task")
+  {
+  }
+  using logic_error::logic_error;
 };
 
 } // namespace oxygen::co

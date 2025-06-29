@@ -50,246 +50,250 @@ namespace oxygen::co {
  queueing and run a task step synchronously.
 */
 class Executor {
-    using Task = std::pair<void (*)(void*) noexcept, void*>;
-    using Tasks = detail::Queue<Task>;
+  using Task = std::pair<void (*)(void*) noexcept, void*>;
+  using Tasks = detail::Queue<Task>;
 
 public:
-    struct Capacity {
-        static constexpr size_t Default = 128;
-        static constexpr size_t Small = 4;
-    };
+  struct Capacity {
+    static constexpr size_t Default = 128;
+    static constexpr size_t Small = 4;
+  };
 
-    explicit Executor(const EventLoopID event_loop_id, const size_t capacity = Capacity::Default)
-        : event_loop_id_(event_loop_id)
-        , buffer_(capacity)
-    {
-    }
+  explicit Executor(
+    const EventLoopID event_loop_id, const size_t capacity = Capacity::Default)
+    : event_loop_id_(event_loop_id)
+    , buffer_(capacity)
+  {
+  }
 
-    template <class EventLoopT>
-    explicit Executor(EventLoopT&& event_loop, size_t capacity = Capacity::Default)
-        : Executor(
-              EventLoopTraits<std::decay_t<EventLoopT>>::EventLoopId(std::forward<EventLoopT>(event_loop)),
-              capacity)
-    {
-    }
+  template <class EventLoopT>
+  explicit Executor(
+    EventLoopT&& event_loop, size_t capacity = Capacity::Default)
+    : Executor(EventLoopTraits<std::decay_t<EventLoopT>>::EventLoopId(
+                 std::forward<EventLoopT>(event_loop)),
+        capacity)
+  {
+  }
 
-    ~Executor()
-    {
-        if (scheduled_ != nullptr) {
-            // We had a call pending from another executor. Based on the
-            // invariant that we can't be destroyed with our own callbacks
-            // scheduled, we must not need that call anymore; the most likely
-            // way to hit this is by destroying an UnsafeNursery inside an async
-            // task, which deals with the pending callbacks using
-            // Executor::drain().
-            scheduled_->buffer_.ForEach([&](Task& task) {
-                if (task.second == this) {
-                    task.first = +[](void*) noexcept { };
-                    task.second = nullptr;
-                }
-            });
+  ~Executor()
+  {
+    if (scheduled_ != nullptr) {
+      // We had a call pending from another executor. Based on the
+      // invariant that we can't be destroyed with our own callbacks
+      // scheduled, we must not need that call anymore; the most likely
+      // way to hit this is by destroying an UnsafeNursery inside an async
+      // task, which deals with the pending callbacks using
+      // Executor::drain().
+      scheduled_->buffer_.ForEach([&](Task& task) {
+        if (task.second == this) {
+          task.first = +[](void*) noexcept { };
+          task.second = nullptr;
         }
-
-        DCHECK_F(buffer_.Empty());
-
-        if (running_ != nullptr) {
-            *running_ = false;
-        }
-        if (Current() == this) {
-            Current() = nullptr;
-        }
+      });
     }
 
-    OXYGEN_MAKE_NON_COPYABLE(Executor)
-    OXYGEN_MAKE_NON_MOVABLE(Executor)
+    DCHECK_F(buffer_.Empty());
 
-    //! Schedules `fn(arg)` to be called on the next executor loop, then runs
-    //! the executor loop unless already running.
-    template <class T>
-    void RunSoon(void (*fn)(T*) noexcept, T* arg) // NOLINT(*-no-recursion)
-    {
-        Schedule(fn, arg);
-        RunSoon();
+    if (running_ != nullptr) {
+      *running_ = false;
     }
-
-    template <class T>
-    void RunSoon(void (*fn)(const T*) noexcept, const T* arg)
-    {
-        Schedule(fn, arg);
-        RunSoon();
+    if (Current() == this) {
+      Current() = nullptr;
     }
+  }
 
-    //! Runs executor loop until it's empty. This function is re-entrant.
-    void Drain() { Drain(*ready_); }
+  OXYGEN_MAKE_NON_COPYABLE(Executor)
+  OXYGEN_MAKE_NON_MOVABLE(Executor)
 
-    //! Arranges `fn(arg)` to be called on the next executor loop, but does
-    //! *not* run the executor loop.
-    /*!
-     The caller should arrange `RunSoon()` to be called at some point in the
-     future, or else the callback will never be called.
+  //! Schedules `fn(arg)` to be called on the next executor loop, then runs
+  //! the executor loop unless already running.
+  template <class T>
+  void RunSoon(void (*fn)(T*) noexcept, T* arg) // NOLINT(*-no-recursion)
+  {
+    Schedule(fn, arg);
+    RunSoon();
+  }
 
-     \note We are losing a bit of type safety here because we are storing
-           function pointers in the queue with `void *` types but still allowing
-           the functions to be defined with real types. In exchange, we're
-           keeping the code very simple. Clang-tidy will complain, but we are
-           converting from `T*` to `void* and calling the function pointer
-           inside `Drain` with `void *`. It works fine as it is and there is no
-           simple alternate way to keep the type information without requiring
-           RTTI.
-    */
-    template <class T>
-    void Schedule(void (*fn)(T*) noexcept, T* arg)
-    {
-        // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict, *-pro-type-reinterpret-cast)
-        ready_->EmplaceBack(reinterpret_cast<void (*)(void*) noexcept>(fn), arg);
+  template <class T> void RunSoon(void (*fn)(const T*) noexcept, const T* arg)
+  {
+    Schedule(fn, arg);
+    RunSoon();
+  }
+
+  //! Runs executor loop until it's empty. This function is re-entrant.
+  void Drain() { Drain(*ready_); }
+
+  //! Arranges `fn(arg)` to be called on the next executor loop, but does
+  //! *not* run the executor loop.
+  /*!
+   The caller should arrange `RunSoon()` to be called at some point in the
+   future, or else the callback will never be called.
+
+   \note We are losing a bit of type safety here because we are storing
+         function pointers in the queue with `void *` types but still allowing
+         the functions to be defined with real types. In exchange, we're
+         keeping the code very simple. Clang-tidy will complain, but we are
+         converting from `T*` to `void* and calling the function pointer
+         inside `Drain` with `void *`. It works fine as it is and there is no
+         simple alternate way to keep the type information without requiring
+         RTTI.
+  */
+  template <class T> void Schedule(void (*fn)(T*) noexcept, T* arg)
+  {
+    // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict,
+    // *-pro-type-reinterpret-cast)
+    ready_->EmplaceBack(reinterpret_cast<void (*)(void*) noexcept>(fn), arg);
+  }
+
+  template <class T> void Schedule(void (*fn)(const T*) noexcept, const T* arg)
+  {
+    // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict,
+    // *-pro-type-reinterpret-cast, *-pro-type-const-cast)
+    ready_->EmplaceBack(
+      reinterpret_cast<void (*)(void*) noexcept>(fn), const_cast<T*>(arg));
+  }
+
+  //! Runs the executor loop.
+  /*!
+   If called from within the loop, does nothing; if called from another
+   executor's loop, schedules this executor's event loop to be run from
+   current executor (therefore not introducing an interruption point).
+
+   \note This will continue running executor until its run queue empties, and
+         only then would return, so I/O checks can be made.
+  */
+  void RunSoon() noexcept // NOLINT(*-no-recursion)
+  {
+    if (running_ != nullptr || scheduled_ != nullptr) {
+      // Do nothing; our callbacks are already slated to run soon
+    } else if (Current() != nullptr
+      && Current()->event_loop_id_ == event_loop_id_) {
+      // Schedule the current executor to run our callbacks
+      scheduled_ = Current();
+      scheduled_->RunSoon(+[](Executor* ex) noexcept { ex->RunOnce(); }, this);
+    } else {
+      // No current executor, or it's for a different event loop:
+      // run our callbacks immediately
+      RunOnce();
     }
+  }
 
-    template <class T>
-    void Schedule(void (*fn)(const T*) noexcept, const T* arg)
-    {
-        // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict, *-pro-type-reinterpret-cast, *-pro-type-const-cast)
-        ready_->EmplaceBack(reinterpret_cast<void (*)(void*) noexcept>(fn), const_cast<T*>(arg));
-    }
+  //! Runs the function, temporarily capturing any tasks scheduled into a
+  //! separate list. Then runs everything in the list.
+  /*!
+   \note Tasks scheduled as a result of executing the capture list go into
+         previously used list.
+  */
+  template <class Fn>
+  void Capture(Fn fn, const size_t capacity = Capacity::Small)
+  {
+    Tasks tmp { capacity };
+    detail::ScopeGuard guard([&]() noexcept { Drain(tmp); });
 
-    //! Runs the executor loop.
-    /*!
-     If called from within the loop, does nothing; if called from another
-     executor's loop, schedules this executor's event loop to be run from
-     current executor (therefore not introducing an interruption point).
+    Tasks* old_ready = ready_;
+    // ReSharper disable once CppDFALocalValueEscapesFunction
+    ready_ = &tmp;
+    detail::ScopeGuard guard2(
+      [&old_ready, this]() noexcept { ready_ = old_ready; });
 
-     \note This will continue running executor until its run queue empties, and
-           only then would return, so I/O checks can be made.
-    */
-    void RunSoon() noexcept // NOLINT(*-no-recursion)
-    {
-        if (running_ != nullptr || scheduled_ != nullptr) {
-            // Do nothing; our callbacks are already slated to run soon
-        } else if (Current() != nullptr && Current()->event_loop_id_ == event_loop_id_) {
-            // Schedule the current executor to run our callbacks
-            scheduled_ = Current();
-            scheduled_->RunSoon(
-                +[](Executor* ex) noexcept { ex->RunOnce(); }, this);
-        } else {
-            // No current executor, or it's for a different event loop:
-            // run our callbacks immediately
-            RunOnce();
-        }
-    }
-
-    //! Runs the function, temporarily capturing any tasks scheduled into a
-    //! separate list. Then runs everything in the list.
-    /*!
-     \note Tasks scheduled as a result of executing the capture list go into
-           previously used list.
-    */
-    template <class Fn>
-    void Capture(Fn fn, const size_t capacity = Capacity::Small)
-    {
-        Tasks tmp { capacity };
-        detail::ScopeGuard guard([&]() noexcept { Drain(tmp); });
-
-        Tasks* old_ready = ready_;
-        // ReSharper disable once CppDFALocalValueEscapesFunction
-        ready_ = &tmp;
-        detail::ScopeGuard guard2([&old_ready, this]() noexcept {
-            ready_ = old_ready;
-        });
-
-        fn();
-    }
+    fn();
+  }
 
 private:
-    void RunOnce() noexcept
-    {
-        scheduled_ = nullptr;
-        if (running_ == nullptr) {
+  void RunOnce() noexcept
+  {
+    scheduled_ = nullptr;
+    if (running_ == nullptr) {
 #if !defined(NDEBUG)
-            LOG_SCOPE_F(2, "Executor running");
-            DLOG_F(5, "Event loop ID: {}", fmt::ptr(event_loop_id_.Get()));
+      LOG_SCOPE_F(2, "Executor running");
+      DLOG_F(5, "Event loop ID: {}", fmt::ptr(event_loop_id_.Get()));
 #endif
-            Drain();
-        }
+      Drain();
     }
+  }
 
-    void Drain(Tasks& tasks) noexcept
-    {
-        Executor* prev = Current();
-        Current() = this;
-        detail::ScopeGuard guard([&]() noexcept { Current() = prev; });
+  void Drain(Tasks& tasks) noexcept
+  {
+    Executor* prev = Current();
+    Current() = this;
+    detail::ScopeGuard guard([&]() noexcept { Current() = prev; });
 
-        bool b = true;
-        if (running_ == nullptr) {
-            // `running_` will be reset before this method returns, via the scope
-            // guard.
-            // ReSharper disable once CppDFALocalValueEscapesFunction
-            running_ = &b;
-        }
-        const bool* running = running_;
-        detail::ScopeGuard guard2([&]() noexcept {
-            if (*running && running_ == &b) {
-                running_ = nullptr;
-            }
-        });
-
-        while (*running && !tasks.Empty()) {
-            auto [fn, arg] = tasks.Front();
-            tasks.PopFront();
-            fn(arg);
-        }
+    bool b = true;
+    if (running_ == nullptr) {
+      // `running_` will be reset before this method returns, via the scope
+      // guard.
+      // ReSharper disable once CppDFALocalValueEscapesFunction
+      running_ = &b;
     }
+    const bool* running = running_;
+    detail::ScopeGuard guard2([&]() noexcept {
+      if (*running && running_ == &b) {
+        running_ = nullptr;
+      }
+    });
 
-    static auto Current() noexcept -> Executor*&
-    {
-        // NB: Executor::Current() is the executor that is currently running
-        // (i.e., is inside a call to Drain()), and will be nullptr if all tasks
-        // are blocked waiting for something.
-        thread_local Executor* executor = nullptr;
-        return executor;
+    while (*running && !tasks.Empty()) {
+      auto [fn, arg] = tasks.Front();
+      tasks.PopFront();
+      fn(arg);
     }
+  }
 
-    EventLoopID event_loop_id_;
-    Tasks buffer_;
+  static auto Current() noexcept -> Executor*&
+  {
+    // NB: Executor::Current() is the executor that is currently running
+    // (i.e., is inside a call to Drain()), and will be nullptr if all tasks
+    // are blocked waiting for something.
+    thread_local Executor* executor = nullptr;
+    return executor;
+  }
 
-    //! Currently used list of ready tasks. Normally points to `buffer_`,
-    //! but can be temporarily replaced from `Capture()`.
-    Tasks* ready_ = &buffer_;
+  EventLoopID event_loop_id_;
+  Tasks buffer_;
 
-    bool* running_ { nullptr };
+  //! Currently used list of ready tasks. Normally points to `buffer_`,
+  //! but can be temporarily replaced from `Capture()`.
+  Tasks* ready_ = &buffer_;
 
-    //! Stores the pointer to an outer executor on which we've scheduled our
-    //! runOnce() to run soon, or nullptr if not scheduled.
-    Executor* scheduled_ = nullptr;
+  bool* running_ { nullptr };
+
+  //! Stores the pointer to an outer executor on which we've scheduled our
+  //! runOnce() to run soon, or nullptr if not scheduled.
+  Executor* scheduled_ = nullptr;
 };
 
 namespace detail {
-    class GetExecutor {
-        Executor* executor_ = nullptr;
+  class GetExecutor {
+    Executor* executor_ = nullptr;
 
-    public:
-        //! @{
-        //! Implementation of the awaiter interface.
-        // ReSharper disable CppMemberFunctionMayBeStatic
-        // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+  public:
+    //! @{
+    //! Implementation of the awaiter interface.
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
 
-        void await_set_executor(Executor* executor) noexcept
-        {
-            executor_ = executor;
-        }
-        [[nodiscard]] auto await_ready() const noexcept -> bool { return executor_ != nullptr; }
-        auto await_suspend(const Handle h) -> Handle { return h; }
-        [[nodiscard]] auto await_resume() const -> Executor* { return executor_; }
+    void await_set_executor(Executor* executor) noexcept
+    {
+      executor_ = executor;
+    }
+    [[nodiscard]] auto await_ready() const noexcept -> bool
+    {
+      return executor_ != nullptr;
+    }
+    auto await_suspend(const Handle h) -> Handle { return h; }
+    [[nodiscard]] auto await_resume() const -> Executor* { return executor_; }
 
-        // ReSharper disable CppMemberFunctionMayBeStatic
-        // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
-        //! @}
-    };
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    //! @}
+  };
 } // namespace detail
 
 /// Returns an awaitable that you can use in an async context to get the
 /// currently-running executor.
 inline auto GetExecutor() -> Awaitable<Executor*> auto
 {
-    return detail::GetExecutor {};
+  return detail::GetExecutor {};
 }
 
 } // namespace oxygen::co

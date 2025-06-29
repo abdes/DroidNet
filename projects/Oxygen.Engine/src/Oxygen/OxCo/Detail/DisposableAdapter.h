@@ -13,21 +13,20 @@ namespace oxygen::co::detail {
 //! A wrapper around an awaiter declaring that its return value is safe to
 //! dispose of upon cancellation. May be used on third party awaitables which
 //! don't know about the async cancellation mechanism.
-template <class T>
-class DisposableAdapter : public CancellableAdapterBase<T> {
+template <class T> class DisposableAdapter : public CancellableAdapterBase<T> {
 public:
-    using CancellableAdapterBase<T>::CancellableAdapterBase;
+  using CancellableAdapterBase<T>::CancellableAdapterBase;
 
-    bool await_early_cancel() noexcept
-    {
-        return AwaitEarlyCancel(this->awaiter_);
-    }
-    bool await_cancel(Handle h) noexcept
-    {
-        return AwaitCancel(this->awaiter_, h);
-    }
-    // ReSharper disable once CppMemberFunctionMayBeStatic
-    auto await_must_resume() const noexcept { return std::false_type {}; }
+  bool await_early_cancel() noexcept
+  {
+    return AwaitEarlyCancel(this->awaiter_);
+  }
+  bool await_cancel(Handle h) noexcept
+  {
+    return AwaitCancel(this->awaiter_, h);
+  }
+  // ReSharper disable once CppMemberFunctionMayBeStatic
+  auto await_must_resume() const noexcept { return std::false_type {}; }
 };
 
 } // namespace oxygen::co::detail

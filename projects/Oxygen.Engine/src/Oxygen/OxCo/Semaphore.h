@@ -21,30 +21,29 @@ namespace oxygen::co {
 /// wraps `acquire()` and `release()`.
 class Semaphore : public detail::ParkingLotImpl<Semaphore> {
 public:
-    template <class RetVal>
-    class Awaiter;
-    class LockGuard;
+  template <class RetVal> class Awaiter;
+  class LockGuard;
 
-    explicit Semaphore(const size_t initial = 1)
-        : value_(initial)
-    {
-    }
+  explicit Semaphore(const size_t initial = 1)
+    : value_(initial)
+  {
+  }
 
-    [[nodiscard]] auto Value() const noexcept -> size_t { return value_; }
+  [[nodiscard]] auto Value() const noexcept -> size_t { return value_; }
 
-    /// An awaitable that decrements the semaphore, suspending
-    /// the caller if it is currently zero.
-    [[nodiscard]] auto Acquire() -> co::Awaitable<void> auto;
+  /// An awaitable that decrements the semaphore, suspending
+  /// the caller if it is currently zero.
+  [[nodiscard]] auto Acquire() -> co::Awaitable<void> auto;
 
-    /// Increments the semaphore, waking one suspended task (if any).
-    void Release();
+  /// Increments the semaphore, waking one suspended task (if any).
+  void Release();
 
-    /// RAII-style decrement, returning guard object which
-    /// will increment the semaphore back upon going out of scope
-    [[nodiscard]] auto Lock() -> co::Awaitable<LockGuard> auto;
+  /// RAII-style decrement, returning guard object which
+  /// will increment the semaphore back upon going out of scope
+  [[nodiscard]] auto Lock() -> co::Awaitable<LockGuard> auto;
 
 private:
-    size_t value_;
+  size_t value_;
 };
 
 //
@@ -53,77 +52,79 @@ private:
 
 class [[nodiscard]] Semaphore::LockGuard {
 public:
-    LockGuard() = default;
+  LockGuard() = default;
 
-    ~LockGuard()
-    {
-        if (sem_ != nullptr) {
-            sem_->Release();
-        }
+  ~LockGuard()
+  {
+    if (sem_ != nullptr) {
+      sem_->Release();
     }
+  }
 
-    LockGuard(LockGuard&& lk) noexcept
-        : sem_(std::exchange(lk.sem_, nullptr))
-    {
-    }
-    auto operator=(LockGuard&& lk) noexcept -> LockGuard& = delete;
+  LockGuard(LockGuard&& lk) noexcept
+    : sem_(std::exchange(lk.sem_, nullptr))
+  {
+  }
+  auto operator=(LockGuard&& lk) noexcept -> LockGuard& = delete;
 
-    LockGuard(const LockGuard& lk) = delete;
-    auto operator=(LockGuard lk) noexcept -> LockGuard&
-    {
-        std::swap(sem_, lk.sem_);
-        return *this;
-    }
+  LockGuard(const LockGuard& lk) = delete;
+  auto operator=(LockGuard lk) noexcept -> LockGuard&
+  {
+    std::swap(sem_, lk.sem_);
+    return *this;
+  }
 
-    void Release()
-    {
-        if (sem_ != nullptr) {
-            sem_->Release();
-            sem_ = nullptr;
-        }
+  void Release()
+  {
+    if (sem_ != nullptr) {
+      sem_->Release();
+      sem_ = nullptr;
     }
+  }
 
 private:
-    explicit LockGuard(Semaphore& sem)
-        : sem_(&sem)
-    {
-    }
-    friend class Awaiter<LockGuard>;
+  explicit LockGuard(Semaphore& sem)
+    : sem_(&sem)
+  {
+  }
+  friend class Awaiter<LockGuard>;
 
-    Semaphore* sem_ = nullptr;
+  Semaphore* sem_ = nullptr;
 };
 
-template <class RetVal>
-class Semaphore::Awaiter final : public Parked {
+template <class RetVal> class Semaphore::Awaiter final : public Parked {
 public:
-    using Parked::Parked;
-    [[nodiscard]] auto await_ready() const noexcept -> bool { return this->Object().Value() > 0; }
+  using Parked::Parked;
+  [[nodiscard]] auto await_ready() const noexcept -> bool
+  {
+    return this->Object().Value() > 0;
+  }
 
-    void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
+  void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
 
-    auto await_resume()
-    {
-        --this->Object().value_;
-        if constexpr (!std::is_same_v<RetVal, void>) {
-            return RetVal(this->Object());
-        }
+  auto await_resume()
+  {
+    --this->Object().value_;
+    if constexpr (!std::is_same_v<RetVal, void>) {
+      return RetVal(this->Object());
     }
+  }
 };
 
 inline auto Semaphore::Acquire() -> co::Awaitable<void> auto
 {
-    return Awaiter<void>(*this);
+  return Awaiter<void>(*this);
 }
 
 inline auto Semaphore::Lock() -> co::Awaitable<LockGuard> auto
 {
-    return Awaiter<LockGuard>(*this);
+  return Awaiter<LockGuard>(*this);
 }
 
 inline void Semaphore::Release()
 {
-    ++value_;
-    UnParkOne();
+  ++value_;
+  UnParkOne();
 }
 
 } // namespace oxygen::co

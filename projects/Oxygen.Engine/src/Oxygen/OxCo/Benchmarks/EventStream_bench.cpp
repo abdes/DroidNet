@@ -44,240 +44,247 @@ constexpr size_t kIterations { 10 };
 
 auto MakeEvent() -> EventType
 {
-    return std::string(40, 'A'); // Generate a string with 256 'A' characters
+  return std::string(40, 'A'); // Generate a string with 256 'A' characters
 }
 
 class SharedEventSource {
 public:
-    SharedEventSource()
-        : repeatable_shared_([this]() -> Co<EventType> { co_return co_await PumpEvent(); })
-    {
-    }
+  SharedEventSource()
+    : repeatable_shared_(
+        [this]() -> Co<EventType> { co_return co_await PumpEvent(); })
+  {
+  }
 
-    void PollOne() { poll_.UnParkAll(); }
+  void PollOne() { poll_.UnParkAll(); }
 
-    auto NextEvent()
-    {
-        return repeatable_shared_.Next();
-    }
+  auto NextEvent() { return repeatable_shared_.Next(); }
 
-    auto Lock() { return repeatable_shared_.Lock(); }
+  auto Lock() { return repeatable_shared_.Lock(); }
 
 private:
-    auto PumpEvent() -> Co<EventType>
-    {
-        co_await poll_.Park();
-        auto event = MakeEvent();
-        co_return event;
-    }
+  auto PumpEvent() -> Co<EventType>
+  {
+    co_await poll_.Park();
+    auto event = MakeEvent();
+    co_return event;
+  }
 
-    oxygen::co::RepeatableShared<EventType> repeatable_shared_;
-    ParkingLot poll_;
+  oxygen::co::RepeatableShared<EventType> repeatable_shared_;
+  ParkingLot poll_;
 };
 
 class MultiChannelEventSource {
 public:
-    void PollOne() { poll_.UnParkAll(); }
+  void PollOne() { poll_.UnParkAll(); }
 
-    std::array<Channel<EventType>, 8> channels_;
+  std::array<Channel<EventType>, 8> channels_;
 
-    auto PumpEvent() -> Co<>
-    {
-        co_await poll_.Park();
-        auto event = MakeEvent();
+  auto PumpEvent() -> Co<>
+  {
+    co_await poll_.Park();
+    auto event = MakeEvent();
 
-        // Write the pumped event to all channels
-        for (auto& chan : channels_) {
-            co_await chan.Send(event);
-        }
+    // Write the pumped event to all channels
+    for (auto& chan : channels_) {
+      co_await chan.Send(event);
     }
+  }
 
 private:
-    ParkingLot poll_ {};
+  ParkingLot poll_ {};
 };
 
 class BroadcastChannelEventSource {
 public:
-    BroadcastChannelEventSource()
-        : channel_()
-    {
-    }
+  BroadcastChannelEventSource()
+    : channel_()
+  {
+  }
 
-    void PollOne() { poll_.UnParkAll(); }
+  void PollOne() { poll_.UnParkAll(); }
 
-    BroadcastChannel<EventType> channel_;
+  BroadcastChannel<EventType> channel_;
 
-    auto PumpEvent() -> Co<>
-    {
-        co_await poll_.Park();
-        // Write the pumped event to all channels
-        auto& w = channel_.ForWrite();
-        auto event = MakeEvent();
-        co_await w.Send(event);
-    }
+  auto PumpEvent() -> Co<>
+  {
+    co_await poll_.Park();
+    // Write the pumped event to all channels
+    auto& w = channel_.ForWrite();
+    auto event = MakeEvent();
+    co_await w.Send(event);
+  }
 
 private:
-    ParkingLot poll_ {};
+  ParkingLot poll_ {};
 };
 
 void DoSetup(const benchmark::State& /*state*/)
 {
-    loguru::g_preamble_date = false;
-    loguru::g_preamble_file = true;
-    loguru::g_preamble_verbose = false;
-    loguru::g_preamble_time = false;
-    loguru::g_preamble_uptime = false;
-    loguru::g_preamble_thread = false;
-    loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_preamble_date = false;
+  loguru::g_preamble_file = true;
+  loguru::g_preamble_verbose = false;
+  loguru::g_preamble_time = false;
+  loguru::g_preamble_uptime = false;
+  loguru::g_preamble_thread = false;
+  loguru::g_preamble_header = false;
+  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
 }
 
 void BM_SharedEventSource(benchmark::State& state)
 {
-    TestEventLoop el;
-    SharedEventSource sh_pump;
-    size_t events_processed { 0UL };
-    bool done { false };
+  TestEventLoop el;
+  SharedEventSource sh_pump;
+  size_t events_processed { 0UL };
+  bool done { false };
 
-    for (auto _ : state) {
-        state.PauseTiming();
-        events_processed = 0;
-        done = false;
-        state.ResumeTiming();
+  for (auto _ : state) {
+    state.PauseTiming();
+    events_processed = 0;
+    done = false;
+    state.ResumeTiming();
 
-        Run(el, [&]() -> Co<> {
-            OXCO_WITH_NURSERY(nursery)
-            {
-                nursery.Start([&]() -> Co<> {
-                    while (!done) {
-                        sh_pump.PollOne();
-                        co_await kYield;
-                    }
-                });
-
-                for (int i = 0; i < 8; ++i) {
-                    nursery.Start([&, is_counter = i == 0]() -> Co<> {
-                        co_await kYield;
-                        while (!done) {
-                            auto& event = co_await sh_pump.NextEvent();
-                            auto lock = co_await sh_pump.Lock();
-                            if (is_counter) {
-                                ++events_processed;
-                                done = events_processed == kIterations;
-                            }
-                            benchmark::DoNotOptimize(event);
-                        }
-                    });
-                }
-                co_return kJoin;
-            };
+    Run(el, [&]() -> Co<> {
+      OXCO_WITH_NURSERY(nursery)
+      {
+        nursery.Start([&]() -> Co<> {
+          while (!done) {
+            sh_pump.PollOne();
+            co_await kYield;
+          }
         });
-    }
-    state.SetItemsProcessed(state.iterations() * kIterations);
+
+        for (int i = 0; i < 8; ++i) {
+          nursery.Start([&, is_counter = i == 0]() -> Co<> {
+            co_await kYield;
+            while (!done) {
+              auto& event = co_await sh_pump.NextEvent();
+              auto lock = co_await sh_pump.Lock();
+              if (is_counter) {
+                ++events_processed;
+                done = events_processed == kIterations;
+              }
+              benchmark::DoNotOptimize(event);
+            }
+          });
+        }
+        co_return kJoin;
+      };
+    });
+  }
+  state.SetItemsProcessed(state.iterations() * kIterations);
 }
-BENCHMARK(BM_SharedEventSource)->Setup(DoSetup)->Repetitions(5)->ReportAggregatesOnly(true);
+BENCHMARK(BM_SharedEventSource)
+  ->Setup(DoSetup)
+  ->Repetitions(5)
+  ->ReportAggregatesOnly(true);
 
 void BM_MultiChannel(benchmark::State& state)
 {
-    TestEventLoop el;
-    MultiChannelEventSource mc_pump;
-    size_t events_processed { 0UL };
-    bool done { false };
+  TestEventLoop el;
+  MultiChannelEventSource mc_pump;
+  size_t events_processed { 0UL };
+  bool done { false };
 
-    for (auto _ : state) {
-        state.PauseTiming();
-        events_processed = 0;
-        done = false;
-        state.ResumeTiming();
+  for (auto _ : state) {
+    state.PauseTiming();
+    events_processed = 0;
+    done = false;
+    state.ResumeTiming();
 
-        Run(el, [&]() -> Co<> {
-            OXCO_WITH_NURSERY(nursery)
-            {
-                nursery.Start([&]() -> Co<> {
-                    while (!done) {
-                        mc_pump.PollOne();
-                        co_await kYield;
-                    }
-                });
-
-                nursery.Start([&]() -> Co<> {
-                    while (!done) {
-                        co_await mc_pump.PumpEvent();
-                    }
-                });
-
-                // Reader tasks
-                for (size_t i = 0; i < mc_pump.channels_.size(); ++i) {
-                    nursery.Start([&, i, is_counter = i == 0]() -> Co<> {
-                        while (!done) {
-                            auto event = co_await mc_pump.channels_[i].Receive();
-                            if (is_counter) {
-                                ++events_processed;
-                                done = events_processed == kIterations;
-                            }
-                            benchmark::DoNotOptimize(event);
-                        }
-                    });
-                }
-                co_return kJoin;
-            };
+    Run(el, [&]() -> Co<> {
+      OXCO_WITH_NURSERY(nursery)
+      {
+        nursery.Start([&]() -> Co<> {
+          while (!done) {
+            mc_pump.PollOne();
+            co_await kYield;
+          }
         });
-    }
-    state.SetItemsProcessed(state.iterations() * kIterations);
+
+        nursery.Start([&]() -> Co<> {
+          while (!done) {
+            co_await mc_pump.PumpEvent();
+          }
+        });
+
+        // Reader tasks
+        for (size_t i = 0; i < mc_pump.channels_.size(); ++i) {
+          nursery.Start([&, i, is_counter = i == 0]() -> Co<> {
+            while (!done) {
+              auto event = co_await mc_pump.channels_[i].Receive();
+              if (is_counter) {
+                ++events_processed;
+                done = events_processed == kIterations;
+              }
+              benchmark::DoNotOptimize(event);
+            }
+          });
+        }
+        co_return kJoin;
+      };
+    });
+  }
+  state.SetItemsProcessed(state.iterations() * kIterations);
 }
-BENCHMARK(BM_MultiChannel)->Setup(DoSetup)->Repetitions(5)->ReportAggregatesOnly(true);
+BENCHMARK(BM_MultiChannel)
+  ->Setup(DoSetup)
+  ->Repetitions(5)
+  ->ReportAggregatesOnly(true);
 
 void BM_BroadcastChannel(benchmark::State& state)
 {
-    TestEventLoop el;
-    BroadcastChannelEventSource bc_pump;
-    size_t events_processed { 0UL };
-    bool done { false };
+  TestEventLoop el;
+  BroadcastChannelEventSource bc_pump;
+  size_t events_processed { 0UL };
+  bool done { false };
 
-    for (auto _ : state) {
-        state.PauseTiming();
-        events_processed = 0;
-        done = false;
-        state.ResumeTiming();
+  for (auto _ : state) {
+    state.PauseTiming();
+    events_processed = 0;
+    done = false;
+    state.ResumeTiming();
 
-        Run(el, [&]() -> Co<> {
-            OXCO_WITH_NURSERY(nursery)
-            {
-                // Poller and pump tasks
-                nursery.Start([&]() -> Co<> {
-                    while (!done) {
-                        bc_pump.PollOne();
-                        co_await kYield;
-                    }
-                });
-
-                nursery.Start([&]() -> Co<> {
-                    while (!done) {
-                        co_await bc_pump.PumpEvent();
-                    }
-                });
-
-                // Reader tasks
-                for (int i = 0; i < 8; ++i) {
-                    nursery.Start([&, is_counter = i == 0]() -> Co<> {
-                        auto r = bc_pump.channel_.ForRead();
-                        while (!done) {
-                            auto event = co_await r.Receive();
-                            if (is_counter) {
-                                ++events_processed;
-                                done = events_processed == kIterations;
-                            }
-                            benchmark::DoNotOptimize(event);
-                        }
-                    });
-                }
-                co_return kJoin;
-            };
+    Run(el, [&]() -> Co<> {
+      OXCO_WITH_NURSERY(nursery)
+      {
+        // Poller and pump tasks
+        nursery.Start([&]() -> Co<> {
+          while (!done) {
+            bc_pump.PollOne();
+            co_await kYield;
+          }
         });
-    }
-    state.SetItemsProcessed(state.iterations() * kIterations);
+
+        nursery.Start([&]() -> Co<> {
+          while (!done) {
+            co_await bc_pump.PumpEvent();
+          }
+        });
+
+        // Reader tasks
+        for (int i = 0; i < 8; ++i) {
+          nursery.Start([&, is_counter = i == 0]() -> Co<> {
+            auto r = bc_pump.channel_.ForRead();
+            while (!done) {
+              auto event = co_await r.Receive();
+              if (is_counter) {
+                ++events_processed;
+                done = events_processed == kIterations;
+              }
+              benchmark::DoNotOptimize(event);
+            }
+          });
+        }
+        co_return kJoin;
+      };
+    });
+  }
+  state.SetItemsProcessed(state.iterations() * kIterations);
 }
-BENCHMARK(BM_BroadcastChannel)->Setup(DoSetup)->Repetitions(5)->ReportAggregatesOnly(true);
+BENCHMARK(BM_BroadcastChannel)
+  ->Setup(DoSetup)
+  ->Repetitions(5)
+  ->ReportAggregatesOnly(true);
 
 } // namespace
 
