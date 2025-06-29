@@ -49,6 +49,12 @@ public:
   OXYGEN_BASE_API void clear();
   [[nodiscard]] OXYGEN_BASE_API auto eof() const noexcept -> bool;
 
+  [[nodiscard]] OXYGEN_BASE_API auto backward(size_t offset) noexcept
+    -> Result<void>;
+  [[nodiscard]] OXYGEN_BASE_API auto forward(size_t offset) noexcept
+    -> Result<void>;
+  [[nodiscard]] OXYGEN_BASE_API auto seek_end() noexcept -> Result<void>;
+
 private:
   std::vector<char> internal_buffer_;
   std::span<char> external_buffer_;

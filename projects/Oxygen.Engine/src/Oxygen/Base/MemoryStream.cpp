@@ -130,4 +130,30 @@ auto MemoryStream::eof() const noexcept -> bool
   return pos_ >= buffer.size();
 }
 
+auto MemoryStream::backward(size_t offset) noexcept -> Result<void>
+{
+  if (offset > pos_) {
+    return std::make_error_code(std::errc::io_error);
+  }
+  pos_ -= offset;
+  return {};
+}
+
+auto MemoryStream::forward(size_t offset) noexcept -> Result<void>
+{
+  const auto buffer = get_buffer();
+  if (pos_ + offset > buffer.size()) {
+    return std::make_error_code(std::errc::io_error);
+  }
+  pos_ += offset;
+  return {};
+}
+
+auto MemoryStream::seek_end() noexcept -> Result<void>
+{
+  const auto buffer = get_buffer();
+  pos_ = buffer.size();
+  return {};
+}
+
 } // namespace oxygen::serio

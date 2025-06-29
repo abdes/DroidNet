@@ -62,6 +62,9 @@ public:
   */
   [[nodiscard]] auto seek(size_t pos) const noexcept -> Result<void>;
   [[nodiscard]] auto size() const noexcept -> Result<size_t>;
+  [[nodiscard]] auto backward(size_t offset) const noexcept -> Result<void>;
+  [[nodiscard]] auto forward(size_t offset) const noexcept -> Result<void>;
+  [[nodiscard]] auto seek_end() const noexcept -> Result<void>;
 
 private:
   std::unique_ptr<StreamType> stream_;
@@ -227,6 +230,53 @@ auto FileStream<StreamType>::size() const noexcept -> Result<size_t>
     }
 
     return static_cast<size_t>(size);
+  } catch (const std::exception& /*ex*/) {
+    return std::make_error_code(std::errc::io_error);
+  }
+}
+
+template <BackingStream StreamType>
+auto FileStream<StreamType>::backward(size_t offset) const noexcept
+  -> Result<void>
+{
+  try {
+    stream_->seekg(-static_cast<std::streamoff>(offset), std::ios::cur);
+    if (stream_->fail()) {
+      stream_->clear();
+      return std::make_error_code(std::errc::io_error);
+    }
+    return {};
+  } catch (const std::exception& /*ex*/) {
+    return std::make_error_code(std::errc::io_error);
+  }
+}
+
+template <BackingStream StreamType>
+auto FileStream<StreamType>::forward(size_t offset) const noexcept
+  -> Result<void>
+{
+  try {
+    stream_->seekg(static_cast<std::streamoff>(offset), std::ios::cur);
+    if (stream_->fail()) {
+      stream_->clear();
+      return std::make_error_code(std::errc::io_error);
+    }
+    return {};
+  } catch (const std::exception& /*ex*/) {
+    return std::make_error_code(std::errc::io_error);
+  }
+}
+
+template <BackingStream StreamType>
+auto FileStream<StreamType>::seek_end() const noexcept -> Result<void>
+{
+  try {
+    stream_->seekg(0, std::ios::end);
+    if (stream_->fail()) {
+      stream_->clear();
+      return std::make_error_code(std::errc::io_error);
+    }
+    return {};
   } catch (const std::exception& /*ex*/) {
     return std::make_error_code(std::errc::io_error);
   }

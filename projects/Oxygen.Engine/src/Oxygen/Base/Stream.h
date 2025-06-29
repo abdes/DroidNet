@@ -20,6 +20,9 @@ concept Stream = requires(T t, char* data, size_t size) {
   { t.flush() } -> std::same_as<Result<void>>;
   { t.position() } -> std::same_as<Result<size_t>>;
   { t.seek(size) } -> std::same_as<Result<void>>;
+  { t.backward(size) } -> std::same_as<Result<void>>;
+  { t.forward(size) } -> std::same_as<Result<void>>;
+  { t.seek_end() } -> std::same_as<Result<void>>;
   { t.size() } -> std::same_as<Result<size_t>>;
 };
 
