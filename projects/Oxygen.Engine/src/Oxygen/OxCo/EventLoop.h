@@ -21,19 +21,19 @@ namespace oxygen::co {
  multiple objects.
 */
 class EventLoopID {
-    const void* id_;
+  const void* id_;
 
 public:
-    explicit constexpr EventLoopID(const void* id)
-        : id_(id)
-    {
-    }
+  explicit constexpr EventLoopID(const void* id)
+    : id_(id)
+  {
+  }
 
-    explicit constexpr operator const void*() const { return id_; }
-    [[nodiscard]] auto Get() const noexcept { return id_; }
+  explicit constexpr operator const void*() const { return id_; }
+  [[nodiscard]] auto Get() const noexcept { return id_; }
 
-    constexpr auto operator==(const EventLoopID& other) const -> bool = default;
-    constexpr auto operator<=>(const EventLoopID& other) const = default;
+  constexpr auto operator==(const EventLoopID& other) const -> bool = default;
+  constexpr auto operator<=>(const EventLoopID& other) const = default;
 };
 
 //! `EventLoop` traits for a type, which need to be specialized to adapt a
@@ -71,34 +71,62 @@ public:
  };
  \endcode
  */
-template <class T, class = void>
-struct EventLoopTraits {
-    // Enforce that the traits are specialized for a specific event loop type.
-    // Prevents instantiation of the generic version.
-    static_assert(!std::is_same_v<T, T>,
-        "you must specialize EventLoopTraits for a specific event loop class");
+template <class T, class = void> struct EventLoopTraits {
+  // Enforce that the traits are specialized for a specific event loop type.
+  // Prevents instantiation of the generic version.
+  static_assert(!std::is_same_v<T, T>,
+    "you must specialize EventLoopTraits for a specific event loop class");
 
-    // ReSharper disable CppFunctionIsNotImplemented
+  // ReSharper disable CppFunctionIsNotImplemented
 
-    //! Returns a unique identifier for the event loop. In general, you can use
-    //! the address of the event loop object as its ID.
-    static auto EventLoopId(T&) -> EventLoopID;
+  //! Returns a unique identifier for the event loop. In general, you can use
+  //! the address of the event loop object as its ID.
+  static auto EventLoopId(T&) -> EventLoopID;
 
-    //! Runs the event loop.
-    static void Run(T&);
+  //! Runs the event loop.
+  static void Run(T&);
 
-    //! Tells the event loop to stop, which will cause `Run()` to return shortly
-    //! thereafter.
-    static void Stop(T&);
+  //! Tells the event loop to stop, which will cause `Run()` to return shortly
+  //! thereafter.
+  static void Stop(T&);
 
-    //! Tests whether we're inside this event loop.
-    /*! Only used for preventing nested runs using the same event loop;
-     if no suitable implementation is available, may always return false,
-     or leave undefined for the same effect.
-    */
-    static auto IsRunning(T&) noexcept -> bool;
+  //! Tests whether we're inside this event loop.
+  /*! Only used for preventing nested runs using the same event loop;
+   if no suitable implementation is available, may always return false,
+   or leave undefined for the same effect.
+  */
+  static auto IsRunning(T&) noexcept -> bool;
 
-    // ReSharper restore CppFunctionIsNotImplemented
+  // ReSharper restore CppFunctionIsNotImplemented
+};
+
+//! Specialize this class for an event loop type to allow ThreadPool
+//! to be constructed around this event loop.
+template <class EventLoopT> class ThreadNotification {
+public:
+  /*!
+   Prepare to be able to invoke `fn(arg)` on the current thread, which is
+   running the given event loop. The same arguments are passed to this
+   constructor and to `post()` to allow for a variety of notification
+   architectures.
+  */
+  ThreadNotification(EventLoopT&, void (*fn)(void*), void* arg)
+  {
+    static_assert(!std::is_same_v<EventLoopT, EventLoopT>,
+      "Specialize this class for your event loop type "
+      "to allow constructing ThreadPool around the loop");
+  }
+
+  //! Called from worker threads to wake up the main thread.
+  /*!
+   Arrange for `fn(arg)` to be called on the thread that created the
+   ThreadNotification object, which was running `eventLoop` when it was created.
+   Multiple `post()` calls may be coalesced into a single call to `fn`.
+
+   The `eventLoop`, `fn` and `args` are guaranteed match those passed to the
+   object constructor (to facilitate stateless implementations).
+  */
+  void Post(EventLoopT& eventLoop, void (*fn)(void*), void* arg) noexcept;
 };
 
 } // namespace oxygen::co
