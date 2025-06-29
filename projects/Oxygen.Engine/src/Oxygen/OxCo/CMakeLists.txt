@@ -52,6 +52,7 @@ set(
   "RepeatableShared.h"
   "Semaphore.h"
   "TaskCancelledException.h"
+  "ThreadPool.h"
   "Value.h"
   "Yield.h"
   "Detail/SanitizedAwaiter.h"
