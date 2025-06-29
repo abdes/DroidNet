@@ -27,119 +27,120 @@ namespace {
 
 class MuxRangeTest : public OxCoTestFixture {
 protected:
-    auto MakeTask(const int x) const -> Co<int>
-    {
-        co_await el_->Sleep(milliseconds(x));
-        co_return x * 100;
-    }
+  auto MakeTask(const int x) const -> Co<int>
+  {
+    co_await el_->Sleep(milliseconds(x));
+    co_return x * 100;
+  }
 };
 
 NOLINT_TEST_F(MuxRangeTest, AnyOf)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        std::vector<Co<int>> v {};
-        v.push_back(MakeTask(3));
-        v.push_back(MakeTask(2));
-        v.push_back(MakeTask(5));
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    std::vector<Co<int>> v {};
+    v.push_back(MakeTask(3));
+    v.push_back(MakeTask(2));
+    v.push_back(MakeTask(5));
 
-        const auto ret = co_await AnyOf(std::move(v));
-        EXPECT_EQ(el_->Now(), 2ms);
-        EXPECT_EQ(ret.size(), 3);
-        EXPECT_FALSE(ret[0]);
-        EXPECT_EQ(*ret[1], 200);
-        EXPECT_FALSE(ret[2]);
-    });
+    const auto ret = co_await AnyOf(std::move(v));
+    EXPECT_EQ(el_->Now(), 2ms);
+    EXPECT_EQ(ret.size(), 3);
+    EXPECT_FALSE(ret[0]);
+    EXPECT_EQ(*ret[1], 200);
+    EXPECT_FALSE(ret[2]);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, AnyOfImmediateFront)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        auto imm = []() -> Co<int> { co_return 0; };
-        std::vector<Co<int>> v {};
-        v.push_back(imm());
-        v.push_back(MakeTask(2));
-        co_await AnyOf(v);
-    });
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    auto imm = []() -> Co<int> { co_return 0; };
+    std::vector<Co<int>> v {};
+    v.push_back(imm());
+    v.push_back(MakeTask(2));
+    co_await AnyOf(v);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, AnyOfImmediateBack)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        auto imm = []() -> Co<int> { co_return 0; };
-        std::vector<Co<int>> v {};
-        v.push_back(MakeTask(2));
-        v.push_back(imm());
-        co_await AnyOf(v);
-    });
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    auto imm = []() -> Co<int> { co_return 0; };
+    std::vector<Co<int>> v {};
+    v.push_back(MakeTask(2));
+    v.push_back(imm());
+    co_await AnyOf(v);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, AnyOfEmpty)
 {
-    oxygen::co::Run(*el_, []() -> Co<> {
-        std::vector<Co<int>> v {};
-        co_await AnyOf(v);
-    });
+  oxygen::co::Run(*el_, []() -> Co<> {
+    std::vector<Co<int>> v {};
+    co_await AnyOf(v);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, AllOfEmpty)
 {
-    oxygen::co::Run(*el_, []() -> Co<> {
-        std::vector<Co<int>> v {};
-        co_await AllOf(v);
-    });
+  oxygen::co::Run(*el_, []() -> Co<> {
+    std::vector<Co<int>> v {};
+    co_await AllOf(v);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, AllOf)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        std::vector<Co<int>> v {};
-        v.push_back(MakeTask(3));
-        v.push_back(MakeTask(2));
-        v.push_back(MakeTask(5));
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    std::vector<Co<int>> v {};
+    v.push_back(MakeTask(3));
+    v.push_back(MakeTask(2));
+    v.push_back(MakeTask(5));
 
-        const auto ret = co_await AllOf(v);
-        EXPECT_EQ(el_->Now(), 5ms);
-        EXPECT_EQ(ret[0], 300);
-        EXPECT_EQ(ret[1], 200);
-        EXPECT_EQ(ret[2], 500);
-    });
+    const auto ret = co_await AllOf(v);
+    EXPECT_EQ(el_->Now(), 5ms);
+    EXPECT_EQ(ret[0], 300);
+    EXPECT_EQ(ret[1], 200);
+    EXPECT_EQ(ret[2], 500);
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, MoveableRange_rvalue_ret)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        std::vector<Co<int>> v {};
-        v.push_back(MakeTask(3));
-        v.push_back(MakeTask(2));
-        v.push_back(MakeTask(5));
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    std::vector<Co<int>> v {};
+    v.push_back(MakeTask(3));
+    v.push_back(MakeTask(2));
+    v.push_back(MakeTask(5));
 
-        co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int>&& {
-            return std::move(x);
-        }));
-    });
+    co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int>&& {
+      return std::move(x);
+    }));
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, MoveableRange_value_ret)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        std::vector<Co<int>> v {};
-        v.push_back(MakeTask(3));
-        v.push_back(MakeTask(2));
-        v.push_back(MakeTask(5));
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    std::vector<Co<int>> v {};
+    v.push_back(MakeTask(3));
+    v.push_back(MakeTask(2));
+    v.push_back(MakeTask(5));
 
-        co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int> {
-            return std::move(x);
-        }));
-    });
+    co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int> {
+      return std::move(x);
+    }));
+  });
 }
 
 NOLINT_TEST_F(MuxRangeTest, RValueRange)
 {
-    oxygen::co::Run(*el_, [this]() -> Co<> {
-        // Construct awaitables on the fly
-        std::vector values { 3, 2, 5 };
-        co_await AllOf(values | std::views::transform([&](const int x) { return MakeTask(x); }));
-    });
+  oxygen::co::Run(*el_, [this]() -> Co<> {
+    // Construct awaitables on the fly
+    std::vector values { 3, 2, 5 };
+    co_await AllOf(
+      values | std::views::transform([&](const int x) { return MakeTask(x); }));
+  });
 }
 
 } // namespace

@@ -8,7 +8,8 @@
 
 // Check if the required C++ version is available
 #if __cplusplus < 202002L
-#  error "This header-only library requires C++20. Please use a C++20 compliant compiler."
+#  error                                                                       \
+    "This header-only library requires C++20. Please use a C++20 compliant compiler."
 #endif
 
 #include <Oxygen/OxCo/Detail/CoTag.h>
@@ -82,48 +83,46 @@ namespace oxygen::co {
      of things to make it easier to work with lambdas in particular, but it is
      always recommended to run with `Address Sanitizer` while developing.
 */
-template <class T = void>
-class [[nodiscard]] Co : public detail::CoTag {
+template <class T = void> class [[nodiscard]] Co : public detail::CoTag {
 public:
-    using promise_type = detail::Promise<T>;
-    using ReturnType = T;
+  using promise_type = detail::Promise<T>;
+  using ReturnType = T;
 
-    Co() = default;
-    explicit Co(detail::Promise<T>& promise)
-        : promise_(&promise)
-    {
-    }
+  Co() = default;
+  explicit Co(detail::Promise<T>& promise)
+    : promise_(&promise)
+  {
+  }
 
-    [[nodiscard]] auto IsValid() const { return promise_.get() != nullptr; }
+  [[nodiscard]] auto IsValid() const { return promise_.get() != nullptr; }
 
-    //! This is pretty much the only meaningful operation you can do on a
-    //! `Co<T>`. Calling it returns an `Awaitable`, which also acts as the
-    //! `Awaiter` for controlling the suspension and resumption of the
-    //! coroutine.
-    auto operator co_await() noexcept
-    {
-        return detail::TaskAwaiter<T>(promise_.get());
-    }
+  //! This is pretty much the only meaningful operation you can do on a
+  //! `Co<T>`. Calling it returns an `Awaitable`, which also acts as the
+  //! `Awaiter` for controlling the suspension and resumption of the
+  //! coroutine.
+  auto operator co_await() noexcept
+  {
+    return detail::TaskAwaiter<T>(promise_.get());
+  }
 
 private:
-    auto Release() -> detail::Promise<T>* { return promise_.release(); }
+  auto Release() -> detail::Promise<T>* { return promise_.release(); }
 
-    // Friends for Release()
-    friend class Nursery;
+  // Friends for Release()
+  friend class Nursery;
 
-    // Hold the promise object for the coroutine ensuring it is not destroyed as
-    // long as the coroutine is running.
-    detail::PromisePtr<T> promise_;
+  // Hold the promise object for the coroutine ensuring it is not destroyed as
+  // long as the coroutine is running.
+  detail::PromisePtr<T> promise_;
 };
 
 namespace detail {
-    //! The promise type for a `Co<T>` object, will always return a `Co<T>`
-    //! object from its `get_return_object()` method.
-    template <class T>
-    auto Promise<T>::get_return_object() -> Co<T>
-    {
-        return Co<T>(*this);
-    }
+  //! The promise type for a `Co<T>` object, will always return a `Co<T>`
+  //! object from its `get_return_object()` method.
+  template <class T> auto Promise<T>::get_return_object() -> Co<T>
+  {
+    return Co<T>(*this);
+  }
 } // namespace detail
 
 } // namespace oxygen::co

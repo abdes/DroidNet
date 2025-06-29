@@ -24,10 +24,9 @@ namespace oxygen::co::detail {
     co_await kSuspendForever;
  \endcode
  */
-template <class T>
-class CoAwaitFactory {
+template <class T> class CoAwaitFactory {
 public:
-    auto operator co_await() const noexcept { return T {}; }
+  auto operator co_await() const noexcept { return T {}; }
 };
 
 } // namespace oxygen::co::detail

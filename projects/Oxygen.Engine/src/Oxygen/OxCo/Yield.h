@@ -21,24 +21,27 @@ namespace oxygen::co {
  */
 class Yield {
 public:
-    // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-    [[nodiscard]] auto await_ready() const noexcept { return false; }
+  // ReSharper disable CppMemberFunctionMayBeStatic
+  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+  [[nodiscard]] auto await_ready() const noexcept { return false; }
 
 #ifdef __clang__
-    // clang-16 manages to optimize away this function entirely
-    // in optimized builds.
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-    void await_suspend(detail::Handle h) __attribute__((noinline)) { h.resume(); }
+  // clang-16 manages to optimize away this function entirely
+  // in optimized builds.
+  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+  void await_suspend(detail::Handle h) __attribute__((noinline)) { h.resume(); }
 #else
-    [[nodiscard]] auto await_suspend(detail::Handle const h) { return h; }
+  [[nodiscard]] auto await_suspend(detail::Handle const h) { return h; }
 #endif
 
-    void await_resume() { }
+  void await_resume() { }
 
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-    auto await_cancel([[maybe_unused]] detail::Handle h) noexcept { return std::true_type {}; }
-    // ReSharper restore CppMemberFunctionMayBeStatic
+  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
+  auto await_cancel([[maybe_unused]] detail::Handle h) noexcept
+  {
+    return std::true_type {};
+  }
+  // ReSharper restore CppMemberFunctionMayBeStatic
 };
 
 } // namespace oxygen::co

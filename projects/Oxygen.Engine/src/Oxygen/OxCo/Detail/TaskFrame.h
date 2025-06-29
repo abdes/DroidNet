@@ -16,14 +16,14 @@ namespace oxygen::co::detail {
 //! resume execution.
 class TaskFrame : public ProxyFrame {
 public:
-    static constexpr uintptr_t kTag = frame_tags::kTask | ProxyFrame::kTag;
-    TaskFrame() { TagWith(kTag); }
+  static constexpr uintptr_t kTag = frame_tags::kTask | ProxyFrame::kTag;
+  TaskFrame() { TagWith(kTag); }
 
-    void ProgramCounter(const uintptr_t pc) { pc_ = pc; }
-    [[nodiscard]] auto ProgramCounter() const { return pc_; }
+  void ProgramCounter(const uintptr_t pc) { pc_ = pc; }
+  [[nodiscard]] auto ProgramCounter() const { return pc_; }
 
 private:
-    uintptr_t pc_ = 0;
+  uintptr_t pc_ = 0;
 };
 
 } // namespace oxygen::co::detail
