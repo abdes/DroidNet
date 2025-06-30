@@ -12,7 +12,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
