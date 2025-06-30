@@ -43,12 +43,7 @@ target_link_libraries(${dump_assets_target} PRIVATE oxygen::content)
 
 # -- GTest Test Programs -------------------------------------------------------
 
-# include(GTestHelpers)
+include(GTestHelpers)
 
-# m_gtest_program(
-#   D3D12HeapAllocationStrategy
-#   SOURCES
-#     "HeapAllocationStrategy_test.cpp"
-# )
-# m_gtest_program(DescriptorHeapSegment SOURCES "DescriptorHeapSegment_test.cpp")
-# m_gtest_program(PipelineStateCache SOURCES "PipelineStateCache_test.cpp")
+m_gtest_program(LoadShaderAsset SOURCES "LoadShaderAsset_test.cpp")
+m_gtest_program(LoadTextureAsset SOURCES "LoadTextureAsset_test.cpp")

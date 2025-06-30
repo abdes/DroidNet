@@ -6,23 +6,47 @@
 
 #pragma once
 
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Content/api_export.h>
 #include <memory>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Reader.h>
+#include <Oxygen/Base/Stream.h>
+#include <Oxygen/Data/ShaderAsset.h>
+#include <Oxygen/Data/ShaderType.h>
 
 namespace oxygen::content::loaders {
 
-//! Placeholder shader asset type for loader demonstration.
-class PlaceHolderShaderAsset : public oxygen::Object {
-  OXYGEN_TYPED(PlaceHolderShaderAsset)
-public:
-  PlaceHolderShaderAsset() = default;
-  ~PlaceHolderShaderAsset() override = default;
-};
-
 //! Loader for shader assets.
-OXGN_CNTT_API std::unique_ptr<PlaceHolderShaderAsset> LoadShader(
-  const PakFile& pak, const AssetDirectoryEntry& entry);
+template <oxygen::serio::Stream S>
+auto LoadShaderAsset(oxygen::serio::Reader<S> reader)
+  -> std::unique_ptr<data::ShaderAsset>
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  auto check_result = [](auto&& result, const char* field) {
+    if (!result) {
+      LOG_F(INFO, "-failed- on {}: {}", field, result.error().message());
+      throw std::runtime_error(
+        fmt::format("error reading shader asset ({}): {}", field,
+          result.error().message()));
+    }
+  };
+
+  // Read shader_type
+  auto shader_type_result = reader.read<uint32_t>();
+  check_result(shader_type_result, "shader type");
+  auto shader_type = static_cast<data::ShaderType>(*shader_type_result);
+  LOG_F(INFO, "shader type: {}", nostd::to_string(shader_type));
+
+  // Read shader_name (length-prefixed)
+  auto name_result = reader.read_string();
+  check_result(name_result, "shader name");
+  LOG_F(INFO, "shader name: {}", name_result.value());
+
+  // Construct ShaderAsset using the new constructor
+  return std::make_unique<data::ShaderAsset>(
+    shader_type, std::move(*name_result));
+}
 
 } // namespace oxygen::content::loaders

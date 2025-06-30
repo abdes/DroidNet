@@ -7,9 +7,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Loaders/GeometryLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/MeshLoader.h>
+// #include <Oxygen/Content/Loaders/GeometryLoader.h>
+// #include <Oxygen/Content/Loaders/MaterialLoader.h>
+// #include <Oxygen/Content/Loaders/MeshLoader.h>
 #include <Oxygen/Content/Loaders/ShaderLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 
@@ -17,13 +17,15 @@ using namespace oxygen::content;
 
 AssetLoader::AssetLoader()
 {
+  using oxygen::serio::FileStream;
+
   LOG_SCOPE_FUNCTION(INFO);
 
-  RegisterLoader(AssetType::kGeometry, loaders::LoadGeometry);
-  RegisterLoader(AssetType::kMesh, loaders::LoadMesh);
-  RegisterLoader(AssetType::kMaterial, loaders::LoadMaterial);
-  RegisterLoader(AssetType::kShader, loaders::LoadShader);
-  RegisterLoader(AssetType::kTexture, loaders::LoadTexture);
+  // RegisterLoader(AssetType::kGeometry, loaders::LoadGeometry);
+  // RegisterLoader(AssetType::kMesh, loaders::LoadMesh);
+  // RegisterLoader(AssetType::kMaterial, loaders::LoadMaterial);
+  RegisterLoader(AssetType::kShader, loaders::LoadShaderAsset<FileStream<>>);
+  RegisterLoader(AssetType::kTexture, loaders::LoadTextureAsset<FileStream<>>);
 }
 
 void AssetLoader::AddPakFile(const std::filesystem::path& path)

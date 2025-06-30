@@ -61,6 +61,7 @@ target_sources(
       "MeshView.h"
       "ProceduralMeshes.h"
       "ShaderType.h"
+      "TextureAsset.h"
       "Vertex.h"
 )
 
@@ -75,7 +76,6 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
-    oxygen::graphics-common
     glm::glm
 )
 
