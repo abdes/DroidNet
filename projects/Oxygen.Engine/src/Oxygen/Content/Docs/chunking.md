@@ -338,8 +338,8 @@ static_assert(sizeof(TextureAssetHeader) == 64);
 // -----------------------------
 #pragma pack(push, 1)
 struct ShaderAssetHeader {
-    uint32_t shader_type = 0;        // Vertex, Fragment, etc. See ShaderType enum
-    uint8_t  shader_name[60];        // Shader name stored as: uint32_t length, followed by name data)
+    uint32_t shader_type;        // Vertex, Fragment, etc. See ShaderType enum
+    uint8_t  shader_name[60];    // uint32_t length, followed by name data
 };
 #pragma pack(pop)
 static_assert(sizeof(MaterialAssetHeader) == 64);
@@ -356,12 +356,13 @@ static_assert(sizeof(MaterialAssetHeader) == 64);
 // -----------------------------
 #pragma pack(push, 1)
 struct MaterialAssetHeader {
-    uint32_t material_type = 0;      // Material type (e.g. Opaque, Transparent)
-    uint32_t shader_stages = 0;      // 32 bit Bitset, each bit corresponds to a shader stage
-    uint32_t texture_count = 0;      // Number of bound textures
-    uint8_t  reserved[52] = {};
-    // Followed by: array of shader asset IDs (uint64_t[count_of(set bits in shader_stages)])
-    //              array of texture asset IDs (uint64_t[texture_count])
+  uint32_t material_type;  // Material type (e.g. Opaque, Transparent)
+  uint32_t shader_stages;  // 32 bit Bitset, each bit maps to a shader stage
+  uint32_t texture_count;  // Number of bound textures
+  uint8_t  reserved[52];
+  // Followed by:
+  // - array of shader asset IDs (uint64_t[count_of(set bits in shader_stages)])
+  // - array of texture asset IDs (uint64_t[texture_count])
 };
 #pragma pack(pop)
 static_assert(sizeof(MaterialAssetHeader) == 64);

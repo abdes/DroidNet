@@ -55,9 +55,9 @@ target_sources(
     # "Loaders/GeometryLoader.cpp"
     # "Loaders/GeometryLoader.h"
     # "Loaders/MaterialLoader.cpp"
-    # "Loaders/MaterialLoader.h"
     # "Loaders/MeshLoader.cpp"
     # "Loaders/MeshLoader.h"
+    "Loaders/MaterialLoader.h"
     "Loaders/ShaderLoader.h"
     "Loaders/TextureLoader.h"
   PUBLIC

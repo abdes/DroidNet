@@ -16,7 +16,7 @@
 
 namespace oxygen::content::loaders {
 
-//! Loader for shader assets.
+//! Loader for texture assets.
 template <oxygen::serio::Stream S>
 auto LoadTextureAsset(oxygen::serio::Reader<S> reader)
   -> std::unique_ptr<data::TextureAsset>
