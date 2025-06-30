@@ -97,6 +97,8 @@ target_sources(
       "Named.h"
       "Object.h"
       "ObjectMetaData.h"
+      "Typed.h"
+      "TypedObject.h"
       "TypeSystem.h"
 )
 

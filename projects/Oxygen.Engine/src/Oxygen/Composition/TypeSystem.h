@@ -6,16 +6,13 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
-
-using TypeId = uint64_t;
-auto constexpr kInvalidTypeId = static_cast<TypeId>(-1);
 
 //! Global type registry for mapping type names to unique TypeId values.
 /*!
