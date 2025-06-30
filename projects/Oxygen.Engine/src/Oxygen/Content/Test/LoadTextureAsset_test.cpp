@@ -51,8 +51,9 @@ class TextureLoaderErrorTestFixture : public TextureLoaderBasicTestFixture {
 NOLINT_TEST_F(
   TextureLoaderBasicTestFixture, LoadTexture_ValidInput_ReturnsTextureAsset)
 {
-  // Arrange
   using oxygen::data::TextureAsset;
+
+  // Arrange
   constexpr struct TextureAssetHeader {
     uint32_t width = 128;
     uint32_t height = 64;

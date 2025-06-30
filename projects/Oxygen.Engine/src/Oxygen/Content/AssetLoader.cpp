@@ -8,8 +8,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
 // #include <Oxygen/Content/Loaders/GeometryLoader.h>
-// #include <Oxygen/Content/Loaders/MaterialLoader.h>
 // #include <Oxygen/Content/Loaders/MeshLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/ShaderLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 
@@ -23,7 +23,8 @@ AssetLoader::AssetLoader()
 
   // RegisterLoader(AssetType::kGeometry, loaders::LoadGeometry);
   // RegisterLoader(AssetType::kMesh, loaders::LoadMesh);
-  // RegisterLoader(AssetType::kMaterial, loaders::LoadMaterial);
+  RegisterLoader(
+    AssetType::kMaterial, loaders::LoadMaterialAsset<FileStream<>>);
   RegisterLoader(AssetType::kShader, loaders::LoadShaderAsset<FileStream<>>);
   RegisterLoader(AssetType::kTexture, loaders::LoadTextureAsset<FileStream<>>);
 }
