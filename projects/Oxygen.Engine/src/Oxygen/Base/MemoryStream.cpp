@@ -11,24 +11,24 @@
 
 namespace oxygen::serio {
 
-MemoryStream::MemoryStream(const std::span<char> buffer) noexcept
+MemoryStream::MemoryStream(const std::span<std::byte> buffer) noexcept
   : external_buffer_(buffer)
 {
 }
 
-auto MemoryStream::get_buffer() noexcept -> std::span<char>
+auto MemoryStream::get_buffer() noexcept -> std::span<std::byte>
 {
   return external_buffer_.empty() ? std::span(internal_buffer_)
                                   : external_buffer_;
 }
 
-auto MemoryStream::get_buffer() const noexcept -> std::span<const char>
+auto MemoryStream::get_buffer() const noexcept -> std::span<const std::byte>
 {
   return external_buffer_.empty() ? std::span(internal_buffer_)
                                   : external_buffer_;
 }
 
-auto MemoryStream::write(const char* data, const size_t size) noexcept
+auto MemoryStream::write(const std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
   if (data == nullptr && size > 0) {
@@ -60,7 +60,8 @@ auto MemoryStream::write(const char* data, const size_t size) noexcept
   return {};
 }
 
-auto MemoryStream::read(char* data, const size_t size) noexcept -> Result<void>
+auto MemoryStream::read(std::byte* data, const size_t size) noexcept
+  -> Result<void>
 {
   if (data == nullptr && size > 0) {
     return std::make_error_code(std::errc::invalid_argument);
@@ -119,7 +120,7 @@ void MemoryStream::clear()
   if (external_buffer_.empty()) {
     internal_buffer_.clear();
   } else {
-    std::ranges::fill(external_buffer_, static_cast<char>(0));
+    std::ranges::fill(external_buffer_, static_cast<std::byte>(0x00));
   }
   reset();
 }

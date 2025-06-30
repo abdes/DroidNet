@@ -19,7 +19,7 @@ class MockStream {
 public:
   explicit MockStream() = default;
 
-  auto write(const char* data, const size_t size) noexcept -> Result<void>
+  auto write(const std::byte* data, const size_t size) noexcept -> Result<void>
   {
     try {
       if (force_fail_) {
@@ -41,7 +41,7 @@ public:
       }
 
       // Write at current position
-      std::span<const char> input_data { data, size };
+      std::span<const std::byte> input_data { data, size };
       auto dest = std::ranges::subrange(
         data_.begin() + static_cast<difference_type>(pos_),
         data_.begin() + static_cast<difference_type>(pos_ + size));
@@ -53,7 +53,7 @@ public:
     }
   }
 
-  auto read(char* data, const size_t size) noexcept -> Result<void>
+  auto read(std::byte* data, const size_t size) noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -76,7 +76,7 @@ public:
     auto source = std::ranges::subrange(
       data_.begin() + static_cast<difference_type>(pos_),
       data_.begin() + static_cast<difference_type>(pos_ + size));
-    std::span<char> output_data { data, size };
+    std::span<std::byte> output_data { data, size };
 
     std::ranges::copy(source, output_data.begin());
     pos_ += size;
@@ -160,13 +160,13 @@ public:
 
   // Testing helpers
   void force_fail(const bool fail) noexcept { force_fail_ = fail; }
-  [[nodiscard]] auto get_data() const -> const std::vector<char>&
+  [[nodiscard]] auto get_data() const -> const std::vector<std::byte>&
   {
     return data_;
   }
 
 private:
-  std::vector<char> data_;
+  std::vector<std::byte> data_;
   size_t pos_ = 0;
   bool force_fail_ = false;
 };

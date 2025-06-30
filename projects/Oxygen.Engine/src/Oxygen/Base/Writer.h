@@ -62,7 +62,8 @@ public:
 
     // Write string length / data
     CHECK_RESULT(write_raw(length));
-    CHECK_RESULT(stream_.get().write(str.data(), str.length()));
+    CHECK_RESULT(stream_.get().write(
+      reinterpret_cast<const std::byte*>(str.data()), str.length()));
 
     // Align to next boundary
     return align_to(alignof(uint32_t));
@@ -104,14 +105,12 @@ public:
     return align_to(alignof(uint32_t));
   }
 
-  [[nodiscard]] auto position() const noexcept -> Result<size_t>
+  [[nodiscard]] auto write_blob(std::span<const std::byte> blob) noexcept
+    -> Result<void>
   {
-    return stream_.get().position();
+    return stream_.get().write(blob.data(), blob.size());
   }
 
-  auto flush() noexcept -> Result<void> { return stream_.get().flush(); }
-
-private:
   [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
   {
     try {
@@ -130,7 +129,7 @@ private:
       const size_t padding
         = (alignment - (current_pos.value() % alignment)) % alignment;
       if (padding > 0) {
-        std::array<char, kMaxAlignment> zeros { 0 };
+        std::array<std::byte, kMaxAlignment> zeros { std::byte(0) };
         return stream_.get().write(zeros.data(), padding);
       }
       return {};
@@ -139,6 +138,14 @@ private:
     }
   }
 
+  [[nodiscard]] auto position() const noexcept -> Result<size_t>
+  {
+    return stream_.get().position();
+  }
+
+  auto flush() noexcept -> Result<void> { return stream_.get().flush(); }
+
+private:
   template <typename T>
     requires std::is_trivially_copyable_v<T>
   [[nodiscard]] auto write_raw(const T& value) noexcept -> Result<void>
@@ -149,7 +156,7 @@ private:
     }
     return stream_.get().write(
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      reinterpret_cast<const char*>(&temp), sizeof(T));
+      reinterpret_cast<const std::byte*>(&temp), sizeof(T));
   }
 
   std::reference_wrapper<S> stream_;

@@ -27,7 +27,7 @@ protected:
     const auto pos = stream_.position().value();
     const size_t padding = (alignment - (pos % alignment)) % alignment;
     if (padding > 0) {
-      const std::vector<char> zeros(padding, 0);
+      const std::vector<std::byte> zeros(padding, 0x00_b);
       ASSERT_TRUE(stream_.write(zeros.data(), padding));
     }
   }
@@ -42,10 +42,10 @@ protected:
     if (!IsLittleEndian() && sizeof(T) > 1) {
       auto temp = ByteSwap(value);
       ASSERT_TRUE(
-        stream_.write(reinterpret_cast<const char*>(&temp), sizeof(T)));
+        stream_.write(reinterpret_cast<const std::byte*>(&temp), sizeof(T)));
     } else {
       ASSERT_TRUE(
-        stream_.write(reinterpret_cast<const char*>(&value), sizeof(T)));
+        stream_.write(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
     }
   }
 
@@ -58,9 +58,10 @@ protected:
     if (!IsLittleEndian()) {
       length = ByteSwap(length);
     }
-    ASSERT_TRUE(
-      stream_.write(reinterpret_cast<const char*>(&length), sizeof(length)));
-    ASSERT_TRUE(stream_.write(str.data(), str.length()));
+    ASSERT_TRUE(stream_.write(
+      reinterpret_cast<const std::byte*>(&length), sizeof(length)));
+    ASSERT_TRUE(stream_.write(
+      reinterpret_cast<const std::byte*>(str.data()), str.length()));
 
     // Add final alignment padding
     write_padding(alignof(uint32_t));
@@ -77,8 +78,8 @@ protected:
       write_padding(alignof(T));
     }
 
-    ASSERT_TRUE(stream_.write(
-      reinterpret_cast<const char*>(values.data()), values.size() * sizeof(T)));
+    ASSERT_TRUE(stream_.write(reinterpret_cast<const std::byte*>(values.data()),
+      values.size() * sizeof(T)));
 
     // Add final alignment padding
     write_padding(alignof(uint32_t));
@@ -250,6 +251,78 @@ NOLINT_TEST_F(ReaderTest, ReadArray_Fails_OnStreamError)
   stream_.force_fail(true);
   const auto result = sut_.read_array<uint32_t>();
   EXPECT_FALSE(result);
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlob_Success)
+{
+  // Setup
+  const std::vector<std::byte> test_data
+    = { 'a'_b, 'b'_b, 'c'_b, 'd'_b, 'e'_b };
+  ASSERT_TRUE(stream_.write(test_data.data(), test_data.size()));
+  seek_to(0);
+
+  // Act
+  const auto result = sut_.read_blob(test_data.size());
+
+  // Assert
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.value(), test_data);
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlob_Empty)
+{
+  // Act
+  const auto result = sut_.read_blob(0);
+  // Assert
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result.value().empty());
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlob_Fails_OnStreamError)
+{
+  const std::vector<std::byte> test_data = { 'x'_b, 'y'_b };
+  ASSERT_TRUE(stream_.write(test_data.data(), test_data.size()));
+  seek_to(0);
+  stream_.force_fail(true);
+  const auto result = sut_.read_blob(test_data.size());
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlobTo_Success)
+{
+  // Setup
+  const std::vector<std::byte> test_data = { '1'_b, '2'_b, '3'_b, '4'_b };
+  ASSERT_TRUE(stream_.write(test_data.data(), test_data.size()));
+  seek_to(0);
+  std::vector<std::byte> buffer(test_data.size());
+
+  // Act
+  const auto result = sut_.read_blob_to(buffer);
+
+  // Assert
+  ASSERT_TRUE(result);
+  EXPECT_EQ(buffer, test_data);
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlobTo_Empty)
+{
+  std::vector<std::byte> buffer;
+  const auto result = sut_.read_blob_to(buffer);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(buffer.empty());
+}
+
+NOLINT_TEST_F(ReaderTest, ReadBlobTo_Fails_OnStreamError)
+{
+  const std::vector<std::byte> test_data = { 'z'_b, 'w'_b };
+  ASSERT_TRUE(stream_.write(test_data.data(), test_data.size()));
+  seek_to(0);
+  std::vector<std::byte> buffer(test_data.size());
+  stream_.force_fail(true);
+  const auto result = sut_.read_blob_to(buffer);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
 } // namespace
