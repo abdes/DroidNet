@@ -324,6 +324,7 @@ auto DepthPrePass::SetupViewPortAndScissors(
 
 auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 {
+  using data::ShaderType;
   using graphics::BindingSlotDesc;
   using graphics::CompareOp;
   using graphics::CullMode;
@@ -338,7 +339,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::RootBindingItem;
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
-  using graphics::ShaderType;
+  using oxygen::graphics::MakeShaderIdentifier;
 
   constexpr RasterizerStateDesc raster_desc {
     .fill_mode = FillMode::kSolid,

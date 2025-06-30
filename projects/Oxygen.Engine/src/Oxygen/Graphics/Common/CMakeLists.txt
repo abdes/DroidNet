@@ -143,8 +143,9 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
-    oxygen::core
     oxygen::config
+    oxygen::core
+    oxygen::data
     oxygen::platform
 )
 

@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Format.h>
@@ -29,6 +30,7 @@ using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorAllocator;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::Framebuffer;
+using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
@@ -279,6 +281,7 @@ auto ShaderPass::SetupViewPortAndScissors(
 */
 auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 {
+  using data::ShaderType;
   using graphics::BindingSlotDesc;
   using graphics::CompareOp;
   using graphics::CullMode;
@@ -293,7 +296,6 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::RootBindingItem;
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
-  using graphics::ShaderType;
 
   // Set up rasterizer and blend state for standard color rendering
   constexpr RasterizerStateDesc raster_desc {
