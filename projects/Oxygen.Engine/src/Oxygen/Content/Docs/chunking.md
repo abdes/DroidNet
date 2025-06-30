@@ -100,8 +100,11 @@ The `AssetDirectoryEntry` structure includes two important fields: `size` and `a
   this field to validate that the asset data is correctly aligned in memory
   before uploading to the GPU.
 
-> **Note:** Both fields are determined at asset build time and are essential for correct and efficient loading and GPU resource creation. The
-> loader uses `size` for data operations and `alignment` for validation and resource creation. Offsets are always absolute file offsets, so padding is only for alignment, not for sequential traversal.
+> **Note:** Both fields are determined at asset build time and are essential for
+> correct and efficient loading and GPU resource creation. The loader uses
+> `size` for data operations and `alignment` for validation and resource
+> creation. Offsets are always absolute file offsets, so padding is only for
+> alignment, not for sequential traversal.
 
 ---
 
@@ -250,106 +253,128 @@ struct PakFooter {
 static_assert(sizeof(PakFooter) == 64);
 
 // -----------------------------
-// 🧱 MeshAssetHeader (example asset layout)
-// -----------------------------
-struct alignas(64) MeshAssetHeader {
-    uint32_t vertexCount = 0;
-    uint32_t indexCount = 0;
-    uint32_t vertexStride = 0;
-    uint32_t indexStride = 0;
-    uint32_t vertexBufferSize = 0;
-    uint32_t indexBufferSize = 0;
-    float    boundingBoxMin[3] = {};
-    float    boundingBoxMax[3] = {};
-    uint8_t  reserved[16] = {}; // Padding to 64 bytes
-    // Followed by: vertex buffer, index buffer, optional metadata
-};
-
-// -----------------------------
 // 🧩 GeometryAssetHeader (64 bytes + LOD table)
 // -----------------------------
 struct alignas(64) GeometryAssetHeader {
-    uint32_t lodCount = 0;                // Number of LODs (must be >= 1)
+    uint32_t lod_count = 0;                // Number of LODs (must be >= 1)
     uint32_t reserved0 = 0;
-    float    boundingBoxMin[3] = {};
-    float    boundingBoxMax[3] = {};
+    float    bounding_box_min[3] = {};
+    float    bounding_box_max[3] = {};
     uint8_t  reserved[40] = {};           // Padding to 64 bytes
     // Followed by: AssetKey lodKeys[lodCount];
     // Optionally: geometry-level metadata
 };
 
 // -----------------------------
-// 🧱 MeshAssetHeader (64 bytes + MeshView table)
+// 🧱 MeshAssetHeader (64 bytes + SubMesh table)
 // -----------------------------
 struct alignas(64) MeshAssetHeader {
-    uint32_t vertexCount = 0;
-    uint32_t indexCount = 0;
-    uint32_t vertexStride = 0;
-    uint32_t indexStride = 0;
-    uint32_t vertexBufferSize = 0;
-    uint32_t indexBufferSize = 0;
-    uint32_t meshViewCount = 0;           // Number of MeshViews (sub-meshes)
-    uint32_t reserved0 = 0;
-    float    boundingBoxMin[3] = {};
-    float    boundingBoxMax[3] = {};
+    uint32_t vertex_count = 0;
+    uint32_t index_count = 0;
+    uint32_t vertex_stride = 0;
+    uint32_t index_stride = 0;
+    uint32_t vertex_buffer_size = 0;
+    uint32_t index_buffer_size = 0;
+    uint32_t submesh_count = 0;           // Number of SubMeshes
+    uint32_t meshview_count = 0;          // Total number of MeshViews (all SubMeshes)
+    float    bounding_box_min[3] = {};
+    float    bounding_box_max[3] = {};
     uint8_t  reserved[8] = {};            // Padding to 64 bytes
-    // Followed by: MeshViewDesc meshViews[meshViewCount];
+    // Followed by: SubMeshDesc submeshes[submesh_count];
+    //              MeshViewDesc meshviews[meshview_count];
     //              vertex buffer, index buffer, optional metadata
+};
+
+// -----------------------------
+// 🧩 SubMeshDesc (32 bytes + MeshView table)
+// -----------------------------
+struct alignas(16) SubMeshDesc {
+    uint32_t meshview_offset = 0;          // Offset into MeshViewDesc table (index)
+    uint32_t meshview_count = 0;           // Number of MeshViews in this SubMesh
+    uint32_t material_index = 0;           // Material slot or index
+    uint32_t reserved0 = 0;
+    float    bounding_box_min[3] = {};
+    float    bounding_box_max[3] = {};
+    // MeshViews for this SubMesh are meshviews[meshview_offset .. meshview_offset+meshview_count-1]
 };
 
 // -----------------------------
 // 🧩 MeshViewDesc (32 bytes)
 // -----------------------------
 struct alignas(16) MeshViewDesc {
-    uint32_t firstIndex = 0;              // Start index in index buffer
-    uint32_t indexCount = 0;              // Number of indices
-    uint32_t firstVertex = 0;             // Start vertex in vertex buffer
-    uint32_t vertexCount = 0;             // Number of vertices
-    uint32_t materialIndex = 0;           // Material slot or index
-    uint32_t reserved[3] = {};
-    // Optionally: name hash or string offset
+    uint32_t first_index = 0;              // Start index in index buffer
+    uint32_t index_count = 0;              // Number of indices
+    uint32_t first_vertex = 0;             // Start vertex in vertex buffer
+    uint32_t vertex_count = 0;             // Number of vertices
+    uint32_t reserved[4] = {};
 };
+```
 
+```cpp
 // -----------------------------
 // 🖼️ TextureAssetHeader (64 bytes)
 // -----------------------------
-struct alignas(64) TextureAssetHeader {
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t mipCount = 1;
-    uint32_t arrayLayers = 1;
-    uint32_t format = 0;             // Enum or DXGI/VK format code
-    uint32_t imageSize = 0;          // Total size in bytes
-    uint32_t alignment = 256;        // Required alignment
-    uint8_t  isCubemap = 0;
-    uint8_t  reserved[35] = {};      // Padding to 64 bytes
-    // Followed by: image data (GPU-native format, e.g., BCn, ASTC)
+#pragma pack(push, 1)
+struct TextureAssetHeader {
+    uint32_t width;
+    uint32_t height;
+    uint32_t mip_count;
+    uint32_t array_layers;
+    uint32_t format;             // Texture format
+    uint32_t image_size;         // Total size in bytes
+    uint32_t alignment;          // Required alignment for data blob (256)
+    uint8_t  is_cubemap;
+    uint8_t  reserved[35];       // Padding to 64 bytes
+    // Followed by: image data (GPU-native format, e.g., BCn, ASTC),
+    // aligned at 256 boundary for memory-mapped access
 };
+#pragma pack(pop)
+static_assert(sizeof(TextureAssetHeader) == 64);
+```
 
+```cpp
 // -----------------------------
 // 📝 ShaderAssetHeader (64 bytes)
 // -----------------------------
-struct alignas(64) ShaderAssetHeader {
-    uint32_t stage = 0;              // Enum: Vertex, Fragment, etc.
-    uint32_t codeSize = 0;           // Size of bytecode in bytes
-    uint32_t entryPointLength = 0;   // Length of entry point string
-    uint32_t reserved0 = 0;
-    uint8_t  reserved[48] = {};
-    // Followed by: entry point string, then bytecode
+#pragma pack(push, 1)
+struct ShaderAssetHeader {
+    uint32_t shader_type = 0;        // Vertex, Fragment, etc. See ShaderType enum
+    uint8_t  shader_name[60];        // Shader name stored as: uint32_t length, followed by name data)
 };
+#pragma pack(pop)
+static_assert(sizeof(MaterialAssetHeader) == 64);
+```
 
+> Note: (Shader type, Shader Name) produce an engine wide unique ID for the
+> shader. Shaders are compiled/recompiled if needed at engine startup, and their
+> binary blobs are stored separately from the PAK file, and loaded separately by
+> the `ShaderManager`.
+
+```cpp
 // -----------------------------
 // 🎨 MaterialAssetHeader (64 bytes)
 // -----------------------------
-struct alignas(64) MaterialAssetHeader {
-    uint64_t shaderAssetID = 0;      // Reference to Shader asset
-    uint32_t textureCount = 0;       // Number of bound textures
-    uint32_t paramCount = 0;         // Number of float/vector params
-    uint8_t  reserved[48] = {};
-    // Followed by: array of texture asset IDs (uint64_t[textureCount])
-    //              array of parameter values (float[paramCount] or struct)
+#pragma pack(push, 1)
+struct MaterialAssetHeader {
+    uint32_t material_type = 0;      // Material type (e.g. Opaque, Transparent)
+    uint32_t shader_stages = 0;      // 32 bit Bitset, each bit corresponds to a shader stage
+    uint32_t texture_count = 0;      // Number of bound textures
+    uint8_t  reserved[52] = {};
+    // Followed by: array of shader asset IDs (uint64_t[count_of(set bits in shader_stages)])
+    //              array of texture asset IDs (uint64_t[texture_count])
 };
+#pragma pack(pop)
+static_assert(sizeof(MaterialAssetHeader) == 64);
+```
 
+> Note 1: Each bit in `shader_flags`, when set indicates that this material
+> applies in that particular stage, and a corresponding shader ID will be
+> present in the shader assetIDs table that follows this MaterialAssetHeader.
+>
+> Note 2: future extensions include material parameters, root signature
+> optimization
+
+```cpp
 // -----------------------------
 // 🔊 AudioAssetHeader (64 bytes)
 // -----------------------------
@@ -362,3 +387,4 @@ struct alignas(64) AudioAssetHeader {
     uint8_t  reserved[44] = {};
     // Followed by: audio data (compressed or raw)
 };
+```

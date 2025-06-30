@@ -13,28 +13,13 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Composition/Object.h>
+#include <Oxygen/Content/LoaderFunction.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content {
-
-// Concept: T must derive from oxygen::Object and have static ClassTypeId()
-// returning oxygen::TypeId
-template <typename T>
-concept HasTypeInfo = std::derived_from<T, oxygen::Object> && requires {
-  { T::ClassTypeId() } -> std::same_as<oxygen::TypeId>;
-};
-
-// Concept: LoaderFn must return a unique_ptr<XXX> where XXX is HasTypeInfo and
-// accept (const PakFile&, const AssetDirectoryEntry&)
-template <typename F>
-concept LoaderFunction = requires(
-  F f, const PakFile& pak, const AssetDirectoryEntry& entry) {
-  typename std::remove_cvref_t<decltype(*f(pak, entry))>;
-  requires HasTypeInfo<std::remove_pointer_t<decltype(f(pak, entry).get())>>;
-  { f(pak, entry) };
-};
 
 class AssetLoader {
 public:
@@ -50,7 +35,8 @@ public:
     LoaderFnErased erased
       = [fn = std::forward<F>(fn)](const PakFile& pak,
           const AssetDirectoryEntry& entry) -> std::shared_ptr<void> {
-      auto uptr = fn(pak, entry);
+      auto reader = pak.CreateReader(entry);
+      auto uptr = fn(std::move(reader));
       return uptr ? std::shared_ptr<void>(std::move(uptr)) : nullptr;
     };
     AddTypeErasedLoader(type, std::move(erased));
@@ -59,7 +45,7 @@ public:
   OXGN_CNTT_API void AddPakFile(const std::filesystem::path& path);
 
   // Load returns shared_ptr<T> and uses static_pointer_cast for type safety
-  template <HasTypeInfo T> std::shared_ptr<T> Load(const AssetKey& key)
+  template <IsTyped T> std::shared_ptr<T> Load(const AssetKey& key)
   {
     for (const auto& pak : paks_) {
       auto entry_opt = pak->FindEntry(key);

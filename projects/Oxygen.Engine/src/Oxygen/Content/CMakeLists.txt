@@ -52,15 +52,13 @@ target_sources(
     "AssetKey.cpp"
     "AssetLoader.cpp"
     "PakFile.cpp"
-    "Loaders/GeometryLoader.cpp"
-    "Loaders/GeometryLoader.h"
-    "Loaders/MaterialLoader.cpp"
-    "Loaders/MaterialLoader.h"
-    "Loaders/MeshLoader.cpp"
-    "Loaders/MeshLoader.h"
-    "Loaders/ShaderLoader.cpp"
+    # "Loaders/GeometryLoader.cpp"
+    # "Loaders/GeometryLoader.h"
+    # "Loaders/MaterialLoader.cpp"
+    # "Loaders/MaterialLoader.h"
+    # "Loaders/MeshLoader.cpp"
+    # "Loaders/MeshLoader.h"
     "Loaders/ShaderLoader.h"
-    "Loaders/TextureLoader.cpp"
     "Loaders/TextureLoader.h"
   PUBLIC
     FILE_SET HEADERS
@@ -83,6 +81,7 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::composition
+    oxygen::data
     stduuid::stduuid
 )
 
