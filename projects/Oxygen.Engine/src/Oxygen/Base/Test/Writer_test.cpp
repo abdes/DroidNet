@@ -65,7 +65,9 @@ protected:
     ASSERT_EQ(length, expected.length());
     ASSERT_GE(stream_.get_data().size(), verify_pos_ + length);
 
-    const std::string actual(stream_.get_data().data() + verify_pos_, length);
+    const std::string actual(
+      reinterpret_cast<const char*>(stream_.get_data().data()) + verify_pos_,
+      length);
     EXPECT_EQ(actual, expected);
     verify_pos_ += length;
 
@@ -150,6 +152,33 @@ NOLINT_TEST_F(WriterTest, WriteArray_Fails_WhenTooLarge)
   const auto result = sut_.write_array(std::span(large_array));
   EXPECT_FALSE(result);
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::message_size));
+}
+
+NOLINT_TEST_F(WriterTest, WriteBlob_Success)
+{
+  const std::vector<std::byte> test_data = { 'a'_b, 'b'_b, 'c'_b, 'd'_b };
+  ASSERT_TRUE(sut_.write_blob(test_data));
+  // Verify written bytes
+  ASSERT_GE(stream_.get_data().size(), test_data.size());
+  EXPECT_TRUE(
+    std::equal(test_data.begin(), test_data.end(), stream_.get_data().begin()));
+}
+
+NOLINT_TEST_F(WriterTest, WriteBlob_Empty)
+{
+  const std::vector<std::byte> empty_data;
+  ASSERT_TRUE(sut_.write_blob(empty_data));
+  // No bytes should be written
+  EXPECT_TRUE(stream_.get_data().empty());
+}
+
+NOLINT_TEST_F(WriterTest, WriteBlob_Fails_OnStreamError)
+{
+  const std::vector<std::byte> test_data = { 'x'_b, 'y'_b };
+  stream_.force_fail(true);
+  const auto result = sut_.write_blob(test_data);
+  EXPECT_FALSE(result);
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
 } // namespace

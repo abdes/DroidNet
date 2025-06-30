@@ -19,15 +19,22 @@ namespace oxygen::serio {
 
 class MemoryStream {
 public:
-  OXYGEN_BASE_API explicit MemoryStream(std::span<char> buffer = {}) noexcept;
+  OXYGEN_BASE_API explicit MemoryStream(
+    std::span<std::byte> buffer = {}) noexcept;
   virtual ~MemoryStream() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MemoryStream);
   OXYGEN_DEFAULT_MOVABLE(MemoryStream);
 
+  [[nodiscard]] auto write(std::span<const std::byte> data) noexcept
+    -> Result<void>
+  {
+    return write(data.data(), data.size());
+  }
+
   [[nodiscard]] OXYGEN_BASE_API auto write(
-    const char* data, size_t size) noexcept -> Result<void>;
-  [[nodiscard]] OXYGEN_BASE_API auto read(char* data, size_t size) noexcept
+    const std::byte* data, size_t size) noexcept -> Result<void>;
+  [[nodiscard]] OXYGEN_BASE_API auto read(std::byte* data, size_t size) noexcept
     -> Result<void>;
   [[nodiscard]] OXYGEN_BASE_API auto flush() const noexcept -> Result<void>;
   [[nodiscard]] OXYGEN_BASE_API auto position() const noexcept
@@ -56,12 +63,12 @@ public:
   [[nodiscard]] OXYGEN_BASE_API auto seek_end() noexcept -> Result<void>;
 
 private:
-  std::vector<char> internal_buffer_;
-  std::span<char> external_buffer_;
+  std::vector<std::byte> internal_buffer_;
+  std::span<std::byte> external_buffer_;
   size_t pos_ = 0;
 
-  [[nodiscard]] auto get_buffer() noexcept -> std::span<char>;
-  [[nodiscard]] auto get_buffer() const noexcept -> std::span<const char>;
+  [[nodiscard]] auto get_buffer() noexcept -> std::span<std::byte>;
+  [[nodiscard]] auto get_buffer() const noexcept -> std::span<const std::byte>;
 };
 
 static_assert(Stream<MemoryStream>);

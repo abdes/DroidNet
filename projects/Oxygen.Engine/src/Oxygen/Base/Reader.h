@@ -46,7 +46,7 @@ public:
     T value;
     CHECK_RESULT(
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      stream_.get().read(reinterpret_cast<char*>(&value), sizeof(T)));
+      stream_.get().read(reinterpret_cast<std::byte*>(&value), sizeof(T)));
 
     if (!IsLittleEndian() && sizeof(T) > 1) {
       value = ByteSwap(value);
@@ -64,7 +64,8 @@ public:
       CHECK_RESULT(read_string_length(length));
 
       std::string str(length, '\0');
-      CHECK_RESULT(stream_.get().read(str.data(), length));
+      CHECK_RESULT(
+        stream_.get().read(reinterpret_cast<std::byte*>(str.data()), length));
 
       // Skip padding to maintain alignment
       CHECK_RESULT(align_to(alignof(uint32_t)));
@@ -111,16 +112,45 @@ public:
     }
   }
 
-private:
-  [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
+  [[nodiscard]] auto read_blob(size_t size) noexcept
+    -> Result<std::vector<std::byte>>
   {
     try {
-      static constexpr size_t kMaxAlignment = 256;
-
-      // Verify alignment is power of 2 and within limits
-      if (!std::has_single_bit(alignment) || alignment > kMaxAlignment) {
-        return std::make_error_code(std::errc::invalid_argument);
+      if (size == 0) {
+        return std::vector<std::byte> {};
       }
+      std::vector<std::byte> buffer(size);
+      auto result = stream_.get().read(buffer.data(), size);
+      if (!result) {
+        return result.error();
+      }
+      return buffer;
+    } catch (const std::exception& /*ex*/) {
+      return std::make_error_code(std::errc::io_error);
+    }
+  }
+
+  [[nodiscard]] auto read_blob_to(std::span<std::byte> buffer) noexcept
+    -> Result<void>
+  {
+    return stream_.get().read(buffer.data(), buffer.size());
+  }
+
+  [[nodiscard]] auto position() noexcept -> Result<size_t>
+  {
+    return stream_.get().position();
+  }
+
+  [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
+  {
+    static constexpr size_t kMaxAlignment = 256;
+
+    // Verify alignment is power of 2 and within limits
+    if (!std::has_single_bit(alignment) || alignment < 1
+      || alignment > kMaxAlignment) {
+      return std::make_error_code(std::errc::invalid_argument);
+    }
+    try {
 
       const auto current_pos = stream_.get().position();
       if (!current_pos) {
@@ -130,8 +160,7 @@ private:
       const size_t padding
         = (alignment - (current_pos.value() % alignment)) % alignment;
       if (padding > 0) {
-        std::array<char, kMaxAlignment> discard {};
-        return stream_.get().read(discard.data(), padding);
+        return stream_.get().forward(padding);
       }
       return {};
     } catch (const std::exception& /*ex*/) {
@@ -139,6 +168,7 @@ private:
     }
   }
 
+private:
   [[nodiscard]] auto read_string_length(
     limits::SequenceSizeType& length) noexcept -> Result<void>
   {

@@ -6,36 +6,121 @@
 
 #pragma once
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Stream.h>
-
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Stream.h>
+
 namespace oxygen::serio {
 
+//=== BackingStream concept (pluggable file io for FileStream) ===------------//
 template <typename T>
-concept BackingStream = requires(T stream, const T constStream,
-  const std::filesystem::path& path, std::ios::openmode mode, char* data,
-  std::streamsize size, std::streamoff off, std::ios_base::seekdir way) {
-  { stream.open(path, mode) } -> std::same_as<void>;
-  { constStream.is_open() } -> std::same_as<bool>;
+concept BackingStream
+  = requires(T stream, const T constStream, const std::filesystem::path& path,
+    std::ios::openmode mode, const std::byte* cdata, std::byte* data,
+    size_t size, std::streamoff off, std::ios_base::seekdir way) {
+      { stream.open(path, mode) } -> std::same_as<void>;
+      { constStream.is_open() } -> std::same_as<bool>;
+      { stream.write(cdata, size) } -> std::same_as<void>;
+      { stream.read(data, size) } -> std::same_as<void>;
+      { stream.clear() } -> std::same_as<void>;
+      { stream.flush() } -> std::same_as<void>;
+      { stream.tellg() } -> std::same_as<std::streampos>;
+      { stream.seekg(off, way) } -> std::same_as<void>;
+      { constStream.fail() } -> std::same_as<bool>;
+      { constStream.eof() } -> std::same_as<bool>;
+    };
+
+//=== ByteFileStream: std::byte wrapper for std::fstream ===------------------//
+
+class ByteFileStream {
+public:
+  ByteFileStream() = default;
+  ~ByteFileStream() = default;
+
+  void open(const std::filesystem::path& path, std::ios::openmode mode)
   {
-    stream.write(data, size)
-  } -> std::convertible_to<std::basic_ostream<char>&>;
-  { stream.read(data, size) } -> std::convertible_to<std::basic_istream<char>&>;
-  { stream.flush() } -> std::convertible_to<std::basic_ostream<char>&>;
-  { stream.tellg() }; // We cannot specify the return type here with MSVC
-  { stream.seekg(off, way) } -> std::convertible_to<std::basic_istream<char>&>;
-  { constStream.fail() } -> std::same_as<bool>;
-  { constStream.eof() } -> std::same_as<bool>;
+    file_.open(path, mode | std::ios::binary);
+  }
+
+  [[nodiscard]] bool is_open() const noexcept { return file_.is_open(); }
+
+  void write(const std::byte* data, size_t size)
+  {
+    if (!file_.is_open() || !file_.good()) {
+      file_.setstate(std::ios::failbit);
+      return;
+    }
+    file_.write(
+      reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+    if (!file_)
+      file_.setstate(std::ios::failbit);
+  }
+
+  void read(std::byte* data, size_t size)
+  {
+    if (!file_.is_open() || !file_.good()) {
+      file_.setstate(std::ios::failbit);
+      return;
+    }
+    file_.read(
+      reinterpret_cast<char*>(data), static_cast<std::streamsize>(size));
+    if (!file_ && !file_.eof())
+      file_.setstate(std::ios::failbit);
+  }
+
+  void flush()
+  {
+    if (!file_.is_open()) {
+      file_.setstate(std::ios::failbit);
+      return;
+    }
+    file_.flush();
+    if (!file_)
+      file_.setstate(std::ios::failbit);
+  }
+
+  void clear(std::ios::iostate state = std::ios::goodbit)
+  {
+    if (!file_.is_open()) {
+      file_.setstate(std::ios::failbit);
+      return;
+    }
+    file_.clear(state);
+  }
+
+  [[nodiscard]] auto tellg() -> std::streampos
+  {
+    if (!file_.is_open())
+      return -1;
+    return file_.tellg();
+  }
+
+  void seekg(std::streamoff off, std::ios_base::seekdir way)
+  {
+    if (!file_.is_open()) {
+      file_.setstate(std::ios::failbit);
+      return;
+    }
+    file_.seekg(off, way);
+    if (!file_)
+      file_.setstate(std::ios::failbit);
+  }
+
+  [[nodiscard]] bool fail() const noexcept { return !file_.good(); }
+  [[nodiscard]] bool eof() const noexcept { return file_.eof(); }
+
+private:
+  std::fstream file_;
 };
 
-static_assert(BackingStream<std::fstream>);
+static_assert(BackingStream<ByteFileStream>);
 
-template <BackingStream StreamType = std::fstream> class FileStream {
+template <BackingStream StreamType = ByteFileStream> class FileStream {
 public:
   explicit FileStream(const std::filesystem::path& path,
     std::ios::openmode mode = std::ios::in | std::ios::out,
@@ -46,9 +131,15 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(FileStream);
   OXYGEN_DEFAULT_MOVABLE(FileStream);
 
-  [[nodiscard]] auto write(const char* data, size_t size) const noexcept
+  [[nodiscard]] auto write(std::span<const std::byte> data) noexcept
+    -> Result<void>
+  {
+    return write(data.data(), data.size());
+  }
+
+  [[nodiscard]] auto write(const std::byte* data, size_t size) const noexcept
     -> Result<void>;
-  [[nodiscard]] auto read(char* data, size_t size) const noexcept
+  [[nodiscard]] auto read(std::byte* data, size_t size) const noexcept
     -> Result<void>;
   [[nodiscard]] auto flush() const noexcept -> Result<void>;
   [[nodiscard]] auto position() const noexcept -> Result<size_t>;
@@ -86,7 +177,7 @@ FileStream<StreamType>::FileStream(const std::filesystem::path& path,
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::write(
-  const char* data, const size_t size) const noexcept -> Result<void>
+  const std::byte* data, const size_t size) const noexcept -> Result<void>
 {
   try {
     if (data == nullptr && size > 0) {
@@ -108,8 +199,8 @@ auto FileStream<StreamType>::write(
 }
 
 template <BackingStream StreamType>
-auto FileStream<StreamType>::read(char* data, const size_t size) const noexcept
-  -> Result<void>
+auto FileStream<StreamType>::read(
+  std::byte* data, const size_t size) const noexcept -> Result<void>
 {
   try {
     if (data == nullptr && size > 0) {
@@ -281,8 +372,5 @@ auto FileStream<StreamType>::seek_end() const noexcept -> Result<void>
     return std::make_error_code(std::errc::io_error);
   }
 }
-
-// Explicit template instantiation
-template class FileStream<std::fstream>;
 
 } // namespace oxygen::serio
