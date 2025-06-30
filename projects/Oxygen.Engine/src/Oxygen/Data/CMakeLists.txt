@@ -51,6 +51,7 @@ target_sources(
   PRIVATE
     "MeshAsset.cpp"
     "ProceduralMeshes.cpp"
+    "ShaderType.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -59,6 +60,7 @@ target_sources(
       "MeshAsset.h"
       "MeshView.h"
       "ProceduralMeshes.h"
+      "ShaderType.h"
       "Vertex.h"
 )
 
