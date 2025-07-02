@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <string>
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypeSystem.h>
