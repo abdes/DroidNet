@@ -13,29 +13,23 @@
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ShaderReference.h>
 
 namespace oxygen::content::loaders {
 
-//! Loader for texture assets.
+//! Loader for material assets.
 template <oxygen::serio::Stream S>
 auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
   -> std::unique_ptr<data::MaterialAsset>
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-#pragma pack(push, 1)
-  struct MaterialAssetHeader {
-    uint32_t material_type;
-    uint32_t shader_stages;
-    uint32_t texture_count;
-    uint8_t reserved[52];
-    // Followed by:
-    // - array of shader asset IDs (uint64_t[count_of(set bits in
-    // shader_stages)])
-    // - array of texture asset IDs (uint64_t[texture_count])
-  };
-#pragma pack(pop)
-  static_assert(sizeof(MaterialAssetHeader) == 64);
+  using oxygen::ShaderType;
+  using oxygen::data::ShaderReference;
+  using oxygen::data::pak::kMaxNameSize;
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::ResourceIndexT;
+  using oxygen::data::pak::ShaderReferenceDesc;
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
@@ -46,46 +40,140 @@ auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
     }
   };
 
-  // Read material header
-  auto result = reader.read<MaterialAssetHeader>();
-  check_result(result, "material header");
-  const auto& mat_header = result.value();
-  LOG_F(INFO, "material type : {}", mat_header.material_type);
-  LOG_F(INFO, "shader stages : {}", mat_header.shader_stages);
+  // Read MaterialAssetDesc field-by-field to avoid
+  // std::has_unique_object_representations issues with float fields
+  MaterialAssetDesc desc;
 
-  std::vector<uint64_t> shader_ids;
-  // Shader asset IDs follow header, then texture asset IDs
-  {
-    const uint32_t shader_id_count = std::popcount(mat_header.shader_stages);
-    DCHECK_GT_F(shader_id_count, 0U); // at least one shader
-    LOG_SCOPE_F(INFO, fmt::format("Shaders ({})", shader_id_count).c_str());
-    shader_ids.resize(shader_id_count);
-    if (shader_id_count > 0) {
-      auto shader_result = reader.read_blob_to(
-        std::as_writable_bytes(std::span<uint64_t>(shader_ids)));
-      check_result(shader_result, "shaders");
-    }
-    for (size_t i = 0; i < shader_ids.size(); ++i) {
-      LOG_F(INFO, "{}", shader_ids[i]);
+  // Read AssetHeader field-by-field
+  auto asset_type_result = reader.read<uint8_t>();
+  check_result(asset_type_result, "AssetHeader.asset_type");
+  desc.header.asset_type = asset_type_result.value();
+
+  // Read name as individual characters
+  for (size_t i = 0; i < kMaxNameSize; ++i) {
+    auto char_result = reader.read<char>();
+    check_result(char_result, "AssetHeader.name");
+    desc.header.name[i] = char_result.value();
+  }
+
+  auto version_result = reader.read<uint8_t>();
+  check_result(version_result, "AssetHeader.version");
+  desc.header.version = version_result.value();
+
+  auto priority_result = reader.read<uint8_t>();
+  check_result(priority_result, "AssetHeader.streaming_priority");
+  desc.header.streaming_priority = priority_result.value();
+
+  auto content_hash_result = reader.read<uint64_t>();
+  check_result(content_hash_result, "AssetHeader.content_hash");
+  desc.header.content_hash = content_hash_result.value();
+
+  auto variant_flags_result = reader.read<uint32_t>();
+  check_result(variant_flags_result, "AssetHeader.variant_flags");
+  desc.header.variant_flags = variant_flags_result.value();
+
+  // Skip AssetHeader reserved bytes
+  for (size_t i = 0; i < 16; ++i) {
+    auto reserved_result = reader.read<uint8_t>();
+    check_result(reserved_result, "AssetHeader.reserved");
+    desc.header.reserved[i] = reserved_result.value();
+  }
+
+  // Read MaterialAssetDesc specific fields
+  auto material_domain_result = reader.read<uint8_t>();
+  check_result(material_domain_result, "MaterialAssetDesc.material_domain");
+  desc.material_domain = material_domain_result.value();
+
+  auto flags_result = reader.read<uint32_t>();
+  check_result(flags_result, "MaterialAssetDesc.flags");
+  desc.flags = flags_result.value();
+
+  auto shader_stages_result = reader.read<uint32_t>();
+  check_result(shader_stages_result, "MaterialAssetDesc.shader_stages");
+  desc.shader_stages = shader_stages_result.value();
+
+  // Read float arrays (these are the problematic fields for unique object
+  // representation)
+  for (int i = 0; i < 4; ++i) {
+    auto base_color_result = reader.read<float>();
+    check_result(base_color_result, "MaterialAssetDesc.base_color");
+    desc.base_color[i] = base_color_result.value();
+  }
+
+  auto normal_scale_result = reader.read<float>();
+  check_result(normal_scale_result, "MaterialAssetDesc.normal_scale");
+  desc.normal_scale = normal_scale_result.value();
+
+  auto metalness_result = reader.read<float>();
+  check_result(metalness_result, "MaterialAssetDesc.metalness");
+  desc.metalness = metalness_result.value();
+
+  auto roughness_result = reader.read<float>();
+  check_result(roughness_result, "MaterialAssetDesc.roughness");
+  desc.roughness = roughness_result.value();
+
+  auto ambient_occlusion_result = reader.read<float>();
+  check_result(ambient_occlusion_result, "MaterialAssetDesc.ambient_occlusion");
+  desc.ambient_occlusion = ambient_occlusion_result.value();
+
+  // Read texture resource indices
+  auto base_color_texture_result = reader.read<ResourceIndexT>();
+  check_result(
+    base_color_texture_result, "MaterialAssetDesc.base_color_texture");
+  desc.base_color_texture = base_color_texture_result.value();
+
+  auto normal_texture_result = reader.read<ResourceIndexT>();
+  check_result(normal_texture_result, "MaterialAssetDesc.normal_texture");
+  desc.normal_texture = normal_texture_result.value();
+
+  auto metallic_texture_result = reader.read<ResourceIndexT>();
+  check_result(metallic_texture_result, "MaterialAssetDesc.metallic_texture");
+  desc.metallic_texture = metallic_texture_result.value();
+
+  auto roughness_texture_result = reader.read<ResourceIndexT>();
+  check_result(roughness_texture_result, "MaterialAssetDesc.roughness_texture");
+  desc.roughness_texture = roughness_texture_result.value();
+
+  auto ambient_occlusion_texture_result = reader.read<ResourceIndexT>();
+  check_result(ambient_occlusion_texture_result,
+    "MaterialAssetDesc.ambient_occlusion_texture");
+  desc.ambient_occlusion_texture = ambient_occlusion_texture_result.value();
+
+  // Read reserved texture indices array
+  for (int i = 0; i < 8; ++i) {
+    auto reserved_texture_result = reader.read<ResourceIndexT>();
+    check_result(
+      reserved_texture_result, "MaterialAssetDesc.reserved_textures");
+    desc.reserved_textures[i] = reserved_texture_result.value();
+  }
+
+  // Skip reserved bytes
+  for (size_t i = 0; i < 68; ++i) {
+    auto reserved_result = reader.read<uint8_t>();
+    check_result(reserved_result, "MaterialAssetDesc.reserved");
+    desc.reserved[i] = reserved_result.value();
+  }
+  LOG_F(INFO, "material_domain : {}", desc.material_domain);
+  LOG_F(INFO, "shader_stages   : 0x{:08X}", desc.shader_stages);
+
+  // Count set bits in shader_stages to determine number of shader references
+  uint32_t shader_stage_bits = desc.shader_stages;
+  size_t shader_count = std::popcount(shader_stage_bits);
+  std::vector<ShaderReference> shader_refs;
+  shader_refs.reserve(shader_count);
+
+  // For each set bit, read a ShaderReferenceDesc and construct a
+  // ShaderReference
+  for (uint32_t i = 0; i < 32; ++i) {
+    if ((shader_stage_bits & (1u << i)) != 0) {
+      auto shader_result = reader.read<ShaderReferenceDesc>();
+      check_result(shader_result, "ShaderReferenceDesc");
+      ShaderType stage = static_cast<ShaderType>(i);
+      shader_refs.emplace_back(stage, shader_result.value());
     }
   }
 
-  std::vector<uint64_t> texture_ids(mat_header.texture_count);
-  // then texture asset IDs
-  if (mat_header.texture_count > 0) {
-    LOG_SCOPE_F(
-      INFO, fmt::format("Textures ({})", mat_header.texture_count).c_str());
-    auto texture_result = reader.read_blob_to(
-      std::as_writable_bytes(std::span<uint64_t>(texture_ids)));
-    check_result(texture_result, "textures");
-    for (size_t i = 0; i < mat_header.texture_count; ++i) {
-      LOG_F(INFO, "{}", texture_ids[i]);
-    }
-  }
-
-  return std::make_unique<data::MaterialAsset>(mat_header.material_type,
-    mat_header.shader_stages, mat_header.texture_count, std::move(shader_ids),
-    std::move(texture_ids));
+  return std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
 }
 
 } // namespace oxygen::content::loaders

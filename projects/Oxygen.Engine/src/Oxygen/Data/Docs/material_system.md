@@ -34,48 +34,6 @@ This document outlines the core design principles, data structures, and
 integration strategies for the Oxygen Engine’s material system, providing a
 foundation for future extensions and optimizations.
 
----
-
-## 🧱 Geometry Asset
-
-- Represents the 3D shape of a model.
-- Stored as a binary asset with metadata, vertex/index buffers, and submesh
-  descriptors.
-- Designed for efficient streaming and partial loading.
-
-### Geometry Asset Structure
-
-```text
-Geometry Asset (AssetID: "character_knight")
-├── LOD 0 (MeshID: "character_knight_LOD0")
-│   ├── Submesh 0 → Material Slot 0
-│   └── Submesh 1 → Material Slot 1
-├── LOD 1 (MeshID: "character_knight_LOD1")
-│   ├── Submesh 0 → Material Slot 0
-│   └── Submesh 1 → Material Slot 1
-└── LOD 2 (MeshID: "character_knight_LOD2")
-    ├── Submesh 0 → Material Slot 0
-    └── Submesh 1 → Material Slot 1
-```
-
-### Key Concepts
-
-- **LODs**: Multiple levels of detail for performance scaling based on screen
-  size or distance.
-- **Submeshes**: Smallest drawable units, each mapped to a material slot.
-- **Material Slots**: Logical bindings that allow material overrides without
-  modifying geometry.
-
-### Best Practices
-
-- Use stable AssetIDs and MaterialIDs (hashed strings or GUIDs) for referencing.
-- Support partial loading of LODs and submeshes for large scenes.
-- Include asset versioning in the binary format for backward compatibility and
-  upgrades.
-- Store bounding volumes per LOD for efficient culling.
-
----
-
 ## 🎨 Material Asset
 
 A material asset is a data-driven description of how a surface should appear
@@ -98,38 +56,57 @@ Material properties are grouped into the following categories:
 - `name` (string): For debugging, asset tracking, and editor display.
 - `domain` (enum): E.g., Opaque, AlphaBlended, Masked. Controls pipeline
   behavior and render pass selection.
-- `version` (uint): For compatibility and upgrade tracking.
 
 #### B. Texture References
 
-- Bindless indices into a global descriptor heap:
-  - `base_color_texture_index`
-  - `normal_texture_index`
-  - `metallic_roughness_texture_index`
-  - `emissive_texture_index`
+The following table summarizes the most common material texture slots in leading
+engines, with those considered **core** for a minimal physically-based rendering
+(PBR) workflow in Oxygen Engine (Core column is now #2):
 
-✅ Indices are compact, GPU-friendly, and decouple asset management from rendering.
+| Texture Name        | Core | Purpose / Usage                                                      |
+|---------------------|------|-----------------------------------------------------------------------|
+| BaseColor / Albedo  | Yes  | Main color of the surface, without lighting or shadowing              |
+| Normal Map          | Yes  | Encodes surface normals for detailed lighting and bump effects        |
+| Metallic            | Yes  | Controls metalness (0 = dielectric, 1 = metal)                        |
+| Roughness           | Yes  | Controls surface microfacet roughness (0 = smooth, 1 = rough)         |
+| Ambient Occlusion   | Yes  | Stores occlusion/shadowing from ambient light                         |
+| Emissive            | No   | Adds self-illumination (glow) to the surface                          |
+| Height / Parallax   | No   | Used for parallax mapping or displacement effects                     |
+| Opacity / Mask      | No   | Controls transparency or cutout (alpha masking)                       |
+| Detail / Overlay    | No   | Additional fine detail, often tiled at higher frequency               |
+| Subsurface / SSS    | No   | Subsurface scattering mask or color for skin, wax, etc.               |
+| Cavity / Curvature  | No   | Enhances small-scale shadowing or edge highlights                     |
+| Sheen / Clearcoat   | No   | Special effects for fabrics or layered surfaces                       |
+| Transmission        | No   | Controls light passing through (for glass, thin objects)              |
 
 #### C. Scalar Factors (PBR)
 
-Used to modulate or replace texture values:
+Scalar (fallback) factors are used to modulate or replace texture values. They are part of nearly all material asset systems in modern engines, enabling both simple and complex materials, runtime overrides, and robust fallback behavior when textures are missing. The following table summarizes typical scalar factors for PBR workflows, consistent with the texture table above:
 
-- `base_color` (float3 or float4)
-- `roughness` (float)
-- `metalness` (float)
-- `emissive_factor` (float3)
-- `opacity` (float)
+| Scalar Factor        | Core | Type    | Purpose / Usage                                                      |
+|----------------------|------|---------|-----------------------------------------------------------------------|
+| base_color           | Yes  | float4  | Surface color (RGBA). Used if no base color texture is present. Alpha supports cutout/opacity. |
+| normal_scale         | Yes  | float   | Scales the effect of the normal map. 1.0 = full, 0.0 = flat.          |
+| metalness            | Yes  | float   | Metalness value. Used if no metallic texture is present.              |
+| roughness            | Yes  | float   | Roughness value. Used if no roughness texture is present.             |
+| ambient_occlusion    | Yes  | float   | AO multiplier. Used if no AO texture is present.                      |
+| emissive_factor      | No   | float3  | Emissive color multiplier. Used if no emissive texture is present.    |
+| opacity              | No   | float   | Alpha for transparency/cutout. Used if no opacity/mask texture.       |
+| height_scale         | No   | float   | Parallax/displacement amount. Used if no height/parallax texture.     |
+| subsurface           | No   | float   | Subsurface scattering strength. Used if no SSS texture is present.    |
+| clearcoat            | No   | float   | Clearcoat layer strength. Used if no clearcoat texture is present.    |
+| sheen                | No   | float   | Sheen effect strength. Used if no sheen texture is present.           |
+| transmission         | No   | float   | Transmission (thin transparency) amount. Used if no transmission texture is present. |
 
-✅ Factors support simple materials without textures, and allow runtime overrides.
+✅ These factors support simple materials without textures, allow runtime overrides, and provide robust fallback for missing or incomplete texture sets.
 
 #### D. Flags & Options
 
-- Boolean flags or bitfields for:
+- A 32-bit bitfield for flags that can further control the render state and shader branching for the material. Examples include:
   - `double_sided`
   - `alpha_test`
   - `depth_write`
   - `transparent`
-- These control render state configuration and shader branching.
 
 ---
 

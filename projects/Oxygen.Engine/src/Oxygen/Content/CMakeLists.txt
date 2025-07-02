@@ -19,8 +19,6 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
-find_package(stduuid CONFIG REQUIRED)
-
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -49,7 +47,6 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "AssetKey.cpp"
     "AssetLoader.cpp"
     "PakFile.cpp"
     # "Loaders/GeometryLoader.cpp"
@@ -58,14 +55,12 @@ target_sources(
     # "Loaders/MeshLoader.cpp"
     # "Loaders/MeshLoader.h"
     "Loaders/MaterialLoader.h"
-    "Loaders/ShaderLoader.h"
     "Loaders/TextureLoader.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "AssetKey.h"
       "PakFile.h"
 )
 
@@ -82,7 +77,6 @@ target_link_libraries(
     oxygen::base
     oxygen::composition
     oxygen::data
-    stduuid::stduuid
 )
 
 # ------------------------------------------------------------------------------

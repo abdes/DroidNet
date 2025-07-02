@@ -6,10 +6,10 @@
 
 #include <iostream>
 
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
-using oxygen::data::MeshAsset;
+using oxygen::data::Mesh;
 using oxygen::engine::RenderItem;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
@@ -23,7 +23,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
         { { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 },
           { 1, 1, 1, 1 } } };
   std::vector<std::uint32_t> indices = { 0, 1, 2 };
-  auto mesh = std::make_shared<MeshAsset>(
+  auto mesh = std::make_shared<Mesh>(
     "TestMesh", std::move(vertices), std::move(indices));
 
   // Create a RenderItem

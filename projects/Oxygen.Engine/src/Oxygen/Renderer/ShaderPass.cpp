@@ -8,7 +8,7 @@
 #include <utility>
 
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -90,17 +90,18 @@ namespace {
 auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   DescriptorAllocator& allocator) -> NativeObject
 {
+  using oxygen::TextureType;
+
   const auto& tex_desc = color_texture.GetDescriptor();
   oxygen::graphics::TextureViewDescription rtv_view_desc { .view_type
     = ResourceViewType::kTexture_RTV,
     .visibility = DescriptorVisibility::kCpuOnly,
     .format = tex_desc.format,
-    .dimension = tex_desc.dimension,
+    .dimension = tex_desc.texture_type,
     .sub_resources = { .base_mip_level = 0,
       .num_mip_levels = tex_desc.mip_levels,
       .base_array_slice = 0,
-      .num_array_slices
-      = (tex_desc.dimension == oxygen::graphics::TextureDimension::kTexture3D
+      .num_array_slices = (tex_desc.texture_type == TextureType::kTexture3D
           ? tex_desc.depth
           : tex_desc.array_size) },
     .is_read_only_dsv = false };
@@ -128,17 +129,18 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
 auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
   DescriptorAllocator& allocator) -> NativeObject
 {
+  using oxygen::TextureType;
+
   const auto& tex_desc = depth_texture.GetDescriptor();
   oxygen::graphics::TextureViewDescription dsv_view_desc {
     .view_type = ResourceViewType::kTexture_DSV,
     .visibility = DescriptorVisibility::kCpuOnly,
     .format = tex_desc.format,
-    .dimension = tex_desc.dimension,
+    .dimension = tex_desc.texture_type,
     .sub_resources = { .base_mip_level = 0,
       .num_mip_levels = tex_desc.mip_levels,
       .base_array_slice = 0,
-      .num_array_slices
-      = (tex_desc.dimension == oxygen::graphics::TextureDimension::kTexture3D
+      .num_array_slices = (tex_desc.texture_type == TextureType::kTexture3D
           ? tex_desc.depth
           : tex_desc.array_size) },
     .is_read_only_dsv = true,

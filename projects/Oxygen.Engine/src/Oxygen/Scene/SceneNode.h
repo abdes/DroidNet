@@ -24,7 +24,7 @@
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::data {
-class MeshAsset;
+class Mesh;
 } // namespace oxygen::data
 
 namespace oxygen::scene {
@@ -199,20 +199,19 @@ public:
 
   //! Attaches a mesh component to this SceneNode. If a mesh component
   //! already exists, this will fail.
-  OXGN_SCN_API auto AttachMesh(
-    std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool;
+  OXGN_SCN_API auto AttachMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
+    -> bool;
 
   //! Detaches the camera component from this SceneNode, if present.
   OXGN_SCN_API auto DetachMesh() noexcept -> bool;
 
   //! Replaces the current mesh component with a new one. If no mesh component
   //! exists, this acts as attach.
-  OXGN_SCN_API auto ReplaceMesh(
-    std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool;
+  OXGN_SCN_API auto ReplaceMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
+    -> bool;
 
   //! Gets the attached mesh if present.
-  OXGN_SCN_NDAPI auto GetMesh() noexcept
-    -> std::shared_ptr<const data::MeshAsset>;
+  OXGN_SCN_NDAPI auto GetMesh() noexcept -> std::shared_ptr<const data::Mesh>;
 
   //! Checks if this SceneNode has an attached mesh component.
   OXGN_SCN_NDAPI auto HasMesh() noexcept -> bool;

@@ -45,6 +45,5 @@ target_link_libraries(${dump_assets_target} PRIVATE oxygen::content)
 
 include(GTestHelpers)
 
-m_gtest_program(LoadShaderAsset SOURCES "LoadShaderAsset_test.cpp")
 m_gtest_program(LoadTextureAsset SOURCES "LoadTextureAsset_test.cpp")
 m_gtest_program(LoadMaterialAsset SOURCES "LoadMaterialAsset_test.cpp")

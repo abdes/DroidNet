@@ -20,6 +20,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
+find_package(stduuid CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -49,17 +50,28 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "MeshAsset.cpp"
+    "AssetKey.cpp"
+    "GeometryAsset.cpp"
+    "MaterialAsset.cpp"
     "ProceduralMeshes.cpp"
+    "ShaderReference.cpp"
+    "TextureResource.cpp"
+    "Detail/ToStringConverters.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "MeshAsset.h"
-      "MeshView.h"
+      "Asset.h"
+      "AssetKey.h"
+      "AssetType.h"
+      "GeometryAsset.h"
+      "MaterialAsset.h"
+      "MaterialDomain.h"
+      "PakFormat.h"
       "ProceduralMeshes.h"
-      "TextureAsset.h"
+      "ShaderReference.h"
+      "TextureResource.h"
       "Vertex.h"
 )
 
@@ -75,7 +87,9 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::core
+    oxygen::composition
     glm::glm
+    stduuid::stduuid
 )
 
 # ------------------------------------------------------------------------------

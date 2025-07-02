@@ -22,7 +22,7 @@ namespace oxygen::data {
  This structure is standalone and reusable across engine systems (procedural
  generation, import/export, GPU upload, or physics).
 
- @see MeshAsset, MeshView
+ @see Mesh, MeshView
 */
 struct Vertex {
   glm::vec3 position; //!< Object-space position

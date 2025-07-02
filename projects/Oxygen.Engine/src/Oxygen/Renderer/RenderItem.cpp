@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <limits>
 
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
 using oxygen::engine::RenderItem;

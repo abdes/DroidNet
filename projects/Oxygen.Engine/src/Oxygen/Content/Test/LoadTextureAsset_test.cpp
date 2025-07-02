@@ -9,14 +9,14 @@
 #include <Oxygen/Base/Writer.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/Test/Mocks/MockStream.h>
-#include <Oxygen/Data/TextureAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 
 using ::testing::AllOf;
 using ::testing::Eq;
 using ::testing::IsNull;
 using ::testing::NotNull;
 
-using oxygen::content::loaders::LoadTextureAsset;
+using oxygen::content::loaders::LoadTextureResource;
 using oxygen::serio::Reader;
 
 namespace {
@@ -45,63 +45,150 @@ class TextureLoaderErrorTestFixture : public TextureLoaderBasicTestFixture {
   // No additional members needed for now; extend as needed for error scenarios.
 };
 
-//=== TextureLoader Basic Functionality Tests ===--------------------------//
+//=== TextureLoader Basic Functionality Tests ===-----------------------------//
 
-//! Test: LoadTextureAsset returns valid TextureAsset for correct input.
+//! Test: LoadTextureResource returns valid TextureResource for correct input.
 NOLINT_TEST_F(
   TextureLoaderBasicTestFixture, LoadTexture_ValidInput_ReturnsTextureAsset)
 {
-  using oxygen::data::TextureAsset;
+  using oxygen::data::TextureResource;
 
   // Arrange
-  constexpr struct TextureAssetHeader {
-    uint32_t width = 128;
-    uint32_t height = 64;
-    uint32_t mip_count = 5;
-    uint32_t array_layers = 2;
-    uint32_t format = 42;
-    uint32_t image_size = 287;
-    uint32_t alignment = 256;
-    uint8_t is_cubemap = 1;
-    uint8_t reserved[35] = {};
-  } header;
-  static_assert(sizeof(TextureAssetHeader) == 64);
 
-  // Write header
-  ASSERT_TRUE(writer.write(header));
-  ASSERT_TRUE(writer.align_to(header.alignment));
-  std::array<std::byte, header.image_size> image_data = { std::byte(0x99) };
+  using oxygen::data::pak::TextureResourceDesc;
+  constexpr TextureResourceDesc desc {
+    .data_offset = 256,
+    .data_size = 287,
+    .texture_type = static_cast<uint8_t>(oxygen::TextureType::kTextureCube),
+    .compression_type = 0, // Example: 0 = uncompressed
+    .width = 128,
+    .height = 64,
+    .depth = 1,
+    .array_layers = 6, // For cubemap
+    .mip_levels = 5,
+    .format = static_cast<uint8_t>(oxygen::Format::kRGBA32Float),
+    .alignment = 256,
+    .is_cubemap = 1,
+    .reserved = { 0 },
+  };
+
+  // Write header (TextureResourceDesc)
+  ASSERT_TRUE(writer.write(desc));
+  if (desc.data_offset > sizeof(desc)) {
+    std::vector<std::byte> pad(
+      desc.data_offset - sizeof(desc), std::byte { 0 });
+    ASSERT_TRUE(writer.write_blob(pad));
+  }
+  std::vector<std::byte> image_data(desc.data_size, std::byte(0x99));
   ASSERT_TRUE(writer.write_blob(image_data));
   stream.seek(0);
 
   // Act
-  auto asset = LoadTextureAsset(reader);
+  auto asset = LoadTextureResource(reader);
 
   // Assert
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetWidth(), 128u);
   EXPECT_EQ(asset->GetHeight(), 64u);
+  EXPECT_EQ(asset->GetDepth(), 1u);
+  EXPECT_EQ(asset->GetArrayLayers(), 6u);
   EXPECT_EQ(asset->GetMipCount(), 5u);
-  EXPECT_EQ(asset->GetArrayLayers(), 2u);
-  EXPECT_EQ(asset->GetFormat(), 42u);
-  EXPECT_EQ(asset->GetImageSize(), header.image_size);
-  EXPECT_EQ(asset->GetAlignment(), 256u);
+  EXPECT_EQ(asset->GetFormat(), oxygen::Format::kRGBA32Float);
+  EXPECT_EQ(asset->GetDataSize(), 287u);
+  EXPECT_EQ(asset->GetDataAlignment(), 256u);
   EXPECT_TRUE(asset->IsCubemap());
-
-  // padding to 256 is required for alignement
-  ASSERT_LE(sizeof(header), 256u);
-  EXPECT_EQ(asset->GetDataOffset(), header.alignment);
+  EXPECT_EQ(asset->GetDataOffset(), 256u);
+  EXPECT_EQ(asset->GetTextureType(), oxygen::TextureType::kTextureCube);
+  EXPECT_EQ(asset->GetCompressionType(), 0u);
 }
 
-//=== TextureLoader Error Handling Tests ===-------------------------------//
+//! Test: LoadTextureResource returns kUnknown for invalid texture type.
+NOLINT_TEST_F(
+  TextureLoaderBasicTestFixture, LoadTexture_InvalidTextureType_ReturnsUnknown)
+{
+  using oxygen::Format;
+  using oxygen::TextureType;
+  using oxygen::data::TextureResource;
+  using oxygen::data::pak::TextureResourceDesc;
 
-//! Test: LoadTextureAsset throws if header cannot be read.
+  constexpr TextureResourceDesc desc {
+    .data_offset = 256,
+    .data_size = 128,
+    .texture_type = 255, // Invalid
+    .compression_type = 0,
+    .width = 16,
+    .height = 16,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = static_cast<uint8_t>(Format::kRGBA32Float),
+    .alignment = 256,
+    .is_cubemap = 0,
+    .reserved = { 0 },
+  };
+  ASSERT_TRUE(writer.write(desc));
+  if (desc.data_offset > sizeof(desc)) {
+    std::vector<std::byte> pad(
+      desc.data_offset - sizeof(desc), std::byte { 0 });
+    ASSERT_TRUE(writer.write_blob(pad));
+  }
+  std::vector<std::byte> image_data(desc.data_size, std::byte(0x11));
+  ASSERT_TRUE(writer.write_blob(image_data));
+  stream.seek(0);
+
+  auto asset = LoadTextureResource(reader);
+  ASSERT_THAT(asset, NotNull());
+  EXPECT_EQ(asset->GetTextureType(), TextureType::kUnknown);
+}
+
+//! Test: LoadTextureResource returns kUnknown for invalid format.
+NOLINT_TEST_F(
+  TextureLoaderBasicTestFixture, LoadTexture_InvalidFormat_ReturnsUnknown)
+{
+  using oxygen::Format;
+  using oxygen::TextureType;
+  using oxygen::data::TextureResource;
+  using oxygen::data::pak::TextureResourceDesc;
+
+  constexpr TextureResourceDesc desc {
+    .data_offset = 256,
+    .data_size = 128,
+    .texture_type = static_cast<uint8_t>(TextureType::kTexture2D),
+    .compression_type = 0,
+    .width = 16,
+    .height = 16,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = 255, // Invalid
+    .alignment = 256,
+    .is_cubemap = 0,
+    .reserved = { 0 },
+  };
+  ASSERT_TRUE(writer.write(desc));
+  if (desc.data_offset > sizeof(desc)) {
+    std::vector<std::byte> pad(
+      desc.data_offset - sizeof(desc), std::byte { 0 });
+    ASSERT_TRUE(writer.write_blob(pad));
+  }
+  std::vector<std::byte> image_data(desc.data_size, std::byte(0x22));
+  ASSERT_TRUE(writer.write_blob(image_data));
+  stream.seek(0);
+
+  auto asset = LoadTextureResource(reader);
+  ASSERT_THAT(asset, NotNull());
+  EXPECT_EQ(asset->GetFormat(), Format::kUnknown);
+}
+
+//=== TextureLoader Error Handling Tests ===----------------------------------//
+
+//! Test: LoadTextureResource throws if header cannot be read.
 NOLINT_TEST_F(
   TextureLoaderErrorTestFixture, LoadTexture_FailsToReadHeader_Throws)
 {
   // Act + Assert
   EXPECT_THROW(
-    { (void)LoadTextureAsset(std::move(reader)); }, std::runtime_error);
+    { (void)LoadTextureResource(std::move(reader)); }, std::runtime_error);
 }
 
 } // namespace

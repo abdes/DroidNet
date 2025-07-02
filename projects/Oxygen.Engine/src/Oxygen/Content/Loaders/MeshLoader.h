@@ -22,7 +22,7 @@ public:
 };
 
 //! Loader for mesh assets.
-OXGN_CNTT_API std::unique_ptr<PlaceHolderMeshAsset> LoadMesh(
+OXGN_CNTT_API std::unique_ptr<PlaceHolderMeshAsset> LoadMeshAsset(
   const PakFile& pak, const AssetDirectoryEntry& entry);
 
 } // namespace oxygen::content::loaders

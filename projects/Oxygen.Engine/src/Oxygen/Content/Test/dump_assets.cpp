@@ -12,10 +12,12 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Content/AssetKey.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Data/AssetKey.h>
 
 using namespace oxygen::content;
+using namespace oxygen::data;
+using namespace oxygen::data::pak;
 
 void PrintGuidReadable(const std::array<uint8_t, 16>& guid)
 {
@@ -33,43 +35,18 @@ void PrintGuidReadable(const std::array<uint8_t, 16>& guid)
 void PrintAssetKey(const AssetKey& key)
 {
   std::cout << "    --- asset key ---\n";
-  std::cout << "    GUID        : ";
-  PrintGuidReadable(key.guid);
-  std::cout << "\n";
-  std::cout << "    Variant     : " << key.variant << "\n";
-  std::cout << "    Version     : " << static_cast<int>(key.version) << "\n";
-  std::cout << "    Type        : " << nostd::to_string(key.type) << "\n";
-  std::cout << "    Reserved    : " << key.reserved << "\n";
+  std::cout << "    GUID        : " << nostd::to_string(key) << "\n";
 }
 
-void PrintDependencies(const AssetDirectoryEntry& entry, const PakFile& pak)
-{
-  if (entry.dependency_count > 0) {
-    std::cout << "    --- dependencies ---\n";
-    auto deps = pak.Dependencies(entry);
-    for (const auto& dep_key : deps) {
-      std::cout << "        ";
-      PrintGuidReadable(dep_key.guid);
-      std::cout << "\n";
-    }
-  }
-}
-
-void PrintAssetEntry(
-  const AssetDirectoryEntry& entry, size_t idx, const PakFile& pak)
+void PrintAssetEntry(const AssetDirectoryEntry& entry, size_t idx)
 {
   std::cout << "Asset #" << idx << ":\n";
-  PrintAssetKey(entry.key);
-  PrintDependencies(entry, pak);
+  PrintAssetKey(entry.asset_key);
   std::cout << "    --- asset metadata ---\n";
-  std::cout << "    Offset      : " << entry.data_offset << "\n";
-  std::cout << "    Size        : " << entry.data_size << "\n";
-  std::cout << "    Alignment   : " << entry.alignment << "\n";
-  std::cout << "    Dependencies: " << entry.dependency_count << "\n";
-  std::cout << "    Compression : " << static_cast<int>(entry.compression)
-            << "\n";
-  std::cout << "    Reserved0   : " << static_cast<int>(entry.reserved0)
-            << "\n\n";
+  std::cout << "    Asset Type   : " << entry.asset_type << "\n";
+  std::cout << "    Entry Offset : " << entry.entry_offset << "\n";
+  std::cout << "    Desc Offset  : " << entry.desc_offset << "\n";
+  std::cout << "    Desc Size    : " << entry.desc_size << "\n";
 }
 
 int main(int argc, char* argv[])
@@ -104,7 +81,7 @@ int main(int argc, char* argv[])
     std::cout << "PAK: " << pak_path << "\n";
     std::cout << "Asset count: " << dir.size() << "\n\n";
     for (size_t i = 0; i < dir.size(); ++i) {
-      PrintAssetEntry(dir[i], i, pak);
+      PrintAssetEntry(dir[i], i);
     }
   } catch (const std::exception& ex) {
     std::cerr << "Error: " << ex.what() << "\n";

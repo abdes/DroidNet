@@ -8,15 +8,17 @@
 
 #include <numbers>
 
+#include <Oxygen/Data/MaterialAsset.h>
+
 // ReSharper disable CppClangTidyModernizeUseDesignatedInitializers
 
 namespace oxygen::data {
 
 /*!
- Creates a new MeshAsset representing a unit axis-aligned cube centered at the
+ Creates a new Mesh representing a unit axis-aligned cube centered at the
  origin.
 
- @return Shared pointer to the immutable MeshAsset containing the cube geometry.
+ @return Shared pointer to the immutable Mesh containing the cube geometry.
  Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
@@ -24,7 +26,7 @@ namespace oxygen::data {
  - Time Complexity: O(1) (fixed-size geometry generation)
  - Memory: Allocates space for 8 vertices and 36 indices
  - Optimization: No dynamic allocations beyond vector growth; all data is
-   constructed in-place and moved into the MeshAsset.
+   constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -35,10 +37,10 @@ namespace oxygen::data {
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
-       using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+       using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
-auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
+auto MakeCubeMeshAsset() -> std::shared_ptr<Mesh>
 {
   // Vertices for a unit cube centered at the origin
   constexpr float h = 0.5f;
@@ -70,15 +72,19 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
     3, 7, 6, 3, 6, 2,
     // clang-format on
   };
-  auto asset = std::make_shared<MeshAsset>(
-    "Cube", std::move(vertices), std::move(indices));
-  // Add a default view covering the whole mesh
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Cube", std::move(vertices), std::move(indices));
+  // Add a default submesh covering the whole mesh
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a UV sphere centered at the origin.
+ Creates a new Mesh representing a UV sphere centered at the origin.
  The sphere is generated using latitude and longitude segments, with vertices
  distributed over the surface and indexed triangles forming the mesh. Normals,
  UVs, tangents, bitangents, and vertex colors are set for each vertex.
@@ -86,7 +92,7 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
  @param latitude_segments Number of segments along the vertical axis (minimum
  3).
  @param longitude_segments Number of segments around the equator (minimum 3).
- @return Shared pointer to the immutable MeshAsset containing the sphere
+ @return Shared pointer to the immutable Mesh containing the sphere
  geometry. Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
@@ -94,7 +100,7 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
  - Time Complexity: O(latitude_segments * longitude_segments)
  - Memory: Allocates space for (latitude_segments+1)*(longitude_segments+1)
  vertices and 6*latitude_segments*longitude_segments indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -105,11 +111,11 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<MeshAsset>
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
-       using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+       using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakeSphereMeshAsset(unsigned int latitude_segments,
-  unsigned int longitude_segments) -> std::shared_ptr<MeshAsset>
+  unsigned int longitude_segments) -> std::shared_ptr<Mesh>
 {
   if (latitude_segments < 3 || longitude_segments < 3) {
     return nullptr;
@@ -158,14 +164,18 @@ auto MakeSphereMeshAsset(unsigned int latitude_segments,
       indices.push_back(i3);
     }
   }
-  auto asset = std::make_shared<MeshAsset>(
-    "Sphere", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Sphere", std::move(vertices), std::move(indices));
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a flat plane in the XZ plane centered at
+ Creates a new Mesh representing a flat plane in the XZ plane centered at
  the origin. The plane is subdivided into a grid of quads, with each quad made
  of two triangles. Vertices are generated with positions, normals, texcoords,
  tangents, bitangents, and color.
@@ -173,7 +183,7 @@ auto MakeSphereMeshAsset(unsigned int latitude_segments,
  @param x_segments Number of subdivisions along the X axis (minimum 1).
  @param z_segments Number of subdivisions along the Z axis (minimum 1).
  @param size Length of the plane along X and Z (plane is size x size).
- @return Shared pointer to the immutable MeshAsset containing the plane
+ @return Shared pointer to the immutable Mesh containing the plane
  geometry. Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
@@ -181,7 +191,7 @@ auto MakeSphereMeshAsset(unsigned int latitude_segments,
  - Time Complexity: O(x_segments * z_segments)
  - Memory: Allocates space for (x_segments+1)*(z_segments+1) vertices and
  6*x_segments*z_segments indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -192,11 +202,11 @@ auto MakeSphereMeshAsset(unsigned int latitude_segments,
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
- using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+ using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
-  float size) -> std::shared_ptr<MeshAsset>
+  float size) -> std::shared_ptr<Mesh>
 {
   if (x_segments < 1 || z_segments < 1 || size <= 0.0f) {
     return nullptr;
@@ -235,14 +245,19 @@ auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
       indices.push_back(i3);
     }
   }
-  auto asset = std::make_shared<MeshAsset>(
-    "Plane", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Plane", std::move(vertices), std::move(indices));
+  // Add a default submesh covering the whole mesh
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a cylinder centered at the origin, aligned
+ Creates a new Mesh representing a cylinder centered at the origin, aligned
  along the Y axis. The cylinder consists of a side surface and two end caps.
  Vertices are generated with positions, normals, texcoords, tangents,
  bitangents, and color.
@@ -250,7 +265,7 @@ auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
  @param segments Number of radial segments (minimum 3).
  @param height Height of the cylinder (centered at Y=0).
  @param radius Radius of the cylinder.
- @return Shared pointer to the immutable MeshAsset containing the cylinder
+ @return Shared pointer to the immutable Mesh containing the cylinder
  geometry. Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
@@ -258,7 +273,7 @@ auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
  - Time Complexity: O(segments)
  - Memory: Allocates space for 2*(segments+1) + 2 vertices and 12*segments
  indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -269,11 +284,11 @@ for (const auto& v : cylinder->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
- using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+ using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakeCylinderMeshAsset(const unsigned int segments, const float height,
-  const float radius) -> std::shared_ptr<MeshAsset>
+  const float radius) -> std::shared_ptr<Mesh>
 {
   if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
     return nullptr;
@@ -357,14 +372,18 @@ auto MakeCylinderMeshAsset(const unsigned int segments, const float height,
     indices.push_back(v2);
     indices.push_back(v3);
   }
-  auto asset = std::make_shared<MeshAsset>(
+  auto asset = std::make_shared<Mesh>(
     "Cylinder", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a cone centered at the origin, aligned
+ Creates a new Mesh representing a cone centered at the origin, aligned
  along the Y axis. The cone consists of a side surface and a base cap.
  Vertices are generated with positions, normals, texcoords, tangents,
  bitangents, and color, using designated initializers and trailing commas.
@@ -372,14 +391,14 @@ auto MakeCylinderMeshAsset(const unsigned int segments, const float height,
  @param segments Number of radial segments (minimum 3).
  @param height Height of the cone (centered at Y=0, apex at +Y).
  @param radius Base radius of the cone.
- @return Shared pointer to the immutable MeshAsset containing the cone geometry.
+ @return Shared pointer to the immutable Mesh containing the cone geometry.
  Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
 
  - Time Complexity: O(segments)
  - Memory: Allocates space for (segments+2) vertices and 6*segments indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -390,11 +409,11 @@ for (const auto& v : cone->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
- using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+ using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
-  -> std::shared_ptr<MeshAsset>
+  -> std::shared_ptr<Mesh>
 {
   if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
     return nullptr;
@@ -456,14 +475,18 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
     indices.push_back(i + 1);
     indices.push_back(base_center);
   }
-  auto asset = std::make_shared<MeshAsset>(
-    "Cone", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Cone", std::move(vertices), std::move(indices));
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a torus (doughnut shape) centered at the
+ Creates a new Mesh representing a torus (doughnut shape) centered at the
  origin, aligned along the Y axis. The torus is generated by sweeping a circle
  (minor radius) around a larger circle (major radius). Vertices are generated
  with positions, normals, texcoords, tangents, bitangents, and color.
@@ -472,7 +495,7 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
  @param minor_segments Number of segments around the tube (minimum 3).
  @param major_radius Radius from the center to the center of the tube.
  @param minor_radius Radius of the tube.
- @return Shared pointer to the immutable MeshAsset containing the torus
+ @return Shared pointer to the immutable Mesh containing the torus
  geometry. Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
@@ -480,7 +503,7 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
  - Time Complexity: O(major_segments * minor_segments)
  - Memory: Allocates space for (major_segments+1)*(minor_segments+1) vertices
  and 6*major_segments*minor_segments indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -491,12 +514,12 @@ for (const auto& v : torus->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
-       using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+       using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakeTorusMeshAsset(unsigned int major_segments,
   unsigned int minor_segments, float major_radius, float minor_radius)
-  -> std::shared_ptr<MeshAsset>
+  -> std::shared_ptr<Mesh>
 {
   if (major_segments < 3 || minor_segments < 3 || major_radius <= 0.0f
     || minor_radius <= 0.0f) {
@@ -550,27 +573,31 @@ auto MakeTorusMeshAsset(unsigned int major_segments,
       indices.push_back(i3);
     }
   }
-  auto asset = std::make_shared<MeshAsset>(
-    "Torus", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Torus", std::move(vertices), std::move(indices));
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a quad (rectangle) in the XZ plane,
+ Creates a new Mesh representing a quad (rectangle) in the XZ plane,
  centered at the origin. The quad is made of two triangles. Vertices are
  generated with positions, normals, texcoords, tangents, bitangents, and color.
 
  @param width Width of the quad along the X axis (must be > 0).
  @param height Height of the quad along the Z axis (must be > 0).
- @return Shared pointer to the immutable MeshAsset containing the quad geometry.
+ @return Shared pointer to the immutable Mesh containing the quad geometry.
  Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
 
  - Time Complexity: O(1)
  - Memory: Allocates space for 4 vertices and 6 indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -581,11 +608,11 @@ for (const auto& v : quad->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
-       using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+       using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
 auto MakeQuadMeshAsset(const float width, const float height)
-  -> std::shared_ptr<MeshAsset>
+  -> std::shared_ptr<Mesh>
 {
   if (width <= 0.0f || height <= 0.0f) {
     return nullptr;
@@ -604,26 +631,31 @@ auto MakeQuadMeshAsset(const float width, const float height)
     0, 1, 2, // triangle 1
     2, 3, 0, // triangle 2
   };
-  auto asset = std::make_shared<MeshAsset>(
-    "Quad", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  auto asset
+    = std::make_shared<Mesh>("Quad", std::move(vertices), std::move(indices));
+  // Add a default submesh covering the whole mesh
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 
 /*!
- Creates a new MeshAsset representing a simple arrow gizmo, typically used for
+ Creates a new Mesh representing a simple arrow gizmo, typically used for
  axis visualization in editors and debug views. The arrow is aligned along the
  +Y axis, composed of a cylinder shaft and a cone head, with distinct colors
  for shaft and head. All geometry is centered at the origin.
 
- @return Shared pointer to the immutable MeshAsset containing the arrow gizmo.
+ @return Shared pointer to the immutable Mesh containing the arrow gizmo.
  Returns nullptr on invalid input. Never throws.
 
  ### Performance Characteristics
 
  - Time Complexity: O(segments)
  - Memory: Allocates space for a small number of vertices and indices
- - Optimization: All data is constructed in-place and moved into the MeshAsset.
+ - Optimization: All data is constructed in-place and moved into the Mesh.
 
  ### Usage Examples
 
@@ -634,10 +666,10 @@ for (const auto& v : arrow->Vertices()) { ... }
  ```
 
  @note The default view covers the entire mesh. Submesh views can be created
-       using MeshAsset::CreateView.
- @see MeshAsset, MeshView, Vertex
+       using Mesh::MakeView.
+ @see Mesh, MeshView, Vertex
 */
-auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<MeshAsset>
+auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<Mesh>
 {
   constexpr unsigned int segments = 16;
   constexpr float shaft_length = 0.7f;
@@ -747,9 +779,13 @@ auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<MeshAsset>
     indices.push_back(cone_base_start + i + 1);
     indices.push_back(base_center);
   }
-  auto asset = std::make_shared<MeshAsset>(
+  auto asset = std::make_shared<Mesh>(
     "ArrowGizmo", std::move(vertices), std::move(indices));
-  asset->CreateView("default", 0, asset->VertexCount(), 0, asset->IndexCount());
+  std::vector<MeshView> views;
+  views.push_back(
+    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
+  asset->AddSubMesh(
+    "default", std::move(views), MaterialAsset::CreateDefault());
   return asset;
 }
 

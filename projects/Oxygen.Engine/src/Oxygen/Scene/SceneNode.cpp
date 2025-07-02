@@ -636,7 +636,7 @@ auto SceneNode::HasCamera() noexcept -> bool
  @return True if the mesh was successfully attached; false if a mesh already
  exists, the node is invalid, or the mesh is null.
 */
-auto SceneNode::AttachMesh(std::shared_ptr<const data::MeshAsset> mesh) noexcept
+auto SceneNode::AttachMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
   -> bool
 {
   if (!mesh) {
@@ -692,8 +692,8 @@ auto SceneNode::DetachMesh() noexcept -> bool
  @return True if the mesh was successfully replaced or attached; false if the
  node is invalid or the mesh is null.
 */
-auto SceneNode::ReplaceMesh(
-  std::shared_ptr<const data::MeshAsset> mesh) noexcept -> bool
+auto SceneNode::ReplaceMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
+  -> bool
 {
   if (!mesh) {
     LOG_F(ERROR, "Cannot attach a null mesh. SceneNode: {}",
@@ -720,7 +720,7 @@ auto SceneNode::ReplaceMesh(
  @return Shared pointer to the attached MeshAsset, or nullptr if no mesh is
  attached or the node is invalid.
 */
-auto SceneNode::GetMesh() noexcept -> std::shared_ptr<const data::MeshAsset>
+auto SceneNode::GetMesh() noexcept -> std::shared_ptr<const data::Mesh>
 {
   return SafeCall(
     NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
@@ -731,7 +731,7 @@ auto SceneNode::GetMesh() noexcept -> std::shared_ptr<const data::MeshAsset>
       if (state.node_impl->HasComponent<detail::MeshData>()) {
         return state.node_impl->GetComponent<detail::MeshData>().GetMeshAsset();
       }
-      return std::shared_ptr<const data::MeshAsset> {};
+      return std::shared_ptr<const data::Mesh> {};
     });
 }
 

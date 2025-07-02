@@ -168,7 +168,7 @@ NOLINT_TEST_F(SceneNodeMeshTest, AttachMesh_Nullptr_ReturnsFalse)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  std::shared_ptr<const oxygen::data::MeshAsset> null_mesh;
+  std::shared_ptr<const oxygen::data::Mesh> null_mesh;
 
   // Act & Assert
   EXPECT_FALSE(node.AttachMesh(null_mesh));

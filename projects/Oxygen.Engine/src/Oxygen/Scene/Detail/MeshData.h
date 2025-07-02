@@ -7,7 +7,7 @@
 #pragma once
 
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 
 namespace oxygen::scene::detail {
 
@@ -15,7 +15,7 @@ class MeshData final : public Component {
   OXYGEN_COMPONENT(MeshData)
 
 public:
-  MeshData(std::shared_ptr<const data::MeshAsset> mesh_asset)
+  MeshData(std::shared_ptr<const data::Mesh> mesh_asset)
     : mesh_asset_(std::move(mesh_asset))
   {
   }
@@ -26,7 +26,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(MeshData)
 
   //! Returns the mesh asset associated with this component.
-  std::shared_ptr<const data::MeshAsset> GetMeshAsset() const noexcept
+  std::shared_ptr<const data::Mesh> GetMeshAsset() const noexcept
   {
     return mesh_asset_;
   }
@@ -42,7 +42,7 @@ public:
 
 private:
   //! The mesh asset containing the geometry data.
-  std::shared_ptr<const data::MeshAsset> mesh_asset_;
+  std::shared_ptr<const data::Mesh> mesh_asset_;
 };
 
 } // namespace oxygen::scene::detail

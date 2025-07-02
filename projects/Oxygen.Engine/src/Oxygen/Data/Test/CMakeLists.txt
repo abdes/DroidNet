@@ -38,8 +38,9 @@ include(GTestHelpers)
 m_gtest_program(
   Mesh
   SOURCES
-    "MeshAsset_test.cpp"
-    "Vertex_test.cpp"
+    "Mesh_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
+    "SubMesh_test.cpp"
+    "Vertex_test.cpp"
 )

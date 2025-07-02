@@ -13,7 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
@@ -24,7 +24,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-using oxygen::data::MeshAsset;
+using oxygen::data::Mesh;
 using oxygen::engine::EvictionPolicy;
 using oxygen::engine::MeshGpuResources;
 using oxygen::engine::MeshId;
@@ -38,7 +38,7 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
 namespace {
-auto GetMeshId(const MeshAsset& mesh) -> MeshId
+auto GetMeshId(const Mesh& mesh) -> MeshId
 {
   // Use pointer value or a unique mesh identifier if available
   return reinterpret_cast<MeshId>(&mesh);
@@ -106,17 +106,17 @@ Renderer::Renderer(std::weak_ptr<RenderController> render_controller,
 
 Renderer::~Renderer() { mesh_resources_.clear(); }
 
-auto Renderer::GetVertexBuffer(const MeshAsset& mesh) -> std::shared_ptr<Buffer>
+auto Renderer::GetVertexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
 {
   return EnsureMeshResources(mesh).vertex_buffer;
 }
 
-auto Renderer::GetIndexBuffer(const MeshAsset& mesh) -> std::shared_ptr<Buffer>
+auto Renderer::GetIndexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
 {
   return EnsureMeshResources(mesh).index_buffer;
 }
 
-auto Renderer::UnregisterMesh(const MeshAsset& mesh) -> void
+auto Renderer::UnregisterMesh(const Mesh& mesh) -> void
 {
   const MeshId id = GetMeshId(mesh);
   const auto it = mesh_resources_.find(id);
@@ -152,8 +152,8 @@ auto Renderer::PostExecute(const RenderContext& context) -> void
 }
 
 namespace {
-auto CreateVertexBuffer(const MeshAsset& mesh,
-  RenderController& render_controller) -> std::shared_ptr<Buffer>
+auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
+  -> std::shared_ptr<Buffer>
 {
   DLOG_F(2, "Create vertex buffe");
 
@@ -171,8 +171,8 @@ auto CreateVertexBuffer(const MeshAsset& mesh,
   return vertex_buffer;
 }
 
-auto CreateIndexBuffer(const MeshAsset& mesh,
-  RenderController& render_controller) -> std::shared_ptr<Buffer>
+auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
+  -> std::shared_ptr<Buffer>
 {
   DLOG_F(2, "Create index buffer");
 
@@ -190,9 +190,8 @@ auto CreateIndexBuffer(const MeshAsset& mesh,
   return index_buffer;
 }
 
-auto UploadVertexBuffer(const MeshAsset& mesh,
-  RenderController& render_controller, Buffer& vertex_buffer,
-  oxygen::graphics::CommandRecorder& recorder) -> void
+auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
+  Buffer& vertex_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
 {
   DLOG_F(2, "Upload vertex buffer");
 
@@ -226,9 +225,8 @@ auto UploadVertexBuffer(const MeshAsset& mesh,
     upload_buffer, render_controller.GetPerFrameResourceManager());
 }
 
-auto UploadIndexBuffer(const MeshAsset& mesh,
-  RenderController& render_controller, Buffer& index_buffer,
-  oxygen::graphics::CommandRecorder& recorder) -> void
+auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
+  Buffer& index_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
 {
   DLOG_F(2, "Upload index buffer");
 
@@ -264,7 +262,7 @@ auto UploadIndexBuffer(const MeshAsset& mesh,
 
 } // namespace
 
-auto Renderer::EnsureMeshResources(const MeshAsset& mesh) -> MeshGpuResources&
+auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 {
   MeshId id = GetMeshId(mesh);
   const auto it = mesh_resources_.find(id);
