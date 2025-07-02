@@ -264,10 +264,10 @@ auto MainModule::SetupShaders() const -> void
 
   // Verify that the shaders can be loaded by the Graphics backend
   const auto vertex_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
-    data::ShaderType::kVertex, "FullScreenTriangle.hlsl"));
+    ShaderType::kVertex, "FullScreenTriangle.hlsl"));
 
   const auto pixel_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
-    data::ShaderType::kPixel, "FullScreenTriangle.hlsl"));
+    ShaderType::kPixel, "FullScreenTriangle.hlsl"));
 
   CHECK_NOTNULL_F(
     vertex_shader, "Failed to load FullScreenTriangle vertex shader");

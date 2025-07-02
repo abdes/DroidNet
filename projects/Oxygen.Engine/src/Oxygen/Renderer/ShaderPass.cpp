@@ -281,7 +281,6 @@ auto ShaderPass::SetupViewPortAndScissors(
 */
 auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 {
-  using data::ShaderType;
   using graphics::BindingSlotDesc;
   using graphics::CompareOp;
   using graphics::CullMode;

@@ -27,7 +27,7 @@
 namespace oxygen::graphics {
 
 struct CompiledShaderInfo {
-  data::ShaderType shader_type { data::ShaderType::kVertex };
+  ShaderType shader_type { ShaderType::kVertex };
   std::string shader_unique_id;
   std::string source_file_path;
   uint64_t source_hash { 0 };
@@ -38,7 +38,7 @@ struct CompiledShaderInfo {
   CompiledShaderInfo() = default;
 
   // Parameterized constructor
-  CompiledShaderInfo(const data::ShaderType type, std::string unique_id,
+  CompiledShaderInfo(const ShaderType type, std::string unique_id,
     std::string path, const uint64_t hash, const size_t size,
     const std::chrono::system_clock::time_point time) noexcept
     : shader_type(type)

@@ -9,7 +9,7 @@
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Data/ShaderType.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -61,7 +61,7 @@ OXYGEN_GFX_API auto to_string(ShaderStageFlags value) -> std::string;
        extension.
 */
 struct ShaderInfo {
-  data::ShaderType type; //!< Shader type.
+  ShaderType type; //!< Shader type.
   std::string relative_path; //!< Path to the shader source file, relative to
                              //!< the engine shaders directory.
   std::string entry_point { "main" }; //!< Entry point function name.
@@ -76,8 +76,7 @@ struct ShaderInfo {
  \see MakeShaderIdentifier(const ShaderInfo&)
 */
 [[nodiscard]] OXYGEN_GFX_API auto MakeShaderIdentifier(
-  data::ShaderType shader_type, const std::string& relative_path)
-  -> std::string;
+  ShaderType shader_type, const std::string& relative_path) -> std::string;
 
 //! Generates a unique identifier string for a shader using ShaderInfo.
 /*!

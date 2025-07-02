@@ -9,10 +9,10 @@
 
 #include <Oxygen/Graphics/Common/Shaders.h>
 
-auto oxygen::graphics::MakeShaderIdentifier(const data::ShaderType shader_type,
-  const std::string& relative_path) -> std::string
+auto oxygen::graphics::MakeShaderIdentifier(
+  const ShaderType shader_type, const std::string& relative_path) -> std::string
 {
-  using oxygen::data::ShaderType;
+  using oxygen::ShaderType;
 
   std::string prefix;
   switch (shader_type) { // NOLINT(clang-diagnostic-switch-enum) rest are not
