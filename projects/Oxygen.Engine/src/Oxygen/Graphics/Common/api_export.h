@@ -25,3 +25,5 @@
 #else
 #  define OXYGEN_GFX_API
 #endif
+
+#define OXYGEN_GFX_NDAPI [[nodiscard]] OXYGEN_GFX_API

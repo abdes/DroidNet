@@ -64,7 +64,7 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
       .view_type = ResourceViewType::kTexture_RTV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = attachment.format,
-      .dimension = texture->GetDescriptor().dimension,
+      .dimension = texture->GetDescriptor().texture_type,
       .sub_resources = attachment.sub_resources,
     };
 
@@ -102,7 +102,7 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
       .view_type = ResourceViewType::kTexture_DSV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = depth_attachment.format,
-      .dimension = texture->GetDescriptor().dimension,
+      .dimension = texture->GetDescriptor().texture_type,
       .sub_resources = depth_attachment.sub_resources,
     };
 

@@ -106,11 +106,11 @@ auto oxygen::graphics::d3d12::detail::GetDxgiFormatMapping(
   Format generic_format) -> const DxgiFormatMapping&
 {
   static_assert(sizeof(kDxgiFormatMappings) / sizeof(DxgiFormatMapping)
-      == static_cast<size_t>(Format::kMax),
+      == static_cast<size_t>(Format::kMaxFormat) + 1,
     "The DXGI format mapping table doesn't have the right number of elements");
 
   if (static_cast<uint32_t>(generic_format)
-    >= static_cast<uint32_t>(Format::kMax)) {
+    > static_cast<uint32_t>(Format::kMaxFormat)) {
     // Return kUnknown for invalid format
     return kDxgiFormatMappings[static_cast<uint32_t>(Format::kUnknown)];
   }
