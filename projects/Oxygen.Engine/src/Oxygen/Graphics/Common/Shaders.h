@@ -41,8 +41,7 @@ enum class ShaderStageFlags : uint32_t { // NOLINT(performance-enum-size)
   kCallable = OXYGEN_FLAG(13), //!< Callable Shader stage (ray tracing).
   //! @}
 
-  kMaxShaderStage
-  = OXYGEN_FLAG(14), //!< Maximum value sentinel for shader stages.
+  kMaxShaderStage = kCallable, //!< Maximum value sentinel for shader stages.
 
   kAllGraphics = kAmplification | kMesh | kVertex | kHull | kDomain | kGeometry
     | kPixel, //!< All graphics shader stages.

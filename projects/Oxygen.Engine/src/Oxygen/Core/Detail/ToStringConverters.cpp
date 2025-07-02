@@ -8,12 +8,13 @@
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 auto oxygen::to_string(oxygen::Format format) -> const char*
 {
   switch (format) {
     // clang-format off
-    case oxygen::Format::kUnknown:             return "UNKNOWN";
+    case oxygen::Format::kUnknown:             return "__Unknown__";
     case oxygen::Format::kR8UInt:              return "R8_UINT";
     case oxygen::Format::kR8SInt:              return "R8_SINT";
     case oxygen::Format::kR8UNorm:             return "R8_UNORM";
@@ -81,7 +82,6 @@ auto oxygen::to_string(oxygen::Format format) -> const char*
     case oxygen::Format::kDepth24Stencil8:     return "DEPTH24_STENCIL8";
     case oxygen::Format::kDepth32:             return "DEPTH32";
     case oxygen::Format::kDepth32Stencil8:     return "DEPTH32_STENCIL8";
-    case oxygen::Format::kMax:                 return "MAX";
     // clang-format on
   }
 
@@ -92,7 +92,7 @@ auto oxygen::to_string(const oxygen::ShaderType value) -> const char*
 {
   switch (value) {
     // clang-format off
-  case ShaderType::kUnknown:         return "Unknown";
+  case ShaderType::kUnknown:         return "__Unknown__";
   case ShaderType::kAmplification:   return "Amplification Shader";
   case ShaderType::kMesh:            return "Mesh Shader";
   case ShaderType::kVertex:          return "Vertex Shader";
@@ -107,7 +107,26 @@ auto oxygen::to_string(const oxygen::ShaderType value) -> const char*
   case ShaderType::kClosestHit:      return "Closest-Hit Shader";
   case ShaderType::kMiss:            return "Miss Shader";
   case ShaderType::kCallable:        return "Callable Shader";
-  case ShaderType::kMaxShaderType:   return "__Max__";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
+}
+
+auto oxygen::to_string(const oxygen::TextureType value) -> const char*
+{
+  switch (value) {
+    // clang-format off
+  case TextureType::kUnknown:                    return "__Unknown__";
+  case TextureType::kTexture1D:                  return "1D Texture";
+  case TextureType::kTexture1DArray:             return "1D Texture Array";
+  case TextureType::kTexture2D:                  return "2D Texture";
+  case TextureType::kTexture2DArray:             return "2D Texture Array";
+  case TextureType::kTextureCube:                return "Cube Texture";
+  case TextureType::kTextureCubeArray:           return "Cube Texture Array";
+  case TextureType::kTexture2DMultiSample:       return "2D Multi-Sample Texture";
+  case TextureType::kTexture2DMultiSampleArray:  return "2D Multi-Sample Texture Array";
+  case TextureType::kTexture3D:                  return "3D Texture";
     // clang-format on
   }
 

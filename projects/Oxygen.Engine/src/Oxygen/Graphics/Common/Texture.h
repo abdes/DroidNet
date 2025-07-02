@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -27,20 +28,7 @@ namespace oxygen::graphics {
 
 class DescriptorHandle;
 
-enum class TextureDimension : uint8_t {
-  kUnknown,
-  kTexture1D,
-  kTexture1DArray,
-  kTexture2D,
-  kTexture2DArray,
-  kTextureCube,
-  kTextureCubeArray,
-  kTexture2DMultiSample,
-  kTexture2DMultiSampleArray,
-  kTexture3D
-};
-
-OXYGEN_GFX_API auto to_string(TextureDimension value) -> const char*;
+OXYGEN_GFX_API auto to_string(TextureType value) -> const char*;
 
 struct TextureDesc {
   uint32_t width = 1;
@@ -51,7 +39,7 @@ struct TextureDesc {
   uint32_t sample_count = 1;
   uint32_t sample_quality = 0;
   Format format = Format::kUnknown;
-  TextureDimension dimension = TextureDimension::kTexture2D;
+  TextureType texture_type = TextureType::kTexture2D;
 
   std::string debug_name { "Texture" };
 
@@ -244,7 +232,7 @@ struct TextureViewDescription {
   //! The dimension of the texture (1D, 2D, 3D, etc.).
   //! This may differ from the texture dimension in some cases (e.g., typeless
   //! textures).
-  TextureDimension dimension { TextureDimension::kUnknown };
+  TextureType dimension { TextureType::kUnknown };
 
   //! The sub-resource set to use for the view.
   //! This defines which mip levels and array slices to include in the view.
@@ -348,16 +336,14 @@ public:
 protected:
   //! Gets a shader resource view for the texture.
   [[nodiscard]] OXYGEN_GFX_API virtual auto CreateShaderResourceView(
-    const DescriptorHandle& view_handle, Format format,
-    TextureDimension dimension, TextureSubResourceSet sub_resources) const
-    -> NativeObject
+    const DescriptorHandle& view_handle, Format format, TextureType dimension,
+    TextureSubResourceSet sub_resources) const -> NativeObject
     = 0;
 
   //! Gets an unordered access view for the texture.
   [[nodiscard]] OXYGEN_GFX_API virtual auto CreateUnorderedAccessView(
-    const DescriptorHandle& view_handle, Format format,
-    TextureDimension dimension, TextureSubResourceSet sub_resources) const
-    -> NativeObject
+    const DescriptorHandle& view_handle, Format format, TextureType dimension,
+    TextureSubResourceSet sub_resources) const -> NativeObject
     = 0;
 
   //! Gets a render target view for the texture.

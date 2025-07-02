@@ -13,7 +13,6 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
@@ -247,34 +246,6 @@ auto oxygen::graphics::to_string(const ResourceAccessMode value) -> const char*
     return "Volatile";
   case ResourceAccessMode::kReadBack:
     return "Read Back";
-  }
-
-  return "__NotSupported__";
-}
-
-auto oxygen::graphics::to_string(const TextureDimension value) -> const char*
-{
-  switch (value) {
-  case TextureDimension::kUnknown:
-    return "Unknown";
-  case TextureDimension::kTexture1DArray:
-    return "1D Array";
-  case TextureDimension::kTexture1D:
-    return "1D";
-  case TextureDimension::kTexture2D:
-    return "2D";
-  case TextureDimension::kTexture2DArray:
-    return "2D Array";
-  case TextureDimension::kTextureCube:
-    return "Cube";
-  case TextureDimension::kTextureCubeArray:
-    return "Cube Array";
-  case TextureDimension::kTexture2DMultiSample:
-    return "2D MS";
-  case TextureDimension::kTexture2DMultiSampleArray:
-    return "2D MS Array";
-  case TextureDimension::kTexture3D:
-    return "3D";
   }
 
   return "__NotSupported__";

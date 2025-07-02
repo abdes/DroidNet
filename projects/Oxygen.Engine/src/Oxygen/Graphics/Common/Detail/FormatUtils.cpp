@@ -89,10 +89,11 @@ static const FormatInfo kFormatInfo[] = {
 auto GetFormatInfo(Format format) -> const FormatInfo&
 {
   static_assert(sizeof(kFormatInfo) / sizeof(FormatInfo)
-      == static_cast<size_t>(Format::kMax),
+      == static_cast<size_t>(Format::kMaxFormat) + 1,
     "The format info table doesn't have the right number of elements");
 
-  if (static_cast<uint32_t>(format) >= static_cast<uint32_t>(Format::kMax)) {
+  if (static_cast<uint32_t>(format)
+    > static_cast<uint32_t>(Format::kMaxFormat)) {
     return kFormatInfo[0]; // kUnknown
   }
 

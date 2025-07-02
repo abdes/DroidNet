@@ -10,7 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -37,7 +37,7 @@
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
-using oxygen::data::MeshAsset;
+using oxygen::data::Mesh;
 using oxygen::data::Vertex;
 using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
@@ -239,7 +239,7 @@ auto MainModule::SetupFramebuffers() -> void
     depth_desc.width = 800;
     depth_desc.height = 800;
     depth_desc.format = Format::kDepth32;
-    depth_desc.dimension = graphics::TextureDimension::kTexture2D;
+    depth_desc.texture_type = TextureType::kTexture2D;
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;
     depth_desc.use_clear_value = true;

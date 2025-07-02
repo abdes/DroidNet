@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 #include <Oxygen/Core/api_export.h>
 
@@ -128,9 +129,13 @@ enum class Format : uint8_t {
   kDepth32             = 66, //!< 32-bit depth buffer
   kDepth32Stencil8     = 67, //!< 32-bit depth buffer + 8-bit stencil buffer
 
-  kMax                 = 68  //!< Maximum value for validation
+  //!< Maximum value for validation
+  kMaxFormat           = kDepth32Stencil8,
   // clang-format on
 };
+
+static_assert(sizeof(std::underlying_type_t<Format>) == sizeof(uint8_t),
+  "Format enum must be 8 bits for binary encoding");
 
 //! String representation of enum values in `Format`.
 OXGN_CORE_NDAPI auto to_string(Format value) -> const char*;

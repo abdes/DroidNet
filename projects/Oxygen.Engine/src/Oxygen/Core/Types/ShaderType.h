@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include <Oxygen/Data/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen {
 
@@ -41,7 +41,7 @@ enum class ShaderType : uint32_t {
   kCallable      = 14,
   //! @}
 
-  kMaxShaderType  //!< Maximum value sentinel.
+  kMaxShaderType = kCallable, //!< Maximum value sentinel
   // clang-format on
 };
 
@@ -53,6 +53,6 @@ static_assert(
   "ShaderType enum values must be < 32 (for shader assets binary encoding)");
 
 //! String representation of enum values in `ShaderType`.
-OXGN_DATA_NDAPI auto to_string(ShaderType value) -> const char*;
+OXGN_CORE_NDAPI auto to_string(ShaderType value) -> const char*;
 
 } // namespace oxygen
