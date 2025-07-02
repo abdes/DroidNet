@@ -68,7 +68,7 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   using namespace oxygen::data;
   struct MeshFactory {
     const char* name;
-    std::shared_ptr<MeshAsset> (*fn)();
+    std::shared_ptr<Mesh> (*fn)();
   } factories[] = {
     { "Cube", &MakeCubeMeshAsset },
     { "ArrowGizmo", &MakeArrowGizmoMeshAsset },
@@ -80,7 +80,7 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   const auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
   const auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
   const auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
-  std::shared_ptr<MeshAsset> assets[]
+  std::shared_ptr<Mesh> assets[]
     = { sphere, plane, cylinder, cone, torus, quad };
 
   // Act & Assert
@@ -89,19 +89,23 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
     ASSERT_NE(mesh, nullptr) << f.name;
     EXPECT_GT(mesh->VertexCount(), 0u) << f.name;
     EXPECT_GT(mesh->IndexCount(), 0u) << f.name;
-    EXPECT_EQ(mesh->Views().size(), 1u) << f.name;
-    const auto& view = mesh->Views().front();
-    EXPECT_EQ(view.VertexCount(), mesh->VertexCount()) << f.name;
-    EXPECT_EQ(view.IndexCount(), mesh->IndexCount()) << f.name;
+    ASSERT_EQ(mesh->SubMeshes().size(), 1u) << f.name;
+    const auto& submesh = mesh->SubMeshes().front();
+    ASSERT_EQ(submesh.MeshViews().size(), 1u) << f.name;
+    const auto& view = submesh.MeshViews().front();
+    EXPECT_EQ(view.Vertices().size(), mesh->VertexCount()) << f.name;
+    EXPECT_EQ(view.Indices().size(), mesh->IndexCount()) << f.name;
   }
   for (const auto& mesh : assets) {
     ASSERT_NE(mesh, nullptr);
     EXPECT_GT(mesh->VertexCount(), 0u);
     EXPECT_GT(mesh->IndexCount(), 0u);
-    EXPECT_EQ(mesh->Views().size(), 1u);
-    const auto& view = mesh->Views().front();
-    EXPECT_EQ(view.VertexCount(), mesh->VertexCount());
-    EXPECT_EQ(view.IndexCount(), mesh->IndexCount());
+    ASSERT_EQ(mesh->SubMeshes().size(), 1u);
+    const auto& submesh = mesh->SubMeshes().front();
+    ASSERT_EQ(submesh.MeshViews().size(), 1u);
+    const auto& view = submesh.MeshViews().front();
+    EXPECT_EQ(view.Vertices().size(), mesh->VertexCount());
+    EXPECT_EQ(view.Indices().size(), mesh->IndexCount());
   }
 }
 
@@ -133,11 +137,12 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
   using namespace oxygen::data;
   const auto mesh = MakeCubeMeshAsset();
   ASSERT_NE(mesh, nullptr);
-  const auto& view = mesh->Views().front();
+  const auto& submesh = mesh->SubMeshes().front();
+  const auto& view = submesh.MeshViews().front();
 
   // Act & Assert
-  EXPECT_EQ(view.VertexCount(), mesh->VertexCount());
-  EXPECT_EQ(view.IndexCount(), mesh->IndexCount());
+  EXPECT_EQ(view.Vertices().size(), mesh->VertexCount());
+  EXPECT_EQ(view.Indices().size(), mesh->IndexCount());
   EXPECT_EQ(view.Vertices().data(), mesh->Vertices().data());
   EXPECT_EQ(view.Indices().data(), mesh->Indices().data());
 }
@@ -149,7 +154,7 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
   using namespace oxygen::data;
   struct MeshType {
     const char* name;
-    std::shared_ptr<MeshAsset> asset;
+    std::shared_ptr<Mesh> asset;
     size_t min_vertices;
     size_t min_indices;
   } types[] = {
@@ -173,10 +178,12 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
     if (t.min_indices > 0) {
       EXPECT_GE(t.asset->IndexCount(), t.min_indices) << t.name;
     }
-    EXPECT_EQ(t.asset->Views().size(), 1u) << t.name;
-    const auto& view = t.asset->Views().front();
-    EXPECT_EQ(view.VertexCount(), t.asset->VertexCount()) << t.name;
-    EXPECT_EQ(view.IndexCount(), t.asset->IndexCount()) << t.name;
+    ASSERT_EQ(t.asset->SubMeshes().size(), 1u) << t.name;
+    const auto& submesh = t.asset->SubMeshes().front();
+    ASSERT_EQ(submesh.MeshViews().size(), 1u) << t.name;
+    const auto& view = submesh.MeshViews().front();
+    EXPECT_EQ(view.Vertices().size(), t.asset->VertexCount()) << t.name;
+    EXPECT_EQ(view.Indices().size(), t.asset->IndexCount()) << t.name;
   }
 }
 

@@ -20,7 +20,7 @@ class RenderController;
 } // namespace oxygen::graphics
 
 namespace oxygen::data {
-class MeshAsset;
+class Mesh;
 } // namespace oxygen::data
 
 namespace oxygen::engine {
@@ -68,15 +68,15 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Renderer)
 
   //! Returns the vertex buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API auto GetVertexBuffer(const data::MeshAsset& mesh)
+  OXGN_RNDR_API auto GetVertexBuffer(const data::Mesh& mesh)
     -> std::shared_ptr<graphics::Buffer>;
 
   //! Returns the index buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API auto GetIndexBuffer(const data::MeshAsset& mesh)
+  OXGN_RNDR_API auto GetIndexBuffer(const data::Mesh& mesh)
     -> std::shared_ptr<graphics::Buffer>;
 
   //! Explicitly unregisters a mesh and its GPU resources.
-  OXGN_RNDR_API auto UnregisterMesh(const data::MeshAsset& mesh) -> void;
+  OXGN_RNDR_API auto UnregisterMesh(const data::Mesh& mesh) -> void;
 
   //! Evicts unused mesh resources according to the eviction policy.
   OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t current_frame)
@@ -96,7 +96,7 @@ private:
   OXGN_RNDR_API auto PreExecute(const RenderContext& context) -> void;
   OXGN_RNDR_API auto PostExecute(const RenderContext& context) -> void;
 
-  auto EnsureMeshResources(const data::MeshAsset& mesh) -> MeshGpuResources&;
+  auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;

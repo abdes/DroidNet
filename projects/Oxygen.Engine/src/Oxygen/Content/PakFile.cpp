@@ -8,6 +8,8 @@
 #include <Oxygen/Content/PakFile.h>
 
 using namespace oxygen::content;
+using namespace oxygen::data;
+using namespace oxygen::data::pak;
 
 namespace {
 // Helper to open a FileStream and throw with logging on error
@@ -31,17 +33,6 @@ size_t EntryIndex(const AssetDirectoryEntry& entry,
     throw std::invalid_argument("Entry is not part of this PakFile");
   }
   return idx;
-}
-
-void SkipDependencies(
-  oxygen::serio::Stream auto* stream, uint16_t dependency_count)
-{
-  if (dependency_count > 0) {
-    size_t deps_size = static_cast<size_t>(dependency_count) * sizeof(AssetKey);
-    if (auto res = stream->forward(deps_size); !res) {
-      throw std::runtime_error("Failed to seek past dependencies");
-    }
-  }
 }
 } // namespace
 
@@ -118,21 +109,14 @@ void PakFile::ReadDirectoryEntry(Reader& reader)
 
   auto entry_result = reader.read<AssetDirectoryEntry>();
   if (!entry_result) {
-    LOG_F(ERROR, "Failed to read asset directory entry {}: {}",
+    LOG_F(ERROR, "Failed to read asset directory entry: {}",
       entry_result.error().message());
     throw std::runtime_error("Failed to read asset directory entries");
   }
 
   const auto& entry = *entry_result;
-  LOG_F(INFO, "entry offset    : {}", entry.entry_offset);
-  LOG_F(INFO, "data offset     : {}", entry.data_offset);
-  LOG_F(INFO, "data size       : {}", entry.data_size);
-  LOG_F(INFO, "alignment       : {}", entry.alignment);
-  LOG_F(INFO, "dependencies    : {}", entry.dependency_count);
-  LOG_F(INFO, "compression     : {}", static_cast<int>(entry.compression));
-
-  directory_.emplace_back(std::move(*entry_result));
-  key_to_index_.emplace(directory_.back().key, directory_.size() - 1);
+  directory_.emplace_back(entry);
+  key_to_index_.emplace(entry.asset_key, directory_.size() - 1);
 }
 
 void PakFile::ReadDirectory(
@@ -150,8 +134,6 @@ void PakFile::ReadDirectory(
   key_to_index_.clear();
   for (std::uint32_t i = 0; i < asset_count; ++i) {
     ReadDirectoryEntry(reader); // places the entry at the end of directory_
-    const auto& entry = directory_.back();
-    SkipDependencies(stream, entry.dependency_count);
   }
 }
 
@@ -189,47 +171,13 @@ auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
   if (!stream_) {
     throw std::runtime_error("PakFile stream is not open");
   }
-  // Seek to asset offset
-  if (auto res = stream_->seek(entry.data_offset); !res) {
-    LOG_F(ERROR, "Failed to seek to asset offset {}: {}", entry.data_offset,
-      res.error().message());
-    throw std::runtime_error("Failed to seek to asset offset");
+  // Seek to asset descriptor offset (desc_offset in new format)
+  if (auto res = stream_->seek(entry.desc_offset); !res) {
+    LOG_F(ERROR, "Failed to seek to asset desc offset {}: {}",
+      entry.desc_offset, res.error().message());
+    throw std::runtime_error("Failed to seek to asset desc offset");
   }
   return Reader(*stream_);
-}
-
-auto PakFile::Dependencies(const AssetDirectoryEntry& entry) const
-  -> std::vector<AssetKey>
-{
-  std::scoped_lock lock(mutex_);
-
-  if (!stream_) {
-    throw std::runtime_error("PakFile stream is not open");
-  }
-
-  // Ensure entry is part of this PakFile
-  const auto idx = key_to_index_.at(entry.key);
-  size_t deps_offset = entry.entry_offset + sizeof(AssetDirectoryEntry);
-  if (auto res = stream_->seek(deps_offset); !res) {
-    LOG_F(ERROR, "Failed to seek to dependencies for entry {}: {}", idx,
-      res.error().message());
-    throw std::runtime_error("Failed to seek to dependencies");
-  }
-  Reader reader(*stream_);
-  std::vector<AssetKey> deps;
-  if (entry.dependency_count > 0) {
-    deps.reserve(entry.dependency_count);
-    for (uint16_t i = 0; i < entry.dependency_count; ++i) {
-      auto key_result = reader.read<AssetKey>();
-      if (!key_result) {
-        LOG_F(ERROR, "Failed to read dependency {} for entry {}: {}", i, idx,
-          key_result.error().message());
-        throw std::runtime_error("Failed to read dependencies");
-      }
-      deps.push_back(std::move(*key_result));
-    }
-  }
-  return deps;
 }
 
 } // namespace oxygen::content

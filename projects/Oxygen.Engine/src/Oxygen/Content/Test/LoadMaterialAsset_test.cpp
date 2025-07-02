@@ -40,6 +40,91 @@ protected:
   {
   }
 
+  //! Helper method to write MaterialAssetDesc using write_blob for arrays.
+  auto WriteMaterialAssetDesc(const oxygen::data::pak::MaterialAssetDesc& desc)
+    -> bool
+  {
+    // Write AssetHeader field-by-field
+    if (!writer.write(desc.header.asset_type))
+      return false;
+    if (!writer.write_blob(std::as_bytes(std::span(desc.header.name))))
+      return false;
+    if (!writer.write(desc.header.version))
+      return false;
+    if (!writer.write(desc.header.streaming_priority))
+      return false;
+    if (!writer.write(desc.header.content_hash))
+      return false;
+    if (!writer.write(desc.header.variant_flags))
+      return false;
+    if (!writer.write_blob(std::as_bytes(std::span(desc.header.reserved))))
+      return false;
+
+    // Write MaterialAssetDesc fields
+    if (!writer.write(desc.material_domain))
+      return false;
+    if (!writer.write(desc.flags))
+      return false;
+    if (!writer.write(desc.shader_stages))
+      return false;
+
+    // Write float arrays element by element
+    for (const auto& color_component : desc.base_color) {
+      if (!writer.write(color_component))
+        return false;
+    }
+
+    if (!writer.write(desc.normal_scale))
+      return false;
+    if (!writer.write(desc.metalness))
+      return false;
+    if (!writer.write(desc.roughness))
+      return false;
+    if (!writer.write(desc.ambient_occlusion))
+      return false;
+
+    // Write texture indices
+    if (!writer.write(desc.base_color_texture))
+      return false;
+    if (!writer.write(desc.normal_texture))
+      return false;
+    if (!writer.write(desc.metallic_texture))
+      return false;
+    if (!writer.write(desc.roughness_texture))
+      return false;
+    if (!writer.write(desc.ambient_occlusion_texture))
+      return false;
+
+    // Write reserved texture array
+    if (!writer.write_blob(std::as_bytes(std::span(desc.reserved_textures))))
+      return false;
+
+    // Write reserved bytes
+    if (!writer.write_blob(std::as_bytes(std::span(desc.reserved))))
+      return false;
+
+    return true;
+  }
+
+  //! Helper method to write ShaderReferenceDesc using write_blob for arrays.
+  auto WriteShaderReferenceDesc(
+    const oxygen::data::pak::ShaderReferenceDesc& shader_desc) -> bool
+  {
+    // Write shader_unique_id array as blob
+    if (!writer.write_blob(
+          std::as_bytes(std::span(shader_desc.shader_unique_id))))
+      return false;
+
+    if (!writer.write(shader_desc.shader_hash))
+      return false;
+
+    // Write reserved array as blob
+    if (!writer.write_blob(std::as_bytes(std::span(shader_desc.reserved))))
+      return false;
+
+    return true;
+  }
+
   MockStream stream;
   Writer writer;
   Reader<MockStream> reader;
@@ -52,32 +137,52 @@ NOLINT_TEST_F(
   MaterialLoaderBasicTestFixture, LoadMaterial_ValidInput_ReturnsMaterialAsset)
 {
   // Arrange
+  using oxygen::ShaderType;
   using oxygen::data::MaterialAsset;
-  struct MaterialAssetHeader {
-    uint32_t material_type;
-    uint32_t shader_stages;
-    uint32_t texture_count;
-    uint8_t reserved[52] {};
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::ShaderReferenceDesc;
+
+  constexpr uint32_t kShaderStages
+    = (1 << static_cast<uint32_t>(ShaderType::kVertex))
+    | (1 << static_cast<uint32_t>(ShaderType::kPixel));
+  constexpr size_t kShaderCount = 2;
+
+  MaterialAssetDesc desc{
+    .header = {
+      .asset_type = 7,
+    },
+    .material_domain = 1,
+    .flags = 0xAABBCCDD,
+    .shader_stages = kShaderStages,
+    .base_color = {0.1f, 0.2f, 0.3f, 0.4f},
+    .normal_scale = 1.5f,
+    .metalness = 0.7f,
+    .roughness = 0.2f,
+    .ambient_occlusion = 0.9f,
+    .base_color_texture = 42,
+    .normal_texture = 43,
+    .metallic_texture = 44,
+    .roughness_texture = 45,
+    .ambient_occlusion_texture = 46,
   };
-  constexpr uint32_t kMaterialType = 42;
-  constexpr uint32_t kShaderStages = 0b1011; // 3 bits set
-  constexpr uint32_t kTextureCount = 2;
-  const std::vector<uint64_t> shader_ids = { 11, 22, 33 };
-  const std::vector<uint64_t> texture_ids = { 44, 55 };
 
-  std::vector<std::byte> buffer(sizeof(MaterialAssetHeader)
-    + shader_ids.size() * 8 + texture_ids.size() * 8);
-  auto* header = reinterpret_cast<MaterialAssetHeader*>(buffer.data());
-  header->material_type = kMaterialType;
-  header->shader_stages = kShaderStages;
-  header->texture_count = kTextureCount;
-  std::memcpy(buffer.data() + sizeof(MaterialAssetHeader), shader_ids.data(),
-    shader_ids.size() * 8);
-  std::memcpy(
-    buffer.data() + sizeof(MaterialAssetHeader) + shader_ids.size() * 8,
-    texture_ids.data(), texture_ids.size() * 8);
+  ShaderReferenceDesc shader_descs[kShaderCount] = {
+    {
+      .shader_unique_id = "VS@main.vert",
+      .shader_hash = 0x1111,
+    },
+    {
+      .shader_unique_id = "PS@main.frag",
+      .shader_hash = 0x2222,
+    },
+  };
 
-  stream.write(buffer.data(), buffer.size());
+  // Write MaterialAssetDesc using field-by-field serialization
+  ASSERT_TRUE(WriteMaterialAssetDesc(desc));
+  // Write ShaderReferenceDesc array using field-by-field serialization
+  for (size_t i = 0; i < kShaderCount; ++i) {
+    ASSERT_TRUE(WriteShaderReferenceDesc(shader_descs[i]));
+  }
   stream.seek(0);
 
   // Act
@@ -85,13 +190,45 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetMaterialType(), kMaterialType);
-  EXPECT_EQ(asset->GetShaderStages(), kShaderStages);
-  EXPECT_EQ(asset->GetTextureCount(), kTextureCount);
-  EXPECT_THAT(asset->GetShaderIds(),
-    AllOf(SizeIs(3), IsSupersetOf({ 11ull, 22ull, 33ull })));
+
+  // Scalars
+  EXPECT_EQ(asset->GetHeader().asset_type, 7);
+  EXPECT_EQ(
+    asset->GetMaterialDomain(), static_cast<oxygen::data::MaterialDomain>(1));
+  EXPECT_EQ(asset->GetFlags(), 0xAABBCCDDu);
+  EXPECT_FLOAT_EQ(asset->GetNormalScale(), 1.5f);
+  EXPECT_FLOAT_EQ(asset->GetMetalness(), 0.7f);
+  EXPECT_FLOAT_EQ(asset->GetRoughness(), 0.2f);
+  EXPECT_FLOAT_EQ(asset->GetAmbientOcclusion(), 0.9f);
+
+  // Arrays/collections
   EXPECT_THAT(
-    asset->GetTextureIds(), AllOf(SizeIs(2), IsSupersetOf({ 44ull, 55ull })));
+    asset->GetBaseColor(), ::testing::ElementsAre(0.1f, 0.2f, 0.3f, 0.4f));
+  EXPECT_THAT((std::array<unsigned, 5> {
+                static_cast<unsigned>(asset->GetBaseColorTexture()),
+                static_cast<unsigned>(asset->GetNormalTexture()),
+                static_cast<unsigned>(asset->GetMetallicTexture()),
+                static_cast<unsigned>(asset->GetRoughnessTexture()),
+                static_cast<unsigned>(asset->GetAmbientOcclusionTexture()) }),
+    ::testing::ElementsAre(42u, 43u, 44u, 45u, 46u));
+
+  // Shaders
+  auto shaders = asset->GetShaders();
+  ASSERT_THAT(shaders, ::testing::SizeIs(kShaderCount));
+  EXPECT_THAT(shaders,
+    ::testing::ElementsAre(
+      AllOf(::testing::Property(&oxygen::data::ShaderReference::GetShaderType,
+              ShaderType::kVertex),
+        ::testing::Property(&oxygen::data::ShaderReference::GetShaderUniqueId,
+          Eq("VS@main.vert")),
+        ::testing::Property(
+          &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0x1111u))),
+      AllOf(::testing::Property(&oxygen::data::ShaderReference::GetShaderType,
+              ShaderType::kPixel),
+        ::testing::Property(&oxygen::data::ShaderReference::GetShaderUniqueId,
+          Eq("PS@main.frag")),
+        ::testing::Property(
+          &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0x2222u)))));
 }
 
 //=== MaterialLoader Error Handling Tests ===------------------------------//

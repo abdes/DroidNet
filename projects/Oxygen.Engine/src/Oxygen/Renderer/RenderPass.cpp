@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>

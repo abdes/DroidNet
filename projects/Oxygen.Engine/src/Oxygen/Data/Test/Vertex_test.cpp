@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>

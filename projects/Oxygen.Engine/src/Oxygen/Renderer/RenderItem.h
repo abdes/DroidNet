@@ -15,7 +15,7 @@
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::data {
-class MeshAsset;
+class Mesh;
 class MaterialAsset;
 } // namespace oxygen::data
 
@@ -38,7 +38,7 @@ namespace oxygen::engine {
 */
 struct RenderItem {
   // === Geometry Data ===
-  std::shared_ptr<const data::MeshAsset> mesh;
+  std::shared_ptr<const data::Mesh> mesh;
 
   // === Material and Shading ===
   std::shared_ptr<const data::MaterialAsset> material;

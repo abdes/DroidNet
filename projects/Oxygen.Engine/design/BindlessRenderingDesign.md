@@ -101,86 +101,86 @@ None
 
 ### 1. ✓ DescriptorVisibility Enum
 
-   - Defines memory locations where descriptors can reside
-   - Implementation detail for optimization of descriptor updates
-   - Values: kShaderVisible (GPU-accessible), kCpuOnly (CPU-only)
-   - Used by allocator to determine descriptor placement
-   - In D3D12 terms, this maps to whether a descriptor resides in a
+- Defines memory locations where descriptors can reside
+- Implementation detail for optimization of descriptor updates
+- Values: kShaderVisible (GPU-accessible), kCpuOnly (CPU-only)
+- Used by allocator to determine descriptor placement
+- In D3D12 terms, this maps to whether a descriptor resides in a
      shader-visible heap or a non-shader-visible heap
-   - In Vulkan terms, this maps to host-visible vs device-local descriptor pools
-   - Renamed from DescriptorSpace to DescriptorVisibility for clarity
-   - Renamed NonShaderVisible to CpuOnly for better semantic meaning
+- In Vulkan terms, this maps to host-visible vs device-local descriptor pools
+- Renamed from DescriptorSpace to DescriptorVisibility for clarity
+- Renamed NonShaderVisible to CpuOnly for better semantic meaning
 
 ### 2. ✓ IndexRange Class
 
-   - Maps between local descriptor indices (per descriptor type) and global indices
-   - Contains baseIndex and count fields to define a range
-   - Provides methods to check if an index is within range
-   - Used internally by allocator implementations
-   - An empty range (count == 0) is valid and represents a no-op or sentinel
+- Maps between local descriptor indices (per descriptor type) and global indices
+- Contains baseIndex and count fields to define a range
+- Provides methods to check if an index is within range
+- Used internally by allocator implementations
+- An empty range (count == 0) is valid and represents a no-op or sentinel
      value (e.g., for default construction or error states)
-   - Bounds checking is the responsibility of the caller; IndexRange does not
+- Bounds checking is the responsibility of the caller; IndexRange does not
      validate that its indices are within the bounds of any underlying resource
      or table (similar to std::span)
 
 ### 3. ✓ DescriptorHandle
 
-   - Represents an allocated descriptor slot with stable index for shader
+- Represents an allocated descriptor slot with stable index for shader
      reference
-   - Has limited ownership semantics - can release its descriptor back to the
+- Has limited ownership semantics - can release its descriptor back to the
      allocator but doesn't own the underlying resource
-   - Contains back-reference to allocator for lifetime management
-   - Non-copyable, movable semantics to enforce ownership rules
-   - Clear RAII behavior with automatic release in destructor and explicit
+- Contains back-reference to allocator for lifetime management
+- Non-copyable, movable semantics to enforce ownership rules
+- Clear RAII behavior with automatic release in destructor and explicit
      Release() method
-   - Stores ResourceViewType and DescriptorVisibility to track descriptor type
+- Stores ResourceViewType and DescriptorVisibility to track descriptor type
      and memory location
-   - Provides GetIndex(), GetViewType(), GetVisibility() and IsValid()
+- Provides GetIndex(), GetViewType(), GetVisibility() and IsValid()
      inspection methods
-   - Does not directly expose platform-specific handles - these are
+- Does not directly expose platform-specific handles - these are
      implementation details, accessed through the DescriptorAllocator /
      DescriptorHeapSegment
 
 ### 4. ✓ DescriptorHeapSegment
 
-   - **Purpose**: Defines an interface for managing a dedicated section, or
+- **Purpose**: Defines an interface for managing a dedicated section, or
      "segment," within a larger descriptor heap. Each segment is responsible for
      a contiguous range of descriptor handles, all intended for a specific
      `ResourceViewType` and `DescriptorVisibility`.
 
-   - **Core Responsibilities**:
-     - **Lifecycle Management**: Provides unique descriptor indices upon
+- **Core Responsibilities**:
+  - **Lifecycle Management**: Provides unique descriptor indices upon
        allocation. Released indices become available for subsequent allocations.
-     - **Boundary Adherence**: Allocations are confined to the segment's defined
+  - **Boundary Adherence**: Allocations are confined to the segment's defined
        range (`baseIndex` to `baseIndex + capacity - 1`). Releases outside this
        range must fail.
-     - **State Integrity**:
-       - `Allocate()`: Returns a sentinel value (e.g.,
+  - **State Integrity**:
+    - `Allocate()`: Returns a sentinel value (e.g.,
          `std::numeric_limits<uint32_t>::max()`) if the segment is full.
-       - `Release(index)`: Returns `true` for a valid, successful release;
+    - `Release(index)`: Returns `true` for a valid, successful release;
          `false` otherwise (e.g., out of bounds, already free). Re-releasing an
          index without an intermediate allocation must fail.
-     - **Consistent Properties**: `GetViewType()`, `GetVisibility()`,
+  - **Consistent Properties**: `GetViewType()`, `GetVisibility()`,
        `GetBaseIndex()`, and `GetCapacity()` must remain constant
        post-construction.
-     - **Accurate Counts**: `GetAllocatedCount()` and
+  - **Accurate Counts**: `GetAllocatedCount()` and
        `GetAvailableCount()` must be accurate.
 
-   - **`FixedDescriptorHeapSegment` Implementation**:
-     - **Pre-allocated Capacity**: The maximum number of descriptors is fixed at
+- **`FixedDescriptorHeapSegment` Implementation**:
+  - **Pre-allocated Capacity**: The maximum number of descriptors is fixed at
        construction time and cannot be changed later. The segment maintains a
        fixed-size pool of descriptor indices.
-     - **LIFO Recycling**: Implements a Last-In, First-Out (LIFO) strategy for
+  - **LIFO Recycling**: Implements a Last-In, First-Out (LIFO) strategy for
        reusing descriptors from its `free_list_`. This can benefit cache
        locality.
-     - **Sequential Allocation Fallback**: If the `free_list_` is empty, new
+  - **Sequential Allocation Fallback**: If the `free_list_` is empty, new
        descriptors are allocated sequentially by incrementing an internal
        counter (`next_index_`).
-     - **Efficient State Tracking**: Uses a vector of boolean flags to track
+  - **Efficient State Tracking**: Uses a vector of boolean flags to track
        which indices have been released, allowing quick validation during
        release operations.
 
-   - **Relationship with `DescriptorAllocator`**: `DescriptorAllocator`
+- **Relationship with `DescriptorAllocator`**: `DescriptorAllocator`
      implementations will typically manage collections of
      `DescriptorHeapSegment` instances (or similar sub-allocation mechanisms).
      The allocator will delegate requests for specific descriptor types and
@@ -188,80 +188,80 @@ None
 
 ### 5. ✓ DescriptorAllocator
 
-   - Abstract interface for descriptor allocation from underlying graphics API
+- Abstract interface for descriptor allocation from underlying graphics API
      heaps/pools.
 
-   - **Internal Management**: Implementations will likely manage one or more
+- **Internal Management**: Implementations will likely manage one or more
      `DescriptorHeapSegment` instances (or analogous structures) for each
      combination of `ResourceViewType` and `DescriptorVisibility`. This allows
      the `DescriptorAllocator` to organize and sub-allocate descriptors
      efficiently.
 
-   - **Responsibilities**:
-     - Manages shader-visible and CPU-only descriptor spaces by potentially
+- **Responsibilities**:
+  - Manages shader-visible and CPU-only descriptor spaces by potentially
        using different sets of `DescriptorHeapSegment`s for each
        `DescriptorVisibility`.
-     - Provides methods for allocation (`Allocate`) and release (`Release`) of
+  - Provides methods for allocation (`Allocate`) and release (`Release`) of
        `DescriptorHandle`s. These operations will typically be routed to an
        appropriate `DescriptorHeapSegment`.     - Facilitates copying descriptors between visibility spaces through the
        `CopyDescriptor` method.
-     - Exposes methods to get associated platform-specific handles/pointers for
+  - Exposes methods to get associated platform-specific handles/pointers for
        descriptors via `GetNativeHandle`.
-     - Provides shader-visible heaps for bindless rendering via `GetShaderVisibleHeaps()`
+  - Provides shader-visible heaps for bindless rendering via `GetShaderVisibleHeaps()`
        which are automatically bound during pipeline state transitions.
-     - Provides utility methods like `GetRemainingDescriptorsCount`,
+  - Provides utility methods like `GetRemainingDescriptorsCount`,
        `GetAllocatedDescriptorsCount`, and `Contains` for descriptor management.
-     - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
+  - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
        etc.) when interacting with segments.
 
-   - **Ownership Model**:
-      - Owns the descriptor heaps/pools
-      - Creates descriptor handles that reference it for lifecycle management
-      - Does not own the resources nor their views (textures, buffers, etc.),
+- **Ownership Model**:
+  - Owns the descriptor heaps/pools
+  - Creates descriptor handles that reference it for lifecycle management
+  - Does not own the resources nor their views (textures, buffers, etc.),
         but keeps a strong reference to the registered resources. This requires
         the resource owner to **UnRegister the resource before destroying it**.
-      - Manages descriptor lifecycle, not resource lifecycle
+  - Manages descriptor lifecycle, not resource lifecycle
 
-   - **Lifetime**:
-      - Tied to the Renderer instance
-      - Persists for the duration of rendering operations
-      - Outlives individual resources but not the rendering system
+- **Lifetime**:
+  - Tied to the Renderer instance
+  - Persists for the duration of rendering operations
+  - Outlives individual resources but not the rendering system
 
 ### 5.1 ✓ Heap Allocation Strategy
 
-   - **Purpose**: Defines how descriptor heaps are organized and configured across
+- **Purpose**: Defines how descriptor heaps are organized and configured across
      different resource types and visibilities.
 
-   - **Interface**: `DescriptorAllocationStrategy`
-     - `GetHeapKey(ResourceViewType, DescriptorVisibility)`: Maps a resource view
+- **Interface**: `DescriptorAllocationStrategy`
+  - `GetHeapKey(ResourceViewType, DescriptorVisibility)`: Maps a resource view
        type and visibility to a unique string key that identifies the heap configuration.
-     - `GetHeapDescription(string)`: Retrieves the `HeapDescription` for a given heap key.
+  - `GetHeapDescription(string)`: Retrieves the `HeapDescription` for a given heap key.
 
-   - **Default Implementation**: `DefaultDescriptorAllocationStrategy`
-     - Provides a reasonable default mapping of resource types to heap configurations.
-     - Uses a key format of "ViewType:Visibility" (e.g., "Texture_SRV:gpu").
-     - Pre-configures appropriate capacities for different descriptor types.
-     - Allows customization of heap growth parameters.
+- **Default Implementation**: `DefaultDescriptorAllocationStrategy`
+  - Provides a reasonable default mapping of resource types to heap configurations.
+  - Uses a key format of "ViewType:Visibility" (e.g., "Texture_SRV:gpu").
+  - Pre-configures appropriate capacities for different descriptor types.
+  - Allows customization of heap growth parameters.
 
-   - **HeapDescription Structure**:
-     - `cpu_visible_capacity`: Initial capacity for CPU-visible descriptors.
-     - `shader_visible_capacity`: Initial capacity for shader-visible descriptors.
-     - `allow_growth`: Whether dynamic growth is allowed when heaps are full.
-     - `growth_factor`: Multiplication factor when expanding descriptor heaps.
-     - `max_growth_iterations`: Maximum number of growth cycles before failing allocations.
+- **HeapDescription Structure**:
+  - `cpu_visible_capacity`: Initial capacity for CPU-visible descriptors.
+  - `shader_visible_capacity`: Initial capacity for shader-visible descriptors.
+  - `allow_growth`: Whether dynamic growth is allowed when heaps are full.
+  - `growth_factor`: Multiplication factor when expanding descriptor heaps.
+  - `max_growth_iterations`: Maximum number of growth cycles before failing allocations.
 
-   - **Base Implementation**: `BaseDescriptorAllocator`
-     - Implements the core functionality of the `DescriptorAllocator` interface.
-     - Uses the `DescriptorAllocationStrategy` to configure and manage its heaps.
-     - Maintains a collection of heap segments for each (type, visibility) combination.
-     - Provides thread safety through mutexes for all allocation and release operations.
-     - Creates new segments dynamically as needed based on the heap configuration.
-     - Delegates the actual segment creation to derived classes through a virtual method.
+- **Base Implementation**: `BaseDescriptorAllocator`
+  - Implements the core functionality of the `DescriptorAllocator` interface.
+  - Uses the `DescriptorAllocationStrategy` to configure and manage its heaps.
+  - Maintains a collection of heap segments for each (type, visibility) combination.
+  - Provides thread safety through mutexes for all allocation and release operations.
+  - Creates new segments dynamically as needed based on the heap configuration.
+  - Delegates the actual segment creation to derived classes through a virtual method.
 
-   - **Configuration**: `BaseDescriptorAllocatorConfig`
-     - Contains a `heap_strategy` shared pointer that can be customized at creation time.
-     - Used to initialize the `BaseDescriptorAllocator` with specific heap configurations.
-     - Falls back to a `DefaultDescriptorAllocationStrategy` if none is provided.
+- **Configuration**: `BaseDescriptorAllocatorConfig`
+  - Contains a `heap_strategy` shared pointer that can be customized at creation time.
+  - Used to initialize the `BaseDescriptorAllocator` with specific heap configurations.
+  - Falls back to a `DefaultDescriptorAllocationStrategy` if none is provided.
 
 ### D3D12 Implementation Considerations
 
@@ -326,16 +326,16 @@ None
 
 ## 5. ✓ ResourceRegistry
 
-   - Higher-level abstraction with integrated view caching
-   - Manages mapping between resources and indices
-   - Integrates view creation with descriptor management
-   - Provides simplified API for resource registration
-   - Creates optimized descriptor update path for resources
-   - Features:
-     - Thread-safe for multi-threaded resource registration
-     - TODO: Name-based resource lookup for engine convenience
-     - Type-safe handle system for shader indices
-     - Efficient descriptor recycling
+- Higher-level abstraction with integrated view caching
+- Manages mapping between resources and indices
+- Integrates view creation with descriptor management
+- Provides simplified API for resource registration
+- Creates optimized descriptor update path for resources
+- Features:
+  - Thread-safe for multi-threaded resource registration
+  - TODO: Name-based resource lookup for engine convenience
+  - Type-safe handle system for shader indices
+  - Efficient descriptor recycling
 
 ### Design Rationale: Integrated View Caching**
 
@@ -540,7 +540,7 @@ signature space for the CBV but requires the CBV to be stable in GPU memory.
 auto pipeline_desc = graphics::GraphicsPipelineDesc::Builder{}
     .SetVertexShader({"FullScreenTriangle.hlsl"})
     .SetPixelShader({"FullScreenTriangle.hlsl"})
-    .SetFramebufferLayout({.color_target_formats = {graphics::Format::kRGBA8UNorm}})
+    .SetFramebufferLayout({.color_target_formats = {Format::kRGBA8UNorm}})
     // Direct CBV binding at root parameter 0
     .AddRootBinding({
         .binding_slot_desc = {.register_index = 0, .register_space = 0},
@@ -571,7 +571,7 @@ auto srv_handle = descriptor_allocator.Allocate(
 graphics::BufferViewDescription srv_desc{
     .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = graphics::Format::kUnknown,
+    .format = Format::kUnknown,
     .stride = sizeof(Vertex)
 };
 
@@ -618,7 +618,7 @@ and SRV bindings. This maintains the correct register mappings: CBV at register
 auto pipeline_desc = graphics::GraphicsPipelineDesc::Builder{}
     .SetVertexShader({"FullScreenTriangle.hlsl"})
     .SetPixelShader({"FullScreenTriangle.hlsl"})
-    .SetFramebufferLayout({.color_target_formats = {graphics::Format::kRGBA8UNorm}})
+    .SetFramebufferLayout({.color_target_formats = {Format::kRGBA8UNorm}})
     // CBV range in the descriptor table (register b0)
     .AddRootBinding({
         .binding_slot_desc = {.register_index = 0, .register_space = 0},
@@ -676,7 +676,7 @@ auto srv_handle = descriptor_allocator.Allocate(
 graphics::BufferViewDescription srv_desc{
     .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = graphics::Format::kUnknown,
+    .format = Format::kUnknown,
     .stride = sizeof(Vertex)
 };
 

@@ -6,87 +6,175 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
 
-//! A material asset as stored in the PAK file.
+//! Material asset as stored in the PAK file resource table.
 /*!
- ### Binary Encoding:
+ Represents a material asset as described by the PAK file's MaterialAssetDesc.
+ This is a direct, binary-compatible wrapper for the PAK format, providing
+ access to all fields and metadata for rendering and asset management.
+
+ ### Binary Encoding (PAK v1, 256 bytes)
+
  ```text
- offset size name           description
- ------ ---- -------------- ----------------------------------------------------
- 0x00   4    material_type  Material type (e.g. Opaque, Transparent)
- 0x04   4    shader_stages  32 bit Bitset, each bit maps to a shader stage
- 0x08   4    texture_count  Number of bound textures
- 0x0C   52   reserved       Reserved/padding to 64 bytes
- 0x40   ...  shader asset IDs (uint64_t[count_of(set bits in shader_stages)])
- 0x...  ...  texture asset IDs (uint64_t[texture_count])
+ offset size   name                  description
+ ------ ------ --------------------- -------------------------------------------
+ 0x00   96     header                AssetHeader (type, name, version, etc.)
+ 0x60   1      material_domain       Material domain (enum)
+ 0x61   4      flags                 Bitfield for material options
+ 0x65   4      shader_stages         Bitfield for used shader stages
+ 0x69   16     base_color            RGBA fallback color (float[4])
+ 0x79   4      normal_scale          Normal map scale (float)
+ 0x7D   4      metalness             Metalness scalar (float)
+ 0x81   4      roughness             Roughness scalar (float)
+ 0x85   4      ambient_occlusion     AO scalar (float)
+ 0x89   4      base_color_texture    Index into TextureResourceTable
+ 0x8D   4      normal_texture        Index into TextureResourceTable
+ 0x91   4      metallic_texture      Index into TextureResourceTable
+ 0x95   4      roughness_texture     Index into TextureResourceTable
+ 0x99   4      ambient_occlusion_tex Index into TextureResourceTable
+ 0x9D   32     reserved_textures     Reserved for future texture indices
+ 0xBD   68     reserved              Reserved/padding to 256 bytes
+ 0x100 ...     shader references     Array ShaderReference
  ```
 
- @note Packed to 64 bytes total. Not aligned.
- @note Each bit in `shader_flags`, when set indicates that this material applies
- in that particular stage, and a corresponding shader ID will be present in the
- shader assetIDs table that follows this MaterialAssetHeader.
+ @note The shader indices array immediately follows the descriptor and is sized
+ by the number of set bits in `shader_stages`.
 
- @see TextureAsset, ShaderAsset
+ @see MaterialAssetDesc, TextureResourceDesc, ShaderReferenceDesc, PakFormat.h
 */
 class MaterialAsset : public oxygen::Object {
   OXYGEN_TYPED(MaterialAsset)
 
 public:
-  MaterialAsset() = default;
-  MaterialAsset(uint32_t material_type, uint32_t shader_stages,
-    uint32_t texture_count, std::vector<uint64_t> shader_ids,
-    std::vector<uint64_t> texture_ids)
-    : material_type_(material_type)
-    , shader_stages_(shader_stages)
-    , texture_count_(texture_count)
-    , shader_ids_(std::move(shader_ids))
-    , texture_ids_(std::move(texture_ids))
+  explicit MaterialAsset(
+    pak::MaterialAssetDesc desc, std::vector<ShaderReference> shader_refs = {})
+    : desc_(std::move(desc))
+    , shader_refs_(std::move(shader_refs))
   {
   }
+
   ~MaterialAsset() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialAsset)
   OXYGEN_DEFAULT_MOVABLE(MaterialAsset)
 
-  [[nodiscard]] auto GetMaterialType() const noexcept -> uint32_t
+  //! Returns the asset header metadata.
+  [[nodiscard]] auto GetHeader() const noexcept -> const pak::AssetHeader&
   {
-    return material_type_;
-  }
-  [[nodiscard]] auto GetShaderStages() const noexcept -> uint32_t
-  {
-    return shader_stages_;
-  }
-  [[nodiscard]] auto GetTextureCount() const noexcept -> uint32_t
-  {
-    return texture_count_;
-  }
-  [[nodiscard]] auto GetShaderIds() const noexcept -> std::span<const uint64_t>
-  {
-    return shader_ids_;
-  }
-  [[nodiscard]] auto GetTextureIds() const noexcept -> std::span<const uint64_t>
-  {
-    return texture_ids_;
+    return desc_.header;
   }
 
+  //! Returns the material domain (e.g. Opaque, AlphaBlended, etc.).
+  [[nodiscard]] auto GetMaterialDomain() const noexcept -> MaterialDomain
+  {
+    return static_cast<MaterialDomain>(desc_.material_domain);
+  }
+
+  //! Returns the material flags bitfield.
+  [[nodiscard]] auto GetFlags() const noexcept -> uint32_t
+  {
+    return desc_.flags;
+  }
+
+  //! Returns the shader references for all stages used by this material.
+  [[nodiscard]] auto GetShaders() const noexcept
+    -> std::span<const ShaderReference>
+  {
+    return std::span<const ShaderReference>(
+      shader_refs_.data(), shader_refs_.size());
+  }
+
+  //! Returns the fallback base color (RGBA).
+  [[nodiscard]] auto GetBaseColor() const noexcept -> std::span<const float, 4>
+  {
+    return std::span<const float, 4>(desc_.base_color);
+  }
+
+  //! Returns the normal map scale.
+  [[nodiscard]] auto GetNormalScale() const noexcept -> float
+  {
+    return desc_.normal_scale;
+  }
+
+  //! Returns the metalness scalar.
+  [[nodiscard]] auto GetMetalness() const noexcept -> float
+  {
+    return desc_.metalness;
+  }
+
+  //! Returns the roughness scalar.
+  [[nodiscard]] auto GetRoughness() const noexcept -> float
+  {
+    return desc_.roughness;
+  }
+
+  //! Returns the ambient occlusion scalar.
+  [[nodiscard]] auto GetAmbientOcclusion() const noexcept -> float
+  {
+    return desc_.ambient_occlusion;
+  }
+
+  //! Returns the index of the base color texture.
+  [[nodiscard]] auto GetBaseColorTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.base_color_texture;
+  }
+
+  //! Returns the index of the normal texture.
+  [[nodiscard]] auto GetNormalTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.normal_texture;
+  }
+
+  //! Returns the index of the metallic texture.
+  [[nodiscard]] auto GetMetallicTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.metallic_texture;
+  }
+
+  //! Returns the index of the roughness texture.
+  [[nodiscard]] auto GetRoughnessTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.roughness_texture;
+  }
+
+  //! Returns the index of the ambient occlusion texture.
+  [[nodiscard]] auto GetAmbientOcclusionTexture() const noexcept
+    -> pak::ResourceIndexT
+  {
+    return desc_.ambient_occlusion_texture;
+  }
+
+  //! Creates a default material for procedural meshes and fallback scenarios.
+  OXGN_DATA_NDAPI static auto CreateDefault()
+    -> std::shared_ptr<const MaterialAsset>;
+
+  //! Creates a debug/wireframe material for development and debugging.
+  OXGN_DATA_NDAPI static auto CreateDebug()
+    -> std::shared_ptr<const MaterialAsset>;
+
 private:
-  uint32_t material_type_;
-  uint32_t shader_stages_;
-  uint32_t texture_count_;
-  std::vector<uint64_t> shader_ids_;
-  std::vector<uint64_t> texture_ids_;
+  pak::MaterialAssetDesc desc_ {};
+  std::vector<ShaderReference> shader_refs_ {};
 };
 
 } // namespace oxygen::data

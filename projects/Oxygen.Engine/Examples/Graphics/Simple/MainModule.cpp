@@ -527,7 +527,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
   // Animate rotation angle
   static float rotation_angle = 0.0f; // radians
-  // rotation_angle += 0.01f; // radians per frame, adjust as needed
+  rotation_angle += 0.01f; // radians per frame, adjust as needed
 
   scene_constants_.world_matrix
     = glm::rotate(glm::mat4(1.0f), rotation_angle, glm::vec3(0.5f, 1.0f, 0.0f));

@@ -26,10 +26,10 @@ static_assert(oxygen::content::LoaderFunction<
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   using oxygen::content::AssetLoader;
-  using enum oxygen::content::AssetType;
+  using enum oxygen::data::AssetType;
 
   AssetLoader loader;
-  loader.RegisterLoader(kGeometry, DummyLoader<oxygen::serio::FileStream<>>);
+  loader.RegisterLoader(DummyLoader<oxygen::serio::FileStream<>>);
 
   return EXIT_SUCCESS;
 }

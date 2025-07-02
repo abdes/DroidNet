@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-#include <Oxygen/Data/MeshAsset.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 
 using oxygen::data::MakeCubeMeshAsset;
@@ -21,8 +21,19 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   }
 
   std::cout << "Mesh created: " << mesh->Vertices().size() << " vertices, "
-            << mesh->Indices().size() << " indices, " << mesh->Views().size()
-            << " submeshes\n";
+            << mesh->Indices().size() << " indices, "
+            << mesh->SubMeshes().size() << " submeshes\n";
+
+  // Print views for each submesh
+  for (const auto& submesh : mesh->SubMeshes()) {
+    std::cout << "  SubMesh '" << submesh.Name() << "' has "
+              << submesh.MeshViews().size() << " view(s):\n";
+    std::size_t view_idx = 0;
+    for (const auto& view : submesh.MeshViews()) {
+      std::cout << "    View " << view_idx++ << ": " << view.Vertices().size()
+                << " vertices, " << view.Indices().size() << " indices\n";
+    }
+  }
 
   return EXIT_SUCCESS;
 }

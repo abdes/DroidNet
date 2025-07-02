@@ -226,7 +226,6 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
 {
   using graphics::DescriptorHandle;
   using graphics::DescriptorVisibility;
-  using graphics::TextureDimension;
   using graphics::TextureViewDescription;
 
   auto& render_controller = Context().GetRenderController();
@@ -239,12 +238,12 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
     .view_type = ResourceViewType::kTexture_DSV,
     .visibility = DescriptorVisibility::kCpuOnly,
     .format = depth_tex_desc.format,
-    .dimension = depth_tex_desc.dimension,
+    .dimension = depth_tex_desc.texture_type,
     .sub_resources = {
         .base_mip_level = 0,
         .num_mip_levels = depth_tex_desc.mip_levels,
         .base_array_slice = 0,
-        .num_array_slices = (depth_tex_desc.dimension == TextureDimension::kTexture3D
+        .num_array_slices = (depth_tex_desc.texture_type == TextureType::kTexture3D
                 ? depth_tex_desc.depth
                 : depth_tex_desc.array_size),
     },
