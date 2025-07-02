@@ -238,7 +238,7 @@ auto MainModule::SetupFramebuffers() -> void
     graphics::TextureDesc depth_desc;
     depth_desc.width = 800;
     depth_desc.height = 800;
-    depth_desc.format = graphics::Format::kDepth32;
+    depth_desc.format = Format::kDepth32;
     depth_desc.dimension = graphics::TextureDimension::kTexture2D;
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;
@@ -308,7 +308,7 @@ auto MainModule::EnsureVertexBufferSrv() -> void
   graphics::BufferViewDescription srv_view_desc {
     .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = graphics::Format::kUnknown,
+    .format = Format::kUnknown,
     .stride = sizeof(Vertex),
   };
 

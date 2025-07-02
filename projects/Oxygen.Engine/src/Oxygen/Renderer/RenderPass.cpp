@@ -173,8 +173,7 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
           item.mesh.get()->Name());
         continue;
       }
-      command_recorder.BindIndexBuffer(
-        *index_buffer, graphics::Format::kR32UInt);
+      command_recorder.BindIndexBuffer(*index_buffer, Format::kR32UInt);
       command_recorder.DrawIndexed(
         static_cast<uint32_t>(item.mesh->IndexCount()), 1, 0, 0, 0);
     } else {
