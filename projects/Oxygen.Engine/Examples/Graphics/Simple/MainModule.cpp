@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -411,6 +412,80 @@ auto MainModule::UpdateSceneConstantsBuffer(
   DLOG_F(2, "Scene constants buffer updated");
 }
 
+auto MainModule::EnsureMaterialConstantsBuffer() -> void
+{
+  // Only create and update the buffer. No descriptor/view registration needed
+  // for direct root CBV binding.
+  if (!material_constants_buffer_) {
+    DLOG_F(INFO, "Creating material constants buffer");
+    const graphics::BufferDesc cb_desc {
+      .size_bytes = sizeof(MaterialConstants),
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = "Material Constants Buffer",
+    };
+
+    CHECK_F(!gfx_weak_.expired());
+    const auto gfx = gfx_weak_.lock();
+
+    material_constants_buffer_ = gfx->CreateBuffer(cb_desc);
+    material_constants_buffer_->SetName("Material Constants Buffer");
+
+    context_.material_constants = material_constants_buffer_;
+  }
+}
+
+auto MainModule::UpdateMaterialConstantsBuffer(
+  const MaterialConstants& constants) const -> void
+{
+  if (!material_constants_buffer_) {
+    LOG_F(ERROR, "Material constants buffer is not initialized");
+    return;
+  }
+  // Map the buffer and copy the constants
+  if (void* mapped = material_constants_buffer_->Map()) {
+    memcpy(mapped, &constants, sizeof(MaterialConstants));
+    material_constants_buffer_->UnMap();
+  } else {
+    LOG_F(ERROR, "Failed to map material constants buffer for update");
+  }
+  DLOG_F(2, "Material constants buffer updated");
+}
+
+auto MainModule::ExtractMaterialConstants(
+  const data::MaterialAsset& material) const -> MaterialConstants
+{
+  MaterialConstants constants;
+
+  // Extract base color (RGBA)
+  const auto base_color_span = material.GetBaseColor();
+  constants.base_color = glm::vec4(base_color_span[0], base_color_span[1],
+    base_color_span[2], base_color_span[3]);
+
+  // Extract PBR scalar values
+  constants.metalness = material.GetMetalness();
+  constants.roughness = material.GetRoughness();
+  constants.normal_scale = material.GetNormalScale();
+  constants.ambient_occlusion = material.GetAmbientOcclusion();
+
+  // Extract texture indices
+  // For now, set all texture indices to invalid since we don't have texture
+  // loading yet In a full implementation, these would be resolved to actual
+  // descriptor heap indices
+  constexpr uint32_t kInvalidTextureIndex
+    = 0; // 0 typically represents an invalid or default texture
+  constants.base_color_texture_index = kInvalidTextureIndex;
+  constants.normal_texture_index = kInvalidTextureIndex;
+  constants.metallic_texture_index = kInvalidTextureIndex;
+  constants.roughness_texture_index = kInvalidTextureIndex;
+  constants.ambient_occlusion_texture_index = kInvalidTextureIndex;
+
+  // Extract material flags
+  constants.flags = material.GetFlags();
+
+  return constants;
+}
+
 auto MainModule::EnsureMeshDrawResources() -> void
 {
   // This is not strictly necessary, but ensures that shaders that are looking
@@ -447,6 +522,12 @@ auto MainModule::EnsureMeshDrawResources() -> void
     LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
     throw;
   }
+  try {
+    EnsureMaterialConstantsBuffer();
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
+    throw;
+  }
 }
 
 // === Data-driven RenderItem/scene system integration ===
@@ -466,9 +547,11 @@ auto MainModule::RenderScene() -> co::Co<>
 
   if (render_items_.empty()) {
     const auto cube_mesh = data::MakeCubeMeshAsset();
+    // Create a default material for the cube
+    const auto cube_material = data::MaterialAsset::CreateDebug();
     RenderItem cube_item {
       .mesh = cube_mesh,
-      .material = nullptr,
+      .material = cube_material,
       .world_transform = glm::mat4(1.0f), // Not used directly in shader
       .normal_transform = glm::mat4(1.0f),
       .cast_shadows = false,
@@ -550,6 +633,13 @@ auto MainModule::RenderScene() -> co::Co<>
   scene_constants_.camera_position = { 0.0f, 0.0f, -3.5f };
 
   UpdateSceneConstantsBuffer(scene_constants_);
+
+  // Update material constants from the first render item's material
+  if (!render_items_.empty() && render_items_.front().material) {
+    const auto material_constants
+      = ExtractMaterialConstants(*render_items_.front().material);
+    UpdateMaterialConstantsBuffer(material_constants);
+  }
 
   // Assemble and run the render graph
   co_await renderer_->ExecuteRenderGraph(

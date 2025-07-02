@@ -399,6 +399,15 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .data = DirectBufferBinding {}
   };
 
+  constexpr RootBindingDesc material_constants_cbv_desc { // b2, space0
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 2,
+      .register_space = 0,
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {}
+  };
+
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc {
       .shader = MakeShaderIdentifier(ShaderType::kVertex, "DepthPrePass.hlsl"),
@@ -417,5 +426,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .AddRootBinding(RootBindingItem(resource_indices_cbv_desc))
     // binding 2: SceneConstants CBV (b1)
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
+    // binding 3: MaterialConstants CBV (b2)
+    .AddRootBinding(RootBindingItem(material_constants_cbv_desc))
     .Build();
 }

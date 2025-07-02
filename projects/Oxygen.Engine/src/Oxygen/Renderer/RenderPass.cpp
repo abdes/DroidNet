@@ -112,7 +112,7 @@ auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
 {
   using graphics::DirectBufferBinding;
 
-  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_NOTNULL_F(Context().bindless_indices);
   DCHECK_F(LastBuiltPsoDesc().has_value());
 
   constexpr auto root_param_index
@@ -128,6 +128,35 @@ auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
   recorder.SetGraphicsRootConstantBufferView(
     root_param.GetRootParameterIndex(), // should be binding 1 (b0, space0)
     Context().bindless_indices->GetGPUVirtualAddress());
+}
+
+auto RenderPass::BindMaterialConstantsBuffer(CommandRecorder& recorder) const
+  -> void
+{
+  using graphics::DirectBufferBinding;
+
+  // Material constants buffer is optional, so check if it exists
+  if (!Context().material_constants) {
+    // If no material constants buffer is available, we can skip binding
+    // The shader should handle this case gracefully or use default values
+    return;
+  }
+
+  DCHECK_F(LastBuiltPsoDesc().has_value());
+
+  constexpr auto root_param_index
+    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
+      RootBindings::kMaterialConstantsCbv);
+  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
+
+  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
+    "Expected root parameter {}'s data to be DirectBufferBinding",
+    root_param_index);
+
+  // Bind the buffer as a root CBV (direct GPU virtual address)
+  recorder.SetGraphicsRootConstantBufferView(
+    root_param.GetRootParameterIndex(), // should be binding 3 (b2, space0)
+    Context().material_constants->GetGPUVirtualAddress());
 }
 
 auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void

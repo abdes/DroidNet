@@ -65,6 +65,24 @@ private:
     glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
   } scene_constants_;
 
+  // Material constants structure matching shader layout
+  struct MaterialConstants {
+    glm::vec4 base_color { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback color
+    float metalness { 0.0f }; // Metalness scalar
+    float roughness { 0.8f }; // Roughness scalar
+    float normal_scale { 1.0f }; // Normal map scale
+    float ambient_occlusion { 1.0f }; // AO scalar
+    // Texture indices (bindless)
+    uint32_t base_color_texture_index { 0 };
+    uint32_t normal_texture_index { 0 };
+    uint32_t metallic_texture_index { 0 };
+    uint32_t roughness_texture_index { 0 };
+    uint32_t ambient_occlusion_texture_index { 0 };
+    uint32_t flags { 0 }; // Material flags
+    float _pad0 { 0.0f }; // Padding for alignment
+    float _pad1 { 0.0f }; // Padding for alignment
+  };
+
   auto SetupCommandQueues() const -> void;
   auto SetupMainWindow() -> void;
   auto SetupSurface() -> void;
@@ -88,6 +106,14 @@ private:
   std::shared_ptr<graphics::Buffer> index_buffer_;
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
   std::shared_ptr<graphics::Buffer> indices_buffer_;
+  std::shared_ptr<graphics::Buffer> material_constants_buffer_;
+
+  // Helper methods for material support
+  auto EnsureMaterialConstantsBuffer() -> void;
+  auto UpdateMaterialConstantsBuffer(const MaterialConstants& constants) const
+    -> void;
+  auto ExtractMaterialConstants(const data::MaterialAsset& material) const
+    -> MaterialConstants;
 
   // === Data-driven RenderItem/scene system members ===
   std::vector<engine::RenderItem> render_items_;
