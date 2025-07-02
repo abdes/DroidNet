@@ -204,6 +204,7 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
+  BindMaterialConstantsBuffer(recorder);
   IssueDrawCalls(recorder);
   Context().RegisterPass(this);
 
@@ -375,6 +376,15 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .data = DirectBufferBinding {}
   };
 
+  constexpr RootBindingDesc material_constants_cbv_desc { // b2, space0
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 2,
+      .register_space = 0,
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {}
+  };
+
   return graphics::GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
@@ -391,6 +401,8 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .AddRootBinding(RootBindingItem(resource_indices_cbv_desc))
     // binding 2: SceneConstants CBV (b1)
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
+    // binding 3: MaterialConstants CBV (b2)
+    .AddRootBinding(RootBindingItem(material_constants_cbv_desc))
     .Build();
 }
 

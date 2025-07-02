@@ -39,6 +39,23 @@ cbuffer SceneConstants : register(b1) {
     float _pad0; // Padding to match C++ struct alignment
 }
 
+// Material constants buffer (matches C++ MaterialConstants struct layout)
+cbuffer MaterialConstants : register(b2) {
+    float4 base_color;                      // RGBA fallback color
+    float metalness;                        // Metalness scalar
+    float roughness;                        // Roughness scalar
+    float normal_scale;                     // Normal map scale
+    float ambient_occlusion;                // AO scalar
+    uint base_color_texture_index;          // Texture indices (bindless)
+    uint normal_texture_index;
+    uint metallic_texture_index;
+    uint roughness_texture_index;
+    uint ambient_occlusion_texture_index;
+    uint flags;                             // Material flags
+    float _mat_pad0;                        // Padding for alignment
+    float _mat_pad1;                        // Padding for alignment
+}
+
 // Access to the bindless descriptor heap
 StructuredBuffer<Vertex> g_BindlessVertexBuffers[] : register(t0, space0);
 
@@ -65,6 +82,13 @@ VSOutput VS(uint vertexID : SV_VertexID) {
 
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
-    // Output the interpolated color from the vertex shader
-    return float4(input.color, 1.0);
+    // Combine vertex color with material base color
+    float3 combined_color = input.color * base_color.rgb;
+
+    // Apply some basic material properties for visual feedback
+    // Modulate color based on metalness and roughness for demonstration
+    combined_color = lerp(combined_color, combined_color * 0.5, metalness);  // Darken metallic surfaces
+    combined_color = lerp(combined_color, combined_color * 1.2, 1.0 - roughness); // Brighten smooth surfaces
+
+    return float4(combined_color, base_color.a);
 }
