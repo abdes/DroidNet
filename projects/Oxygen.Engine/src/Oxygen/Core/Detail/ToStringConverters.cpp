@@ -7,6 +7,7 @@
 #include <string>
 
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 
 auto oxygen::to_string(oxygen::Format format) -> const char*
 {
@@ -81,6 +82,32 @@ auto oxygen::to_string(oxygen::Format format) -> const char*
     case oxygen::Format::kDepth32:             return "DEPTH32";
     case oxygen::Format::kDepth32Stencil8:     return "DEPTH32_STENCIL8";
     case oxygen::Format::kMax:                 return "MAX";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
+}
+
+auto oxygen::to_string(const oxygen::ShaderType value) -> const char*
+{
+  switch (value) {
+    // clang-format off
+  case ShaderType::kUnknown:         return "Unknown";
+  case ShaderType::kAmplification:   return "Amplification Shader";
+  case ShaderType::kMesh:            return "Mesh Shader";
+  case ShaderType::kVertex:          return "Vertex Shader";
+  case ShaderType::kHull:            return "Hull Shader";
+  case ShaderType::kDomain:          return "Domain Shader";
+  case ShaderType::kGeometry:        return "Geometry Shader";
+  case ShaderType::kPixel:           return "Pixel Shader";
+  case ShaderType::kCompute:         return "Compute Shader";
+  case ShaderType::kRayGen:          return "Ray Generation Shader";
+  case ShaderType::kIntersection:    return "Intersection Shader";
+  case ShaderType::kAnyHit:          return "Any-Hit Shader";
+  case ShaderType::kClosestHit:      return "Closest-Hit Shader";
+  case ShaderType::kMiss:            return "Miss Shader";
+  case ShaderType::kCallable:        return "Callable Shader";
+  case ShaderType::kMaxShaderType:   return "__Max__";
     // clang-format on
   }
 

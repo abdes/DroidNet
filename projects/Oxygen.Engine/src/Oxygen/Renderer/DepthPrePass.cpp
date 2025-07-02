@@ -324,7 +324,6 @@ auto DepthPrePass::SetupViewPortAndScissors(
 
 auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 {
-  using data::ShaderType;
   using graphics::BindingSlotDesc;
   using graphics::CompareOp;
   using graphics::CullMode;

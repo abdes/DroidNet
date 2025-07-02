@@ -51,7 +51,6 @@ target_sources(
   PRIVATE
     "MeshAsset.cpp"
     "ProceduralMeshes.cpp"
-    "ShaderType.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -60,7 +59,6 @@ target_sources(
       "MeshAsset.h"
       "MeshView.h"
       "ProceduralMeshes.h"
-      "ShaderType.h"
       "TextureAsset.h"
       "Vertex.h"
 )
@@ -76,6 +74,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::core
     glm::glm
 )
 

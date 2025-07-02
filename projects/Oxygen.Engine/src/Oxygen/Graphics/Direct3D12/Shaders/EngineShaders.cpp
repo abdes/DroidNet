@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.h>
 
-using oxygen::data::ShaderType;
+using oxygen::ShaderType;
 using oxygen::graphics::ShaderInfo;
 using oxygen::graphics::d3d12::EngineShaders;
 

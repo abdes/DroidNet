@@ -23,7 +23,7 @@
 #include <type_traits>
 
 using Microsoft::WRL::ComPtr;
-using oxygen::data::ShaderType;
+using oxygen::ShaderType;
 using oxygen::graphics::d3d12::ShaderCompiler;
 using oxygen::windows::ThrowOnFailed;
 

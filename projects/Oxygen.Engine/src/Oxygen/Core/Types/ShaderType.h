@@ -11,37 +11,38 @@
 
 #include <Oxygen/Data/api_export.h>
 
-namespace oxygen::data {
+namespace oxygen {
 
 //! Enum representing the different types of shaders.
 enum class ShaderType : uint32_t {
-  kUnknown
-  = 0, //!< Unknown Shader Type: Used for error handling or uninitialized state.
+  // clang-format off
+  kUnknown       = 0,  //!< Unknown Shader Type (Invalid or uninitialized state)
 
   //! @{
   //! Graphics pipeline shaders.
-  kAmplification,
-  kMesh,
-  kVertex,
-  kHull,
-  kDomain,
-  kGeometry,
-  kPixel,
+  kAmplification = 1,
+  kMesh          = 2,
+  kVertex        = 3,
+  kHull          = 4,
+  kDomain        = 5,
+  kGeometry      = 6,
+  kPixel         = 7,
   //! @}
 
-  kCompute,
+  kCompute       = 8,
 
   //! @{
   //! Ray tracing shaders.
-  kRayGen,
-  kIntersection,
-  kAnyHit,
-  kClosestHit,
-  kMiss,
-  kCallable,
+  kRayGen        = 9,
+  kIntersection  = 10,
+  kAnyHit        = 11,
+  kClosestHit    = 12,
+  kMiss          = 13,
+  kCallable      = 14,
   //! @}
 
-  kMaxShaderType //!< Maximum value sentinel.
+  kMaxShaderType  //!< Maximum value sentinel.
+  // clang-format on
 };
 
 // For binary encoding, material assets use a 32-bit integer, as flags, to
@@ -54,4 +55,4 @@ static_assert(
 //! String representation of enum values in `ShaderType`.
 OXGN_DATA_NDAPI auto to_string(ShaderType value) -> const char*;
 
-} // namespace oxygen::data
+} // namespace oxygen

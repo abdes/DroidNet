@@ -307,7 +307,7 @@ void ShaderManager::Load()
 
   shader_cache_.clear();
   for (size_t i = 0; i < header.value().shader_count; ++i) {
-    auto shader_type = reader.read<data::ShaderType>();
+    auto shader_type = reader.read<ShaderType>();
     if (!shader_type.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + shader_type.error().message());

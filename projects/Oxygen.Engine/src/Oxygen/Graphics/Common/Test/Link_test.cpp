@@ -8,7 +8,7 @@
 
 #include <Oxygen/Graphics/Common/Shaders.h>
 
-using oxygen::data::ShaderType;
+using oxygen::ShaderType;
 using oxygen::graphics::MakeShaderIdentifier;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
