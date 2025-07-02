@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/MeshAsset.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -17,7 +18,6 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
@@ -308,7 +308,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Determine if a depth attachment is present
   const auto* fb = GetFramebuffer();
   bool has_depth = false;
-  auto depth_format = graphics::Format::kUnknown;
+  auto depth_format = Format::kUnknown;
   uint32_t sample_count = 1;
   if (fb) {
     const auto& fb_desc = fb->GetDescriptor();

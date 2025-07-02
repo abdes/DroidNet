@@ -6,14 +6,83 @@
 
 #include <string>
 
-#include <fmt/format.h>
+#include <Oxygen/Core/Types/Format.h>
 
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
-
-auto oxygen::graphics::to_string(const ViewPort& viewport) -> std::string
+auto oxygen::to_string(oxygen::Format format) -> const char*
 {
-  return fmt::format(
-    "ViewPort{{tl.x={}, tl.y={}, w={}, h={}, min_depth={}, max_depth={}}}",
-    viewport.top_left_x, viewport.top_left_y, viewport.width, viewport.height,
-    viewport.min_depth, viewport.max_depth);
+  switch (format) {
+    // clang-format off
+    case oxygen::Format::kUnknown:             return "UNKNOWN";
+    case oxygen::Format::kR8UInt:              return "R8_UINT";
+    case oxygen::Format::kR8SInt:              return "R8_SINT";
+    case oxygen::Format::kR8UNorm:             return "R8_UNORM";
+    case oxygen::Format::kR8SNorm:             return "R8_SNORM";
+    case oxygen::Format::kR16UInt:             return "R16_UINT";
+    case oxygen::Format::kR16SInt:             return "R16_SINT";
+    case oxygen::Format::kR16UNorm:            return "R16_UNORM";
+    case oxygen::Format::kR16SNorm:            return "R16_SNORM";
+    case oxygen::Format::kR16Float:            return "R16_FLOAT";
+    case oxygen::Format::kR32UInt:             return "R32_UINT";
+    case oxygen::Format::kR32SInt:             return "R32_SINT";
+    case oxygen::Format::kR32Float:            return "R32_FLOAT";
+    case oxygen::Format::kRG8UInt:             return "RG8_UINT";
+    case oxygen::Format::kRG8SInt:             return "RG8_SINT";
+    case oxygen::Format::kRG8UNorm:            return "RG8_UNORM";
+    case oxygen::Format::kRG8SNorm:            return "RG8_SNORM";
+    case oxygen::Format::kRG16UInt:            return "RG16_UINT";
+    case oxygen::Format::kRG16SInt:            return "RG16_SINT";
+    case oxygen::Format::kRG16UNorm:           return "RG16_UNORM";
+    case oxygen::Format::kRG16SNorm:           return "RG16_SNORM";
+    case oxygen::Format::kRG16Float:           return "RG16_FLOAT";
+    case oxygen::Format::kRG32UInt:            return "RG32_UINT";
+    case oxygen::Format::kRG32SInt:            return "RG32_SINT";
+    case oxygen::Format::kRG32Float:           return "RG32_FLOAT";
+    case oxygen::Format::kRGB32UInt:           return "RGB32_UINT";
+    case oxygen::Format::kRGB32SInt:           return "RGB32_SINT";
+    case oxygen::Format::kRGB32Float:          return "RGB32_FLOAT";
+    case oxygen::Format::kRGBA8UInt:           return "RGBA8_UINT";
+    case oxygen::Format::kRGBA8SInt:           return "RGBA8_SINT";
+    case oxygen::Format::kRGBA8UNorm:          return "RGBA8_UNORM";
+    case oxygen::Format::kRGBA8UNormSRGB:      return "RGBA8_UNORM_SRGB";
+    case oxygen::Format::kRGBA8SNorm:          return "RGBA8_SNORM";
+    case oxygen::Format::kBGRA8UNorm:          return "BGRA8_UNORM";
+    case oxygen::Format::kBGRA8UNormSRGB:      return "BGRA8_UNORM_SRGB";
+    case oxygen::Format::kRGBA16UInt:          return "RGBA16_UINT";
+    case oxygen::Format::kRGBA16SInt:          return "RGBA16_SINT";
+    case oxygen::Format::kRGBA16UNorm:         return "RGBA16_UNORM";
+    case oxygen::Format::kRGBA16SNorm:         return "RGBA16_SNORM";
+    case oxygen::Format::kRGBA16Float:         return "RGBA16_FLOAT";
+    case oxygen::Format::kRGBA32UInt:          return "RGBA32_UINT";
+    case oxygen::Format::kRGBA32SInt:          return "RGBA32_SINT";
+    case oxygen::Format::kRGBA32Float:         return "RGBA32_FLOAT";
+    case oxygen::Format::kB5G6R5UNorm:         return "B5G6R5_UNORM";
+    case oxygen::Format::kB5G5R5A1UNorm:       return "B5G5R5A1_UNORM";
+    case oxygen::Format::kB4G4R4A4UNorm:       return "B4G4R4A4_UNORM";
+    case oxygen::Format::kR11G11B10Float:      return "R11G11B10_FLOAT";
+    case oxygen::Format::kR10G10B10A2UNorm:    return "R10G10B10A2_UNORM";
+    case oxygen::Format::kR10G10B10A2UInt:     return "R10G10B10A2_UINT";
+    case oxygen::Format::kR9G9B9E5Float:       return "R9G9B9E5_FLOAT";
+    case oxygen::Format::kBC1UNorm:            return "BC1_UNORM";
+    case oxygen::Format::kBC1UNormSRGB:        return "BC1_UNORM_SRGB";
+    case oxygen::Format::kBC2UNorm:            return "BC2_UNORM";
+    case oxygen::Format::kBC2UNormSRGB:        return "BC2_UNORM_SRGB";
+    case oxygen::Format::kBC3UNorm:            return "BC3_UNORM";
+    case oxygen::Format::kBC3UNormSRGB:        return "BC3_UNORM_SRGB";
+    case oxygen::Format::kBC4UNorm:            return "BC4_UNORM";
+    case oxygen::Format::kBC4SNorm:            return "BC4_SNORM";
+    case oxygen::Format::kBC5UNorm:            return "BC5_UNORM";
+    case oxygen::Format::kBC5SNorm:            return "BC5_SNORM";
+    case oxygen::Format::kBC6HFloatU:          return "BC6H_FLOAT_U";
+    case oxygen::Format::kBC6HFloatS:          return "BC6H_FLOAT_S";
+    case oxygen::Format::kBC7UNorm:            return "BC7_UNORM";
+    case oxygen::Format::kBC7UNormSRGB:        return "BC7_UNORM_SRGB";
+    case oxygen::Format::kDepth16:             return "DEPTH16";
+    case oxygen::Format::kDepth24Stencil8:     return "DEPTH24_STENCIL8";
+    case oxygen::Format::kDepth32:             return "DEPTH32";
+    case oxygen::Format::kDepth32Stencil8:     return "DEPTH32_STENCIL8";
+    case oxygen::Format::kMax:                 return "MAX";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
 }

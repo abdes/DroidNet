@@ -299,7 +299,7 @@ auto MainModule::SetupFramebuffers() -> void
     graphics::TextureDesc depth_desc;
     depth_desc.width = 800;
     depth_desc.height = 800;
-    depth_desc.format = graphics::Format::kDepth32;
+    depth_desc.format = Format::kDepth32;
     depth_desc.dimension = graphics::TextureDimension::kTexture2D;
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;

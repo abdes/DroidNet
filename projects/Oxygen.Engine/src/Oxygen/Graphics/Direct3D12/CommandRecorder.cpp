@@ -801,7 +801,7 @@ void CommandRecorder::SetRenderTargets(
 }
 
 void CommandRecorder::BindIndexBuffer(
-  const graphics::Buffer& buffer, graphics::Format format)
+  const graphics::Buffer& buffer, Format format)
 {
   const auto* command_list = GetConcreteCommandList();
   DCHECK_NOTNULL_F(command_list);
@@ -815,10 +815,10 @@ void CommandRecorder::BindIndexBuffer(
   ib_view.BufferLocation = d3d12_buffer->GetResource()->GetGPUVirtualAddress();
   ib_view.SizeInBytes = static_cast<UINT>(d3d12_buffer->GetSize());
   switch (format) {
-  case graphics::Format::kR16UInt:
+  case Format::kR16UInt:
     ib_view.Format = DXGI_FORMAT_R16_UINT;
     break;
-  case graphics::Format::kR32UInt:
+  case Format::kR32UInt:
     ib_view.Format = DXGI_FORMAT_R32_UINT;
     break;
   default:

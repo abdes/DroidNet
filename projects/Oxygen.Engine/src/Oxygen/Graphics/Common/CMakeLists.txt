@@ -117,7 +117,6 @@ target_sources(
       "Types/Color.h"
       "Types/DescriptorVisibility.h"
       "Types/EngineResources.h"
-      "Types/Format.h"
       "Types/IndexRange.h"
       "Types/Queues.h"
       "Types/RenderTask.h"
