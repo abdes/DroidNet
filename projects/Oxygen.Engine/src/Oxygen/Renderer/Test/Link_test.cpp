@@ -7,8 +7,10 @@
 #include <iostream>
 
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
+using oxygen::data::MaterialAsset;
 using oxygen::data::Mesh;
 using oxygen::engine::RenderItem;
 
@@ -23,8 +25,20 @@ auto main(int /*argc*/, char** /*argv*/) -> int
         { { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 },
           { 1, 1, 1, 1 } } };
   std::vector<std::uint32_t> indices = { 0, 1, 2 };
-  auto mesh = std::make_shared<Mesh>(
-    "TestMesh", std::move(vertices), std::move(indices));
+
+  auto material = oxygen::data::MaterialAsset::CreateDefault();
+
+  // Use MeshBuilder to construct the mesh
+  auto mesh = oxygen::data::MeshBuilder()
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("DefaultSubMesh", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
 
   // Create a RenderItem
   RenderItem item;

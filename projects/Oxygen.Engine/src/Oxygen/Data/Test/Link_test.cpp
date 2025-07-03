@@ -26,7 +26,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
 
   // Print views for each submesh
   for (const auto& submesh : mesh->SubMeshes()) {
-    std::cout << "  SubMesh '" << submesh.Name() << "' has "
+    std::cout << "  SubMesh '" << submesh.GetName() << "' has "
               << submesh.MeshViews().size() << " view(s):\n";
     std::size_t view_idx = 0;
     for (const auto& view : submesh.MeshViews()) {

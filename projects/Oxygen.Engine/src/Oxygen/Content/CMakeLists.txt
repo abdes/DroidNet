@@ -49,19 +49,13 @@ target_sources(
   PRIVATE
     "AssetLoader.cpp"
     "PakFile.cpp"
-    # "Loaders/GeometryLoader.cpp"
-    # "Loaders/GeometryLoader.h"
-    # "Loaders/MaterialLoader.cpp"
-    # "Loaders/MeshLoader.cpp"
-    # "Loaders/MeshLoader.h"
+    "Loaders/GeometryLoader.h"
     "Loaders/MaterialLoader.h"
     "Loaders/TextureLoader.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "PakFile.h"
+    FILES "api_export.h" "PakFile.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

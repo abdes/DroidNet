@@ -22,15 +22,18 @@ using ::testing::AllOf;
 using ::testing::Eq;
 using ::testing::SizeIs;
 
+using AssetHeader = oxygen::data::pak::AssetHeader;
+using MemoryStream = oxygen::serio::MemoryStream;
+using Reader = oxygen::serio::Reader<MemoryStream>;
+
 //=== LoadAssetHeader Basic Tests ===--------------------------------------//
 
 //! Scenario: LoadAssetHeader returns correct AssetHeader for valid input
 TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
 {
   // Arrange
-  std::array<std::byte, sizeof(oxygen::data::pak::AssetHeader)> buffer {};
-  auto* header
-    = reinterpret_cast<oxygen::data::pak::AssetHeader*>(buffer.data());
+  std::array<std::byte, sizeof(AssetHeader)> buffer {};
+  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   header->asset_type = 3;
   {
     constexpr char kTestName[] = "TestAsset";
@@ -43,9 +46,8 @@ TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
   header->content_hash = 0x123456789ABCDEF0ULL;
   header->variant_flags = 0xAABBCCDD;
 
-  oxygen::serio::MemoryStream stream(
-    std::span<std::byte>(buffer.data(), buffer.size()));
-  oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  Reader reader(stream);
 
   // Act
   auto result = oxygen::content::loaders::LoadAssetHeader(reader);
@@ -63,9 +65,8 @@ TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
 TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
 {
   // Arrange
-  std::array<std::byte, sizeof(oxygen::data::pak::AssetHeader)> buffer {};
-  auto* header
-    = reinterpret_cast<oxygen::data::pak::AssetHeader*>(buffer.data());
+  std::array<std::byte, sizeof(AssetHeader)> buffer {};
+  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   header->asset_type = 255; // Invalid (assuming kMaxAssetType < 255)
   {
     constexpr char kInvalidName[] = "InvalidType";
@@ -74,9 +75,8 @@ TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
       std::min(sizeof(header->name), sizeof(kInvalidName)), header->name);
   }
 
-  oxygen::serio::MemoryStream stream(
-    std::span<std::byte>(buffer.data(), buffer.size()));
-  oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  Reader reader(stream);
 
   // Act & Assert
   EXPECT_THROW(
@@ -87,18 +87,16 @@ TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
 TEST(LoadAssetHeader_edge, WarnsIfNameNotNullTerminated)
 {
   // Arrange
-  std::array<std::byte, sizeof(oxygen::data::pak::AssetHeader)> buffer {};
-  auto* header
-    = reinterpret_cast<oxygen::data::pak::AssetHeader*>(buffer.data());
+  std::array<std::byte, sizeof(AssetHeader)> buffer {};
+  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   // Fill name with non-null chars
   for (size_t i = 0; i < oxygen::data::pak::kMaxNameSize; ++i) {
     header->name[i] = 'A';
   }
   header->asset_type = 1;
 
-  oxygen::serio::MemoryStream stream(
-    std::span<std::byte>(buffer.data(), buffer.size()));
-  oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  Reader reader(stream);
 
   // Act
   // Should not throw, but should log a warning (not checked here)

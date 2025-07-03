@@ -4,13 +4,41 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/ProceduralMeshes.h>
-
 #include <numbers>
 
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 
 // ReSharper disable CppClangTidyModernizeUseDesignatedInitializers
+
+namespace {
+
+auto BuildMesh(std::string_view name,
+  std::vector<oxygen::data::Vertex> vertices, std::vector<uint32_t> indices)
+  -> std::shared_ptr<oxygen::data::Mesh>
+{
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::pak::MeshViewDesc;
+
+  auto mesh = MeshBuilder(0, name)
+                .WithVertices(std::move(vertices))
+                .WithIndices(std::move(indices))
+                .BeginSubMesh("default", MaterialAsset::CreateDefault())
+                .WithMeshView(MeshViewDesc {
+                  .first_index = 0,
+                  .index_count = static_cast<uint32_t>(indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
+                .EndSubMesh()
+                .Build();
+
+  return mesh;
+}
+
+} // namespace
 
 namespace oxygen::data {
 
@@ -72,15 +100,8 @@ auto MakeCubeMeshAsset() -> std::shared_ptr<Mesh>
     3, 7, 6, 3, 6, 2,
     // clang-format on
   };
-  auto asset
-    = std::make_shared<Mesh>("Cube", std::move(vertices), std::move(indices));
-  // Add a default submesh covering the whole mesh
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Cube", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -164,14 +185,8 @@ auto MakeSphereMeshAsset(unsigned int latitude_segments,
       indices.push_back(i3);
     }
   }
-  auto asset
-    = std::make_shared<Mesh>("Sphere", std::move(vertices), std::move(indices));
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Sphere", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -245,15 +260,8 @@ auto MakePlaneMeshAsset(unsigned int x_segments, unsigned int z_segments,
       indices.push_back(i3);
     }
   }
-  auto asset
-    = std::make_shared<Mesh>("Plane", std::move(vertices), std::move(indices));
-  // Add a default submesh covering the whole mesh
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Plane", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -372,14 +380,8 @@ auto MakeCylinderMeshAsset(const unsigned int segments, const float height,
     indices.push_back(v2);
     indices.push_back(v3);
   }
-  auto asset = std::make_shared<Mesh>(
-    "Cylinder", std::move(vertices), std::move(indices));
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Cylinder", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -475,14 +477,8 @@ auto MakeConeMeshAsset(unsigned int segments, float height, float radius)
     indices.push_back(i + 1);
     indices.push_back(base_center);
   }
-  auto asset
-    = std::make_shared<Mesh>("Cone", std::move(vertices), std::move(indices));
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Cone", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -573,14 +569,8 @@ auto MakeTorusMeshAsset(unsigned int major_segments,
       indices.push_back(i3);
     }
   }
-  auto asset
-    = std::make_shared<Mesh>("Torus", std::move(vertices), std::move(indices));
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Torus", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -631,15 +621,8 @@ auto MakeQuadMeshAsset(const float width, const float height)
     0, 1, 2, // triangle 1
     2, 3, 0, // triangle 2
   };
-  auto asset
-    = std::make_shared<Mesh>("Quad", std::move(vertices), std::move(indices));
-  // Add a default submesh covering the whole mesh
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("Quad", std::move(vertices), std::move(indices));
 }
 
 /*!
@@ -779,14 +762,8 @@ auto MakeArrowGizmoMeshAsset() -> std::shared_ptr<Mesh>
     indices.push_back(cone_base_start + i + 1);
     indices.push_back(base_center);
   }
-  auto asset = std::make_shared<Mesh>(
-    "ArrowGizmo", std::move(vertices), std::move(indices));
-  std::vector<MeshView> views;
-  views.push_back(
-    asset->MakeView(0, asset->VertexCount(), 0, asset->IndexCount()));
-  asset->AddSubMesh(
-    "default", std::move(views), MaterialAsset::CreateDefault());
-  return asset;
+
+  return BuildMesh("ArrowGizmo", std::move(vertices), std::move(indices));
 }
 
 } // namespace oxygen::data

@@ -9,14 +9,19 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -24,6 +29,7 @@ namespace oxygen::data {
 
 // Forward declaration
 class MaterialAsset;
+class Mesh;
 
 //! Immutable, non-owning view of a mesh's geometry data.
 /*!
@@ -56,33 +62,22 @@ class MaterialAsset;
 */
 class MeshView {
 public:
-  // Only Mesh should construct MeshView. Do not construct directly.
-  MeshView(std::span<const Vertex> vertices,
-    std::span<const std::uint32_t> indices) noexcept
-    : vertices_(vertices)
-    , indices_(indices)
-  {
-  }
+  OXGN_DATA_API MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept;
 
   ~MeshView() = default;
 
   OXYGEN_DEFAULT_COPYABLE(MeshView)
   OXYGEN_DEFAULT_MOVABLE(MeshView)
 
-  [[nodiscard]] constexpr auto Vertices() const noexcept
-    -> std::span<const Vertex>
-  {
-    return vertices_;
-  }
-  [[nodiscard]] constexpr auto Indices() const noexcept
-    -> std::span<const std::uint32_t>
-  {
-    return indices_;
-  }
+  OXGN_DATA_NDAPI auto Vertices() const noexcept -> std::span<const Vertex>;
+
+  OXGN_DATA_NDAPI auto Indices() const noexcept
+    -> std::span<const std::uint32_t>;
 
 private:
-  std::span<const Vertex> vertices_ {};
-  std::span<const std::uint32_t> indices_ {};
+  std::reference_wrapper<const Mesh> mesh_;
+
+  pak::MeshViewDesc desc_ {};
 };
 
 //! Represents a submesh within a mesh asset.
@@ -113,27 +108,26 @@ private:
 class SubMesh {
 public:
   // Only Mesh should construct SubMesh. Do not construct directly.
-  SubMesh(std::string name, std::vector<MeshView> meshviews,
-    std::shared_ptr<const MaterialAsset> material)
-    : name_(std::move(name))
-    , mesh_views_(std::move(meshviews))
-    , material_(std::move(material))
-  {
-    // Enforce design constraints
-    assert(!mesh_views_.empty()
-      && "SubMesh must have at least one MeshView (1:N constraint)");
-    assert(material_ != nullptr
-      && "SubMesh must have exactly one Material (1:1 constraint)");
-  }
+  OXGN_DATA_API SubMesh(
+    const Mesh& mesh, pak::SubMeshDesc desc, std::vector<MeshView> meshviews);
+
+  OXGN_DATA_API SubMesh(const Mesh& mesh, std::string name,
+    std::vector<MeshView> meshviews,
+    std::shared_ptr<const MaterialAsset> material);
+
   ~SubMesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(SubMesh)
   OXYGEN_DEFAULT_MOVABLE(SubMesh)
 
-  [[nodiscard]] auto Name() const noexcept -> const std::string&
-  {
-    return name_;
-  }
+  //! Returns the submesh name as a string view (for debugging/tools).
+  /*!
+    Returns the asset name from the descriptor as a string view. The name is
+    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
+    and tools, not for runtime use.
+  */
+  auto GetName() const noexcept -> std::string_view { return name_; }
+
   [[nodiscard]] auto MeshViews() const noexcept -> std::span<const MeshView>
   {
     return mesh_views_;
@@ -145,9 +139,33 @@ public:
   }
 
 private:
-  std::string name_;
+  // Allow MeshBuilder to set up mesh views directly
+  friend class MeshBuilder;
+
+  SubMesh(const Mesh& mesh, std::string name,
+    std::shared_ptr<const MaterialAsset> material)
+    : mesh_(mesh)
+    , name_(std::move(name))
+    , material_(std::move(material))
+  {
+  }
+
+  // Only for MeshBuilder: set mesh views after construction
+  void AddMeshViewInternal(pak::MeshViewDesc view_desc)
+  {
+    mesh_views_.emplace_back(mesh_.get(), std::move(view_desc));
+  }
+
+  std::reference_wrapper<const Mesh> mesh_;
+
+  std::string name_ {};
+  glm::vec3 bbox_min_ {};
+  glm::vec3 bbox_max_ {};
+  glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
   std::vector<MeshView> mesh_views_;
   std::shared_ptr<const MaterialAsset> material_;
+
+  std::optional<pak::SubMeshDesc> desc_ {};
 };
 
 //! Immutable, shareable mesh asset containing geometry data and submeshes.
@@ -187,31 +205,38 @@ private:
  @note Mesh is invalid if it contains no submeshes.
  @see MeshView, SubMesh, Vertex, MaterialAsset
 */
-class Mesh final {
+class Mesh {
 public:
   //! Constructs a Mesh with the given name, vertices, and indices.
-  OXGN_DATA_API Mesh(std::string name, std::vector<Vertex> vertices,
-    std::vector<std::uint32_t> indices);
+  OXGN_DATA_API Mesh(
+    uint32_t lod, pak::MeshDesc desc, std::vector<SubMesh> submeshes);
+
+  OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
+    std::vector<std::uint32_t> indices, std::vector<SubMesh> submeshes);
 
   ~Mesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Mesh)
   OXYGEN_DEFAULT_MOVABLE(Mesh)
 
-  //! Returns the name of the mesh asset.
-  [[nodiscard]] auto Name() const noexcept -> const std::string&
-  {
-    return name_;
-  }
+  //! Returns the mesh name as a string view (for debugging/tools).
+  /*!
+    Returns the asset name from the descriptor as a string view. The name is
+    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
+    and tools, not for runtime use.
+  */
+  auto GetName() const noexcept -> std::string_view { return name_; }
 
   //! Returns a span of all vertices.
-  [[nodiscard]] auto Vertices() const noexcept -> std::span<const Vertex>
+  [[nodiscard]] virtual auto Vertices() const noexcept
+    -> std::span<const Vertex>
   {
     return vertices_;
   }
 
   //! Returns a span of all indices.
-  [[nodiscard]] auto Indices() const noexcept -> std::span<const std::uint32_t>
+  [[nodiscard]] virtual auto Indices() const noexcept
+    -> std::span<const std::uint32_t>
   {
     return indices_;
   }
@@ -233,11 +258,6 @@ public:
   {
     return !indices_.empty();
   }
-
-  //! Creates a MeshView for a subrange of the mesh's vertex and index buffers.
-  OXGN_DATA_NDAPI auto MakeView(std::size_t vertex_offset,
-    std::size_t vertex_count, std::size_t index_offset,
-    std::size_t index_count) const -> MeshView;
 
   //! Adds a submesh containing its meshviews and a material.
   OXGN_DATA_API auto AddSubMesh(std::string name,
@@ -274,7 +294,24 @@ public:
     return !submeshes_.empty();
   }
 
+  // Allow MeshBuilder to set up submeshes directly
+  friend class MeshBuilder;
+
+protected:
+  // For builder and testing
+  OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
+    std::vector<std::uint32_t> indices);
+
 private:
+  // For builder name override
+  void SetName(std::string name) { name_ = std::move(name); }
+
+  // Only for MeshBuilder: add a fully constructed SubMesh
+  void AddSubMeshInternal(SubMesh&& submesh)
+  {
+    submeshes_.emplace_back(std::move(submesh));
+  }
+
   //! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
   /*!
    Scans all vertex positions and updates bbox_min_ and bbox_max_ to enclose all
@@ -285,13 +322,230 @@ private:
   auto ComputeBoundingBox() -> void;
   auto ComputeBoundingSphere() -> void;
 
-  std::string name_;
-  std::vector<Vertex> vertices_;
-  std::vector<std::uint32_t> indices_;
-  std::vector<SubMesh> submeshes_;
+  std::string name_ {};
   glm::vec3 bbox_min_ {};
   glm::vec3 bbox_max_ {};
   glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
+  std::vector<SubMesh> submeshes_;
+
+  std::vector<Vertex> vertices_;
+  std::vector<std::uint32_t> indices_;
+
+  std::optional<pak::MeshDesc> desc_ {};
 };
+
+//! Geometry asset as stored in the PAK file resource table.
+/*!
+  Represents a geometry asset as described by the PAK file's GeometryAssetDesc.
+  This is a direct, binary-compatible wrapper for the PAK format, providing
+  access to all fields and metadata for rendering and asset management.
+
+  ### Binary Encoding (PAK v1, 256 bytes)
+
+  ```text
+  offset size   name                description
+  ------ ------ ------------------- -----------------------------------------
+  0x00   96     header              AssetHeader (type, name, version, etc.)
+  0x60   4      lod_count           Number of LODs (must be >= 1)
+  0x64   12     bounding_box_min    AABB min (float[3])
+  0x70   12     bounding_box_max    AABB max (float[3])
+  0x7C   133    reserved            Reserved/padding to 256 bytes
+  0x100 ...     mesh descs          Array MeshDesc[lod_count]
+  ```
+
+  @note The mesh LOD array immediately follows the descriptor and is sized
+  by `lod_count`.
+
+  @see GeometryAssetDesc, MeshDesc, SubMeshDesc, AssetHeader, PakFormat.h
+*/
+class GeometryAsset : public Asset {
+  OXYGEN_TYPED(GeometryAsset)
+
+public:
+  explicit GeometryAsset(pak::GeometryAssetDesc desc)
+    : desc_(std::move(desc))
+  {
+  }
+
+  ~GeometryAsset() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(GeometryAsset)
+  OXYGEN_DEFAULT_MOVABLE(GeometryAsset)
+
+  //! Returns the asset header metadata.
+  [[nodiscard]] auto GetHeader() const noexcept -> const pak::AssetHeader&
+  {
+    return desc_.header;
+  }
+
+private:
+  pak::GeometryAssetDesc desc_ {};
+};
+
+//! Builder for a single submesh within a MeshBuilder type-state API.
+/*!
+  SubMeshBuilder is only constructible by MeshBuilder::BeginSubMesh and is used
+  to accumulate mesh views for a single submesh. Only after at least one mesh
+  view is added can the submesh be finalized and returned to the parent builder.
+
+  @see MeshBuilder
+*/
+class SubMeshBuilder {
+public:
+  SubMeshBuilder(MeshBuilder& parent_builder, std::string name,
+    std::shared_ptr<const MaterialAsset> material)
+    : parent_(parent_builder)
+    , name_(std::move(name))
+    , material_(std::move(material))
+  {
+  }
+
+  ~SubMeshBuilder() = default;
+
+  auto WithMeshView(pak::MeshViewDesc desc) -> SubMeshBuilder&
+  {
+    mesh_views_.push_back(std::move(desc));
+    return *this;
+  }
+
+  auto EndSubMesh() -> MeshBuilder&;
+
+  //! Returns true if at least one mesh view has been added.
+  [[nodiscard]] auto HasMeshViews() const noexcept -> bool
+  {
+    return !mesh_views_.empty();
+  }
+
+  //! Accessor for the submesh name.
+  [[nodiscard]] auto Name() const noexcept -> const std::string&
+  {
+    return name_;
+  }
+
+  //! Accessor for the submesh material.
+  [[nodiscard]] auto Material() const noexcept
+    -> const std::shared_ptr<const MaterialAsset>&
+  {
+    return material_;
+  }
+
+  //! Accessor for the mesh view descriptors.
+  [[nodiscard]] auto MeshViews() const noexcept
+    -> const std::vector<pak::MeshViewDesc>&
+  {
+    return mesh_views_;
+  }
+
+private:
+  std::reference_wrapper<MeshBuilder> parent_;
+  std::string name_;
+  std::shared_ptr<const MaterialAsset> material_;
+  std::vector<pak::MeshViewDesc> mesh_views_;
+
+  friend class MeshBuilder;
+};
+
+//! Builder for constructing immutable Mesh objects with submeshes and views.
+/*!
+  MeshBuilder provides a fluent, safe API for assembling a Mesh and its
+  submeshes/views. It accumulates geometry and submesh definitions, then
+  produces a fully immutable Mesh instance.
+
+  @see Mesh, SubMesh, MeshView
+*/
+//=== MeshBuilder
+//===-------------------------------------------------------------//
+
+//! Builder for constructing immutable Mesh objects with submeshes and views.
+/*!
+  MeshBuilder provides a fluent, type-safe API for assembling a Mesh and its
+  submeshes/views. It accumulates geometry and submesh definitions, then
+  produces a fully immutable Mesh instance. Submesh construction is enforced
+  via the SubMeshBuilder type-state pattern.
+
+  @see Mesh, SubMesh, MeshView, SubMeshBuilder
+*/
+class MeshBuilder {
+public:
+  MeshBuilder(uint32_t lod = 0, std::string_view name = {})
+    : lod_(lod)
+    , name_(name.empty() ? fmt::format("LOD_{}", lod) : std::string(name))
+  {
+  }
+
+  ~MeshBuilder() = default;
+
+  //! Sets the mesh vertices (replaces any existing vertices).
+  auto WithVertices(std::span<const Vertex> vertices) -> MeshBuilder&
+  {
+    vertices_.assign(vertices.begin(), vertices.end());
+    return *this;
+  }
+
+  //! Sets the mesh indices (replaces any existing indices).
+  auto WithIndices(std::span<const std::uint32_t> indices) -> MeshBuilder&
+  {
+    indices_.assign(indices.begin(), indices.end());
+    return *this;
+  }
+
+  //! Begins a new submesh definition. Returns a SubMeshBuilder for mesh view
+  //! accumulation.
+  auto BeginSubMesh(std::string name,
+    std::shared_ptr<const MaterialAsset> material) -> SubMeshBuilder
+  {
+    return SubMeshBuilder(*this, std::move(name), std::move(material));
+  }
+
+  //! Finalizes a submesh and adds it to the mesh. Only callable with a finished
+  //! SubMeshBuilder.
+  auto EndSubMesh(SubMeshBuilder&& submesh_builder) -> MeshBuilder&
+  {
+    if (!submesh_builder.HasMeshViews()) {
+      throw std::logic_error("SubMesh must have at least one MeshView");
+    }
+    submeshes_.emplace_back(SubMeshSpec {
+      .name = submesh_builder.Name(),
+      .material = submesh_builder.Material(),
+      .mesh_views = submesh_builder.MeshViews(),
+    });
+    return *this;
+  }
+
+  //! Builds and returns the immutable Mesh.
+  OXGN_DATA_NDAPI auto Build() -> std::shared_ptr<Mesh>;
+
+private:
+  uint32_t lod_;
+  std::string name_;
+  std::vector<Vertex> vertices_;
+  std::vector<std::uint32_t> indices_;
+
+  struct SubMeshSpec {
+    std::string name;
+    std::shared_ptr<const MaterialAsset> material;
+    std::vector<pak::MeshViewDesc> mesh_views;
+  };
+  std::vector<SubMeshSpec> submeshes_;
+
+  friend class SubMeshBuilder;
+  void AddSubMeshFromBuilder(const SubMeshBuilder& builder)
+  {
+    submeshes_.emplace_back(SubMeshSpec {
+      .name = builder.Name(),
+      .material = builder.Material(),
+      .mesh_views = builder.MeshViews(),
+    });
+  }
+};
+
+inline auto SubMeshBuilder::EndSubMesh() -> MeshBuilder&
+{
+  if (!HasMeshViews()) {
+    throw std::logic_error("SubMesh must have at least one MeshView");
+  }
+  parent_.get().AddSubMeshFromBuilder(*this);
+  return parent_;
+}
 
 } // namespace oxygen::data

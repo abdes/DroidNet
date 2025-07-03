@@ -12,6 +12,83 @@ using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
 
+namespace {
+
+auto GetNameFromDesc(const char name[oxygen::data::pak::kMaxNameSize])
+  -> std::string
+{
+  std::size_t len = 0;
+  while (len < oxygen::data::pak::kMaxNameSize && name[len] != '\0') {
+    ++len;
+  }
+  return { name, len };
+}
+
+} // namespace
+
+MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
+  : mesh_(mesh)
+  , desc_(std::move(desc))
+{
+  // Enforce design constraints
+  CHECK_F(desc_.vertex_count > 0, "MeshView must have at least one vertex");
+  CHECK_F(desc_.index_count > 0, "MeshView must have at least one index");
+  CHECK_F(desc_.first_vertex + desc_.vertex_count <= mesh.Vertices().size(),
+    "MeshView vertex range exceeds mesh vertex count");
+  CHECK_F(desc_.first_index + desc_.index_count <= mesh.Indices().size(),
+    "MeshView index range exceeds mesh index count");
+}
+
+auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
+{
+  return mesh_.get().Vertices().subspan(desc_.first_vertex, desc_.vertex_count);
+}
+
+auto MeshView::Indices() const noexcept -> std::span<const std::uint32_t>
+{
+  return mesh_.get().Indices().subspan(desc_.first_index, desc_.index_count);
+}
+
+SubMesh::SubMesh(
+  const Mesh& mesh, pak::SubMeshDesc desc, std::vector<MeshView> meshviews)
+  : mesh_(mesh)
+  , name_(GetNameFromDesc(desc.name))
+  , mesh_views_(std::move(meshviews))
+  , bbox_min_(desc.bounding_box_min[0], desc.bounding_box_min[1],
+      desc.bounding_box_min[2])
+  , bbox_max_(desc.bounding_box_max[0], desc.bounding_box_max[1],
+      desc.bounding_box_max[2])
+  , desc_(std::move(desc))
+{
+  // Enforce design constraints
+  CHECK_F(!mesh_views_.empty(),
+    "SubMesh must have at least one MeshView (1:N constraint)");
+
+  // TODO: resolve the material reference from the descriptor
+
+  // TODO: compute bounding sphere from the vertices of the meshviews
+  // ComputeBoundingSphere();
+}
+
+SubMesh::SubMesh(const Mesh& mesh, std::string name,
+  std::vector<MeshView> meshviews,
+  std::shared_ptr<const MaterialAsset> material)
+  : mesh_(mesh)
+  , name_(std::move(name))
+  , mesh_views_(std::move(meshviews))
+  , material_(std::move(material))
+{
+  // Enforce design constraints
+  CHECK_F(!mesh_views_.empty(),
+    "SubMesh must have at least one MeshView (1:N constraint)");
+  CHECK_NOTNULL_F(
+    material_, "SubMesh must have exactly one Material (1:1 constraint)");
+
+  // TODO: compute bounding box and sphere from the vertices of the meshviews
+  // ComputeBoundingBox();
+  // ComputeBoundingSphere();
+}
+
 //! Constructs a Mesh with the given name, vertices, and indices.
 /*!
   Initializes the mesh asset with the provided name, vertex data, and index
@@ -21,43 +98,37 @@ using oxygen::data::Vertex;
   @param indices Index data (moved)
   @note Throws (CHECK_F death) if vertices or indices are empty.
 */
-Mesh::Mesh(std::string name, std::vector<Vertex> vertices,
-  std::vector<std::uint32_t> indices)
-  : name_(std::move(name))
-  , vertices_(std::move(vertices))
-  , indices_(std::move(indices))
+Mesh::Mesh(uint32_t lod, pak::MeshDesc desc, std::vector<SubMesh> submeshes)
+  : name_(fmt::format("LOD_{}", lod))
+  , submeshes_(std::move(submeshes))
+  , desc_(std::move(desc))
 {
-  CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
-  CHECK_F(!indices_.empty(), "Mesh must have at least one index");
+  CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
   ComputeBoundingBox();
   ComputeBoundingSphere();
 }
 
-//! Creates a MeshView for a subrange of the mesh's vertex and index buffers.
-/*!
-  Returns a MeshView describing a subrange of the mesh's vertex and index data.
-  Only Mesh can construct MeshView instances. No validation is performed;
-  the caller must ensure the ranges are valid.
-
-  @param vertex_offset Offset into the vertex array
-  @param vertex_count Number of vertices in the view
-  @param index_offset Offset into the index array
-  @param index_count Number of indices in the view
-  @return MeshView (non-owning, immutable)
-
-  @warning No validation is performed; caller must ensure ranges are valid.
-*/
-auto Mesh::MakeView(std::size_t vertex_offset, std::size_t vertex_count,
-  std::size_t index_offset, std::size_t index_count) const -> MeshView
+Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
+  std::vector<std::uint32_t> indices, std::vector<SubMesh> submeshes)
+  : name_(fmt::format("LOD_{}", lod))
+  , vertices_(std::move(vertices))
+  , indices_(std::move(indices))
+  , submeshes_(std::move(submeshes))
 {
-  CHECK_F(vertex_offset + vertex_count <= vertices_.size(),
-    "MeshView vertex range out of bounds");
-  CHECK_F(index_offset + index_count <= indices_.size(),
-    "MeshView index range out of bounds");
-  return MeshView {
-    std::span<const Vertex>(vertices_.data() + vertex_offset, vertex_count),
-    std::span<const std::uint32_t>(indices_.data() + index_offset, index_count),
-  };
+  CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
+  ComputeBoundingBox();
+  ComputeBoundingSphere();
+}
+
+Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
+  std::vector<std::uint32_t> indices)
+  : name_(fmt::format("LOD_{}", lod))
+  , vertices_(std::move(vertices))
+  , indices_(std::move(indices))
+{
+  CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
+  ComputeBoundingBox();
+  ComputeBoundingSphere();
 }
 
 //! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
@@ -118,5 +189,29 @@ auto Mesh::AddSubMesh(std::string name, std::vector<MeshView> meshviews,
   std::shared_ptr<const MaterialAsset> material) -> void
 {
   submeshes_.emplace_back(
-    std::move(name), std::move(meshviews), std::move(material));
+    *this, std::move(name), std::move(meshviews), std::move(material));
+}
+
+using oxygen::data::MeshBuilder;
+
+//! Builds and returns the immutable Mesh.
+auto MeshBuilder::Build() -> std::shared_ptr<Mesh>
+{
+  CHECK_F(!vertices_.empty(), "Mesh must have vertices");
+  CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
+
+  // Create the Mesh object
+  auto mesh = std::shared_ptr<Mesh>(new Mesh(lod_, vertices_, indices_));
+  mesh->SetName(name_);
+
+  // For each submesh spec, create MeshViews and SubMesh, then add to mesh
+  for (const auto& spec : submeshes_) {
+    SubMesh submesh(*mesh, spec.name, spec.material);
+    for (const auto& view_desc : spec.mesh_views) {
+      submesh.AddMeshViewInternal(std::move(view_desc));
+    }
+    mesh->AddSubMeshInternal(std::move(submesh));
+  }
+
+  return mesh;
 }
