@@ -129,12 +129,12 @@ protected:
     -> void;
 
   //! This enumeration defines the order of root signature bindings used by
-  //! render passes.
+  //! render passes in the bindless rendering model.
   enum class RootBindings : uint8_t {
-    kBindlessTableSrv = 0, // t0,s0 Bindless descriptor table for SRV/CBV/UAV
-    kIndicesCbv = 1, // b0,s0 Indices in the descriptor table (constant buffer)
-    kSceneConstantsCbv = 2, // b1,s0 Scene constants (constant buffer)
-    kMaterialConstantsCbv = 3, // b2,s0 Material constants (constant buffer)
+    kBindlessTableSrv
+    = 0, // Bindless descriptor table for SRVs (t0 in multiple spaces)
+    kSceneConstantsCbv = 1, // b1,s0 Scene constants (constant buffer)
+    kMaterialConstantsCbv = 2, // b2,s0 Material constants (constant buffer)
   };
 
 private:

@@ -205,25 +205,22 @@ auto CommandRecorder::End() -> graphics::CommandList*
 }
 
 namespace {
-// Root parameter indices based on the current root signature:
-// Root Param 0: Descriptor table for CBV (b0) and SRVs (t0...)
-// Root Param 1 (if samplers were separate and defined in root sig): Sampler
-// descriptor table
-constexpr UINT kRootIndex_CBV_SRV_UAV_Table = 0;
-constexpr UINT kRootIndex_Sampler_Table
-  = 1; // Assuming samplers might be on a different root param (if any)
+// Modern bindless root signature layout:
+// Root Param 0: Single unbounded SRV descriptor table (t0, space0)
+// Root Param 1: Direct CBV for SceneConstants (b1, space0)
+// Root Param 2: Direct CBV for MaterialConstants (b2, space0) - graphics only
+constexpr UINT kRootIndex_UnboundedSRV_Table = 0;
+constexpr UINT kRootIndex_SceneConstants_CBV = 1;
+constexpr UINT kRootIndex_MaterialConstants_CBV = 2;
 } // namespace
 
 void CommandRecorder::SetupDescriptorTables(
   const std::span<const detail::ShaderVisibleHeapInfo> heaps) const
 {
-  // Invariant: The descriptor table at root parameter 0 must match the root
-  // signature layout:
-  //   - CBV at heap index 0 (register b0)
-  //   - SRVs at heap indices 1+ (register t0, space0)
+  // Modern bindless approach: Bind the single unbounded SRV descriptor table.
   // The heap(s) bound here must be the same as those used to allocate CBV/SRV
   // handles in MainModule.cpp. This ensures the shader can access resources
-  // using the indices provided in the CBV.
+  // using ResourceDescriptorHeap with direct global indices.
   auto* d3d12_command_list = GetConcreteCommandList()->GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
@@ -253,7 +250,7 @@ void CommandRecorder::SetupDescriptorTables(
   }
 
   if (!heaps_to_set.empty()) {
-    DLOG_F(4, "recorder: set {} descriptor heaps for command list: {}",
+    DLOG_F(2, "recorder: set {} descriptor heaps for command list: {}",
       heaps_to_set.size(), GetConcreteCommandList()->GetName());
     d3d12_command_list->SetDescriptorHeaps(
       static_cast<UINT>(heaps_to_set.size()), heaps_to_set.data());
@@ -262,10 +259,10 @@ void CommandRecorder::SetupDescriptorTables(
   auto set_table = [this, d3d12_command_list, queue_role](const UINT root_index,
                      const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
     if (queue_role == QueueRole::kGraphics) {
-      DLOG_F(4,
+      DLOG_F(0,
         "recorder: SetGraphicsRootDescriptorTable for command list: {}, root "
-        "index={}",
-        GetConcreteCommandList()->GetName(), root_index);
+        "index={}, gpu_handle={}",
+        GetConcreteCommandList()->GetName(), root_index, gpu_handle.ptr);
       d3d12_command_list->SetGraphicsRootDescriptorTable(
         root_index, gpu_handle);
     } else if (queue_role == QueueRole::kCompute) {
@@ -274,18 +271,20 @@ void CommandRecorder::SetupDescriptorTables(
   };
 
   for (const auto& heap_info : heaps) {
-    UINT root_idx_to_bind;
     if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
-      root_idx_to_bind
-        = kRootIndex_CBV_SRV_UAV_Table; // Bind to root parameter 0
+      // Bind the single unbounded SRV descriptor table
+      // The shader uses ResourceDescriptorHeap to access all resources by
+      // global index
+      set_table(kRootIndex_UnboundedSRV_Table, heap_info.gpu_handle);
+
     } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
-      // This assumes samplers are on a separate root parameter if they exist.
-      // If your root signature doesn't define a sampler table at
-      // root_idx_to_bind, this will be an error. For the current root signature
-      // (only one param for CBV/SRV/UAV), this branch might not be hit or would
-      // need adjustment if samplers were part of the same table or a different
-      // root signature design.
-      root_idx_to_bind = kRootIndex_Sampler_Table;
+      // Note: Current root signature doesn't include sampler tables
+      // If samplers are needed, they would need to be added to the root
+      // signature
+      DLOG_F(WARNING,
+        "Sampler descriptor heap detected but no sampler table in root "
+        "signature");
+      continue;
     } else {
       DLOG_F(WARNING,
         "Unsupported descriptor heap type for root table binding: {}",
@@ -293,7 +292,6 @@ void CommandRecorder::SetupDescriptorTables(
           heap_info.heap_type));
       continue;
     }
-    set_table(root_idx_to_bind, heap_info.gpu_handle);
   }
 }
 
@@ -419,60 +417,63 @@ void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
  */
 
 //! Create a bindless root signature for graphics or compute pipelines
-// Invariant: The root signature contains a single descriptor table with two
-// ranges:
-//   - Range 0: 1 CBV at register b0 (heap index 0)
-//   - Range 1: SRVs for register t0 onwards (heap indices 1+)
-// The descriptor table is always at root parameter 0.
+// Modern bindless root signature layout:
+//   - Root Parameter 0: Single unbounded SRV descriptor table (t0, space0)
+//   - Root Parameter 1: Direct CBV for SceneConstants (b1, space0)
+//   - Root Parameter 2: Direct CBV for MaterialConstants (b2, space0) -
+//   graphics only
 // The flag D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED is set
 // for true bindless access. This layout must match the expectations of both the
-// engine and the shaders (see FullScreenTriangle.hlsl).
+// engine and the shaders (see DepthPrePass.hlsl and FullScreenTriangle.hlsl).
 auto CommandRecorder::CreateBindlessRootSignature(const bool is_graphics) const
   -> dx::IRootSignature*
 {
-  std::vector<D3D12_ROOT_PARAMETER> root_params(
-    1); // Single root parameter for the main descriptor table
-  std::vector<D3D12_DESCRIPTOR_RANGE> ranges(2);
+  const size_t num_cbv_params
+    = is_graphics ? 2 : 1; // SceneConstants + MaterialConstants (graphics only)
+  const size_t num_root_params = 1 + num_cbv_params; // 1 SRV table + CBV(s)
 
-  // Range 0: CBV for register b0 (heap index 0)
-  ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-  ranges[0].NumDescriptors = 1;
-  ranges[0].BaseShaderRegister = 0; // b0
-  ranges[0].RegisterSpace = 0;
-  ranges[0].OffsetInDescriptorsFromTableStart
-    = 0; // This CBV is at the start of the table
+  std::vector<D3D12_ROOT_PARAMETER> root_params(num_root_params);
+  D3D12_DESCRIPTOR_RANGE srv_range {};
 
-  // Range 1: SRVs for register t0 onwards (heap indices 1+)
-  ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-  ranges[1].NumDescriptors
-    = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Unbounded, for bindless
-  ranges[1].BaseShaderRegister = 0; // t0
-  ranges[1].RegisterSpace = 0; // Assuming SRVs are in space0
-  ranges[1].OffsetInDescriptorsFromTableStart
-    = 1; // SRVs start after the 1 CBV descriptor
+  // Single unbounded SRV range for all resources (t0, space0)
+  srv_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+  srv_range.NumDescriptors = UINT_MAX; // Unbounded
+  srv_range.BaseShaderRegister = 0; // t0
+  srv_range.RegisterSpace = 0; // space0
+  srv_range.OffsetInDescriptorsFromTableStart = 0;
 
+  // Root Parameter 0: Single unbounded SRV descriptor table (t0, space0)
   root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-  root_params[0].DescriptorTable.NumDescriptorRanges
-    = static_cast<UINT>(ranges.size());
-  root_params[0].DescriptorTable.pDescriptorRanges = ranges.data();
-  root_params[0].ShaderVisibility
-    = D3D12_SHADER_VISIBILITY_ALL; // Visible to all stages that might need it
+  root_params[0].DescriptorTable.NumDescriptorRanges = 1;
+  root_params[0].DescriptorTable.pDescriptorRanges = &srv_range;
+  root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+  // Root Parameter 1: Direct CBV for SceneConstants (b1, space0)
+  root_params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+  root_params[1].Descriptor.ShaderRegister = 1; // b1
+  root_params[1].Descriptor.RegisterSpace = 0; // space0
+  root_params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+  // Root Parameter 2: Direct CBV for MaterialConstants (b2, space0) - graphics
+  // only
+  if (is_graphics) {
+    root_params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    root_params[2].Descriptor.ShaderRegister = 2; // b2
+    root_params[2].Descriptor.RegisterSpace = 0; // space0
+    root_params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+  }
 
   const D3D12_ROOT_SIGNATURE_DESC root_sig_desc {
     .NumParameters = static_cast<UINT>(root_params.size()),
     .pParameters = root_params.data(),
-    .NumStaticSamplers = 0, // Add static samplers if needed
+    .NumStaticSamplers = 0,
     .pStaticSamplers = nullptr,
     .Flags = (is_graphics
                  ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
                  : D3D12_ROOT_SIGNATURE_FLAG_NONE)
-      | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, // enables
-                                                                     // true
-                                                                     // bindless
-                                                                     // access
-                                                                     // for all
-                                                                     // shaders.
+      | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
   };
+
   Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
   HRESULT hr = D3D12SerializeRootSignature(
     &root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &sig_blob, &err_blob);

@@ -83,6 +83,18 @@ private:
     float _pad1 { 0.0f }; // Padding for alignment
   };
 
+  // === Bindless resource indices tracking ===
+  struct DrawResourceIndices {
+    uint32_t vertex_buffer_index;
+    uint32_t index_buffer_index;
+    uint32_t is_indexed; // 1 for indexed meshes, 0 for non-indexed meshes
+  };
+  DrawResourceIndices last_uploaded_indices_ {};
+  bool indices_dirty_ = true;
+
+  void SetDrawResourceIndices(const DrawResourceIndices& new_indices);
+  void UploadIndicesIfNeeded();
+
   auto SetupCommandQueues() const -> void;
   auto SetupMainWindow() -> void;
   auto SetupSurface() -> void;
@@ -102,10 +114,8 @@ private:
     framebuffers_ {};
   engine::RenderContext context_ {};
 
-  std::shared_ptr<graphics::Buffer> vertex_buffer_;
-  std::shared_ptr<graphics::Buffer> index_buffer_;
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
-  std::shared_ptr<graphics::Buffer> indices_buffer_;
+  std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
   std::shared_ptr<graphics::Buffer> material_constants_buffer_;
 
   // Helper methods for material support
@@ -121,13 +131,17 @@ private:
   co::Nursery* nursery_ { nullptr };
   auto EnsureBindlessIndexingBuffer() -> void;
   auto EnsureVertexBufferSrv() -> void;
+  auto EnsureIndexBufferSrv() -> void;
   auto EnsureMeshDrawResources() -> void;
   auto EnsureSceneConstantsBuffer() -> void;
   auto UpdateSceneConstantsBuffer(const SceneConstants& constants) const
     -> void;
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
+  uint32_t index_srv_shader_visible_index_ { 2 };
   bool recreate_indices_cbv_ { true };
+  bool vertex_srv_created_ { false };
+  bool index_srv_created_ { false };
 };
 
 } // namespace oxygen::examples

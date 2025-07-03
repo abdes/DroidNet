@@ -280,18 +280,12 @@ auto MainModule::SetupShaders() const -> void
 
 // === Bindless Rendering Invariants ===
 // - The engine manages a single shader-visible CBV_SRV_UAV heap per D3D12 type.
-// - The CBV for per-draw constants is always at heap index 0 (register b0).
+// - The Resource Indices CBV for bindless rendering is always (register b0).
 // - All other resources (SRVs, UAVs) are placed in the heap starting at
 // index 1.
-// - For this example, the vertex buffer SRV is always at heap index 1 (register
-// t0, space0).
-// - The constant buffer (CBV) contains a uint specifying the index of the
-// vertex buffer SRV in the heap (always 1 for this draw).
-// - The root signature and shader are designed to match this layout. See
-// PipelineStateCache.cpp and FullScreenTriangle.hlsl for details.
 auto MainModule::EnsureVertexBufferSrv() -> void
 {
-  if (!recreate_indices_cbv_) {
+  if (vertex_srv_created_) {
     return;
   }
 
@@ -300,7 +294,6 @@ auto MainModule::EnsureVertexBufferSrv() -> void
   // Use the mesh from the first render item
   if (render_items_.empty() || !render_items_.front().mesh) {
     LOG_F(ERROR, "No mesh asset available for SRV registration");
-    recreate_indices_cbv_ = false;
     return;
   }
   const auto& mesh = render_items_.front().mesh;
@@ -320,7 +313,6 @@ auto MainModule::EnsureVertexBufferSrv() -> void
 
   if (!srv_handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate descriptor handle for vertex buffer SRV!");
-    recreate_indices_cbv_ = false;
     return;
   }
 
@@ -335,6 +327,79 @@ auto MainModule::EnsureVertexBufferSrv() -> void
 
   LOG_F(INFO, "Vertex buffer SRV registered at index {}",
     vertex_srv_shader_visible_index_);
+
+  vertex_srv_created_ = true;
+}
+
+auto MainModule::EnsureIndexBufferSrv() -> void
+{
+  if (index_srv_created_) {
+    return;
+  }
+
+  auto& resource_registry = render_controller_->GetResourceRegistry();
+
+  // Use the mesh from the first render item
+  if (render_items_.empty() || !render_items_.front().mesh) {
+    LOG_F(ERROR, "No mesh asset available for index buffer SRV registration");
+    return;
+  }
+  const auto& mesh = render_items_.front().mesh;
+  auto index_buffer = renderer_->GetIndexBuffer(*mesh);
+
+  graphics::BufferViewDescription srv_view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = Format::kR32UInt, // Index buffer format
+    .stride = sizeof(uint32_t), // 32-bit indices
+  };
+
+  auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
+  auto srv_handle = descriptor_allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+
+  if (!srv_handle.IsValid()) {
+    LOG_F(ERROR, "Failed to allocate descriptor handle for index buffer SRV!");
+    return;
+  }
+
+  // Actually create the native view (SRV) in the backend
+  const auto view = index_buffer->GetNativeView(srv_handle, srv_view_desc);
+
+  index_srv_shader_visible_index_
+    = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+
+  resource_registry.RegisterView(
+    *index_buffer, view, std::move(srv_handle), srv_view_desc);
+
+  LOG_F(INFO, "Index buffer SRV registered at index {}",
+    index_srv_shader_visible_index_);
+
+  index_srv_created_ = true;
+}
+
+void MainModule::SetDrawResourceIndices(const DrawResourceIndices& new_indices)
+{
+  if (std::memcmp(
+        &last_uploaded_indices_, &new_indices, sizeof(DrawResourceIndices))
+    != 0) {
+    indices_dirty_ = true;
+    last_uploaded_indices_ = new_indices;
+  }
+}
+
+void MainModule::UploadIndicesIfNeeded()
+{
+  if (!indices_dirty_)
+    return;
+  if (!bindless_indices_buffer_)
+    return;
+  void* mapped = bindless_indices_buffer_->Map();
+  std::memcpy(mapped, &last_uploaded_indices_, sizeof(DrawResourceIndices));
+  bindless_indices_buffer_->UnMap();
+  indices_dirty_ = false;
+  DLOG_F(2, "Bindless indices buffer updated");
 }
 
 auto MainModule::EnsureBindlessIndexingBuffer() -> void
@@ -345,30 +410,73 @@ auto MainModule::EnsureBindlessIndexingBuffer() -> void
     return;
   }
 
-  // Only create and update the buffer. No descriptor/view registration needed
-  // for direct root CBV binding.
-  if (!indices_buffer_) {
-    DLOG_F(INFO, "Creating constant buffer for vertex buffer SRV index {}",
-      vertex_srv_shader_visible_index_);
-    graphics::BufferDesc cb_desc { .size_bytes = 256,
+  // Use the class member type for draw resource indices
+  static_assert(
+    sizeof(MainModule::DrawResourceIndices) == 12, "Unexpected struct size");
+
+  // Only create and update the buffer as a structured buffer (SRV)
+  if (!bindless_indices_buffer_) {
+    DLOG_F(INFO, "Creating structured buffer for DrawResourceIndices");
+    graphics::BufferDesc sb_desc {
+      .size_bytes = sizeof(DrawResourceIndices),
       .usage = graphics::BufferUsage::kConstant,
       .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Vertex Buffer Index Constant Buffer" };
+      .debug_name = "DrawResourceIndices StructuredBuffer",
+    };
 
     CHECK_F(!gfx_weak_.expired());
     const auto gfx = gfx_weak_.lock();
 
-    indices_buffer_ = gfx->CreateBuffer(cb_desc);
-    indices_buffer_->SetName("Indices Buffer");
+    bindless_indices_buffer_ = gfx->CreateBuffer(sb_desc);
+    bindless_indices_buffer_->SetName("DrawResourceIndicesBuffer");
 
-    context_.bindless_indices = indices_buffer_;
+    auto& resource_registry = render_controller_->GetResourceRegistry();
+    resource_registry.Register(bindless_indices_buffer_);
+
+    auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
+    graphics::BufferViewDescription srv_view_desc {
+      .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .format = Format::kUnknown,
+      .stride = sizeof(DrawResourceIndices),
+    };
+
+    auto srv_handle = descriptor_allocator.Allocate(
+      graphics::ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+
+    if (!srv_handle.IsValid()) {
+      LOG_F(ERROR,
+        "Failed to allocate descriptor handle for bindless indices buffer "
+        "SRV!");
+      recreate_indices_cbv_ = false;
+      return;
+    }
+
+    // Actually create the native view (SRV) in the backend
+    const auto view
+      = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
+
+    auto shader_visible_index
+      = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+
+    resource_registry.RegisterView(
+      *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
+
+    LOG_F(INFO, "Bindless indices buffer SRV registered at index {}",
+      shader_visible_index);
+
+    context_.bindless_indices = bindless_indices_buffer_;
   }
 
-  // Always update the buffer contents (SRV index may change per frame)
-  void* mapped_data = indices_buffer_->Map();
-  memcpy(mapped_data, &vertex_srv_shader_visible_index_,
-    sizeof(vertex_srv_shader_visible_index_));
-  indices_buffer_->UnMap();
+  // === Efficient resource indices upload ===
+  DrawResourceIndices indices_data {
+    .vertex_buffer_index = vertex_srv_shader_visible_index_, // Use actual heap index
+    .index_buffer_index = index_srv_shader_visible_index_,   // Use actual heap index
+    .is_indexed = 1, // For now, assume we're rendering the cube mesh which is indexed
+  };
+  SetDrawResourceIndices(indices_data);
+  UploadIndicesIfNeeded();
   recreate_indices_cbv_ = false; // Reset the flag
 }
 
@@ -491,9 +599,9 @@ auto MainModule::EnsureMeshDrawResources() -> void
   // This is not strictly necessary, but ensures that shaders that are looking
   // for the index mapping CBV at b0s0 will always be able to find it even if
   // the render pass omits binding it explicitly at the root.
-  DCHECK_F(indices_buffer_ || recreate_indices_cbv_,
+  DCHECK_F(bindless_indices_buffer_ || recreate_indices_cbv_,
     "Constant buffer must be created first");
-  if (!indices_buffer_) {
+  if (!bindless_indices_buffer_) {
     try {
       EnsureBindlessIndexingBuffer();
       recreate_indices_cbv_ = true;
@@ -503,11 +611,18 @@ auto MainModule::EnsureMeshDrawResources() -> void
     }
   }
 
-  DCHECK_F(indices_buffer_ != nullptr, "Constant buffer must be created first");
+  DCHECK_F(bindless_indices_buffer_ != nullptr,
+    "Constant buffer must be created first");
   try {
     EnsureVertexBufferSrv();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring vertex buffer SRV: {}", e.what());
+    throw;
+  }
+  try {
+    EnsureIndexBufferSrv();
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "Error while ensuring index buffer SRV: {}", e.what());
     throw;
   }
   try {

@@ -6,14 +6,12 @@
 
 // === Bindless Rendering Contract ===
 // - The engine provides a single shader-visible CBV_SRV_UAV heap.
-// - The constant buffer (CBV) is always at heap index 0 (register b0).
-// - All other resources (SRVs, UAVs) are in the heap starting at index 1.
-// - For this shader, the vertex buffer SRV is always at heap index 1 (register
-//   t0, space0).
-// - The CBV contains a uint specifying the index of the vertex buffer SRV in
-//   the heap (should be 1 for this draw).
-// - The root signature and engine must match this layout for correct operation.
-//   See MainModule.cpp and PipelineStateCache.cpp for details.
+// - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
+// - Resources are intermixed in the heap: indices buffer, vertex buffers, index buffers.
+// - The indices buffer at heap index 0 contains actual heap indices (physical locations).
+// - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
+// - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
+//   See MainModule.cpp and CommandRecorder.cpp for details.
 
 // Define vertex structure to match the CPU-side Vertex struct
 struct Vertex {
@@ -25,9 +23,12 @@ struct Vertex {
     float4 color;
 };
 
-// Define constant buffer explicitly to match our root signature
-cbuffer VertexBufferConstants : register(b0) {
-    uint g_VertexBufferIndex;
+
+// Structured buffer for draw resource indices (matches C++ DrawResourceIndices)
+struct DrawResourceIndices {
+    uint vertex_buffer_index;
+    uint index_buffer_index;
+    uint is_indexed; // 1 for indexed meshes, 0 for non-indexed meshes
 };
 
 // Scene constants buffer (matches C++ struct layout)
@@ -57,19 +58,39 @@ cbuffer MaterialConstants : register(b2) {
 }
 
 // Access to the bindless descriptor heap
-StructuredBuffer<Vertex> g_BindlessVertexBuffers[] : register(t0, space0);
+// Modern SM 6.6+ approach using ResourceDescriptorHeap for direct heap indexing
+// No resource declarations needed - ResourceDescriptorHeap provides direct access
 
 struct VSOutput {
     float4 position : SV_POSITION;
     float3 color : COLOR;
 };
 
+
 [shader("vertex")]
 VSOutput VS(uint vertexID : SV_VertexID) {
     VSOutput output;
 
-    // Access vertex data from the structured buffer using the index
-    Vertex vertex = g_BindlessVertexBuffers[g_VertexBufferIndex][vertexID];
+    // Access the indices buffer at heap index 0 using ResourceDescriptorHeap
+    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[0];
+    DrawResourceIndices indices = indices_buffer[0];
+
+    uint vertex_buffer_index = indices.vertex_buffer_index;
+    uint index_buffer_index = indices.index_buffer_index;
+
+    uint actual_vertex_index;
+    if (indices.is_indexed) {
+        // For indexed rendering, get the index buffer and read the actual vertex index
+        Buffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
+        actual_vertex_index = index_buffer[vertexID];
+    } else {
+        // For non-indexed rendering, use the vertex ID directly
+        actual_vertex_index = vertexID;
+    }
+
+    // Access vertex data using ResourceDescriptorHeap
+    StructuredBuffer<Vertex> vertex_buffer = ResourceDescriptorHeap[vertex_buffer_index];
+    Vertex vertex = vertex_buffer[actual_vertex_index];
 
     // Apply world, view, and projection transforms
     float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
