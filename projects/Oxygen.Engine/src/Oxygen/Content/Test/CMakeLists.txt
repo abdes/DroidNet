@@ -52,4 +52,5 @@ m_gtest_program(
     "LoadTextureAsset_test.cpp"
     "LoadMaterialAsset_test.cpp"
     "GeometryLoader_basic_test.cpp"
+    "GeometryLoader_error_test.cpp"
 )

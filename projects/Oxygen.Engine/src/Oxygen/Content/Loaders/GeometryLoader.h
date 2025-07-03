@@ -49,7 +49,7 @@ namespace detail {
   auto LoadMeshViewDesc(oxygen::serio::Reader<S> reader)
     -> data::pak::MeshViewDesc
   {
-    LOG_SCOPE_FUNCTION(INFO);
+    LOG_SCOPE_F(INFO, "Mesh View");
 
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -57,6 +57,12 @@ namespace detail {
     // Read MeshViewDesc from the stream
     auto mesh_view_result = reader.template read<MeshViewDesc>();
     detail::CheckResult(mesh_view_result, "m.desc");
+    const auto& mesh_view_desc = *mesh_view_result;
+    LOG_F(INFO, "firs vertex   : {}", mesh_view_desc.first_vertex);
+    LOG_F(INFO, "vertex count  : {}", mesh_view_desc.vertex_count);
+    LOG_F(INFO, "first index   : {}", mesh_view_desc.first_index);
+    LOG_F(INFO, "index count   : {}", mesh_view_desc.index_count);
+
     return *mesh_view_result;
   }
 
@@ -64,7 +70,7 @@ namespace detail {
   auto LoadSubMeshDesc(oxygen::serio::Reader<S> reader)
     -> data::pak::SubMeshDesc
   {
-    LOG_SCOPE_FUNCTION(INFO);
+    LOG_SCOPE_F(INFO, "Sub-Mesh");
 
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -75,22 +81,30 @@ namespace detail {
       reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
     auto submesh_name_result = reader.read_blob_to(submesh_name_span);
     detail::CheckResult(submesh_name_result, "sm.name");
+    LOG_F(INFO, "name           : {}", desc.name);
 
     // material_asset_key
     auto mat_key_result = reader.template read<AssetKey>();
     detail::CheckResult(mat_key_result, "sm.material_asset_key");
     desc.material_asset_key = *mat_key_result;
+    LOG_F(
+      INFO, "material asset : {}", nostd::to_string(desc.material_asset_key));
 
     // mesh_view_count
     auto mesh_view_count_result = reader.template read<uint32_t>();
     detail::CheckResult(mesh_view_count_result, "sm.mesh_view_count");
     desc.mesh_view_count = *mesh_view_count_result;
+    LOG_F(INFO, "mesh view count: {}", desc.mesh_view_count);
 
     // bounding_box_min
     ReadBoundingBox(reader, desc.bounding_box_min, "sm.bounding_box_min");
+    LOG_F(INFO, "bounding box min: ({}, {}, {})", desc.bounding_box_min[0],
+      desc.bounding_box_min[1], desc.bounding_box_min[2]);
 
     // bounding_box_max
     ReadBoundingBox(reader, desc.bounding_box_max, "sm.bounding_box_max");
+    LOG_F(INFO, "bounding box max: ({}, {}, {})", desc.bounding_box_max[0],
+      desc.bounding_box_max[1], desc.bounding_box_max[2]);
 
     return desc;
   }
@@ -99,17 +113,14 @@ namespace detail {
   auto LoadSubMeshViews(oxygen::serio::Reader<S> reader,
     uint32_t mesh_view_count) -> std::vector<data::pak::MeshViewDesc>
   {
-    LOG_SCOPE_FUNCTION(INFO);
-
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
 
     std::vector<MeshViewDesc> mesh_views;
     mesh_views.reserve(mesh_view_count);
     for (uint32_t i = 0; i < mesh_view_count; ++i) {
-      auto mesh_view_result = reader.template read<MeshViewDesc>();
-      detail::CheckResult(mesh_view_result, "mv.desc");
-      mesh_views.push_back(*mesh_view_result);
+      auto mesh_view_desc = detail::LoadMeshViewDesc(reader);
+      mesh_views.push_back(mesh_view_desc);
     }
     return mesh_views;
   }
@@ -119,7 +130,7 @@ namespace detail {
 template <oxygen::serio::Stream S>
 auto LoadMesh(oxygen::serio::Reader<S> reader) -> std::shared_ptr<data::Mesh>
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_F(INFO, "Mesh");
 
   using namespace oxygen::data;
   using namespace oxygen::data::pak;
@@ -130,35 +141,44 @@ auto LoadMesh(oxygen::serio::Reader<S> reader) -> std::shared_ptr<data::Mesh>
     reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
   auto name_result = reader.read_blob_to(name_span);
   detail::CheckResult(name_result, "m.name");
+  LOG_F(INFO, "name            : {}", desc.name);
 
   // vertex_buffer
   auto vb_result = reader.template read<ResourceIndexT>();
   detail::CheckResult(vb_result, "m.vertex_buffer");
   desc.vertex_buffer = *vb_result;
+  LOG_F(INFO, "vertex buffer   : {}", desc.vertex_buffer);
 
   // index_buffer
   auto ib_result = reader.template read<ResourceIndexT>();
   detail::CheckResult(ib_result, "m.index_buffer");
   desc.index_buffer = *ib_result;
+  LOG_F(INFO, "index buffer    : {}", desc.index_buffer);
 
   // submesh_count
   auto submesh_count_result = reader.template read<uint32_t>();
   detail::CheckResult(submesh_count_result, "m.submesh_count");
   desc.submesh_count = *submesh_count_result;
+  LOG_F(INFO, "submesh count   : {}", desc.submesh_count);
 
   // mesh_view_count
   auto mesh_view_count_result = reader.template read<uint32_t>();
   detail::CheckResult(mesh_view_count_result, "m.mesh_view_count");
   desc.mesh_view_count = *mesh_view_count_result;
+  LOG_F(INFO, "mesh view count : {}", desc.mesh_view_count);
 
   // bounding_box_min
   detail::ReadBoundingBox(reader, desc.bounding_box_min, "m.bounding_box_min");
+  LOG_F(INFO, "bounding box min: ({}, {}, {})", desc.bounding_box_min[0],
+    desc.bounding_box_min[1], desc.bounding_box_min[2]);
   // bounding_box_max
   detail::ReadBoundingBox(reader, desc.bounding_box_max, "m.bounding_box_max");
+  LOG_F(INFO, "bounding box max: ({}, {}, {})", desc.bounding_box_max[0],
+    desc.bounding_box_max[1], desc.bounding_box_max[2]);
 
   // Placeholder: actual vertex/index buffer loading not implemented
-  std::vector<Vertex> vertices; // TODO: load from stream
-  std::vector<std::uint32_t> indices; // TODO: load from stream
+  std::vector<Vertex> vertices { 200 }; // TODO: load from stream
+  std::vector<std::uint32_t> indices { 200 }; // TODO: load from stream
 
   std::string name(
     desc.name, std::find(desc.name, desc.name + kMaxNameSize, '\0'));
@@ -167,15 +187,16 @@ auto LoadMesh(oxygen::serio::Reader<S> reader) -> std::shared_ptr<data::Mesh>
   builder.WithVertices(vertices).WithIndices(indices);
 
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {
-    auto desc = detail::LoadSubMeshDesc(reader);
-    auto mesh_views = detail::LoadSubMeshViews(reader, desc.mesh_view_count);
+    auto sm_desc = detail::LoadSubMeshDesc(reader);
+    auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
 
     std::string sm_name;
-    if (auto nul = std::find(std::begin(desc.name), std::end(desc.name), '\0');
-      nul != std::end(desc.name)) {
-      sm_name.assign(desc.name, nul);
+    if (auto nul
+      = std::find(std::begin(sm_desc.name), std::end(sm_desc.name), '\0');
+      nul != std::end(sm_desc.name)) {
+      sm_name.assign(sm_desc.name, nul);
     } else {
-      sm_name.assign(desc.name, desc.name + kMaxNameSize);
+      sm_name.assign(sm_desc.name, sm_desc.name + kMaxNameSize);
     }
 
     // Placeholder: material asset is not loaded here
@@ -196,12 +217,15 @@ template <oxygen::serio::Stream S>
 auto LoadGeometryAsset(oxygen::serio::Reader<S> reader)
   -> std::unique_ptr<data::GeometryAsset>
 {
-  LOG_SCOPE_FUNCTION(INFO);
   using namespace oxygen::data;
   using namespace oxygen::data::pak;
 
+  LOG_SCOPE_F(INFO, "Geometry");
+
   // Read GeometryAssetDesc field by field
   GeometryAssetDesc desc;
+
+  auto pack = reader.ScopedAlignement(1);
 
   // header (use header loader from Helpers.h)
   desc.header = LoadAssetHeader(reader);
@@ -210,6 +234,7 @@ auto LoadGeometryAsset(oxygen::serio::Reader<S> reader)
   auto lod_count_result = reader.template read<uint32_t>();
   detail::CheckResult(lod_count_result, "g.lod_count");
   desc.lod_count = *lod_count_result;
+  DLOG_F(INFO, "GeometryAsset LOD count: {}", desc.lod_count);
 
   // bounding_box_min
   detail::ReadBoundingBox(reader, desc.bounding_box_min, "g.bounding_box_min");
@@ -222,8 +247,16 @@ auto LoadGeometryAsset(oxygen::serio::Reader<S> reader)
   auto skip_result = reader.forward(reserved_size);
   detail::CheckResult(skip_result, "g.reserved (skip)");
 
-  // Construct and return GeometryAsset
-  return std::make_unique<GeometryAsset>(std::move(desc));
+  // Read LOD meshes
+  std::vector<std::shared_ptr<Mesh>> lod_meshes;
+  for (uint32_t i = 0; i < desc.lod_count; ++i) {
+    auto mesh = LoadMesh(reader);
+    lod_meshes.push_back(std::move(mesh));
+  }
+
+  // Construct and return GeometryAsset with LOD meshes
+  return std::make_unique<GeometryAsset>(
+    std::move(desc), std::move(lod_meshes));
 }
 
 } // namespace oxygen::content::loaders

@@ -356,14 +356,16 @@ private:
   @note The mesh LOD array immediately follows the descriptor and is sized
   by `lod_count`.
 
-  @see GeometryAssetDesc, MeshDesc, SubMeshDesc, AssetHeader, PakFormat.h
+  @see Mesh, SubMesh, AssetHeader, PakFormat.h
 */
 class GeometryAsset : public Asset {
   OXYGEN_TYPED(GeometryAsset)
 
 public:
-  explicit GeometryAsset(pak::GeometryAssetDesc desc)
+  GeometryAsset(
+    pak::GeometryAssetDesc desc, std::vector<std::shared_ptr<Mesh>> lod_meshes)
     : desc_(std::move(desc))
+    , lod_meshes_(std::move(lod_meshes))
   {
   }
 
@@ -378,8 +380,54 @@ public:
     return desc_.header;
   }
 
+  //! Returns the asset name (from header).
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
+  {
+    return desc_.header.name;
+  }
+
+  //! Returns the minimum corner of the asset's axis-aligned bounding box
+  //! (AABB).
+  [[nodiscard]] auto BoundingBoxMin() const noexcept -> glm::vec3
+  {
+    return glm::vec3(desc_.bounding_box_min[0], desc_.bounding_box_min[1],
+      desc_.bounding_box_min[2]);
+  }
+
+  //! Returns the maximum corner of the asset's axis-aligned bounding box
+  //! (AABB).
+  [[nodiscard]] auto BoundingBoxMax() const noexcept -> glm::vec3
+  {
+    return glm::vec3(desc_.bounding_box_max[0], desc_.bounding_box_max[1],
+      desc_.bounding_box_max[2]);
+  }
+
+  //! Returns a span of all LOD meshes.
+  [[nodiscard]] auto Meshes() const noexcept
+    -> std::span<const std::shared_ptr<Mesh>>
+  {
+    return lod_meshes_;
+  }
+
+  //! Returns the mesh for the given LOD index, or nullptr if out of range.
+  [[nodiscard]] auto MeshAt(size_t lod) const noexcept
+    -> const std::shared_ptr<Mesh>&
+  {
+    static const std::shared_ptr<Mesh> null_mesh;
+    if (lod < lod_meshes_.size())
+      return lod_meshes_[lod];
+    return null_mesh;
+  }
+
+  //! Returns the number of LODs (meshes) in the asset.
+  [[nodiscard]] auto LodCount() const noexcept -> size_t
+  {
+    return lod_meshes_.size();
+  }
+
 private:
   pak::GeometryAssetDesc desc_ {};
+  std::vector<std::shared_ptr<Mesh>> lod_meshes_;
 };
 
 //! Builder for a single submesh within a MeshBuilder type-state API.
