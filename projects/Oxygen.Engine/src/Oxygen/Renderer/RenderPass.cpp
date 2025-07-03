@@ -110,24 +110,11 @@ auto RenderPass::BindSceneConstantsBuffer(CommandRecorder& recorder) const
 
 auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
 {
-  using graphics::DirectBufferBinding;
-
-  DCHECK_NOTNULL_F(Context().bindless_indices);
-  DCHECK_F(LastBuiltPsoDesc().has_value());
-
-  constexpr auto root_param_index
-    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
-      RootBindings::kIndicesCbv);
-  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
-
-  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
-    "Expected root parameter {}'s data to be DirectBufferBinding",
-    root_param_index);
-
-  // Bind the buffer as a root CBV (direct GPU virtual address)
-  recorder.SetGraphicsRootConstantBufferView(
-    root_param.GetRootParameterIndex(), // should be binding 1 (b0, space0)
-    Context().bindless_indices->GetGPUVirtualAddress());
+  // In the bindless rendering model, the indices buffer (DrawResourceIndices)
+  // is already accessible through the descriptor table at heap index 0.
+  // The shader accesses it via g_DrawResourceIndices[0] in space0.
+  // No additional binding is required here.
+  (void)recorder; // Suppress unused parameter warning
 }
 
 auto RenderPass::BindMaterialConstantsBuffer(CommandRecorder& recorder) const
@@ -194,18 +181,17 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
       = { static_cast<uint32_t>(sizeof(Vertex)) };
     command_recorder.SetVertexBuffers(1, buffer_array, stride_array);
 
-    // Use index buffer if present
+    // In bindless rendering, both vertex and index buffers are accessed through
+    // SRVs The shader handles index lookups internally, so we always use Draw
+    // with IndexCount for indexed meshes (the shader reads indices from the
+    // bindless index buffer)
     if (item.mesh->IsIndexed()) {
-      auto index_buffer = context.GetRenderer().GetIndexBuffer(*item.mesh);
-      if (!index_buffer) {
-        LOG_F(WARNING, "Could not get the index buffer for mesh {}. Skipping.",
-          item.mesh.get()->Name());
-        continue;
-      }
-      command_recorder.BindIndexBuffer(*index_buffer, Format::kR32UInt);
-      command_recorder.DrawIndexed(
-        static_cast<uint32_t>(item.mesh->IndexCount()), 1, 0, 0, 0);
+      // Draw with the number of indices (shader will resolve vertex indices
+      // internally)
+      command_recorder.Draw(
+        static_cast<uint32_t>(item.mesh->IndexCount()), 1, 0, 0);
     } else {
+      // Draw with the number of vertices for non-indexed meshes
       command_recorder.Draw(
         static_cast<uint32_t>(item.mesh->VertexCount()), 1, 0, 0);
     }

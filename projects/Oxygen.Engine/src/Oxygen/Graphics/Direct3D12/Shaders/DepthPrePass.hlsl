@@ -5,15 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 // === Bindless Rendering Contract ===
-// - The engine provides a single shader-visible descriptor heap for all CBV,
-//   SRV, and UAV resources.
-// - Samplers are managed in a separate heap.
-// - All resource descriptors (vertex buffers, textures, etc.) are mixed in the
-//   same heap and use the same register space (space0).
-// - The root constant buffer (register b0) contains global indices to access
-//   resources in the bindless arrays.
-// - The root signature and engine must match this layout for correct operation.
-//   See MainModule.cpp and PipelineStateCache.cpp for details.
+// - The engine provides a single shader-visible CBV_SRV_UAV heap.
+// - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
+// - Resources are intermixed in the heap: indices buffer, vertex buffers, index buffers.
+// - The indices buffer at heap index 0 contains actual heap indices (physical locations).
+// - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
+// - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
+//   See MainModule.cpp and CommandRecorder.cpp for details.
 
 struct VertexData
 {
@@ -25,23 +23,16 @@ struct VertexData
     float4 color;
 };
 
-// Bindless resource arrays: all resources are in the same descriptor heap and use space0
-StructuredBuffer<VertexData> g_BindlessVertexBuffers[] : register(t0, space0);
-// Example for other resource types in the same heap:
-// Texture2D g_BindlessTextures[] : register(t0, space0);
-// ByteAddressBuffer g_BindlessConstants[] : register(t0, space0);
-// (All indices are global indices into the unified heap)
-// Samplers are still declared in their own heap/space:
-// SamplerState g_BindlessSamplers[] : register(s0, space0);
-
-// Constant buffer for bindless resource access configured by the engine.
-// Contains global indices for accessing resources in the bindless arrays.
-cbuffer ResourceIndices : register(b0) {
-    uint g_VertexBufferIndex;  // Global index into g_BindlessVertexBuffers array
-    // uint g_TextureIndex;    // Global index into g_BindlessTextures[]
-    // uint g_SamplerIndex;    // Index into g_BindlessSamplers[]
-    // uint g_MaterialIndex;   // Global index into g_BindlessConstants[]
+// Structured buffer for draw resource indices (matches C++ DrawResourceIndices)
+struct DrawResourceIndices {
+    uint vertex_buffer_index;
+    uint index_buffer_index;
+    uint is_indexed; // 1 for indexed meshes, 0 for non-indexed meshes
 };
+
+
+// Access to the bindless descriptor heap (SM 6.6+)
+// No resource declarations needed - ResourceDescriptorHeap provides direct access
 
 // Constant buffer for scene-wide data. This is typically bound directly as a
 // root CBV (not indexed from the descriptor heap), allowing fast and efficient
@@ -52,12 +43,13 @@ cbuffer SceneConstants : register(b1) {
     float4x4 projection_matrix;
     float3 camera_position;
     float _pad0; // Padding to match C++ struct alignment
-};
+}
 
 // Output structure for the Vertex Shader
 struct VS_OUTPUT_DEPTH {
     float4 clipSpacePosition : SV_POSITION;
 };
+
 
 // Vertex Shader: DepthOnlyVS
 // Transforms vertices to clip space for depth buffer population.
@@ -66,9 +58,26 @@ struct VS_OUTPUT_DEPTH {
 VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     VS_OUTPUT_DEPTH output;
 
-    // Fetch the current vertex data from the bindless buffer array
-    // using the global index from ResourceIndices and the system-generated vertexID.
-    VertexData currentVertex = g_BindlessVertexBuffers[g_VertexBufferIndex][vertexID];
+    // Access the indices buffer at heap index 0 using ResourceDescriptorHeap
+    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[0];
+    DrawResourceIndices indices = indices_buffer[0];
+
+    uint vertex_buffer_index = indices.vertex_buffer_index;
+    uint index_buffer_index = indices.index_buffer_index;
+
+    uint actual_vertex_index;
+    if (indices.is_indexed) {
+        // For indexed rendering, get the index buffer and read the actual vertex index
+        Buffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
+        actual_vertex_index = index_buffer[vertexID];
+    } else {
+        // For non-indexed rendering, use the vertex ID directly
+        actual_vertex_index = vertexID;
+    }
+
+    // Access vertex data using ResourceDescriptorHeap
+    StructuredBuffer<VertexData> vertex_buffer = ResourceDescriptorHeap[vertex_buffer_index];
+    VertexData currentVertex = vertex_buffer[actual_vertex_index];
 
     // Transform position from object space to clip space using world, view, projection
     float4 world_pos = mul(world_matrix, float4(currentVertex.position, 1.0f));

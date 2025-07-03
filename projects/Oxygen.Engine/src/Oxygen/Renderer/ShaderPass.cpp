@@ -345,11 +345,11 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .sample_count = sample_count,
   };
 
-  // Root binding for SRV descriptor table (bindless vertex buffer)
-  constexpr RootBindingDesc srv_table_desc {
+  // Root Parameter 0: SRV table for space0 (indices buffer)
+  constexpr RootBindingDesc indices_srv_table_desc {
     .binding_slot_desc = BindingSlotDesc {
-      .register_index = 0,
-      .register_space = 0,
+      .register_index = 0, // t0
+      .register_space = 0, // space0
     },
     .visibility = ShaderStageFlags::kAll,
     .data = DescriptorTableBinding {
@@ -358,33 +358,54 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     },
   };
 
-  constexpr RootBindingDesc resource_indices_cbv_desc { // b0, space0
+  // Root Parameter 1: SRV table for space1 (vertex buffers)
+  constexpr RootBindingDesc vertex_srv_table_desc {
     .binding_slot_desc = BindingSlotDesc {
-      .register_index = 0,
-      .register_space = 0,
+      .register_index = 0, // t0
+      .register_space = 1, // space1
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DescriptorTableBinding {
+      .view_type = ResourceViewType::kStructuredBuffer_SRV,
+      .base_index = 0,
+    },
+  };
+
+  // Root Parameter 2: SRV table for space2 (index buffers)
+  constexpr RootBindingDesc index_srv_table_desc {
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 0, // t0
+      .register_space = 2, // space2
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DescriptorTableBinding {
+      .view_type = ResourceViewType::kStructuredBuffer_SRV,
+      .base_index = 0,
+    },
+  };
+
+  // Root Parameter 3: SceneConstants CBV (b1, space0)
+  constexpr RootBindingDesc scene_constants_cbv_desc {
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 1, // b1
+      .register_space = 0, // space0
     },
     .visibility = ShaderStageFlags::kAll,
     .data = DirectBufferBinding {}
   };
 
-  constexpr RootBindingDesc scene_constants_cbv_desc { // b1, space0
+  // Root Parameter 4: MaterialConstants CBV (b2, space0)
+  constexpr RootBindingDesc material_constants_cbv_desc {
     .binding_slot_desc = BindingSlotDesc {
-      .register_index = 1,
-      .register_space = 0,
+      .register_index = 2, // b2
+      .register_space = 0, // space0
     },
     .visibility = ShaderStageFlags::kAll,
     .data = DirectBufferBinding {}
   };
 
-  constexpr RootBindingDesc material_constants_cbv_desc { // b2, space0
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 2,
-      .register_space = 0,
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DirectBufferBinding {}
-  };
-
+  // Modern bindless root signature: one unbounded SRV table (t0, space0),
+  // direct CBVs for scene and material constants.
   return graphics::GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
@@ -395,13 +416,11 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .SetDepthStencilState(ds_desc)
     .SetBlendState({})
     .SetFramebufferLayout(fb_layout_desc)
-    // binding 0: SRV table
-    .AddRootBinding(RootBindingItem(srv_table_desc))
-    // binding 1: ResourceIndices CBV (b0)
-    .AddRootBinding(RootBindingItem(resource_indices_cbv_desc))
-    // binding 2: SceneConstants CBV (b1)
+    // Root Parameter 0: Single unbounded SRV table (t0, space0)
+    .AddRootBinding(RootBindingItem(indices_srv_table_desc))
+    // Root Parameter 1: SceneConstants CBV (b1, space0)
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
-    // binding 3: MaterialConstants CBV (b2)
+    // Root Parameter 2: MaterialConstants CBV (b2, space0)
     .AddRootBinding(RootBindingItem(material_constants_cbv_desc))
     .Build();
 }
