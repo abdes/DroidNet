@@ -12,17 +12,24 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/AlignmentGuard.h>
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Stream.h>
 
 namespace oxygen::serio {
 
-template <Stream S> class Reader {
+template <Stream S> class Reader : public Packer {
 public:
   explicit Reader(S& stream) noexcept
     : stream_(stream)
   {
+  }
+
+  [[nodiscard]] auto ScopedAlignement(uint8_t alignment) noexcept(false)
+    -> ::oxygen::serio::AlignmentGuard
+  {
+    return AlignmentGuard(*this, alignment);
   }
 
   template <typename T>
@@ -143,15 +150,12 @@ public:
 
   [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
   {
-    static constexpr size_t kMaxAlignment = 256;
-
-    // Verify alignment is power of 2 and within limits
-    if (!std::has_single_bit(alignment) || alignment < 1
-      || alignment > kMaxAlignment) {
-      return std::make_error_code(std::errc::invalid_argument);
+    if (!alignment_.empty() && !alignment_.top() == 0) {
+      // override alignment with the top of the stack
+      alignment = alignment_.top();
     }
-    try {
 
+    try {
       const auto current_pos = stream_.get().position();
       if (!current_pos) {
         return current_pos.error();
@@ -166,6 +170,11 @@ public:
     } catch (const std::exception& /*ex*/) {
       return std::make_error_code(std::errc::io_error);
     }
+  }
+
+  [[nodiscard]] auto forward(size_t num_bytes) noexcept -> Result<void>
+  {
+    return stream_.get().forward(num_bytes);
   }
 
 private:

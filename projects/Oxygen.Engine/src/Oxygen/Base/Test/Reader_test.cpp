@@ -325,4 +325,201 @@ NOLINT_TEST_F(ReaderTest, ReadBlobTo_Fails_OnStreamError)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
+//=== Scoped Alignment Guard Integration Tests ===----------------------------//
+
+//! Tests that Reader reads values correctly with explicit scoped alignment
+//! guard.
+/*! Covers auto alignment, specific alignment, and edge cases.
+  @see oxygen::serio::AlignmentGuard, oxygen::serio::Reader
+*/
+class ReaderAlignmentGuardIntegrationTest : public testing::Test {
+protected:
+  void SetUp() override { stream_.seek(0); }
+
+  void write_aligned_uint32(uint32_t value, size_t alignment)
+  {
+    // Write padding to align to 'alignment' boundary
+    const auto pos = stream_.position().value();
+    const size_t padding = (alignment - (pos % alignment)) % alignment;
+    if (padding > 0) {
+      const std::vector<std::byte> zeros(padding, 0x00_b);
+      ASSERT_TRUE(stream_.write(zeros.data(), padding));
+    }
+    if (!IsLittleEndian()) {
+      value = ByteSwap(value);
+    }
+    ASSERT_TRUE(
+      stream_.write(reinterpret_cast<const std::byte*>(&value), sizeof(value)));
+  }
+
+  MockStream stream_;
+  Reader<MockStream> sut_ { stream_ };
+};
+
+NOLINT_TEST_F(
+  ReaderAlignmentGuardIntegrationTest, ReadsValuesWithNestedAlignmentScopes)
+{
+  // Arrange
+  constexpr uint32_t value1 = 0x11111111;
+  constexpr uint64_t value2 = 0x2222222233333333ULL;
+  constexpr uint32_t value3 = 0x44444444;
+
+  // Write value1 with 4-byte alignment
+  write_aligned_uint32(value1, 4);
+  // Write value2 with 8-byte alignment
+  const auto pos2 = stream_.position().value();
+  const size_t pad2
+    = (alignof(uint64_t) - (pos2 % alignof(uint64_t))) % alignof(uint64_t);
+  if (pad2 > 0) {
+    const std::vector<std::byte> zeros(pad2, 0x00_b);
+    ASSERT_TRUE(stream_.write(zeros.data(), pad2));
+  }
+  uint64_t v2 = value2;
+  if (!IsLittleEndian()) {
+    v2 = ByteSwap(v2);
+  }
+  ASSERT_TRUE(
+    stream_.write(reinterpret_cast<const std::byte*>(&v2), sizeof(v2)));
+  // Write value3 with 4-byte alignment
+  write_aligned_uint32(value3, 4);
+
+  // Act
+  stream_.seek(0);
+  // Outer scope: 4-byte alignment
+  {
+    auto guard4 = sut_.ScopedAlignement(4);
+    auto r1 = sut_.read<uint32_t>();
+    ASSERT_TRUE(r1);
+    EXPECT_EQ(r1.value(), value1);
+
+    // Nested scope: 8-byte alignment
+    {
+      auto guard8 = sut_.ScopedAlignement(8);
+      auto r2 = sut_.read<uint64_t>();
+      ASSERT_TRUE(r2);
+      EXPECT_EQ(r2.value(), value2);
+    }
+
+    // Back to outer scope: 4-byte alignment
+    auto r3 = sut_.read<uint32_t>();
+    ASSERT_TRUE(r3);
+    EXPECT_EQ(r3.value(), value3);
+  }
+}
+
+NOLINT_TEST_F(
+  ReaderAlignmentGuardIntegrationTest, ReadsValueWithExplicitAlignment)
+{
+  // Arrange
+  constexpr uint32_t test_value = 0xCAFEBABE;
+  constexpr size_t alignment = 16;
+  write_aligned_uint32(test_value, alignment);
+  // Write a second value with different alignment
+  write_aligned_uint32(0xDEADBEEF, 4);
+
+  // Act
+  stream_.seek(0);
+  {
+    auto guard = sut_.ScopedAlignement(alignment);
+    auto result = sut_.read<uint32_t>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.value(), test_value);
+  }
+  // Next value should be readable with 4-byte alignment
+  {
+    auto guard = sut_.ScopedAlignement(4);
+    auto result = sut_.read<uint32_t>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.value(), 0xDEADBEEF);
+  }
+}
+
+NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest, ReadsValueWithAutoAlignment)
+{
+  // Arrange
+  constexpr uint32_t test_value = 0xAABBCCDD;
+  // Write with 4-byte alignment (default for uint32_t)
+  write_aligned_uint32(test_value, alignof(uint32_t));
+
+  // Act
+  stream_.seek(0);
+  // No explicit guard: Reader should align automatically
+  auto result = sut_.read<uint32_t>();
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.value(), test_value);
+}
+
+NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest,
+  ReadsValueWithMisalignedData_ReadsWrongValue)
+{
+  // Arrange
+  constexpr uint32_t test_value = 0x12345678;
+  // Write value with wrong alignment (e.g., offset by 1)
+  const std::vector<std::byte> pad(1, 0x00_b);
+  ASSERT_TRUE(stream_.write(pad.data(), pad.size()));
+  write_aligned_uint32(test_value, 1); // Actually unaligned
+
+  // Act
+  stream_.seek(0);
+  // Try to read with explicit 4-byte alignment
+  auto guard = sut_.ScopedAlignement(4);
+  auto result = sut_.read<uint32_t>();
+  // The value read will not match test_value due to misalignment
+  ASSERT_TRUE(result);
+  EXPECT_NE(result.value(), test_value);
+}
+
+NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest, ThrowsOnInvalidAlignment)
+{
+  // Arrange/Act/Assert
+  EXPECT_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(3)),
+    std::invalid_argument);
+  // 0 is valid (auto-alignment)
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(0)));
+  // 256 is valid (max alignment)
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(256)));
+  // 257 as uint8_t wraps to 1, which is valid
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(257)));
+}
+
+NOLINT_TEST_F(
+  ReaderAlignmentGuardIntegrationTest, ReadsValueWithAutoTypeAlignment)
+{
+  // Arrange
+  constexpr uint64_t test_value = 0x1122334455667788ULL;
+  // Write with 8-byte alignment (alignof(uint64_t))
+  write_aligned_uint32(0xDEADBEEF, 4); // Write a dummy 4-byte value first
+  // Now align to 8 and write the uint64_t
+  const auto pos = stream_.position().value();
+  const size_t padding
+    = (alignof(uint64_t) - (pos % alignof(uint64_t))) % alignof(uint64_t);
+  if (padding > 0) {
+    const std::vector<std::byte> zeros(padding, 0x00_b);
+    ASSERT_TRUE(stream_.write(zeros.data(), padding));
+  }
+  uint64_t value = test_value;
+  if (!IsLittleEndian()) {
+    value = ByteSwap(value);
+  }
+  ASSERT_TRUE(
+    stream_.write(reinterpret_cast<const std::byte*>(&value), sizeof(value)));
+
+  // Act
+  stream_.seek(0);
+  // Read dummy value
+  {
+    auto guard = sut_.ScopedAlignement(4);
+    auto result = sut_.read<uint32_t>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.value(), 0xDEADBEEF);
+  }
+  // Read uint64_t with auto-alignment (0)
+  {
+    auto guard = sut_.ScopedAlignement(0); // auto-align to alignof(uint64_t)
+    auto result = sut_.read<uint64_t>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.value(), test_value);
+  }
+}
+
 } // namespace

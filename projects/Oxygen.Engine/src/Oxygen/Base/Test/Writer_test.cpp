@@ -181,4 +181,95 @@ NOLINT_TEST_F(WriterTest, WriteBlob_Fails_OnStreamError)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
+//=== Scoped Alignment Guard Integration Tests ===----------------------------//
+
+//! Tests that Writer writes values correctly with explicit scoped alignment
+//! guard.
+/*! Covers auto alignment, specific alignment, nested scopes, and edge cases.
+  @see oxygen::serio::AlignmentGuard, oxygen::serio::Writer
+*/
+
+class WriterAlignmentGuardIntegrationTest : public testing::Test {
+protected:
+  void SetUp() override
+  {
+    stream_.seek(0);
+    verify_pos_ = 0;
+  }
+
+  MockStream stream_;
+  Writer<MockStream> sut_ { stream_ };
+  size_t verify_pos_ { 0 };
+
+  template <typename T> void verify_written(const T& expected)
+  {
+    if constexpr (sizeof(T) > 1) {
+      const size_t padding
+        = (alignof(T) - (verify_pos_ % alignof(T))) % alignof(T);
+      verify_pos_ += padding;
+      ASSERT_EQ(verify_pos_ % alignof(T), 0);
+    }
+    ASSERT_GE(stream_.get_data().size(), verify_pos_ + sizeof(T));
+    T actual;
+    std::memcpy(&actual, stream_.get_data().data() + verify_pos_, sizeof(T));
+    if (!IsLittleEndian() && sizeof(T) > 1) {
+      actual = ByteSwap(actual);
+    }
+    EXPECT_EQ(actual, expected);
+    verify_pos_ += sizeof(T);
+  }
+};
+
+NOLINT_TEST_F(
+  WriterAlignmentGuardIntegrationTest, WritesValueWithExplicitAlignment)
+{
+  constexpr uint32_t test_value = 0xCAFEBABE;
+  constexpr size_t alignment = 16;
+  {
+    auto guard = sut_.ScopedAlignement(alignment);
+    ASSERT_TRUE(sut_.write(test_value));
+  }
+  verify_written(test_value);
+}
+
+NOLINT_TEST_F(WriterAlignmentGuardIntegrationTest, WritesValueWithAutoAlignment)
+{
+  constexpr uint32_t test_value = 0xAABBCCDD;
+  {
+    auto guard = sut_.ScopedAlignement(0); // auto-align
+    ASSERT_TRUE(sut_.write(test_value));
+  }
+  verify_written(test_value);
+}
+
+NOLINT_TEST_F(
+  WriterAlignmentGuardIntegrationTest, WritesValuesWithNestedAlignmentScopes)
+{
+  constexpr uint32_t value1 = 0x11111111;
+  constexpr uint64_t value2 = 0x2222222233333333ULL;
+  constexpr uint32_t value3 = 0x44444444;
+
+  {
+    auto guard4 = sut_.ScopedAlignement(4);
+    ASSERT_TRUE(sut_.write(value1));
+    {
+      auto guard8 = sut_.ScopedAlignement(8);
+      ASSERT_TRUE(sut_.write(value2));
+    }
+    ASSERT_TRUE(sut_.write(value3));
+  }
+  verify_written(value1);
+  verify_written(value2);
+  verify_written(value3);
+}
+
+NOLINT_TEST_F(WriterAlignmentGuardIntegrationTest, ThrowsOnInvalidAlignment)
+{
+  EXPECT_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(3)),
+    std::invalid_argument);
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(0)));
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(256)));
+  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(257)));
+}
+
 } // namespace
