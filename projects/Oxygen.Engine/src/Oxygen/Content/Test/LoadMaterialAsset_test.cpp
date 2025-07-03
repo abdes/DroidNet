@@ -44,6 +44,7 @@ protected:
   auto WriteMaterialAssetDesc(const oxygen::data::pak::MaterialAssetDesc& desc)
     -> bool
   {
+    auto pack = writer.ScopedAlignement(1);
     // Write AssetHeader field-by-field
     if (!writer.write(desc.header.asset_type))
       return false;
@@ -138,7 +139,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   using oxygen::ShaderType;
+  using oxygen::data::AssetType;
   using oxygen::data::MaterialAsset;
+  using oxygen::data::MaterialDomain;
   using oxygen::data::pak::MaterialAssetDesc;
   using oxygen::data::pak::ShaderReferenceDesc;
 
@@ -149,9 +152,14 @@ NOLINT_TEST_F(
 
   MaterialAssetDesc desc{
     .header = {
-      .asset_type = 7,
+      .asset_type = static_cast<uint8_t>(AssetType::kMaterial),
+      .name = "Test Material",
+      .version = 1,
+      .streaming_priority = 2,
+      .content_hash = 0x1234567890ABCDEF,
+      .variant_flags = 0x870,
     },
-    .material_domain = 1,
+    .material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque),
     .flags = 0xAABBCCDD,
     .shader_stages = kShaderStages,
     .base_color = {0.1f, 0.2f, 0.3f, 0.4f},
@@ -192,9 +200,9 @@ NOLINT_TEST_F(
   ASSERT_THAT(asset, NotNull());
 
   // Scalars
-  EXPECT_EQ(asset->GetHeader().asset_type, 7);
-  EXPECT_EQ(
-    asset->GetMaterialDomain(), static_cast<oxygen::data::MaterialDomain>(1));
+  EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
+  EXPECT_EQ(asset->GetAssetName(), "Test Material");
+  EXPECT_EQ(asset->GetMaterialDomain(), MaterialDomain::kOpaque);
   EXPECT_EQ(asset->GetFlags(), 0xAABBCCDDu);
   EXPECT_FLOAT_EQ(asset->GetNormalScale(), 1.5f);
   EXPECT_FLOAT_EQ(asset->GetMetalness(), 0.7f);

@@ -19,6 +19,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ShaderReference.h>
@@ -61,7 +62,7 @@ namespace oxygen::data {
 
  @see MaterialAssetDesc, TextureResourceDesc, ShaderReferenceDesc, PakFormat.h
 */
-class MaterialAsset : public oxygen::Object {
+class MaterialAsset : public Asset {
   OXYGEN_TYPED(MaterialAsset)
 
 public:

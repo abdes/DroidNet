@@ -8,35 +8,74 @@
 
 #include <string_view>
 
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::data {
 
-//=== Asset Interface
-//===--------------------------------------------------------//
+//=== Asset Basse Class ===---------------------------------------------------//
 
-//! Base interface for all asset types
+//! Base class for all asset types
 /*!
-  Provides immutable access to asset metadata as defined in AssetHeader.
-  All asset types must implement this interface. Assets are immutable after
-  creation; only getters are provided.
+  Provides immutable access to asset metadata as defined in AssetHeader. Assumes
+  that the asset passed all validation checks in the loader. No extra
+  validations are made here.
 
   @see AssetHeader, AssetType, AssetKey
 */
-class Asset {
+class Asset : public Object {
 public:
-  //! Returns the asset's name as a string view.
-  virtual auto GetName() const noexcept -> std::string_view = 0;
-
-  //! Returns the asset's type (see AssetType).
-  virtual auto GetAssetType() const noexcept -> AssetType = 0;
-
-  //! Returns the asset's unique key (see AssetKey).
-  virtual auto GetAssetKey() const noexcept -> const AssetKey& = 0;
-
   //! Virtual destructor for interface.
   virtual ~Asset() = default;
+
+  //! Returns the asset type field from the header (for debugging).
+  auto GetAssetType() const noexcept -> AssetType
+  {
+    return static_cast<AssetType>(GetHeader().asset_type);
+  }
+
+  //! Returns the asset name as a string view (for debugging/tools).
+  /*!
+    Returns the asset name from the header as a string view. The name is
+    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
+    and tools, not for runtime use.
+  */
+  auto GetAssetName() const noexcept -> std::string_view
+  {
+    const char* name = GetHeader().name;
+    std::size_t len = 0;
+    while (len < pak::kMaxNameSize && name[len] != '\0') {
+      ++len;
+    }
+    return std::string_view(name, len);
+  }
+
+  //! Returns the asset format version.
+  auto GetVersion() const noexcept -> uint8_t { return GetHeader().version; }
+
+  //! Returns the streaming priority (0=highest, 255=lowest).
+  auto GetStreamingPriority() const noexcept -> uint8_t
+  {
+    return GetHeader().streaming_priority;
+  }
+
+  //! Returns the content integrity hash.
+  auto GetContentHash() const noexcept -> uint64_t
+  {
+    return GetHeader().content_hash;
+  }
+
+  //! Returns the project-defined variant flags.
+  auto GetVariantFlags() const noexcept -> uint32_t
+  {
+    return GetHeader().variant_flags;
+  }
+
+protected:
+  //! Returns the asset header (to be implemented by derived classes).
+  virtual auto GetHeader() const noexcept -> const pak::AssetHeader& = 0;
 };
 
 } // namespace oxygen::data
