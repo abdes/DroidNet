@@ -37,6 +37,8 @@ auto LoadAssetHeader(oxygen::serio::Reader<S>& reader)
   using oxygen::data::AssetType;
   using oxygen::data::pak::AssetHeader;
 
+  LOG_SCOPE_F(INFO, "Header");
+
   auto result = reader.template read<AssetHeader>();
   if (!result) {
     LOG_F(INFO, "-failed- on AssetHeader: {}", result.error().message());
