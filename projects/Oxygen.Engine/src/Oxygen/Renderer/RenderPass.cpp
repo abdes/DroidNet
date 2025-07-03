@@ -172,7 +172,7 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
       = context.GetRenderer().GetVertexBuffer(*item.mesh);
     if (!vertex_buffer) {
       LOG_F(WARNING, "Could not get the vertex buffer for mesh {}. Skipping.",
-        item.mesh.get()->Name());
+        item.mesh.get()->GetName());
       continue;
     }
 

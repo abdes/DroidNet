@@ -163,7 +163,7 @@ auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
     .size_bytes = vertices.size() * sizeof(oxygen::data::Vertex),
     .usage = BufferUsage::kVertex,
     .memory = BufferMemory::kDeviceLocal,
-    .debug_name = mesh.Name() + ".VertexBuffer",
+    .debug_name = std::string(mesh.GetName()) + ".VertexBuffer",
   };
   auto vertex_buffer = graphics.CreateBuffer(vb_desc);
   vertex_buffer->SetName(vb_desc.debug_name);
@@ -182,7 +182,7 @@ auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
     .size_bytes = indices.size() * sizeof(std::uint32_t),
     .usage = BufferUsage::kIndex,
     .memory = BufferMemory::kDeviceLocal,
-    .debug_name = mesh.Name() + ".IndexBuffer",
+    .debug_name = std::string(mesh.GetName()) + ".IndexBuffer",
   };
   auto index_buffer = graphics.CreateBuffer(ib_desc);
   index_buffer->SetName(ib_desc.debug_name);
@@ -204,7 +204,7 @@ auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
     .size_bytes = vertices.size() * sizeof(oxygen::data::Vertex),
     .usage = BufferUsage::kNone,
     .memory = BufferMemory::kUpload,
-    .debug_name = mesh.Name() + ".VertexUploadBuffer",
+    .debug_name = std::string(mesh.GetName()) + ".VertexUploadBuffer",
   };
   auto upload_buffer = graphics.CreateBuffer(upload_desc);
   upload_buffer->SetName(upload_desc.debug_name);
@@ -239,7 +239,7 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
     .size_bytes = indices.size() * sizeof(std::uint32_t),
     .usage = BufferUsage::kNone,
     .memory = BufferMemory::kUpload,
-    .debug_name = mesh.Name() + ".IndexUploadBuffer",
+    .debug_name = std::string(mesh.GetName()) + ".IndexUploadBuffer",
   };
   auto upload_buffer = graphics.CreateBuffer(upload_desc);
   upload_buffer->SetName(upload_desc.debug_name);
@@ -274,7 +274,7 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   }
 
   DLOG_SCOPE_FUNCTION(INFO);
-  DLOG_F(INFO, "mesh: {}", mesh.Name());
+  DLOG_F(INFO, "mesh: {}", mesh.GetName());
 
   const auto render_controller = render_controller_.lock();
   if (!render_controller) {
