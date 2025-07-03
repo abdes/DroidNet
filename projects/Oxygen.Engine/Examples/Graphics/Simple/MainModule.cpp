@@ -465,15 +465,16 @@ auto MainModule::EnsureBindlessIndexingBuffer() -> void
 
     LOG_F(INFO, "Bindless indices buffer SRV registered at index {}",
       shader_visible_index);
-
-    context_.bindless_indices = bindless_indices_buffer_;
   }
 
   // === Efficient resource indices upload ===
   DrawResourceIndices indices_data {
-    .vertex_buffer_index = vertex_srv_shader_visible_index_, // Use actual heap index
-    .index_buffer_index = index_srv_shader_visible_index_,   // Use actual heap index
-    .is_indexed = 1, // For now, assume we're rendering the cube mesh which is indexed
+    .vertex_buffer_index
+    = vertex_srv_shader_visible_index_, // Use actual heap index
+    .index_buffer_index
+    = index_srv_shader_visible_index_, // Use actual heap index
+    .is_indexed
+    = 1, // For now, assume we're rendering the cube mesh which is indexed
   };
   SetDrawResourceIndices(indices_data);
   UploadIndicesIfNeeded();

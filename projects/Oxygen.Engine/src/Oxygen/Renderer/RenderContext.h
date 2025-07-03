@@ -110,18 +110,6 @@ struct RenderContext {
   */
   std::shared_ptr<const graphics::Buffer> scene_constants;
 
-  //! The constant buffer containing indices into the descriptor table (for
-  //! bindless rendering).
-  /*!
-   This buffer should be prepared and updated by the caller before the render
-   graph executes. It is bound directly as a root CBV (using its GPU virtual
-   address). Render passes will need to ensure that the root signature is set
-   consistently with the shader's expectations.
-
-   @note This field is mandatory.
-  */
-  std::shared_ptr<const graphics::Buffer> bindless_indices;
-
   //! The constant buffer containing material constants for the current render
   //! item.
   /*!
