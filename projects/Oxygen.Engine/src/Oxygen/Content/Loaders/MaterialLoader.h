@@ -12,6 +12,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 
@@ -44,42 +45,13 @@ auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
   // std::has_unique_object_representations issues with float fields
   MaterialAssetDesc desc;
 
-  // Read AssetHeader field-by-field
-  auto asset_type_result = reader.read<uint8_t>();
-  check_result(asset_type_result, "AssetHeader.asset_type");
-  desc.header.asset_type = asset_type_result.value();
-
-  // Read name as individual characters
-  for (size_t i = 0; i < kMaxNameSize; ++i) {
-    auto char_result = reader.read<char>();
-    check_result(char_result, "AssetHeader.name");
-    desc.header.name[i] = char_result.value();
+  {
+    LOG_SCOPE_F(INFO, "Header");
+    desc.header = LoadAssetHeader(reader);
   }
 
-  auto version_result = reader.read<uint8_t>();
-  check_result(version_result, "AssetHeader.version");
-  desc.header.version = version_result.value();
+  // -- Read MaterialAssetDesc specific fields
 
-  auto priority_result = reader.read<uint8_t>();
-  check_result(priority_result, "AssetHeader.streaming_priority");
-  desc.header.streaming_priority = priority_result.value();
-
-  auto content_hash_result = reader.read<uint64_t>();
-  check_result(content_hash_result, "AssetHeader.content_hash");
-  desc.header.content_hash = content_hash_result.value();
-
-  auto variant_flags_result = reader.read<uint32_t>();
-  check_result(variant_flags_result, "AssetHeader.variant_flags");
-  desc.header.variant_flags = variant_flags_result.value();
-
-  // Skip AssetHeader reserved bytes
-  for (size_t i = 0; i < 16; ++i) {
-    auto reserved_result = reader.read<uint8_t>();
-    check_result(reserved_result, "AssetHeader.reserved");
-    desc.header.reserved[i] = reserved_result.value();
-  }
-
-  // Read MaterialAssetDesc specific fields
   auto material_domain_result = reader.read<uint8_t>();
   check_result(material_domain_result, "MaterialAssetDesc.material_domain");
   desc.material_domain = material_domain_result.value();
@@ -139,28 +111,36 @@ auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
     "MaterialAssetDesc.ambient_occlusion_texture");
   desc.ambient_occlusion_texture = ambient_occlusion_texture_result.value();
 
-  // Read reserved texture indices array
-  for (int i = 0; i < 8; ++i) {
-    auto reserved_texture_result = reader.read<ResourceIndexT>();
-    check_result(
-      reserved_texture_result, "MaterialAssetDesc.reserved_textures");
-    desc.reserved_textures[i] = reserved_texture_result.value();
-  }
+  // Skip reserved texture indices array
+  auto skip_result = reader.forward(sizeof(desc.reserved_textures));
+  check_result(skip_result, "MaterialAssetDesc.reserved_textures (skip)");
 
   // Skip reserved bytes
-  for (size_t i = 0; i < 68; ++i) {
-    auto reserved_result = reader.read<uint8_t>();
-    check_result(reserved_result, "MaterialAssetDesc.reserved");
-    desc.reserved[i] = reserved_result.value();
-  }
-  LOG_F(INFO, "material_domain : {}", desc.material_domain);
-  LOG_F(INFO, "shader_stages   : 0x{:08X}", desc.shader_stages);
+  skip_result = reader.forward(sizeof(desc.reserved));
+  check_result(skip_result, "MaterialAssetDesc.reserved (skip)");
+
+  LOG_F(INFO, "material domain   : {}", desc.material_domain);
+  LOG_F(INFO, "flags             : 0x{:08X}", desc.flags);
+  LOG_F(INFO, "shader stages     : 0x{:08X}", desc.shader_stages);
+  LOG_F(INFO, "base color        : [{:.2f}, {:.2f}, {:.2f}, {:.2f}]",
+    desc.base_color[0], desc.base_color[1], desc.base_color[2],
+    desc.base_color[3]);
+  LOG_F(INFO, "normal scale      : {:.2f}", desc.normal_scale);
+  LOG_F(INFO, "metalness         : {:.2f}", desc.metalness);
+  LOG_F(INFO, "roughness         : {:.2f}", desc.roughness);
+  LOG_F(INFO, "ambient occlusion : {:.2f}", desc.ambient_occlusion);
+  LOG_F(INFO, "base color tex    : {}", desc.base_color_texture);
+  LOG_F(INFO, "normal tex        : {}", desc.normal_texture);
+  LOG_F(INFO, "metallic tex      : {}", desc.metallic_texture);
+  LOG_F(INFO, "roughness tex     : {}", desc.roughness_texture);
+  LOG_F(INFO, "ambient occ. tex  : {}", desc.ambient_occlusion_texture);
 
   // Count set bits in shader_stages to determine number of shader references
   uint32_t shader_stage_bits = desc.shader_stages;
   size_t shader_count = std::popcount(shader_stage_bits);
   std::vector<ShaderReference> shader_refs;
   shader_refs.reserve(shader_count);
+  LOG_F(INFO, "shader references : {}", shader_count);
 
   // For each set bit, read a ShaderReferenceDesc and construct a
   // ShaderReference
@@ -170,6 +150,9 @@ auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
       check_result(shader_result, "ShaderReferenceDesc");
       ShaderType stage = static_cast<ShaderType>(i);
       shader_refs.emplace_back(stage, shader_result.value());
+      LOG_F(INFO, "  shader stage {}: {} (hash: 0x{:016X})", i,
+        shader_refs.back().GetShaderUniqueId(),
+        shader_refs.back().GetShaderSourceHash());
     }
   }
 
