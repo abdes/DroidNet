@@ -5,12 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(Dump Assets - Complex) Launch",
+            "name": "(Dump PAK Simple) Launch",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.DumpAssets.exe",
+            "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.DumpPakFile.exe",
             "args": [
-                "src/Oxygen/Content/Test/TestData/ComplexAssets.pak"
+                "src/Oxygen/Content/Test/TestData/Simple.pak",
+                "--verbose"
             ],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}",
