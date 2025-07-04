@@ -6,7 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Base/ResourceTypeList.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Base/TypeList.h>
 
 using oxygen::IndexOf;
 using oxygen::ResourceHandle;

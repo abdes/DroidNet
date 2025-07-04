@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
-#include <Oxygen/Base/ResourceTypeList.h>
+#include <Oxygen/Base/TypeList.h>
 
 namespace oxygen {
 
@@ -20,6 +20,18 @@ namespace oxygen {
  objects using compile-time type identification and contiguous memory layout.
  They are designed for scenarios where O(1) access, automatic handle validation,
  and memory defragmentation are critical for performance.
+
+ ### Global Resource Type List
+ - All resource types (any type derived from Resource) and pooled object types
+   (any type that uses ResourceTable for storage) must be listed in a single
+   `TypeList` (e.g., `ResourceTypeList`).
+ - The order of types in the list determines their type ID. **Never reorder
+   existing types**; only append new types to the end to maintain binary
+   compatibility across builds and modules.
+ - Forward declare all resource/component types before defining the type list to
+   avoid circular dependencies and enable use in headers.
+ - The type list must be visible to all code that needs to resolve resource type
+   IDs at compile time (e.g., pools, handles, registries).
 
  ### When to Use Resource
 
