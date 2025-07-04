@@ -49,6 +49,9 @@ class TextureResource : public oxygen::Object {
   OXYGEN_TYPED(TextureResource)
 
 public:
+  //! Type alias for the descriptor type used by this resource.
+  using DescT = pak::TextureResourceDesc;
+
   explicit TextureResource(pak::TextureResourceDesc desc)
     : desc_(std::move(desc))
   {
