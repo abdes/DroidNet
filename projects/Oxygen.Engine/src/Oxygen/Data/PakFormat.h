@@ -207,35 +207,55 @@ static_assert(sizeof(TextureResourceDesc) == 40);
 
 //! Buffer resource table entry (32 bytes)
 /*!
+  Describes a buffer resource in the asset pak. Buffer data can be raw bytes,
+  typed with a specific format, or structured with a specific element stride.
+
+  - Raw buffers correspond to `element_format` of `0` and a stride of `1`.
+  - Typed buffers have a non-zero `element_format`; in which case, the format
+    specifies the size of each element in the buffer and `element_stride` is
+    ignored (should be `0` for safety).
+  - Structured buffers have their `element_format` set to `0` and
+    `element_stride` set to the size of each element in bytes (>1).
+
   @note Buffer `element_format` must be one of the core type `Format` enum
   values.
-  @note Buffers are always aligned to their `element_stride` when not equal to
-  `0` (i.e. not a raw buffer).
-  @note Buffer `usage_flags` is a bitfield that can be used to specify
-  additional properties such as read/write access, GPU vs CPU usage, etc. It's
-  currently not defined yet, but Common usage flags for buffers in graphics and
-  asset systems include:
-    - Vertex buffer (used as a source for vertex input)
-    - Index buffer (used as a source for index input)
-    - Constant/Uniform buffer (used for shader constants/uniforms)
-    - Storage/Structured buffer (read/write access in shaders)
-    - Indirect argument buffer (used for indirect draw/dispatch)
-    - CPU read/write access (staging, upload, or readback)
-    - Dynamic/static/immutable (lifetime and update frequency hints)
+
+  @note Buffers are always aligned to their `element_stride`, with `1`
+  indicating a raw buffer of bytes. `0` is invalid/unset.
+
+  @note Buffer `usage_flags` is a bitfield providing hints to the engine or
+  graphics API. The constants below define the possible flags:
+
+    ```cpp
+    // --- Buffer Role Flags (can be combined) ---
+    0x01 : VertexBuffer      (vertex input source)
+    0x02 : IndexBuffer       (index input source)
+    0x04 : ConstantBuffer    (shader constants/uniforms)
+    0x08 : StorageBuffer     (read/write in shaders)
+    0x10 : IndirectBuffer    (indirect draw/dispatch arguments)
+
+    // --- CPU Access Flags (can be combined) ---
+    0x20 : CPUWritable       (CPU can write to buffer)
+    0x40 : CPUReadable       (CPU can read from buffer)
+
+    // --- Update Frequency Flags (mutually exclusive) ---
+    // Only one of these should be set; if none, default to Static.
+    0x80 : Dynamic           (frequently updated)
+    0x100: Static            (rarely updated)
+    0x200: Immutable         (never updated after creation)
+    ```
+
+  @note The `reserved` field is for future expansion and must be
+  zero-initialized.
 */
 #pragma pack(push, 1)
 struct BufferResourceDesc {
-  OffsetT data_offset = 0; // Absolute offset to buffer data
-  DataBlobSizeT data_size = 0; // Size of buffer data
-  uint8_t buffer_type = 0; // Vertex, Index, Constant, etc.
-  uint32_t element_stride = 0; // Size of each element (0 for raw buffers)
-  uint8_t element_format = 0; // Element format type
-  // TODO: Define usage flags for buffers
-  uint32_t usage_flags = 0; // Usage flags
-  uint16_t alignment = 0; // Required alignment in bytes
-
-  // Reserved for future use
-  uint8_t reserved[8] = {};
+  OffsetT offset_bytes = 0; //!< Absolute offset to buffer data in the pak
+  DataBlobSizeT size_bytes = 0; //!< Size of buffer data in bytes
+  uint32_t usage_flags = 0; //!< Usage hints (see above)
+  uint32_t element_stride = 0; //!< 1 for raw buffers, 0 when unused
+  uint8_t element_format = 0; //!< Format enum value (0 = raw or structured)
+  uint8_t reserved[11] = {}; //!< Reserved for future use (must be zero)
 };
 #pragma pack(pop)
 static_assert(sizeof(BufferResourceDesc) == 32);

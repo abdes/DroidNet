@@ -11,9 +11,10 @@ using oxygen::data::TextureResource;
 
 auto TextureResource::GetTextureType() const noexcept -> TextureType
 {
-  if (desc_.texture_type >= static_cast<uint32_t>(TextureType::kUnknown)
-    && desc_.texture_type
-      <= static_cast<uint32_t>(TextureType::kMaxTextureType)) {
+  if (desc_.texture_type
+      >= static_cast<std::underlying_type_t<TextureType>>(TextureType::kUnknown)
+    && desc_.texture_type <= static_cast<std::underlying_type_t<TextureType>>(
+         TextureType::kMaxTextureType)) {
     return static_cast<TextureType>(desc_.texture_type);
   }
   LOG_F(WARNING, "Invalid texture type: {}", desc_.texture_type);
@@ -22,8 +23,10 @@ auto TextureResource::GetTextureType() const noexcept -> TextureType
 
 auto TextureResource::GetFormat() const noexcept -> Format
 {
-  if (desc_.format >= static_cast<uint32_t>(Format::kUnknown)
-    && desc_.format <= static_cast<uint32_t>(Format::kMaxFormat)) {
+  if (desc_.format
+      >= static_cast<std::underlying_type_t<Format>>(Format::kUnknown)
+    && desc_.format
+      <= static_cast<std::underlying_type_t<Format>>(Format::kMaxFormat)) {
     return static_cast<Format>(desc_.format);
   }
   LOG_F(WARNING, "Invalid texture format: {}", desc_.format);
