@@ -25,11 +25,11 @@
    (including the null terminator) and padded with null bytes.
  - All indices are 0-based. Except when explicitly stated otherwise, `0` is a
    valid index.
- - All hashes for content integrity are 64-bit unsigned integers, and
-   are computed using a cryptographic hash function (e.g., SHA-256).
+ - All hashes for content integrity are 32-bit CRC32 values for corruption
+   detection and performance.
 */
 
-// TODO: Define the cryptographic hash function for content integrity
+// TODO: Define constants for hash algorithm enumeration
 
 namespace oxygen::data::pak::v1 {
 
@@ -144,11 +144,15 @@ struct PakFooter {
   ResourceTable buffer_table = {};
   ResourceTable audio_table = {};
 
-  uint64_t pak_hash = 0; // Optional integrity hash
-  char footer_magic[8] = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
-
   // Reserved for future use
-  uint8_t reserved[120] = {};
+  uint8_t reserved[124] = {};
+
+  // -- CRC32 Integrity --
+  // Include the entire file content, except the 4 bytes for pak_crc32 itself
+  uint32_t pak_crc32 = 0; // CRC32 integrity hash (excluded from calculation)
+
+  // The last thing in the PAK file is the footer magic bytes.
+  char footer_magic[8] = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 };
 #pragma pack(pop)
 static_assert(sizeof(PakFooter) == 256);

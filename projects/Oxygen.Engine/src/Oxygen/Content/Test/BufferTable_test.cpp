@@ -10,6 +10,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/BufferResource.h>

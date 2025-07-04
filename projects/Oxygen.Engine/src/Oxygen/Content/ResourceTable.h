@@ -16,16 +16,11 @@
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Base/TypeList.h>
-#include <Oxygen/Content/LoaderFunction.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content {
-
-// Concept: T must be a known resource type and have DescT
-template <typename T>
-concept PakResource = requires { typename T::DescT; }
-  && (oxygen::IndexOf<T, ResourceTypeList>::value >= 0);
 
 template <PakResource T, oxygen::serio::Stream S> class ResourceTable {
 public:
@@ -33,7 +28,8 @@ public:
   using ReaderT = oxygen::serio::Reader<std::remove_reference_t<S>>;
   using ResourceKeyT = data::pak::ResourceIndexT;
 
-  using LoaderFnErased = std::function<std::shared_ptr<T>(ReaderT&)>;
+  using LoaderFnErased = std::function<std::shared_ptr<T>(
+    LoaderContext<std::remove_reference_t<S>>)>;
 
   //! Construct with custom loader and resource table metadata
   /*!
@@ -53,7 +49,7 @@ public:
    @throw std::invalid_argument if entry_size does not match expected size.
   */
   template <typename LoaderFn>
-    requires LoaderFunctionForStream<LoaderFn, std::remove_reference_t<S>>
+    requires LoadFunctionForStream<LoaderFn, std::remove_reference_t<S>>
   ResourceTable(std::unique_ptr<S> stream,
     const data::pak::ResourceTable& table_meta, LoaderFn loader_fn)
     : stream_(std::move(stream))
@@ -84,7 +80,8 @@ public:
   }
 
   //! Find or lazily create resource by key
-  auto GetOrLoadResource(const ResourceKeyT& key) -> std::shared_ptr<T>
+  auto GetOrLoadResource(const ResourceKeyT& key, bool offline = false)
+    -> std::shared_ptr<T>
   {
 
     if (!IsValidKey(key)) {
@@ -101,7 +98,12 @@ public:
     }
 
     // Load resource from the descriptor at that position
-    std::shared_ptr<T> res = loader_(reader_);
+    LoaderContext<std::remove_reference_t<S>> context { .asset_loader
+      = nullptr, // Resource loaders don't have asset_loader
+      .current_asset_key = {}, // No asset key for resources
+      .reader = std::ref(reader_),
+      .offline = offline };
+    std::shared_ptr<T> res = loader_(context);
     resources_.emplace(key, res);
     return res;
   }
@@ -113,13 +115,14 @@ public:
   auto Size() const noexcept -> std::size_t { return table_meta_.count; }
 
 private:
-  // Helper to type-erase a loader function, enforcing LoaderFunctionForStream
-  // concept
+  // Helper to type-erase a loader function, enforcing
+  // LoadFunctionForStream concept
   template <typename LoaderFn>
   static LoaderFnErased MakeTypeErasedLoader(LoaderFn&& fn)
   {
     return [fn = std::forward<LoaderFn>(fn)](
-             ReaderT& reader) -> std::shared_ptr<T> { return fn(reader); };
+             LoaderContext<std::remove_reference_t<S>> context)
+             -> std::shared_ptr<T> { return fn(context); };
   }
 
   // Helper: for index-based keys, just return the key

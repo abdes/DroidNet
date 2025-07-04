@@ -5,11 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
 
-using namespace oxygen::content;
-using namespace oxygen::data;
-using namespace oxygen::data::pak;
+using oxygen::content::PakFile;
+using oxygen::data::AssetKey;
+using oxygen::data::pak::AssetDirectoryEntry;
+using oxygen::data::pak::PakFooter;
+using oxygen::data::pak::PakHeader;
 
 namespace {
 // Helper to open a FileStream and throw with logging on error
@@ -36,7 +40,37 @@ size_t EntryIndex(const AssetDirectoryEntry& entry,
 }
 } // namespace
 
-namespace oxygen::content {
+void PakFile::InitBuffersTable() const
+{
+  DCHECK_F(!buffers_table_);
+
+  if (footer_.buffer_table.count > 0) {
+    DCHECK_GT_F(footer_.buffer_table.entry_size, 0U,
+      "resource table entry size must be greater than 0");
+    // Create a new FileStream from the original file path
+    auto table_stream
+      = std::make_unique<oxygen::serio::FileStream<>>(file_path_, std::ios::in);
+    buffers_table_.emplace(std::move(table_stream), footer_.buffer_table,
+      oxygen::content::loaders::LoadBufferResource<
+        oxygen::serio::FileStream<>>);
+  }
+}
+
+void PakFile::InitTexturesTable() const
+{
+  DCHECK_F(!textures_table_);
+
+  if (footer_.texture_table.count > 0) {
+    DCHECK_GT_F(footer_.texture_table.entry_size, 0U,
+      "resource table entry size must be greater than 0");
+    // Create a new FileStream from the original file path
+    auto table_stream
+      = std::make_unique<oxygen::serio::FileStream<>>(file_path_, std::ios::in);
+    textures_table_.emplace(std::move(table_stream), footer_.texture_table,
+      oxygen::content::loaders::LoadTextureResource<
+        oxygen::serio::FileStream<>>);
+  }
+}
 
 void PakFile::ReadHeader(oxygen::serio::FileStream<>* stream)
 {
@@ -90,7 +124,11 @@ void PakFile::ReadFooter(oxygen::serio::FileStream<>* stream)
   }
   footer_ = footer_result.value();
 
-  LOG_F(INFO, "pak hash         : {}", footer_.pak_hash);
+  // Initialize resource tables if present
+  InitBuffersTable();
+  InitTexturesTable();
+
+  LOG_F(INFO, "pak crc32        : {}", footer_.pak_crc32);
   LOG_F(INFO, "directory offset : {}", footer_.directory_offset);
   LOG_F(INFO, "directory size   : {}", footer_.directory_size);
   LOG_F(INFO, "asset count      : {}", footer_.asset_count);
@@ -138,7 +176,8 @@ void PakFile::ReadDirectory(
 }
 
 PakFile::PakFile(const std::filesystem::path& path)
-  : stream_(OpenFileStream(path))
+  : file_path_(path)
+  , stream_(OpenFileStream(path))
 {
   LOG_SCOPE_FUNCTION(INFO);
   LOG_F(INFO, "file : {}", path.string());
@@ -165,6 +204,16 @@ auto PakFile::Directory() const noexcept -> std::span<const AssetDirectoryEntry>
     directory_.data(), directory_.size());
 }
 
+auto PakFile::FormatVersion() const noexcept -> uint16_t
+{
+  return header_.version;
+}
+
+auto PakFile::ContentVersion() const noexcept -> uint16_t
+{
+  return header_.content_version;
+}
+
 auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
 {
   std::scoped_lock lock(mutex_);
@@ -180,4 +229,20 @@ auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
   return Reader(*stream_);
 }
 
-} // namespace oxygen::content
+auto PakFile::BuffersTable() const -> BuffersTableT&
+{
+  if (!buffers_table_) {
+    throw std::runtime_error(
+      "PakFile: No buffer resource table present in this file");
+  }
+  return *buffers_table_;
+}
+
+auto PakFile::TexturesTable() const -> TexturesTableT&
+{
+  if (!textures_table_) {
+    throw std::runtime_error(
+      "PakFile: No texture resource table present in this file");
+  }
+  return *textures_table_;
+}

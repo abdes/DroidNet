@@ -12,19 +12,23 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::loaders {
 
-//! Loader for texture assets.
+//! Loader for buffer assets.
 
-//! Loads a texture resource from a PAK file stream.
+//! Loads a buffer resource from a PAK file stream.
 template <oxygen::serio::Stream S>
-auto LoadBufferResource(oxygen::serio::Reader<S> reader)
+auto LoadBufferResource(LoaderContext<S> context)
   -> std::unique_ptr<data::BufferResource>
 {
   LOG_SCOPE_F(1, "Load Buffer Resource");
+  LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
+
+  auto& reader = context.reader.get();
 
   using oxygen::data::pak::BufferResourceDesc;
 
@@ -38,6 +42,7 @@ auto LoadBufferResource(oxygen::serio::Reader<S> reader)
   };
 
   // Read BufferResourceDesc from the stream
+  LOG_F(2, "-- buufer desc reader pos = {}", reader.position().value());
   auto result = reader.read<BufferResourceDesc>();
   check_result(result, "BufferResourceDesc");
   const auto& desc = result.value();
@@ -51,6 +56,7 @@ auto LoadBufferResource(oxygen::serio::Reader<S> reader)
   LOG_F(2, "element stride : {}", desc.element_stride);
 
   // Construct BufferResource using the new struct-based constructor
+  // Note: In offline mode, we skip any GPU resource creation
   return std::make_unique<data::BufferResource>(desc);
 }
 

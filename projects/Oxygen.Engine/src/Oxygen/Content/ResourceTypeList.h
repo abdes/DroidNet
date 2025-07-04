@@ -7,7 +7,6 @@
 #pragma once
 
 #include <Oxygen/Base/TypeList.h>
-#include <Oxygen/Content/ResourceTable.h>
 
 // Forward declarations for resource types
 namespace oxygen::data {
@@ -23,5 +22,10 @@ using ResourceTypeList = oxygen::TypeList<
   data::TextureResource
   // clang-format on
   >;
+
+// Concept: T must be a known resource type and have DescT
+template <typename T>
+concept PakResource = requires { typename T::DescT; }
+  && (oxygen::IndexOf<T, ResourceTypeList>::value >= 0);
 
 } // namespace oxygen::content

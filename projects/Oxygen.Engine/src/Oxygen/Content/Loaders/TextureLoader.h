@@ -12,6 +12,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
+#include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 
@@ -21,10 +23,13 @@ namespace oxygen::content::loaders {
 
 //! Loads a texture resource from a PAK file stream.
 template <oxygen::serio::Stream S>
-auto LoadTextureResource(oxygen::serio::Reader<S> reader)
+auto LoadTextureResource(LoaderContext<S> context)
   -> std::unique_ptr<data::TextureResource>
 {
   LOG_SCOPE_F(1, "Load Texture Resource");
+  LOG_F(2, "offline mode     : {}", context.offline ? "yes" : "no");
+
+  auto& reader = context.reader.get();
 
   using oxygen::data::pak::TextureResourceDesc;
 
@@ -58,6 +63,7 @@ auto LoadTextureResource(oxygen::serio::Reader<S> reader)
   LOG_F(2, "is cubemap       : {}", desc.is_cubemap ? "yes" : "no");
 
   // Construct TextureResource using the new struct-based constructor
+  // Note: In offline mode, we skip any GPU resource creation
   return std::make_unique<data::TextureResource>(desc);
 }
 

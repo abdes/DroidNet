@@ -12,18 +12,85 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 
 namespace oxygen::content::loaders {
 
+//! Register dependencies for a material asset with the asset loader.
+/*!
+ Registers resource dependencies for textures and handles future shader
+ dependencies.
+
+ @param loader The asset loader to register dependencies with
+ @param current_asset_key The asset key of the material being loaded
+ @param desc The material asset descriptor containing dependency information
+ */
+void RegisterMaterialDependencies(AssetLoader& loader,
+  const oxygen::data::AssetKey& current_asset_key,
+  const oxygen::data::pak::MaterialAssetDesc& desc)
+{
+  using oxygen::data::pak::ResourceIndexT;
+
+  // Register resource dependencies for non-zero texture indices
+  if (desc.base_color_texture != 0) {
+    LOG_F(2, "Registering resource dependency: base_color_texture = {}",
+      desc.base_color_texture);
+    loader.AddResourceDependency(current_asset_key, desc.base_color_texture);
+  }
+
+  if (desc.normal_texture != 0) {
+    LOG_F(2, "Registering resource dependency: normal_texture = {}",
+      desc.normal_texture);
+    loader.AddResourceDependency(current_asset_key, desc.normal_texture);
+  }
+
+  if (desc.metallic_texture != 0) {
+    LOG_F(2, "Registering resource dependency: metallic_texture = {}",
+      desc.metallic_texture);
+    loader.AddResourceDependency(current_asset_key, desc.metallic_texture);
+  }
+
+  if (desc.roughness_texture != 0) {
+    LOG_F(2, "Registering resource dependency: roughness_texture = {}",
+      desc.roughness_texture);
+    loader.AddResourceDependency(current_asset_key, desc.roughness_texture);
+  }
+
+  if (desc.ambient_occlusion_texture != 0) {
+    LOG_F(2, "Registering resource dependency: ambient_occlusion_texture = {}",
+      desc.ambient_occlusion_texture);
+    loader.AddResourceDependency(
+      current_asset_key, desc.ambient_occlusion_texture);
+  }
+
+  // TODO: Implement shader refs as resources
+  // Currently shader references are embedded data without asset keys
+  // In the future, shaders should be separate assets/resources with proper keys
+  //
+  // Register asset dependencies for shader references
+  // for (const auto& shader_ref : shader_refs) {
+  //   oxygen::data::AssetKey shader_asset_key = shader_ref.GetAssetKey();
+  //   LOG_F(2, "Registering asset dependency: shader = {}",
+  //   nostd::to_string(shader_asset_key));
+  //   loader.AddAssetDependency(current_asset_key, shader_asset_key);
+  // }
+}
+
 //! Loader for material assets.
 template <oxygen::serio::Stream S>
-auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
+auto LoadMaterialAsset(LoaderContext<S> context)
   -> std::unique_ptr<data::MaterialAsset>
 {
   LOG_SCOPE_FUNCTION(INFO);
+  LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
+
+  auto& reader = context.reader.get();
+  auto& loader
+    = *context.asset_loader; // Asset loaders always have non-null asset_loader
 
   using oxygen::ShaderType;
   using oxygen::data::ShaderReference;
@@ -155,6 +222,8 @@ auto LoadMaterialAsset(oxygen::serio::Reader<S> reader)
         shader_refs.back().GetShaderSourceHash());
     }
   }
+
+  RegisterMaterialDependencies(loader, context.current_asset_key, desc);
 
   return std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
 }
