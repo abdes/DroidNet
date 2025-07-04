@@ -126,8 +126,12 @@
   },
   "[cpp]": {
     "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.formatOnSave": true,
   },
-  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true
+  },
   "C_Cpp.codeAnalysis.clangTidy.enabled": true,
   "C_Cpp.codeAnalysis.clangTidy.args": [
     "--config-file=${workspaceFolder}/.clang-tidy",
@@ -181,5 +185,8 @@
     }
   ],
   "github.copilot.chat.agent.thinkingTool": true,
-  "C_Cpp.clang_format_style": "file"
+  "C_Cpp.clang_format_style": "file",
+  "black-formatter.args": [
+    "--line-length", "80"
+  ]
 }
