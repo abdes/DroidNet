@@ -110,7 +110,8 @@ static_assert(sizeof(ResourceRegion) == 16);
 #pragma pack(push, 1)
 struct ResourceTable {
   uint64_t offset = 0; // Absolute offset from start of PAK file
-  uint64_t count = 0; // Number of entries in table
+  uint32_t count = 0; // Number of entries in table
+  uint32_t entry_size = 0; // Size of each entry in bytes
 };
 #pragma pack(pop)
 static_assert(sizeof(ResourceTable) == 16);
@@ -250,7 +251,7 @@ static_assert(sizeof(TextureResourceDesc) == 40);
 */
 #pragma pack(push, 1)
 struct BufferResourceDesc {
-  OffsetT offset_bytes = 0; //!< Absolute offset to buffer data in the pak
+  OffsetT data_offset = 0; //!< Absolute offset to buffer data in the pak
   DataBlobSizeT size_bytes = 0; //!< Size of buffer data in bytes
   uint32_t usage_flags = 0; //!< Usage hints (see above)
   uint32_t element_stride = 0; //!< 1 for raw buffers, 0 when unused

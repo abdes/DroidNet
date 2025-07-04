@@ -49,6 +49,7 @@ target_sources(
   PRIVATE
     "AssetLoader.cpp"
     "PakFile.cpp"
+    "Loaders/BufferLoader.h"
     "Loaders/GeometryLoader.h"
     "Loaders/MaterialLoader.h"
     "Loaders/TextureLoader.h"

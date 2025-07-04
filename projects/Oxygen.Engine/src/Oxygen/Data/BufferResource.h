@@ -25,7 +25,7 @@ namespace oxygen::data {
  ```text
  offset size name             description
  ------ ---- ---------------- ---------------------------------------------
- 0x00   8    offset_bytes     Absolute offset to buffer data in PAK file
+ 0x00   8    data_offset     Absolute offset to buffer data in PAK file
  0x08   4    size_bytes       Size of buffer data in bytes
  0x0C   4    usage_flags      Buffer usage and access flags (bitfield)
  0x10   4    element_stride   Stride of each element in bytes (1 = raw)
@@ -39,6 +39,9 @@ class BufferResource : public oxygen::Object {
   OXYGEN_TYPED(BufferResource)
 
 public:
+  //! Type alias for the descriptor type used by this resource.
+  using DescT = pak::BufferResourceDesc;
+
   //! Buffer usage and access flags for BufferResource.
   enum class UsageFlags : uint32_t {
     kNone = 0, //!< No flags set
@@ -72,7 +75,7 @@ public:
 
   [[nodiscard]] auto GetDataOffset() const noexcept
   {
-    return desc_.offset_bytes;
+    return desc_.data_offset;
   }
 
   [[nodiscard]] auto GetDataSize() const noexcept { return desc_.size_bytes; }
@@ -122,6 +125,6 @@ private:
 OXYGEN_DEFINE_FLAGS_OPERATORS(BufferResource::UsageFlags)
 
 // Returns a string representation of UsageFlags bitmask.
-auto to_string(BufferResource::UsageFlags value) -> std::string;
+OXGN_DATA_NDAPI auto to_string(BufferResource::UsageFlags value) -> std::string;
 
 } // namespace oxygen::data

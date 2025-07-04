@@ -54,3 +54,10 @@ m_gtest_program(
     "GeometryLoader_basic_test.cpp"
     "GeometryLoader_error_test.cpp"
 )
+
+m_gtest_program(
+  ResourceTable
+  SOURCES
+    "BufferTable_test.cpp"
+    "TextureTable_test.cpp"
+)
