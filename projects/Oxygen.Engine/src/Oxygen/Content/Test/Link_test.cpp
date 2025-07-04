@@ -8,19 +8,20 @@
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 
 class DummyAsset : public oxygen::Object {
   OXYGEN_TYPED(DummyAsset)
 };
 
 template <oxygen::serio::Stream S>
-auto DummyLoader(oxygen::serio::Reader<S> /*reader*/)
+auto DummyLoader(oxygen::content::LoaderContext<S> /*context*/)
   -> std::unique_ptr<DummyAsset>
 {
   return std::make_unique<DummyAsset>();
 }
 
-static_assert(oxygen::content::LoaderFunction<
+static_assert(oxygen::content::LoadFunction<
   decltype(DummyLoader<oxygen::serio::FileStream<>>)>);
 
 auto main(int /*argc*/, char** /*argv*/) -> int

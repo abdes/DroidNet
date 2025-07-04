@@ -93,6 +93,13 @@ private:
  - **1:1 Material**: Each SubMesh must reference exactly one MaterialAsset.
  - Construction will fail (assert) if these constraints are violated.
 
+ ### Constructor Variants
+
+ - **From PAK data**: Uses pak::SubMeshDesc and resolves material reference
+ later
+ - **For procedural/builder**: Directly accepts MaterialAsset for
+ runtime-generated meshes
+
  ### Key Features
 
  - **Material Association**: Each submesh references a MaterialAsset.
@@ -107,14 +114,6 @@ private:
 */
 class SubMesh {
 public:
-  // Only Mesh should construct SubMesh. Do not construct directly.
-  OXGN_DATA_API SubMesh(
-    const Mesh& mesh, pak::SubMeshDesc desc, std::vector<MeshView> meshviews);
-
-  OXGN_DATA_API SubMesh(const Mesh& mesh, std::string name,
-    std::vector<MeshView> meshviews,
-    std::shared_ptr<const MaterialAsset> material);
-
   ~SubMesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(SubMesh)
@@ -138,23 +137,33 @@ public:
     return material_;
   }
 
-private:
+protected:
   // Allow MeshBuilder to set up mesh views directly
   friend class MeshBuilder;
 
-  SubMesh(const Mesh& mesh, std::string name,
-    std::shared_ptr<const MaterialAsset> material)
-    : mesh_(mesh)
-    , name_(std::move(name))
-    , material_(std::move(material))
-  {
-  }
+  OXGN_DATA_API SubMesh(const Mesh& mesh, std::string name,
+    std::shared_ptr<const MaterialAsset> material);
 
   // Only for MeshBuilder: set mesh views after construction
   void AddMeshViewInternal(pak::MeshViewDesc view_desc)
   {
     mesh_views_.emplace_back(mesh_.get(), std::move(view_desc));
   }
+
+  // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
+  void SetDescriptor(pak::SubMeshDesc desc) { desc_ = std::move(desc); }
+
+private:
+  //! Computes bounding box and sphere - handles both PAK and procedural cases.
+  /*!
+   Computes bounding data using the most appropriate method:
+   - If PAK descriptor exists: uses pre-computed bounding box
+   - If no descriptor: computes bounding box from mesh view vertices
+   - Always computes bounding sphere from the resulting bounding box
+
+   Data members are the single source of truth for bounding information.
+  */
+  auto ComputeBounds() -> void;
 
   std::reference_wrapper<const Mesh> mesh_;
 
@@ -207,13 +216,6 @@ private:
 */
 class Mesh {
 public:
-  //! Constructs a Mesh with the given name, vertices, and indices.
-  OXGN_DATA_API Mesh(
-    uint32_t lod, pak::MeshDesc desc, std::vector<SubMesh> submeshes);
-
-  OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
-    std::vector<std::uint32_t> indices, std::vector<SubMesh> submeshes);
-
   ~Mesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Mesh)
@@ -259,11 +261,6 @@ public:
     return !indices_.empty();
   }
 
-  //! Adds a submesh containing its meshviews and a material.
-  OXGN_DATA_API auto AddSubMesh(std::string name,
-    std::vector<MeshView> meshviews,
-    std::shared_ptr<const MaterialAsset> material) -> void;
-
   //! Returns a span of all submeshes.
   [[nodiscard]] auto SubMeshes() const noexcept -> std::span<const SubMesh>
   {
@@ -294,17 +291,13 @@ public:
     return !submeshes_.empty();
   }
 
+protected:
   // Allow MeshBuilder to set up submeshes directly
   friend class MeshBuilder;
 
-protected:
   // For builder and testing
   OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
     std::vector<std::uint32_t> indices);
-
-private:
-  // For builder name override
-  void SetName(std::string name) { name_ = std::move(name); }
 
   // Only for MeshBuilder: add a fully constructed SubMesh
   void AddSubMeshInternal(SubMesh&& submesh)
@@ -312,15 +305,24 @@ private:
     submeshes_.emplace_back(std::move(submesh));
   }
 
-  //! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
+  // For builder name override
+  void SetName(std::string name) { name_ = std::move(name); }
+
+  // Only for MeshBuilder: set PAK descriptor for bounding optimization
+  void SetDescriptor(pak::MeshDesc desc) { desc_ = std::move(desc); }
+
+private:
+  //! Computes bounding box and sphere - handles both PAK and procedural cases.
   /*!
-   Scans all vertex positions and updates bbox_min_ and bbox_max_ to enclose all
-   vertices. Should be called during construction or after loading new vertex
-   data.
+   Computes bounding data using the most appropriate method:
+   - If PAK descriptor exists: uses pre-computed bounding box
+   - If no descriptor: computes bounding box from vertices
+   - Always computes bounding sphere from the resulting bounding box
+
+   Data members are the single source of truth for bounding information.
    @note This is a private utility for internal use only.
   */
-  auto ComputeBoundingBox() -> void;
-  auto ComputeBoundingSphere() -> void;
+  auto ComputeBounds() -> void;
 
   std::string name_ {};
   glm::vec3 bbox_min_ {};
@@ -378,12 +380,6 @@ public:
   [[nodiscard]] auto GetHeader() const noexcept -> const pak::AssetHeader&
   {
     return desc_.header;
-  }
-
-  //! Returns the asset name (from header).
-  [[nodiscard]] auto GetName() const noexcept -> std::string_view
-  {
-    return desc_.header.name;
   }
 
   //! Returns the minimum corner of the asset's axis-aligned bounding box
@@ -456,6 +452,12 @@ public:
     return *this;
   }
 
+  auto WithDescriptor(pak::SubMeshDesc desc) -> SubMeshBuilder&
+  {
+    desc_ = std::move(desc);
+    return *this;
+  }
+
   auto EndSubMesh() -> MeshBuilder&;
 
   //! Returns true if at least one mesh view has been added.
@@ -489,6 +491,7 @@ private:
   std::string name_;
   std::shared_ptr<const MaterialAsset> material_;
   std::vector<pak::MeshViewDesc> mesh_views_;
+  std::optional<pak::SubMeshDesc> desc_;
 
   friend class MeshBuilder;
 };
@@ -537,6 +540,12 @@ public:
     return *this;
   }
 
+  auto WithDescriptor(pak::MeshDesc desc) -> MeshBuilder&
+  {
+    desc_ = std::move(desc);
+    return *this;
+  }
+
   //! Begins a new submesh definition. Returns a SubMeshBuilder for mesh view
   //! accumulation.
   auto BeginSubMesh(std::string name,
@@ -556,6 +565,7 @@ public:
       .name = submesh_builder.Name(),
       .material = submesh_builder.Material(),
       .mesh_views = submesh_builder.MeshViews(),
+      .desc = submesh_builder.desc_,
     });
     return *this;
   }
@@ -573,8 +583,10 @@ private:
     std::string name;
     std::shared_ptr<const MaterialAsset> material;
     std::vector<pak::MeshViewDesc> mesh_views;
+    std::optional<pak::SubMeshDesc> desc;
   };
   std::vector<SubMeshSpec> submeshes_;
+  std::optional<pak::MeshDesc> desc_;
 
   friend class SubMeshBuilder;
   void AddSubMeshFromBuilder(const SubMeshBuilder& builder)
@@ -583,6 +595,7 @@ private:
       .name = builder.Name(),
       .material = builder.Material(),
       .mesh_views = builder.MeshViews(),
+      .desc = builder.desc_,
     });
   }
 };

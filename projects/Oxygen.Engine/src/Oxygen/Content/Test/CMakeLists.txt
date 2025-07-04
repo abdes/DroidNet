@@ -30,8 +30,8 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 # -- Assets Dump Tool ----------------------------------------------------------
 
-set(dump_assets_target "Oxygen.Content.DumpAssets")
-add_executable(${dump_assets_target} "dump_assets.cpp")
+set(dump_assets_target "Oxygen.Content.DumpPakFile")
+add_executable(${dump_assets_target} "PakFileDumper.cpp")
 set_target_properties(
   ${link_test_target}
   PROPERTIES

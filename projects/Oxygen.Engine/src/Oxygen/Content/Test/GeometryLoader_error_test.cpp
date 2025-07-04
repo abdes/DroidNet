@@ -7,6 +7,8 @@
 #include <Oxygen/Base/MemoryStream.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -17,6 +19,7 @@
 
 using ::testing::AllOf;
 using ::testing::Eq;
+using ::testing::NiceMock;
 using ::testing::SizeIs;
 
 using GeometryAsset = oxygen::data::GeometryAsset;
@@ -26,12 +29,40 @@ using Reader = oxygen::serio::Reader<MemoryStream>;
 
 namespace {
 
+//=== Mock AssetLoader
+//===------------------------------------------------------//
+
+//! Mock AssetLoader for lightweight testing without PAK file dependencies.
+class MockAssetLoader : public oxygen::content::AssetLoader {
+public:
+  MOCK_METHOD(void, AddAssetDependency,
+    (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
+  MOCK_METHOD(void, AddResourceDependency,
+    (const oxygen::data::AssetKey&, oxygen::data::pak::ResourceIndexT),
+    (override));
+};
+
 //=== GeometryLoader Edge Tests ===---------------------------------------//
 
 //!
 //! Fixture for GeometryLoader edge tests
 //!
-struct GeometryLoaderEdgeTest : public ::testing::Test { };
+struct GeometryLoaderEdgeTest : public ::testing::Test {
+protected:
+  NiceMock<MockAssetLoader> asset_loader;
+
+  //! Helper method to create LoaderContext for testing.
+  template <typename StreamT>
+  auto CreateLoaderContext(oxygen::serio::Reader<StreamT>& reader)
+    -> oxygen::content::LoaderContext<StreamT>
+  {
+    return oxygen::content::LoaderContext<StreamT> { .asset_loader
+      = &asset_loader,
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .reader = std::ref(reader),
+      .offline = false };
+  }
+};
 
 //! Scenario: LoadMesh throws if name is not null-terminated
 TEST_F(
@@ -70,7 +101,8 @@ TEST_F(
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 //=== GeometryLoader Error Tests ===---------------------------------------//
@@ -78,7 +110,22 @@ TEST_F(
 //!
 //! Fixture for GeometryLoader error tests
 //!
-struct GeometryLoaderErrorTest : public ::testing::Test { };
+struct GeometryLoaderErrorTest : public ::testing::Test {
+protected:
+  NiceMock<MockAssetLoader> asset_loader;
+
+  //! Helper method to create LoaderContext for testing.
+  template <typename StreamT>
+  auto CreateLoaderContext(oxygen::serio::Reader<StreamT>& reader)
+    -> oxygen::content::LoaderContext<StreamT>
+  {
+    return oxygen::content::LoaderContext<StreamT> { .asset_loader
+      = &asset_loader,
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .reader = std::ref(reader),
+      .offline = false };
+  }
+};
 
 //! Scenario: LoadGeometryAsset throws if header is invalid
 TEST_F(GeometryLoaderErrorTest,
@@ -100,8 +147,9 @@ TEST_F(GeometryLoaderErrorTest,
   Reader reader(stream);
 
   // Act & Assert
+  auto context = CreateLoaderContext(reader);
   EXPECT_THROW(
-    oxygen::content::loaders::LoadGeometryAsset(reader), std::runtime_error);
+    oxygen::content::loaders::LoadGeometryAsset(context), std::runtime_error);
 }
 
 //!
@@ -150,7 +198,8 @@ TEST_F(GeometryLoaderErrorTest,
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 //!
@@ -190,7 +239,8 @@ TEST_F(GeometryLoaderErrorTest,
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 //!
@@ -219,7 +269,8 @@ TEST_F(GeometryLoaderErrorTest,
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 //!
@@ -259,7 +310,8 @@ TEST_F(GeometryLoaderErrorTest,
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 //!
@@ -301,7 +353,8 @@ TEST_F(
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::exception);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
 } // namespace

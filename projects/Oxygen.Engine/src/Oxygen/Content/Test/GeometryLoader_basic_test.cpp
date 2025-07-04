@@ -12,6 +12,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Writer.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -19,6 +21,7 @@
 
 using ::testing::AllOf;
 using ::testing::Eq;
+using ::testing::NiceMock;
 using ::testing::SizeIs;
 
 using GeometryAsset = oxygen::data::GeometryAsset;
@@ -28,12 +31,40 @@ using Reader = oxygen::serio::Reader<MemoryStream>;
 
 namespace {
 
+//=== Mock AssetLoader
+//===------------------------------------------------------//
+
+//! Mock AssetLoader for lightweight testing without PAK file dependencies.
+class MockAssetLoader : public oxygen::content::AssetLoader {
+public:
+  MOCK_METHOD(void, AddAssetDependency,
+    (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
+  MOCK_METHOD(void, AddResourceDependency,
+    (const oxygen::data::AssetKey&, oxygen::data::pak::ResourceIndexT),
+    (override));
+};
+
 //=== GeometryLoader Basic Tests ===---------------------------------------//
 
 //!
 //! Fixture for GeometryLoader basic tests
 //!
-struct GeometryLoaderBasicTest : public ::testing::Test { };
+struct GeometryLoaderBasicTest : public ::testing::Test {
+protected:
+  NiceMock<MockAssetLoader> asset_loader;
+
+  //! Helper method to create LoaderContext for testing.
+  template <typename StreamT>
+  auto CreateLoaderContext(oxygen::serio::Reader<StreamT>& reader)
+    -> oxygen::content::LoaderContext<StreamT>
+  {
+    return oxygen::content::LoaderContext<StreamT> { .asset_loader
+      = &asset_loader,
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .reader = std::ref(reader),
+      .offline = false };
+  }
+};
 
 //! Scenario: LoadMesh throws if buffer is too short for MeshDesc
 TEST_F(GeometryLoaderBasicTest, LoadMesh_ThrowsOnShortBuffer) // NOLINT_BASIC
@@ -44,7 +75,8 @@ TEST_F(GeometryLoaderBasicTest, LoadMesh_ThrowsOnShortBuffer) // NOLINT_BASIC
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::runtime_error);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::runtime_error);
 }
 
 //! Scenario: LoadGeometryAsset throws if buffer is too short for
@@ -59,8 +91,9 @@ TEST_F(GeometryLoaderBasicTest,
   Reader reader(stream);
 
   // Act & Assert
+  auto context = CreateLoaderContext(reader);
   EXPECT_THROW(
-    oxygen::content::loaders::LoadGeometryAsset(reader), std::runtime_error);
+    oxygen::content::loaders::LoadGeometryAsset(context), std::runtime_error);
 }
 
 //! Scenario: LoadMesh returns nullptr for empty buffer
@@ -73,7 +106,8 @@ TEST_F(
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(oxygen::content::loaders::LoadMesh(reader), std::runtime_error);
+  auto context = CreateLoaderContext(reader);
+  EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::runtime_error);
 }
 
 //! Scenario: LoadGeometryAsset returns nullptr for empty buffer
@@ -86,8 +120,9 @@ TEST_F(GeometryLoaderBasicTest,
   Reader reader(stream);
 
   // Act & Assert
+  auto context = CreateLoaderContext(reader);
   EXPECT_THROW(
-    oxygen::content::loaders::LoadGeometryAsset(reader), std::runtime_error);
+    oxygen::content::loaders::LoadGeometryAsset(context), std::runtime_error);
 }
 
 //! Scenario: LoadGeometryAsset parses a minimal valid asset
@@ -195,7 +230,8 @@ TEST_F(GeometryLoaderBasicTest,
 
   // Act
   std::unique_ptr<GeometryAsset> asset;
-  EXPECT_NO_THROW(asset = oxygen::content::loaders::LoadGeometryAsset(reader));
+  auto context = CreateLoaderContext(reader);
+  EXPECT_NO_THROW(asset = oxygen::content::loaders::LoadGeometryAsset(context));
 
   // Assert
   ASSERT_NE(asset, nullptr);
@@ -208,6 +244,255 @@ TEST_F(GeometryLoaderBasicTest,
   EXPECT_FLOAT_EQ(desc.bounding_box_min[0], -1.0f);
   EXPECT_FLOAT_EQ(desc.bounding_box_max[2], 1.0f);
   // No further mesh/submesh structure is accessible from GeometryAsset API
+}
+
+//=== GeometryLoader Dependency Management Tests ===------------------------//
+
+//! Test: LoadGeometryAsset registers resource dependencies for vertex/index
+//! buffers.
+TEST_F(GeometryLoaderBasicTest,
+  LoadGeometryAsset_ValidBuffers_RegistersResourceDependencies) // NOLINT_BASIC
+{
+  using namespace oxygen::data;
+  using namespace oxygen::data::pak;
+
+  // Arrange
+  constexpr uint32_t lod_count = 1;
+  constexpr uint32_t submesh_count = 1;
+  constexpr ResourceIndexT vertex_buffer_index = 100;
+  constexpr ResourceIndexT index_buffer_index = 101;
+
+  MemoryStream stream;
+  oxygen::serio::Writer<MemoryStream> writer(stream);
+  auto align_guard = writer.ScopedAlignement(1);
+
+  // Write minimal GeometryAssetDesc
+  AssetHeader header {};
+  header.asset_type = 1;
+  {
+    constexpr auto src = "TestAsset";
+    constexpr auto src_len = std::char_traits<char>::length(src);
+    constexpr auto copy_len = std::min(src_len, kMaxNameSize - 1);
+    std::copy_n(src, copy_len, header.name);
+    std::fill(header.name + copy_len, header.name + kMaxNameSize, '\0');
+  }
+  header.version = 1;
+  (void)writer.write(header);
+  (void)writer.write(lod_count);
+
+  // Bounding boxes
+  float bbox[6] = { -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f };
+  for (float v : bbox)
+    (void)writer.write(v);
+
+  // Reserved
+  std::array<std::byte, sizeof(GeometryAssetDesc::reserved)> reserved {};
+  (void)writer.write_blob(reserved);
+
+  // Write MeshDesc with specific buffer indices
+  char mesh_name[kMaxNameSize] = "TestMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(mesh_name, kMaxNameSize)));
+  (void)writer.write(vertex_buffer_index); // vertex_buffer
+  (void)writer.write(index_buffer_index); // index_buffer
+  (void)writer.write(submesh_count);
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // mesh bounding box
+
+  // Write SubMeshDesc
+  char submesh_name[kMaxNameSize] = "TestSubMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(submesh_name, kMaxNameSize)));
+  (void)writer.write(
+    AssetKey {}); // material_asset_key (zero - no asset dependency)
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // submesh bounding box
+
+  // Write MeshViewDesc
+  MeshViewDesc mesh_view {};
+  mesh_view.vertex_count = 1;
+  mesh_view.index_count = 1;
+  (void)writer.write(mesh_view);
+
+  (void)stream.seek(0);
+  Reader reader(stream);
+
+  // Expect resource dependency registrations for vertex and index buffers
+  EXPECT_CALL(
+    asset_loader, AddResourceDependency(::testing::_, vertex_buffer_index));
+  EXPECT_CALL(
+    asset_loader, AddResourceDependency(::testing::_, index_buffer_index));
+
+  // Act
+  std::unique_ptr<GeometryAsset> asset;
+  auto context = CreateLoaderContext(reader);
+  EXPECT_NO_THROW(asset = oxygen::content::loaders::LoadGeometryAsset(context));
+
+  // Assert
+  ASSERT_NE(asset, nullptr);
+}
+
+//! Test: LoadGeometryAsset registers asset dependencies for materials.
+TEST_F(GeometryLoaderBasicTest,
+  LoadGeometryAsset_ValidMaterial_RegistersAssetDependencies) // NOLINT_BASIC
+{
+  using namespace oxygen::data;
+  using namespace oxygen::data::pak;
+
+  // Arrange
+  constexpr uint32_t lod_count = 1;
+  constexpr uint32_t submesh_count = 1;
+  AssetKey material_key { .guid = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                            14, 15, 16 } }; // Non-zero material key
+
+  MemoryStream stream;
+  oxygen::serio::Writer<MemoryStream> writer(stream);
+  auto align_guard = writer.ScopedAlignement(1);
+
+  // Write minimal GeometryAssetDesc
+  AssetHeader header {};
+  header.asset_type = 1;
+  {
+    constexpr auto src = "TestAsset";
+    constexpr auto src_len = std::char_traits<char>::length(src);
+    constexpr auto copy_len = std::min(src_len, kMaxNameSize - 1);
+    std::copy_n(src, copy_len, header.name);
+    std::fill(header.name + copy_len, header.name + kMaxNameSize, '\0');
+  }
+  header.version = 1;
+  (void)writer.write(header);
+  (void)writer.write(lod_count);
+
+  // Bounding boxes
+  float bbox[6] = { -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f };
+  for (float v : bbox)
+    (void)writer.write(v);
+
+  // Reserved
+  std::array<std::byte, sizeof(GeometryAssetDesc::reserved)> reserved {};
+  (void)writer.write_blob(reserved);
+
+  // Write MeshDesc
+  char mesh_name[kMaxNameSize] = "TestMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(mesh_name, kMaxNameSize)));
+  (void)writer.write(static_cast<ResourceIndexT>(1)); // vertex_buffer
+  (void)writer.write(static_cast<ResourceIndexT>(1)); // index_buffer
+  (void)writer.write(submesh_count);
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // mesh bounding box
+
+  // Write SubMeshDesc with material dependency
+  char submesh_name[kMaxNameSize] = "TestSubMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(submesh_name, kMaxNameSize)));
+  (void)writer.write(material_key); // material_asset_key (non-zero)
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // submesh bounding box
+
+  // Write MeshViewDesc
+  MeshViewDesc mesh_view {};
+  mesh_view.vertex_count = 1;
+  mesh_view.index_count = 1;
+  (void)writer.write(mesh_view);
+
+  (void)stream.seek(0);
+  Reader reader(stream);
+
+  // Expect asset dependency registration for material
+  EXPECT_CALL(asset_loader, AddAssetDependency(::testing::_, material_key));
+
+  // Act
+  std::unique_ptr<GeometryAsset> asset;
+  auto context = CreateLoaderContext(reader);
+  EXPECT_NO_THROW(asset = oxygen::content::loaders::LoadGeometryAsset(context));
+
+  // Assert
+  ASSERT_NE(asset, nullptr);
+}
+
+//! Test: LoadGeometryAsset skips zero material keys (no asset dependencies).
+TEST_F(GeometryLoaderBasicTest,
+  LoadGeometryAsset_ZeroMaterial_SkipsDependencies) // NOLINT_BASIC
+{
+  using namespace oxygen::data;
+  using namespace oxygen::data::pak;
+
+  // Arrange
+  constexpr uint32_t lod_count = 1;
+  constexpr uint32_t submesh_count = 1;
+
+  MemoryStream stream;
+  oxygen::serio::Writer<MemoryStream> writer(stream);
+  auto align_guard = writer.ScopedAlignement(1);
+
+  // Write minimal GeometryAssetDesc
+  AssetHeader header {};
+  header.asset_type = 1;
+  {
+    constexpr auto src = "TestAsset";
+    constexpr auto src_len = std::char_traits<char>::length(src);
+    constexpr auto copy_len = std::min(src_len, kMaxNameSize - 1);
+    std::copy_n(src, copy_len, header.name);
+    std::fill(header.name + copy_len, header.name + kMaxNameSize, '\0');
+  }
+  header.version = 1;
+  (void)writer.write(header);
+  (void)writer.write(lod_count);
+
+  // Bounding boxes
+  float bbox[6] = { -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f };
+  for (float v : bbox)
+    (void)writer.write(v);
+
+  // Reserved
+  std::array<std::byte, sizeof(GeometryAssetDesc::reserved)> reserved {};
+  (void)writer.write_blob(reserved);
+
+  // Write MeshDesc
+  char mesh_name[kMaxNameSize] = "TestMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(mesh_name, kMaxNameSize)));
+  (void)writer.write(static_cast<ResourceIndexT>(1)); // vertex_buffer
+  (void)writer.write(static_cast<ResourceIndexT>(1)); // index_buffer
+  (void)writer.write(submesh_count);
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // mesh bounding box
+
+  // Write SubMeshDesc with zero material key
+  char submesh_name[kMaxNameSize] = "TestSubMesh";
+  (void)writer.write_blob(
+    std::as_bytes(std::span<const char>(submesh_name, kMaxNameSize)));
+  (void)writer.write(AssetKey {}); // material_asset_key (zero - no dependency)
+  (void)writer.write(static_cast<uint32_t>(1)); // mesh_view_count
+  for (float v : bbox)
+    (void)writer.write(v); // submesh bounding box
+
+  // Write MeshViewDesc
+  MeshViewDesc mesh_view {};
+  mesh_view.vertex_count = 1;
+  mesh_view.index_count = 1;
+  (void)writer.write(mesh_view);
+
+  (void)stream.seek(0);
+  Reader reader(stream);
+
+  // Expect NO asset dependency calls for zero material key
+  EXPECT_CALL(asset_loader, AddAssetDependency(::testing::_, ::testing::_))
+    .Times(0);
+
+  // Act
+  std::unique_ptr<GeometryAsset> asset;
+  auto context = CreateLoaderContext(reader);
+  EXPECT_NO_THROW(asset = oxygen::content::loaders::LoadGeometryAsset(context));
+
+  // Assert
+  ASSERT_NE(asset, nullptr);
 }
 
 } // namespace

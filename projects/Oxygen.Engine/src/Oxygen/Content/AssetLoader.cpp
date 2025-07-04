@@ -7,10 +7,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
-// #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
 // #include <Oxygen/Content/Loaders/MeshLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
 
 using namespace oxygen::content;
 
@@ -20,10 +19,8 @@ AssetLoader::AssetLoader()
 
   LOG_SCOPE_FUNCTION(INFO);
 
-  // RegisterLoader(loaders::LoadGeometry);
-  // RegisterLoader(loaders::LoadMesh);
+  RegisterLoader(loaders::LoadGeometryAsset<FileStream<>>);
   RegisterLoader(loaders::LoadMaterialAsset<FileStream<>>);
-  RegisterLoader(loaders::LoadTextureResource<FileStream<>>);
 }
 
 void AssetLoader::AddPakFile(const std::filesystem::path& path)
@@ -40,4 +37,32 @@ void AssetLoader::AddTypeErasedLoader(
   } else {
     LOG_F(INFO, "Registered loader for type: {}/{}", type_id, type_name);
   }
+}
+
+void AssetLoader::AddAssetDependency(const oxygen::data::AssetKey& dependent,
+  const oxygen::data::AssetKey& dependency)
+{
+  LOG_SCOPE_F(2, "Add Asset Dependency");
+  LOG_F(2, "dependent: {} -> dependency: {}", nostd::to_string(dependent),
+    nostd::to_string(dependency));
+
+  // Add forward dependency
+  asset_dependencies_[dependent].insert(dependency);
+
+  // Add reverse dependency for reference counting
+  reverse_asset_dependencies_[dependency].insert(dependent);
+}
+
+void AssetLoader::AddResourceDependency(const oxygen::data::AssetKey& dependent,
+  oxygen::data::pak::ResourceIndexT resource_index)
+{
+  LOG_SCOPE_F(2, "Add Resource Dependency");
+  LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent),
+    resource_index);
+
+  // Add forward dependency
+  resource_dependencies_[dependent].insert(resource_index);
+
+  // Add reverse dependency for reference counting
+  reverse_resource_dependencies_[resource_index].insert(dependent);
 }

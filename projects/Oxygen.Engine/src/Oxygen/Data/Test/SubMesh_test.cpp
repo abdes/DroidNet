@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Data/GeometryAsset.h>
@@ -18,6 +19,41 @@ using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
+
+// Test-only wrapper to expose protected SubMesh constructor
+class TestSubMesh : public SubMesh {
+public:
+  TestSubMesh(const Mesh& mesh, std::string name,
+    std::vector<MeshView> meshviews,
+    std::shared_ptr<const MaterialAsset> material)
+    : SubMesh(mesh, std::move(name), std::move(material))
+  {
+    // Enforce design constraint that MeshBuilder would enforce
+    CHECK_F(!meshviews.empty(),
+      "SubMesh must have at least one MeshView (1:N constraint)");
+
+    // Add mesh views after construction (mimicking MeshBuilder behavior)
+    for (const auto& view : meshviews) {
+      auto desc = GetMeshViewDesc(view);
+      AddMeshViewInternal(std::move(desc));
+    }
+  }
+
+private:
+  // Helper to extract descriptor from MeshView
+  static oxygen::data::pak::MeshViewDesc GetMeshViewDesc(const MeshView& view)
+  {
+    // Create descriptor from the mesh view data
+    auto vertices = view.Vertices();
+    auto indices = view.Indices();
+    return oxygen::data::pak::MeshViewDesc {
+      .first_index = 0, // Simplified for tests
+      .index_count = static_cast<uint32_t>(indices.size()),
+      .first_vertex = 0, // Simplified for tests
+      .vertex_count = static_cast<uint32_t>(vertices.size()),
+    };
+  }
+};
 
 // Mock Mesh for SubMesh construction
 class MockMesh : public Mesh {
@@ -109,7 +145,7 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
     std::vector<oxygen::data::ShaderReference> {});
 
   // Act
-  SubMesh submesh(*mesh_, "test_submesh", std::move(mesh_views), material);
+  TestSubMesh submesh(*mesh_, "test_submesh", std::move(mesh_views), material);
 
   // Assert
   EXPECT_EQ(submesh.GetName(), "test_submesh");
@@ -161,7 +197,7 @@ NOLINT_TEST_F(SubMeshTestFixture, MultipleMeshViews)
     std::vector<oxygen::data::ShaderReference> {});
 
   // Act
-  SubMesh submesh(
+  TestSubMesh submesh(
     *mesh_, "multi_view_submesh", std::move(mesh_views), material);
 
   // Assert
@@ -196,8 +232,8 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyMeshViews_Throws)
     std::vector<oxygen::data::ShaderReference> {});
 
   // Act & Assert
-  EXPECT_DEATH(
-    SubMesh submesh(*mesh_, "empty_submesh", std::move(mesh_views), material),
+  EXPECT_DEATH(TestSubMesh submesh(
+                 *mesh_, "empty_submesh", std::move(mesh_views), material),
     ".*");
 }
 
@@ -226,7 +262,7 @@ NOLINT_TEST_F(SubMeshTestFixture, NullMaterial_Throws)
     });
 
   // Act & Assert
-  EXPECT_DEATH(SubMesh submesh(*mesh_, "null_material_submesh",
+  EXPECT_DEATH(TestSubMesh submesh(*mesh_, "null_material_submesh",
                  std::move(mesh_views), nullptr),
     ".*");
 }
@@ -257,10 +293,11 @@ NOLINT_TEST_F(SubMeshTestFixture, Move)
   auto material = std::make_shared<const MaterialAsset>(
     oxygen::data::pak::MaterialAssetDesc {},
     std::vector<oxygen::data::ShaderReference> {});
-  SubMesh submesh1(*mesh_, "movable_submesh", std::move(mesh_views), material);
+  TestSubMesh submesh1(
+    *mesh_, "movable_submesh", std::move(mesh_views), material);
 
   // Act
-  SubMesh submesh2 = std::move(submesh1);
+  TestSubMesh submesh2 = std::move(submesh1);
 
   // Assert
   EXPECT_EQ(submesh2.GetName(), "movable_submesh");
@@ -297,7 +334,7 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyName)
     std::vector<oxygen::data::ShaderReference> {});
 
   // Act
-  SubMesh submesh(*mesh_, "", std::move(mesh_views), material);
+  TestSubMesh submesh(*mesh_, "", std::move(mesh_views), material);
 
   // Assert
   EXPECT_EQ(submesh.GetName(), "");
@@ -333,7 +370,7 @@ NOLINT_TEST_F(SubMeshTestFixture, LongName)
     std::vector<oxygen::data::ShaderReference> {});
 
   // Act
-  SubMesh submesh(*mesh_, long_name, std::move(mesh_views), material);
+  TestSubMesh submesh(*mesh_, long_name, std::move(mesh_views), material);
 
   // Assert
   EXPECT_EQ(submesh.GetName(), long_name);

@@ -9,6 +9,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Writer.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Test/Mocks/MockStream.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -18,6 +20,7 @@ using ::testing::AllOf;
 using ::testing::Eq;
 using ::testing::IsNull;
 using ::testing::IsSupersetOf;
+using ::testing::NiceMock;
 using ::testing::NotNull;
 using ::testing::SizeIs;
 
@@ -25,6 +28,19 @@ using oxygen::content::loaders::LoadMaterialAsset;
 using oxygen::serio::Reader;
 
 namespace {
+
+//=== Mock AssetLoader
+//===------------------------------------------------------//
+
+//! Mock AssetLoader for lightweight testing without PAK file dependencies.
+class MockAssetLoader : public oxygen::content::AssetLoader {
+public:
+  MOCK_METHOD(void, AddAssetDependency,
+    (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
+  MOCK_METHOD(void, AddResourceDependency,
+    (const oxygen::data::AssetKey&, oxygen::data::pak::ResourceIndexT),
+    (override));
+};
 
 //=== MaterialLoader Test Fixtures ===-------------------------------------//
 
@@ -107,6 +123,16 @@ protected:
     return true;
   }
 
+  //! Helper method to create LoaderContext for testing.
+  auto CreateLoaderContext() -> oxygen::content::LoaderContext<MockStream>
+  {
+    return oxygen::content::LoaderContext<MockStream> { .asset_loader
+      = &asset_loader,
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .reader = std::ref(reader),
+      .offline = false };
+  }
+
   //! Helper method to write ShaderReferenceDesc using write_blob for arrays.
   auto WriteShaderReferenceDesc(
     const oxygen::data::pak::ShaderReferenceDesc& shader_desc) -> bool
@@ -129,6 +155,7 @@ protected:
   MockStream stream;
   Writer writer;
   Reader<MockStream> reader;
+  NiceMock<MockAssetLoader> asset_loader;
 };
 
 //=== MaterialLoader Basic Functionality Tests ===-------------------------//
@@ -194,7 +221,8 @@ NOLINT_TEST_F(
   stream.seek(0);
 
   // Act
-  auto asset = LoadMaterialAsset(reader);
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
 
   // Assert
   ASSERT_THAT(asset, NotNull());
@@ -256,7 +284,12 @@ NOLINT_TEST_F(
   stream.seek(0);
 
   // Act + Assert
-  EXPECT_THROW({ (void)LoadMaterialAsset(reader); }, std::runtime_error);
+  EXPECT_THROW(
+    {
+      auto context = CreateLoaderContext();
+      (void)LoadMaterialAsset(context);
+    },
+    std::runtime_error);
 }
 
 //! Test: LoadMaterialAsset throws if shader IDs are truncated.
@@ -286,7 +319,12 @@ NOLINT_TEST_F(
   stream.seek(0);
 
   // Act + Assert
-  EXPECT_THROW({ (void)LoadMaterialAsset(reader); }, std::runtime_error);
+  EXPECT_THROW(
+    {
+      auto context = CreateLoaderContext();
+      (void)LoadMaterialAsset(context);
+    },
+    std::runtime_error);
 }
 
 //! Test: LoadMaterialAsset throws if texture IDs are truncated.
@@ -318,7 +356,217 @@ NOLINT_TEST_F(
   stream.seek(0);
 
   // Act + Assert
-  EXPECT_THROW({ (void)LoadMaterialAsset(reader); }, std::runtime_error);
+  EXPECT_THROW(
+    {
+      auto context = CreateLoaderContext();
+      (void)LoadMaterialAsset(context);
+    },
+    std::runtime_error);
+}
+
+//=== MaterialLoader Dependency Management Tests ===------------------------//
+
+//! Test: LoadMaterialAsset registers resource dependencies for textures.
+NOLINT_TEST_F(MaterialLoaderBasicTestFixture,
+  LoadMaterial_ValidTextures_RegistersResourceDependencies)
+{
+  // Arrange
+  using oxygen::ShaderType;
+  using oxygen::data::AssetKey;
+  using oxygen::data::AssetType;
+  using oxygen::data::MaterialDomain;
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::ShaderReferenceDesc;
+
+  constexpr uint32_t kShaderStages
+    = (1 << static_cast<uint32_t>(ShaderType::kVertex));
+
+  // Set up material with texture dependencies
+  MaterialAssetDesc desc{
+    .header = {
+      .asset_type = static_cast<uint8_t>(AssetType::kMaterial),
+      .name = "Test Material",
+      .version = 1,
+      .streaming_priority = 2,
+      .content_hash = 0x1234567890ABCDEF,
+      .variant_flags = 0x870,
+    },
+    .material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque),
+    .flags = 0xAABBCCDD,
+    .shader_stages = kShaderStages,
+    .base_color = {0.1f, 0.2f, 0.3f, 0.4f},
+    .normal_scale = 1.5f,
+    .metalness = 0.7f,
+    .roughness = 0.2f,
+    .ambient_occlusion = 0.9f,
+    .base_color_texture = 100,      // Non-zero texture indices
+    .normal_texture = 101,
+    .metallic_texture = 102,
+    .roughness_texture = 103,
+    .ambient_occlusion_texture = 104,
+  };
+
+  ShaderReferenceDesc shader_desc {
+    .shader_unique_id = "VS@main.vert",
+    .shader_hash = 0x1111,
+  };
+
+  // Write test data
+  ASSERT_TRUE(WriteMaterialAssetDesc(desc));
+  ASSERT_TRUE(WriteShaderReferenceDesc(shader_desc));
+  stream.seek(0);
+
+  // Expect resource dependency registrations for each texture
+  EXPECT_CALL(asset_loader,
+    AddResourceDependency(::testing::_, 100)); // base_color_texture
+  EXPECT_CALL(
+    asset_loader, AddResourceDependency(::testing::_, 101)); // normal_texture
+  EXPECT_CALL(
+    asset_loader, AddResourceDependency(::testing::_, 102)); // metallic_texture
+  EXPECT_CALL(asset_loader,
+    AddResourceDependency(::testing::_, 103)); // roughness_texture
+  EXPECT_CALL(asset_loader,
+    AddResourceDependency(::testing::_, 104)); // ambient_occlusion_texture
+
+  // Act
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+}
+
+//! Test: LoadMaterialAsset registers asset dependencies for shaders.
+NOLINT_TEST_F(MaterialLoaderBasicTestFixture,
+  LoadMaterial_ValidShaders_RegistersAssetDependencies)
+{
+  // Arrange
+  using oxygen::ShaderType;
+  using oxygen::data::AssetKey;
+  using oxygen::data::AssetType;
+  using oxygen::data::MaterialDomain;
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::ShaderReferenceDesc;
+
+  constexpr uint32_t kShaderStages
+    = (1 << static_cast<uint32_t>(ShaderType::kVertex))
+    | (1 << static_cast<uint32_t>(ShaderType::kPixel));
+  constexpr size_t kShaderCount = 2;
+
+  MaterialAssetDesc desc{
+    .header = {
+      .asset_type = static_cast<uint8_t>(AssetType::kMaterial),
+      .name = "Test Material",
+      .version = 1,
+      .streaming_priority = 2,
+      .content_hash = 0x1234567890ABCDEF,
+      .variant_flags = 0x870,
+    },
+    .material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque),
+    .flags = 0xAABBCCDD,
+    .shader_stages = kShaderStages,
+    .base_color = {0.1f, 0.2f, 0.3f, 0.4f},
+    .normal_scale = 1.5f,
+    .metalness = 0.7f,
+    .roughness = 0.2f,
+    .ambient_occlusion = 0.9f,
+    .base_color_texture = 0,      // Zero texture indices (no texture dependencies)
+    .normal_texture = 0,
+    .metallic_texture = 0,
+    .roughness_texture = 0,
+    .ambient_occlusion_texture = 0,
+  };
+
+  ShaderReferenceDesc shader_descs[kShaderCount] = {
+    {
+      .shader_unique_id = "VS@main.vert",
+      .shader_hash = 0x1111,
+    },
+    {
+      .shader_unique_id = "PS@main.frag",
+      .shader_hash = 0x2222,
+    },
+  };
+
+  // Write test data
+  ASSERT_TRUE(WriteMaterialAssetDesc(desc));
+  for (size_t i = 0; i < kShaderCount; ++i) {
+    ASSERT_TRUE(WriteShaderReferenceDesc(shader_descs[i]));
+  }
+  stream.seek(0);
+
+  // Expect asset dependency registrations for each shader
+  // FIXME: These calls will fail until dependency registration is implemented
+  // in LoadMaterialAsset
+  EXPECT_CALL(asset_loader, AddAssetDependency(::testing::_, ::testing::_))
+    .Times(kShaderCount);
+
+  // Act
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+}
+
+//! Test: LoadMaterialAsset skips zero texture indices (no dependencies).
+NOLINT_TEST_F(
+  MaterialLoaderBasicTestFixture, LoadMaterial_ZeroTextures_SkipsDependencies)
+{
+  // Arrange
+  using oxygen::ShaderType;
+  using oxygen::data::AssetType;
+  using oxygen::data::MaterialDomain;
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::ShaderReferenceDesc;
+
+  constexpr uint32_t kShaderStages
+    = (1 << static_cast<uint32_t>(ShaderType::kVertex));
+
+  MaterialAssetDesc desc{
+    .header = {
+      .asset_type = static_cast<uint8_t>(AssetType::kMaterial),
+      .name = "Test Material",
+      .version = 1,
+      .streaming_priority = 2,
+      .content_hash = 0x1234567890ABCDEF,
+      .variant_flags = 0x870,
+    },
+    .material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque),
+    .flags = 0xAABBCCDD,
+    .shader_stages = kShaderStages,
+    .base_color = {0.1f, 0.2f, 0.3f, 0.4f},
+    .normal_scale = 1.5f,
+    .metalness = 0.7f,
+    .roughness = 0.2f,
+    .ambient_occlusion = 0.9f,
+    .base_color_texture = 0,      // All zero - no texture dependencies expected
+    .normal_texture = 0,
+    .metallic_texture = 0,
+    .roughness_texture = 0,
+    .ambient_occlusion_texture = 0,
+  };
+
+  ShaderReferenceDesc shader_desc {
+    .shader_unique_id = "VS@main.vert",
+    .shader_hash = 0x1111,
+  };
+
+  // Write test data
+  ASSERT_TRUE(WriteMaterialAssetDesc(desc));
+  ASSERT_TRUE(WriteShaderReferenceDesc(shader_desc));
+  stream.seek(0);
+
+  // Expect NO resource dependency calls for zero texture indices
+  EXPECT_CALL(asset_loader, AddResourceDependency(::testing::_, ::testing::_))
+    .Times(0);
+
+  // Act
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
 }
 
 } // namespace

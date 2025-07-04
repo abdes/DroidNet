@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Writer.h>
+#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/Test/Mocks/MockStream.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -33,6 +34,16 @@ protected:
     : writer(stream)
     , reader(stream)
   {
+  }
+
+  //! Helper method to create LoaderContext for testing.
+  auto CreateLoaderContext() -> oxygen::content::LoaderContext<MockStream>
+  {
+    return oxygen::content::LoaderContext<MockStream> { .asset_loader
+      = nullptr, // Resources don't use asset_loader
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .reader = std::ref(reader),
+      .offline = false };
   }
 
   MockStream stream;
@@ -84,7 +95,8 @@ NOLINT_TEST_F(
   stream.seek(0);
 
   // Act
-  auto asset = LoadTextureResource(reader);
+  auto context = CreateLoaderContext();
+  auto asset = LoadTextureResource(context);
 
   // Assert
   ASSERT_THAT(asset, NotNull());
@@ -136,7 +148,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(writer.write_blob(image_data));
   stream.seek(0);
 
-  auto asset = LoadTextureResource(reader);
+  auto context = CreateLoaderContext();
+  auto asset = LoadTextureResource(context);
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetTextureType(), TextureType::kUnknown);
 }
@@ -175,7 +188,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(writer.write_blob(image_data));
   stream.seek(0);
 
-  auto asset = LoadTextureResource(reader);
+  auto context = CreateLoaderContext();
+  auto asset = LoadTextureResource(context);
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetFormat(), Format::kUnknown);
 }
@@ -187,8 +201,8 @@ NOLINT_TEST_F(
   TextureLoaderErrorTestFixture, LoadTexture_FailsToReadHeader_Throws)
 {
   // Act + Assert
-  EXPECT_THROW(
-    { (void)LoadTextureResource(std::move(reader)); }, std::runtime_error);
+  auto context = CreateLoaderContext();
+  EXPECT_THROW({ (void)LoadTextureResource(context); }, std::runtime_error);
 }
 
 } // namespace

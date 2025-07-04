@@ -1,0 +1,21 @@
+version: 1
+content_version: 0
+
+# Empty PAK specification - no resources, no assets
+# This creates a minimal but valid PAK file with:
+# - PAK header (64 bytes)
+# - Empty resource regions and tables
+# - Empty asset directory
+# - PAK footer (256 bytes)
+
+# No textures section
+# textures: []
+
+# No buffers section
+# buffers: []
+
+# No audio section
+# audios: []
+
+# No assets section
+# assets: []

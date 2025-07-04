@@ -1,0 +1,434 @@
+version: 1
+content_version: 42
+
+# Complex Geometry Asset Specification
+# ====================================
+# This represents a detailed 3D model (e.g., a spaceship) with:
+# - Multiple LODs for distance-based rendering
+# - Multiple materials (hull, glass, engine glow)
+# - Multiple submeshes per LOD (hull, cockpit, engines, weapons)
+# - Multiple mesh views per submesh for different detail levels
+# - Comprehensive texture set (diffuse, normal, metallic, roughness, AO, emissive)
+# - Vertex and index buffers for each LOD
+
+# =============================================================================
+# TEXTURE RESOURCES
+# =============================================================================
+
+textures:
+  # Hull Material Textures
+  - name: "SpaceshipHull_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daed93310e82301445bf7244141141c1b040b040b040b0"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm (was incorrectly using kRGBA8UInt)
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da8080808080808080808080808080808080808080"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Metallic"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daffffffffffffffffffffffffffffffffffff"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Roughness"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da404040404040404040404040404040404040"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_AO"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da202020202020202020202020202020202020"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Cockpit Glass Material Textures
+  - name: "CockpitGlass_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da1010101010101010101010101010101010"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "CockpitGlass_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff8080"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Engine Material Textures
+  - name: "EngineGlow_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff4000ff4000ff4000ff4000ff4000ff40"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "EngineGlow_Emissive"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff8000ff8000ff8000ff8000ff8000ff80"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Weapon Material Textures
+  - name: "Weapon_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da606060606060606060606060606060"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "Weapon_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff80"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+# =============================================================================
+# BUFFER RESOURCES
+# =============================================================================
+
+buffers:
+  # LOD 0 Buffers (Highest Detail - 5000 vertices)
+  - name: "SpaceshipLOD0_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    usage: 1  # D3D11_USAGE_IMMUTABLE
+    bind_flags: 1  # D3D11_BIND_VERTEX_BUFFER
+    stride: 32  # Position(12) + Normal(12) + UV(8)
+
+  - name: "SpaceshipLOD0_IndexBuffer"
+    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2  # D3D11_BIND_INDEX_BUFFER
+    format: 5  # Format::kR16UInt (16-bit unsigned integer for indices)
+
+  # LOD 1 Buffers (Medium Detail - 2500 vertices)
+  - name: "SpaceshipLOD1_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    usage: 1
+    bind_flags: 1
+    stride: 32
+
+  - name: "SpaceshipLOD1_IndexBuffer"
+    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2
+    format: 5  # Format::kR16UInt
+
+  # LOD 2 Buffers (Low Detail - 1000 vertices)
+  - name: "SpaceshipLOD2_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    usage: 1
+    bind_flags: 1
+    stride: 32
+
+  - name: "SpaceshipLOD2_IndexBuffer"
+    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2
+    format: 5  # Format::kR16UInt
+
+# =============================================================================
+# MATERIAL ASSETS
+# =============================================================================
+
+assets:
+  # Hull Material (Main body of the spaceship)
+  - name: "SpaceshipHullMaterial"
+    type: "material"
+    asset_key: "01234567-89ab-cdef-0123-456789abcdef"
+    version: 1
+    streaming_priority: 128
+    content_hash: 0x12345678
+    variant_flags: 0
+
+    # Material properties
+    material_domain: 0  # Surface material
+    flags: 0x0001  # Opaque
+    shader_stages: 0x0007  # Vertex | Hull | Pixel
+    base_color: [0.8, 0.8, 0.9, 1.0]  # Slightly blue-tinted metal
+    normal_scale: 1.0
+    metalness: 0.8
+    roughness: 0.3
+    ambient_occlusion: 1.0
+
+    # Texture references
+    texture_refs:
+      base_color_texture: "SpaceshipHull_Diffuse"
+      normal_texture: "SpaceshipHull_Normal"
+      metallic_texture: "SpaceshipHull_Metallic"
+      roughness_texture: "SpaceshipHull_Roughness"
+      ambient_occlusion_texture: "SpaceshipHull_AO"
+
+    # Shader references
+    shader_references:
+      - shader_unique_id: "StandardPBR_VS"
+        shader_hash: 0xABCDEF01
+      - shader_unique_id: "StandardPBR_PS"
+        shader_hash: 0x23456789
+
+  # Cockpit Glass Material (Transparent cockpit)
+  - name: "CockpitGlassMaterial"
+    type: "material"
+    asset_key: "fedcba98-7654-3210-fedc-ba9876543210"
+    version: 1
+    streaming_priority: 96
+    content_hash: 0x87654321
+    variant_flags: 0x0002  # Transparent variant
+
+    material_domain: 0
+    flags: 0x0002  # Transparent
+    shader_stages: 0x0007
+    base_color: [0.9, 0.95, 1.0, 0.3]  # Transparent blue glass
+    normal_scale: 0.5
+    metalness: 0.0
+    roughness: 0.1
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "CockpitGlass_Diffuse"
+      normal_texture: "CockpitGlass_Normal"
+
+    shader_references:
+      - shader_unique_id: "TransparentPBR_VS"
+        shader_hash: 0x34567890
+      - shader_unique_id: "TransparentPBR_PS"
+        shader_hash: 0x45678901
+
+  # Engine Glow Material (Emissive engines)
+  - name: "EngineGlowMaterial"
+    type: "material"
+    asset_key: "11111111-2222-3333-4444-555555555555"
+    version: 1
+    streaming_priority: 192
+    content_hash: 0x11223344
+    variant_flags: 0x0004  # Emissive variant
+
+    material_domain: 0
+    flags: 0x0004  # Emissive
+    shader_stages: 0x0007
+    base_color: [1.0, 0.25, 0.0, 1.0]  # Bright orange glow
+    normal_scale: 1.0
+    metalness: 0.0
+    roughness: 0.0
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "EngineGlow_Diffuse"
+
+    shader_references:
+      - shader_unique_id: "EmissivePBR_VS"
+        shader_hash: 0x56789012
+      - shader_unique_id: "EmissivePBR_PS"
+        shader_hash: 0x67890123
+
+  # Weapon Material (Metallic weapon parts)
+  - name: "WeaponMaterial"
+    type: "material"
+    asset_key: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    version: 1
+    streaming_priority: 64
+    content_hash: 0xAABBCCDD
+    variant_flags: 0
+
+    material_domain: 0
+    flags: 0x0001  # Opaque
+    shader_stages: 0x0007
+    base_color: [0.4, 0.4, 0.45, 1.0]  # Dark gunmetal
+    normal_scale: 1.2
+    metalness: 0.9
+    roughness: 0.4
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "Weapon_Diffuse"
+      normal_texture: "Weapon_Normal"
+
+    shader_references:
+      - shader_unique_id: "StandardPBR_VS"
+        shader_hash: 0xABCDEF01
+      - shader_unique_id: "StandardPBR_PS"
+        shader_hash: 0x23456789
+
+  # ==========================================================================
+  # COMPLEX GEOMETRY ASSET
+  # ==========================================================================
+
+  # Main Spaceship Geometry Asset
+  - name: "SpaceshipGeometry"
+    type: "geometry"
+    asset_key: "12345678-90ab-cdef-1234-567890abcdef"
+    version: 3
+    streaming_priority: 255
+    content_hash: 0x12345678
+    variant_flags: 0
+    alignment: 256
+
+    # Overall bounding box for the entire spaceship
+    bounding_box_min: [-10.0, -3.0, -15.0]
+    bounding_box_max: [10.0, 3.0, 15.0]
+
+    # Multiple LODs for distance-based rendering
+    lods:
+      # LOD 0 - Highest Detail (Close range: 0-50 units)
+      - name: "SpaceshipLOD0"
+        vertex_buffer: "SpaceshipLOD0_VertexBuffer"
+        index_buffer: "SpaceshipLOD0_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Main Hull Submesh
+          - name: "Hull"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 3600
+                first_vertex: 0
+                vertex_count: 1200
+              - first_index: 3600
+                index_count: 1800
+                first_vertex: 1200
+                vertex_count: 600
+
+          # Cockpit Glass Submesh
+          - name: "Cockpit"
+            material: "CockpitGlassMaterial"
+            bounding_box_min: [-2.0, 1.0, 8.0]
+            bounding_box_max: [2.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 5400
+                index_count: 900
+                first_vertex: 1800
+                vertex_count: 300
+
+          # Engine Submesh
+          - name: "Engines"
+            material: "EngineGlowMaterial"
+            bounding_box_min: [-6.0, -2.0, -15.0]
+            bounding_box_max: [6.0, 0.0, -8.0]
+            mesh_views:
+              - first_index: 6300
+                index_count: 1200
+                first_vertex: 2100
+                vertex_count: 400
+              - first_index: 7500
+                index_count: 600
+                first_vertex: 2500
+                vertex_count: 200
+
+          # Weapon Systems Submesh
+          - name: "Weapons"
+            material: "WeaponMaterial"
+            bounding_box_min: [-10.0, -1.0, -5.0]
+            bounding_box_max: [10.0, 1.0, 5.0]
+            mesh_views:
+              - first_index: 8100
+                index_count: 900
+                first_vertex: 2700
+                vertex_count: 300
+              - first_index: 9000
+                index_count: 450
+                first_vertex: 3000
+                vertex_count: 150
+              - first_index: 9450
+                index_count: 450
+                first_vertex: 3150
+                vertex_count: 150
+
+      # LOD 1 - Medium Detail (Medium range: 50-150 units)
+      - name: "SpaceshipLOD1"
+        vertex_buffer: "SpaceshipLOD1_VertexBuffer"
+        index_buffer: "SpaceshipLOD1_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Simplified Hull (combines hull and cockpit)
+          - name: "HullCombined"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 2400
+                first_vertex: 0
+                vertex_count: 800
+
+          # Simplified Engines
+          - name: "EnginesSimple"
+            material: "EngineGlowMaterial"
+            bounding_box_min: [-6.0, -2.0, -15.0]
+            bounding_box_max: [6.0, 0.0, -8.0]
+            mesh_views:
+              - first_index: 2400
+                index_count: 900
+                first_vertex: 800
+                vertex_count: 300
+
+          # Simplified Weapons
+          - name: "WeaponsSimple"
+            material: "WeaponMaterial"
+            bounding_box_min: [-10.0, -1.0, -5.0]
+            bounding_box_max: [10.0, 1.0, 5.0]
+            mesh_views:
+              - first_index: 3300
+                index_count: 600
+                first_vertex: 1100
+                vertex_count: 200
+
+      # LOD 2 - Low Detail (Far range: 150+ units)
+      - name: "SpaceshipLOD2"
+        vertex_buffer: "SpaceshipLOD2_VertexBuffer"
+        index_buffer: "SpaceshipLOD2_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Single combined mesh for entire spaceship
+          - name: "SpaceshipLowDetail"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-10.0, -3.0, -15.0]
+            bounding_box_max: [10.0, 3.0, 15.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 1200
+                first_vertex: 0
+                vertex_count: 400

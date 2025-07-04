@@ -14,6 +14,8 @@ using oxygen::data::Vertex;
 
 namespace {
 
+// Helper function for converting PAK name arrays to strings
+// TODO: This duplicates Asset::GetAssetName() logic - consider consolidation
 auto GetNameFromDesc(const char name[oxygen::data::pak::kMaxNameSize])
   -> std::string
 {
@@ -49,75 +51,15 @@ auto MeshView::Indices() const noexcept -> std::span<const std::uint32_t>
   return mesh_.get().Indices().subspan(desc_.first_index, desc_.index_count);
 }
 
-SubMesh::SubMesh(
-  const Mesh& mesh, pak::SubMeshDesc desc, std::vector<MeshView> meshviews)
-  : mesh_(mesh)
-  , name_(GetNameFromDesc(desc.name))
-  , mesh_views_(std::move(meshviews))
-  , bbox_min_(desc.bounding_box_min[0], desc.bounding_box_min[1],
-      desc.bounding_box_min[2])
-  , bbox_max_(desc.bounding_box_max[0], desc.bounding_box_max[1],
-      desc.bounding_box_max[2])
-  , desc_(std::move(desc))
-{
-  // Enforce design constraints
-  CHECK_F(!mesh_views_.empty(),
-    "SubMesh must have at least one MeshView (1:N constraint)");
-
-  // TODO: resolve the material reference from the descriptor
-
-  // TODO: compute bounding sphere from the vertices of the meshviews
-  // ComputeBoundingSphere();
-}
-
 SubMesh::SubMesh(const Mesh& mesh, std::string name,
-  std::vector<MeshView> meshviews,
   std::shared_ptr<const MaterialAsset> material)
   : mesh_(mesh)
   , name_(std::move(name))
-  , mesh_views_(std::move(meshviews))
   , material_(std::move(material))
 {
   // Enforce design constraints
-  CHECK_F(!mesh_views_.empty(),
-    "SubMesh must have at least one MeshView (1:N constraint)");
   CHECK_NOTNULL_F(
     material_, "SubMesh must have exactly one Material (1:1 constraint)");
-
-  // TODO: compute bounding box and sphere from the vertices of the meshviews
-  // ComputeBoundingBox();
-  // ComputeBoundingSphere();
-}
-
-//! Constructs a Mesh with the given name, vertices, and indices.
-/*!
-  Initializes the mesh asset with the provided name, vertex data, and index
-  data. All data is moved in; the asset is immutable after construction.
-  @param name Name of the mesh asset
-  @param vertices Vertex data (moved)
-  @param indices Index data (moved)
-  @note Throws (CHECK_F death) if vertices or indices are empty.
-*/
-Mesh::Mesh(uint32_t lod, pak::MeshDesc desc, std::vector<SubMesh> submeshes)
-  : name_(fmt::format("LOD_{}", lod))
-  , submeshes_(std::move(submeshes))
-  , desc_(std::move(desc))
-{
-  CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
-  ComputeBoundingBox();
-  ComputeBoundingSphere();
-}
-
-Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
-  std::vector<std::uint32_t> indices, std::vector<SubMesh> submeshes)
-  : name_(fmt::format("LOD_{}", lod))
-  , vertices_(std::move(vertices))
-  , indices_(std::move(indices))
-  , submeshes_(std::move(submeshes))
-{
-  CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
-  ComputeBoundingBox();
-  ComputeBoundingSphere();
 }
 
 Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
@@ -127,69 +69,94 @@ Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
   , indices_(std::move(indices))
 {
   CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
-  ComputeBoundingBox();
-  ComputeBoundingSphere();
+  ComputeBounds();
 }
 
-//! Computes the axis-aligned bounding box (AABB) from the mesh's vertex data.
+//! Computes bounding box and sphere - the single source of truth.
 /*!
-  Scans all vertex positions and updates `bbox_min_` and `bbox_max_` to enclose
-  all vertices. If the mesh is empty, both min and max are set to zero.
-*/
-auto Mesh::ComputeBoundingBox() -> void
-{
-  if (vertices_.empty()) {
-    bbox_min_ = bbox_max_ = glm::vec3(0.0f);
-    return;
-  }
-  bbox_min_ = bbox_max_ = vertices_.front().position;
-  for (const auto& v : vertices_) {
-    bbox_min_ = glm::min(bbox_min_, v.position);
-    bbox_max_ = glm::max(bbox_max_, v.position);
-  }
-}
+  Computes bounding data using the most appropriate method:
+  - If PAK descriptor exists: use pre-computed bounding box
+  - If no descriptor: compute bounding box from vertices
+  - Always compute bounding sphere from the resulting bounding box
 
-//! Computes the bounding sphere for the mesh in local space.
-/*!
-  Computes a bounding sphere that encloses the mesh in local space by
-  fitting a sphere to the AABB corners.
-
-  @note This is used for culling and render list construction.
+  Data members (bbox_min_, bbox_max_, bounding_sphere_) are the source of truth.
 */
-auto Mesh::ComputeBoundingSphere() -> void
+auto Mesh::ComputeBounds() -> void
 {
-  // Use Ritter's algorithm or fit sphere to AABB corners (simple, conservative)
-  // Here: fit sphere to AABB corners
-  const glm::vec3& min = bbox_min_;
-  const glm::vec3& max = bbox_max_;
-  glm::vec3 corners[8] = {
-    { min.x, min.y, min.z },
-    { max.x, min.y, min.z },
-    { min.x, max.y, min.z },
-    { max.x, max.y, min.z },
-    { min.x, min.y, max.z },
-    { max.x, min.y, max.z },
-    { min.x, max.y, max.z },
-    { max.x, max.y, max.z },
-  };
-  glm::vec3 center(0.0f);
-  for (int i = 0; i < 8; ++i) {
-    center += corners[i];
+  // Step 1: Compute or copy bounding box
+  if (desc_.has_value()) {
+    // Use pre-computed bounds from PAK descriptor
+    const auto& desc = desc_.value();
+    bbox_min_ = glm::vec3(desc.bounding_box_min[0], desc.bounding_box_min[1],
+      desc.bounding_box_min[2]);
+    bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
+      desc.bounding_box_max[2]);
+  } else {
+    // Compute from vertices
+    if (vertices_.empty()) {
+      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    } else {
+      bbox_min_ = bbox_max_ = vertices_.front().position;
+      for (const auto& v : vertices_) {
+        bbox_min_ = glm::min(bbox_min_, v.position);
+        bbox_max_ = glm::max(bbox_max_, v.position);
+      }
+    }
   }
-  center /= 8.0f;
-  float radius = 0.0f;
-  for (int i = 0; i < 8; ++i) {
-    radius = std::max(radius, glm::distance(center, corners[i]));
-  }
+
+  // Step 2: Always compute bounding sphere from bounding box
+  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5f;
+  const float radius = glm::length(bbox_max_ - center);
   bounding_sphere_ = glm::vec4(center, radius);
 }
 
-//! Adds a submesh containing its meshviews and a material.
-auto Mesh::AddSubMesh(std::string name, std::vector<MeshView> meshviews,
-  std::shared_ptr<const MaterialAsset> material) -> void
+//! Computes bounding box and sphere for SubMesh - the single source of truth.
+/*!
+  Computes bounding data using the most appropriate method:
+  - If PAK descriptor exists: use pre-computed bounding box
+  - If no descriptor: compute bounding box from mesh view vertices
+  - Always compute bounding sphere from the resulting bounding box
+
+  Data members (bbox_min_, bbox_max_, bounding_sphere_) are the source of truth.
+*/
+auto SubMesh::ComputeBounds() -> void
 {
-  submeshes_.emplace_back(
-    *this, std::move(name), std::move(meshviews), std::move(material));
+  // Step 1: Compute or copy bounding box
+  if (desc_.has_value()) {
+    // Use pre-computed bounds from PAK descriptor
+    const auto& desc = desc_.value();
+    bbox_min_ = glm::vec3(desc.bounding_box_min[0], desc.bounding_box_min[1],
+      desc.bounding_box_min[2]);
+    bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
+      desc.bounding_box_max[2]);
+  } else {
+    // Compute from mesh view vertices
+    if (mesh_views_.empty()) {
+      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    } else {
+      bool first = true;
+      for (const auto& mesh_view : mesh_views_) {
+        for (const auto& vertex : mesh_view.Vertices()) {
+          if (first) {
+            bbox_min_ = bbox_max_ = vertex.position;
+            first = false;
+          } else {
+            bbox_min_ = glm::min(bbox_min_, vertex.position);
+            bbox_max_ = glm::max(bbox_max_, vertex.position);
+          }
+        }
+      }
+      if (first) {
+        // No vertices found
+        bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+      }
+    }
+  }
+
+  // Step 2: Always compute bounding sphere from bounding box
+  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5f;
+  const float radius = glm::length(bbox_max_ - center);
+  bounding_sphere_ = glm::vec4(center, radius);
 }
 
 using oxygen::data::MeshBuilder;
@@ -204,9 +171,23 @@ auto MeshBuilder::Build() -> std::shared_ptr<Mesh>
   auto mesh = std::shared_ptr<Mesh>(new Mesh(lod_, vertices_, indices_));
   mesh->SetName(name_);
 
+  // Set mesh descriptor if provided
+  if (desc_.has_value()) {
+    mesh->SetDescriptor(desc_.value());
+  }
   // For each submesh spec, create MeshViews and SubMesh, then add to mesh
   for (const auto& spec : submeshes_) {
     SubMesh submesh(*mesh, spec.name, spec.material);
+
+    // Enforce design constraint: SubMesh must have at least one MeshView
+    CHECK_F(!spec.mesh_views.empty(),
+      "SubMesh must have at least one MeshView (1:N constraint)");
+
+    // Set submesh descriptor if provided
+    if (spec.desc.has_value()) {
+      submesh.SetDescriptor(spec.desc.value());
+    }
+
     for (const auto& view_desc : spec.mesh_views) {
       submesh.AddMeshViewInternal(std::move(view_desc));
     }
