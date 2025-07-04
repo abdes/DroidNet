@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Base/ResourceTypeList.h>
+#include <Oxygen/Base/TypeList.h>
 
 namespace oxygen {
 

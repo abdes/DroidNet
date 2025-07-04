@@ -7,7 +7,7 @@
 #include <memory>
 
 #include <Oxygen/Base/ResourceHandle.h>
-#include <Oxygen/Base/ResourceTypeList.h>
+#include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Testing/GTest.h>
