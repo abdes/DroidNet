@@ -51,6 +51,7 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "AssetKey.cpp"
+    "BufferResource.cpp"
     "GeometryAsset.cpp"
     "MaterialAsset.cpp"
     "ProceduralMeshes.cpp"
@@ -65,6 +66,7 @@ target_sources(
       "Asset.h"
       "AssetKey.h"
       "AssetType.h"
+      "BufferResource.h"
       "GeometryAsset.h"
       "MaterialAsset.h"
       "MaterialDomain.h"
