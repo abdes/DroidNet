@@ -84,4 +84,34 @@ struct IndexOf<T, TypeList<U, Ts...>>
   : std::integral_constant<std::size_t,
       1 + IndexOf<T, TypeList<Ts...>>::value> { };
 
+/*!
+ Template metaprogramming helper to apply a TypeList to a template.
+
+ Transforms TypeList<A, B, C> into Template<A, B, C>, enabling the use of
+ TypeList with other template metaprogramming utilities like std::tuple,
+ std::variant, etc.
+
+ @tparam Template The template to apply the TypeList to
+ @tparam List The TypeList to apply
+
+ ### Usage Examples
+
+ ```cpp
+ using MyTypes = TypeList<int, float, double>;
+ using MyTuple = Apply_t<std::tuple, MyTypes>; // std::tuple<int, float, double>
+ using MyVariant = Apply_t<std::variant, MyTypes>; // std::variant<int, float,
+ double>
+ ```
+*/
+template <template <typename...> class Template, typename List> struct Apply;
+
+template <template <typename...> class Template, typename... Types>
+struct Apply<Template, TypeList<Types...>> {
+  using type = Template<Types...>;
+};
+
+//! Convenience alias for Apply<Template, List>::type
+template <template <typename...> class Template, typename List>
+using Apply_t = typename Apply<Template, List>::type;
+
 } // namespace oxygen

@@ -17,8 +17,9 @@
 
 namespace oxygen::content {
 
-// Forward declaration for loader context
+// Forward declarations for loader context
 class AssetLoader;
+class PakFile;
 
 //! Context passed to loader functions containing all necessary loading state.
 template <oxygen::serio::Stream S> struct LoaderContext {
@@ -33,6 +34,9 @@ template <oxygen::serio::Stream S> struct LoaderContext {
 
   //! Whether loading is performed in offline mode
   bool offline { false };
+
+  //! Source PAK file for intra-PAK resource resolution
+  const PakFile* source_pak { nullptr };
 };
 
 template <typename F, typename S>

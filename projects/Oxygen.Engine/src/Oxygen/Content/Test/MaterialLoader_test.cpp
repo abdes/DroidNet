@@ -38,8 +38,7 @@ public:
   MOCK_METHOD(void, AddAssetDependency,
     (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
   MOCK_METHOD(void, AddResourceDependency,
-    (const oxygen::data::AssetKey&, oxygen::data::pak::ResourceIndexT),
-    (override));
+    (const oxygen::data::AssetKey&, oxygen::content::ResourceKey), (override));
 };
 
 //=== MaterialLoader Test Fixtures ===-------------------------------------//
