@@ -16,9 +16,10 @@ using oxygen::data::pak::PakFooter;
 using oxygen::data::pak::PakHeader;
 
 namespace {
+
 // Helper to open a FileStream and throw with logging on error
-std::unique_ptr<oxygen::serio::FileStream<>> OpenFileStream(
-  const std::filesystem::path& path)
+auto OpenFileStream(const std::filesystem::path& path)
+  -> std::unique_ptr<oxygen::serio::FileStream<>>
 {
   try {
     return std::make_unique<oxygen::serio::FileStream<>>(path, std::ios::in);
@@ -28,51 +29,31 @@ std::unique_ptr<oxygen::serio::FileStream<>> OpenFileStream(
   }
 }
 
-size_t EntryIndex(const AssetDirectoryEntry& entry,
-  const std::vector<AssetDirectoryEntry>& directory)
-{
-  auto base = directory.data();
-  size_t idx = static_cast<size_t>(std::distance(base, &entry));
-  if (idx >= directory.size()) {
-    throw std::invalid_argument("Entry is not part of this PakFile");
-  }
-  return idx;
-}
 } // namespace
 
-void PakFile::InitBuffersTable() const
+auto PakFile::InitBuffersTable() const -> void
 {
   DCHECK_F(!buffers_table_);
 
   if (footer_.buffer_table.count > 0) {
     DCHECK_GT_F(footer_.buffer_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
-    // Create a new FileStream from the original file path
-    auto table_stream
-      = std::make_unique<oxygen::serio::FileStream<>>(file_path_, std::ios::in);
-    buffers_table_.emplace(std::move(table_stream), footer_.buffer_table,
-      oxygen::content::loaders::LoadBufferResource<
-        oxygen::serio::FileStream<>>);
+    buffers_table_.emplace(footer_.buffer_table);
   }
 }
 
-void PakFile::InitTexturesTable() const
+auto PakFile::InitTexturesTable() const -> void
 {
   DCHECK_F(!textures_table_);
 
   if (footer_.texture_table.count > 0) {
     DCHECK_GT_F(footer_.texture_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
-    // Create a new FileStream from the original file path
-    auto table_stream
-      = std::make_unique<oxygen::serio::FileStream<>>(file_path_, std::ios::in);
-    textures_table_.emplace(std::move(table_stream), footer_.texture_table,
-      oxygen::content::loaders::LoadTextureResource<
-        oxygen::serio::FileStream<>>);
+    textures_table_.emplace(footer_.texture_table);
   }
 }
 
-void PakFile::ReadHeader(oxygen::serio::FileStream<>* stream)
+auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -99,7 +80,7 @@ void PakFile::ReadHeader(oxygen::serio::FileStream<>* stream)
   }
 }
 
-void PakFile::ReadFooter(oxygen::serio::FileStream<>* stream)
+auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -141,7 +122,7 @@ void PakFile::ReadFooter(oxygen::serio::FileStream<>* stream)
   }
 }
 
-void PakFile::ReadDirectoryEntry(Reader& reader)
+auto PakFile::ReadDirectoryEntry(Reader& reader) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -157,8 +138,8 @@ void PakFile::ReadDirectoryEntry(Reader& reader)
   key_to_index_.emplace(entry.asset_key, directory_.size() - 1);
 }
 
-void PakFile::ReadDirectory(
-  oxygen::serio::FileStream<>* stream, std::uint32_t asset_count)
+auto PakFile::ReadDirectory(
+  serio::FileStream<>* stream, std::uint32_t asset_count) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -200,8 +181,7 @@ auto PakFile::FindEntry(const AssetKey& key) const noexcept
 auto PakFile::Directory() const noexcept -> std::span<const AssetDirectoryEntry>
 {
   std::scoped_lock lock(mutex_);
-  return std::span<const AssetDirectoryEntry>(
-    directory_.data(), directory_.size());
+  return { directory_.data(), directory_.size() };
 }
 
 auto PakFile::FormatVersion() const noexcept -> uint16_t

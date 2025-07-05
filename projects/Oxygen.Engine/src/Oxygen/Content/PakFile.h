@@ -126,6 +126,28 @@ public:
     }
   }
 
+  //! Get the resource table for the specified resource type.
+  /*!
+   Returns a pointer to the ResourceTable for the specified resource type.
+   Uses template specialization to return the appropriate table.
+
+   @tparam T The resource type (must satisfy PakResource concept)
+   @return Pointer to ResourceTable for type T, or nullptr if not present
+   @see HasTableOf, BuffersTable, TexturesTable
+  */
+  template <PakResource T>
+  auto GetResourceTable() const
+    -> ResourceTable<T, oxygen::serio::FileStream<>>*
+  {
+    if constexpr (std::is_same_v<T, data::BufferResource>) {
+      return buffers_table_ ? &(*buffers_table_) : nullptr;
+    } else if constexpr (std::is_same_v<T, data::TextureResource>) {
+      return textures_table_ ? &(*textures_table_) : nullptr;
+    } else {
+      return nullptr;
+    }
+  }
+
 private:
   void ReadHeader(oxygen::serio::FileStream<>* stream);
   void ReadFooter(oxygen::serio::FileStream<>* stream);

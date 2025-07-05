@@ -10,7 +10,6 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -97,39 +96,42 @@ protected:
     table_meta.entry_size = entry_size;
     table = std::make_unique<
       oxygen::content::ResourceTable<TextureResource, MemoryStream>>(
-      std::move(stream), table_meta,
-      oxygen::content::loaders::LoadTextureResource<MemoryStream>);
+      std::move(stream), table_meta);
   }
 };
 
-//! Test: Table loads, caches, and unloads a TextureResource correctly.
-NOLINT_TEST_F(TextureTableBasicTest, Smoke)
+//! Test: Table resolves resource offsets and metadata correctly.
+NOLINT_TEST_F(TextureTableBasicTest, OffsetResolution)
 {
   // Arrange: (done in SetUp)
 
-  // Act/Assert: Check initial state load resource, check cache, unload
+  // Act/Assert: Check table metadata
   EXPECT_EQ(table->Size(), 1u);
-  EXPECT_FALSE(table->HasResource(0));
 
-  // Act/Assert: load resource, check cache, unload
-  auto res = table->GetOrLoadResource(0);
-  ASSERT_TRUE(res != nullptr);
-  EXPECT_EQ(res->GetDataOffset(), desc.data_offset);
-  EXPECT_EQ(res->GetDataSize(), desc.data_size);
-  EXPECT_EQ(res->GetWidth(), desc.width);
-  EXPECT_EQ(res->GetHeight(), desc.height);
-  EXPECT_EQ(
-    static_cast<std::underlying_type_t<oxygen::Format>>(res->GetFormat()),
-    desc.format);
-  EXPECT_EQ(res->GetDataAlignment(), desc.alignment);
-  EXPECT_EQ(res->IsCubemap(), desc.is_cubemap);
+  // Act/Assert: Check resource descriptor offset resolution
+  auto descriptor_offset = table->GetResourceOffset(0);
+  EXPECT_TRUE(descriptor_offset.has_value());
 
-  // Assert: Check cache
-  EXPECT_TRUE(table->HasResource(0));
+  // Act/Assert: Check stream access and read descriptor
+  auto& stream = table->GetStream();
 
-  // Act/Assert: unload
-  table->OnResourceUnloaded(0);
-  EXPECT_FALSE(table->HasResource(0));
+  // Read the descriptor from the resolved offset
+  (void)stream.seek(*descriptor_offset);
+  TextureResourceDesc read_desc;
+  auto bytes_read
+    = stream.read(reinterpret_cast<std::byte*>(&read_desc), sizeof(read_desc));
+  EXPECT_EQ(bytes_read, sizeof(read_desc));
+
+  // Verify we can read the expected data from the data offset in descriptor
+  (void)stream.seek(read_desc.data_offset);
+  std::vector<std::byte> read_data(read_desc.data_size);
+  auto data_bytes_read = stream.read(read_data.data(), read_desc.data_size);
+  EXPECT_EQ(data_bytes_read, read_desc.data_size);
+
+  // Verify the data pattern we wrote in SetUp
+  for (size_t i = 0; i < read_desc.data_size; ++i) {
+    EXPECT_EQ(read_data[i], std::byte { 0xAB });
+  }
 }
 
 } // anonymous namespace

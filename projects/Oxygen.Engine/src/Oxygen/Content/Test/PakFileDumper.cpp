@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -238,7 +239,8 @@ template <typename T> std::string ToHexString(T value)
   return oss.str();
 }
 
-void PrintBufferResourceTable(const PakFile& pak, const DumpOptions& opts)
+void PrintBufferResourceTable(
+  const PakFile& pak, const DumpOptions& opts, AssetLoader& asset_loader)
 {
   if (!opts.show_resources)
     return;
@@ -256,12 +258,13 @@ void PrintBufferResourceTable(const PakFile& pak, const DumpOptions& opts)
   PrintField("Buffer Count", buffer_count);
 
   if (opts.verbose && buffer_count > 0) {
+
     std::cout << "    Buffer entries:\n";
     for (size_t i = 0; i < std::min(buffer_count, size_t(20)); ++i) {
       try {
-        // Load buffer resource in offline mode to inspect its metadata
-        auto buffer_resource
-          = buffers_table.GetOrLoadResource(static_cast<uint32_t>(i), true);
+        // Load buffer resource using AssetLoader in offline mode
+        auto buffer_resource = asset_loader.LoadResource<BufferResource>(
+          pak, static_cast<uint32_t>(i), true);
         if (buffer_resource) {
           std::cout << "      [" << i << "] Buffer Resource:\n";
           PrintField(
@@ -307,7 +310,8 @@ void PrintBufferResourceTable(const PakFile& pak, const DumpOptions& opts)
   std::cout << "\n";
 }
 
-void PrintTextureResourceTable(const PakFile& pak, const DumpOptions& opts)
+void PrintTextureResourceTable(
+  const PakFile& pak, const DumpOptions& opts, AssetLoader& asset_loader)
 {
   if (!opts.show_resources)
     return;
@@ -325,12 +329,13 @@ void PrintTextureResourceTable(const PakFile& pak, const DumpOptions& opts)
   PrintField("Texture Count", texture_count);
 
   if (opts.verbose && texture_count > 0) {
+
     std::cout << "    Texture entries:\n";
     for (size_t i = 0; i < std::min(texture_count, size_t(20)); ++i) {
       try {
-        // Load texture resource in offline mode to inspect its metadata
-        auto texture_resource
-          = textures_table.GetOrLoadResource(static_cast<uint32_t>(i), true);
+        // Load texture resource using AssetLoader in offline mode
+        auto texture_resource = asset_loader.LoadResource<TextureResource>(
+          pak, static_cast<uint32_t>(i), true);
         if (texture_resource) {
           std::cout << "      [" << i << "] Texture Resource:\n";
           PrintField(
@@ -523,6 +528,13 @@ int main(int argc, char* argv[])
   try {
     PakFile pak(pak_path);
 
+    // Create a single AssetLoader instance - built-in loaders are
+    // auto-registered
+    AssetLoader asset_loader;
+
+    // Add the PAK file to the asset loader by path (for resource loading)
+    asset_loader.AddPakFile(pak_path);
+
     PrintSeparator("PAK FILE ANALYSIS: " + pak_path.filename().string());
     PrintField("File Path", pak_path.string());
     PrintField("File Size",
@@ -535,8 +547,8 @@ int main(int argc, char* argv[])
 
     if (opts.show_resources) {
       PrintSeparator("RESOURCE TABLES");
-      PrintBufferResourceTable(pak, opts);
-      PrintTextureResourceTable(pak, opts);
+      PrintBufferResourceTable(pak, opts, asset_loader);
+      PrintTextureResourceTable(pak, opts, asset_loader);
     }
 
     PrintAssetDirectory(pak, opts);
