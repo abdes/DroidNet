@@ -60,6 +60,7 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
+      "AnyCache.h"
       "Resources.h"
       "SafeCall.h"
       "Types/Format.h"
@@ -75,7 +76,12 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_CORE_STATIC>
 )
 
-target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PUBLIC
+    oxygen::base
+    oxygen::composition
+)
 
 # ------------------------------------------------------------------------------
 # Tests
