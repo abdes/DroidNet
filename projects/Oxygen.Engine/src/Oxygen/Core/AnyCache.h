@@ -42,7 +42,7 @@ concept CacheValueType = requires {
   ### Implementation Notes
 
   - Cost estimation provides hints for eviction decisions and drives the
-    decision to start eviction. A cachae has a budget that is the maximum
+    decision to start eviction. A cache has a budget that is the maximum
     allowed cost for all items in the cache. As items are added, the `consumed`
     cost is updated. If the budget is exceeded, eviction is triggered.
 
@@ -110,26 +110,28 @@ template <typename K> struct RefCountedEviction {
   ContainerType eviction_list;
 
   // Cost estimator: uses user-provided function if set, else returns 1
-  size_t Cost(const std::shared_ptr<void>& value, TypeId type_id) const
+  [[nodiscard]] auto Cost(
+    const std::shared_ptr<void>& value, const TypeId type_id) const -> size_t
   {
-    if (cost_fn_)
+    if (cost_fn_) {
       return cost_fn_(value, type_id);
+    }
     return 1;
   }
 
-  explicit RefCountedEviction(CostType _budget, CostFunction cost_fn = {})
+  explicit RefCountedEviction(const CostType _budget, CostFunction cost_fn = {})
     : budget(_budget)
     , cost_fn_(std::move(cost_fn))
   {
   }
 
-  void Clear()
+  auto Clear() -> void
   {
     eviction_list.clear();
     consumed = 0;
   }
 
-  IteratorType Store(EntryType&& entry)
+  auto Store(EntryType&& entry) -> IteratorType
   {
     // We consider the caller to be a user of the item
     std::get<3>(entry) = 1; // set refcount to 1
@@ -145,7 +147,7 @@ template <typename K> struct RefCountedEviction {
     return eviction_list.begin();
   }
 
-  bool Evict(IteratorType& it)
+  auto Evict(IteratorType& it) -> bool
   {
     if (std::get<3>(*it) == 1) {
       auto& value = std::get<2>(*it);
@@ -157,14 +159,14 @@ template <typename K> struct RefCountedEviction {
     return false;
   }
 
-  void CheckOut(IteratorType& it) { ++std::get<3>(*it); }
+  auto CheckOut(IteratorType& it) -> void { ++std::get<3>(*it); }
 
-  void CheckIn(IteratorType& it)
+  auto CheckIn(IteratorType& it) -> void
   {
-    auto& refcnt = std::get<3>(*it);
-    if (refcnt > 0) {
-      --refcnt;
-      if (refcnt == 0) {
+    auto& refcount = std::get<3>(*it);
+    if (refcount > 0) {
+      --refcount;
+      if (refcount == 0) {
         auto& value = std::get<2>(*it);
         auto type_id = std::get<1>(*it);
         consumed -= Cost(value, type_id);
@@ -173,7 +175,7 @@ template <typename K> struct RefCountedEviction {
     }
   }
 
-  void Fit(std::function<void(const K&)> /*erase_map*/)
+  static auto Fit(std::function<void(const K&)> /*erase_map*/) -> void // NOLINT
   {
     // This policy only evicts based on ref count, so we do not need to
     // implement this method.
@@ -244,7 +246,7 @@ private:
 
   ### Usage Patterns
 
-  - Store and retrieve shared objects by key in multi-threaded systems.
+  - Store and retrieve shared objects by key in multithreaded systems.
   - Use with custom eviction policies for different resource constraints.
   - Integrate with asset/resource managers, component systems, or service
     registries requiring safe, concurrent object caching.
@@ -287,7 +289,8 @@ public:
 
     @see Replace, CheckOut, EvictionPolicyType
   */
-  template <CacheValueType V> bool Store(const KeyType& key, const V& value)
+  template <CacheValueType V>
+  auto Store(const KeyType& key, const V& value) -> bool
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -303,26 +306,26 @@ public:
       // Update type id as well
       std::get<1>(*(it->second)) = type_id;
       return true;
-    } else {
-      EntryType entry = std::make_tuple(key, type_id, erased, 1);
-      IteratorType ev_it = eviction_.Store(std::move(entry));
-      if (ev_it == eviction_.eviction_list.end()) {
-        // Try to fit and retry once
-        eviction_.Fit([this](const KeyType& k) { this->map_.erase(k); });
-        entry = std::make_tuple(key, type_id, erased, 1);
-        ev_it = eviction_.Store(std::move(entry));
-        if (ev_it == eviction_.eviction_list.end()) {
-          return false;
-        }
-      }
-      map_[key] = ev_it;
-      return true;
     }
+    EntryType entry = std::make_tuple(key, type_id, erased, 1);
+    IteratorType ev_it = eviction_.Store(std::move(entry));
+    if (ev_it == eviction_.eviction_list.end()) {
+      // Try to fit and retry once
+      eviction_.Fit([this](const KeyType& k) { this->map_.erase(k); });
+      entry = std::make_tuple(key, type_id, erased, 1);
+      ev_it = eviction_.Store(std::move(entry));
+      if (ev_it == eviction_.eviction_list.end()) {
+        return false;
+      }
+    }
+    map_[key] = ev_it;
+    return true;
   }
 
   //! Replace an existing value by key. Returns false if key not present or not
   //! replaceable.
-  template <CacheValueType V> bool Replace(const KeyType& key, const V& value)
+  template <CacheValueType V>
+  auto Replace(const KeyType& key, const V& value) -> bool
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -350,7 +353,7 @@ public:
     @note Increments usage state as interpreted by the eviction policy.
     @see CheckIn, Peek
   */
-  template <CacheValueType V> V CheckOut(const KeyType& key)
+  template <CacheValueType V> auto CheckOut(const KeyType& key) -> V
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -377,7 +380,7 @@ public:
 
     @see CheckOut
   */
-  template <CacheValueType V> V Peek(const KeyType& key) const
+  template <CacheValueType V> auto Peek(const KeyType& key) const -> V
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
@@ -395,7 +398,7 @@ public:
   }
 
   //! Check in (return) a previously checked out value.
-  void CheckIn(const KeyType& key)
+  auto CheckIn(const KeyType& key) -> void
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -409,7 +412,7 @@ public:
   }
 
   //! Remove a value by key if permitted by the eviction policy.
-  bool Remove(const KeyType& key)
+  auto Remove(const KeyType& key) -> bool
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -424,7 +427,7 @@ public:
   }
 
   //! Remove all items from the cache, ignoring constraints.
-  void Clear()
+  auto Clear() -> void
   {
     std::unique_lock lock(mutex_);
     eviction_.Clear();
@@ -432,15 +435,15 @@ public:
   }
 
   //! Returns true if the cache contains the given key.
-  bool Contains(const KeyType& key) const noexcept
+  auto Contains(const KeyType& key) const noexcept -> bool
   {
     std::shared_lock lock(mutex_);
-    return map_.find(key) != map_.end();
+    return map_.contains(key);
   }
 
   //! Returns the TypeId of the value stored under the given key, or
   //! kInvalidTypeId if not present.
-  TypeId GetTypeId(const KeyType& key) const noexcept
+  auto GetTypeId(const KeyType& key) const noexcept -> TypeId
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
@@ -451,7 +454,7 @@ public:
   }
 
   //! Returns the current usage count for a key, or 0 if not present.
-  std::size_t GetRefCount(const KeyType& key) const noexcept
+  auto GetRefCount(const KeyType& key) const noexcept -> std::size_t
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
@@ -462,21 +465,21 @@ public:
   }
 
   //! Returns the number of items currently in the cache.
-  std::size_t Size() const noexcept
+  auto Size() const noexcept -> std::size_t
   {
     std::shared_lock lock(mutex_);
     return map_.size();
   }
 
   //! Returns the current total cost consumed by all items in the cache.
-  typename EvictionPolicyType::CostType Consumed() const noexcept
+  auto Consumed() const noexcept -> typename EvictionPolicyType::CostType
   {
     std::shared_lock lock(mutex_);
     return eviction_.consumed;
   }
 
   //! Returns the maximum allowed cost (budget) for the cache.
-  typename EvictionPolicyType::CostType Budget() const noexcept
+  auto Budget() const noexcept -> typename EvictionPolicyType::CostType
   {
     std::shared_lock lock(mutex_);
     return eviction_.budget;
@@ -505,22 +508,25 @@ public:
         : it_(it)
       {
       }
-      const value_type& operator*() const { return it_->first; }
-      iterator& operator++()
+      auto operator*() const -> const value_type& { return it_->first; }
+      auto operator++() -> iterator&
       {
         ++it_;
         return *this;
       }
-      iterator operator++(int)
+      auto operator++(int) -> iterator
       {
         auto tmp = *this;
         ++it_;
         return tmp;
       }
-      bool operator==(const iterator& other) const = default;
+      auto operator==(const iterator& other) const -> bool = default;
     };
-    iterator begin() const { return iterator(map_->begin()); }
-    iterator end() const { return iterator(map_->end()); }
+    [[nodiscard]] auto begin() const -> iterator
+    {
+      return iterator(map_->begin());
+    }
+    [[nodiscard]] auto end() const -> iterator { return iterator(map_->end()); }
   };
 
   //! brief Returns a view of all keys in the cache.
@@ -533,9 +539,9 @@ public:
    @warning This view and its iterators are NOT thread safe. You must hold the
    cache's lock (by not calling any other cache method from any thread) for the
    entire lifetime of the view and all iterators derived from it. If the cache
-   is modified in any way (insert, remove, checkin, checkout, clear, etc.) while
-   a view or its iterator is in use, the behavior is undefined and may result in
-   crashes or data corruption.
+   is modified in any way (insert, remove, check in, check out, clear, etc.)
+   while a view or its iterator is in use, the behavior is undefined and may
+   result in crashes or data corruption.
 
    This is the same as the C++ standard library containers and views: non-owning
    views over mutable containers are inherently unsafe for concurrent use. If
@@ -543,7 +549,7 @@ public:
 
    ### Example Usage
 
-   Usage of KeysView to iterate over keys in the cache is obvious, but here is
+    of KeysView to iterate over keys in the cache is obvious, but here is
    an example of how to use it to get a view of all items of a specific
    type in the cache:
 
