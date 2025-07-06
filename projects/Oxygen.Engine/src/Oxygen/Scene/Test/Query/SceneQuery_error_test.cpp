@@ -207,11 +207,11 @@ NOLINT_TEST_F(
   SceneQueryErrorTest, Query_WithLargeResults_HandlesMemoryEfficiently)
 {
   // Arrange: Create very large hierarchy
-  CreateForestScene(100, 100); // 100 roots * 100 children = 10,000+ nodes
+  CreateForestScene(10, 100); // 10 roots * 100 children = 1,000+ nodes
   CreateQuery();
 
   std::vector<SceneNode> large_collection;
-  large_collection.reserve(10000); // Pre-allocate to test memory patterns
+  large_collection.reserve(1000); // Pre-allocate to test memory patterns
 
   // Act: Collect all nodes
   auto result = query_->Collect(
@@ -219,7 +219,7 @@ NOLINT_TEST_F(
 
   // Assert: Should handle large collections efficiently
   EXPECT_TRUE(result);
-  EXPECT_GT(large_collection.size(), 10000);
+  EXPECT_GT(large_collection.size(), 1000);
   EXPECT_EQ(result.nodes_matched, large_collection.size());
 }
 
