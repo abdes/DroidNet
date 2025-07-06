@@ -15,10 +15,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/ContentCache.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
+#include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -105,7 +105,7 @@ public:
   template <IsTyped T>
   auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
   {
-    return content_cache_.Get<T>(HashAssetKey(key));
+    return content_cache_.CheckOut<T>(HashAssetKey(key));
   }
 
   //! Check if asset is loaded in cache
@@ -121,7 +121,7 @@ public:
   */
   template <IsTyped T> auto HasAsset(const data::AssetKey& key) const -> bool
   {
-    return content_cache_.Has<T>(HashAssetKey(key));
+    return content_cache_.Contains(HashAssetKey(key));
   }
 
   //! Release asset reference (decrements ref count)
@@ -190,7 +190,7 @@ public:
   template <PakResource T>
   auto GetResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
   {
-    return content_cache_.Get<T>(HashResourceKey(key));
+    return content_cache_.CheckOut<T>(HashResourceKey(key));
   }
 
   //! Check if resource is loaded
@@ -207,7 +207,7 @@ public:
   template <PakResource T>
   auto HasResource(ResourceKey key) const noexcept -> bool
   {
-    return content_cache_.Has<T>(HashResourceKey(key));
+    return content_cache_.Contains(HashResourceKey(key));
   }
 
   //! Release resource reference (decrements ref count)
@@ -323,7 +323,7 @@ private:
   //=== Unified Content Cache ================================================//
 
   //! Unified content cache for both assets and resources
-  ContentCache content_cache_;
+  AnyCache<uint64_t, RefCountedEviction<uint64_t>> content_cache_;
 
   //! Hash an AssetKey for cache storage
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
