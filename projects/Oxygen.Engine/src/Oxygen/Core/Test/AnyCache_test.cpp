@@ -23,22 +23,22 @@ namespace {
 // Basic test cases
 // -----------------------------------------------------------------------------
 
-class AnyCacheBasicTest : public ::testing::Test {
+class AnyCacheBasicTest : public testing::Test {
 protected:
-  struct CachedNumber : oxygen::Object {
+  struct CachedNumber final : oxygen::Object {
     OXYGEN_TYPED(CachedNumber)
   public:
-    CachedNumber(int v)
+    explicit CachedNumber(const int v)
       : value(v)
     {
     }
     int value { 0 };
   };
 
-  struct CachedString : oxygen::Object {
+  struct CachedString final : oxygen::Object {
     OXYGEN_TYPED(CachedString)
   public:
-    CachedString(std::string_view v)
+    explicit CachedString(const std::string_view v)
       : value(v)
     {
     }
@@ -61,14 +61,14 @@ NOLINT_TEST_F(AnyCacheBasicTest, Smoke)
   EXPECT_EQ(cache_.Peek<CachedStringPtr>(2)->value, "two");
 
   {
-    auto num = cache_.CheckOut<CachedNumberPtr>(1);
+    const auto num = cache_.CheckOut<CachedNumberPtr>(1);
     EXPECT_EQ(num->value, 1);
     cache_.CheckIn(1);
   }
   EXPECT_TRUE(cache_.Remove(1));
 
   {
-    auto str = cache_.CheckOut<CachedStringPtr>(2);
+    const auto str = cache_.CheckOut<CachedStringPtr>(2);
     EXPECT_EQ(str->value, "two");
     cache_.CheckIn(2);
   }
@@ -80,7 +80,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, Smoke)
 NOLINT_TEST_F(AnyCacheBasicTest, Ranges)
 {
   using CachedNumberPtr = std::shared_ptr<CachedNumber>;
-  auto type_id = CachedNumber::ClassTypeId();
+  const auto type_id = CachedNumber::ClassTypeId();
 
   cache_.Store(1, std::make_shared<CachedNumber>(1));
   cache_.Store(2, std::make_shared<CachedNumber>(2));
@@ -90,9 +90,10 @@ NOLINT_TEST_F(AnyCacheBasicTest, Ranges)
   cache_.Store(101, std::make_shared<CachedString>("str_101"));
   cache_.Store(102, std::make_shared<CachedString>("str_102"));
 
-  auto cached_items = cache_.Keys() | std::views::filter([&](int key) {
+  // ReSharper disable once CppLocalVariableMayBeConst
+  auto cached_items = cache_.Keys() | std::views::filter([&](const int key) {
     return cache_.GetTypeId(key) == type_id;
-  }) | std::views::transform([&](int key) {
+  }) | std::views::transform([&](const int key) {
     return cache_.Peek<CachedNumberPtr>(key);
   }) | std::views::filter([](const CachedNumberPtr& ptr) {
     return static_cast<bool>(ptr);
@@ -100,7 +101,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, Ranges)
 
   // Now you can iterate:
   std::vector<int> int_values;
-  for (const CachedNumberPtr& item : cached_items) {
+  for (const auto& item : cached_items) {
     int_values.push_back(item->value);
   }
 
