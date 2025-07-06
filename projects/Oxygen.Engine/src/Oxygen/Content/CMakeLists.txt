@@ -48,7 +48,6 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "AssetLoader.cpp"
-    "ContentCache.cpp"
     "PakFile.cpp"
     "Detail/ResourceKey.h"
     "Loaders/BufferLoader.h"
@@ -60,7 +59,6 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "ContentCache.h"
       "PakFile.h"
       "AssetLoader.h"
       "LoaderFunctions.h"

@@ -289,15 +289,15 @@ public:
 
     @see Replace, CheckOut, EvictionPolicyType
   */
-  template <CacheValueType V>
-  auto Store(const KeyType& key, const V& value) -> bool
+  template <IsTyped V>
+  auto Store(const KeyType& key, std::shared_ptr<V> value) -> bool
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     auto type_id = value
       ? std::remove_reference_t<decltype(*value)>::ClassTypeId()
       : kInvalidTypeId;
-    std::shared_ptr<void> erased = value;
+    std::shared_ptr<void> erased = std::move(value);
     if (it != map_.end()) {
       // Already exists: try replacing
       if (!eviction_.TryReplace(it->second, erased)) {
@@ -353,7 +353,7 @@ public:
     @note Increments usage state as interpreted by the eviction policy.
     @see CheckIn, Peek
   */
-  template <CacheValueType V> auto CheckOut(const KeyType& key) -> V
+  template <IsTyped V> auto CheckOut(const KeyType& key) -> std::shared_ptr<V>
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
@@ -361,14 +361,13 @@ public:
       auto& entry = *(it->second);
       eviction_.CheckOut(it->second); // use the item
       TypeId stored_type = std::get<1>(entry);
-      if constexpr (requires { V::element_type::ClassTypeId(); }) {
-        if (stored_type == V::element_type::ClassTypeId()) {
-          return std::static_pointer_cast<typename V::element_type>(
-            std::get<2>(entry));
+      if constexpr (requires { V::ClassTypeId(); }) {
+        if (stored_type == V::ClassTypeId()) {
+          return std::static_pointer_cast<V>(std::get<2>(entry));
         }
       }
     }
-    return V {};
+    return {};
   }
 
   /*!
@@ -380,21 +379,20 @@ public:
 
     @see CheckOut
   */
-  template <CacheValueType V> auto Peek(const KeyType& key) const -> V
+  template <IsTyped V> auto Peek(const KeyType& key) const -> std::shared_ptr<V>
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
       auto& entry = *(it->second);
       TypeId stored_type = std::get<1>(entry);
-      if constexpr (requires { V::element_type::ClassTypeId(); }) {
-        if (stored_type == V::element_type::ClassTypeId()) {
-          return std::static_pointer_cast<typename V::element_type>(
-            std::get<2>(entry));
+      if constexpr (requires { V::ClassTypeId(); }) {
+        if (stored_type == V::ClassTypeId()) {
+          return std::static_pointer_cast<V>(std::get<2>(entry));
         }
       }
     }
-    return V {};
+    return {};
   }
 
   //! Check in (return) a previously checked out value.

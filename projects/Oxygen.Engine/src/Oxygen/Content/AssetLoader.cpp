@@ -113,7 +113,7 @@ auto AssetLoader::ReleaseResource(
 
   if (!has_dependents) {
     // Safe to decrement - ContentCache will remove when ref count reaches zero
-    content_cache_.DecrementRefCount(key_hash);
+    content_cache_.CheckIn(key_hash);
   } else {
     LOG_F(INFO, "Resource {} has asset dependents, not releasing",
       nostd::to_string(internal_key));
@@ -147,8 +147,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
 {
   // Check cache first
   auto hash_key = HashAssetKey(key);
-  if (auto cached = content_cache_.Get<T>(hash_key)) {
-    content_cache_.IncrementRefCount(hash_key);
+  if (auto cached = content_cache_.CheckOut<T>(hash_key)) {
     return cached;
   }
 
@@ -162,7 +161,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
         auto typed = std::static_pointer_cast<T>(void_ptr);
         if (typed && typed->GetTypeId() == T::ClassTypeId()) {
           // Cache the loaded asset
-          content_cache_.Store<T>(hash_key, typed, 1);
+          content_cache_.Store(hash_key, typed);
           return typed;
         }
       }
@@ -226,8 +225,7 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   auto key_hash = std::hash<detail::ResourceKey> {}(internal_key);
 
   // Check cache first using the ResourceKey directly
-  if (auto cached = content_cache_.Get<T>(key_hash)) {
-    content_cache_.IncrementRefCount(key_hash);
+  if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
     return cached;
   }
 
@@ -242,7 +240,7 @@ auto AssetLoader::LoadResource(const PakFile& pak,
     auto typed = std::static_pointer_cast<T>(void_ptr);
     if (typed && typed->GetTypeId() == T::ClassTypeId()) {
       // Cache the loaded resource
-      content_cache_.Store<T>(key_hash, typed, 1);
+      content_cache_.Store(key_hash, typed);
       return typed;
     }
   }
@@ -308,7 +306,7 @@ auto AssetLoader::ReleaseAsset(
   [[maybe_unused]] const auto& type = asset_type;
 
   const auto hash_key = HashAssetKey(key);
-  content_cache_.DecrementRefCount(hash_key);
+  content_cache_.CheckIn(hash_key);
 }
 
 //=== Resource Cache Implementation (Updated for ContentCache) ==============//

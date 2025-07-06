@@ -51,24 +51,21 @@ protected:
 
 NOLINT_TEST_F(AnyCacheBasicTest, Smoke)
 {
-  using CachedNumberPtr = std::shared_ptr<CachedNumber>;
-  using CachedStringPtr = std::shared_ptr<CachedString>;
-
   cache_.Store(1, std::make_shared<CachedNumber>(1));
   cache_.Store(2, std::make_shared<CachedString>("two"));
 
-  EXPECT_EQ(cache_.Peek<CachedNumberPtr>(1)->value, 1);
-  EXPECT_EQ(cache_.Peek<CachedStringPtr>(2)->value, "two");
+  EXPECT_EQ(cache_.Peek<CachedNumber>(1)->value, 1);
+  EXPECT_EQ(cache_.Peek<CachedString>(2)->value, "two");
 
   {
-    const auto num = cache_.CheckOut<CachedNumberPtr>(1);
+    const auto num = cache_.CheckOut<CachedNumber>(1);
     EXPECT_EQ(num->value, 1);
     cache_.CheckIn(1);
   }
   EXPECT_TRUE(cache_.Remove(1));
 
   {
-    const auto str = cache_.CheckOut<CachedStringPtr>(2);
+    const auto str = cache_.CheckOut<CachedString>(2);
     EXPECT_EQ(str->value, "two");
     cache_.CheckIn(2);
   }
@@ -94,7 +91,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, Ranges)
   auto cached_items = cache_.Keys() | std::views::filter([&](const int key) {
     return cache_.GetTypeId(key) == type_id;
   }) | std::views::transform([&](const int key) {
-    return cache_.Peek<CachedNumberPtr>(key);
+    return cache_.Peek<CachedNumber>(key);
   }) | std::views::filter([](const CachedNumberPtr& ptr) {
     return static_cast<bool>(ptr);
   });
