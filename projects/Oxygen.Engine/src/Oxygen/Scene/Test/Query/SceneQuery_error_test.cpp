@@ -142,19 +142,19 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result1.has_value());
 
   std::optional<SceneNode> result2;
-  _ = query_->FindFirstByPath(result2, "//");
+  (void)query_->FindFirstByPath(result2, "//");
   EXPECT_FALSE(result2.has_value());
 
   std::optional<SceneNode> result3;
-  _ = query_->FindFirstByPath(result3, "Node//Child");
+  (void)query_->FindFirstByPath(result3, "Node//Child");
   EXPECT_FALSE(result3.has_value());
 
   std::vector<SceneNode> nodes;
-  _ = query_->CollectByPath(nodes, "**/**");
+  (void)query_->CollectByPath(nodes, "**/**");
   // Should handle double recursive wildcards gracefully
 
   nodes.clear();
-  _ = query_->CollectByPath(nodes, "*/*/");
+  (void)query_->CollectByPath(nodes, "*/*/");
   // Should handle trailing wildcards gracefully
 }
 
