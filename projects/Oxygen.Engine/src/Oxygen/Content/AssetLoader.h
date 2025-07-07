@@ -289,7 +289,7 @@ public:
    @see LoadAsset, LoadResource
   */
   template <LoadFunction LF, typename UF>
-  void RegisterLoader(LF&& load_fn, UF&& unload_fn)
+  auto RegisterLoader(LF&& load_fn, UF&& unload_fn) -> void
   {
     // Infer the type from the loader function signature
     using LoaderPtr
@@ -346,7 +346,7 @@ private:
 
   //! Helper method for the recursive descent of asset dependencies when
   //! releasing assets.
-  void ReleaseAssetTree(const data::AssetKey& key);
+  auto ReleaseAssetTree(const data::AssetKey& key) -> void;
 
   //=== Dependency Tracking ===-----------------------------------------------//
 

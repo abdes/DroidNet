@@ -9,12 +9,12 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 
-using oxygen::data::MakeCubeMeshAsset;
+using oxygen::data::GenerateMesh;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   // Create a simple cube mesh using the procedural mesh factory
-  const auto mesh = MakeCubeMeshAsset();
+  const auto mesh = GenerateMesh("Cube/TestCube", {});
   if (!mesh) {
     std::cerr << "Failed to create mesh.\n";
     return EXIT_FAILURE;

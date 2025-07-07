@@ -11,6 +11,7 @@
 #include <limits>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MeshType.h>
 
 //! Oxygen PAK file binary format specification
 /*!
@@ -472,6 +473,25 @@ struct GeometryAssetDesc {
 #pragma pack(pop)
 static_assert(sizeof(GeometryAssetDesc) == 256);
 
+//! Fields for a standard (static) mesh
+#pragma pack(push, 1)
+struct StandardMeshInfo {
+  ResourceIndexT vertex_buffer = 0; //!< Reference to vertex buffer
+  ResourceIndexT index_buffer = 0; //!< Reference to index buffer
+  float bounding_box_min[3] = {}; //!< AABB min coordinates
+  float bounding_box_max[3] = {}; //!< AABB max coordinates
+};
+#pragma pack(pop)
+static_assert(sizeof(StandardMeshInfo) == 32);
+
+//! Fields for a procedural mesh
+#pragma pack(push, 1)
+struct ProceduralMeshInfo {
+  uint32_t params_size = 0; //!< Size of procedural parameter blob (bytes)
+};
+#pragma pack(pop)
+static_assert(sizeof(ProceduralMeshInfo) == 4);
+
 //! Mesh descriptor (104 bytes + SubMesh table)
 /*!
   Describes a single mesh LOD within a geometry asset. Each MeshDesc contains
@@ -495,16 +515,45 @@ static_assert(sizeof(GeometryAssetDesc) == 256);
 #pragma pack(push, 1)
 struct MeshDesc {
   char name[kMaxNameSize] = {};
-  ResourceIndexT vertex_buffer = kNoResourceIndex; // Reference to vertex buffer
-  ResourceIndexT index_buffer = kNoResourceIndex; // Reference to index buffer
+  uint8_t mesh_type = 0; // MeshType enum value
   uint32_t submesh_count = 0; // Number of SubMeshes
   uint32_t mesh_view_count = 0; // Total number of MeshViews (all SubMeshes)
-  float bounding_box_min[3] = {}; // AABB min coordinates
-  float bounding_box_max[3] = {}; // AABB max coordinates
+  union {
+    //! Static Mesh. All info is self-contained in this structure.
+    StandardMeshInfo standard;
+    //! Procedural Mesh. Parameters blob follow the MeshDesc immediately. Mesh
+    //! name is used to identify the procedural mesh type, and should be in the
+    //! format: `Generator/MeshName`, where `Generator` is a known procedural
+    //! mesh generator type (e.g., `Terrain`, `Plane`, `Sphere`, etc.)
+    //! understandable or resolvable by the geometry loader.
+    ProceduralMeshInfo procedural;
+  } info {};
+
+#define OXYGEN_MESH_IS(NAME, ENUM)                                             \
+  [[nodiscard]] constexpr bool Is##NAME() const                                \
+  {                                                                            \
+    return static_cast<std::underlying_type_t<MeshType>>(MeshType::ENUM)       \
+      == mesh_type;                                                            \
+  }
+
+  OXYGEN_MESH_IS(Standard, kStandard)
+  OXYGEN_MESH_IS(Procedural, kProcedural)
+  OXYGEN_MESH_IS(Skinned, kSkinned)
+  OXYGEN_MESH_IS(MorphTarget, kMorphTarget)
+  OXYGEN_MESH_IS(Instanced, kInstanced)
+  OXYGEN_MESH_IS(Collision, kCollision)
+  OXYGEN_MESH_IS(Navigation, kNavigation)
+  OXYGEN_MESH_IS(Billboard, kBillboard)
+  OXYGEN_MESH_IS(Voxel, kVoxel)
+
+#undef OXYGEN_MESH_IS
 };
-// Followed by: SubMeshDesc submeshes[submesh_count];
+// Followed by:
+// - Optional blob of data depending on `mesh_type`. Blob size is specified by
+//   the MeshInfo structure.
+// - SubMeshDesc submeshes[submesh_count];
 #pragma pack(pop)
-static_assert(sizeof(MeshDesc) == 104);
+static_assert(sizeof(MeshDesc) == 105);
 
 //! Sub-mesh descriptor (108 bytes + MeshView table)
 /*!

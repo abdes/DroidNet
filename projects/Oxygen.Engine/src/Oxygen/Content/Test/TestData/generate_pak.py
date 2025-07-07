@@ -147,7 +147,7 @@ ASSET_NAME_MAX_LENGTH = 63
 ASSET_KEY_SIZE = 16
 MATERIAL_DESC_SIZE = 256
 GEOMETRY_DESC_SIZE = 256
-MESH_DESC_SIZE = 104
+MESH_DESC_SIZE = 105  # Updated from 104 to 105 per new PakFormat.h
 SUBMESH_DESC_SIZE = 108
 MESH_VIEW_DESC_SIZE = 16
 
@@ -1196,25 +1196,44 @@ def create_geometry_asset_descriptor(
 def create_mesh_descriptor(
     lod: Dict[str, Any], resource_index_map: Dict[str, Dict[str, int]]
 ) -> bytes:
-    """Create mesh descriptor from LOD specification."""
+    """Create mesh descriptor from LOD specification, matching new PakFormat.h."""
     mesh_name = pack_name_string(lod["name"], 64)
-    vertex_buffer_idx = resource_index_map["buffer"].get(
-        lod["vertex_buffer"], 0
-    )
-    index_buffer_idx = resource_index_map["buffer"].get(lod["index_buffer"], 0)
+    mesh_type = lod.get("mesh_type", 0)  # 0 = Standard, 1 = Procedural, etc.
     submeshes = lod.get("submeshes", [])
     mesh_view_count = sum(len(sm.get("mesh_views", [])) for sm in submeshes)
+    submesh_count = len(submeshes)
+
+    # StandardMeshInfo fields (default)
+    vertex_buffer_idx = resource_index_map["buffer"].get(
+        lod.get("vertex_buffer", ""), 0
+    )
+    index_buffer_idx = resource_index_map["buffer"].get(
+        lod.get("index_buffer", ""), 0
+    )
     mesh_bb_min = lod.get("bounding_box_min", [0.0, 0.0, 0.0])
     mesh_bb_max = lod.get("bounding_box_max", [0.0, 0.0, 0.0])
 
+    # ProceduralMeshInfo (if mesh_type == 1)
+    procedural_params_size = lod.get("procedural_params_size", 0)
+
+    # Build union info
+    if mesh_type == 1:  # Procedural
+        info = struct.pack("<I", procedural_params_size) + b"\x00" * (32 - 4)
+    else:  # Standard (default)
+        info = (
+            struct.pack("<I", vertex_buffer_idx)
+            + struct.pack("<I", index_buffer_idx)
+            + struct.pack("<3f", *mesh_bb_min)
+            + struct.pack("<3f", *mesh_bb_max)
+        )
+        info += b"\x00" * (32 - len(info))  # Pad to 32 bytes
+
     mesh_desc = (
         mesh_name
-        + struct.pack("<I", vertex_buffer_idx)
-        + struct.pack("<I", index_buffer_idx)
-        + struct.pack("<I", len(submeshes))
+        + struct.pack("<B", mesh_type)
+        + struct.pack("<I", submesh_count)
         + struct.pack("<I", mesh_view_count)
-        + struct.pack("<3f", *mesh_bb_min)
-        + struct.pack("<3f", *mesh_bb_max)
+        + info
     )
 
     if len(mesh_desc) != MESH_DESC_SIZE:

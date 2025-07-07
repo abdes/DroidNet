@@ -6,6 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MeshType.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
@@ -84,9 +85,9 @@ Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
 auto Mesh::ComputeBounds() -> void
 {
   // Step 1: Compute or copy bounding box
-  if (desc_.has_value()) {
+  if (desc_.has_value() && desc_.value().IsStandard()) {
     // Use pre-computed bounds from PAK descriptor
-    const auto& desc = desc_.value();
+    const auto& desc = desc_.value().info.standard;
     bbox_min_ = glm::vec3(desc.bounding_box_min[0], desc.bounding_box_min[1],
       desc.bounding_box_min[2]);
     bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],

@@ -57,7 +57,15 @@ target_sources(
     "ProceduralMeshes.cpp"
     "ShaderReference.cpp"
     "TextureResource.cpp"
-    "Detail/ToStringConverters.cpp"
+    "ToStringConverters.cpp"
+    "Procedural/ArrowGizmo.cpp"
+    "Procedural/Cone.cpp"
+    "Procedural/Cube.cpp"
+    "Procedural/Cylinder.cpp"
+    "Procedural/Plane.cpp"
+    "Procedural/Quad.cpp"
+    "Procedural/Sphere.cpp"
+    "Procedural/Torus.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"

@@ -26,7 +26,8 @@ NOLINT_TEST_F(SceneNodeMeshTest, AttachMesh_AttachesMeshAsset)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh = oxygen::data::MakeCubeMeshAsset();
+  std::shared_ptr<oxygen::data::Mesh> mesh
+    = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   EXPECT_FALSE(node.HasMesh());
 
   // Act
@@ -44,10 +45,12 @@ NOLINT_TEST_F(SceneNodeMeshTest, AttachMesh_AttachesMeshAsset)
     Scenario: Attach a second mesh and verify the first remains. */
 NOLINT_TEST_F(SceneNodeMeshTest, AttachMesh_FailsIfMeshAlreadyExists)
 {
+  using oxygen::data::Mesh;
+
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh1 = oxygen::data::MakeCubeMeshAsset();
-  auto mesh2 = oxygen::data::MakePlaneMeshAsset();
+  std::shared_ptr<Mesh> mesh1 = oxygen::data::GenerateMesh("Cube/Mesh1", {});
+  std::shared_ptr<Mesh> mesh2 = oxygen::data::GenerateMesh("Plane/Mesh1", {});
   EXPECT_TRUE(node.AttachMesh(mesh1));
   EXPECT_TRUE(node.HasMesh());
 
@@ -67,7 +70,8 @@ NOLINT_TEST_F(SceneNodeMeshTest, DetachMesh_RemovesMeshComponent)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh = oxygen::data::MakeCubeMeshAsset();
+  std::shared_ptr<oxygen::data::Mesh> mesh
+    = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   EXPECT_TRUE(node.AttachMesh(mesh));
   EXPECT_TRUE(node.HasMesh());
 
@@ -101,8 +105,10 @@ NOLINT_TEST_F(SceneNodeMeshTest, ReplaceMesh_ReplacesExistingMesh)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh1 = oxygen::data::MakeCubeMeshAsset();
-  auto mesh2 = oxygen::data::MakePlaneMeshAsset();
+  std::shared_ptr<oxygen::data::Mesh> mesh1
+    = oxygen::data::GenerateMesh("Cube/Mesh1", {});
+  std::shared_ptr<oxygen::data::Mesh> mesh2
+    = oxygen::data::GenerateMesh("Plane/Mesh1", {});
   EXPECT_TRUE(node.AttachMesh(mesh1));
   EXPECT_TRUE(node.HasMesh());
 
@@ -123,7 +129,8 @@ NOLINT_TEST_F(SceneNodeMeshTest, ReplaceMesh_NoMesh_ActsLikeAttach)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh = oxygen::data::MakeCubeMeshAsset();
+  std::shared_ptr<oxygen::data::Mesh> mesh
+    = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   EXPECT_FALSE(node.HasMesh());
 
   // Act
@@ -153,7 +160,8 @@ NOLINT_TEST_F(SceneNodeMeshTest, HasMesh_ReturnsTrueIfMeshAttached)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  auto mesh = oxygen::data::MakeCubeMeshAsset();
+  std::shared_ptr<oxygen::data::Mesh> mesh
+    = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   EXPECT_FALSE(node.HasMesh());
 
   // Act
