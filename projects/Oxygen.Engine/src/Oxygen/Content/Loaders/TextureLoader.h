@@ -67,4 +67,16 @@ auto LoadTextureResource(LoaderContext<S> context)
   return std::make_unique<data::TextureResource>(desc);
 }
 
+//! Unload function for TextureResource.
+inline void UnloadTextureResource(
+  std::shared_ptr<oxygen::data::TextureResource> /*resource*/,
+  oxygen::content::AssetLoader& /*loader*/, bool offline) noexcept
+{
+  if (offline) {
+    // In offline mode, we do not need to clean up GPU resources.
+    return;
+  }
+  // TODO: cleanup GPU resources for the texture.
+}
+
 } // namespace oxygen::content::loaders

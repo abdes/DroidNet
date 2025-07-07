@@ -18,10 +18,10 @@
 |---------|--------|----------------|-------|
 | **Synchronous Asset Loader** | ✅ **Complete** | `AssetLoader.h/cpp` | Type-safe LoaderContext system |
 | **Loader Registration** | ✅ **Complete** | `LoaderFunctions.h` | Unified LoaderContext API for all loaders |
-| **Resource Caching** | ✅ **Complete** | `ResourceTable.h` | Resource deduplication with manual eviction |
-| **Dependency Registration** | ✅ **Complete** | `LoaderContext` | Inline dependency registration during loading |
-| **Safe Asset Unloading** | ❌ **Missing** | *Not implemented* | No dependency checking for unload operations |
-| **Asset Caching** | ❌ **Missing** | *Not implemented* | Assets not cached in AssetLoader |
+| **Resource Caching** | ✅ **Complete** | `ResourceTable.h`, `AssetLoader.h/cpp` | Resource deduplication with manual eviction and ref counting |
+| **Dependency Registration** | ✅ **Complete** | `LoaderContext`, `AssetLoader.h/cpp` | Inline dependency registration during loading, enforced at runtime |
+| **Safe Asset Unloading** | 🔄 **Partial** | `AssetLoader.h/cpp` | Reference counting and dependency tracking implemented, but full cascading validation not yet enforced |
+| **Asset Caching** | ✅ **Complete** | `AssetLoader.h/cpp` | Assets cached in AssetLoader with ref counting |
 | **Hot Reload** | ❌ **Missing** | *Not implemented* | No file watching or invalidation |
 
 ### Asynchronous System (Designed but Not Implemented)
@@ -69,8 +69,8 @@
 
 | Area | Status | Coverage | Notes |
 |------|--------|----------|-------|
-| **Unit Tests** | ✅ **Excellent** | Comprehensive coverage | All loaders: basic, error, dependency tests |
-| **Integration Tests** | ✅ **Good** | Link + table tests | LoaderContext integration validated |
+| **Unit Tests** | ✅ **Excellent** | Comprehensive coverage | All loaders: basic, error, dependency, and cache/refcount tests |
+| **Integration Tests** | ✅ **Good** | Link + table tests | LoaderContext integration, cache, and dependency logic validated |
 | **Performance Tests** | ❌ **Missing** | *None* | No loading benchmarks |
 | **Memory Tests** | ❌ **Missing** | *None* | No leak or usage validation |
 
@@ -78,9 +78,9 @@
 
 ### Phase 1: Foundation (High Priority)
 
-1. **Asset Caching System** - Implement caching in AssetLoader (resources already cached)
-2. **Safe Asset Unloading** - Dependency checking to prevent unloading assets with active references
-3. **Reference Counting** - Track usage counts for shared assets (MaterialAssets, etc.)
+1. **Asset Caching System** - **Complete**: Implemented in AssetLoader (resources and assets cached with ref counting)
+2. **Safe Asset Unloading** - **Partial**: Reference counting and dependency tracking implemented, but full cascading validation not yet enforced
+3. **Reference Counting** - **Complete**: Usage counts tracked for shared assets/resources
 4. **Error Handling** - Robust error recovery and reporting
 
 ### Phase 2: Async Pipeline (Medium Priority)
@@ -285,6 +285,6 @@ AudioAsset → AudioResource (resource table index)
 
 ### Reference Counting Need
 
-Since MaterialAssets can be shared across multiple GeometryAssets, the system
+Reference counting and cache eviction are implemented for both assets and resources. Assets and resources are only unloaded when their reference count reaches zero and no dependents remain. This ensures safe sharing and unloading of MaterialAssets, GeometryAssets, and all resource types.
 needs reference counting to safely unload materials without breaking geometry
 that depends on them.

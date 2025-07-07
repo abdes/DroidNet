@@ -46,10 +46,15 @@ public:
   //! Register an asset-to-asset dependency
   /*!
    Records that an asset depends on another asset for proper loading order
-   and reference counting.
+   and reference counting. This will increment the reference count of the
+   dependency in the cache, ensuring it remains loaded until the dependency
+   is removed.
 
    @param dependent The asset that has the dependency
    @param dependency The asset that is depended upon
+
+   @note The dependency's reference count is incremented in the cache.
+   @see AddResourceDependency, ReleaseAsset
    */
   OXGN_CNTT_API virtual auto AddAssetDependency(
     const data::AssetKey& dependent, const data::AssetKey& dependency) -> void;
@@ -57,16 +62,20 @@ public:
   //! Register an asset-to-resource dependency
   /*!
    Records that an asset depends on a resource for proper loading order
-   and reference counting.
+   and reference counting. This will increment the reference count of the
+   resource in the cache, ensuring it remains loaded until the dependency
+   is removed.
 
    @param dependent The asset that has the dependency
    @param resource_key The ResourceKey that is depended upon
+
+   @note The resource's reference count is incremented in the cache.
+   @see AddAssetDependency, ReleaseResource
    */
   OXGN_CNTT_API virtual auto AddResourceDependency(
     const data::AssetKey& dependent, ResourceKey resource_key) -> void;
 
-  //=== Asset Loading
-  //===-----------------------------------------------------------//
+  //=== Asset Loading ===-----------------------------------------------------//
 
   //! Load or get cached asset
   /*!
@@ -124,19 +133,32 @@ public:
     return content_cache_.Contains(HashAssetKey(key));
   }
 
-  //! Release asset reference (decrements ref count)
+  //! Release an asset, indicating it is no longer in use by the caller.
   /*!
-   Decrements the reference count for an asset. When count reaches zero,
-   the asset is removed from the cache.
+   Assets are centrally cached and shared throughout the engine, with automatic
+   reference counting and dependency tracking. When an asset is no longer in
+   use, it should be explicitly released. Releasing an asset checks it back into
+   the cache, releases all of its resource dependencies first, and then
+   recursively releases all of its asset dependencies. This ensures that
+   transitive dependencies—whether resources or other assets—are properly
+   released in a safe and efficient order.
+
+   ### Deferred Unloading Behavior
+
+   Releasing an asset and its dependencies does not guarantee their immediate
+   unloading. Unloading (as a result of eviction from the cache) occurs only
+   when an asset or resource is no longer checked out for use, either directly
+   or as a dependency, by any part of the system.
 
    @param key The asset key to release
-   @param asset_type TypeId of the asset type
+   @return True if this call caused the asset to be fully evicted from the
+   cache, false if the asset is still present or was not present.
 
-   @note Automatically removes asset when ref count reaches zero
-   @see LoadAsset, HasAsset
+   @note There is no atomic, all-or-nothing eviction of dependency trees;
+   eviction is determined individually by reference counts and dependents.
+   @see LoadAsset, HasAsset, ReleaseResource
   */
-  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key, TypeId asset_type)
-    -> void;
+  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool;
 
   //=== Resource Loading ===================================================//
 
@@ -210,95 +232,121 @@ public:
     return content_cache_.Contains(HashResourceKey(key));
   }
 
-  //! Release resource reference (decrements ref count)
+  //! Releases (checks in) a resource usage.
   /*!
-   Decrements the reference count for a resource. When count reaches zero AND
-   no assets depend on the resource, triggers cleanup and notifies the
-   originating ResourceTable via OnResourceUnloaded().
+   This method decrements the usage count for the resource. The resource will
+   only be evicted from the cache when all users (including all asset
+   dependents) have released (checked in) their usage.
 
-   @param key The ResourceKey identifying the resource
-   @param resource_type TypeId of the resource type (for type-erased storage)
+   If this call returns false, you have released your usage, but the resource is
+   still in use elsewhere or not present. The resource will only be fully
+   evicted (and return true) when all users and dependents have released it.
 
-   @note Automatically cascades to dependent resources if safe to unload
-   @note Calls ResourceTable::OnResourceUnloaded() when actually unloaded
-   @see LoadResource, HasResourceDependents
+   @param key The ResourceKey identifying the resource.
+   @return True if this call caused the resource to be fully evicted from the
+   cache, false if the resource is still present or was not present.
+
+   @note This method is idempotent: repeated calls after eviction return false.
+   @see LoadResource, HasResource, ReleaseAsset, AnyCache
   */
-  OXGN_CNTT_API auto ReleaseResource(ResourceKey key, TypeId resource_type)
-    -> void;
+  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool;
 
-protected:
-  //! Register a loader for assets or resources (unified interface)
+  //! Register a load and unload functions for assets or resources (unified
+  //! interface)
   /*!
-   Registers a loader function for assets or resources. The system automatically
-   determines the type from the loader function signature and uses the
-   appropriate loading strategy.
+   The load function is invoked when an asset or resource is requested and is
+   not already cached.
 
-   @tparam F The loader function type (must satisfy LoadFunction)
-   @param fn The loader function to register
+   The unload function is invoked when the asset or resource is evicted from the
+   cache (i.e. no longer used directly or as a dependency).
+
+   The target type (specific asset or resource) is automatically deduced from
+   the load function's return type. The unload function must be callable with a
+   `std::shared_ptr<T>`, an `AssetLoader&`, and a `bool` (offline flag), where
+   `T` is the `element_type` type of the smart pointer returned by the load
+   function.
+
+   @tparam LF The load function type (must satisfy LoadFunction)
+   @tparam UF The unload function type; must be callable as
+     `void(std::shared_ptr<T>, AssetLoader&, bool)` where T matches the load
+     function's return type.
+   @param load_fn The load function to register
+   @param unload_fn The unload function to register
 
    ### Usage Examples
+
    ```cpp
    // Register asset loaders - type inferred from function signature
-   asset_loader.RegisterLoader(LoadGeometryAsset);
-   asset_loader.RegisterLoader(LoadMaterialAsset);
+   asset_loader.RegisterLoader(LoadGeometryAsset, UnloadGeometryAsset);
+   asset_loader.RegisterLoader(LoadMaterialAsset, UnloadMaterialAsset);
 
    // Register resource loaders - type inferred from function signature
-   asset_loader.RegisterLoader(LoadBufferResource);
-   asset_loader.RegisterLoader(LoadTextureResource);
+   asset_loader.RegisterLoader(LoadBufferResource, UnloadBufferResource);
+   asset_loader.RegisterLoader(LoadTextureResource, UnloadTextureResource);
    ```
 
-   @note Uses same LoaderContext interface for both assets and resources
-   @note Type is automatically inferred from loader function return type
-   @note Only one loader per type is supported
+   @note Only one load/unload function pair per type is supported.
    @see LoadAsset, LoadResource
   */
-  template <LoadFunction F> auto RegisterLoader(F&& fn) -> void
+  template <LoadFunction LF, typename UF>
+  void RegisterLoader(LF&& load_fn, UF&& unload_fn)
   {
     // Infer the type from the loader function signature
     using LoaderPtr
-      = decltype(fn(std::declval<LoaderContext<serio::FileStream<>>>()));
+      = decltype(load_fn(std::declval<LoaderContext<serio::FileStream<>>>()));
     using T = std::remove_pointer_t<typename LoaderPtr::element_type>;
     static_assert(IsTyped<T>, "T must satisfy IsTyped concept");
+    static_assert(
+      std::is_invocable_r_v<void, UF, std::shared_ptr<T>, AssetLoader&, bool>,
+      "Unload function must be callable with (std::shared_ptr<T>, "
+      "AssetLoader&, bool) and return void");
 
     auto type_id = T::ClassTypeId();
     auto type_name = T::ClassTypeNamePretty();
 
+    // Store type-erased unload function
+    unloaders_[type_id]
+      = [unload_fn = std::forward<UF>(unload_fn)](
+          std::shared_ptr<void> asset, AssetLoader& loader, bool offline) {
+          auto typed = std::static_pointer_cast<T>(asset);
+          unload_fn(typed, loader, offline);
+        };
+
     if constexpr (PakResource<T>) {
       // Resource loader path
       LoadResourceFnErased erased
-        = [fn = std::forward<F>(fn)](AssetLoader& loader, const PakFile& pak,
-            data::pak::ResourceIndexT resource_index,
+        = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
+            const PakFile& pak, data::pak::ResourceIndexT resource_index,
             bool offline) -> std::shared_ptr<void> {
         return MakeResourceLoaderCall<T>(
-          fn, loader, pak, resource_index, offline);
+          load_fn, loader, pak, resource_index, offline);
       };
       AddTypeErasedResourceLoader(type_id, type_name, std::move(erased));
 
     } else {
       // Asset loader path
       LoadAssetFnErased erased
-        = [fn = std::forward<F>(fn)](AssetLoader& loader, const PakFile& pak,
-            const data::pak::AssetDirectoryEntry& entry,
+        = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
+            const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
             bool offline) -> std::shared_ptr<void> {
-        return MakeAssetLoaderCall(fn, loader, pak, entry, offline);
+        return MakeAssetLoaderCall(load_fn, loader, pak, entry, offline);
       };
-      AddTypeErasedLoader(type_id, type_name, std::move(erased));
+      AddTypeErasedAssetLoader(type_id, type_name, std::move(erased));
     }
   }
 
 private:
-  // Use shared_ptr<void> for type erasure, loader functions get AssetLoader&
-  // reference
-  using LoadAssetFnErased = std::function<std::shared_ptr<void>(
-    AssetLoader&, const PakFile&, const data::pak::AssetDirectoryEntry&, bool)>;
+  // Type-erased unload function signature
+  using UnloadFnErased
+    = std::function<void(std::shared_ptr<void>, AssetLoader&, bool)>;
 
-  // Resource loader type erasure - similar to asset loaders but with
-  // ResourceIndexT
-  using LoadResourceFnErased = std::function<std::shared_ptr<void>(
-    AssetLoader&, const PakFile&, data::pak::ResourceIndexT, bool)>;
+  // Map from type id to type-erased unload function
+  std::unordered_map<TypeId, UnloadFnErased> unloaders_;
+  std::vector<std::unique_ptr<PakFile>> paks_;
 
-  std::unordered_map<TypeId, LoadAssetFnErased> loaders_;
-  std::unordered_map<TypeId, LoadResourceFnErased> resource_loaders_;
+  //! Helper method for the recursive descent of asset dependencies when
+  //! releasing assets.
+  void ReleaseAssetTree(const data::AssetKey& key);
 
   //=== Dependency Tracking ===-----------------------------------------------//
 
@@ -320,7 +368,7 @@ private:
   std::unordered_map<ResourceKey, std::unordered_set<data::AssetKey>>
     reverse_resource_dependencies_;
 
-  //=== Unified Content Cache ================================================//
+  //=== Unified Content Cache ===---------------------------------------------//
 
   //! Unified content cache for both assets and resources
   AnyCache<uint64_t, RefCountedEviction<uint64_t>> content_cache_;
@@ -346,13 +394,26 @@ private:
     const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
     -> std::shared_ptr<void>;
 
-  OXGN_CNTT_API auto AddTypeErasedLoader(TypeId type_id,
+  //=== Type-erased Lodeing/Unloading ===-------------------------------------//
+
+  // Use shared_ptr<void> for type erasure, loader functions get AssetLoader&
+  // reference
+  using LoadAssetFnErased = std::function<std::shared_ptr<void>(
+    AssetLoader&, const PakFile&, const data::pak::AssetDirectoryEntry&, bool)>;
+
+  // Resource loader type erasure - similar to asset loaders but with
+  // ResourceIndexT
+  using LoadResourceFnErased = std::function<std::shared_ptr<void>(
+    AssetLoader&, const PakFile&, data::pak::ResourceIndexT, bool)>;
+
+  std::unordered_map<TypeId, LoadAssetFnErased> loaders_;
+  std::unordered_map<TypeId, LoadResourceFnErased> resource_loaders_;
+
+  OXGN_CNTT_API auto AddTypeErasedAssetLoader(TypeId type_id,
     std::string_view type_name, LoadAssetFnErased loader) -> void;
 
   OXGN_CNTT_API auto AddTypeErasedResourceLoader(TypeId type_id,
     std::string_view type_name, LoadResourceFnErased loader) -> void;
-
-  std::vector<std::unique_ptr<PakFile>> paks_;
 };
 
 //=== Explicit Template Declarations for DLL Export ==========================//
