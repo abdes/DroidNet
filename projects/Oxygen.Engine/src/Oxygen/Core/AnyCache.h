@@ -343,14 +343,12 @@ public:
     return true;
   }
 
+  //! Check out (borrow) a value by key.
   /*!
-    Check out (borrow) a value by key.
-
     @tparam V Value type (must satisfy CacheValueType).
     @param key The key to check out.
     @return Shared pointer to the value if present and type matches, else empty.
 
-    @note Increments usage state as interpreted by the eviction policy.
     @see CheckIn, Peek
   */
   template <IsTyped V> auto CheckOut(const KeyType& key) -> std::shared_ptr<V>
@@ -359,7 +357,7 @@ public:
     auto it = map_.find(key);
     if (it != map_.end()) {
       auto& entry = *(it->second);
-      eviction_.CheckOut(it->second); // use the item
+      eviction_.CheckOut(it->second);
       TypeId stored_type = std::get<1>(entry);
       if constexpr (requires { V::ClassTypeId(); }) {
         if (stored_type == V::ClassTypeId()) {
@@ -368,6 +366,22 @@ public:
       }
     }
     return {};
+  }
+
+  //! Mark an item as checked out without returning it.
+  /*!
+   This method has the same effect as the strongly typed CheckOut method, but
+   can be used when you simply need to mark an item as in use without
+   retrieving it. This is similar to touching a file to update its stats without
+   actually accessing its contents.
+  */
+  auto Touch(const KeyType& key) -> void
+  {
+    std::unique_lock lock(mutex_);
+    auto it = map_.find(key);
+    if (it != map_.end()) {
+      eviction_.CheckOut(it->second);
+    }
   }
 
   /*!
@@ -451,15 +465,9 @@ public:
     return kInvalidTypeId;
   }
 
-  //! Returns the current usage count for a key, or 0 if not present.
-  auto GetRefCount(const KeyType& key) const noexcept -> std::size_t
+  auto IsCheckedOut(const KeyType& key) const noexcept -> std::size_t
   {
-    std::shared_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      return std::get<3>(*(it->second));
-    }
-    return 0;
+    return GetRefCount(key) == 1;
   }
 
   //! Returns the number of items currently in the cache.
@@ -577,6 +585,18 @@ public:
   auto Keys() const
   {
     return KeysView<std::unordered_map<KeyType, IteratorType, Hash>>(map_);
+  }
+
+protected:
+  //! Returns the current usage count for a key, or 0 if not present.
+  auto GetRefCount(const KeyType& key) const noexcept -> std::size_t
+  {
+    std::shared_lock lock(mutex_);
+    auto it = map_.find(key);
+    if (it != map_.end()) {
+      return std::get<3>(*(it->second));
+    }
+    return 0;
   }
 
 private:
