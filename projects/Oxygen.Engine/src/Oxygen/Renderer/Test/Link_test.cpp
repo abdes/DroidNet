@@ -42,7 +42,6 @@ auto main(int /*argc*/, char** /*argv*/) -> int
 
   // Create a RenderItem
   RenderItem item;
-  item.mesh = mesh;
   item.world_transform = glm::mat4(1.0f);
   item.UpdatedTransformedProperties();
 
