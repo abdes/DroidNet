@@ -47,43 +47,55 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_DATA_HEADERS
+  "api_export.h"
+  "Asset.h"
+  "AssetKey.h"
+  "AssetType.h"
+  "BufferResource.h"
+  "GeometryAsset.h"
+  "MaterialAsset.h"
+  "MaterialDomain.h"
+  "MeshType.h"
+  "PakFormat.h"
+  "ProceduralMeshes.h"
+  "ShaderReference.h"
+  "TextureResource.h"
+  "Vertex.h"
+)
+set(
+  OXYGEN_DATA_PRIVATE_SOURCES
+  "AssetKey.cpp"
+  "BufferResource.cpp"
+  "GeometryAsset.cpp"
+  "MaterialAsset.cpp"
+  "ProceduralMeshes.cpp"
+  "ShaderReference.cpp"
+  "TextureResource.cpp"
+  "ToStringConverters.cpp"
+  "Procedural/ArrowGizmo.cpp"
+  "Procedural/Cone.cpp"
+  "Procedural/Cube.cpp"
+  "Procedural/Cylinder.cpp"
+  "Procedural/Plane.cpp"
+  "Procedural/Quad.cpp"
+  "Procedural/Sphere.cpp"
+  "Procedural/Torus.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "AssetKey.cpp"
-    "BufferResource.cpp"
-    "GeometryAsset.cpp"
-    "MaterialAsset.cpp"
-    "ProceduralMeshes.cpp"
-    "ShaderReference.cpp"
-    "TextureResource.cpp"
-    "ToStringConverters.cpp"
-    "Procedural/ArrowGizmo.cpp"
-    "Procedural/Cone.cpp"
-    "Procedural/Cube.cpp"
-    "Procedural/Cylinder.cpp"
-    "Procedural/Plane.cpp"
-    "Procedural/Quad.cpp"
-    "Procedural/Sphere.cpp"
-    "Procedural/Torus.cpp"
+    ${OXYGEN_DATA_PRIVATE_SOURCES}
+    ${OXYGEN_DATA_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "Asset.h"
-      "AssetKey.h"
-      "AssetType.h"
-      "BufferResource.h"
-      "GeometryAsset.h"
-      "MaterialAsset.h"
-      "MaterialDomain.h"
-      "PakFormat.h"
-      "ProceduralMeshes.h"
-      "ShaderReference.h"
-      "TextureResource.h"
-      "Vertex.h"
+    FILES ${OXYGEN_DATA_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

@@ -7,7 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Detail/ResourceKey.h>
+#include <Oxygen/Content/Internal/ResourceKey.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -96,7 +96,7 @@ auto AssetLoader::AddResourceDependency(
   LOG_SCOPE_F(2, "Add Resource Dependency");
 
   // Decode ResourceKey for logging
-  detail::ResourceKey internal_key(resource_key);
+  internal::ResourceKey internal_key(resource_key);
   LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent),
     nostd::to_string(internal_key));
 
@@ -241,8 +241,8 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
 {
   const auto pak_index = GetPakIndex(pak);
-  const detail::ResourceKey internal_key(pak_index, resource_index);
-  auto key_hash = std::hash<detail::ResourceKey> {}(internal_key);
+  const internal::ResourceKey internal_key(pak_index, resource_index);
+  auto key_hash = std::hash<internal::ResourceKey> {}(internal_key);
 
   // Check cache first using the ResourceKey directly
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
@@ -319,8 +319,8 @@ auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 
 auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
 {
-  const detail::ResourceKey internal_key(key);
-  return std::hash<detail::ResourceKey> {}(internal_key);
+  const internal::ResourceKey internal_key(key);
+  return std::hash<internal::ResourceKey> {}(internal_key);
 }
 
 auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint32_t
