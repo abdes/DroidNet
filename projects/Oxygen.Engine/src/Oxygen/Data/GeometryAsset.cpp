@@ -162,13 +162,13 @@ auto SubMesh::ComputeBounds() -> void
 using oxygen::data::MeshBuilder;
 
 //! Builds and returns the immutable Mesh.
-auto MeshBuilder::Build() -> std::shared_ptr<Mesh>
+auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
 {
   CHECK_F(!vertices_.empty(), "Mesh must have vertices");
   CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
 
   // Create the Mesh object
-  auto mesh = std::shared_ptr<Mesh>(new Mesh(lod_, vertices_, indices_));
+  auto mesh = std::unique_ptr<Mesh>(new Mesh(lod_, vertices_, indices_));
   mesh->SetName(name_);
 
   // Set mesh descriptor if provided

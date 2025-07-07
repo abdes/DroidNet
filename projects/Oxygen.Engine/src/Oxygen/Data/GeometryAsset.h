@@ -571,7 +571,7 @@ public:
   }
 
   //! Builds and returns the immutable Mesh.
-  OXGN_DATA_NDAPI auto Build() -> std::shared_ptr<Mesh>;
+  OXGN_DATA_NDAPI auto Build() -> std::unique_ptr<Mesh>;
 
 private:
   uint32_t lod_;
