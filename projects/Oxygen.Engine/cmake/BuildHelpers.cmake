@@ -211,3 +211,72 @@ function(asap_generate_export_headers target module)
     EXPORT_MACRO_NAME ${export_macro_name}
   )
 endfunction()
+
+function(arrange_target_files_for_ide target)
+  get_target_property(_all_sources ${target} SOURCES)
+  get_target_property(_all_headers ${target} INTERFACE_HEADERS)
+  set(
+    _all_files
+    ${_all_sources}
+    ${_all_headers}
+  )
+
+  # Group files for IDE
+  foreach(file IN LISTS _all_files)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+      get_filename_component(file_path "${file}" PATH)
+      if(file_path)
+        string(REPLACE "/" "\\" group_path "${file_path}")
+        source_group("src/${group_path}" FILES "${file}")
+      else()
+        source_group("src" FILES "${file}")
+      endif()
+    endif()
+  endforeach()
+
+  # Find all .h, .hpp, .c, .cpp files recursively
+  file(
+    GLOB_RECURSE _all_existing_files
+    RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+  )
+
+  # Print files not in _all_files, excluding Test, Benchmarks, Examples
+  set(_missing_files "")
+  foreach(existing_file IN LISTS _all_existing_files)
+    # Exclude if path contains Test, Benchmarks, or Examples (case-insensitive)
+    string(TOLOWER "${existing_file}" _lower_file)
+    if(
+      _lower_file
+        MATCHES
+        "test/"
+      OR
+        _lower_file
+          MATCHES
+          "benchmarks/"
+      OR
+        _lower_file
+          MATCHES
+          "examples/"
+    )
+      continue()
+    endif()
+    list(FIND _all_files "${existing_file}" _idx)
+    if(_idx EQUAL -1)
+      list(APPEND _missing_files "${existing_file}")
+    endif()
+  endforeach()
+
+  if(_missing_files)
+    message(
+      AUTHOR_WARNING
+      "The following files exist in the source directory but are NOT part of the target '${target}':"
+    )
+    foreach(missing_file IN LISTS _missing_files)
+      message(NOTICE "  ${missing_file}")
+    endforeach()
+  endif()
+endfunction()
