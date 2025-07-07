@@ -12,7 +12,7 @@
 
 #include <Oxygen/Data/PakFormat.h>
 
-namespace oxygen::content::detail {
+namespace oxygen::content::internal {
 
 //! Resource key that combines PAK file index and resource index
 /*!
@@ -97,9 +97,9 @@ inline auto to_string(const ResourceKey& key) -> std::string
 } // namespace oxygen::content::detail
 
 //! Specialization of std::hash for ResourceKey
-template <> struct std::hash<oxygen::content::detail::ResourceKey> {
+template <> struct std::hash<oxygen::content::internal::ResourceKey> {
   auto operator()(
-    const oxygen::content::detail::ResourceKey& key) const noexcept -> size_t
+    const oxygen::content::internal::ResourceKey& key) const noexcept -> size_t
   {
     return key.GetRawKey();
   }

@@ -50,24 +50,36 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_CORE_HEADERS
+    "api_export.h"
+    "AnyCache.h"
+    "Resources.h"
+    "SafeCall.h"
+    "Types/Format.h"
+    "Types/ShaderType.h"
+    "Types/TextureType.h"
+    "version-info.h"
+    "Version.h"
+)
+set(
+  OXYGEN_CORE_PRIVATE_SOURCES
+    "Version.cpp"
+    "Detail/ToStringConverters.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Version.cpp"
-    "Detail/ToStringConverters.cpp"
+    ${OXYGEN_CORE_PRIVATE_SOURCES}
+    ${OXYGEN_CORE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "AnyCache.h"
-      "Resources.h"
-      "SafeCall.h"
-      "Types/Format.h"
-      "Types/ShaderType.h"
-      "version-info.h"
-      "Version.h"
+    FILES ${OXYGEN_CORE_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

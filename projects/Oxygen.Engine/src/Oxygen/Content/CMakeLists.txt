@@ -44,26 +44,39 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-target_sources(
-  ${META_MODULE_TARGET}
-  PRIVATE
+set(
+  OXYGEN_CONTENT_HEADERS
+    "api_export.h"
+    "PakFile.h"
+    "AssetLoader.h"
+    "LoaderFunctions.h"
+    "ResourceTable.h"
+    "ResourceTypeList.h"
+)
+set(
+  OXYGEN_CONTENT_PRIVATE_SOURCES
     "AssetLoader.cpp"
     "PakFile.cpp"
-    "Detail/ResourceKey.h"
+    "Internal/ResourceKey.h"
     "Loaders/BufferLoader.h"
     "Loaders/GeometryLoader.h"
     "Loaders/MaterialLoader.h"
     "Loaders/TextureLoader.h"
+    "Loaders/Helpers.h"
+)
+
+target_sources(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_CONTENT_PRIVATE_SOURCES}
+    ${OXYGEN_CONTENT_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "PakFile.h"
-      "AssetLoader.h"
-      "LoaderFunctions.h"
-      "ResourceTable.h"
+    FILES ${OXYGEN_CONTENT_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
