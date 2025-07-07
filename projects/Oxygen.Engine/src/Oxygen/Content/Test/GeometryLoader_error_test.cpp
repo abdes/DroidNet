@@ -63,7 +63,11 @@ protected:
   }
 };
 
+//!
 //! Scenario: LoadMesh throws if name is not null-terminated
+//! This test verifies that LoadMesh detects a mesh name that is not
+//! null-terminated and throws an exception as required by the format contract.
+//!
 TEST_F(
   GeometryLoaderEdgeTest, LoadMesh_ThrowsIfNameNotNullTerminated) // NOLINT_EDGE
 {
@@ -72,35 +76,46 @@ TEST_F(
 
   // Arrange
   std::array<std::byte, sizeof(MeshDesc) + sizeof(SubMeshDesc)> buffer {};
-  auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
-  for (size_t i = 0; i < kMaxNameSize; ++i) {
-    mesh_desc->name[i] = 'B';
+
+  // Write MeshDesc with name not null-terminated
+  {
+    auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
+    // Fill name with non-null bytes
+    std::fill_n(mesh_desc->name, kMaxNameSize, 'B');
+    mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
+    mesh_desc->submesh_count = 1;
+    mesh_desc->mesh_view_count = 0;
+    mesh_desc->info.standard.vertex_buffer = 1;
+    mesh_desc->info.standard.index_buffer = 1;
+    for (int i = 0; i < 3; ++i) {
+      mesh_desc->info.standard.bounding_box_min[i] = 0.0f;
+      mesh_desc->info.standard.bounding_box_max[i] = 0.0f;
+    }
   }
-  mesh_desc->vertex_buffer = 1;
-  mesh_desc->index_buffer = 1;
-  mesh_desc->submesh_count = 1; // At least one submesh required
-  mesh_desc->mesh_view_count = 0;
-  for (int i = 0; i < 3; ++i) {
-    mesh_desc->bounding_box_min[i] = 0.0f;
-    mesh_desc->bounding_box_max[i] = 0.0f;
+
+  // Write a valid SubMeshDesc immediately after MeshDesc
+  {
+    auto* submesh_desc
+      = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
+    // Use a valid, null-terminated submesh name
+    submesh_desc->name[0] = 'S';
+    submesh_desc->name[1] = '\0';
+    std::fill(submesh_desc->name + 2, submesh_desc->name + kMaxNameSize, 0);
+    submesh_desc->material_asset_key = AssetKey {};
+    submesh_desc->mesh_view_count = 0;
+    for (int i = 0; i < 3; ++i) {
+      submesh_desc->bounding_box_min[i] = 0.0f;
+      submesh_desc->bounding_box_max[i] = 0.0f;
+    }
   }
-  // Add a dummy submesh with valid structure
-  auto* submesh_desc
-    = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
-  submesh_desc->name[0] = 'S';
-  submesh_desc->name[1] = '\0';
-  submesh_desc->material_asset_key
-    = AssetKey {}; // Use default constructed AssetKey
-  submesh_desc->mesh_view_count = 0;
-  for (int i = 0; i < 3; ++i) {
-    submesh_desc->bounding_box_min[i] = 0.0f;
-    submesh_desc->bounding_box_max[i] = 0.0f;
-  }
+
   MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
   Reader reader(stream);
 
   // Act & Assert
   auto context = CreateLoaderContext(reader);
+
+  //! The loader must throw due to missing null-termination in mesh name.
   EXPECT_THROW(oxygen::content::loaders::LoadMesh(context), std::exception);
 }
 
@@ -174,13 +189,15 @@ TEST_F(GeometryLoaderErrorTest,
   auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
   mesh_desc->name[0] = 'A';
   mesh_desc->name[1] = '\0';
-  mesh_desc->vertex_buffer = static_cast<ResourceIndexT>(-1); // Invalid index
-  mesh_desc->index_buffer = 1;
+  mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
   mesh_desc->submesh_count = 1;
   mesh_desc->mesh_view_count = 0;
+  mesh_desc->info.standard.vertex_buffer
+    = static_cast<ResourceIndexT>(-1); // Invalid index
+  mesh_desc->info.standard.index_buffer = 1;
   for (int i = 0; i < 3; ++i) {
-    mesh_desc->bounding_box_min[i] = 0.0f;
-    mesh_desc->bounding_box_max[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_min[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_max[i] = 0.0f;
   }
   auto* submesh_desc
     = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
@@ -215,13 +232,15 @@ TEST_F(GeometryLoaderErrorTest,
   auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
   mesh_desc->name[0] = 'A';
   mesh_desc->name[1] = '\0';
-  mesh_desc->vertex_buffer = 1;
-  mesh_desc->index_buffer = static_cast<ResourceIndexT>(-1); // Invalid index
+  mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
   mesh_desc->submesh_count = 1;
   mesh_desc->mesh_view_count = 0;
+  mesh_desc->info.standard.vertex_buffer = 1;
+  mesh_desc->info.standard.index_buffer
+    = static_cast<ResourceIndexT>(-1); // Invalid index
   for (int i = 0; i < 3; ++i) {
-    mesh_desc->bounding_box_min[i] = 0.0f;
-    mesh_desc->bounding_box_max[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_min[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_max[i] = 0.0f;
   }
   auto* submesh_desc
     = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
@@ -256,13 +275,14 @@ TEST_F(GeometryLoaderErrorTest,
   auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
   mesh_desc->name[0] = 'A';
   mesh_desc->name[1] = '\0';
-  mesh_desc->vertex_buffer = 1;
-  mesh_desc->index_buffer = 1;
+  mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
   mesh_desc->submesh_count = 0xFFFFFFFF; // Unreasonably large
   mesh_desc->mesh_view_count = 0;
+  mesh_desc->info.standard.vertex_buffer = 1;
+  mesh_desc->info.standard.index_buffer = 1;
   for (int i = 0; i < 3; ++i) {
-    mesh_desc->bounding_box_min[i] = 0.0f;
-    mesh_desc->bounding_box_max[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_min[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_max[i] = 0.0f;
   }
   MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
   Reader reader(stream);
@@ -286,13 +306,14 @@ TEST_F(GeometryLoaderErrorTest,
   auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
   mesh_desc->name[0] = 'A';
   mesh_desc->name[1] = '\0';
-  mesh_desc->vertex_buffer = 1;
-  mesh_desc->index_buffer = 1;
+  mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
   mesh_desc->submesh_count = 1;
   mesh_desc->mesh_view_count = 0xFFFFFFFF; // Unreasonably large
+  mesh_desc->info.standard.vertex_buffer = 1;
+  mesh_desc->info.standard.index_buffer = 1;
   for (int i = 0; i < 3; ++i) {
-    mesh_desc->bounding_box_min[i] = 0.0f;
-    mesh_desc->bounding_box_max[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_min[i] = 0.0f;
+    mesh_desc->info.standard.bounding_box_max[i] = 0.0f;
   }
   auto* submesh_desc
     = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
@@ -327,16 +348,19 @@ TEST_F(
   auto* mesh_desc = reinterpret_cast<MeshDesc*>(buffer.data());
   mesh_desc->name[0] = 'A';
   mesh_desc->name[1] = '\0';
-  mesh_desc->vertex_buffer = 1;
-  mesh_desc->index_buffer = 1;
+  mesh_desc->mesh_type = static_cast<uint8_t>(MeshType::kStandard);
   mesh_desc->submesh_count = 1;
   mesh_desc->mesh_view_count = 0;
-  mesh_desc->bounding_box_min[0] = std::numeric_limits<float>::quiet_NaN();
-  mesh_desc->bounding_box_min[1] = 0.0f;
-  mesh_desc->bounding_box_min[2] = 0.0f;
-  mesh_desc->bounding_box_max[0] = std::numeric_limits<float>::infinity();
-  mesh_desc->bounding_box_max[1] = 0.0f;
-  mesh_desc->bounding_box_max[2] = 0.0f;
+  mesh_desc->info.standard.vertex_buffer = 1;
+  mesh_desc->info.standard.index_buffer = 1;
+  mesh_desc->info.standard.bounding_box_min[0]
+    = std::numeric_limits<float>::quiet_NaN();
+  mesh_desc->info.standard.bounding_box_min[1] = 0.0f;
+  mesh_desc->info.standard.bounding_box_min[2] = 0.0f;
+  mesh_desc->info.standard.bounding_box_max[0]
+    = std::numeric_limits<float>::infinity();
+  mesh_desc->info.standard.bounding_box_max[1] = 0.0f;
+  mesh_desc->info.standard.bounding_box_max[2] = 0.0f;
   auto* submesh_desc
     = reinterpret_cast<SubMeshDesc*>(buffer.data() + sizeof(MeshDesc));
   submesh_desc->name[0] = 'S';

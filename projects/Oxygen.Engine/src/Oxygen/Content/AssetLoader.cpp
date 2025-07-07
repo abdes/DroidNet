@@ -41,7 +41,9 @@ AssetLoader::AssetLoader()
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
-  paks_.push_back(std::make_unique<PakFile>(path));
+  // Normalize the path to ensure consistent handling
+  std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
+  paks_.push_back(std::make_unique<PakFile>(normalized));
 }
 
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
@@ -270,7 +272,7 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
   const auto key_hash = HashResourceKey(key);
 
   // The resource should always be checked in on release. Whether it remains in
-  // the cache or gets eveicted is dependent on the eviction policy.
+  // the cache or gets evicted is dependent on the eviction policy.
   content_cache_.CheckIn(HashResourceKey(key));
   if (content_cache_.Contains(key_hash)) {
     return false;
@@ -323,14 +325,16 @@ auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
 
 auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint32_t
 {
-  // Find the PAK file in our collection and return its index
+  // Normalize the path of the input pak
+  const auto& pak_path = std::filesystem::weakly_canonical(pak.FilePath());
+
   for (auto i = 0U; i < paks_.size(); ++i) {
-    if (paks_[i].get() == &pak) {
+    // Compare normalized paths
+    if (std::filesystem::weakly_canonical(paks_[i]->FilePath()) == pak_path) {
       return i;
     }
   }
 
-  // This should never happen if the PAK is properly managed
-  LOG_F(ERROR, "PAK file not found in AssetLoader collection");
+  LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
   throw std::runtime_error("PAK file not found in AssetLoader collection");
 }

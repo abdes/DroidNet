@@ -10,6 +10,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MeshType.h>
 
 auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
   char*
@@ -20,6 +21,27 @@ auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
     case AssetType::kMaterial:     return "Material";
     case AssetType::kGeometry:     return "Geometry";
     case AssetType::kScene:        return "Scene";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
+}
+
+auto oxygen::data::to_string(oxygen::data::MeshType value) noexcept -> const
+  char*
+{
+  switch (value) {
+    // clang-format off
+    case MeshType::kUnknown:      return "__Unknown__";
+    case MeshType::kStandard:     return "Standard";
+    case MeshType::kProcedural:   return "Procedural";
+    case MeshType::kSkinned:      return "Skinned";
+    case MeshType::kMorphTarget:  return "MorphTarget";
+    case MeshType::kInstanced:    return "Instanced";
+    case MeshType::kCollision:    return "Collision";
+    case MeshType::kNavigation:   return "Navigation";
+    case MeshType::kBillboard:    return "Billboard";
+    case MeshType::kVoxel:        return "Voxel";
     // clang-format on
   }
 

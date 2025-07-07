@@ -28,36 +28,36 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
   using namespace oxygen::data;
 
   // Act & Assert
-  EXPECT_THAT(MakeSphereMeshAsset(2, 2), IsNull());
-  EXPECT_THAT(MakeSphereMeshAsset(8, 8), NotNull());
+  EXPECT_FALSE(MakeSphereMeshAsset(2, 2).has_value());
+  EXPECT_TRUE(MakeSphereMeshAsset(8, 8).has_value());
 
-  EXPECT_THAT(MakePlaneMeshAsset(0, 1, 1.0f), IsNull());
-  EXPECT_THAT(MakePlaneMeshAsset(1, 0, 1.0f), IsNull());
-  EXPECT_THAT(MakePlaneMeshAsset(1, 1, 0.0f), IsNull());
-  EXPECT_THAT(MakePlaneMeshAsset(2, 2, 1.0f), NotNull());
+  EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0f).has_value());
+  EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0f).has_value());
+  EXPECT_FALSE(MakePlaneMeshAsset(1, 1, 0.0f).has_value());
+  EXPECT_TRUE(MakePlaneMeshAsset(2, 2, 1.0f).has_value());
 
-  EXPECT_THAT(MakeCylinderMeshAsset(2, 1.0f, 0.5f), IsNull());
-  EXPECT_THAT(MakeCylinderMeshAsset(8, -1.0f, 0.5f), IsNull());
-  EXPECT_THAT(MakeCylinderMeshAsset(8, 1.0f, -0.5f), IsNull());
-  EXPECT_THAT(MakeCylinderMeshAsset(8, 1.0f, 0.5f), NotNull());
+  EXPECT_FALSE(MakeCylinderMeshAsset(2, 1.0f, 0.5f).has_value());
+  EXPECT_FALSE(MakeCylinderMeshAsset(8, -1.0f, 0.5f).has_value());
+  EXPECT_FALSE(MakeCylinderMeshAsset(8, 1.0f, -0.5f).has_value());
+  EXPECT_TRUE(MakeCylinderMeshAsset(8, 1.0f, 0.5f).has_value());
 
-  EXPECT_THAT(MakeConeMeshAsset(2, 1.0f, 0.5f), IsNull());
-  EXPECT_THAT(MakeConeMeshAsset(8, -1.0f, 0.5f), IsNull());
-  EXPECT_THAT(MakeConeMeshAsset(8, 1.0f, -0.5f), IsNull());
-  EXPECT_THAT(MakeConeMeshAsset(8, 1.0f, 0.5f), NotNull());
+  EXPECT_FALSE(MakeConeMeshAsset(2, 1.0f, 0.5f).has_value());
+  EXPECT_FALSE(MakeConeMeshAsset(8, -1.0f, 0.5f).has_value());
+  EXPECT_FALSE(MakeConeMeshAsset(8, 1.0f, -0.5f).has_value());
+  EXPECT_TRUE(MakeConeMeshAsset(8, 1.0f, 0.5f).has_value());
 
-  EXPECT_THAT(MakeTorusMeshAsset(2, 8, 1.0f, 0.25f), IsNull());
-  EXPECT_THAT(MakeTorusMeshAsset(8, 2, 1.0f, 0.25f), IsNull());
-  EXPECT_THAT(MakeTorusMeshAsset(8, 8, -1.0f, 0.25f), IsNull());
-  EXPECT_THAT(MakeTorusMeshAsset(8, 8, 1.0f, -0.25f), IsNull());
-  EXPECT_THAT(MakeTorusMeshAsset(8, 8, 1.0f, 0.25f), NotNull());
+  EXPECT_FALSE(MakeTorusMeshAsset(2, 8, 1.0f, 0.25f).has_value());
+  EXPECT_FALSE(MakeTorusMeshAsset(8, 2, 1.0f, 0.25f).has_value());
+  EXPECT_FALSE(MakeTorusMeshAsset(8, 8, -1.0f, 0.25f).has_value());
+  EXPECT_FALSE(MakeTorusMeshAsset(8, 8, 1.0f, -0.25f).has_value());
+  EXPECT_TRUE(MakeTorusMeshAsset(8, 8, 1.0f, 0.25f).has_value());
 
-  EXPECT_THAT(MakeQuadMeshAsset(0.0f, 1.0f), IsNull());
-  EXPECT_THAT(MakeQuadMeshAsset(1.0f, 0.0f), IsNull());
-  EXPECT_THAT(MakeQuadMeshAsset(1.0f, 1.0f), NotNull());
+  EXPECT_FALSE(MakeQuadMeshAsset(0.0f, 1.0f).has_value());
+  EXPECT_FALSE(MakeQuadMeshAsset(1.0f, 0.0f).has_value());
+  EXPECT_TRUE(MakeQuadMeshAsset(1.0f, 1.0f).has_value());
 
-  EXPECT_THAT(MakeArrowGizmoMeshAsset(), NotNull());
-  EXPECT_THAT(MakeCubeMeshAsset(), NotNull());
+  EXPECT_TRUE(MakeArrowGizmoMeshAsset().has_value());
+  EXPECT_TRUE(MakeCubeMeshAsset().has_value());
 }
 
 //! Checks that all procedural mesh assets are valid: non-empty, correct view,
@@ -68,11 +68,13 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   using namespace oxygen::data;
   struct MeshFactory {
     const char* name;
-    std::shared_ptr<Mesh> (*fn)();
+    std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> (
+      *fn)();
   } factories[] = {
     { "Cube", &MakeCubeMeshAsset },
     { "ArrowGizmo", &MakeArrowGizmoMeshAsset },
   };
+
   // Factories with params
   const auto sphere = MakeSphereMeshAsset(8, 8);
   const auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
@@ -80,32 +82,22 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   const auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
   const auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
   const auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
-  std::shared_ptr<Mesh> assets[]
+  std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> assets[]
     = { sphere, plane, cylinder, cone, torus, quad };
 
   // Act & Assert
   for (const auto& f : factories) {
-    auto mesh = f.fn();
-    ASSERT_NE(mesh, nullptr) << f.name;
-    EXPECT_GT(mesh->VertexCount(), 0u) << f.name;
-    EXPECT_GT(mesh->IndexCount(), 0u) << f.name;
-    ASSERT_EQ(mesh->SubMeshes().size(), 1u) << f.name;
-    const auto& submesh = mesh->SubMeshes().front();
-    ASSERT_EQ(submesh.MeshViews().size(), 1u) << f.name;
-    const auto& view = submesh.MeshViews().front();
-    EXPECT_EQ(view.Vertices().size(), mesh->VertexCount()) << f.name;
-    EXPECT_EQ(view.Indices().size(), mesh->IndexCount()) << f.name;
+    auto mesh_opt = f.fn();
+    ASSERT_TRUE(mesh_opt.has_value()) << f.name;
+    const auto& [vertices, indices] = *mesh_opt;
+    EXPECT_GT(vertices.size(), 0u) << f.name;
+    EXPECT_GT(indices.size(), 0u) << f.name;
   }
-  for (const auto& mesh : assets) {
-    ASSERT_NE(mesh, nullptr);
-    EXPECT_GT(mesh->VertexCount(), 0u);
-    EXPECT_GT(mesh->IndexCount(), 0u);
-    ASSERT_EQ(mesh->SubMeshes().size(), 1u);
-    const auto& submesh = mesh->SubMeshes().front();
-    ASSERT_EQ(submesh.MeshViews().size(), 1u);
-    const auto& view = submesh.MeshViews().front();
-    EXPECT_EQ(view.Vertices().size(), mesh->VertexCount());
-    EXPECT_EQ(view.Indices().size(), mesh->IndexCount());
+  for (const auto& mesh_opt : assets) {
+    ASSERT_TRUE(mesh_opt.has_value());
+    const auto& [vertices, indices] = *mesh_opt;
+    EXPECT_GT(vertices.size(), 0u);
+    EXPECT_GT(indices.size(), 0u);
   }
 }
 
@@ -114,12 +106,18 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 {
   // Arrange
   using namespace oxygen::data;
-  const auto mesh = MakeCubeMeshAsset();
-  ASSERT_NE(mesh, nullptr);
+  const auto mesh_opt = MakeCubeMeshAsset();
+  ASSERT_TRUE(mesh_opt.has_value());
+  const auto& [vertices, indices] = *mesh_opt;
 
-  // Act
-  const auto& min = mesh->BoundingBoxMin();
-  const auto& max = mesh->BoundingBoxMax();
+  // Compute bounding box from vertices
+  ASSERT_FALSE(vertices.empty());
+  glm::vec3 min = vertices.front().position;
+  glm::vec3 max = vertices.front().position;
+  for (const auto& v : vertices) {
+    min = glm::min(min, v.position);
+    max = glm::max(max, v.position);
+  }
 
   // Assert
   EXPECT_LE(min.x, max.x);
@@ -135,16 +133,13 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
 {
   // Arrange
   using namespace oxygen::data;
-  const auto mesh = MakeCubeMeshAsset();
-  ASSERT_NE(mesh, nullptr);
-  const auto& submesh = mesh->SubMeshes().front();
-  const auto& view = submesh.MeshViews().front();
+  const auto mesh_opt = MakeCubeMeshAsset();
+  ASSERT_TRUE(mesh_opt.has_value());
+  const auto& [vertices, indices] = *mesh_opt;
 
-  // Act & Assert
-  EXPECT_EQ(view.Vertices().size(), mesh->VertexCount());
-  EXPECT_EQ(view.Indices().size(), mesh->IndexCount());
-  EXPECT_EQ(view.Vertices().data(), mesh->Vertices().data());
-  EXPECT_EQ(view.Indices().data(), mesh->Indices().data());
+  // Act & Assert: the only view is the full data
+  EXPECT_EQ(vertices.size(), 8u); // Cube should have 8 vertices
+  EXPECT_EQ(indices.size(), 36u); // Cube should have 36 indices
 }
 
 //! Checks each procedural mesh type for expected geometry and view properties.
@@ -154,7 +149,7 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
   using namespace oxygen::data;
   struct MeshType {
     const char* name;
-    std::shared_ptr<Mesh> asset;
+    std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> asset;
     size_t min_vertices;
     size_t min_indices;
   } types[] = {
@@ -165,25 +160,19 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
     { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f), 11, 48 },
     { "Torus", MakeTorusMeshAsset(8, 8, 1.0f, 0.25f), 81, 384 },
     { "Quad", MakeQuadMeshAsset(1.0f, 1.0f), 4, 6 },
-    { "ArrowGizmo", MakeArrowGizmoMeshAsset(), 0,
-      0 }, // ArrowGizmo: skip min counts, just check not null
+    { "ArrowGizmo", MakeArrowGizmoMeshAsset(), 0, 0 },
   };
 
   // Act & Assert
   for (const auto& t : types) {
-    ASSERT_NE(t.asset, nullptr) << t.name;
+    ASSERT_TRUE(t.asset.has_value()) << t.name;
+    const auto& [vertices, indices] = *t.asset;
     if (t.min_vertices > 0) {
-      EXPECT_GE(t.asset->VertexCount(), t.min_vertices) << t.name;
+      EXPECT_GE(vertices.size(), t.min_vertices) << t.name;
     }
     if (t.min_indices > 0) {
-      EXPECT_GE(t.asset->IndexCount(), t.min_indices) << t.name;
+      EXPECT_GE(indices.size(), t.min_indices) << t.name;
     }
-    ASSERT_EQ(t.asset->SubMeshes().size(), 1u) << t.name;
-    const auto& submesh = t.asset->SubMeshes().front();
-    ASSERT_EQ(submesh.MeshViews().size(), 1u) << t.name;
-    const auto& view = submesh.MeshViews().front();
-    EXPECT_EQ(view.Vertices().size(), t.asset->VertexCount()) << t.name;
-    EXPECT_EQ(view.Indices().size(), t.asset->IndexCount()) << t.name;
   }
 }
 

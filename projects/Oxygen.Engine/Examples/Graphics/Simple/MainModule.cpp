@@ -662,7 +662,8 @@ auto MainModule::RenderScene() -> co::Co<>
     render_controller_->CurrentFrameIndex());
 
   if (render_items_.empty()) {
-    const auto cube_mesh = data::MakeCubeMeshAsset();
+    const std::shared_ptr<data::Mesh> cube_mesh
+      = data::GenerateMesh("Cube/TestMesh", {});
     // Create a default material for the cube
     const auto cube_material = data::MaterialAsset::CreateDebug();
     RenderItem cube_item {
