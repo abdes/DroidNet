@@ -51,10 +51,8 @@ include(GTestHelpers)
 m_gtest_program(TypeSystem SOURCES "TypeSystem_test.cpp")
 
 m_gtest_program(ObjectMetaData SOURCES "ObjectMetaData_test.cpp")
-
 m_gtest_program(ComponentPool SOURCES "ComponentPool_test.cpp")
 m_gtest_program(ComponentPoolRegistry SOURCES "ComponentPoolRegistry_test.cpp")
-
 m_gtest_program(CompositionBasic SOURCES "Composition_Basic_test.cpp")
 m_gtest_program(CompositionCloning SOURCES "Composition_Cloning_test.cpp")
 m_gtest_program(CompositionDeps SOURCES "Composition_Dependency_test.cpp")
@@ -66,7 +64,7 @@ m_gtest_program(CompositionMemory SOURCES "memory_invalidation_test.cpp")
 m_gtest_program(CompositionThreads SOURCES "Composition_Threads_test.cpp")
 
 add_custom_target(
-  "Oxygen.Composition.Tests"
+  "Oxygen.Composition.AllTests"
   DEPENDS
     "Oxygen.Composition.ObjectMetaData.Tests"
     "Oxygen.Composition.ComponentPool.Tests"
@@ -80,4 +78,10 @@ add_custom_target(
     "Oxygen.Composition.CompositionPrint.Tests"
     "Oxygen.Composition.CompositionMemory.Tests"
     "Oxygen.Composition.CompositionThreads.Tests"
+)
+set_target_properties(
+  "Oxygen.Composition.AllTests"
+  PROPERTIES
+    FOLDER
+      "Testing"
 )
