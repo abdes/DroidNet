@@ -27,12 +27,16 @@ AssetLoader::AssetLoader()
   LOG_SCOPE_FUNCTION(INFO);
 
   // Register asset loaders
-  RegisterLoader(loaders::LoadGeometryAsset<FileStream<>>);
-  RegisterLoader(loaders::LoadMaterialAsset<FileStream<>>);
+  RegisterLoader(
+    loaders::LoadGeometryAsset<FileStream<>>, loaders::UnloadGeometryAsset);
+  RegisterLoader(
+    loaders::LoadMaterialAsset<FileStream<>>, loaders::UnloadMaterialAsset);
 
   // Register resource loaders
-  RegisterLoader(loaders::LoadBufferResource<FileStream<>>);
-  RegisterLoader(loaders::LoadTextureResource<FileStream<>>);
+  RegisterLoader(
+    loaders::LoadBufferResource<FileStream<>>, loaders::UnloadBufferResource);
+  RegisterLoader(
+    loaders::LoadTextureResource<FileStream<>>, loaders::UnloadTextureResource);
 }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
@@ -40,7 +44,7 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
   paks_.push_back(std::make_unique<PakFile>(path));
 }
 
-auto AssetLoader::AddTypeErasedLoader(const TypeId type_id,
+auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
   const std::string_view type_name, LoadAssetFnErased loader) -> void
 {
   auto [it, inserted] = loaders_.insert_or_assign(type_id, std::move(loader));
@@ -65,6 +69,8 @@ auto AssetLoader::AddTypeErasedResourceLoader(const TypeId type_id,
   }
 }
 
+//=== Dependency management ==================================================//
+
 auto AssetLoader::AddAssetDependency(
   const data::AssetKey& dependent, const data::AssetKey& dependency) -> void
 {
@@ -77,6 +83,9 @@ auto AssetLoader::AddAssetDependency(
 
   // Add reverse dependency for reference counting
   reverse_asset_dependencies_[dependency].insert(dependent);
+
+  // Touch the dependency asset in the cache to increment its reference count
+  content_cache_.Touch(HashAssetKey(dependency));
 }
 
 auto AssetLoader::AddResourceDependency(
@@ -94,33 +103,12 @@ auto AssetLoader::AddResourceDependency(
 
   // Add reverse dependency for reference counting
   reverse_resource_dependencies_[resource_key].insert(dependent);
+
+  // Touch the dependency resource in the cache to increment its reference count
+  content_cache_.Touch(resource_key);
 }
 
-auto AssetLoader::ReleaseResource(
-  const ResourceKey key, const TypeId resource_type) -> void
-{
-  // Note: resource_type parameter is reserved for future type validation
-  // but not currently used since hash key uniquely identifies the resource
-  [[maybe_unused]] const auto& type = resource_type;
-
-  detail::ResourceKey internal_key(key);
-  const auto key_hash = std::hash<detail::ResourceKey> {}(internal_key);
-
-  // Check for asset dependencies before allowing removal
-  const auto it = reverse_resource_dependencies_.find(key);
-  const bool has_dependents
-    = (it != reverse_resource_dependencies_.end() && !it->second.empty());
-
-  if (!has_dependents) {
-    // Safe to decrement - ContentCache will remove when ref count reaches zero
-    content_cache_.CheckIn(key_hash);
-  } else {
-    LOG_F(INFO, "Resource {} has asset dependents, not releasing",
-      nostd::to_string(internal_key));
-  }
-}
-
-//=== Resource Loading Template Implementations ==============================//
+//=== Asset Loading Implementations ==========================================//
 
 // ReSharper disable CppRedundantQualifier
 template <LoadFunction F>
@@ -171,7 +159,37 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
   return nullptr;
 }
 
-//=== Resource Loading Template Implementations ==============================//
+auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
+{
+  // Recursively release (check in) the asset and all its dependencies.
+  ReleaseAssetTree(key);
+  // Return true if the asset is no longer present in the cache
+  return !content_cache_.Contains(HashAssetKey(key));
+}
+
+auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
+{
+  // Release resource dependencies first
+  auto res_dep_it = resource_dependencies_.find(key);
+  if (res_dep_it != resource_dependencies_.end()) {
+    for (const auto& res_key : res_dep_it->second) {
+      content_cache_.CheckIn(res_key);
+    }
+    resource_dependencies_.erase(res_dep_it);
+  }
+  // Then release asset dependencies
+  auto dep_it = asset_dependencies_.find(key);
+  if (dep_it != asset_dependencies_.end()) {
+    for (const auto& dep_key : dep_it->second) {
+      ReleaseAssetTree(dep_key);
+    }
+    asset_dependencies_.erase(dep_it);
+  }
+  // Release the asset itself
+  content_cache_.CheckIn(HashAssetKey(key));
+}
+
+//=== Resource Loading  ======================================================//
 
 template <PakResource T, oxygen::content::LoadFunction F>
 auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
@@ -247,6 +265,25 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   return nullptr;
 }
 
+auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
+{
+  const auto key_hash = HashResourceKey(key);
+
+  // The resource should always be checked in on release. Whether it remains in
+  // the cache or gets eveicted is dependent on the eviction policy.
+  content_cache_.CheckIn(HashResourceKey(key));
+  if (content_cache_.Contains(key_hash)) {
+    return false;
+  }
+
+  // If the resource is no longer in the cache, we can, and should, safely
+  // unload it.
+
+  // TODO: Implement unloading logic if needed
+  LOG_F(WARNING, "TODO: resource must be unloaded at this point", key);
+  return true; // Successfully released
+}
+
 //=== Explicit Template Instantiations ======================================//
 
 // Instantiate for all supported asset types
@@ -297,16 +334,3 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint32_t
   LOG_F(ERROR, "PAK file not found in AssetLoader collection");
   throw std::runtime_error("PAK file not found in AssetLoader collection");
 }
-
-auto AssetLoader::ReleaseAsset(
-  const data::AssetKey& key, const TypeId asset_type) -> void
-{
-  // Note: asset_type parameter is reserved for future type validation
-  // but not currently used since AssetKey uniquely identifies the asset
-  [[maybe_unused]] const auto& type = asset_type;
-
-  const auto hash_key = HashAssetKey(key);
-  content_cache_.CheckIn(hash_key);
-}
-
-//=== Resource Cache Implementation (Updated for ContentCache) ==============//

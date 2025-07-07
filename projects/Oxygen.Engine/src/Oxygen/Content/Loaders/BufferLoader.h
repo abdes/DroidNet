@@ -60,4 +60,16 @@ auto LoadBufferResource(LoaderContext<S> context)
   return std::make_unique<data::BufferResource>(desc);
 }
 
+//! Unload function for BufferResource.
+inline void UnloadBufferResource(
+  std::shared_ptr<oxygen::data::BufferResource> /*resource*/,
+  oxygen::content::AssetLoader& /*loader*/, bool offline) noexcept
+{
+  if (offline) {
+    // In offline mode, we do not need to clean up GPU resources.
+    return;
+  }
+  // TODO: cleanup GPU resources for the buffer.
+}
+
 } // namespace oxygen::content::loaders

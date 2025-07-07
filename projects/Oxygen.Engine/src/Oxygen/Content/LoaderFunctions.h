@@ -42,19 +42,41 @@ template <oxygen::serio::Stream S> struct LoaderContext {
 template <typename F, typename S>
 concept LoadFunctionForStream
   = oxygen::serio::Stream<S> && requires(F f, LoaderContext<S> context) {
-      typename std::remove_cvref_t<decltype(*f(context))>;
+      {
+        f(context)
+      } -> std::same_as<std::unique_ptr<
+        typename std::remove_pointer_t<decltype(f(context).get())>>>;
       requires IsTyped<std::remove_pointer_t<decltype(f(context).get())>>;
-      { f(context) };
     };
 
+//! Concept for asset/resource load functions used with AssetLoader.
+/*!
+ Load and unload functions are always registered as a pair for a specific asset
+ or resource type `T`, where `T` is deduced from the load function's return
+ type. The load function is responsible for constructing and returning a fully
+ initialized asset or resource from a data stream, while the unload function is
+ responsible for cleanup when the object is evicted from the cache. Both must
+ consistently use the type `T`.
+
+ ### Load Function Requirements
+
+ - Must be callable as `std::unique_ptr<T> f(LoaderContext<S>)` for a stream S.
+ - The returned type `T` must satisfy the `IsTyped` concept.
+ - Failure to load must be indicated by returning a null pointer. Do not use
+   exceptions to indicate normal load errors; only throw for truly exceptional
+   situations (e.g., unrecoverable system errors).
+ - The load function must not retain ownership of the context or any temporary
+   resources.
+
+ ### Unload Function Requirements
+
+ - Must be callable as `void(std::shared_ptr<T>, AssetLoader&, bool)`.
+ - Must handle all errors locally and only throw for exceptional situations that
+   cannot be handled internally.
+
+ @see LoaderContext, AssetLoader
+*/
 template <typename F>
 concept LoadFunction = LoadFunctionForStream<F, oxygen::serio::FileStream<>>;
-
-template <typename F, typename T>
-concept UnloadFunction = IsTyped<T>
-  && requires(
-    F f, std::shared_ptr<T> asset, AssetLoader& loader, bool offline) {
-       { f(asset, loader, offline) } -> std::same_as<void>;
-     };
 
 } // namespace oxygen::content

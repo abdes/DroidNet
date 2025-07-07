@@ -228,4 +228,13 @@ auto LoadMaterialAsset(LoaderContext<S> context)
   return std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
 }
 
+//! Unload function for MaterialAsset.
+inline void UnloadMaterialAsset(
+  std::shared_ptr<oxygen::data::MaterialAsset> /*asset*/,
+  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept
+{
+  // Nothing to do for a material asset, its dependency resources will do the
+  // work when unloaded.
+}
+
 } // namespace oxygen::content::loaders

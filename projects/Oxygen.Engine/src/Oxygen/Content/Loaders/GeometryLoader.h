@@ -129,7 +129,7 @@ namespace detail {
 } // namespace detail
 
 template <oxygen::serio::Stream S>
-auto LoadMesh(LoaderContext<S> context) -> std::shared_ptr<data::Mesh>
+auto LoadMesh(LoaderContext<S> context) -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(INFO, "Mesh");
   LOG_F(2, "offline mode    : {}", context.offline ? "yes" : "no");
@@ -295,6 +295,15 @@ auto LoadGeometryAsset(LoaderContext<S> context)
   // Construct and return GeometryAsset with LOD meshes
   return std::make_unique<GeometryAsset>(
     std::move(desc), std::move(lod_meshes));
+}
+
+//! Unload function for GeometryAsset.
+inline void UnloadGeometryAsset(
+  std::shared_ptr<oxygen::data::GeometryAsset> /*asset*/,
+  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept
+{
+  // Nothing to do for a geometry asset, its dependency resources will do the
+  // work when unloaded.
 }
 
 } // namespace oxygen::content::loaders
