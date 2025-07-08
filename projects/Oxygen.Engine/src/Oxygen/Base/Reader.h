@@ -26,8 +26,8 @@ public:
   {
   }
 
-  [[nodiscard]] auto ScopedAlignement(uint8_t alignment) noexcept(false)
-    -> ::oxygen::serio::AlignmentGuard
+  [[nodiscard]] auto ScopedAlignment(uint16_t alignment) noexcept(false)
+    -> AlignmentGuard
   {
     return AlignmentGuard(*this, alignment);
   }
@@ -150,7 +150,7 @@ public:
 
   [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
   {
-    if (!alignment_.empty() && !alignment_.top() == 0) {
+    if (!alignment_.empty() && alignment_.top() != 0) {
       // override alignment with the top of the stack
       alignment = alignment_.top();
     }

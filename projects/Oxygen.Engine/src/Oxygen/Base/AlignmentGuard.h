@@ -19,9 +19,9 @@ class Packer {
   friend class AlignmentGuard;
 
 protected:
-  static constexpr size_t kMaxAlignment = 256;
+  static constexpr uint16_t kMaxAlignment = 256;
 
-  void pack_push(uint8_t alignment)
+  void pack_push(uint16_t alignment)
   {
     // 0 means auto-align to the type's required alignment (always valid)
     if (alignment != 0
@@ -38,7 +38,7 @@ protected:
     alignment_.pop();
   }
 
-  std::stack<uint8_t> alignment_ {};
+  std::stack<uint16_t> alignment_ {};
 };
 
 //! RAII helper for managing alignment stack via pack_push/pack_pop
@@ -64,7 +64,7 @@ protected:
  */
 class AlignmentGuard {
 public:
-  AlignmentGuard(Packer& obj, uint8_t alignment) noexcept(false)
+  AlignmentGuard(Packer& obj, uint16_t alignment) noexcept(false)
     : obj_(obj)
     , active_(true)
   {

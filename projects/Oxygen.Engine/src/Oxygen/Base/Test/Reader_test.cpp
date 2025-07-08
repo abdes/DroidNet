@@ -20,9 +20,9 @@ namespace {
 
 class ReaderTest : public testing::Test {
 protected:
-  void SetUp() override { stream_.seek(0); }
+  auto SetUp() -> void override { stream_.seek(0); }
 
-  void write_padding(const size_t alignment)
+  auto write_padding(const size_t alignment) -> void
   {
     const auto pos = stream_.position().value();
     const size_t padding = (alignment - (pos % alignment)) % alignment;
@@ -32,7 +32,7 @@ protected:
     }
   }
 
-  template <typename T> void write_pod(const T& value)
+  template <typename T> auto write_pod(const T& value) -> void
   {
     // Add alignment padding for types > 1 byte
     if constexpr (sizeof(T) > 1) {
@@ -49,7 +49,7 @@ protected:
     }
   }
 
-  void write_string(const std::string_view str)
+  auto write_string(const std::string_view str) -> void
   {
     // Align length field
     write_padding(alignof(uint32_t));
@@ -67,7 +67,7 @@ protected:
     write_padding(alignof(uint32_t));
   }
 
-  template <typename T> void write_array(const std::vector<T>& values)
+  template <typename T> auto write_array(const std::vector<T>& values) -> void
   {
     // Align length field
     write_padding(alignof(uint32_t));
@@ -85,7 +85,7 @@ protected:
     write_padding(alignof(uint32_t));
   }
 
-  void seek_to(size_t pos) { ASSERT_TRUE(stream_.seek(pos)); }
+  auto seek_to(size_t pos) -> void { ASSERT_TRUE(stream_.seek(pos)); }
 
   MockStream stream_;
   Reader<MockStream> sut_ { stream_ };
@@ -204,8 +204,8 @@ NOLINT_TEST_F(ReaderTest, Read_Fails_OnStreamError)
 NOLINT_TEST_F(ReaderTest, ReadMixedTypes_MaintainsAlignment)
 {
   // Write mixed-size types
-  const uint8_t byte = 0x42;
-  const uint32_t integer = 0x12345678;
+  constexpr uint8_t byte = 0x42;
+  constexpr uint32_t integer = 0x12345678;
   const std::string str = "test";
 
   write_pod(byte);
@@ -334,9 +334,9 @@ NOLINT_TEST_F(ReaderTest, ReadBlobTo_Fails_OnStreamError)
 */
 class ReaderAlignmentGuardIntegrationTest : public testing::Test {
 protected:
-  void SetUp() override { stream_.seek(0); }
+  auto SetUp() -> void override { stream_.seek(0); }
 
-  void write_aligned_uint32(uint32_t value, size_t alignment)
+  auto write_aligned_uint32(uint32_t value, size_t alignment) -> void
   {
     // Write padding to align to 'alignment' boundary
     const auto pos = stream_.position().value();
@@ -387,14 +387,14 @@ NOLINT_TEST_F(
   stream_.seek(0);
   // Outer scope: 4-byte alignment
   {
-    auto guard4 = sut_.ScopedAlignement(4);
+    auto guard4 = sut_.ScopedAlignment(4);
     auto r1 = sut_.read<uint32_t>();
     ASSERT_TRUE(r1);
     EXPECT_EQ(r1.value(), value1);
 
     // Nested scope: 8-byte alignment
     {
-      auto guard8 = sut_.ScopedAlignement(8);
+      auto guard8 = sut_.ScopedAlignment(8);
       auto r2 = sut_.read<uint64_t>();
       ASSERT_TRUE(r2);
       EXPECT_EQ(r2.value(), value2);
@@ -420,14 +420,14 @@ NOLINT_TEST_F(
   // Act
   stream_.seek(0);
   {
-    auto guard = sut_.ScopedAlignement(alignment);
+    auto guard = sut_.ScopedAlignment(alignment);
     auto result = sut_.read<uint32_t>();
     ASSERT_TRUE(result);
     EXPECT_EQ(result.value(), test_value);
   }
   // Next value should be readable with 4-byte alignment
   {
-    auto guard = sut_.ScopedAlignement(4);
+    auto guard = sut_.ScopedAlignment(4);
     auto result = sut_.read<uint32_t>();
     ASSERT_TRUE(result);
     EXPECT_EQ(result.value(), 0xDEADBEEF);
@@ -462,7 +462,7 @@ NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest,
   // Act
   stream_.seek(0);
   // Try to read with explicit 4-byte alignment
-  auto guard = sut_.ScopedAlignement(4);
+  auto guard = sut_.ScopedAlignment(4);
   auto result = sut_.read<uint32_t>();
   // The value read will not match test_value due to misalignment
   ASSERT_TRUE(result);
@@ -472,14 +472,13 @@ NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest,
 NOLINT_TEST_F(ReaderAlignmentGuardIntegrationTest, ThrowsOnInvalidAlignment)
 {
   // Arrange/Act/Assert
-  EXPECT_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(3)),
-    std::invalid_argument);
+  EXPECT_THROW((void)sut_.ScopedAlignment(3), std::invalid_argument);
   // 0 is valid (auto-alignment)
-  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(0)));
+  EXPECT_NO_THROW((void)sut_.ScopedAlignment(0));
   // 256 is valid (max alignment)
-  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(256)));
+  EXPECT_NO_THROW((void)sut_.ScopedAlignment(static_cast<uint8_t>(256)));
   // 257 as uint8_t wraps to 1, which is valid
-  EXPECT_NO_THROW((void)sut_.ScopedAlignement(static_cast<uint8_t>(257)));
+  EXPECT_NO_THROW((void)sut_.ScopedAlignment(static_cast<uint8_t>(257)));
 }
 
 NOLINT_TEST_F(
@@ -508,14 +507,14 @@ NOLINT_TEST_F(
   stream_.seek(0);
   // Read dummy value
   {
-    auto guard = sut_.ScopedAlignement(4);
+    auto guard = sut_.ScopedAlignment(4);
     auto result = sut_.read<uint32_t>();
     ASSERT_TRUE(result);
     EXPECT_EQ(result.value(), 0xDEADBEEF);
   }
   // Read uint64_t with auto-alignment (0)
   {
-    auto guard = sut_.ScopedAlignement(0); // auto-align to alignof(uint64_t)
+    auto guard = sut_.ScopedAlignment(0); // auto-align to alignof(uint64_t)
     auto result = sut_.read<uint64_t>();
     ASSERT_TRUE(result);
     EXPECT_EQ(result.value(), test_value);
