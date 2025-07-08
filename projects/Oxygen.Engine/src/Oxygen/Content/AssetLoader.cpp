@@ -27,16 +27,16 @@ AssetLoader::AssetLoader()
   LOG_SCOPE_FUNCTION(INFO);
 
   // Register asset loaders
-  RegisterLoader(
-    loaders::LoadGeometryAsset<FileStream<>>, loaders::UnloadGeometryAsset);
-  RegisterLoader(
-    loaders::LoadMaterialAsset<FileStream<>>, loaders::UnloadMaterialAsset);
+  RegisterLoader(loaders::LoadGeometryAsset<FileStream<>, FileStream<>>,
+    loaders::UnloadGeometryAsset);
+  RegisterLoader(loaders::LoadMaterialAsset<FileStream<>, FileStream<>>,
+    loaders::UnloadMaterialAsset);
 
   // Register resource loaders
-  RegisterLoader(
-    loaders::LoadBufferResource<FileStream<>>, loaders::UnloadBufferResource);
-  RegisterLoader(
-    loaders::LoadTextureResource<FileStream<>>, loaders::UnloadTextureResource);
+  RegisterLoader(loaders::LoadBufferResource<FileStream<>, FileStream<>>,
+    loaders::UnloadBufferResource);
+  RegisterLoader(loaders::LoadTextureResource<FileStream<>, FileStream<>>,
+    loaders::UnloadTextureResource);
 }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
@@ -120,10 +120,15 @@ auto AssetLoader::MakeAssetLoaderCall(const F& fn, AssetLoader& loader,
 // ReSharper enable CppRedundantQualifier
 {
   auto reader = pak.CreateReader(entry);
-  LoaderContext<serio::FileStream<>> context {
+  // FIXME: for now we just get a reader on the PAK file itself - future mem map
+  auto buf_reader = pak.CreateDataReader<data::BufferResource>();
+  auto tex_reader = pak.CreateDataReader<data::TextureResource>();
+
+  LoaderContext<serio::FileStream<>, serio::FileStream<>> context {
     .asset_loader = &loader,
     .current_asset_key = entry.asset_key,
-    .reader = std::ref(reader),
+    .desc_reader = std::ref(reader),
+    .data_readers = std::make_tuple(std::ref(buf_reader), std::ref(tex_reader)),
     .offline = offline,
     .source_pak = &pak,
   };
@@ -205,7 +210,6 @@ auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
       pak.FilePath().string(), T::ClassTypeNamePretty());
     return nullptr;
   }
-
   auto offset = resource_table->GetResourceOffset(resource_index);
   if (!offset) {
     LOG_F(ERROR, "Resource({}) index {} not found in PAK file '{}'",
@@ -223,11 +227,15 @@ auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
     return nullptr;
   }
   serio::Reader reader(*table_stream);
+  // FIXME: for now we just get a reader on the PAK file itself - future mem map
+  auto buf_reader = pak.CreateDataReader<data::BufferResource>();
+  auto tex_reader = pak.CreateDataReader<data::TextureResource>();
 
-  LoaderContext context {
+  LoaderContext<serio::FileStream<>, serio::FileStream<>> context {
     .asset_loader = &loader,
     .current_asset_key = {}, // No asset key for resources
-    .reader = std::ref(reader),
+    .desc_reader = std::ref(reader),
+    .data_readers = std::make_tuple(std::ref(buf_reader), std::ref(tex_reader)),
     .offline = offline,
     .source_pak = &pak,
   };

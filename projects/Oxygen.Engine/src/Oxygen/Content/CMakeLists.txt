@@ -46,23 +46,24 @@ set_target_properties(
 
 set(
   OXYGEN_CONTENT_HEADERS
-    "api_export.h"
-    "PakFile.h"
-    "AssetLoader.h"
-    "LoaderFunctions.h"
-    "ResourceTable.h"
-    "ResourceTypeList.h"
+  "api_export.h"
+  "PakFile.h"
+  "AssetLoader.h"
+  "LoaderContext.h"
+  "LoaderFunctions.h"
+  "ResourceTable.h"
+  "ResourceTypeList.h"
 )
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
-    "AssetLoader.cpp"
-    "PakFile.cpp"
-    "Internal/ResourceKey.h"
-    "Loaders/BufferLoader.h"
-    "Loaders/GeometryLoader.h"
-    "Loaders/MaterialLoader.h"
-    "Loaders/TextureLoader.h"
-    "Loaders/Helpers.h"
+  "AssetLoader.cpp"
+  "PakFile.cpp"
+  "Internal/ResourceKey.h"
+  "Loaders/BufferLoader.h"
+  "Loaders/GeometryLoader.h"
+  "Loaders/MaterialLoader.h"
+  "Loaders/TextureLoader.h"
+  "Loaders/Helpers.h"
 )
 
 target_sources(

@@ -177,6 +177,11 @@ public:
     return stream_.get().forward(num_bytes);
   }
 
+  [[nodiscard]] auto seek(size_t pos) noexcept -> Result<void>
+  {
+    return stream_.get().seek(pos);
+  }
+
 private:
   [[nodiscard]] auto read_string_length(
     limits::SequenceSizeType& length) noexcept -> Result<void>

@@ -158,13 +158,15 @@ auto PakFile::ReadDirectory(
 
 PakFile::PakFile(const std::filesystem::path& path)
   : file_path_(path)
-  , stream_(OpenFileStream(path))
+  , meta_stream_(OpenFileStream(path))
+  , buffer_data_stream_(OpenFileStream(path))
+  , texture_data_stream_(OpenFileStream(path))
 {
   LOG_SCOPE_FUNCTION(INFO);
   LOG_F(INFO, "file : {}", path.string());
-  ReadHeader(stream_.get());
-  ReadFooter(stream_.get());
-  ReadDirectory(stream_.get(), static_cast<uint32_t>(footer_.asset_count));
+  ReadHeader(meta_stream_.get());
+  ReadFooter(meta_stream_.get());
+  ReadDirectory(meta_stream_.get(), static_cast<uint32_t>(footer_.asset_count));
 }
 
 auto PakFile::FindEntry(const AssetKey& key) const noexcept
@@ -197,16 +199,49 @@ auto PakFile::ContentVersion() const noexcept -> uint16_t
 auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!stream_) {
+  if (!meta_stream_) {
     throw std::runtime_error("PakFile stream is not open");
   }
   // Seek to asset descriptor offset (desc_offset in new format)
-  if (auto res = stream_->seek(entry.desc_offset); !res) {
+  if (const auto res = meta_stream_->seek(entry.desc_offset); !res) {
     LOG_F(ERROR, "Failed to seek to asset desc offset {}: {}",
       entry.desc_offset, res.error().message());
     throw std::runtime_error("Failed to seek to asset desc offset");
   }
-  return Reader(*stream_);
+  return Reader(*meta_stream_);
+}
+
+auto PakFile::CreateBufferDataReader() const -> Reader
+{
+  std::scoped_lock lock(mutex_);
+  if (!buffer_data_stream_) {
+    throw std::runtime_error("PakFile buffer data stream is not open");
+  }
+  // Seek to asset descriptor offset (desc_offset in new format)
+  if (const auto res = buffer_data_stream_->seek(footer_.buffer_region.offset);
+    !res) {
+    LOG_F(ERROR, "Failed to seek to buffer data region offset {}: {}",
+      footer_.buffer_region.offset, res.error().message());
+    throw std::runtime_error("Failed to seek to buffer data region offset");
+  }
+  return Reader(*buffer_data_stream_);
+}
+
+auto PakFile::CreateTextureDataReader() const -> Reader
+{
+  std::scoped_lock lock(mutex_);
+  if (!texture_data_stream_) {
+    throw std::runtime_error("PakFile texture data stream is not open");
+  }
+  // Seek to asset descriptor offset (desc_offset in new format)
+  if (const auto res
+    = texture_data_stream_->seek(footer_.texture_region.offset);
+    !res) {
+    LOG_F(ERROR, "Failed to seek to texture data region offset {}: {}",
+      footer_.texture_region.offset, res.error().message());
+    throw std::runtime_error("Failed to seek to texture data region offset");
+  }
+  return Reader(*texture_data_stream_);
 }
 
 auto PakFile::BuffersTable() const -> BuffersTableT&

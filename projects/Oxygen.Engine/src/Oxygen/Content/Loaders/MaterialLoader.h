@@ -29,11 +29,11 @@ namespace oxygen::content::loaders {
  @param current_asset_key The asset key of the material being loaded
  @param desc The material asset descriptor containing dependency information
  */
-void RegisterMaterialDependencies(AssetLoader& loader,
-  const oxygen::data::AssetKey& current_asset_key,
-  const oxygen::data::pak::MaterialAssetDesc& desc)
+auto RegisterMaterialDependencies(AssetLoader& loader,
+  const data::AssetKey& current_asset_key,
+  const data::pak::MaterialAssetDesc& desc) -> void
 {
-  using oxygen::data::pak::ResourceIndexT;
+  using data::pak::ResourceIndexT;
 
   // Register resource dependencies for non-zero texture indices
   if (desc.base_color_texture != 0) {
@@ -81,23 +81,23 @@ void RegisterMaterialDependencies(AssetLoader& loader,
 }
 
 //! Loader for material assets.
-template <oxygen::serio::Stream S>
-auto LoadMaterialAsset(LoaderContext<S> context)
+template <serio::Stream DescS, serio::Stream DataS>
+auto LoadMaterialAsset(LoaderContext<DescS, DataS> context)
   -> std::unique_ptr<data::MaterialAsset>
 {
   LOG_SCOPE_FUNCTION(INFO);
   LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
 
-  auto& reader = context.reader.get();
+  auto& reader = context.desc_reader.get();
   auto& loader
     = *context.asset_loader; // Asset loaders always have non-null asset_loader
 
+  using data::ShaderReference;
+  using data::pak::kMaxNameSize;
+  using data::pak::MaterialAssetDesc;
+  using data::pak::ResourceIndexT;
+  using data::pak::ShaderReferenceDesc;
   using oxygen::ShaderType;
-  using oxygen::data::ShaderReference;
-  using oxygen::data::pak::kMaxNameSize;
-  using oxygen::data::pak::MaterialAssetDesc;
-  using oxygen::data::pak::ResourceIndexT;
-  using oxygen::data::pak::ShaderReferenceDesc;
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
@@ -119,61 +119,62 @@ auto LoadMaterialAsset(LoaderContext<S> context)
 
   // -- Read MaterialAssetDesc specific fields
 
-  auto material_domain_result = reader.read<uint8_t>();
+  auto material_domain_result = reader.template read<uint8_t>();
   check_result(material_domain_result, "MaterialAssetDesc.material_domain");
   desc.material_domain = material_domain_result.value();
 
-  auto flags_result = reader.read<uint32_t>();
+  auto flags_result = reader.template read<uint32_t>();
   check_result(flags_result, "MaterialAssetDesc.flags");
   desc.flags = flags_result.value();
 
-  auto shader_stages_result = reader.read<uint32_t>();
+  auto shader_stages_result = reader.template read<uint32_t>();
   check_result(shader_stages_result, "MaterialAssetDesc.shader_stages");
   desc.shader_stages = shader_stages_result.value();
 
   // Read float arrays (these are the problematic fields for unique object
   // representation)
-  for (int i = 0; i < 4; ++i) {
-    auto base_color_result = reader.read<float>();
+  for (float& i : desc.base_color) {
+    auto base_color_result = reader.template read<float>();
     check_result(base_color_result, "MaterialAssetDesc.base_color");
-    desc.base_color[i] = base_color_result.value();
+    i = base_color_result.value();
   }
 
-  auto normal_scale_result = reader.read<float>();
+  auto normal_scale_result = reader.template read<float>();
   check_result(normal_scale_result, "MaterialAssetDesc.normal_scale");
   desc.normal_scale = normal_scale_result.value();
 
-  auto metalness_result = reader.read<float>();
+  auto metalness_result = reader.template read<float>();
   check_result(metalness_result, "MaterialAssetDesc.metalness");
   desc.metalness = metalness_result.value();
 
-  auto roughness_result = reader.read<float>();
+  auto roughness_result = reader.template read<float>();
   check_result(roughness_result, "MaterialAssetDesc.roughness");
   desc.roughness = roughness_result.value();
 
-  auto ambient_occlusion_result = reader.read<float>();
+  auto ambient_occlusion_result = reader.template read<float>();
   check_result(ambient_occlusion_result, "MaterialAssetDesc.ambient_occlusion");
   desc.ambient_occlusion = ambient_occlusion_result.value();
 
   // Read texture resource indices
-  auto base_color_texture_result = reader.read<ResourceIndexT>();
+  auto base_color_texture_result = reader.template read<ResourceIndexT>();
   check_result(
     base_color_texture_result, "MaterialAssetDesc.base_color_texture");
   desc.base_color_texture = base_color_texture_result.value();
 
-  auto normal_texture_result = reader.read<ResourceIndexT>();
+  auto normal_texture_result = reader.template read<ResourceIndexT>();
   check_result(normal_texture_result, "MaterialAssetDesc.normal_texture");
   desc.normal_texture = normal_texture_result.value();
 
-  auto metallic_texture_result = reader.read<ResourceIndexT>();
+  auto metallic_texture_result = reader.template read<ResourceIndexT>();
   check_result(metallic_texture_result, "MaterialAssetDesc.metallic_texture");
   desc.metallic_texture = metallic_texture_result.value();
 
-  auto roughness_texture_result = reader.read<ResourceIndexT>();
+  auto roughness_texture_result = reader.template read<ResourceIndexT>();
   check_result(roughness_texture_result, "MaterialAssetDesc.roughness_texture");
   desc.roughness_texture = roughness_texture_result.value();
 
-  auto ambient_occlusion_texture_result = reader.read<ResourceIndexT>();
+  auto ambient_occlusion_texture_result
+    = reader.template read<ResourceIndexT>();
   check_result(ambient_occlusion_texture_result,
     "MaterialAssetDesc.ambient_occlusion_texture");
   desc.ambient_occlusion_texture = ambient_occlusion_texture_result.value();
@@ -213,9 +214,9 @@ auto LoadMaterialAsset(LoaderContext<S> context)
   // ShaderReference
   for (uint32_t i = 0; i < 32; ++i) {
     if ((shader_stage_bits & (1u << i)) != 0) {
-      auto shader_result = reader.read<ShaderReferenceDesc>();
+      auto shader_result = reader.template read<ShaderReferenceDesc>();
       check_result(shader_result, "ShaderReferenceDesc");
-      ShaderType stage = static_cast<ShaderType>(i);
+      auto stage = static_cast<ShaderType>(i);
       shader_refs.emplace_back(stage, shader_result.value());
       LOG_F(INFO, "  shader stage {}: {} (hash: 0x{:016X})", i,
         shader_refs.back().GetShaderUniqueId(),
@@ -229,9 +230,8 @@ auto LoadMaterialAsset(LoaderContext<S> context)
 }
 
 //! Unload function for MaterialAsset.
-inline void UnloadMaterialAsset(
-  std::shared_ptr<oxygen::data::MaterialAsset> /*asset*/,
-  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept
+inline auto UnloadMaterialAsset(std::shared_ptr<data::MaterialAsset> /*asset*/,
+  AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
 {
   // Nothing to do for a material asset, its dependency resources will do the
   // work when unloaded.
