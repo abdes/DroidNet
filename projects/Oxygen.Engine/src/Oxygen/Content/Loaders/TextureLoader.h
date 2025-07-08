@@ -13,7 +13,6 @@
 #include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/LoaderFunctions.h>
-#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 
@@ -22,16 +21,16 @@ namespace oxygen::content::loaders {
 //! Loader for texture assets.
 
 //! Loads a texture resource from a PAK file stream.
-template <oxygen::serio::Stream S>
-auto LoadTextureResource(LoaderContext<S> context)
+template <serio::Stream DescS, serio::Stream DataS>
+auto LoadTextureResource(LoaderContext<DescS, DataS> context)
   -> std::unique_ptr<data::TextureResource>
 {
   LOG_SCOPE_F(1, "Load Texture Resource");
   LOG_F(2, "offline mode     : {}", context.offline ? "yes" : "no");
 
-  auto& reader = context.reader.get();
+  serio::Reader<DescS>& reader = context.desc_reader.get();
 
-  using oxygen::data::pak::TextureResourceDesc;
+  using data::pak::TextureResourceDesc;
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
@@ -43,12 +42,13 @@ auto LoadTextureResource(LoaderContext<S> context)
   };
 
   // Read TextureResourceDesc from the stream
-  auto result = reader.read<TextureResourceDesc>();
+  auto pack = reader.ScopedAlignment(1);
+  auto result = reader.template read<TextureResourceDesc>();
   check_result(result, "TextureResourceDesc");
   const auto& desc = result.value();
 
-  auto tex_type = static_cast<oxygen::TextureType>(desc.texture_type);
-  auto tex_format = static_cast<oxygen::Format>(desc.format);
+  auto tex_type = static_cast<TextureType>(desc.texture_type);
+  auto tex_format = static_cast<Format>(desc.format);
   LOG_F(1, "data offset      : {}", desc.data_offset);
   LOG_F(1, "data size        : {}", desc.data_size);
   LOG_F(2, "texture type     : {}", nostd::to_string(tex_type));
@@ -60,23 +60,36 @@ auto LoadTextureResource(LoaderContext<S> context)
   LOG_F(2, "mip levels       : {}", desc.mip_levels);
   LOG_F(2, "format           : {}", nostd::to_string(tex_format));
   LOG_F(2, "alignment        : {}", desc.alignment);
-  LOG_F(2, "is cubemap       : {}", desc.is_cubemap ? "yes" : "no");
 
-  // Construct TextureResource using the new struct-based constructor
   // Note: In offline mode, we skip any GPU resource creation
+  if (!context.offline && desc.data_size > 0) {
+    // TODO: Read the texture data
+    // For now we just do some sanity checks and throw if the data cannot be
+    // fully read
+    constexpr std::size_t tex_index
+      = IndexOf<data::TextureResource, ResourceTypeList>::value;
+    auto& data_reader = std::get<tex_index>(context.data_readers).get();
+
+    check_result(data_reader.seek(desc.data_offset), "Texture Data");
+    auto align_result = data_reader.align_to(desc.alignment);
+    check_result(align_result, "Texture Data");
+    auto data_result = data_reader.read_blob(desc.data_size);
+    check_result(data_result, "Texture Data");
+  }
+
   return std::make_unique<data::TextureResource>(desc);
 }
 
 //! Unload function for TextureResource.
-inline void UnloadTextureResource(
-  std::shared_ptr<oxygen::data::TextureResource> /*resource*/,
-  oxygen::content::AssetLoader& /*loader*/, bool offline) noexcept
+inline auto UnloadTextureResource(
+  const std::shared_ptr<data::TextureResource>& /*resource*/,
+  AssetLoader& /*loader*/, const bool offline) noexcept -> void
 {
   if (offline) {
-    // In offline mode, we do not need to clean up GPU resources.
     return;
   }
   // TODO: cleanup GPU resources for the texture.
+  (void)0; // Placeholder for future GPU resource cleanup
 }
 
 } // namespace oxygen::content::loaders

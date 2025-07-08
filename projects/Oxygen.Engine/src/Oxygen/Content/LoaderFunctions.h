@@ -10,44 +10,22 @@
 #include <memory>
 
 #include <Oxygen/Base/FileStream.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Composition/TypeSystem.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Content/LoaderContext.h>
 
 namespace oxygen::content {
 
-// Forward declarations for loader context
-class AssetLoader;
-class PakFile;
-
-//! Context passed to loader functions containing all necessary loading state.
-template <oxygen::serio::Stream S> struct LoaderContext {
-  //! Asset loader for dependency registration (null for resource loaders)
-  AssetLoader* asset_loader { nullptr };
-
-  //! Asset key of the item being loaded (for dependency registration)
-  oxygen::data::AssetKey current_asset_key {};
-
-  //! Reader for the data stream
-  std::reference_wrapper<oxygen::serio::Reader<S>> reader {};
-
-  //! Whether loading is performed in offline mode
-  bool offline { false };
-
-  //! Source PAK file for intra-PAK resource resolution
-  const PakFile* source_pak { nullptr };
-};
-
-template <typename F, typename S>
+template <typename F, typename DescS, typename DataS>
 concept LoadFunctionForStream
-  = oxygen::serio::Stream<S> && requires(F f, LoaderContext<S> context) {
-      {
-        f(context)
-      } -> std::same_as<std::unique_ptr<
-        typename std::remove_pointer_t<decltype(f(context).get())>>>;
-      requires IsTyped<std::remove_pointer_t<decltype(f(context).get())>>;
-    };
+  = oxygen::serio::Stream<DescS> && oxygen::serio::Stream<DataS>
+  && requires(F f, LoaderContext<DescS, DataS> context) {
+       {
+         f(context)
+       } -> std::same_as<
+         std::unique_ptr<std::remove_pointer_t<decltype(f(context).get())>>>;
+       requires IsTyped<std::remove_pointer_t<decltype(f(context).get())>>;
+     };
 
 //! Concept for asset/resource load functions used with AssetLoader.
 /*!
@@ -77,6 +55,7 @@ concept LoadFunctionForStream
  @see LoaderContext, AssetLoader
 */
 template <typename F>
-concept LoadFunction = LoadFunctionForStream<F, oxygen::serio::FileStream<>>;
+concept LoadFunction
+  = LoadFunctionForStream<F, serio::FileStream<>, serio::FileStream<>>;
 
 } // namespace oxygen::content

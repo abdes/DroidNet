@@ -27,7 +27,7 @@ namespace detail {
 
   // Accepts any Result<T> and checks for error, logs and throws if needed
   template <typename ResultT>
-  void CheckResult(const ResultT& result, const char* field_name)
+  auto CheckResult(const ResultT& result, const char* field_name) -> void
   {
     if (!result) {
       LOG_F(ERROR, "-failed- on {}: {}", field_name, result.error().message());
@@ -38,9 +38,9 @@ namespace detail {
   }
 
   // Helper to read a bounding box (float[3])
-  template <oxygen::serio::Stream S>
-  void ReadBoundingBox(
-    oxygen::serio::Reader<S>& reader, float (&bbox)[3], const char* field_name)
+  template <serio::Stream S>
+  auto ReadBoundingBox(
+    serio::Reader<S>& reader, float (&bbox)[3], const char* field_name) -> void
   {
     for (int i = 0; i < 3; ++i) {
       auto f_result = reader.template read<float>();
@@ -50,12 +50,15 @@ namespace detail {
   }
 
   // Handles loading of vertex/index buffers for standard meshes
-  template <oxygen::serio::Stream S>
-  void LoadStandardMeshBuffers(oxygen::serio::Reader<S>& reader,
+  template <serio::Stream DescS, serio::Stream DataS>
+  auto LoadStandardMeshBuffers(LoaderContext<DescS, DataS>& context,
     data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
-    std::vector<uint32_t>& indices, LoaderContext<S>& context)
+    std::vector<uint32_t>& indices) -> void
   {
     using namespace oxygen::data::pak;
+
+    serio::Reader<DescS>& reader = context.desc_reader.get();
+
     // Access union field via desc.info.standard
     auto& info = desc.info.standard;
     // Read vertex_buffer
@@ -82,68 +85,61 @@ namespace detail {
         context.current_asset_key, info.index_buffer);
     }
 
-    for (int i = 0; i < 3; ++i) {
+    for (float& i : desc.info.standard.bounding_box_min) {
       auto min_result = reader.template read<float>();
       CheckResult(min_result, "m.bounding_box_min");
-      desc.info.standard.bounding_box_min[i] = *min_result;
+      i = *min_result;
     }
-    for (int i = 0; i < 3; ++i) {
+    for (float& i : desc.info.standard.bounding_box_max) {
       auto max_result = reader.template read<float>();
       CheckResult(max_result, "m.bounding_box_max");
-      desc.info.standard.bounding_box_max[i] = *max_result;
+      i = *max_result;
     }
 
-    // TODO: Actually load vertex/index buffers from resources
-    // For now, leave empty (or fill with dummy data if needed)
+    // TODO: Read the vertex and index buffer data and attach to mesh
+    // For now we just do some sanity checks and throw if the data cannot be
+    // fully read
 
-    vertices.clear();
-    indices.clear();
+    const auto& buf_table
+      = context.source_pak->template GetResourceTable<data::BufferResource>();
+    if (!buf_table) {
+      LOG_F(ERROR, "no resource table for buffers");
+      throw std::runtime_error("no resource table for buffers");
+    }
 
-    // Cube vertices (positions only, fill other fields as needed)
-    using Vertex = oxygen::data::Vertex;
-    vertices = {
-      Vertex {
-        .position = { -0.5f, -0.5f, -0.5f },
-      },
-      Vertex {
-        .position = { 0.5f, -0.5f, -0.5f },
-      },
-      Vertex {
-        .position = { 0.5f, 0.5f, -0.5f },
-      },
-      Vertex {
-        .position = { -0.5f, 0.5f, -0.5f },
-      },
-      Vertex {
-        .position = { -0.5f, -0.5f, 0.5f },
-      },
-      Vertex {
-        .position = { 0.5f, -0.5f, 0.5f },
-      },
-      Vertex {
-        .position = { 0.5f, 0.5f, 0.5f },
-      },
-      Vertex {
-        .position = { -0.5f, 0.5f, 0.5f },
-      },
-    };
-
-    // Cube indices (12 triangles, 36 indices)
-    indices = {
-      0, 1, 2, 2, 3, 0, // -Z
-      4, 5, 6, 6, 7, 4, // +Z
-      0, 4, 7, 7, 3, 0, // -X
-      1, 5, 6, 6, 2, 1, // +X
-      3, 2, 6, 6, 7, 3, // +Y
-      0, 1, 5, 5, 4, 0, // -Y
-    };
+    // Save current position to restore it later, as we are going to jump around
+    auto pos_result = reader.position();
+    CheckResult(pos_result, "Save desc reader position");
+    {
+      auto vb_offset = buf_table->GetResourceOffset(info.vertex_buffer);
+      if (!vb_offset) {
+        LOG_F(ERROR, "-failed- on vertex buffer not found: index = {}",
+          info.vertex_buffer);
+        throw std::runtime_error("Vertex buffer not found");
+      }
+      CheckResult(reader.seek(*vb_offset), "Vertex Buffer Data");
+      auto buf_resource = LoadBufferResource(context);
+    }
+    {
+      auto ib_offset = buf_table->GetResourceOffset(info.index_buffer);
+      if (!ib_offset) {
+        LOG_F(ERROR, "-failed- on index buffer not found: index = {}",
+          info.index_buffer);
+        throw std::runtime_error("Vertex buffer not found");
+      }
+      CheckResult(reader.seek(*ib_offset), "Index Buffer Data");
+      auto buf_resource = LoadBufferResource(context);
+    }
+    // Restore reader position after reading buffers
+    CheckResult(
+      reader.seek(pos_result.value()), "Restore desc reader position");
   }
 
   // Handles loading and generation for procedural meshes
-  template <oxygen::serio::Stream S>
-  void LoadProceduralMeshBuffers(oxygen::serio::Reader<S>& reader,
+  template <serio::Stream S>
+  auto LoadProceduralMeshBuffers(serio::Reader<S>& reader,
     data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
-    std::vector<uint32_t>& indices)
+    std::vector<uint32_t>& indices) -> void
   {
     // Access union field via desc.info.procedural
     auto& info = desc.info.procedural;
@@ -163,7 +159,7 @@ namespace detail {
     }
 
     // Use GenerateMeshBuffers to get vertices/indices
-    auto mesh_opt = oxygen::data::GenerateMeshBuffers(
+    auto mesh_opt = data::GenerateMeshBuffers(
       desc.name, std::span<const std::byte>(param_blob));
     if (mesh_opt) {
       std::tie(vertices, indices) = std::move(*mesh_opt);
@@ -172,9 +168,8 @@ namespace detail {
     }
   }
 
-  template <oxygen::serio::Stream S>
-  auto LoadMeshViewDesc(oxygen::serio::Reader<S> reader)
-    -> data::pak::MeshViewDesc
+  template <serio::Stream S>
+  auto LoadMeshViewDesc(serio::Reader<S> desc_reader) -> data::pak::MeshViewDesc
   {
     LOG_SCOPE_F(INFO, "Mesh View");
 
@@ -182,7 +177,7 @@ namespace detail {
     using namespace oxygen::data::pak;
 
     // Read MeshViewDesc from the stream
-    auto mesh_view_result = reader.template read<MeshViewDesc>();
+    auto mesh_view_result = desc_reader.template read<MeshViewDesc>();
     detail::CheckResult(mesh_view_result, "m.desc");
     const auto& mesh_view_desc = *mesh_view_result;
     LOG_F(INFO, "firs vertex   : {}", mesh_view_desc.first_vertex);
@@ -193,9 +188,8 @@ namespace detail {
     return *mesh_view_result;
   }
 
-  template <oxygen::serio::Stream S>
-  auto LoadSubMeshDesc(oxygen::serio::Reader<S> reader,
-    LoaderContext<S>& context) -> data::pak::SubMeshDesc
+  template <serio::Stream S>
+  auto LoadSubMeshDesc(serio::Reader<S> desc_reader) -> data::pak::SubMeshDesc
   {
     LOG_SCOPE_F(INFO, "Sub-Mesh");
 
@@ -206,38 +200,38 @@ namespace detail {
     // name
     std::span<std::byte> submesh_name_span(
       reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
-    auto submesh_name_result = reader.read_blob_to(submesh_name_span);
+    auto submesh_name_result = desc_reader.read_blob_to(submesh_name_span);
     detail::CheckResult(submesh_name_result, "sm.name");
     LOG_F(2, "name           : {}", desc.name);
 
     // material_asset_key
-    auto mat_key_result = reader.template read<AssetKey>();
+    auto mat_key_result = desc_reader.template read<AssetKey>();
     detail::CheckResult(mat_key_result, "sm.material_asset_key");
     desc.material_asset_key = *mat_key_result;
     LOG_F(2, "material asset : {}", nostd::to_string(desc.material_asset_key));
 
     // mesh_view_count
-    auto mesh_view_count_result = reader.template read<uint32_t>();
+    auto mesh_view_count_result = desc_reader.template read<uint32_t>();
     detail::CheckResult(mesh_view_count_result, "sm.mesh_view_count");
     desc.mesh_view_count = *mesh_view_count_result;
     LOG_F(2, "mesh view count: {}", desc.mesh_view_count);
 
     // bounding_box_min
-    ReadBoundingBox(reader, desc.bounding_box_min, "sm.bounding_box_min");
+    ReadBoundingBox(desc_reader, desc.bounding_box_min, "sm.bounding_box_min");
     LOG_F(2, "bounding box min: ({}, {}, {})", desc.bounding_box_min[0],
       desc.bounding_box_min[1], desc.bounding_box_min[2]);
 
     // bounding_box_max
-    ReadBoundingBox(reader, desc.bounding_box_max, "sm.bounding_box_max");
+    ReadBoundingBox(desc_reader, desc.bounding_box_max, "sm.bounding_box_max");
     LOG_F(2, "bounding box max: ({}, {}, {})", desc.bounding_box_max[0],
       desc.bounding_box_max[1], desc.bounding_box_max[2]);
 
     return desc;
   }
 
-  template <oxygen::serio::Stream S>
-  auto LoadSubMeshViews(oxygen::serio::Reader<S> reader,
-    uint32_t mesh_view_count) -> std::vector<data::pak::MeshViewDesc>
+  template <serio::Stream S>
+  auto LoadSubMeshViews(serio::Reader<S> reader, uint32_t mesh_view_count)
+    -> std::vector<data::pak::MeshViewDesc>
   {
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -253,13 +247,14 @@ namespace detail {
 
 } // namespace detail
 
-template <oxygen::serio::Stream S>
-auto LoadMesh(LoaderContext<S> context) -> std::unique_ptr<data::Mesh>
+template <serio::Stream DescS, serio::Stream DataS>
+auto LoadMesh(LoaderContext<DescS, DataS> context)
+  -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(INFO, "Mesh");
   LOG_F(2, "offline mode    : {}", context.offline ? "yes" : "no");
 
-  auto& reader = context.reader.get();
+  auto& reader = context.desc_reader.get();
 
   using namespace oxygen::data;
   using namespace oxygen::data::pak;
@@ -306,7 +301,7 @@ auto LoadMesh(LoaderContext<S> context) -> std::unique_ptr<data::Mesh>
   std::vector<uint32_t> indices;
 
   if (desc.IsStandard()) {
-    detail::LoadStandardMeshBuffers(reader, desc, vertices, indices, context);
+    detail::LoadStandardMeshBuffers(context, desc, vertices, indices);
     std::cerr << "[DEBUG] MeshDesc union end offset: "
               << reader.position().value() << std::endl;
   } else if (desc.IsProcedural()) {
@@ -328,7 +323,7 @@ auto LoadMesh(LoaderContext<S> context) -> std::unique_ptr<data::Mesh>
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {
     std::cerr << "[DEBUG] SubMeshDesc start offset: "
               << reader.position().value() << std::endl;
-    auto sm_desc = detail::LoadSubMeshDesc(reader, context);
+    auto sm_desc = detail::LoadSubMeshDesc(reader);
 
     context.asset_loader->AddAssetDependency(
       context.current_asset_key, sm_desc.material_asset_key);
@@ -373,8 +368,8 @@ auto LoadMesh(LoaderContext<S> context) -> std::unique_ptr<data::Mesh>
   return builder.Build();
 }
 
-template <oxygen::serio::Stream S>
-auto LoadGeometryAsset(LoaderContext<S> context)
+template <serio::Stream DescS, serio::Stream DataS>
+auto LoadGeometryAsset(LoaderContext<DescS, DataS> context)
   -> std::unique_ptr<data::GeometryAsset>
 {
   using namespace oxygen::data;
@@ -382,12 +377,12 @@ auto LoadGeometryAsset(LoaderContext<S> context)
 
   LOG_SCOPE_F(INFO, "Geometry");
 
-  auto& reader = context.reader.get();
+  auto& reader = context.desc_reader.get();
 
   // Read GeometryAssetDesc field by field
   GeometryAssetDesc desc;
 
-  auto pack = reader.ScopedAlignement(1);
+  auto pack = reader.ScopedAlignment(1);
 
   // header (use header loader from Helpers.h)
   desc.header = LoadAssetHeader(reader);
@@ -425,9 +420,8 @@ auto LoadGeometryAsset(LoaderContext<S> context)
 }
 
 //! Unload function for GeometryAsset.
-inline void UnloadGeometryAsset(
-  std::shared_ptr<oxygen::data::GeometryAsset> /*asset*/,
-  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept
+inline auto UnloadGeometryAsset(std::shared_ptr<data::GeometryAsset> /*asset*/,
+  AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
 {
   // Nothing to do for a geometry asset, its dependency resources will do the
   // work when unloaded.

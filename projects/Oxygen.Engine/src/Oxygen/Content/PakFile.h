@@ -33,19 +33,19 @@ namespace oxygen::content {
 */
 class PakFile {
   // Internal: initialize resource tables if present in the footer
-  void InitBuffersTable() const;
-  void InitTexturesTable() const;
+  auto InitBuffersTable() const -> void;
+  auto InitTexturesTable() const -> void;
 
 public:
-  using Reader = oxygen::serio::Reader<oxygen::serio::FileStream<>>;
+  using Reader = serio::Reader<serio::FileStream<>>;
 
   //! Type alias for the buffer resource table.
   using BuffersTableT
-    = ResourceTable<data::BufferResource, oxygen::serio::FileStream<>>;
+    = ResourceTable<data::BufferResource, serio::FileStream<>>;
 
   //! Type alias for the texture resource table.
   using TexturesTableT
-    = ResourceTable<data::TextureResource, oxygen::serio::FileStream<>>;
+    = ResourceTable<data::TextureResource, serio::FileStream<>>;
 
   //! 8-byte header magic: {'O','X','P','A','K',0,0,0}
   static constexpr std::array<uint8_t, 8> kHeaderMagic
@@ -136,8 +136,7 @@ public:
    @see HasTableOf, BuffersTable, TexturesTable
   */
   template <PakResource T>
-  auto GetResourceTable() const
-    -> ResourceTable<T, oxygen::serio::FileStream<>>*
+  auto GetResourceTable() const -> ResourceTable<T, serio::FileStream<>>*
   {
     if constexpr (std::is_same_v<T, data::BufferResource>) {
       return buffers_table_ ? &(*buffers_table_) : nullptr;
@@ -148,17 +147,42 @@ public:
     }
   }
 
+  //=== Data Regions Access ===-----------------------------------------------//
+
+  auto CreateBufferDataReader() const -> Reader;
+  auto CreateTextureDataReader() const -> Reader;
+
+  template <PakResource T> auto CreateDataReader() const -> Reader
+  {
+    if constexpr (std::is_same_v<T, data::BufferResource>) {
+      return CreateBufferDataReader();
+    } else if constexpr (std::is_same_v<T, data::TextureResource>) {
+      return CreateTextureDataReader();
+    } else {
+      throw std::invalid_argument(
+        "Unsupported resource type for CreateBufferDataReader");
+    }
+  }
+
 private:
-  void ReadHeader(oxygen::serio::FileStream<>* stream);
-  void ReadFooter(oxygen::serio::FileStream<>* stream);
-  void ReadDirectory(oxygen::serio::FileStream<>* stream, uint32_t asset_count);
+  auto ReadHeader(serio::FileStream<>* stream) -> void;
+  auto ReadFooter(serio::FileStream<>* stream) -> void;
+  auto ReadDirectory(serio::FileStream<>* stream, uint32_t asset_count) -> void;
   auto ReadDirectoryEntry(Reader& reader) -> void;
 
   std::filesystem::path file_path_; // Path to the PAK file
 
   data::pak::PakHeader header_ {};
   data::pak::PakFooter footer_ {};
-  std::unique_ptr<oxygen::serio::FileStream<>> stream_;
+
+  //! Stream for reading the PAK file metadata (header, footer, directory,
+  //! descriptor tables)
+  std::unique_ptr<serio::FileStream<>> meta_stream_;
+
+  //! Streams for reading the data from data regions (aligned)
+  std::unique_ptr<serio::FileStream<>> buffer_data_stream_;
+  std::unique_ptr<serio::FileStream<>> texture_data_stream_;
+
   std::vector<data::pak::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;
   mutable std::unordered_map<data::AssetKey, size_t> key_to_index_;
