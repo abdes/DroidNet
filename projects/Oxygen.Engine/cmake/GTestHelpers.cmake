@@ -38,7 +38,6 @@ function(gtest_program program_name)
       FOLDER
         "Testing"
   )
-  source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${x_SOURCES})
 
   target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 
@@ -73,5 +72,11 @@ function(m_gtest_program program_name)
     DEPS
       ${META_MODULE_TARGET}
       oxygen::testing
+  )
+  source_group(
+    TREE ${CMAKE_CURRENT_SOURCE_DIR}
+    PREFIX ${program_name}
+    FILES
+      ${x_SOURCES}
   )
 endfunction()
