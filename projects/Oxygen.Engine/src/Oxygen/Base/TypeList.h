@@ -114,4 +114,32 @@ struct Apply<Template, TypeList<Types...>> {
 template <template <typename...> class Template, typename List>
 using Apply_t = typename Apply<Template, List>::type;
 
+//! Transforms a TypeList<Ts...> into a new TypeList with a template applied to
+//! each type.
+/*!
+ Applies the template Template to each type in the TypeList.
+
+ @tparam List The TypeList to transform
+ @tparam Template The template to apply (must be a template taking a single
+ type)
+ @return A std::tuple of the transformed types
+
+ ### Usage Examples
+
+ ```cpp
+ using MyTuple = TypeListTransform<MyTypeList, std::add_pointer>::type;
+ ```
+
+ @see TypeList
+*/
+template <typename List, template <typename> class Template>
+struct TypeListTransform;
+
+// Specialization for TypeList
+template <template <typename...> class TypeList, typename... Ts,
+  template <typename> class Template>
+struct TypeListTransform<TypeList<Ts...>, Template> {
+  using type = std::tuple<Template<Ts>...>;
+};
+
 } // namespace oxygen
