@@ -26,8 +26,8 @@ public:
   {
   }
 
-  [[nodiscard]] auto ScopedAlignement(uint8_t alignment) noexcept(false)
-    -> ::oxygen::serio::AlignmentGuard
+  [[nodiscard]] auto ScopedAlignment(uint16_t alignment) noexcept(false)
+    -> AlignmentGuard
   {
     return AlignmentGuard(*this, alignment);
   }
@@ -135,7 +135,7 @@ public:
       const size_t padding
         = (alignment - (current_pos.value() % alignment)) % alignment;
       if (padding > 0) {
-        std::array<std::byte, kMaxAlignment> zeros { std::byte(0) };
+        std::array<std::byte, kMaxAlignment> zeros { std::byte { 0 } };
         return stream_.get().write(zeros.data(), padding);
       }
       return {};
