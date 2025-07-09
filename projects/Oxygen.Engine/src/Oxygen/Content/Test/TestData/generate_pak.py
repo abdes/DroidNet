@@ -924,7 +924,7 @@ def collect_resources(
                     f"Processing {resource_type} resources", len(resource_list)
                 )
 
-                for idx, resource_spec in enumerate(resource_list, 1):
+                for idx, resource_spec in enumerate(resource_list):
                     if "name" not in resource_spec:
                         raise ValueError(
                             f"Resource {idx} missing required 'name' field"

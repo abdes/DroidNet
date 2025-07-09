@@ -1,0 +1,74 @@
+version: 1
+content_version: 0
+textures:
+  - name: "DiffuseTex"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daed93310e82301445bf7244141141c1b040b040b040b0"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm (was incorrectly using kRGBA8UInt)
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "NormalTex"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da8080808080808080808080808080808080808080"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "MetallicTex"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daffffffffffffffffffffffffffffffffffff"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "RoughnessTex"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da404040404040404040404040404040404040"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+  - name: "AOTexture"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da202020202020202020202020202020202020"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+assets:
+  - name: "TestMaterial"
+    type: material
+    asset_key: "01234567-89ab-cdef-0123-456789abcdef"
+    variant: 0
+    version: 1
+    streaming_priority: 0
+    content_hash: 0
+    material_domain: 1
+    alignment: 256
+    flags: 0xAABBCCDD
+    shader_stages: 0x88
+    base_color: [0.1, 0.2, 0.3, 0.4]
+    normal_scale: 1.5
+    metalness: 0.7
+    roughness: 0.2
+    ambient_occlusion: 0.9
+    texture_refs:
+      base_color_texture: "DiffuseTex"
+      normal_texture: "NormalTex"
+      metallic_texture: "MetallicTex"
+      roughness_texture: "RoughnessTex"
+      ambient_occlusion_texture: "AOTexture"
+    shader_references:
+      - shader_unique_id: "VS@main.vert"
+        shader_hash: 0x1111
+      - shader_unique_id: "PS@main.frag"
+        shader_hash: 0x2222

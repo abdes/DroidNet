@@ -23,9 +23,8 @@ inline auto Load(AnyReader& reader, data::pak::AssetHeader& header)
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(header.asset_type));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::span(reinterpret_cast<std::byte*>(header.name),
-      oxygen::data::pak::kMaxNameSize)));
+  CHECK_RESULT(reader.ReadBlobInto(std::span(
+    reinterpret_cast<std::byte*>(header.name), std::size(header.name))));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.streaming_priority));
   CHECK_RESULT(reader.ReadInto(header.content_hash));
