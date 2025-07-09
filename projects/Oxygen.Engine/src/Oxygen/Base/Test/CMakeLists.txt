@@ -50,15 +50,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 m_gtest_program(
-  Serio
-  SOURCES
-    "FileStream_test.cpp"
-    "MemoryStream_test.cpp"
-    "Reader_test.cpp"
-    "Writer_test.cpp"
-)
-
-m_gtest_program(
   Resource
   SOURCES
     "Resource_test.cpp"

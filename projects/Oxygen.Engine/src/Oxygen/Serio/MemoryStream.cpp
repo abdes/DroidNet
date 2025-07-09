@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <span>
 
-#include <Oxygen/Base/MemoryStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 
 namespace oxygen::serio {
 
@@ -16,19 +16,19 @@ MemoryStream::MemoryStream(const std::span<std::byte> buffer) noexcept
 {
 }
 
-auto MemoryStream::get_buffer() noexcept -> std::span<std::byte>
+auto MemoryStream::GetBuffer() noexcept -> std::span<std::byte>
 {
   return external_buffer_.empty() ? std::span(internal_buffer_)
                                   : external_buffer_;
 }
 
-auto MemoryStream::get_buffer() const noexcept -> std::span<const std::byte>
+auto MemoryStream::GetBuffer() const noexcept -> std::span<const std::byte>
 {
   return external_buffer_.empty() ? std::span(internal_buffer_)
                                   : external_buffer_;
 }
 
-auto MemoryStream::write(const std::byte* data, const size_t size) noexcept
+auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
   if (data == nullptr && size > 0) {
@@ -39,7 +39,7 @@ auto MemoryStream::write(const std::byte* data, const size_t size) noexcept
     return std::make_error_code(std::errc::value_too_large);
   }
 
-  auto buffer = get_buffer();
+  auto buffer = GetBuffer();
   if (pos_ + size > buffer.size()) {
     if (external_buffer_.empty()) {
       try {
@@ -60,14 +60,14 @@ auto MemoryStream::write(const std::byte* data, const size_t size) noexcept
   return {};
 }
 
-auto MemoryStream::read(std::byte* data, const size_t size) noexcept
+auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
   if (data == nullptr && size > 0) {
     return std::make_error_code(std::errc::invalid_argument);
   }
 
-  const auto buffer = get_buffer();
+  const auto buffer = GetBuffer();
   if (pos_ >= buffer.size()) {
     return std::make_error_code(std::errc::io_error);
   }
@@ -88,50 +88,44 @@ auto MemoryStream::read(std::byte* data, const size_t size) noexcept
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-auto MemoryStream::flush() const noexcept -> Result<void> { return {}; }
+auto MemoryStream::Flush() noexcept -> Result<void> { return {}; }
 
-auto MemoryStream::position() const noexcept -> Result<size_t> { return pos_; }
+auto MemoryStream::Position() const noexcept -> Result<size_t> { return pos_; }
 
-auto MemoryStream::seek(const size_t pos) noexcept -> Result<void>
+auto MemoryStream::Seek(const size_t pos) noexcept -> Result<void>
 {
-  if (const auto buffer = get_buffer(); pos > buffer.size()) {
+  if (const auto buffer = GetBuffer(); pos > buffer.size()) {
     return std::make_error_code(std::errc::invalid_seek);
   }
   pos_ = pos;
   return {};
 }
 
-auto MemoryStream::size() const noexcept -> Result<size_t>
+auto MemoryStream::Size() const noexcept -> Result<size_t>
 {
-  const auto buffer = get_buffer();
+  const auto buffer = GetBuffer();
   return buffer.size();
 }
 
-auto MemoryStream::data() const noexcept -> std::span<const std::byte>
+auto MemoryStream::Data() const noexcept -> std::span<const std::byte>
 {
-  const auto buffer = get_buffer();
+  const auto buffer = GetBuffer();
   return std::as_bytes(buffer);
 }
 
-void MemoryStream::reset() noexcept { pos_ = 0; }
+auto MemoryStream::Reset() noexcept -> void { pos_ = 0; }
 
-void MemoryStream::clear()
+auto MemoryStream::Clear() -> void
 {
   if (external_buffer_.empty()) {
     internal_buffer_.clear();
   } else {
     std::ranges::fill(external_buffer_, static_cast<std::byte>(0x00));
   }
-  reset();
+  Reset();
 }
 
-auto MemoryStream::eof() const noexcept -> bool
-{
-  const auto buffer = get_buffer();
-  return pos_ >= buffer.size();
-}
-
-auto MemoryStream::backward(size_t offset) noexcept -> Result<void>
+auto MemoryStream::Backward(const size_t offset) noexcept -> Result<void>
 {
   if (offset > pos_) {
     return std::make_error_code(std::errc::io_error);
@@ -140,9 +134,9 @@ auto MemoryStream::backward(size_t offset) noexcept -> Result<void>
   return {};
 }
 
-auto MemoryStream::forward(size_t offset) noexcept -> Result<void>
+auto MemoryStream::Forward(const size_t offset) noexcept -> Result<void>
 {
-  const auto buffer = get_buffer();
+  const auto buffer = GetBuffer();
   if (pos_ + offset > buffer.size()) {
     return std::make_error_code(std::errc::io_error);
   }
@@ -150,9 +144,9 @@ auto MemoryStream::forward(size_t offset) noexcept -> Result<void>
   return {};
 }
 
-auto MemoryStream::seek_end() noexcept -> Result<void>
+auto MemoryStream::SeekEnd() noexcept -> Result<void>
 {
-  const auto buffer = get_buffer();
+  const auto buffer = GetBuffer();
   pos_ = buffer.size();
   return {};
 }
