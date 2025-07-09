@@ -87,9 +87,8 @@ buffers:
 #         uint16_t mip_levels; // Number of mip levels
 #         uint8_t format; // Texture format enum
 #         uint16_t alignment; // 256 for textures
-#         uint8_t is_cubemap; // 1 if cubemap, 0 otherwise
 #         // Reserved for future use
-#         uint8_t reserved[8] = {};
+#         uint8_t reserved[9] = {};
 #       };
 #       #pragma pack(pop)
 #       static_assert(sizeof(TextureResourceDesc) == 40);
@@ -104,7 +103,6 @@ textures:
     mip_levels: 1
     format: 0               # 0 = unknown/RAW, set as needed
     alignment: 256
-    is_cubemap: 0
     data_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627"  # 40 bytes hex, example only
 
 # Emit AssetHeader as:

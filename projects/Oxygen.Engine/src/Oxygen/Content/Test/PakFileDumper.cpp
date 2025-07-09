@@ -362,8 +362,6 @@ auto PrintTextureResourceTable(const PakFile& pak, const DumpOptions& opts,
             "Format", nostd::to_string(texture_resource->GetFormat()), 8);
           PrintField("Texture Type",
             nostd::to_string(texture_resource->GetTextureType()), 8);
-          PrintField(
-            "Is Cubemap", texture_resource->IsCubemap() ? "yes" : "no", 8);
 
           // Show texture data if requested
           if (opts.show_resource_data) {

@@ -203,12 +203,9 @@ struct TextureResourceDesc {
   uint16_t mip_levels; // Number of mip levels
   uint8_t format; // Texture format enum
   uint16_t alignment; // 256 for textures
-  uint8_t is_cubemap; // 1 if cubemap, 0 otherwise
-  // FIXME: is_cubemap should be removed, as it can be inferred from
-  // texture_type and format.
 
   // Reserved for future use
-  uint8_t reserved[8] = {};
+  uint8_t reserved[9] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(TextureResourceDesc) == 40);

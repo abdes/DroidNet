@@ -76,8 +76,7 @@ inline auto Load(AnyReader& reader, data::pak::TextureResourceDesc& desc)
   CHECK_RESULT(reader.ReadInto(desc.mip_levels));
   CHECK_RESULT(reader.ReadInto(desc.format));
   CHECK_RESULT(reader.ReadInto(desc.alignment));
-  CHECK_RESULT(reader.ReadInto(desc.is_cubemap));
-  CHECK_RESULT(reader.Forward(sizeof(desc.reserved)));
+  CHECK_RESULT(reader.Forward(std::size(desc.reserved)));
   return {};
 }
 
