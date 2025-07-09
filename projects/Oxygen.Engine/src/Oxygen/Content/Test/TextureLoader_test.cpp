@@ -85,7 +85,7 @@ NOLINT_TEST_F(
   //   0x1A: mip_levels       = 5           (05 00)
   //   0x1C: format           = 2           (02)  // kRGBA32Float
   //   0x1D: alignment        = 256         (00 01)
-  //   0x1F: reserved[8]      = {0}         (00 00 00 00 00 00 00 00)
+  //   0x1F: reserved[9]      = {0}         (00 00 00 00 00 00 00 00 00)
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 1F 01 00 00 04 00 80 00
     16: 00 00 40 00 00 00 01 00 06 00 05 00 02 00 01 00
@@ -141,7 +141,7 @@ NOLINT_TEST_F(
   //   0x1A: mip_levels       = 1           (01 00)
   //   0x1C: format           = 2           (02)  // kRGBA32Float
   //   0x1D: alignment        = 256         (00 01)
-  //   0x1F: reserved[8]      = {0}         (00 00 00 00 00 00 00 00)
+  //   0x1F: reserved[9]      = {0}         (00 00 00 00 00 00 00 00 00)
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 80 00 00 00 FF 00 10 00
     16: 00 00 10 00 00 00 01 00 01 00 01 00 02 00 01 00
@@ -186,7 +186,7 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_InvalidFormat_ReturnsUnknown)
   //   0x1A: mip_levels       = 1           (01 00)
   //   0x1C: format           = 255         (FF) <- invalid
   //   0x1D: alignment        = 256         (00 01)
-  //   0x1F: reserved[8]      = {0}         (00 00 00 00 00 00 00 00)
+  //   0x1F: reserved[9]      = {0}         (00 00 00 00 00 00 00 00 00)
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 80 00 00 00 01 00 10 00
     16: 00 00 10 00 00 00 01 00 01 00 01 00 FF 00 01 00
@@ -278,7 +278,7 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_ZeroDataSize_Works)
   //   0x1A: mip_levels       = 1           (01 00)
   //   0x1C: format           = 2           (02)
   //   0x1D: alignment        = 256         (00 01)
-  //   0x1F: reserved[8]      = {0}         (00 00 00 00 00 00 00 00)
+  //   0x1F: reserved[9]      = {0}         (00 00 00 00 00 00 00 00 00)
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 00 00 00 00 01 00 10 00
     16: 00 00 10 00 00 00 01 00 01 00 01 00 02 00 01 00

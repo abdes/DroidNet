@@ -12,6 +12,8 @@
 #include <sstream>
 #include <string>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -44,38 +46,36 @@ struct DumpOptions {
 
 auto PrintSeparator(const std::string& title = "") -> void
 {
-  std::cout << "=" << std::string(77, '=') << "=\n";
+  fmt::print("{}\n", std::string(78, '='));
   if (!title.empty()) {
-    std::cout << "== " << title << "\n";
-    std::cout << "=" << std::string(77, '=') << "=\n";
+    fmt::print("== {}\n", title);
+    fmt::print("{}\n", std::string(78, '='));
   }
 }
 
 auto PrintSubSeparator(const std::string& title) -> void
 {
-  std::cout << "--- " << title << " " << std::string(70 - title.length(), '-')
-            << "\n";
+  fmt::print("--- {} {}\n", title, std::string(70 - title.length(), '-'));
 }
 
 template <typename T>
 auto PrintField(const std::string& name, const T& value, int indent = 4) -> void
 {
-  std::cout << std::string(indent, ' ') << std::left << std::setw(20)
-            << name + ":" << value << "\n";
+  fmt::print("{:>{}}{:<20}{}\n", "", indent, name + ":", value);
 }
 
 auto PrintBytes(const std::string& name, const uint8_t* data, size_t size,
   int indent = 4) -> void
 {
-  std::cout << std::string(indent, ' ') << name << ": ";
+  std::string line = fmt::format("{:>{}}{}: ", "", indent, name);
   for (size_t i = 0; i < size; ++i) {
     if (i > 0 && i % 16 == 0) {
-      std::cout << "\n" << std::string(indent + name.length() + 2, ' ');
+      fmt::print("{}\n", line);
+      line = fmt::format("{:>{}}{}: ", "", indent, name);
     }
-    std::cout << std::hex << std::setw(2) << std::setfill('0')
-              << static_cast<int>(data[i]) << " ";
+    line += fmt::format("{:02x} ", data[i]);
   }
-  std::cout << std::dec << std::setfill(' ') << "\n";
+  fmt::print("{}\n", line);
 }
 
 auto PrintHexDump(const uint8_t* data, size_t size, size_t max_bytes = 256)
@@ -84,28 +84,28 @@ auto PrintHexDump(const uint8_t* data, size_t size, size_t max_bytes = 256)
   size_t bytes_to_show = std::min(size, max_bytes);
 
   for (size_t i = 0; i < bytes_to_show; i += 16) {
-    std::cout << "    " << std::hex << std::setw(8) << std::setfill('0') << i
-              << ": ";
+    // Offset: decimal (right-aligned, width 4), then hex (8 digits,
+    // zero-padded)
+    std::string line = fmt::format("{:>4}: {:08x} ", i, i);
 
     // Hex bytes
     for (size_t j = 0; j < 16; ++j) {
       if (i + j < bytes_to_show) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0')
-                  << static_cast<int>(data[i + j]) << " ";
+        line += fmt::format("{:02x} ", data[i + j]);
       } else {
-        std::cout << "   ";
+        line += "   ";
       }
     }
 
-    std::cout << " ";
+    line += " ";
 
     // ASCII representation
     for (size_t j = 0; j < 16 && i + j < bytes_to_show; ++j) {
       uint8_t c = data[i + j];
-      std::cout << (c >= 32 && c <= 126 ? static_cast<char>(c) : '.');
+      line += (c >= 32 && c <= 126) ? static_cast<char>(c) : '.';
     }
 
-    std::cout << std::dec << "\n";
+    fmt::print("{}\n", line);
   }
 
   if (size > max_bytes) {
@@ -199,26 +199,18 @@ auto PrintPakHeader(const PakFile& pak, const DumpOptions& opts) -> void
 auto PrintResourceRegion(
   const std::string& name, uint64_t offset, uint64_t size) -> void
 {
-  std::cout << "    " << std::left << std::setw(16) << name + ":" << "offset=0x"
-            << std::hex << std::setw(8) << std::setfill('0') << offset
-            << ", size=" << std::dec << size << " bytes";
-  if (size == 0) {
-    std::cout << " (empty)";
-  }
-  std::cout << "\n";
+  auto msg = fmt::format("    {:<16}offset=0x{:08x}, size={} bytes{}\n",
+    name + ":", offset, size, size == 0 ? " (empty)" : "");
+  fmt::print("{}", msg);
 }
 
 auto PrintResourceTable(const std::string& name, uint64_t offset,
   uint32_t count, uint32_t entry_size) -> void
 {
-  std::cout << "    " << std::left << std::setw(16) << name + ":" << "offset=0x"
-            << std::hex << std::setw(8) << std::setfill('0') << offset
-            << ", count=" << std::dec << count << ", entry_size=" << entry_size
-            << " bytes";
-  if (count == 0) {
-    std::cout << " (empty)";
-  }
-  std::cout << "\n";
+  auto msg = fmt::format(
+    "    {:<16}offset=0x{:08x}, count={}, entry_size={} bytes{}\n", name + ":",
+    offset, count, entry_size, count == 0 ? " (empty)" : "");
+  fmt::print("{}", msg);
 }
 
 auto PrintPakFooter(const PakFile& pak, const DumpOptions& opts) -> void
@@ -388,27 +380,124 @@ auto PrintTextureResourceTable(const PakFile& pak, const DumpOptions& opts,
  assets). This is separate from resource data - it reads the descriptor/metadata
  that describes how to interpret the asset.
  */
+//=== Shader Reference Printing =============================================//
+
+namespace {
+constexpr size_t kMaterialAssetDescSize = 256;
+constexpr size_t kShaderReferenceDescSize = 216;
+}
+// Prints all fields of a MaterialAssetDesc (including AssetHeader fields)
+auto PrintMaterialDescriptorFields(const MaterialAssetDesc* mat) -> void
+{
+  const AssetHeader& h = mat->header;
+  std::cout << "    --- Material Descriptor Fields ---\n";
+  PrintField("Asset Type", static_cast<int>(h.asset_type), 8);
+  PrintField("Name", std::string(h.name, strnlen(h.name, kMaxNameSize)), 8);
+  PrintField("Version", static_cast<int>(h.version), 8);
+  PrintField("Streaming Priority", static_cast<int>(h.streaming_priority), 8);
+  PrintField("Content Hash", ToHexString(h.content_hash), 8);
+  PrintField("Variant Flags", ToHexString(h.variant_flags), 8);
+  // MaterialAssetDesc fields
+  PrintField("Material Domain", static_cast<int>(mat->material_domain), 8);
+  PrintField("Flags", ToHexString(mat->flags), 8);
+  PrintField("Shader Stages", ToHexString(mat->shader_stages), 8);
+  PrintField("Base Color",
+    fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat->base_color[0],
+      mat->base_color[1], mat->base_color[2], mat->base_color[3]),
+    8);
+  PrintField("Normal Scale", mat->normal_scale, 8);
+  PrintField("Metalness", mat->metalness, 8);
+  PrintField("Roughness", mat->roughness, 8);
+  PrintField("Ambient Occlusion", mat->ambient_occlusion, 8);
+  PrintField("Base Color Texture", mat->base_color_texture, 8);
+  PrintField("Normal Texture", mat->normal_texture, 8);
+  PrintField("Metallic Texture", mat->metallic_texture, 8);
+  PrintField("Roughness Texture", mat->roughness_texture, 8);
+  PrintField("Ambient Occlusion Texture", mat->ambient_occlusion_texture, 8);
+  // for (int i = 0; i < 8; ++i) {
+  //   PrintField(
+  //     fmt::format("Reserved Texture[{}]", i), mat->reserved_textures[i], 8);
+  // }
+  // // Reserved bytes (not printed individually)
+  // PrintField("Reserved (68 bytes)", "...", 8);
+  std::cout << "\n";
+}
+
+auto PrintShaderReference(const uint8_t* data, size_t size, size_t idx,
+  size_t offset, const DumpOptions& opts) -> void
+{
+  if (size < kShaderReferenceDescSize) {
+    std::cout << "      [" << idx
+              << "] ShaderReferenceDesc: (insufficient data)\n";
+    return;
+  }
+  // Parse fields
+  const char* unique_id = reinterpret_cast<const char*>(data);
+  uint64_t shader_hash = *reinterpret_cast<const uint64_t*>(data + 192);
+  // Print fields
+  std::cout << "      [" << idx << "] ShaderReferenceDesc:\n";
+  PrintField("Unique ID", std::string(unique_id, strnlen(unique_id, 192)), 10);
+  PrintField("Shader Hash", ToHexString(shader_hash), 10);
+  // Only print hex dump if requested
+  if (opts.show_asset_descriptors) {
+    std::cout << "        Hex Dump (offset " << offset << ", size "
+              << kShaderReferenceDescSize << "):\n";
+    PrintHexDump(data, kShaderReferenceDescSize, kShaderReferenceDescSize);
+  }
+}
+
+auto PrintMaterialShaderReferences(
+  const uint8_t* data, size_t desc_size, const DumpOptions& opts) -> void
+{
+  if (desc_size < kMaterialAssetDescSize)
+    return;
+  // Shader stages is at offset 100 (AssetHeader=95, +1 domain, +4 flags)
+  uint32_t shader_stages = *reinterpret_cast<const uint32_t*>(data + 100);
+  // Count set bits
+  size_t num_refs = 0;
+  for (uint32_t s = shader_stages; s; s >>= 1)
+    num_refs += (s & 1);
+  if (num_refs == 0)
+    return;
+  std::cout << "    Shader References (" << num_refs << "):\n";
+  size_t base_offset = kMaterialAssetDescSize;
+  for (size_t i = 0; i < num_refs; ++i) {
+    if (base_offset + kShaderReferenceDescSize > desc_size)
+      break;
+    PrintShaderReference(
+      data + base_offset, desc_size - base_offset, i, base_offset, opts);
+    base_offset += kShaderReferenceDescSize;
+  }
+}
+
 auto PrintAssetData(const PakFile& pak, const AssetDirectoryEntry& entry,
   const DumpOptions& opts) -> void
 {
-  if (!opts.show_asset_descriptors) {
-    return;
-  }
-
   try {
     auto reader = pak.CreateReader(entry);
 
-    // Read some data for inspection
-    size_t bytes_to_read
-      = std::min(static_cast<size_t>(entry.desc_size), opts.max_data_bytes);
+    // Read the full descriptor (and shader refs if present)
+    size_t bytes_to_read = static_cast<size_t>(entry.desc_size);
     auto data_result = reader.ReadBlob(bytes_to_read);
 
     if (data_result.has_value()) {
       const auto& data = data_result.value();
-      std::cout << "    Asset Descriptor Preview (" << data.size()
-                << " bytes read):\n";
-      PrintHexDump(reinterpret_cast<const uint8_t*>(data.data()), data.size(),
-        opts.max_data_bytes);
+      // Print hex dump if requested
+      if (opts.show_asset_descriptors) {
+        std::cout << "    Asset Descriptor Preview (" << data.size()
+                  << " bytes read):\n";
+        PrintHexDump(reinterpret_cast<const uint8_t*>(data.data()),
+          std::min(data.size(), opts.max_data_bytes), opts.max_data_bytes);
+      }
+
+      // If this is a material asset, print all descriptor fields
+      if (entry.asset_type == 1 && data.size() >= kMaterialAssetDescSize) {
+        const MaterialAssetDesc* mat
+          = reinterpret_cast<const MaterialAssetDesc*>(data.data());
+        PrintMaterialDescriptorFields(mat);
+        PrintMaterialShaderReferences(
+          reinterpret_cast<const uint8_t*>(data.data()), data.size(), opts);
+      }
     } else {
       std::cout << "    Failed to read asset descriptor data\n";
     }
