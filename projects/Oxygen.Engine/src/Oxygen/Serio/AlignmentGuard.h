@@ -6,11 +6,10 @@
 
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <stack>
 #include <stdexcept>
-
-#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::serio {
 
@@ -19,26 +18,28 @@ class Packer {
   friend class AlignmentGuard;
 
 protected:
+  using AlignmentT = uint16_t;
   static constexpr uint16_t kMaxAlignment = 256;
 
-  void pack_push(uint16_t alignment)
+  auto PushAlignment(const AlignmentT alignment) -> void
   {
     // 0 means auto-align to the type's required alignment (always valid)
     if (alignment != 0
       && (!std::has_single_bit(alignment) || alignment > kMaxAlignment)) {
       throw std::invalid_argument("invalid alignment value");
     }
-    DLOG_F(INFO, "Pushing alignment: {}", static_cast<int>(alignment));
     alignment_.push(alignment);
   }
 
-  void pack_pop()
+  auto PopAlignment() -> void { alignment_.pop(); }
+
+  [[nodiscard]] auto CurrentAlignment() const noexcept -> AlignmentT
   {
-    DLOG_F(INFO, "Popping alignment: {}", static_cast<int>(alignment_.top()));
-    alignment_.pop();
+    return alignment_.empty() ? 0 : alignment_.top();
   }
 
-  std::stack<uint16_t> alignment_ {};
+private:
+  std::stack<AlignmentT> alignment_ {};
 };
 
 //! RAII helper for managing alignment stack via pack_push/pack_pop
@@ -68,11 +69,11 @@ public:
     : obj_(obj)
     , active_(true)
   {
-    obj_.get().pack_push(alignment);
+    obj_.get().PushAlignment(alignment);
   }
 
   AlignmentGuard(const AlignmentGuard&) = delete;
-  AlignmentGuard& operator=(const AlignmentGuard&) = delete;
+  auto operator=(const AlignmentGuard&) -> AlignmentGuard& = delete;
 
   AlignmentGuard(AlignmentGuard&& other) noexcept
     : obj_(other.obj_)
@@ -81,11 +82,11 @@ public:
     other.active_ = false;
   }
 
-  AlignmentGuard& operator=(AlignmentGuard&& other) noexcept
+  auto operator=(AlignmentGuard&& other) noexcept -> AlignmentGuard&
   {
     if (this != &other) {
       if (active_) {
-        obj_.get().pack_pop();
+        obj_.get().PopAlignment();
       }
       obj_ = other.obj_;
       active_ = other.active_;
@@ -97,7 +98,7 @@ public:
   ~AlignmentGuard()
   {
     if (active_) {
-      obj_.get().pack_pop();
+      obj_.get().PopAlignment();
     }
   }
 

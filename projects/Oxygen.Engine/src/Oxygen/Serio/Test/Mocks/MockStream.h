@@ -11,7 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Stream.h>
+#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::serio::testing {
 
@@ -19,7 +19,8 @@ class MockStream {
 public:
   explicit MockStream() = default;
 
-  auto write(const std::byte* data, const size_t size) noexcept -> Result<void>
+  [[nodiscard]] auto Write(const std::byte* data, const size_t size) noexcept
+    -> Result<void>
   {
     try {
       if (force_fail_) {
@@ -53,7 +54,14 @@ public:
     }
   }
 
-  auto read(std::byte* data, const size_t size) noexcept -> Result<void>
+  [[nodiscard]] auto Write(const std::span<const std::byte> data) noexcept
+    -> Result<void>
+  {
+    return Write(data.data(), data.size());
+  }
+
+  [[nodiscard]] auto Read(std::byte* data, const size_t size) noexcept
+    -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -84,7 +92,7 @@ public:
   }
 
   // NOLINTNEXTLINE(readability-make-member-function-const)
-  auto flush() noexcept -> Result<void>
+  [[nodiscard]] auto Flush() noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -92,7 +100,7 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto position() const noexcept -> Result<size_t>
+  [[nodiscard]] auto Position() const noexcept -> Result<size_t>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -100,7 +108,7 @@ public:
     return pos_;
   }
 
-  auto seek(const size_t pos) noexcept -> Result<void>
+  [[nodiscard]] auto Seek(const size_t pos) noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -112,7 +120,7 @@ public:
     return {};
   }
 
-  auto backward(size_t offset) noexcept -> Result<void>
+  [[nodiscard]] auto Backward(size_t offset) noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -124,7 +132,7 @@ public:
     return {};
   }
 
-  auto forward(size_t offset) noexcept -> Result<void>
+  [[nodiscard]] auto Forward(size_t offset) noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -136,7 +144,7 @@ public:
     return {};
   }
 
-  auto seek_end() noexcept -> Result<void>
+  [[nodiscard]] auto SeekEnd() noexcept -> Result<void>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -145,7 +153,7 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto size() const noexcept -> Result<size_t>
+  [[nodiscard]] auto Size() const noexcept -> Result<size_t>
   {
     if (force_fail_) {
       return std::make_error_code(std::errc::io_error);
@@ -153,14 +161,21 @@ public:
     return data_.size();
   }
 
-  [[nodiscard]] auto eof() const noexcept -> bool
+  auto Reset() noexcept -> void
+  {
+    force_fail_ = false;
+    pos_ = 0;
+  }
+
+  [[nodiscard]] auto EndOfStream() const noexcept -> bool
   {
     return pos_ >= data_.size();
   }
 
   // Testing helpers
-  void force_fail(const bool fail) noexcept { force_fail_ = fail; }
-  [[nodiscard]] auto get_data() const -> const std::vector<std::byte>&
+  void ForceFail(const bool fail) noexcept { force_fail_ = fail; }
+
+  [[nodiscard]] auto Data() const -> const std::vector<std::byte>&
   {
     return data_;
   }

@@ -9,8 +9,9 @@
 # ------------------------------------------------------------------------------
 
 asap_module_declare(
-  MODULE_NAME "Oxygen.Base"
-  DESCRIPTION "Common utilities and classes for Oxygen modules"
+  MODULE_NAME "Oxygen.Serio"
+  DESCRIPTION
+    "Provides support for serialization and deserialization of Oxygen objects."
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -18,8 +19,6 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 # Dependencies
 # ------------------------------------------------------------------------------
-
-find_package(fmt CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -35,7 +34,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_BASE_EXPORTS"
+      "OXGN_SERIO_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -46,97 +45,46 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_SERIO_HEADERS
+  "api_export.h"
+  "AlignmentGuard.h"
+  "FileStream.h"
+  "MemoryStream.h"
+  "Stream.h"
+  "Reader.h"
+  "Writer.h"
+)
+set(OXYGEN_SERIO_PRIVATE_SOURCES "MemoryStream.cpp")
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Detail/loguru.cpp"
-    "Detail/signal.hpp"
-    "Windows/ComError.cpp"
-    "Windows/Exceptions.cpp"
+    ${OXYGEN_SERIO_PRIVATE_SOURCES}
+    ${OXYGEN_SERIO_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "AlwaysFalse.h"
-      "api_export.h"
-      "Compilers.h"
-      "Endian.h"
-      "Finally.h"
-      "Hash.h"
-      "Logging.h"
-      "Macros.h"
-      "NoInline.h"
-      "NoStd.h"
-      "Platforms.h"
-      "Resource.h"
-      "ResourceHandle.h"
-      "ResourceTable.h"
-      "Result.h"
-      "ReturnAddress.h"
-      "Signals.h"
-      "StaticVector.h"
-      "StringTypes.h"
-      "StringUtils.h"
-      "TimeUtils.h"
-      "TypeList.h"
-      "Types/Geometry.h"
-      "Types/Overload.h"
-      "Types/Viewport.h"
-      "Unreachable.h"
-      "VariantHelpers.h"
-      "Windows/ComError.h"
-      "Windows/Exceptions.h"
+    FILES ${OXYGEN_SERIO_HEADERS}
 )
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  target_sources(
-    ${META_MODULE_TARGET}
-    PRIVATE
-      "Windows/ComError.cpp"
-      "Windows/Exceptions.cpp"
-    PUBLIC
-      FILE_SET HEADERS
-      FILES "Windows/ComError.h" "Windows/Exceptions.h"
-  )
-endif()
 
-target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
+arrange_target_files_for_ide(${META_MODULE_TARGET})
+
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
-  PUBLIC
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_BASE_STATIC>
-)
-
-target_compile_definitions(
-  ${META_MODULE_TARGET}
-  PUBLIC
-    "LOGURU_USE_FMTLIB=1"
   PRIVATE
-    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SERIO_STATIC>
 )
 
-target_link_libraries(${META_MODULE_TARGET} PUBLIC fmt::fmt-header-only)
+target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
 
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS)
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
   add_subdirectory("Test")
-endif()
-
-# ------------------------------------------------------------------------------
-# API Documentation
-# ------------------------------------------------------------------------------
-
-if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
-  asap_with_doxygen(
-    MODULE_NAME ${META_MODULE_TARGET}
-    VERSION ${META_VERSION}
-    TITLE "\"Base\""
-    BRIEF "\"Base infrastructure for Oxygen\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
-  )
 endif()
 
 # ==============================================================================

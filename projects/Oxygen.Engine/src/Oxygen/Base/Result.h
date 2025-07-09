@@ -65,7 +65,7 @@
 #include <system_error>
 #include <variant>
 
-namespace oxygen::serio {
+namespace oxygen {
 
 //! A template class to represent the result of an operation.
 /*!
@@ -195,4 +195,4 @@ private:
   if (const auto result = expr; !result)                                       \
   return result.error()
 
-} // namespace oxygen::serio
+} // namespace oxygen
