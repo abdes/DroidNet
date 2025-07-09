@@ -10,25 +10,27 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/Reader.h>
+// ReSharper disable once CppUnusedIncludeDirective
+#include <Oxygen/Content/Loaders/Helpers.h>
 
 namespace oxygen::content::loaders {
 
 //! Loader for buffer assets.
 
 //! Loads a buffer resource from a PAK file stream.
-template <serio::Stream DescS, serio::Stream DataS>
-auto LoadBufferResource(LoaderContext<DescS, DataS> context)
+inline auto LoadBufferResource(LoaderContext context)
   -> std::unique_ptr<data::BufferResource>
 {
   LOG_SCOPE_F(1, "Load Buffer Resource");
   LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
 
-  auto& reader = context.desc_reader.get();
+  DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
+  auto& reader = *context.desc_reader;
 
   using data::pak::BufferResourceDesc;
 
@@ -43,7 +45,7 @@ auto LoadBufferResource(LoaderContext<DescS, DataS> context)
 
   // Read BufferResourceDesc from the stream
   auto pack = reader.ScopedAlignment(1);
-  auto result = reader.template read<BufferResourceDesc>();
+  auto result = reader.Read<BufferResourceDesc>();
   check_result(result, "BufferResourceDesc");
   const auto& desc = result.value();
 
@@ -62,14 +64,14 @@ auto LoadBufferResource(LoaderContext<DescS, DataS> context)
     // fully read
     constexpr std::size_t buf_index
       = IndexOf<data::BufferResource, ResourceTypeList>::value;
-    auto& data_reader = std::get<buf_index>(context.data_readers).get();
+    auto& data_reader = *std::get<buf_index>(context.data_readers);
 
-    check_result(data_reader.seek(desc.data_offset), "Buffer Data");
+    check_result(data_reader.Seek(desc.data_offset), "Buffer Data");
     if (desc.element_stride != 0) {
-      auto align_result = data_reader.align_to(desc.element_stride);
+      auto align_result = data_reader.AlignTo(desc.element_stride);
       check_result(align_result, "Buffer Data");
     }
-    auto data_result = data_reader.read_blob(desc.size_bytes);
+    auto data_result = data_reader.ReadBlob(desc.size_bytes);
     check_result(data_result, "Buffer Data");
   }
 

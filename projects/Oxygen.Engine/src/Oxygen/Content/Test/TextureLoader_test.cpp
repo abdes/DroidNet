@@ -6,10 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Base/Writer.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/Writer.h>
 
 #include "Mocks/MockStream.h"
 #include "Utils/PakUtils.h"
@@ -38,18 +38,20 @@ protected:
   }
 
   //! Helper method to create LoaderContext for testing.
-  auto CreateLoaderContext()
-    -> oxygen::content::LoaderContext<MockStream, MockStream>
+  auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    desc_stream_.seek(0);
-    data_stream_.seek(0);
+    if (!desc_stream_.Seek(0)) {
+      throw std::runtime_error("Failed to seek desc_stream");
+    }
+    if (!data_stream_.Seek(0)) {
+      throw std::runtime_error("Failed to seek data_stream");
+    }
 
-    return oxygen::content::LoaderContext<MockStream, MockStream> {
+    return oxygen::content::LoaderContext {
       .asset_loader = nullptr, // Resources don't use asset_loader
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
-      .desc_reader = std::ref(desc_reader_),
-      .data_readers
-      = std::make_tuple(std::ref(data_reader_), std::ref(data_reader_)),
+      .desc_reader = &desc_reader_,
+      .data_readers = std::make_tuple(&data_reader_, &data_reader_),
       .offline = false,
     };
   }

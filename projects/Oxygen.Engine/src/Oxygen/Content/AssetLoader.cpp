@@ -27,16 +27,12 @@ AssetLoader::AssetLoader()
   LOG_SCOPE_FUNCTION(INFO);
 
   // Register asset loaders
-  RegisterLoader(loaders::LoadGeometryAsset<FileStream<>, FileStream<>>,
-    loaders::UnloadGeometryAsset);
-  RegisterLoader(loaders::LoadMaterialAsset<FileStream<>, FileStream<>>,
-    loaders::UnloadMaterialAsset);
+  RegisterLoader(loaders::LoadGeometryAsset, loaders::UnloadGeometryAsset);
+  RegisterLoader(loaders::LoadMaterialAsset, loaders::UnloadMaterialAsset);
 
   // Register resource loaders
-  RegisterLoader(loaders::LoadBufferResource<FileStream<>, FileStream<>>,
-    loaders::UnloadBufferResource);
-  RegisterLoader(loaders::LoadTextureResource<FileStream<>, FileStream<>>,
-    loaders::UnloadTextureResource);
+  RegisterLoader(loaders::LoadBufferResource, loaders::UnloadBufferResource);
+  RegisterLoader(loaders::LoadTextureResource, loaders::UnloadTextureResource);
 }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
@@ -124,11 +120,11 @@ auto AssetLoader::MakeAssetLoaderCall(const F& fn, AssetLoader& loader,
   auto buf_reader = pak.CreateDataReader<data::BufferResource>();
   auto tex_reader = pak.CreateDataReader<data::TextureResource>();
 
-  LoaderContext<serio::FileStream<>, serio::FileStream<>> context {
+  LoaderContext context {
     .asset_loader = &loader,
     .current_asset_key = entry.asset_key,
-    .desc_reader = std::ref(reader),
-    .data_readers = std::make_tuple(std::ref(buf_reader), std::ref(tex_reader)),
+    .desc_reader = &reader,
+    .data_readers = std::make_tuple(&buf_reader, &tex_reader),
     .offline = offline,
     .source_pak = &pak,
   };
@@ -221,7 +217,7 @@ auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
   // the correct offset for the Reader that will be used for loading
   const auto table_stream
     = std::make_unique<serio::FileStream<>>(pak.FilePath(), std::ios::in);
-  if (!table_stream->seek(*offset)) {
+  if (!table_stream->Seek(*offset)) {
     LOG_F(ERROR, "Failed to seek to resource offset {} in PAK file '{}'",
       *offset, pak.FilePath().string());
     return nullptr;
@@ -231,11 +227,11 @@ auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
   auto buf_reader = pak.CreateDataReader<data::BufferResource>();
   auto tex_reader = pak.CreateDataReader<data::TextureResource>();
 
-  LoaderContext<serio::FileStream<>, serio::FileStream<>> context {
+  LoaderContext context {
     .asset_loader = &loader,
     .current_asset_key = {}, // No asset key for resources
-    .desc_reader = std::ref(reader),
-    .data_readers = std::make_tuple(std::ref(buf_reader), std::ref(tex_reader)),
+    .desc_reader = &reader,
+    .data_readers = std::make_tuple(&buf_reader, &tex_reader),
     .offline = offline,
     .source_pak = &pak,
   };

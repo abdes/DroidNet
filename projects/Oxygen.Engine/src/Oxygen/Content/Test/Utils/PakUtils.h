@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/Writer.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::testing {
 
@@ -72,7 +72,7 @@ auto WriteTextureDescWithData(serio::Writer<DescS>& desc_writer,
   std::vector<std::byte> buffer = ParseHexDumpWithOffset(hexdump);
   {
     auto pack = desc_writer.ScopedAlignment(1);
-    auto result = desc_writer.write_blob(buffer);
+    auto result = desc_writer.WriteBlob(buffer);
     if (!result) {
       throw std::runtime_error("Failed to write texture descriptor to stream: "
         + result.error().message());
@@ -82,7 +82,7 @@ auto WriteTextureDescWithData(serio::Writer<DescS>& desc_writer,
     buffer.resize(data_size);
     std::ranges::fill(buffer, data_filler);
     auto pack = data_writer.ScopedAlignment(256);
-    auto result = data_writer.write_blob(buffer);
+    auto result = data_writer.WriteBlob(buffer);
     if (!result) {
       throw std::runtime_error(
         "Failed to write texture data to stream: " + result.error().message());

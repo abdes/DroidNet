@@ -4,23 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/MemoryStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <array>
 #include <cstring>
 #include <span>
 #include <vector>
 
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using ::testing::AllOf;
-using ::testing::Eq;
-using ::testing::SizeIs;
+using testing::AllOf;
+using testing::Eq;
+using testing::SizeIs;
 
 using AssetHeader = oxygen::data::pak::AssetHeader;
 using MemoryStream = oxygen::serio::MemoryStream;
@@ -50,7 +50,8 @@ TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
   Reader reader(stream);
 
   // Act
-  auto result = oxygen::content::loaders::LoadAssetHeader(reader);
+  AssetHeader result;
+  oxygen::content::loaders::LoadAssetHeader(reader, result);
 
   // Assert
   EXPECT_EQ(result.asset_type, 3);
@@ -79,8 +80,9 @@ TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
   Reader reader(stream);
 
   // Act & Assert
-  EXPECT_THROW(
-    oxygen::content::loaders::LoadAssetHeader(reader), std::runtime_error);
+  AssetHeader result;
+  EXPECT_THROW(oxygen::content::loaders::LoadAssetHeader(reader, result),
+    std::runtime_error);
 }
 
 //! Scenario: LoadAssetHeader logs warning if name is not null-terminated
@@ -100,7 +102,8 @@ TEST(LoadAssetHeader_edge, WarnsIfNameNotNullTerminated)
 
   // Act
   // Should not throw, but should log a warning (not checked here)
-  auto result = oxygen::content::loaders::LoadAssetHeader(reader);
+  AssetHeader result;
+  oxygen::content::loaders::LoadAssetHeader(reader, result);
 
   // Assert
   EXPECT_EQ(result.asset_type, 1);

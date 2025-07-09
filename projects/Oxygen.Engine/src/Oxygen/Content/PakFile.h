@@ -15,14 +15,14 @@
 #include <unordered_map>
 #include <vector>
 
-#include <Oxygen/Base/FileStream.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content {
 

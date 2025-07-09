@@ -110,6 +110,7 @@ target_link_libraries(
     oxygen::base
     oxygen::core
     oxygen::composition
+    oxygen::serio
     glm::glm
     stduuid::stduuid
 )

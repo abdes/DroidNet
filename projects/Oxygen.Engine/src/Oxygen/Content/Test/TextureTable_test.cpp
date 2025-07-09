@@ -15,8 +15,8 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/TextureResource.h>
 
-#include <Oxygen/Base/MemoryStream.h>
 #include <Oxygen/Base/Writer.h>
+#include <Oxygen/Serio/MemoryStream.h>
 
 using ::testing::Eq;
 
