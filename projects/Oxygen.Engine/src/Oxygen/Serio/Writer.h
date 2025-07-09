@@ -8,7 +8,7 @@
 
 #include <array>
 #include <bit>
-#include <functional> // for std::reference_wrapper
+#include <functional>
 #include <span>
 #include <string_view>
 
@@ -343,6 +343,45 @@ auto Store(AnyWriter& writer, const std::array<T, N>& value) -> Result<void>
   for (const auto& item : value) {
     CHECK_RESULT(writer.Write(item));
   }
+}
+
+//! Serializes a std::span as a 32-bit length prefix followed by each element.
+/*!
+ Encodes the span as a 32-bit unsigned length (platform endianness), followed
+ by each element encoded in sequence. The length and each element are aligned in
+ the stream according to their natural alignment, unless a specific packing
+ directive is currently set with `ScopedAlignment()`.
+
+ @tparam T Element type
+ @param writer Writer to serialize to
+ @param value Span to serialize
+ @return Result of the write operation
+
+ @see Store, AnyWriter
+*/
+template <typename T>
+auto Store(AnyWriter& writer, const std::span<T>& value) -> Result<void>
+{
+  if (value.size() > limits::kMaxArrayLength) {
+    return std::make_error_code(std::errc::message_size);
+  }
+
+  // Write the size of the array, bounds-checked and properly aligned.
+  CHECK_RESULT(writer.WriteSequenceSize(
+    static_cast<limits::SequenceSizeType>(value.size()),
+    limits::kMaxArrayLength));
+
+  // Align for array elements if needed
+  if constexpr (sizeof(T) > 1) {
+    CHECK_RESULT(writer.AlignTo(alignof(T)));
+  }
+
+  // Write array data
+  for (const auto& item : value) {
+    CHECK_RESULT(writer.Write(item));
+  }
+
+  return {};
 }
 
 } // namespace oxygen::serio

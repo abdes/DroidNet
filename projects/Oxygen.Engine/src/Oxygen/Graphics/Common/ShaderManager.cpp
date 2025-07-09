@@ -12,13 +12,13 @@
 #include <span>
 #include <string>
 
-#include <Oxygen/Base/FileStream.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Reader.h>
-#include <Oxygen/Base/Writer.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderCompiler.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
 
 using oxygen::graphics::CompiledShaderInfo;
 using oxygen::graphics::ShaderManager;
@@ -84,13 +84,59 @@ auto IsSourceFileNewer(const CompiledShaderInfo& info) -> bool
 namespace {
 constexpr uint32_t kArchiveMagic = 0x4F585348; // "OXSH"
 constexpr uint32_t kArchiveVersion = 1;
+} // namespace
 
 struct ArchiveHeader {
   uint32_t magic;
   uint32_t version;
   size_t shader_count;
 };
-} // namespace
+
+namespace oxygen::serio {
+
+//! Store specialization for ArchiveHeader.
+inline auto Store(AnyWriter& writer, const ArchiveHeader& header)
+  -> Result<void>
+{
+  CHECK_RESULT(writer.Write(header.magic));
+  CHECK_RESULT(writer.Write(header.version));
+  CHECK_RESULT(writer.Write(header.shader_count));
+  return {};
+}
+
+//! Store specialization for ArchiveHeader.
+inline auto Load(AnyReader& reader, ArchiveHeader& header) -> Result<void>
+{
+  CHECK_RESULT(reader.ReadInto(header.magic));
+  CHECK_RESULT(reader.ReadInto(header.version));
+  CHECK_RESULT(reader.ReadInto(header.shader_count));
+  return {};
+}
+
+//! Store specialization for ArchiveHeader.
+inline auto Store(AnyWriter& writer, const ShaderType& value) -> Result<void>
+{
+  CHECK_RESULT(
+    writer.Write(static_cast<std::underlying_type_t<ShaderType>>(value)));
+  return {};
+}
+
+//! Store specialization for ArchiveHeader.
+inline auto Load(AnyReader& reader, ShaderType& value) -> Result<void>
+{
+  std::underlying_type_t<ShaderType> shader_type_value;
+  CHECK_RESULT(reader.ReadInto(shader_type_value));
+  if (shader_type_value
+      < static_cast<std::underlying_type_t<ShaderType>>(ShaderType::kUnknown)
+    || shader_type_value > static_cast<std::underlying_type_t<ShaderType>>(
+         ShaderType::kMaxShaderType)) {
+    return std::make_error_code(std::errc::invalid_argument);
+  }
+  value = static_cast<ShaderType>(shader_type_value);
+  return {};
+}
+
+} // namespace oxygen::serio
 
 namespace {
 
@@ -245,41 +291,43 @@ auto ShaderManager::Save() const -> void
   serio::FileStream stream(archive_path_, std::ios::out);
   serio::Writer writer(stream);
 
-  ArchiveHeader header { .magic = kArchiveMagic,
+  ArchiveHeader header {
+    .magic = kArchiveMagic,
     .version = kArchiveVersion,
-    .shader_count = shader_cache_.size() };
-  if (auto result = writer.write(header); !result.has_value()) {
+    .shader_count = shader_cache_.size(),
+  };
+  if (auto result = writer.Write(header); !result.has_value()) {
     throw std::runtime_error("archive saving error: header");
   }
 
   for (const auto& [info, bytecode] : shader_cache_ | std::views::values) {
-    if (auto result = writer.write(info.shader_type); !result.has_value()) {
+    if (auto result = writer.Write(info.shader_type); !result.has_value()) {
       throw std::runtime_error("archive saving error: shader type");
     }
-    if (auto result = writer.write_string(info.shader_unique_id);
+    if (auto result = writer.Write<std::string>(info.shader_unique_id);
       !result.has_value()) {
       throw std::runtime_error("archive saving error: shader unique id");
     }
-    if (auto result = writer.write_string(info.source_file_path);
+    if (auto result = writer.Write<std::string>(info.source_file_path);
       !result.has_value()) {
       throw std::runtime_error("archive saving error: source file path");
     }
-    if (auto result = writer.write(info.source_hash); !result.has_value()) {
+    if (auto result = writer.Write(info.source_hash); !result.has_value()) {
       throw std::runtime_error("archive saving error: source hash");
     }
 
     auto compile_time_ms = GetCompileTime();
-    if (auto result = writer.write(compile_time_ms); !result.has_value()) {
+    if (auto result = writer.Write(compile_time_ms); !result.has_value()) {
       throw std::runtime_error("archive saving error: compile time");
     }
 
-    if (auto result = writer.write(info.compiled_bloc_size);
+    if (auto result = writer.Write(info.compiled_bloc_size);
       !result.has_value()) {
       throw std::runtime_error("archive saving error: compiled bloc size");
     }
 
     // Write bytecode data as array
-    auto result = writer.write_array(
+    auto result = writer.Write(
       std::span(bytecode->Data(), bytecode->Size() / sizeof(uint32_t)));
     if (!result.has_value()) {
       throw std::runtime_error("archive saving error: bytecode");
@@ -294,7 +342,7 @@ void ShaderManager::Load()
   serio::FileStream stream(archive_path_, std::ios::in);
   serio::Reader reader(stream);
 
-  auto header = reader.read<ArchiveHeader>();
+  auto header = reader.Read<ArchiveHeader>();
   if (!header.has_value()) {
     throw std::runtime_error(
       "archive loading error: " + header.error().message());
@@ -307,43 +355,43 @@ void ShaderManager::Load()
 
   shader_cache_.clear();
   for (size_t i = 0; i < header.value().shader_count; ++i) {
-    auto shader_type = reader.read<ShaderType>();
+    auto shader_type = reader.Read<ShaderType>();
     if (!shader_type.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + shader_type.error().message());
     }
 
-    auto unique_id = reader.read_string();
+    auto unique_id = reader.Read<std::string>();
     if (!unique_id.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + unique_id.error().message());
     }
 
-    auto source_path = reader.read_string();
+    auto source_path = reader.Read<std::string>();
     if (!source_path.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + source_path.error().message());
     }
 
-    auto source_hash = reader.read<uint64_t>();
+    auto source_hash = reader.Read<uint64_t>();
     if (!source_hash.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + source_hash.error().message());
     }
 
-    auto compile_time_ms = reader.read<int64_t>();
+    auto compile_time_ms = reader.Read<int64_t>();
     if (!compile_time_ms.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + compile_time_ms.error().message());
     }
 
-    auto bloc_size = reader.read<size_t>();
+    auto bloc_size = reader.Read<size_t>();
     if (!bloc_size.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + bloc_size.error().message());
     }
 
-    auto binary_data = reader.read_array<uint32_t>();
+    auto binary_data = reader.Read<std::vector<uint32_t>>();
     if (!binary_data.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + binary_data.error().message());

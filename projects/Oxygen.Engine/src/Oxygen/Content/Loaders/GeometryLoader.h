@@ -12,7 +12,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -20,6 +19,9 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Serio/Reader.h>
+// ReSharper disable once CppUnusedIncludeDirective
+#include <Oxygen/Content/Loaders/Helpers.h>
 
 namespace oxygen::content::loaders {
 
@@ -38,33 +40,31 @@ namespace detail {
   }
 
   // Helper to read a bounding box (float[3])
-  template <serio::Stream S>
-  auto ReadBoundingBox(
-    serio::Reader<S>& reader, float (&bbox)[3], const char* field_name) -> void
+  inline auto ReadBoundingBox(
+    serio::AnyReader& reader, float (&bbox)[3], const char* field_name) -> void
   {
-    for (int i = 0; i < 3; ++i) {
-      auto f_result = reader.template read<float>();
+    for (float& i : bbox) {
+      auto f_result = reader.ReadInto<float>(i);
       CheckResult(f_result, field_name);
-      bbox[i] = *f_result;
     }
   }
 
   // Handles loading of vertex/index buffers for standard meshes
-  template <serio::Stream DescS, serio::Stream DataS>
-  auto LoadStandardMeshBuffers(LoaderContext<DescS, DataS>& context,
+  inline auto LoadStandardMeshBuffers(LoaderContext& context,
     data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
     std::vector<uint32_t>& indices) -> void
   {
     using namespace oxygen::data::pak;
 
-    serio::Reader<DescS>& reader = context.desc_reader.get();
+    DCHECK_NOTNULL_F(
+      context.desc_reader, "expecting desc_reader not to be null");
+    auto& reader = *context.desc_reader;
 
     // Access union field via desc.info.standard
     auto& info = desc.info.standard;
     // Read vertex_buffer
-    auto vb_result = reader.template read<ResourceIndexT>();
+    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
     CheckResult(vb_result, "m.vertex_buffer");
-    info.vertex_buffer = *vb_result;
     LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
     if (info.vertex_buffer != 0 && context.asset_loader) {
       LOG_F(2, "Registering resource dependency: vertex_buffer = {}",
@@ -74,9 +74,8 @@ namespace detail {
     }
 
     // Read index_buffer
-    auto ib_result = reader.template read<ResourceIndexT>();
+    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
     CheckResult(ib_result, "m.index_buffer");
-    info.index_buffer = *ib_result;
     LOG_F(2, "index buffer    : {}", info.index_buffer);
     if (info.index_buffer != 0 && context.asset_loader) {
       LOG_F(2, "Registering resource dependency: index_buffer = {}",
@@ -86,14 +85,12 @@ namespace detail {
     }
 
     for (float& i : desc.info.standard.bounding_box_min) {
-      auto min_result = reader.template read<float>();
+      auto min_result = reader.ReadInto<float>(i);
       CheckResult(min_result, "m.bounding_box_min");
-      i = *min_result;
     }
     for (float& i : desc.info.standard.bounding_box_max) {
-      auto max_result = reader.template read<float>();
+      auto max_result = reader.ReadInto<float>(i);
       CheckResult(max_result, "m.bounding_box_max");
-      i = *max_result;
     }
 
     // TODO: Read the vertex and index buffer data and attach to mesh
@@ -101,14 +98,14 @@ namespace detail {
     // fully read
 
     const auto& buf_table
-      = context.source_pak->template GetResourceTable<data::BufferResource>();
+      = context.source_pak->GetResourceTable<data::BufferResource>();
     if (!buf_table) {
       LOG_F(ERROR, "no resource table for buffers");
       throw std::runtime_error("no resource table for buffers");
     }
 
     // Save current position to restore it later, as we are going to jump around
-    auto pos_result = reader.position();
+    auto pos_result = reader.Position();
     CheckResult(pos_result, "Save desc reader position");
     {
       auto vb_offset = buf_table->GetResourceOffset(info.vertex_buffer);
@@ -117,7 +114,7 @@ namespace detail {
           info.vertex_buffer);
         throw std::runtime_error("Vertex buffer not found");
       }
-      CheckResult(reader.seek(*vb_offset), "Vertex Buffer Data");
+      CheckResult(reader.Seek(*vb_offset), "Vertex Buffer Data");
       auto buf_resource = LoadBufferResource(context);
     }
     {
@@ -127,17 +124,16 @@ namespace detail {
           info.index_buffer);
         throw std::runtime_error("Vertex buffer not found");
       }
-      CheckResult(reader.seek(*ib_offset), "Index Buffer Data");
+      CheckResult(reader.Seek(*ib_offset), "Index Buffer Data");
       auto buf_resource = LoadBufferResource(context);
     }
     // Restore reader position after reading buffers
     CheckResult(
-      reader.seek(pos_result.value()), "Restore desc reader position");
+      reader.Seek(pos_result.value()), "Restore desc reader position");
   }
 
   // Handles loading and generation for procedural meshes
-  template <serio::Stream S>
-  auto LoadProceduralMeshBuffers(serio::Reader<S>& reader,
+  inline auto LoadProceduralMeshBuffers(serio::AnyReader& reader,
     data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
     std::vector<uint32_t>& indices) -> void
   {
@@ -145,16 +141,14 @@ namespace detail {
     auto& info = desc.info.procedural;
 
     // Read params_size from the stream
-    auto params_size_result = reader.template read<uint32_t>();
+    auto params_size_result = reader.ReadInto<uint32_t>(info.params_size);
     CheckResult(params_size_result, "m.param_blob_size");
-    info.params_size = *params_size_result;
     LOG_F(2, "param blob size : {}", info.params_size);
 
     std::vector<std::byte> param_blob;
     if (info.params_size > 0) {
       param_blob.resize(info.params_size);
-      auto param_blob_result
-        = reader.read_blob_to(std::span<std::byte>(param_blob));
+      auto param_blob_result = reader.ReadBlobInto(std::span(param_blob));
       CheckResult(param_blob_result, "m.param_blob");
     }
 
@@ -168,8 +162,8 @@ namespace detail {
     }
   }
 
-  template <serio::Stream S>
-  auto LoadMeshViewDesc(serio::Reader<S> desc_reader) -> data::pak::MeshViewDesc
+  inline auto LoadMeshViewDesc(serio::AnyReader& desc_reader)
+    -> data::pak::MeshViewDesc
   {
     LOG_SCOPE_F(INFO, "Mesh View");
 
@@ -177,9 +171,9 @@ namespace detail {
     using namespace oxygen::data::pak;
 
     // Read MeshViewDesc from the stream
-    auto mesh_view_result = desc_reader.template read<MeshViewDesc>();
-    detail::CheckResult(mesh_view_result, "m.desc");
-    const auto& mesh_view_desc = *mesh_view_result;
+    MeshViewDesc mesh_view_desc;
+    auto mesh_view_result = desc_reader.Read<MeshViewDesc>();
+    CheckResult(mesh_view_result, "m.desc");
     LOG_F(INFO, "firs vertex   : {}", mesh_view_desc.first_vertex);
     LOG_F(INFO, "vertex count  : {}", mesh_view_desc.vertex_count);
     LOG_F(INFO, "first index   : {}", mesh_view_desc.first_index);
@@ -188,8 +182,8 @@ namespace detail {
     return *mesh_view_result;
   }
 
-  template <serio::Stream S>
-  auto LoadSubMeshDesc(serio::Reader<S> desc_reader) -> data::pak::SubMeshDesc
+  inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
+    -> data::pak::SubMeshDesc
   {
     LOG_SCOPE_F(INFO, "Sub-Mesh");
 
@@ -198,22 +192,22 @@ namespace detail {
 
     SubMeshDesc desc;
     // name
-    std::span<std::byte> submesh_name_span(
+    std::span submesh_name_span(
       reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
-    auto submesh_name_result = desc_reader.read_blob_to(submesh_name_span);
-    detail::CheckResult(submesh_name_result, "sm.name");
+    auto submesh_name_result = desc_reader.ReadBlobInto(submesh_name_span);
+    CheckResult(submesh_name_result, "sm.name");
     LOG_F(2, "name           : {}", desc.name);
 
     // material_asset_key
-    auto mat_key_result = desc_reader.template read<AssetKey>();
-    detail::CheckResult(mat_key_result, "sm.material_asset_key");
-    desc.material_asset_key = *mat_key_result;
+    auto mat_key_result
+      = desc_reader.ReadInto<AssetKey>(desc.material_asset_key);
+    CheckResult(mat_key_result, "sm.material_asset_key");
     LOG_F(2, "material asset : {}", nostd::to_string(desc.material_asset_key));
 
     // mesh_view_count
-    auto mesh_view_count_result = desc_reader.template read<uint32_t>();
-    detail::CheckResult(mesh_view_count_result, "sm.mesh_view_count");
-    desc.mesh_view_count = *mesh_view_count_result;
+    auto mesh_view_count_result
+      = desc_reader.ReadInto<uint32_t>(desc.mesh_view_count);
+    CheckResult(mesh_view_count_result, "sm.mesh_view_count");
     LOG_F(2, "mesh view count: {}", desc.mesh_view_count);
 
     // bounding_box_min
@@ -229,8 +223,7 @@ namespace detail {
     return desc;
   }
 
-  template <serio::Stream S>
-  auto LoadSubMeshViews(serio::Reader<S> reader, uint32_t mesh_view_count)
+  auto LoadSubMeshViews(serio::AnyReader& reader, uint32_t mesh_view_count)
     -> std::vector<data::pak::MeshViewDesc>
   {
     using namespace oxygen::data;
@@ -239,7 +232,7 @@ namespace detail {
     std::vector<MeshViewDesc> mesh_views;
     mesh_views.reserve(mesh_view_count);
     for (uint32_t i = 0; i < mesh_view_count; ++i) {
-      auto mesh_view_desc = detail::LoadMeshViewDesc(reader);
+      auto mesh_view_desc = LoadMeshViewDesc(reader);
       mesh_views.push_back(mesh_view_desc);
     }
     return mesh_views;
@@ -247,54 +240,49 @@ namespace detail {
 
 } // namespace detail
 
-template <serio::Stream DescS, serio::Stream DataS>
-auto LoadMesh(LoaderContext<DescS, DataS> context)
-  -> std::unique_ptr<data::Mesh>
+inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(INFO, "Mesh");
   LOG_F(2, "offline mode    : {}", context.offline ? "yes" : "no");
 
-  auto& reader = context.desc_reader.get();
+  DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
+  auto& reader = *context.desc_reader;
 
   using namespace oxygen::data;
   using namespace oxygen::data::pak;
 
   // Read MeshDesc fields one by one
   MeshDesc desc;
-  std::span<std::byte> name_span(
-    reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
-  auto name_result = reader.read_blob_to(name_span);
+  std::span name_span(reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
+  auto name_result = reader.ReadBlobInto(name_span);
   detail::CheckResult(name_result, "m.name");
   LOG_F(2, "name            : {}", desc.name);
   std::cerr << "[DEBUG] MeshDesc.name offset: "
-            << reader.position().value() - kMaxNameSize << std::endl;
+            << reader.Position().value() - kMaxNameSize << std::endl;
 
   // mesh_type (must be read before union)
-  auto mesh_type_result = reader.template read<uint8_t>();
+  auto mesh_type_result = reader.ReadInto<uint8_t>(desc.mesh_type);
   detail::CheckResult(mesh_type_result, "m.mesh_type");
-  desc.mesh_type = *mesh_type_result;
   LOG_F(2, "mesh type       : {}",
     nostd::to_string(static_cast<MeshType>(desc.mesh_type)));
   std::cerr << "[DEBUG] MeshDesc.mesh_type offset: "
-            << reader.position().value() - 1 << std::endl;
+            << reader.Position().value() - 1 << std::endl;
 
   // submesh_count
-  auto submesh_count_result = reader.template read<uint32_t>();
+  auto submesh_count_result = reader.ReadInto<uint32_t>(desc.submesh_count);
   detail::CheckResult(submesh_count_result, "m.submesh_count");
-  desc.submesh_count = *submesh_count_result;
   LOG_F(2, "submesh count   : {}", desc.submesh_count);
   std::cerr << "[DEBUG] MeshDesc.submesh_count offset: "
-            << reader.position().value() - 4 << std::endl;
+            << reader.Position().value() - 4 << std::endl;
 
   // mesh_view_count
-  auto mesh_view_count_result = reader.template read<uint32_t>();
+  auto mesh_view_count_result = reader.ReadInto<uint32_t>(desc.mesh_view_count);
   detail::CheckResult(mesh_view_count_result, "m.mesh_view_count");
-  desc.mesh_view_count = *mesh_view_count_result;
   LOG_F(2, "mesh view count : {}", desc.mesh_view_count);
   std::cerr << "[DEBUG] MeshDesc.mesh_view_count offset: "
-            << reader.position().value() - 4 << std::endl;
+            << reader.Position().value() - 4 << std::endl;
 
-  std::cerr << "[DEBUG] MeshDesc union offset: " << reader.position().value()
+  std::cerr << "[DEBUG] MeshDesc union offset: " << reader.Position().value()
             << std::endl;
 
   std::vector<Vertex> vertices;
@@ -303,11 +291,11 @@ auto LoadMesh(LoaderContext<DescS, DataS> context)
   if (desc.IsStandard()) {
     detail::LoadStandardMeshBuffers(context, desc, vertices, indices);
     std::cerr << "[DEBUG] MeshDesc union end offset: "
-              << reader.position().value() << std::endl;
+              << reader.Position().value() << std::endl;
   } else if (desc.IsProcedural()) {
     detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
     std::cerr << "[DEBUG] MeshDesc union end offset: "
-              << reader.position().value() << std::endl;
+              << reader.Position().value() << std::endl;
   } else {
     LOG_F(ERROR, "Unsupported mesh type: {}", static_cast<int>(desc.mesh_type));
     return nullptr;
@@ -322,7 +310,7 @@ auto LoadMesh(LoaderContext<DescS, DataS> context)
   uint32_t total_read_views { 0 };
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {
     std::cerr << "[DEBUG] SubMeshDesc start offset: "
-              << reader.position().value() << std::endl;
+              << reader.Position().value() << std::endl;
     auto sm_desc = detail::LoadSubMeshDesc(reader);
 
     context.asset_loader->AddAssetDependency(
@@ -330,7 +318,7 @@ auto LoadMesh(LoaderContext<DescS, DataS> context)
 
     auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
     std::cerr << "[DEBUG] After MeshViewDesc offset: "
-              << reader.position().value() << std::endl;
+              << reader.Position().value() << std::endl;
     if (sm_desc.mesh_view_count != mesh_views.size()) {
       LOG_F(ERROR, "SubMesh {} has {} mesh views, expected {}", i,
         mesh_views.size(), sm_desc.mesh_view_count);
@@ -368,8 +356,7 @@ auto LoadMesh(LoaderContext<DescS, DataS> context)
   return builder.Build();
 }
 
-template <serio::Stream DescS, serio::Stream DataS>
-auto LoadGeometryAsset(LoaderContext<DescS, DataS> context)
+auto LoadGeometryAsset(LoaderContext context)
   -> std::unique_ptr<data::GeometryAsset>
 {
   using namespace oxygen::data;
@@ -377,7 +364,8 @@ auto LoadGeometryAsset(LoaderContext<DescS, DataS> context)
 
   LOG_SCOPE_F(INFO, "Geometry");
 
-  auto& reader = context.desc_reader.get();
+  DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
+  auto& reader = *context.desc_reader;
 
   // Read GeometryAssetDesc field by field
   GeometryAssetDesc desc;
@@ -385,12 +373,11 @@ auto LoadGeometryAsset(LoaderContext<DescS, DataS> context)
   auto pack = reader.ScopedAlignment(1);
 
   // header (use header loader from Helpers.h)
-  desc.header = LoadAssetHeader(reader);
+  LoadAssetHeader(reader, desc.header);
 
   // lod_count
-  auto lod_count_result = reader.template read<uint32_t>();
+  auto lod_count_result = reader.ReadInto<uint32_t>(desc.lod_count);
   detail::CheckResult(lod_count_result, "g.lod_count");
-  desc.lod_count = *lod_count_result;
   LOG_F(2, "LOD count      : {}", desc.lod_count);
   LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
 
@@ -402,7 +389,7 @@ auto LoadGeometryAsset(LoaderContext<DescS, DataS> context)
 
   // reserved: skip forward instead of reading
   constexpr std::streamoff reserved_size = sizeof(desc.reserved);
-  auto skip_result = reader.forward(reserved_size);
+  auto skip_result = reader.Forward(reserved_size);
   detail::CheckResult(skip_result, "g.reserved (skip)");
 
   // Read LOD meshes

@@ -8,6 +8,8 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
+// ReSharper disable once CppUnusedIncludeDirective
+#include <Oxygen/Content/Loaders/Helpers.h>
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
@@ -57,12 +59,12 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-  if (auto res = stream->seek(0); !res) {
+  if (auto res = stream->Seek(0); !res) {
     LOG_F(ERROR, "Failed to seek to pak header: {}", res.error().message());
     throw std::runtime_error("Failed to seek to pak header");
   }
   Reader reader(*stream);
-  auto header_result = reader.read<PakHeader>();
+  auto header_result = reader.Read<PakHeader>();
   if (!header_result) {
     LOG_F(
       ERROR, "Failed to read pak header: {}", header_result.error().message());
@@ -85,19 +87,19 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   LOG_SCOPE_FUNCTION(INFO);
 
   constexpr size_t kPakFooterSize = sizeof(PakFooter);
-  auto size_result = stream->size();
+  auto size_result = stream->Size();
   if (!size_result) {
     LOG_F(
       ERROR, "Failed to get pak file size: {}", size_result.error().message());
     throw std::runtime_error("Failed to get pak file size");
   }
   size_t file_size = size_result.value();
-  if (auto res = stream->seek(file_size - kPakFooterSize); !res) {
+  if (auto res = stream->Seek(file_size - kPakFooterSize); !res) {
     LOG_F(ERROR, "Failed to seek to pak footer: {}", res.error().message());
     throw std::runtime_error("Failed to seek to pak footer");
   }
   Reader reader(*stream);
-  auto footer_result = reader.read<PakFooter>();
+  auto footer_result = reader.Read<PakFooter>();
   if (!footer_result) {
     LOG_F(
       ERROR, "Failed to read pak footer: {}", footer_result.error().message());
@@ -126,7 +128,7 @@ auto PakFile::ReadDirectoryEntry(Reader& reader) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-  auto entry_result = reader.read<AssetDirectoryEntry>();
+  auto entry_result = reader.Read<AssetDirectoryEntry>();
   if (!entry_result) {
     LOG_F(ERROR, "Failed to read asset directory entry: {}",
       entry_result.error().message());
@@ -143,7 +145,7 @@ auto PakFile::ReadDirectory(
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-  if (auto res = stream->seek(footer_.directory_offset); !res) {
+  if (auto res = stream->Seek(footer_.directory_offset); !res) {
     LOG_F(
       ERROR, "Failed to seek to directory offset: {}", res.error().message());
     throw std::runtime_error("Failed to seek to directory offset");
@@ -203,7 +205,7 @@ auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
     throw std::runtime_error("PakFile stream is not open");
   }
   // Seek to asset descriptor offset (desc_offset in new format)
-  if (const auto res = meta_stream_->seek(entry.desc_offset); !res) {
+  if (const auto res = meta_stream_->Seek(entry.desc_offset); !res) {
     LOG_F(ERROR, "Failed to seek to asset desc offset {}: {}",
       entry.desc_offset, res.error().message());
     throw std::runtime_error("Failed to seek to asset desc offset");
@@ -218,7 +220,7 @@ auto PakFile::CreateBufferDataReader() const -> Reader
     throw std::runtime_error("PakFile buffer data stream is not open");
   }
   // Seek to asset descriptor offset (desc_offset in new format)
-  if (const auto res = buffer_data_stream_->seek(footer_.buffer_region.offset);
+  if (const auto res = buffer_data_stream_->Seek(footer_.buffer_region.offset);
     !res) {
     LOG_F(ERROR, "Failed to seek to buffer data region offset {}: {}",
       footer_.buffer_region.offset, res.error().message());
@@ -235,7 +237,7 @@ auto PakFile::CreateTextureDataReader() const -> Reader
   }
   // Seek to asset descriptor offset (desc_offset in new format)
   if (const auto res
-    = texture_data_stream_->seek(footer_.texture_region.offset);
+    = texture_data_stream_->Seek(footer_.texture_region.offset);
     !res) {
     LOG_F(ERROR, "Failed to seek to texture data region offset {}: {}",
       footer_.texture_region.offset, res.error().message());

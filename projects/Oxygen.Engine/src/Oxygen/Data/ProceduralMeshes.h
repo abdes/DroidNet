@@ -12,10 +12,10 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/MemoryStream.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::data {
 

@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/MemoryStream.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
 #include <array>
 #include <span>

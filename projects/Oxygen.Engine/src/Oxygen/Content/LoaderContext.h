@@ -9,11 +9,11 @@
 #include <functional>
 #include <memory>
 
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content {
 
@@ -23,7 +23,7 @@ class PakFile;
 
 //! Context passed to loader functions containing all necessary loading state.
 
-template <serio::Stream DescS, serio::Stream DataS> struct LoaderContext {
+struct LoaderContext {
   //! Asset loader for dependency registration, guaranteed to be valid during a
   //! load operation.
   AssetLoader* asset_loader { nullptr };
@@ -33,12 +33,14 @@ template <serio::Stream DescS, serio::Stream DataS> struct LoaderContext {
 
   //! Reader, already positioned at the start of the asset/resource descriptor
   //! to load.
-  std::reference_wrapper<serio::Reader<DescS>> desc_reader {};
+  serio::AnyReader* desc_reader {};
 
   //=== Data Readers ===------------------------------------------------------//
 
-  template <typename /*ResourceT*/>
-  using DataReaderRef = std::reference_wrapper<serio::Reader<DataS>>;
+  template <typename /*ResourceT*/> using DataReaderPtr = serio::AnyReader*;
+
+  //! Helper alias for a data reader reference for a given resource type.
+  template <typename ResourceT> using DataReaderRef = serio::AnyReader*;
 
   //! Tuple of data region readers, one for each type in ResourceTypeList.
   /*!

@@ -292,8 +292,7 @@ public:
   auto RegisterLoader(LF&& load_fn, UF&& unload_fn) -> void
   {
     // Infer the type from the loader function signature
-    using LoaderPtr = decltype(load_fn(
-      std::declval<LoaderContext<serio::FileStream<>, serio::FileStream<>>>()));
+    using LoaderPtr = decltype(load_fn(std::declval<LoaderContext>()));
     using T = std::remove_pointer_t<typename LoaderPtr::element_type>;
     static_assert(IsTyped<T>, "T must satisfy IsTyped concept");
     static_assert(

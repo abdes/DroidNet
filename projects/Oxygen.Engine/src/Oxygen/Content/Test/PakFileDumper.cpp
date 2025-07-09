@@ -42,7 +42,7 @@ struct DumpOptions {
 
 //=== Utility Functions ======================================================//
 
-void PrintSeparator(const std::string& title = "")
+auto PrintSeparator(const std::string& title = "") -> void
 {
   std::cout << "=" << std::string(77, '=') << "=\n";
   if (!title.empty()) {
@@ -51,21 +51,21 @@ void PrintSeparator(const std::string& title = "")
   }
 }
 
-void PrintSubSeparator(const std::string& title)
+auto PrintSubSeparator(const std::string& title) -> void
 {
   std::cout << "--- " << title << " " << std::string(70 - title.length(), '-')
             << "\n";
 }
 
 template <typename T>
-void PrintField(const std::string& name, const T& value, int indent = 4)
+auto PrintField(const std::string& name, const T& value, int indent = 4) -> void
 {
   std::cout << std::string(indent, ' ') << std::left << std::setw(20)
             << name + ":" << value << "\n";
 }
 
-void PrintBytes(
-  const std::string& name, const uint8_t* data, size_t size, int indent = 4)
+auto PrintBytes(const std::string& name, const uint8_t* data, size_t size,
+  int indent = 4) -> void
 {
   std::cout << std::string(indent, ' ') << name << ": ";
   for (size_t i = 0; i < size; ++i) {
@@ -78,7 +78,8 @@ void PrintBytes(
   std::cout << std::dec << std::setfill(' ') << "\n";
 }
 
-void PrintHexDump(const uint8_t* data, size_t size, size_t max_bytes = 256)
+auto PrintHexDump(const uint8_t* data, size_t size, size_t max_bytes = 256)
+  -> void
 {
   size_t bytes_to_show = std::min(size, max_bytes);
 
@@ -122,8 +123,9 @@ void PrintHexDump(const uint8_t* data, size_t size, size_t max_bytes = 256)
  This is separate from asset descriptors - it reads the raw binary data
  that buffers and textures point to.
  */
-void PrintResourceData(const PakFile& pak, uint64_t data_offset,
+auto PrintResourceData(const PakFile& pak, uint64_t data_offset,
   uint32_t data_size, const std::string& resource_type, size_t max_bytes = 256)
+  -> void
 {
   try {
     // Read data directly from the PAK file at the specified offset
@@ -161,14 +163,14 @@ void PrintResourceData(const PakFile& pak, uint64_t data_offset,
 
 //=== Asset Type Names =======================================================//
 
-const char* GetAssetTypeName(uint8_t asset_type)
+auto GetAssetTypeName(uint8_t asset_type) -> const char*
 {
   return nostd::to_string(static_cast<AssetType>(asset_type));
 }
 
 //=== PAK Structure Dumping Functions ========================================//
 
-void PrintAssetKey(const AssetKey& key, const DumpOptions& opts)
+auto PrintAssetKey(const AssetKey& key, const DumpOptions& opts) -> void
 {
   if (opts.verbose) {
     PrintField("GUID", to_string(key));
@@ -179,10 +181,11 @@ void PrintAssetKey(const AssetKey& key, const DumpOptions& opts)
   }
 }
 
-void PrintPakHeader(const PakFile& pak, const DumpOptions& opts)
+auto PrintPakHeader(const PakFile& pak, const DumpOptions& opts) -> void
 {
-  if (!opts.show_header)
+  if (!opts.show_header) {
     return;
+  }
 
   PrintSeparator("PAK HEADER");
 
@@ -193,8 +196,8 @@ void PrintPakHeader(const PakFile& pak, const DumpOptions& opts)
   std::cout << "\n";
 }
 
-void PrintResourceRegion(
-  const std::string& name, uint64_t offset, uint64_t size)
+auto PrintResourceRegion(
+  const std::string& name, uint64_t offset, uint64_t size) -> void
 {
   std::cout << "    " << std::left << std::setw(16) << name + ":" << "offset=0x"
             << std::hex << std::setw(8) << std::setfill('0') << offset
@@ -205,8 +208,8 @@ void PrintResourceRegion(
   std::cout << "\n";
 }
 
-void PrintResourceTable(
-  const std::string& name, uint64_t offset, uint32_t count, uint32_t entry_size)
+auto PrintResourceTable(const std::string& name, uint64_t offset,
+  uint32_t count, uint32_t entry_size) -> void
 {
   std::cout << "    " << std::left << std::setw(16) << name + ":" << "offset=0x"
             << std::hex << std::setw(8) << std::setfill('0') << offset
@@ -218,10 +221,11 @@ void PrintResourceTable(
   std::cout << "\n";
 }
 
-void PrintPakFooter(const PakFile& pak, const DumpOptions& opts)
+auto PrintPakFooter(const PakFile& pak, const DumpOptions& opts) -> void
 {
-  if (!opts.show_footer)
+  if (!opts.show_footer) {
     return;
+  }
 
   PrintSeparator("PAK FOOTER");
 
@@ -232,18 +236,19 @@ void PrintPakFooter(const PakFile& pak, const DumpOptions& opts)
   std::cout << "\n";
 }
 
-template <typename T> std::string ToHexString(T value)
+template <typename T> auto ToHexString(T value) -> std::string
 {
   std::ostringstream oss;
   oss << "0x" << std::hex << value;
   return oss.str();
 }
 
-void PrintBufferResourceTable(
-  const PakFile& pak, const DumpOptions& opts, AssetLoader& asset_loader)
+auto PrintBufferResourceTable(const PakFile& pak, const DumpOptions& opts,
+  AssetLoader& asset_loader) -> void
 {
-  if (!opts.show_resources)
+  if (!opts.show_resources) {
     return;
+  }
 
   if (!pak.HasTableOf<BufferResource>()) {
     std::cout << "    No buffer resource table present\n\n";
@@ -260,7 +265,8 @@ void PrintBufferResourceTable(
   if (opts.verbose && buffer_count > 0) {
 
     std::cout << "    Buffer entries:\n";
-    for (size_t i = 0; i < std::min(buffer_count, size_t(20)); ++i) {
+    for (size_t i = 0; i < std::min(buffer_count, static_cast<size_t>(20));
+      ++i) {
       try {
         // Load buffer resource using AssetLoader in offline mode
         auto buffer_resource = asset_loader.LoadResource<BufferResource>(
@@ -310,11 +316,12 @@ void PrintBufferResourceTable(
   std::cout << "\n";
 }
 
-void PrintTextureResourceTable(
-  const PakFile& pak, const DumpOptions& opts, AssetLoader& asset_loader)
+auto PrintTextureResourceTable(const PakFile& pak, const DumpOptions& opts,
+  AssetLoader& asset_loader) -> void
 {
-  if (!opts.show_resources)
+  if (!opts.show_resources) {
     return;
+  }
 
   if (!pak.HasTableOf<TextureResource>()) {
     std::cout << "    No texture resource table present\n\n";
@@ -331,7 +338,8 @@ void PrintTextureResourceTable(
   if (opts.verbose && texture_count > 0) {
 
     std::cout << "    Texture entries:\n";
-    for (size_t i = 0; i < std::min(texture_count, size_t(20)); ++i) {
+    for (size_t i = 0; i < std::min(texture_count, static_cast<size_t>(20));
+      ++i) {
       try {
         // Load texture resource using AssetLoader in offline mode
         auto texture_resource = asset_loader.LoadResource<TextureResource>(
@@ -382,11 +390,12 @@ void PrintTextureResourceTable(
  assets). This is separate from resource data - it reads the descriptor/metadata
  that describes how to interpret the asset.
  */
-void PrintAssetData(
-  const PakFile& pak, const AssetDirectoryEntry& entry, const DumpOptions& opts)
+auto PrintAssetData(const PakFile& pak, const AssetDirectoryEntry& entry,
+  const DumpOptions& opts) -> void
 {
-  if (!opts.show_asset_descriptors)
+  if (!opts.show_asset_descriptors) {
     return;
+  }
 
   try {
     auto reader = pak.CreateReader(entry);
@@ -394,7 +403,7 @@ void PrintAssetData(
     // Read some data for inspection
     size_t bytes_to_read
       = std::min(static_cast<size_t>(entry.desc_size), opts.max_data_bytes);
-    auto data_result = reader.read_blob(bytes_to_read);
+    auto data_result = reader.ReadBlob(bytes_to_read);
 
     if (data_result.has_value()) {
       const auto& data = data_result.value();
@@ -412,8 +421,8 @@ void PrintAssetData(
   }
 }
 
-void PrintAssetEntry(const AssetDirectoryEntry& entry, size_t idx,
-  const PakFile& pak, const DumpOptions& opts)
+auto PrintAssetEntry(const AssetDirectoryEntry& entry, size_t idx,
+  const PakFile& pak, const DumpOptions& opts) -> void
 {
   std::cout << "Asset #" << idx << ":\n";
   PrintAssetKey(entry.asset_key, opts);
@@ -430,10 +439,11 @@ void PrintAssetEntry(const AssetDirectoryEntry& entry, size_t idx,
   std::cout << "\n";
 }
 
-void PrintAssetDirectory(const PakFile& pak, const DumpOptions& opts)
+auto PrintAssetDirectory(const PakFile& pak, const DumpOptions& opts) -> void
 {
-  if (!opts.show_directory)
+  if (!opts.show_directory) {
     return;
+  }
 
   PrintSeparator("ASSET DIRECTORY");
 
@@ -446,7 +456,7 @@ void PrintAssetDirectory(const PakFile& pak, const DumpOptions& opts)
   }
 }
 
-DumpOptions ParseCommandLine(int argc, char* argv[])
+auto ParseCommandLine(int argc, char* argv[]) -> DumpOptions
 {
   DumpOptions opts;
 
@@ -474,7 +484,7 @@ DumpOptions ParseCommandLine(int argc, char* argv[])
   return opts;
 }
 
-void PrintUsage(const char* program_name)
+auto PrintUsage(const char* program_name) -> void
 {
   std::cout << "Usage: " << program_name << " <pakfile> [options]\n";
   std::cout << "\nOptions:\n";
@@ -496,7 +506,7 @@ void PrintUsage(const char* program_name)
             << " game.pak --verbose --show-data --hex-dump-assets\n";
 }
 
-int main(int argc, char* argv[])
+auto main(int argc, char* argv[]) -> int
 {
   if (argc < 2) {
     PrintUsage(argv[0]);

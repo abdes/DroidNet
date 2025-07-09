@@ -8,27 +8,32 @@
 
 #include <memory>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Reader.h>
 #include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/Reader.h>
+// ReSharper disable once CppUnusedIncludeDirective
+#include <Oxygen/Content/Loaders/Helpers.h>
 
 namespace oxygen::content::loaders {
 
 //! Loader for texture assets.
 
 //! Loads a texture resource from a PAK file stream.
-template <serio::Stream DescS, serio::Stream DataS>
-auto LoadTextureResource(LoaderContext<DescS, DataS> context)
+inline auto LoadTextureResource(LoaderContext context)
   -> std::unique_ptr<data::TextureResource>
 {
   LOG_SCOPE_F(1, "Load Texture Resource");
   LOG_F(2, "offline mode     : {}", context.offline ? "yes" : "no");
 
-  serio::Reader<DescS>& reader = context.desc_reader.get();
+  DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
+  auto& reader = *context.desc_reader;
 
   using data::pak::TextureResourceDesc;
 
@@ -43,7 +48,7 @@ auto LoadTextureResource(LoaderContext<DescS, DataS> context)
 
   // Read TextureResourceDesc from the stream
   auto pack = reader.ScopedAlignment(1);
-  auto result = reader.template read<TextureResourceDesc>();
+  auto result = reader.Read<TextureResourceDesc>();
   check_result(result, "TextureResourceDesc");
   const auto& desc = result.value();
 
@@ -68,12 +73,14 @@ auto LoadTextureResource(LoaderContext<DescS, DataS> context)
     // fully read
     constexpr std::size_t tex_index
       = IndexOf<data::TextureResource, ResourceTypeList>::value;
-    auto& data_reader = std::get<tex_index>(context.data_readers).get();
+    DCHECK_NOTNULL_F(std::get<tex_index>(context.data_readers),
+      "expecting data reader for TextureResource to be valid");
+    auto& data_reader = *std::get<tex_index>(context.data_readers);
 
-    check_result(data_reader.seek(desc.data_offset), "Texture Data");
-    auto align_result = data_reader.align_to(desc.alignment);
+    check_result(data_reader.Seek(desc.data_offset), "Texture Data");
+    auto align_result = data_reader.AlignTo(desc.alignment);
     check_result(align_result, "Texture Data");
-    auto data_result = data_reader.read_blob(desc.data_size);
+    auto data_result = data_reader.ReadBlob(desc.data_size);
     check_result(data_result, "Texture Data");
   }
 

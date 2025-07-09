@@ -9,23 +9,21 @@
 #include <functional>
 #include <memory>
 
-#include <Oxygen/Base/FileStream.h>
-#include <Oxygen/Base/Stream.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content {
 
-template <typename F, typename DescS, typename DataS>
-concept LoadFunctionForStream
-  = oxygen::serio::Stream<DescS> && oxygen::serio::Stream<DataS>
-  && requires(F f, LoaderContext<DescS, DataS> context) {
-       {
-         f(context)
-       } -> std::same_as<
-         std::unique_ptr<std::remove_pointer_t<decltype(f(context).get())>>>;
-       requires IsTyped<std::remove_pointer_t<decltype(f(context).get())>>;
-     };
+template <typename F>
+concept LoadFunctionForStream = requires(F f, LoaderContext context) {
+  {
+    f(context)
+  } -> std::same_as<
+    std::unique_ptr<std::remove_pointer_t<decltype(f(context).get())>>>;
+  requires IsTyped<std::remove_pointer_t<decltype(f(context).get())>>;
+};
 
 //! Concept for asset/resource load functions used with AssetLoader.
 /*!
@@ -55,7 +53,6 @@ concept LoadFunctionForStream
  @see LoaderContext, AssetLoader
 */
 template <typename F>
-concept LoadFunction
-  = LoadFunctionForStream<F, serio::FileStream<>, serio::FileStream<>>;
+concept LoadFunction = LoadFunctionForStream<F>;
 
 } // namespace oxygen::content

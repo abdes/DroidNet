@@ -59,7 +59,7 @@ auto HandleSphereMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
@@ -91,7 +91,7 @@ auto HandlePlaneMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
@@ -123,7 +123,7 @@ auto HandleCylinderMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
@@ -155,7 +155,7 @@ auto HandleConeMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
@@ -187,7 +187,7 @@ auto HandleTorusMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
@@ -219,7 +219,7 @@ auto HandleQuadMesh(std::span<const std::byte> param_blob)
              return;
            }
            using T = std::tuple_element_t<Is, decltype(defaults)>;
-           auto val = reader.read<T>();
+           auto val = reader.Read<T>();
            if (val) {
              std::get<Is>(defaults) = val.value();
            } else {
