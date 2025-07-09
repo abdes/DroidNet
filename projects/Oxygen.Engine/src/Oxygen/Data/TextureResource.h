@@ -39,8 +39,7 @@ namespace oxygen::data {
  0x1A   2    mip_levels       Number of mipmap levels
  0x1C   1    format           Texture format enum value
  0x1D   2    alignment        Required alignment (default 256)
- 0x1F   1    is_cubemap       1 if cubemap, 0 otherwise (legacy, prefer
- texture_type) 0x20   8    reserved         Reserved for future use
+ texture_type) 0x1F   9    reserved         Reserved for future use
  ```
 
  @see TextureResourceDesc, MaterialAssetDesc
@@ -109,12 +108,6 @@ public:
   [[nodiscard]] auto GetDataAlignment() const noexcept -> uint16_t
   {
     return desc_.alignment;
-  }
-
-  //! @deprecated Prefer GetTextureType() for new code.
-  [[nodiscard]] auto IsCubemap() const noexcept -> bool
-  {
-    return desc_.is_cubemap != 0;
   }
 
 private:

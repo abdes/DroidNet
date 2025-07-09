@@ -827,8 +827,7 @@ def create_texture_resource_descriptor(
     - mip_levels: 2 bytes (uint16_t)
     - format: 1 byte (uint8_t)
     - alignment: 2 bytes (uint16_t)
-    - is_cubemap: 1 byte (uint8_t)
-    - reserved: 8 bytes (uint8_t[8])
+    - reserved: 9 bytes (uint8_t[8])
     """
     texture_type = resource_spec.get("texture_type", 0)
     compression_type = resource_spec.get("compression_type", 0)
@@ -839,7 +838,6 @@ def create_texture_resource_descriptor(
     mip_levels = resource_spec.get("mip_levels", 1)
     format_val = resource_spec.get("format", 0)
     alignment = resource_spec.get("alignment", 256)
-    is_cubemap = resource_spec.get("is_cubemap", 0)
 
     desc = (
         struct.pack("<Q", data_offset)  # data_offset (8 bytes)
@@ -853,8 +851,7 @@ def create_texture_resource_descriptor(
         + struct.pack("<H", mip_levels)  # mip_levels (2 bytes)
         + struct.pack("<B", format_val)  # format (1 byte)
         + struct.pack("<H", alignment)  # alignment (2 bytes)
-        + struct.pack("<B", is_cubemap)  # is_cubemap (1 byte)
-        + b"\x00" * 8  # reserved (8 bytes)
+        + b"\x00" * 9  # reserved (9 bytes)
     )
 
     if len(desc) != 40:  # TextureResourceDesc size
