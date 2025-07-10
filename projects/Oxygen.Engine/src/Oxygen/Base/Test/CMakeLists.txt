@@ -60,6 +60,14 @@ m_gtest_program(
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
 m_gtest_program(Logging SOURCES "Logging_test.cpp")
+m_gtest_program(
+  StateMachine
+  SOURCES
+    "StateMachine_test.cpp"
+    "StateMachine_doc_test.cpp"
+)
+
+# -- Catch2 Test Programs -------------------------------------------------------
 
 include(Catch2Helpers)
 
