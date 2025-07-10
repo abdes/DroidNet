@@ -28,11 +28,9 @@ class OxygenConan(ConanFile):
         "awaitable_state_checker": [True, False],
         "with_asan": [True, False],
         "with_coverage": [True, False],
-
         # Optional components:
         "base": [True, False],
         "oxco": [True, False],
-
         # Also build and install:
         "tools": [True, False],
         "examples": [True, False],
@@ -46,11 +44,9 @@ class OxygenConan(ConanFile):
         "awaitable_state_checker": True,
         "with_asan": False,
         "with_coverage": False,
-
         # Optional components:
         "base": True,
         "oxco": True,
-
         # Also build and package:
         "tools": True,
         "examples": True,
@@ -59,10 +55,25 @@ class OxygenConan(ConanFile):
         "docs": True,
     }
 
-    exports_sources = ("VERSION", "AUTHORS", "README.md", "LICENSE", "CMakeLists.txt", ".clangd.in",
-                       "cmake/**", "src/**", "examples/**", "tests/**", "benchmarks/**", "tools/**",
-                       "share/**", "third_party/**",
-                       "!out/**", "!build/**", "!cmake-build-*/**")
+    exports_sources = (
+        "VERSION",
+        "AUTHORS",
+        "README.md",
+        "LICENSE",
+        "CMakeLists.txt",
+        ".clangd.in",
+        "cmake/**",
+        "src/**",
+        "examples/**",
+        "tests/**",
+        "benchmarks/**",
+        "tools/**",
+        "share/**",
+        "third_party/**",
+        "!out/**",
+        "!build/**",
+        "!cmake-build-*/**",
+    )
 
     def set_version(self):
         self.version = load(self, Path(self.recipe_folder) / "VERSION").strip()
@@ -76,6 +87,7 @@ class OxygenConan(ConanFile):
         self.requires("nlohmann_json/3.11.3")
         self.requires("json-schema-validator/2.3.0")
         self.requires("stduuid/1.2.3")
+        self.requires("magic_enum/0.9.7")
 
         self.test_requires("gtest/master")
         self.test_requires("benchmark/1.9.1")
@@ -87,7 +99,9 @@ class OxygenConan(ConanFile):
             # When building shared libs, and compiler is MSVC, we need to set
             # the runtime to dynamic
             if is_msvc(self) and is_msvc_static_runtime(self):
-                self.output.error("Should not build shared libraries with static runtime!")
+                self.output.error(
+                    "Should not build shared libraries with static runtime!"
+                )
                 raise Exception("Invalid build configuration")
 
         # Link to test frameworks always as static libs
@@ -161,11 +175,13 @@ class OxygenConan(ConanFile):
         # ones too. Specify the path of ConanPresets so that it's not put in
         # place where we cannot `include` it.
         tc.absolute_paths = True
-        tc.user_presets_path = 'ConanPresets.json'
+        tc.user_presets_path = "ConanPresets.json"
 
         self._set_cmake_defs(tc.variables)
         if is_msvc(self):
-            tc.variables["USE_MSVC_RUNTIME_LIBRARY_DLL"] = not is_msvc_static_runtime(self)
+            tc.variables["USE_MSVC_RUNTIME_LIBRARY_DLL"] = (
+                not is_msvc_static_runtime(self)
+            )
 
         if self.options.with_asan:
             tc.cache_variables["OXYGEN_WITH_ASAN"] = "ON"
@@ -207,27 +223,27 @@ class OxygenConan(ConanFile):
         cmake = CMake(self)
         cmake.install()
 
-    def _add_dep(self, opt: str, component,
-                 cmake_dep: str, conan_dep=None):
+    def _add_dep(self, opt: str, component, cmake_dep: str, conan_dep=None):
         opt_val = self.options.get_safe(opt)
         if opt_val is None:  # system option deleted
             return
         if opt_val:
             component.system_libs = [cmake_dep]
         else:
-            component.requires += [conan_dep if conan_dep is not None else cmake_dep]
+            component.requires += [
+                conan_dep if conan_dep is not None else cmake_dep
+            ]
 
     def _library_name(self, component: str):
         # Split the string into segments
-        segments = component.split('-')
+        segments = component.split("-")
         # Capitalize the first letter of each segment (except the first one)
-        lib_name = 'Oxygen.' + '.'.join(word.capitalize() for word in segments)
+        lib_name = "Oxygen." + ".".join(word.capitalize() for word in segments)
         self.output.debug("Library for component 'component' is 'lib_name")
         return lib_name
 
-
     def package_info(self):
-        for name in ('OxCo'):
+        for name in "OxCo":
             if not self.options.get_safe(name.lower(), True):
                 continue  # component is disabled
             component = self.cpp_info.components["oxygen-" + name]
@@ -236,21 +252,25 @@ class OxygenConan(ConanFile):
             component.libs = []
             component.libdirs = []
             # TODO: need to investigate how to define target with namespace
-            component.set_property("cmake_target_name", "oxygen-" + name.lower())
-            component.set_property("cmake_target_aliases", ["oxygen::" + name.lower()])
+            component.set_property(
+                "cmake_target_name", "oxygen-" + name.lower()
+            )
+            component.set_property(
+                "cmake_target_aliases", ["oxygen::" + name.lower()]
+            )
 
-        for name in (['Base']):
+        for name in ["Base"]:
             if not self.options.get_safe(name.lower(), True):
                 continue  # component is disabled
             component = self.cpp_info.components["oxygen-" + name]
             component.libs = [self._library_name(name)]
             component.libdirs = ["lib"]
 
-        component = self.cpp_info.components['Base']
-        self._add_dep('system_fmt', component, "fmt::fmt")
+        component = self.cpp_info.components["Base"]
+        self._add_dep("system_fmt", component, "fmt::fmt")
 
-        component = self.cpp_info.components['OxCo']
-        component.requires += ['Base']
+        component = self.cpp_info.components["OxCo"]
+        component.requires += ["Base"]
 
     # def build_requirements(self):
     #     self.build_requires("cmake/[>=3.25.0]")
