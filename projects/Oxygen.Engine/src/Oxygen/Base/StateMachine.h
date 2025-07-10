@@ -25,7 +25,7 @@
 #include <Oxygen/Base/Compilers.h>
 
 //! Namespace for the State Machine library.
-namespace asap::fsm {
+namespace oxygen::fsm {
 
 //! The event production loop should continue execution normally.
 struct Continue { };
@@ -602,4 +602,4 @@ template <typename... Handlers> struct Will : Handlers... {
   using Handlers::Handle...;
 };
 
-} // namespace asap::fsm
+} // namespace oxygen::fsm

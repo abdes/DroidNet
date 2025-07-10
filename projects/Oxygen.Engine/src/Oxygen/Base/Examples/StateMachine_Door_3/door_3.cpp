@@ -8,15 +8,15 @@
 
 #include <Oxygen/Base/StateMachine.h>
 
-using asap::fsm::ByDefault;
-using asap::fsm::Continue;
-using asap::fsm::DoNothing;
-using asap::fsm::Maybe;
-using asap::fsm::On;
-using asap::fsm::StateMachine;
-using asap::fsm::Status;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using oxygen::fsm::ByDefault;
+using oxygen::fsm::Continue;
+using oxygen::fsm::DoNothing;
+using oxygen::fsm::Maybe;
+using oxygen::fsm::On;
+using oxygen::fsm::StateMachine;
+using oxygen::fsm::Status;
+using oxygen::fsm::TransitionTo;
+using oxygen::fsm::Will;
 
 namespace {
 struct OpenEvent { };

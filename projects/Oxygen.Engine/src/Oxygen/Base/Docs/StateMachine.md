@@ -3,7 +3,7 @@
 
 ## Overview
 
-The Oxygen Engine State Machine library (`asap::fsm`) provides a modern,
+The Oxygen Engine State Machine library (`oxygen::fsm`) provides a modern,
 type-safe, and highly flexible framework for implementing finite state machines
 (FSMs) in C++. It leverages C++17/20 features such as `std::variant`, variadic
 templates, and compile-time type deduction to enable declarative, robust, and
@@ -64,7 +64,7 @@ After handling an event, the state machine returns a `Status` variant:
 Declare a state machine by listing all possible states as template parameters:
 
 ```cpp
-using MyMachine = asap::fsm::StateMachine<ClosedState, OpenState, LockedState>;
+using MyMachine = oxygen::fsm::StateMachine<ClosedState, OpenState, LockedState>;
 ```
 
 The first state is the initial state by default. You can explicitly transition
@@ -88,17 +88,17 @@ transitions.
 struct OpenEvent { };
 struct CloseEvent { };
 
-struct ClosedState : asap::fsm::Will<
-    asap::fsm::On<OpenEvent, asap::fsm::TransitionTo<OpenState>>,
-    asap::fsm::ByDefault<asap::fsm::DoNothing>
+struct ClosedState : oxygen::fsm::Will<
+    oxygen::fsm::On<OpenEvent, oxygen::fsm::TransitionTo<OpenState>>,
+    oxygen::fsm::ByDefault<oxygen::fsm::DoNothing>
 > { };
 
-struct OpenState : asap::fsm::Will<
-    asap::fsm::On<CloseEvent, asap::fsm::TransitionTo<ClosedState>>,
-    asap::fsm::ByDefault<asap::fsm::DoNothing>
+struct OpenState : oxygen::fsm::Will<
+    oxygen::fsm::On<CloseEvent, oxygen::fsm::TransitionTo<ClosedState>>,
+    oxygen::fsm::ByDefault<oxygen::fsm::DoNothing>
 > { };
 
-using DoorMachine = asap::fsm::StateMachine<ClosedState, OpenState>;
+using DoorMachine = oxygen::fsm::StateMachine<ClosedState, OpenState>;
 
 DoorMachine machine{ClosedState{}};
 machine.Handle(OpenEvent{});   // transitions to OpenState
@@ -115,8 +115,8 @@ struct LockedState {
     int lock_code;
     auto Handle(const UnlockEvent& event) const {
         if (event.code == lock_code)
-            return asap::fsm::TransitionTo<ClosedState>{};
-        return asap::fsm::ReportError{"wrong key"};
+            return oxygen::fsm::TransitionTo<ClosedState>{};
+        return oxygen::fsm::ReportError{"wrong key"};
     }
 };
 ```
@@ -128,14 +128,14 @@ struct ClosedState {
     template<typename Event>
     auto OnEnter(const Event&) const {
         std::cout << "Door is closed" << std::endl;
-        return asap::fsm::Continue{};
+        return oxygen::fsm::Continue{};
     }
 };
 ```
 
 ## Actions API
 
-See the following action types (all in `asap::fsm`):
+See the following action types (all in `oxygen::fsm`):
 
 - `TransitionTo<State>`: Transition to another state, optionally with data.
 - `DoNothing`: No transition or side effect.
