@@ -110,17 +110,6 @@ if(${META_PROJECT_ID}_INSTALL)
   # install(DIRECTORY ${PROJECT_SOURCE_DIR}/data DESTINATION ${OXYGEN_INSTALL_DATA} COMPONENT ${data} OPTIONAL)
 endif()
 
-# Must install the export separately for all modules that use the same export name.
-#
-# Example:
-# --------
-# install(
-#   EXPORT asap
-#   NAMESPACE asap::
-#   DESTINATION ${OXYGEN_INSTALL_CMAKE}
-#   FILE "asap-targets.cmake"
-#   COMPONENT Development)
-
 function(oxygen_module_install)
   if(NOT ${META_PROJECT_ID}_INSTALL)
     return()
@@ -147,18 +136,45 @@ function(oxygen_module_install)
     return()
   endif()
 
-  set(runtime "${META_MODULE_NAME}_runtime")
-  set(dev "${META_MODULE_NAME}_dev")
+  set(mod_runtime "${META_MODULE_NAME}_runtime")
+  set(mod_dev "${META_MODULE_NAME}_dev")
 
   message(STATUS "[oxygen_module_install] Namespace: ${x_EXPORT}")
   message(STATUS "[oxygen_module_install] Targets: ${x_TARGETS}")
-  message(STATUS "[oxygen_module_install] Runtime component: ${runtime}")
-  message(STATUS "[oxygen_module_install] Dev component: ${dev}")
+  message(STATUS "[oxygen_module_install] Runtime component: ${mod_runtime}")
+  message(STATUS "[oxygen_module_install] Dev component: ${mod_dev}")
 
   install(
     TARGETS
       ${x_TARGETS}
-    EXPORT "${x_EXPORT}"
+    EXPORT ${META_MODULE_NAME}
+    RUNTIME
+      DESTINATION ${OXYGEN_INSTALL_BIN}
+      COMPONENT ${mod_runtime}
+    LIBRARY
+      DESTINATION ${OXYGEN_INSTALL_SHARED}
+      COMPONENT ${mod_runtime}
+    ARCHIVE
+      DESTINATION ${OXYGEN_INSTALL_LIB}
+      COMPONENT ${mod_dev}
+    FILE_SET
+    HEADERS
+      DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
+      COMPONENT ${mod_dev}
+  )
+
+  # Must install the export per module.
+  install(
+    EXPORT ${META_MODULE_NAME}
+    NAMESPACE ${x_EXPORT}::
+    DESTINATION ${OXYGEN_INSTALL_CMAKE}
+    FILE ${META_MODULE_NAME}-targets.cmake COMPONENT ${mod_dev}
+  )
+
+  install(
+    TARGETS
+      ${x_TARGETS}
+    EXPORT ${x_EXPORT}
     RUNTIME
       DESTINATION ${OXYGEN_INSTALL_BIN}
       COMPONENT ${runtime}
@@ -173,11 +189,12 @@ function(oxygen_module_install)
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
       COMPONENT ${dev}
   )
+
+  # Must install the export per module.
   install(
-    EXPORT ${x_EXPORT}
+    EXPORT ${META_MODULE_NAME}
     NAMESPACE ${x_EXPORT}::
     DESTINATION ${OXYGEN_INSTALL_CMAKE}
-    FILE "${x_EXPORT}-targets.cmake"
-    COMPONENT Development
+    FILE ${META_MODULE_NAME}-targets.cmake COMPONENT ${dev}
   )
 endfunction()

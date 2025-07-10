@@ -33,7 +33,7 @@ add_library(${META_MODULE_TARGET} INTERFACE)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
 set(
-  header_files
+  OXYGEN_CONFIG_HEADERS
   "PlatformConfig.h"
   "EngineConfig.h"
   "GraphicsConfig.h"
@@ -44,25 +44,11 @@ target_sources(
   INTERFACE
     FILE_SET HEADERS
     TYPE HEADERS
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES ${header_files}
+    BASE_DIRS ${OXYGEN_SOURCE_DIR}
+    FILES ${OXYGEN_CONFIG_HEADERS}
 )
 
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  FILES
-    ${source_files}
-    ${header_files}
-)
-
-target_sources(
-  ${META_MODULE_TARGET}
-  INTERFACE
-    FILE_SET HEADERS
-    TYPE HEADERS
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES ${header_files}
-)
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 # Set include directories
 target_include_directories(
@@ -73,19 +59,8 @@ target_include_directories(
     $<INSTALL_INTERFACE:include>
 )
 
-set_target_properties(
-  ${META_MODULE_TARGET}
-  PROPERTIES
-    OUTPUT_NAME
-      "${META_MODULE_NAME}"
-)
-
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
-target_compile_options(
-  ${META_MODULE_TARGET}
-  INTERFACE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
+target_compile_options(${META_MODULE_TARGET} INTERFACE ${OXYGEN_COMMON_CXX_FLAGS})
 
 # Header only libraries don't get a Visual Studio project file generated for
 # them. This is a workaround to make sure the header files are visible in the
