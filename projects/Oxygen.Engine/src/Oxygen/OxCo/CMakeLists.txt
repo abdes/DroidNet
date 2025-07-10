@@ -44,6 +44,7 @@ set(
   "Event.h"
   "EventLoop.h"
   "Executor.h"
+  "LiveObject.h"
   "Nursery.h"
   "ParkingLot.h"
   "Run.h"
@@ -89,6 +90,8 @@ set(
 
 target_sources(
   ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_OXCO_HEADERS}
   INTERFACE
     FILE_SET HEADERS
     TYPE HEADERS

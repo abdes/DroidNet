@@ -214,7 +214,6 @@ endfunction()
 
 function(arrange_target_files_for_ide target)
   get_target_property(_all_sources ${target} SOURCES)
-  get_target_property(_all_headers ${target} INTERFACE_HEADERS)
   set(
     _all_files
     ${_all_sources}
