@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +12,7 @@
 
 using ::testing::Eq;
 
-namespace asap::wrap {
+namespace oxygen::wrap {
 
 namespace {
 
@@ -21,7 +21,7 @@ namespace {
   {
     constexpr size_t column_width = 30;
     const auto* text = "short string";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper().Width(column_width);
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper().Width(column_width);
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("short string"));
   }
 
@@ -30,7 +30,7 @@ namespace {
   {
     const auto* text = "short string";
     const size_t column_width = std::strlen(text);
-    const TextWrapper wrapper = asap::wrap::MakeWrapper().Width(column_width);
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper().Width(column_width);
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("short string"));
   }
 
@@ -59,7 +59,7 @@ namespace {
     const auto& [width, trim_lines, initial_indent, subsequent_indents,
       expected]
       = GetParam();
-    auto builder = asap::wrap::MakeWrapper();
+    auto builder = oxygen::wrap::MakeWrapper();
     builder.Width(width);
     if (trim_lines) {
       builder.TrimLines();
@@ -160,4 +160,4 @@ INSTANTIATE_TEST_SUITE_P(NoTrimLines, LongStringTest,
 
 } // namespace
 
-} // namespace asap::wrap
+} // namespace oxygen::wrap

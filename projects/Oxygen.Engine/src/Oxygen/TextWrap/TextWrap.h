@@ -1,14 +1,8 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-
-/*!
- * \file
- *
- * \brief Stream buffer for the text wrapper stream.
- */
 
 #pragma once
 
@@ -19,7 +13,7 @@
 #include <Oxygen/TextWrap/api_export.h>
 
 /// Text wrapper public interface.
-namespace asap::wrap {
+namespace oxygen::wrap {
 
 class TextWrapperBuilder;
 
@@ -94,7 +88,7 @@ private:
   bool break_on_hyphens_ { false };
 
   static constexpr size_t DEFAULT_COLUMN_WIDTH = 80;
-  static constexpr const char* DEFAULT_TAB_EXPANSION = "\t";
+  static constexpr auto DEFAULT_TAB_EXPANSION = "\t";
 };
 
 /*!
@@ -190,7 +184,7 @@ public:
    * (default: false)
    *
    * \note White space collapsing is done after tab expansion, therefore unless
-   * tab expansion is done with non white space characters, it is superseded.
+   * tab expansion is done with non-white space characters, it is superseded.
    */
   OXGN_TXW_API auto CollapseWhiteSpace() -> TextWrapperBuilder&;
 
@@ -218,6 +212,6 @@ private:
  * \brief Create a new TextWrapperBuilder instance to start building a
  * TextWrapper.
  */
-inline auto MakeWrapper() -> asap::wrap::TextWrapperBuilder { return {}; }
+inline auto MakeWrapper() -> TextWrapperBuilder { return {}; }
 
-} // namespace asap::wrap
+} // namespace oxygen::wrap

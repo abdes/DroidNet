@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +10,7 @@
 
 using ::testing::Eq;
 
-namespace asap::wrap {
+namespace oxygen::wrap {
 
 namespace {
 
@@ -20,7 +20,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "text";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("text"));
   }
 
@@ -30,7 +30,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "text with spaces inside";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("text with spaces inside"));
   }
 
@@ -40,7 +40,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "   spaces_at_start";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("spaces_at_start"));
   }
 
@@ -50,7 +50,7 @@ namespace {
     constexpr size_t column_width = 5;
     const auto* text = "spaces_at_end   ";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("spaces_at_end"));
   }
 
@@ -60,7 +60,7 @@ namespace {
     constexpr size_t column_width = 5;
     const auto* text = "spaces_at_end            ";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("spaces_at_end"));
   }
 
@@ -70,7 +70,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "    spaces\t\teverywhere \f\t   ";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("spaces\t\teverywhere"));
   }
 
@@ -80,7 +80,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "    \t \f\t   ";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq(""));
   }
 
@@ -90,7 +90,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "first   \nsecond";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("first\nsecond"));
   }
 
@@ -100,7 +100,7 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "first\n   second";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("first\nsecond"));
   }
 
@@ -110,7 +110,7 @@ namespace {
     constexpr size_t column_width = 4;
     const auto* text = "first   \n   second";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("first\nsecond"));
   }
 
@@ -120,7 +120,7 @@ namespace {
     constexpr size_t column_width = 10;
     const auto* text = "first   \n   second   \n   third";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("first\nsecond\nthird"));
   }
 
@@ -130,10 +130,10 @@ namespace {
     constexpr size_t column_width = 30;
     const auto* text = "\t  \n   \f \n    ";
     const TextWrapper wrapper
-      = asap::wrap::MakeWrapper().Width(column_width).TrimLines();
+      = oxygen::wrap::MakeWrapper().Width(column_width).TrimLines();
     EXPECT_THAT(wrapper.Fill(text).value(), Eq("\n\n"));
   }
 
 } // namespace
 
-} // namespace asap::wrap
+} // namespace oxygen::wrap

@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +12,7 @@
 
 using ::testing::Eq;
 
-namespace asap::wrap {
+namespace oxygen::wrap {
 
 namespace {
 
@@ -21,7 +21,7 @@ namespace {
   {
     constexpr size_t column_width = 6;
     const auto* text = "hello world!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -34,7 +34,7 @@ namespace {
   {
     constexpr size_t column_width = 6;
     const auto* text = "hello world!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -48,7 +48,7 @@ namespace {
   {
     constexpr size_t column_width = 6;
     const auto* text = "hello world!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -62,7 +62,7 @@ namespace {
   {
     constexpr size_t column_width = 3;
     const auto* text = "hello";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -76,7 +76,7 @@ namespace {
   {
     constexpr size_t column_width = 17;
     const auto* text = "hello world!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -90,7 +90,7 @@ namespace {
   {
     constexpr size_t column_width = 10;
     const auto* text = "bye world - welcome universe!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .TrimLines()
                                   .IndentWith()
@@ -109,7 +109,7 @@ namespace {
   {
     constexpr size_t column_width = 17;
     const auto* text = "";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .IndentWith()
                                   .Initially("==== ")
@@ -122,7 +122,7 @@ namespace {
   {
     constexpr size_t column_width = 17;
     const auto* text = "\nworld!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .IndentWith()
                                   .Initially("==== ")
@@ -135,7 +135,7 @@ namespace {
   {
     constexpr size_t column_width = 17;
     const auto* text = "\n";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .IndentWith()
                                   .Initially("==== ")
@@ -148,7 +148,7 @@ namespace {
   {
     constexpr size_t column_width = 17;
     const auto* text = "hello\nworld!";
-    const TextWrapper wrapper = asap::wrap::MakeWrapper()
+    const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                   .Width(column_width)
                                   .IndentWith()
                                   .Initially("==== ")
@@ -158,4 +158,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::wrap
+} // namespace oxygen::wrap

@@ -1,59 +1,51 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-/*!
- * \file
- *
- * \brief Implementation details of the text wrapper tokenizer.
- */
-
-#include "tokenizer.h"
-
 #include <algorithm>
-#include <numeric>
 #include <utility>
 
 #include <Oxygen/Base/StateMachine.h>
+#include <Oxygen/TextWrap/Internal/Tokenizer.h>
 
-using asap::fsm::ByDefault;
-using asap::fsm::Continue;
-using asap::fsm::DoNothing;
-using asap::fsm::On;
-using asap::fsm::ReissueEvent;
-using asap::fsm::StateMachine;
-using asap::fsm::Status;
-using asap::fsm::Terminate;
-using asap::fsm::TerminateWithError;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using oxygen::fsm::ByDefault;
+using oxygen::fsm::Continue;
+using oxygen::fsm::DoNothing;
+using oxygen::fsm::On;
+using oxygen::fsm::ReissueEvent;
+using oxygen::fsm::StateMachine;
+using oxygen::fsm::Status;
+using oxygen::fsm::Terminate;
+using oxygen::fsm::TerminateWithError;
+using oxygen::fsm::TransitionTo;
+using oxygen::fsm::Will;
 
-using asap::wrap::detail::Token;
-using asap::wrap::detail::TokenConsumer;
-using asap::wrap::detail::TokenType;
+using oxygen::wrap::internal::Token;
+using oxygen::wrap::internal::TokenConsumer;
+using oxygen::wrap::internal::TokenType;
 
 // -----------------------------------------------------------------------------
 //  TokenType formatting helpers
 // -----------------------------------------------------------------------------
 
-auto asap::wrap::detail::to_string(TokenType value) -> const char*
+auto oxygen::wrap::internal::to_string(const TokenType value) -> const char*
 {
   switch (value) {
     // clang-format off
-    case TokenType::Chunk: return "Chunk";
-    case TokenType::WhiteSpace: return "WhiteSpace";
-    case TokenType::NewLine: return "NewLine";
-    case TokenType::ParagraphMark: return "ParagraphMark";
-    case TokenType::EndOfInput: return "EndOfInput";
+    case TokenType::kChunk: return "Chunk";
+    case TokenType::kWhiteSpace: return "WhiteSpace";
+    case TokenType::kNewLine: return "NewLine";
+    case TokenType::kParagraphMark: return "ParagraphMark";
+    case TokenType::kEndOfInput: return "EndOfInput";
     // clang-format on
   }
 
   return "__Unknown__";
 }
 
-auto asap::wrap::detail::operator<<(
+auto oxygen::wrap::internal::operator<<(
   std::ostream& out, const TokenType& token_type) -> std::ostream&
 {
   out << to_string(token_type);
@@ -67,77 +59,22 @@ auto asap::wrap::detail::operator<<(
 namespace {
 
 struct NonWhiteSpaceChar {
-  explicit NonWhiteSpaceChar(char character)
+  explicit NonWhiteSpaceChar(const char character)
     : value { character }
   {
   }
-  const char value;
+  char value;
 };
 struct WhiteSpaceChar {
-  explicit WhiteSpaceChar(char character)
+  explicit WhiteSpaceChar(const char character)
     : value { character }
   {
   }
-  const char value;
+  char value;
 };
 struct InputEnd { };
 
 } // namespace
-
-// -----------------------------------------------------------------------------
-//  Formatting helpers for the Tokenizer events
-// -----------------------------------------------------------------------------
-
-/*!
- * \brief Make a white space character safe for printing by adding a '\' if
- * needed.
- *
- * This function takes any character and if it is a special white space
- * character that needs escaping it transforms it into a safe string for
- * printing by adding a `\` in front of the character.
- *
- * Characters that get escaped are: `\n`, `\r`, `\f`, `\v`, `\t`.
- */
-inline auto EscapeSpecialWhiteSpaces(const char& character) -> std::string
-{
-  // Escape special white space characters
-  std::string escaped;
-  switch (character) {
-  case '\n':
-    escaped = "\\n";
-    break;
-  case '\f':
-    escaped = "\\f";
-    break;
-  case '\r':
-    escaped = "\\r";
-    break;
-  case '\t':
-    escaped = "\\t";
-    break;
-  case '\v':
-    escaped = "\\v";
-    break;
-  default:
-    escaped = character;
-  }
-  return escaped;
-}
-
-/*!
- * \brief Make a string safe for printing by escaping any special white space
- * characters in it.
- *
- * \see EscapeSpecialWhiteSpaces
- */
-inline auto EscapeSpecialWhiteSpaces(const std::string& str) -> std::string
-{
-  return std::accumulate(
-    str.cbegin(), str.cend(), std::string(), [](std::string dest, char value) {
-      dest.append(EscapeSpecialWhiteSpaces(value));
-      return dest;
-    });
-}
 
 // -----------------------------------------------------------------------------
 //  Tokenizer state machine states
@@ -156,8 +93,8 @@ struct FinalState;
  * This utility function passes the token to the token consumer and clears the
  * token before returning.
  */
-void DispatchTokenToConsumer(
-  const TokenConsumer& consume_token, TokenType token_type, std::string& token)
+auto DispatchTokenToConsumer(const TokenConsumer& consume_token,
+  const TokenType token_type, std::string& token) -> void
 {
   consume_token(token_type, token);
   token.clear();
@@ -171,20 +108,21 @@ void DispatchTokenToConsumer(
  * the state machine is a completed execution state and no more tokens will be
  * produced. The tokenizer can be reused for a new input text.
  */
-struct FinalState : public Will<ByDefault<DoNothing>> {
+struct FinalState : Will<ByDefault<DoNothing>> {
   explicit FinalState(TokenConsumer callback)
-    : consume_token_ { std::move(callback) }
+    : consume_token { std::move(callback) }
   {
   }
 
-  [[maybe_unused]] auto OnEnter(const InputEnd& /*event*/) -> Status
+  [[maybe_unused]] [[nodiscard]] auto OnEnter(const InputEnd& /*event*/) const
+    -> Status
   {
-    consume_token_(TokenType::EndOfInput, "");
+    consume_token(TokenType::kEndOfInput, "");
     return Terminate {};
   }
 
 private:
-  TokenConsumer consume_token_;
+  TokenConsumer consume_token;
 };
 
 /*!
@@ -194,10 +132,9 @@ private:
  * be extracted from the input text, this state will transition to one of the
  * next states.
  */
-struct InitialState
-  : public Will<On<NonWhiteSpaceChar, TransitionTo<WordState>>,
-      On<WhiteSpaceChar, TransitionTo<WhiteSpaceState>>,
-      On<InputEnd, TransitionTo<FinalState>>> {
+struct InitialState : Will<On<NonWhiteSpaceChar, TransitionTo<WordState>>,
+                        On<WhiteSpaceChar, TransitionTo<WhiteSpaceState>>,
+                        On<InputEnd, TransitionTo<FinalState>>> {
   using Will::Handle;
 };
 
@@ -210,13 +147,13 @@ struct InitialState
  * token to the token consumer and transitions to the next state corresponding
  * to the last event.
  */
-struct WordState : public Will<On<InputEnd, TransitionTo<FinalState>>,
+struct WordState : Will<On<InputEnd, TransitionTo<FinalState>>,
                      On<WhiteSpaceChar, TransitionTo<WhiteSpaceState>>> {
   using Will::Handle;
 
-  WordState(TokenConsumer callback, bool break_on_hyphens)
-    : consume_token_ { std::move(callback) }
-    , break_on_hyphens_ { break_on_hyphens }
+  WordState(TokenConsumer callback, const bool _break_on_hyphens)
+    : consume_token { std::move(callback) }
+    , break_on_hyphens { _break_on_hyphens }
   {
   }
 
@@ -228,28 +165,28 @@ struct WordState : public Will<On<InputEnd, TransitionTo<FinalState>>,
 
   template <typename Event> auto OnLeave(const Event& /*event*/) -> Status
   {
-    if (!token_.empty()) {
-      DispatchTokenToConsumer(consume_token_, TokenType::Chunk, token_);
+    if (!token.empty()) {
+      DispatchTokenToConsumer(consume_token, TokenType::kChunk, token);
     }
     return Continue {};
   }
 
   [[maybe_unused]] auto Handle(const NonWhiteSpaceChar& event) -> DoNothing
   {
-    if (break_on_hyphens_ && event.value == '-' && !token_.empty()
-      && (std::isalpha(token_.back()) != 0)) {
-      token_.push_back(event.value);
-      DispatchTokenToConsumer(consume_token_, TokenType::Chunk, token_);
+    if (break_on_hyphens && event.value == '-' && !token.empty()
+      && (std::isalpha(token.back()) != 0)) {
+      token.push_back(event.value);
+      DispatchTokenToConsumer(consume_token, TokenType::kChunk, token);
     } else {
-      token_.push_back(event.value);
+      token.push_back(event.value);
     }
     return DoNothing {};
   }
 
 private:
-  std::string token_;
-  TokenConsumer consume_token_;
-  const bool break_on_hyphens_;
+  std::string token;
+  TokenConsumer consume_token;
+  bool break_on_hyphens;
 };
 
 /*!
@@ -263,13 +200,13 @@ private:
  * the token consumer and the state machine transitions into the next state
  * based on the last event.
  */
-struct WhiteSpaceState : public Will<On<InputEnd, TransitionTo<FinalState>>,
+struct WhiteSpaceState : Will<On<InputEnd, TransitionTo<FinalState>>,
                            On<NonWhiteSpaceChar, TransitionTo<WordState>>> {
   using Will::Handle;
 
-  explicit WhiteSpaceState(TokenConsumer callback, bool collapse_ws)
-    : consume_token_ { std::move(callback) }
-    , collapse_ws_ { collapse_ws }
+  explicit WhiteSpaceState(TokenConsumer callback, const bool _collapse_ws)
+    : consume_token { std::move(callback) }
+    , collapse_ws { _collapse_ws }
   {
   }
 
@@ -281,71 +218,71 @@ struct WhiteSpaceState : public Will<On<InputEnd, TransitionTo<FinalState>>,
 
   template <typename Event> auto OnLeave(const Event& /*event*/) -> Status
   {
-    if (!token_.empty()) {
+    if (!token.empty()) {
       // This is not a paragraph mark so dispatch as white space or new line
       // token based on the last seen character
-      if (last_was_newline_) {
-        token_.pop_back();
-        if (!token_.empty()) {
-          DispatchToConsumer(TokenType::WhiteSpace);
+      if (last_was_newline) {
+        token.pop_back();
+        if (!token.empty()) {
+          DispatchToConsumer(TokenType::kWhiteSpace);
         }
-        DispatchToConsumer(TokenType::NewLine);
+        DispatchToConsumer(TokenType::kNewLine);
       } else {
-        DispatchToConsumer(TokenType::WhiteSpace);
+        DispatchToConsumer(TokenType::kWhiteSpace);
       }
     }
-    last_was_newline_ = false;
+    last_was_newline = false;
     return Continue {};
   }
 
   [[maybe_unused]] auto Handle(const WhiteSpaceChar& event) -> DoNothing
   {
     if (event.value == '\n' || event.value == '\v') {
-      if (last_was_newline_) {
-        token_.pop_back();
-        if (!token_.empty()) {
-          DispatchToConsumer(TokenType::WhiteSpace);
+      if (last_was_newline) {
+        token.pop_back();
+        if (!token.empty()) {
+          DispatchToConsumer(TokenType::kWhiteSpace);
         }
-        DispatchToConsumer(TokenType::ParagraphMark);
-        token_ = "";
-        last_was_newline_ = false;
+        DispatchToConsumer(TokenType::kParagraphMark);
+        token = "";
+        last_was_newline = false;
         return DoNothing {};
       }
-      last_was_newline_ = true;
-      token_.push_back('\n');
+      last_was_newline = true;
+      token.push_back('\n');
     } else {
-      if (last_was_newline_) {
-        last_was_newline_ = false;
-        token_.pop_back();
-        if (!token_.empty()) {
-          DispatchToConsumer(TokenType::WhiteSpace);
+      if (last_was_newline) {
+        last_was_newline = false;
+        token.pop_back();
+        if (!token.empty()) {
+          DispatchToConsumer(TokenType::kWhiteSpace);
         }
-        DispatchToConsumer(TokenType::NewLine);
+        DispatchToConsumer(TokenType::kNewLine);
       }
-      token_.push_back(event.value);
+      token.push_back(event.value);
     }
     return DoNothing {};
   }
 
 private:
-  void DispatchToConsumer(TokenType token_type)
+  auto DispatchToConsumer(const TokenType token_type) -> void
   {
     // If the token is a white space, and we need to collapse white spaces, do
     // it now.
-    if (token_type == TokenType::WhiteSpace) {
-      if (collapse_ws_) {
-        token_ = " ";
+    if (token_type == TokenType::kWhiteSpace) {
+      if (collapse_ws) {
+        token = " ";
       }
-      DispatchTokenToConsumer(consume_token_, TokenType::WhiteSpace, token_);
+      DispatchTokenToConsumer(consume_token, TokenType::kWhiteSpace, token);
     } else {
-      DispatchTokenToConsumer(consume_token_, token_type, token_);
+      DispatchTokenToConsumer(consume_token, token_type, token);
     }
   }
 
-  bool last_was_newline_ { false };
-  std::string token_;
-  TokenConsumer consume_token_;
-  const bool collapse_ws_;
+  bool last_was_newline { false };
+  std::string token;
+  TokenConsumer consume_token;
+  bool collapse_ws;
 };
 
 } // namespace
@@ -362,7 +299,7 @@ struct Overload : Ts... {
 // template parameters out of the constructor arguments.
 template <class... Ts> Overload(Ts...) -> Overload<Ts...>;
 
-auto asap::wrap::detail::Tokenizer::Tokenize(
+auto oxygen::wrap::internal::Tokenizer::Tokenize(
   const std::string& text, const TokenConsumer& consume_token) const -> bool
 {
 

@@ -11,11 +11,11 @@
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  using asap::wrap::TextWrapper;
-  using asap::wrap::TextWrapperBuilder;
+  using oxygen::wrap::TextWrapper;
+  using oxygen::wrap::TextWrapperBuilder;
 
   TextWrapperBuilder builder;
-  const TextWrapper wrapper = asap::wrap::MakeWrapper()
+  const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                 .Width(60)
                                 .TrimLines()
                                 .CollapseWhiteSpace()

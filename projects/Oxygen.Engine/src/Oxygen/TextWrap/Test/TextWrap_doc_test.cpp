@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +13,7 @@ namespace {
 // NOLINTNEXTLINE
 TEST(TextWrapperExamples, TypicalWrapWithLineBreaksAndCollapsedSpaces)
 {
-  using asap::wrap::TextWrapper;
+  using oxygen::wrap::TextWrapper;
 
   //! [Example usage]
   const auto* passage = R"(Pride and Prejudice:
@@ -21,7 +21,7 @@ TEST(TextWrapperExamples, TypicalWrapWithLineBreaksAndCollapsedSpaces)
     of a good fortune, must be in want of a wife.)";
 
   constexpr size_t column_width = 28;
-  const TextWrapper wrapper = asap::wrap::MakeWrapper()
+  const TextWrapper wrapper = oxygen::wrap::MakeWrapper()
                                 .Width(column_width)
                                 .TrimLines()
                                 .CollapseWhiteSpace()
