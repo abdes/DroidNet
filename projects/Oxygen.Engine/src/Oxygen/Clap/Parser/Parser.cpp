@@ -1,32 +1,31 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StateMachine.h>
-#include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Clap/Parser/Events.h>
 #include <Oxygen/Clap/Parser/Parser.h>
 #include <Oxygen/Clap/Parser/States.h>
 #include <Oxygen/Clap/Parser/Tokenizer.h>
 
-using asap::fsm::Continue;
-using asap::fsm::ReissueEvent;
-using asap::fsm::Status;
-using asap::fsm::Terminate;
-using asap::fsm::TerminateWithError;
+using oxygen::fsm::Continue;
+using oxygen::fsm::ReissueEvent;
+using oxygen::fsm::Status;
+using oxygen::fsm::Terminate;
+using oxygen::fsm::TerminateWithError;
 
-using asap::clap::parser::detail::DashDashState;
-using asap::clap::parser::detail::FinalState;
-using asap::clap::parser::detail::IdentifyCommandState;
-using asap::clap::parser::detail::InitialState;
-using asap::clap::parser::detail::Machine;
-using asap::clap::parser::detail::ParseLongOptionState;
-using asap::clap::parser::detail::ParseOptionsState;
-using asap::clap::parser::detail::ParseShortOptionState;
-using asap::clap::parser::detail::TokenEvent;
+using oxygen::clap::parser::detail::DashDashState;
+using oxygen::clap::parser::detail::FinalState;
+using oxygen::clap::parser::detail::IdentifyCommandState;
+using oxygen::clap::parser::detail::InitialState;
+using oxygen::clap::parser::detail::Machine;
+using oxygen::clap::parser::detail::ParseLongOptionState;
+using oxygen::clap::parser::detail::ParseOptionsState;
+using oxygen::clap::parser::detail::ParseShortOptionState;
+using oxygen::clap::parser::detail::TokenEvent;
 
 /*!
  * \brief The Overload pattern allows to explicitly 'overload' lambdas and is
@@ -40,7 +39,7 @@ struct Overload : Ts... {
 // template parameters out of the constructor arguments.
 template <class... Ts> Overload(Ts...) -> Overload<Ts...>;
 
-auto asap::clap::parser::CmdLineParser::Parse() -> bool
+auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
 {
   auto machine = Machine { InitialState { context_ }, IdentifyCommandState {},
     ParseOptionsState {}, ParseShortOptionState {}, ParseLongOptionState {},
@@ -57,36 +56,34 @@ auto asap::clap::parser::CmdLineParser::Parse() -> bool
     Status execution_status;
 
     switch (token_type) {
-    case TokenType::ShortOption:
+    case TokenType::kShortOption:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::ShortOption> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kShortOption> { token_value });
       break;
-    case TokenType::LongOption:
+    case TokenType::kLongOption:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::LongOption> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kLongOption> { token_value });
       break;
-    case TokenType::LoneDash:
+    case TokenType::kLoneDash:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::LoneDash> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kLoneDash> { token_value });
       break;
-    case TokenType::DashDash:
+    case TokenType::kDashDash:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::DashDash> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kDashDash> { token_value });
       break;
-    case TokenType::EqualSign:
+    case TokenType::kEqualSign:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::EqualSign> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kEqualSign> { token_value });
       break;
-    case TokenType::Value:
+    case TokenType::kValue:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::Value> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kValue> { token_value });
       break;
-    case TokenType::EndOfInput:
+    case TokenType::kEndOfInput:
       execution_status
-        = machine.Handle(TokenEvent<TokenType::EndOfInput> { token_value });
+        = machine.Handle(TokenEvent<TokenType::kEndOfInput> { token_value });
       break;
-    default:
-      oxygen::Unreachable();
     }
 
     // https://en.cppreference.com/w/cpp/utility/variant/visit
@@ -100,9 +97,9 @@ auto asap::clap::parser::CmdLineParser::Parse() -> bool
         [this, &continue_running, &no_errors](
           const TerminateWithError& status) {
           LOG_F(ERROR, "{}", status.error_message);
-          context_->err_ << fmt::format(
-            "{}: {}", context_->program_name_, status.error_message)
-                         << std::endl;
+          context_->err << fmt::format(
+            "{}: {}", context_->program_name, status.error_message)
+                        << '\n';
           continue_running = false;
           no_errors = false;
         },
@@ -120,7 +117,7 @@ auto asap::clap::parser::CmdLineParser::Parse() -> bool
         DLOG_F(
           1, "re-issuing event({}/{}) as requested ", token_type, token_value);
       } else {
-        DCHECK_NE_F(token.first, TokenType::EndOfInput);
+        DCHECK_NE_F(token.first, TokenType::kEndOfInput);
         token = tokenizer_.NextToken();
       }
     }

@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -11,12 +11,12 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 struct CommandLineContext {
-  explicit CommandLineContext(std::string program_name,
+  explicit CommandLineContext(std::string _program_name,
     Command::Ptr& active_command_ref, OptionValuesMap& ovm_ref)
-    : program_name_ { std::move(program_name) }
+    : program_name { std::move(_program_name) }
     , active_command { active_command_ref }
     , ovm { ovm_ref }
   {
@@ -24,14 +24,14 @@ struct CommandLineContext {
 
   bool allow_long_option_value_with_no_equal { true };
 
-  std::istream& in_ { std::cin };
-  std::ostream& out_ { std::cout };
-  std::ostream& err_ { std::cerr };
+  std::istream& in { std::cin };
+  std::ostream& out { std::cout };
+  std::ostream& err { std::cerr };
 
-  std::string program_name_;
+  std::string program_name;
 
   /*!
-   * \brief Tracks the `asap::clap::Command` objects for the active command.
+   * \brief Tracks the `oxygen::clap::Command` objects for the active command.
    *
    * This field is populated with valid value as soon as the parser identifies a
    * valid command on the command line. All options during subsequent parsing
@@ -42,4 +42,4 @@ struct CommandLineContext {
   OptionValuesMap& ovm;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

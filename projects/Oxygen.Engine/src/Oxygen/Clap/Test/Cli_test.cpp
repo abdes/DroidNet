@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -17,10 +17,10 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 
-using ::testing::Eq;
-using ::testing::IsTrue;
+using testing::Eq;
+using testing::IsTrue;
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 namespace {
 
@@ -57,7 +57,7 @@ namespace {
     mutable Options::Ptr common_options_;
   };
 
-  constexpr const auto about_head
+  constexpr auto about_head
     = "Print the first 10 lines of each FILE to standard output. With more "
       "than "
       "one FILE, precede each with a header giving the file name.\n"
@@ -81,7 +81,7 @@ namespace {
   //     <https://www.gnu.org/software/coreutils/head> or " "available locally
   //     via: info '(coreutils) head invocation'.";
 
-  constexpr const int default_num_lines = 10;
+  constexpr int default_num_lines = 10;
 
   // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
   class HeadCli : public BaseCli {
@@ -284,7 +284,7 @@ namespace {
       EXPECT_THAT(v_zero_terminated.size(), Eq(1));
       EXPECT_THAT(v_zero_terminated.at(0).GetAs<bool>(), Eq(false));
 
-      const auto& v_rest = matches.ValuesOf(Option::key_rest);
+      const auto& v_rest = matches.ValuesOf(Option::key_rest_);
       EXPECT_THAT(v_rest.size(), Eq(1));
       EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("file.txt"));
     }
@@ -305,7 +305,7 @@ namespace {
       EXPECT_THAT(v_quiet.size(), Eq(1));
       EXPECT_THAT(v_quiet.at(0).GetAs<bool>(), Eq(true));
 
-      const auto& v_rest = matches.ValuesOf(Option::key_rest);
+      const auto& v_rest = matches.ValuesOf(Option::key_rest_);
       EXPECT_THAT(v_rest.size(), Eq(1));
       EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("file.txt"));
     }
@@ -352,4 +352,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::clap
+} // namespace oxygen::clap

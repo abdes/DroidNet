@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +10,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Clap/Parser/Parser.h>
 
-using namespace asap::clap;
+using namespace oxygen::clap;
 
 #include <Oxygen/Base/Logging.h>
 

@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -9,9 +9,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Internal/Args.h>
 
-class asap::clap::detail::Arguments::ArgumentsImpl {
-public:
-  ArgumentsImpl(int argc, const char** argv)
+struct oxygen::clap::detail::Arguments::ArgumentsImpl {
+  ArgumentsImpl(const int argc, const char** argv)
   {
     DCHECK_GT_F(argc, 0);
     DCHECK_NOTNULL_F(argv);
@@ -31,18 +30,18 @@ public:
   std::vector<std::string> args {};
 };
 
-asap::clap::detail::Arguments::Arguments(int argc, const char** argv)
+oxygen::clap::detail::Arguments::Arguments(int argc, const char** argv)
   : impl_(new ArgumentsImpl(argc, argv),
       // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
       [](const ArgumentsImpl* impl) { delete impl; })
 {
 }
 
-auto asap::clap::detail::Arguments::ProgramName() const -> const std::string&
+auto oxygen::clap::detail::Arguments::ProgramName() const -> const std::string&
 {
   return impl_->program_name;
 }
-auto asap::clap::detail::Arguments::Args() const -> std::vector<std::string>&
+auto oxygen::clap::detail::Arguments::Args() const -> std::vector<std::string>&
 {
   return impl_->args;
 }

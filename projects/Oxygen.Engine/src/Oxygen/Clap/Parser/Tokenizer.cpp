@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -11,18 +11,18 @@
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Clap/Parser/Tokenizer.h>
 
-using asap::fsm::ByDefault;
-using asap::fsm::Continue;
-using asap::fsm::DoNothing;
-using asap::fsm::Maybe;
-using asap::fsm::On;
-using asap::fsm::OneOf;
-using asap::fsm::StateMachine;
-using asap::fsm::Status;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using oxygen::fsm::ByDefault;
+using oxygen::fsm::Continue;
+using oxygen::fsm::DoNothing;
+using oxygen::fsm::Maybe;
+using oxygen::fsm::On;
+using oxygen::fsm::OneOf;
+using oxygen::fsm::StateMachine;
+using oxygen::fsm::Status;
+using oxygen::fsm::TransitionTo;
+using oxygen::fsm::Will;
 
-namespace asap::clap::parser {
+namespace oxygen::clap::parser {
 
 auto operator<<(std::ostream& out, const TokenType& token_type) -> std::ostream&
 {
@@ -32,9 +32,8 @@ auto operator<<(std::ostream& out, const TokenType& token_type) -> std::ostream&
 
 namespace {
 
-  class InputChar {
-  public:
-    explicit InputChar(char character)
+  struct InputChar {
+    explicit InputChar(const char character)
       : value { character }
     {
     }
@@ -57,7 +56,7 @@ namespace {
   struct DashDashState;
   struct FinalState;
 
-  struct FinalState : public Will<ByDefault<DoNothing>> {
+  struct FinalState : Will<ByDefault<DoNothing>> {
     [[maybe_unused]] static auto OnEnter(const InputEnd& /*event*/) -> Status
     {
       //    std::cout << "InputEnd -> FinalState" << std::endl;
@@ -65,7 +64,7 @@ namespace {
     }
   };
 
-  struct InitialState : public ByDefault<TransitionTo<FinalState>> {
+  struct InitialState : ByDefault<TransitionTo<FinalState>> {
     using ByDefault::Handle;
 
     template <typename Event>
@@ -87,11 +86,11 @@ namespace {
     }
   };
 
-  struct ValueState : public On<InputEnd, TransitionTo<FinalState>> {
+  struct ValueState : On<InputEnd, TransitionTo<FinalState>> {
     using On::Handle;
 
     explicit ValueState(TokenConsumer callback)
-      : consume_token_ { std::move(callback) }
+      : consume_token { std::move(callback) }
     {
     }
 
@@ -99,32 +98,33 @@ namespace {
     {
       //    std::cout << "InputChar(" << event.Value() << ") -> ValueState" <<
       //    std::endl;
-      token_.push_back((event.Value()));
+      token.push_back((event.Value()));
       return Continue {};
     }
 
-    [[maybe_unused]] auto OnLeave(const InputEnd& /*event*/) -> Status
+    [[maybe_unused]] [[nodiscard]] auto OnLeave(const InputEnd& /*event*/) const
+      -> Status
     {
       //    std::cout << "ValueState -> " << std::endl;
-      consume_token_(TokenType::Value, token_);
+      consume_token(TokenType::kValue, token);
       return Continue {};
     }
 
     [[maybe_unused]] auto Handle(const InputChar& event) -> DoNothing
     {
-      token_.push_back(event.Value());
+      token.push_back(event.Value());
       return DoNothing {};
     }
 
   private:
-    std::string token_;
-    TokenConsumer consume_token_;
+    std::string token;
+    TokenConsumer consume_token;
   };
 
   struct OptionState {
 
     explicit OptionState(TokenConsumer callback)
-      : consume_token_ { std::move(callback) }
+      : consume_token { std::move(callback) }
     {
     }
 
@@ -142,10 +142,10 @@ namespace {
       return Continue {};
     }
 
-    [[maybe_unused]] auto Handle([[maybe_unused]] const InputEnd& event)
+    [[maybe_unused]] [[nodiscard]] auto Handle(const InputEnd& /*event*/) const
       -> TransitionTo<FinalState>
     {
-      consume_token_(TokenType::LoneDash, "-");
+      consume_token(TokenType::kLoneDash, "-");
       return TransitionTo<FinalState> {};
     }
 
@@ -161,23 +161,24 @@ namespace {
     }
 
   private:
-    TokenConsumer consume_token_;
+    TokenConsumer consume_token;
   };
 
-  struct ShortOptionState : public On<InputEnd, TransitionTo<FinalState>> {
+  struct ShortOptionState : On<InputEnd, TransitionTo<FinalState>> {
     using On::Handle;
 
     explicit ShortOptionState(TokenConsumer callback)
-      : consume_token_ { std::move(callback) }
+      : consume_token { std::move(callback) }
     {
     }
 
-    [[maybe_unused]] auto OnEnter(const InputChar& event) -> Status
+    [[maybe_unused]] [[nodiscard]] auto OnEnter(const InputChar& event) const
+      -> Status
     {
       //    std::cout << "InputChar(" << event.Value() << ") ->
       //    ShortOptionState"
       //    << std::endl;
-      consume_token_(TokenType::ShortOption, std::string { event.Value() });
+      consume_token(TokenType::kShortOption, std::string { event.Value() });
       return Continue {};
     }
 
@@ -188,21 +189,22 @@ namespace {
       return Continue {};
     }
 
-    [[maybe_unused]] auto Handle(const InputChar& event) -> DoNothing
+    [[maybe_unused]] [[nodiscard]] auto Handle(const InputChar& event) const
+      -> DoNothing
     {
-      consume_token_(TokenType::ShortOption, std::string { event.Value() });
+      consume_token(TokenType::kShortOption, std::string { event.Value() });
       return DoNothing {};
     }
 
   private:
-    TokenConsumer consume_token_;
+    TokenConsumer consume_token;
   };
 
   struct DashDashState : On<InputChar, TransitionTo<LongOptionState>> {
     using On::Handle;
 
     explicit DashDashState(TokenConsumer callback)
-      : consume_token_ { std::move(callback) }
+      : consume_token { std::move(callback) }
     {
     }
 
@@ -220,22 +222,22 @@ namespace {
       return Continue {};
     }
 
-    [[maybe_unused]] auto Handle([[maybe_unused]] const InputEnd& event)
+    [[maybe_unused]] [[nodiscard]] auto Handle(const InputEnd& /*event*/) const
       -> TransitionTo<FinalState>
     {
-      consume_token_(TokenType::DashDash, "--");
+      consume_token(TokenType::kDashDash, "--");
       return TransitionTo<FinalState> {};
     }
 
   private:
-    TokenConsumer consume_token_;
+    TokenConsumer consume_token;
   };
 
-  struct LongOptionState : public On<InputEnd, TransitionTo<FinalState>> {
+  struct LongOptionState : On<InputEnd, TransitionTo<FinalState>> {
     using On::Handle;
 
     explicit LongOptionState(TokenConsumer callback)
-      : consume_token_ { std::move(callback) }
+      : consume_token { std::move(callback) }
     {
     }
 
@@ -243,14 +245,15 @@ namespace {
     {
       //    std::cout << "InputChar(" << event.Value() << ") -> LongOptionState"
       //    << std::endl;
-      token_.push_back((event.Value()));
+      token.push_back((event.Value()));
       return Continue {};
     }
 
-    [[maybe_unused]] auto OnLeave(const InputEnd& /*event*/) -> Status
+    [[maybe_unused]] [[nodiscard]] auto OnLeave(const InputEnd& /*event*/) const
+      -> Status
     {
       //    std::cout << "LongOptionState -> " << std::endl;
-      consume_token_(TokenType::LongOption, token_);
+      consume_token(TokenType::kLongOption, token);
       return Continue {};
     }
 
@@ -266,28 +269,28 @@ namespace {
     {
       switch (event.Value()) {
       case '=':
-        consume_token_(TokenType::LongOption, token_);
-        consume_token_(TokenType::EqualSign, "=");
+        consume_token(TokenType::kLongOption, token);
+        consume_token(TokenType::kEqualSign, "=");
         after_equal_sign = true;
         break;
       default:
         if (after_equal_sign) {
           return TransitionTo<ValueState> {};
         }
-        token_.push_back(event.Value());
+        token.push_back(event.Value());
       }
       return DoNothing {};
     }
 
   private:
-    std::string token_;
+    std::string token;
     bool after_equal_sign { false };
-    TokenConsumer consume_token_;
+    TokenConsumer consume_token;
   };
 
 } // namespace
 
-void Tokenizer::Tokenize(const std::string& arg) const
+auto Tokenizer::Tokenize(const std::string& arg) const -> void
 {
 
   const TokenConsumer consume_token
@@ -297,12 +300,15 @@ void Tokenizer::Tokenize(const std::string& arg) const
     this->tokens_.emplace_back(token_type, std::move(token));
   };
 
-  StateMachine<InitialState, ValueState, OptionState, ShortOptionState,
-    DashDashState, LongOptionState, FinalState>
-    machine { InitialState {}, ValueState { consume_token },
-      OptionState { consume_token }, ShortOptionState { consume_token },
-      DashDashState { consume_token }, LongOptionState { consume_token },
-      FinalState {} };
+  StateMachine machine {
+    InitialState {},
+    ValueState { consume_token },
+    OptionState { consume_token },
+    ShortOptionState { consume_token },
+    DashDashState { consume_token },
+    LongOptionState { consume_token },
+    FinalState {},
+  };
 
   auto cursor = arg.begin();
   while (cursor != arg.end()) {
@@ -312,4 +318,4 @@ void Tokenizer::Tokenize(const std::string& arg) const
   machine.Handle(InputEnd {});
 }
 
-} // namespace asap::clap::parser
+} // namespace oxygen::clap::parser

@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +12,7 @@
 #include <Oxygen/Clap/Fluent/OptionBuilder.h>
 #include <Oxygen/Clap/Internal/ValueDescriptor.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 template <class T> class OptionValueBuilder : public OptionBuilder {
   using Self = OptionValueBuilder;
@@ -108,4 +108,4 @@ private:
 //   return ValueDescriptor<T>::Builder(store_to);
 // }
 
-} // namespace asap::clap
+} // namespace oxygen::clap

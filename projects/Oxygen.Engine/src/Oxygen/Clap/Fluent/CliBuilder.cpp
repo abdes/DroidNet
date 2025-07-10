@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -15,28 +15,28 @@
 
 #include <fmt/format.h>
 
-auto asap::clap::CliBuilder::Version(std::string version) -> CliBuilder&
+auto oxygen::clap::CliBuilder::Version(std::string version) -> CliBuilder&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
   cli_->Version(std::move(version));
   return *this;
 }
 
-auto asap::clap::CliBuilder::ProgramName(std::string name) -> CliBuilder&
+auto oxygen::clap::CliBuilder::ProgramName(std::string name) -> CliBuilder&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
   cli_->ProgramName(std::move(name));
   return *this;
 }
 
-auto asap::clap::CliBuilder::About(std::string about) -> CliBuilder&
+auto oxygen::clap::CliBuilder::About(std::string about) -> CliBuilder&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
   cli_->About(std::move(about));
   return *this;
 }
 
-auto asap::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
+auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   -> CliBuilder&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
@@ -44,21 +44,22 @@ auto asap::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   return *this;
 }
 
-auto asap::clap::CliBuilder::WithVersionCommand() -> Self&
+auto oxygen::clap::CliBuilder::WithVersionCommand() -> Self&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
   cli_->EnableVersionCommand();
   return *this;
 }
 
-auto asap::clap::CliBuilder::WithHelpCommand() -> Self&
+auto oxygen::clap::CliBuilder::WithHelpCommand() -> Self&
 {
   DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
   cli_->EnableHelpCommand();
   return *this;
 }
 
-void asap::clap::CliBuilder::AddHelpOptionToCommand(Command& command)
+auto oxygen::clap::CliBuilder::AddHelpOptionToCommand(Command& command) const
+  -> void
 {
   command.WithOption(Option::WithKey("help")
       .About(fmt::format("Display detailed help information.\nNote "
@@ -72,7 +73,8 @@ void asap::clap::CliBuilder::AddHelpOptionToCommand(Command& command)
       .Build());
 }
 
-void asap::clap::CliBuilder::AddVersionOptionToCommand(Command& command)
+auto oxygen::clap::CliBuilder::AddVersionOptionToCommand(Command& command) const
+  -> void
 {
   command.WithOption(Option::WithKey("version")
       .About(fmt::format("Display version information.\nNote that `{} "
@@ -85,7 +87,7 @@ void asap::clap::CliBuilder::AddVersionOptionToCommand(Command& command)
       .Build());
 }
 
-auto asap::clap::CliBuilder::Build() -> std::unique_ptr<Cli>
+auto oxygen::clap::CliBuilder::Build() -> std::unique_ptr<Cli>
 {
   // Handle additional setup needed when the default `version` or `help`
   // commands are enabled.

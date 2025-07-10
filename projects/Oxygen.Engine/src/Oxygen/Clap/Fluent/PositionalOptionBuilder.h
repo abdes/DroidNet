@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +13,7 @@
 
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 template <typename Builder,
   std::enable_if_t<std::is_same_v<Builder, OptionBuilder>, std::nullptr_t>>
@@ -54,7 +54,7 @@ public:
   auto WithValue(typename ValueDescriptor<T>::Builder&& option_value_builder)
     -> Positional<Builder>&
   {
-    Builder::template WithValue<T>(option_value_builder);
+    Builder::template WithValue<T>(std::move(option_value_builder));
     return *this;
   }
 
@@ -62,4 +62,4 @@ public:
   using Builder::WithValue;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -22,7 +22,7 @@ void AppendOptionalMessage(std::string& description, const char* message)
   description.append(" - ").append(message).append(".");
 }
 
-auto CommandDiagnostic(const asap::clap::parser::detail::CommandPtr& command)
+auto CommandDiagnostic(const oxygen::clap::parser::detail::CommandPtr& command)
   -> std::string
 {
   if (!command || command->IsDefault()) {
@@ -33,7 +33,7 @@ auto CommandDiagnostic(const asap::clap::parser::detail::CommandPtr& command)
 
 } // namespace
 
-auto asap::clap::parser::detail::UnrecognizedCommand(
+auto oxygen::clap::parser::detail::UnrecognizedCommand(
   const std::vector<std::string>& path_segments, const char* message)
   -> std::string
 {
@@ -43,7 +43,7 @@ auto asap::clap::parser::detail::UnrecognizedCommand(
   return description;
 }
 
-auto asap::clap::parser::detail::MissingCommand(
+auto oxygen::clap::parser::detail::MissingCommand(
   const ParserContextPtr& context, const char* message) -> std::string
 {
   auto supported_commands
@@ -60,7 +60,7 @@ auto asap::clap::parser::detail::MissingCommand(
   return description;
 }
 
-auto asap::clap::parser::detail::UnrecognizedOption(
+auto oxygen::clap::parser::detail::UnrecognizedOption(
   const ParserContextPtr& context, const std::string& token,
   const char* message) -> std::string
 {
@@ -71,7 +71,7 @@ auto asap::clap::parser::detail::UnrecognizedOption(
   AppendOptionalMessage(description, message);
   return description;
 }
-auto asap::clap::parser::detail::IllegalMultipleOccurrence(
+auto oxygen::clap::parser::detail::IllegalMultipleOccurrence(
   const ParserContextPtr& context, const char* message) -> std::string
 {
   DCHECK_NOTNULL_F(context->active_option);
@@ -89,7 +89,7 @@ auto asap::clap::parser::detail::IllegalMultipleOccurrence(
   return description;
 }
 
-auto asap::clap::parser::detail::OptionSyntaxError(
+auto oxygen::clap::parser::detail::OptionSyntaxError(
   const ParserContextPtr& context, const char* message) -> std::string
 {
   auto description = fmt::format("{} option '{}' is using an invalid syntax",
@@ -98,7 +98,7 @@ auto asap::clap::parser::detail::OptionSyntaxError(
   return description;
 }
 
-auto asap::clap::parser::detail::MissingValueForOption(
+auto oxygen::clap::parser::detail::MissingValueForOption(
   const ParserContextPtr& context, const char* message) -> std::string
 {
   auto description
@@ -110,7 +110,7 @@ auto asap::clap::parser::detail::MissingValueForOption(
   return description;
 }
 
-auto asap::clap::parser::detail::InvalidValueForOption(
+auto oxygen::clap::parser::detail::InvalidValueForOption(
   const ParserContextPtr& context, const std::string& token,
   const char* message) -> std::string
 {
@@ -125,7 +125,7 @@ auto asap::clap::parser::detail::InvalidValueForOption(
   return description;
 }
 
-auto asap::clap::parser::detail::MissingRequiredOption(
+auto oxygen::clap::parser::detail::MissingRequiredOption(
   const CommandPtr& command, const OptionPtr& option, const char* message)
   -> std::string
 {
@@ -139,7 +139,7 @@ auto asap::clap::parser::detail::MissingRequiredOption(
   return description;
 }
 
-auto asap::clap::parser::detail::UnexpectedPositionalArguments(
+auto oxygen::clap::parser::detail::UnexpectedPositionalArguments(
   const ParserContextPtr& context, const char* message) -> std::string
 {
   auto description = fmt::format("{} argument{} '{}' "

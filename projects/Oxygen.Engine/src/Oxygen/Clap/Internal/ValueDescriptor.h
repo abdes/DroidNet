@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +14,7 @@
 #include <Oxygen/Clap/Detail/ParseValue.h>
 #include <Oxygen/Clap/ValueSemantics.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 /*!
  * \brief The concrete implementation of `ValueSemantics` interface for a value
@@ -56,7 +56,7 @@ public:
     return user_friendly_name_;
   }
 
-  void UserFriendlyName(std::string name)
+  auto UserFriendlyName(std::string name) -> void
   {
     user_friendly_name_ = std::move(name);
   }
@@ -73,8 +73,8 @@ public:
    *
    * \see Notifier
    */
-  void StoreTo(T* store_to) { store_to_ = store_to; }
-  // TODO(Abdessattar) test case for ValueDescriptor with value_store
+  auto StoreTo(T* store_to) -> void { store_to_ = store_to; }
+  // TODO(abdes) test case for ValueDescriptor with value_store
 
   /**
    * \copydoc DefaultValue(const T &, const std::string &)
@@ -85,7 +85,7 @@ public:
    *
    * \see ImplicitValue
    */
-  void DefaultValue(const T& value)
+  auto DefaultValue(const T& value) -> void
   {
     default_value_ = std::any { value };
     std::ostringstream string_converter;
@@ -105,7 +105,7 @@ public:
    *
    * \see ImplicitValue
    */
-  void DefaultValue(const T& value, const std::string& textual)
+  auto DefaultValue(const T& value, const std::string& textual) -> void
   {
     default_value_ = std::any { value };
     default_value_as_text_ = textual;
@@ -120,7 +120,7 @@ public:
    *
    * \see Required
    */
-  void ImplicitValue(const T& value)
+  auto ImplicitValue(const T& value) -> void
   {
     implicit_value_ = std::any(value);
     std::ostringstream string_converter;
@@ -140,7 +140,7 @@ public:
    *
    * \see Required
    */
-  void ImplicitValue(const T& value, const std::string& textual)
+  auto ImplicitValue(const T& value, const std::string& textual) -> void
   {
     implicit_value_ = std::any(value);
     implicit_value_as_text_ = textual;
@@ -150,7 +150,7 @@ public:
    * \brief Specifies that the option can appear multiple times on the command
    * line (i.e. it can accept multiple values).
    */
-  void Repeatable() { repeatable_ = true; }
+  auto Repeatable() -> void { repeatable_ = true; }
 
   /**
    * \brief Specifies a function to be called when the final value
@@ -158,7 +158,7 @@ public:
    *
    * \see Notify
    */
-  void Notifier(std::function<void(const T&)> callback)
+  auto Notifier(std::function<void(const T&)> callback) -> void
   {
     notifier_ = callback;
   }
@@ -187,11 +187,11 @@ public:
     return default_value_.has_value();
   }
 
-  // TODO(Abdessattar) document currently available value type parsers
+  // TODO(abdes) document currently available value type parsers
   auto Parse(std::any& value_store, const std::string& token) const
     -> bool override
   {
-    // TODO(Abdessattar) implement additional value type parsers
+    // TODO(abdes) implement additional value type parsers
     T parsed;
     if (detail::ParseValue(token, parsed)) {
       value_store = parsed;
@@ -248,7 +248,7 @@ public:
    *
    * \see Create \see Notifier
    */
-  void Notify(const std::any& value_store) const override
+  auto Notify(const std::any& value_store) const -> void override
   {
     const T* value = std::any_cast<T>(&value_store);
     if (store_to_) {
@@ -276,4 +276,4 @@ private:
   std::function<void(const T&)> notifier_;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

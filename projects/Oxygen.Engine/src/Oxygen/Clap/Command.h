@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,7 +18,7 @@
 #include <Oxygen/Clap/api_export.h>
 
 /// Namespace for command line parsing related APIs.
-namespace asap::clap {
+namespace oxygen::clap {
 
 // Forward reference used to declare the weak pointer to the parent CLI.
 class Cli;
@@ -36,17 +37,17 @@ public:
    * **Example**
    * \snippet command_test.cpp Default command
    */
-  static constexpr const char* DEFAULT = "";
+  static constexpr auto DEFAULT = "";
 
   /// Version command name.
-  static constexpr const char* VERSION = "version";
-  static constexpr const char* VERSION_LONG = "--version";
-  static constexpr const char* VERSION_SHORT = "-v";
+  static constexpr auto VERSION = "version";
+  static constexpr auto VERSION_LONG = "--version";
+  static constexpr auto VERSION_SHORT = "-v";
 
   /// Help command name.
-  static constexpr const char* HELP = "help";
-  static constexpr const char* HELP_LONG = "--help";
-  static constexpr const char* HELP_SHORT = "-h";
+  static constexpr auto HELP = "help";
+  static constexpr auto HELP_LONG = "--help";
+  static constexpr auto HELP_SHORT = "-h";
 
   Command(const Command& other) = delete;
   Command(Command&& other) noexcept = delete;
@@ -89,7 +90,7 @@ public:
   [[nodiscard]] auto FindShortOption(const std::string& name) const
     -> std::optional<std::shared_ptr<Option>>
   {
-    const auto result = std::find_if(options_.cbegin(), options_.cend(),
+    const auto result = std::ranges::find_if(options_,
       [&name](const Option::Ptr& option) { return option->Short() == name; });
     if (result == options_.cend()) {
       return {};
@@ -100,7 +101,7 @@ public:
   [[nodiscard]] auto FindLongOption(const std::string& name) const
     -> std::optional<std::shared_ptr<Option>>
   {
-    const auto result = std::find_if(options_.cbegin(), options_.cend(),
+    const auto result = std::ranges::find_if(options_,
       [&name](const Option::Ptr& option) { return option->Long() == name; });
     if (result == options_.cend()) {
       return {};
@@ -108,7 +109,7 @@ public:
     return std::make_optional(*result);
   }
 
-  /** Produces a human readable output of 'desc', listing options,
+  /** Produces a human-readable  output of 'desc', listing options,
       their descriptions and allowed parameters. Other options_description
       instances previously passed to add will be output separately. */
   friend auto operator<<(std::ostream& out, const Command& command)
@@ -116,11 +117,12 @@ public:
 
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API void Print(std::ostream& out, unsigned width = 80) const;
+  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 80) const -> void;
 
-  OXGN_CLP_API void PrintSynopsis(std::ostream& out) const;
+  OXGN_CLP_API auto PrintSynopsis(std::ostream& out) const -> void;
 
-  OXGN_CLP_API void PrintOptions(std::ostream& out, unsigned width) const;
+  OXGN_CLP_API auto PrintOptions(std::ostream& out, unsigned width) const
+    -> void;
 
   [[nodiscard]] auto CommandOptions() const -> const std::vector<Option::Ptr>&
   {
@@ -141,7 +143,7 @@ private:
    * \brief Construct a new Command object to be mounted at the path
    * corresponding to the provided segments.
    *
-   * By default a command is mounted at the top level, meaning that it starts
+   * By default, a command is mounted at the top level, meaning that it starts
    * executing from the very first token in the command line arguments. This
    * corresponds to the typical command line programs that just do one specific
    * task and accept options to parametrize that task. This however does not fit
@@ -177,7 +179,7 @@ private:
   explicit Command(std::string first_segment, Segment... other_segments)
     : path_ { std::move(first_segment), std::move(other_segments)... }
   {
-    if ((std::find(path_.begin(), path_.end(), "") != std::end(path_))
+    if ((std::ranges::find(path_, "") != std::end(path_))
       && (path_.size() != 1)) {
       throw std::domain_error(
         "default command can only have one path segment (an empty string)");
@@ -190,7 +192,7 @@ private:
     return *this;
   }
 
-  void WithOptions(std::shared_ptr<Options> options, bool hidden)
+  auto WithOptions(std::shared_ptr<Options> options, bool hidden) -> void
   {
     for (const auto& option : *options) {
       options_.push_back(option);
@@ -199,18 +201,19 @@ private:
     groups_.emplace_back(std::move(options), hidden);
   }
 
-  void WithOption(std::shared_ptr<Option>&& option)
+  auto WithOption(std::shared_ptr<Option>&& option) -> void
   {
-    if (option->Key() == Command::HELP || option->Key() == Command::VERSION) {
+    if (option->Key() == HELP || option->Key() == VERSION) {
       options_.emplace(options_.begin(), option);
       options_in_groups_.insert(options_in_groups_.begin(), false);
     } else {
-      options_.emplace_back(option);
+      options_.push_back(std::move(option));
       options_in_groups_.push_back(false);
     }
   }
 
-  template <typename... Args> void WithPositionalArguments(Args&&... options)
+  template <typename... Args>
+  auto WithPositionalArguments(Args&&... options) -> void
   {
     positional_args_.insert(
       positional_args_.end(), { std::forward<Args>(options)... });
@@ -239,4 +242,4 @@ inline auto operator<<(std::ostream& out, const Command& command)
   return out;
 }
 
-} // namespace asap::clap
+} // namespace oxygen::clap

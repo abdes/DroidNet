@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -16,22 +16,22 @@
 #include <Oxygen/Clap/Parser/Events.h>
 #include <Oxygen/Clap/Parser/Tokenizer.h>
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
-using asap::fsm::ByDefault;
-using asap::fsm::Continue;
-using asap::fsm::DoNothing;
-using asap::fsm::Maybe;
-using asap::fsm::On;
-using asap::fsm::OneOf;
-using asap::fsm::ReissueEvent;
-using asap::fsm::ReportError;
-using asap::fsm::StateMachine;
-using asap::fsm::Status;
-using asap::fsm::Terminate;
-using asap::fsm::TerminateWithError;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using fsm::ByDefault;
+using fsm::Continue;
+using fsm::DoNothing;
+using fsm::Maybe;
+using fsm::On;
+using fsm::OneOf;
+using fsm::ReissueEvent;
+using fsm::ReportError;
+using fsm::StateMachine;
+using fsm::Status;
+using fsm::Terminate;
+using fsm::TerminateWithError;
+using fsm::TransitionTo;
+using fsm::Will;
 
 struct InitialState;
 struct IdentifyCommandState;
@@ -64,7 +64,7 @@ using Machine
  *
  * - ParseOptionsState:
  *   - if the current token is a `TokenType::Value` and it does not match the
- *     initial segment of any of the supported commands.
+ *     initial segment of one of the supported commands.
  *   - if the current token is a `TokenType::ShortOption` or
  *     `TokenType::LongOption` or `TokenType::LoneDash` and the CLI has a
  *     default command.
@@ -78,25 +78,25 @@ using Machine
  * **Errors**:
  *
  * - UnrecognizedCommand: if the current token is a `TokenType::Value` that does
- *   not match the initial segment of any of the supported commands and the CLI
+ *   not match the initial segment of one of the supported commands and the CLI
  *   does not have a default command.
  * - MissingCommand: if the current token is not a `TokenType::Value` and the
  *   CLI does not have a default command.
  */
 struct InitialState {
 
-  explicit InitialState(ParserContextPtr context)
-    : context_ { std::move(context) }
+  explicit InitialState(ParserContextPtr _context)
+    : context { std::move(_context) }
   {
-    for (const auto& command : context_->commands) {
+    for (const auto& command : context->commands) {
       if (command->IsDefault()) {
-        context_->active_command = command;
+        context->active_command = command;
         break;
       }
     }
   }
 
-  auto Handle(const TokenEvent<TokenType::Value>& event) -> OneOf<ReportError,
+  auto Handle(const TokenEvent<TokenType::kValue>& event) -> OneOf<ReportError,
     TransitionTo<ParseOptionsState>, TransitionTo<IdentifyCommandState>>
   {
     // We have a token that could be either a command path segment or a value.
@@ -104,56 +104,56 @@ struct InitialState {
     // we are sure this is the start of a command path. Otherwise, this can only
     // be a value, and we must have a default command.
     if (MaybeCommand(event.token)) {
-      return TransitionTo<IdentifyCommandState>(context_);
+      return TransitionTo<IdentifyCommandState>(context);
     }
-    if (context_->active_command) {
-      return TransitionTo<ParseOptionsState>(context_);
+    if (context->active_command) {
+      return TransitionTo<ParseOptionsState>(context);
     }
     return ReportError(UnrecognizedCommand({ event.token }));
   }
 
-  auto Handle(const TokenEvent<TokenType::EndOfInput>& /*event*/)
+  auto Handle(const TokenEvent<TokenType::kEndOfInput>& /*event*/)
     -> OneOf<ReportError, TransitionTo<FinalState>>
   {
-    if (context_->active_command) {
-      return TransitionTo<FinalState>(context_);
+    if (context->active_command) {
+      return TransitionTo<FinalState>(context);
     }
-    return ReportError(MissingCommand(context_));
+    return ReportError(MissingCommand(context));
   }
 
-  template <TokenType token_type>
-  auto Handle(const TokenEvent<token_type>& /*event*/)
+  template <TokenType TokenT>
+  auto Handle(const TokenEvent<TokenT>& /*event*/)
     -> OneOf<TransitionTo<ParseOptionsState>, TransitionTo<FinalState>,
       TransitionTo<DashDashState>, ReportError>
   {
-    static_assert(token_type != TokenType::Value);
+    static_assert(TokenT != TokenType::kValue);
     // For any token type other than TokenType::Value, we require a default
     // command to be present.
-    if (context_->active_command) {
-      if constexpr (token_type == TokenType::DashDash) {
-        return TransitionTo<DashDashState>(context_);
+    if (context->active_command) {
+      if constexpr (TokenT == TokenType::kDashDash) {
+        return TransitionTo<DashDashState>(context);
       } else {
-        return TransitionTo<ParseOptionsState>(context_);
+        return TransitionTo<ParseOptionsState>(context);
       }
     }
-    return ReportError(MissingCommand(context_));
+    return ReportError(MissingCommand(context));
   }
 
-  [[nodiscard]] auto context() const -> const ParserContextPtr&
+  [[nodiscard]] auto GetContext() const -> const ParserContextPtr&
   {
-    return context_;
+    return context;
   }
 
 private:
   [[nodiscard]] auto MaybeCommand(const std::string& token) const -> bool
   {
-    return std::any_of(std::cbegin(context_->commands),
-      std::cend(context_->commands), [&token](const auto& command) {
+    return std::ranges::any_of(
+      context->commands, [&token](const auto& command) {
         return (!command->Path().empty() && command->Path()[0] == token);
       });
   }
 
-  ParserContextPtr context_;
+  ParserContextPtr context;
 };
 
 /*!
@@ -166,8 +166,8 @@ private:
  * **Parser context**:
  *
  * - Upon entering, it is expected that a `ParserContext` object is passed as
- *   `data` to the `OnEnter()` handler, and that such context contains a non
- *   empty list of commands.
+ *   `data` to the `OnEnter()` handler, and that such context contains a
+ * non-empty list of commands.
  * - Before leaving, this state will ensure that the context's `active_command`
  *   field contains the deepest match of a supported command if possible. For
  *   example, a command line interface that supports commands with paths `do`
@@ -183,7 +183,7 @@ private:
  *
  * **Transitions**:
  *
- * - IdentifyCommandState: as long as tokens encountered are TokenType::Value
+ * - IdentifyCommandState: as long as tokens encountered are TokenType::Value,
  *   and they incrementally match path segments of known commands, the state
  *   machine will stay at the same state.
  * - ParseOptionsState: if tokens previously collected match a known command or
@@ -202,7 +202,7 @@ private:
  */
 struct IdentifyCommandState {
 
-  auto OnEnter(const TokenEvent<TokenType::Value>& event, std::any data)
+  auto OnEnter(const TokenEvent<TokenType::kValue>& event, std::any data)
     -> Status
   {
     // Entering here, we have the assurance that the token already matches (at
@@ -254,31 +254,29 @@ struct IdentifyCommandState {
     if (last_matched_command_) {
       context_->active_command = last_matched_command_;
       switch (token_type) {
-      case TokenType::DashDash:
+      case TokenType::kDashDash:
         return TransitionTo<DashDashState>(context_);
-      case TokenType::EndOfInput:
+      case TokenType::kEndOfInput:
         return TransitionTo<FinalState>(context_);
-      case TokenType::LongOption:
-      case TokenType::ShortOption:
-      case TokenType::LoneDash:
-      case TokenType::Value:
-      case TokenType::EqualSign:
+      case TokenType::kLongOption:
+      case TokenType::kShortOption:
+      case TokenType::kLoneDash:
+      case TokenType::kValue:
+      case TokenType::kEqualSign:
         return TransitionTo<ParseOptionsState>(context_);
-      default:
-        oxygen::Unreachable();
       }
     }
     if (default_command_) {
       context_->active_command = default_command_;
       DCHECK_F(context_->positional_tokens.empty());
-      std::copy(std::begin(path_segments_), std::end(path_segments_),
-        std::back_inserter(context_->positional_tokens));
+      std::ranges::copy(
+        path_segments_, std::back_inserter(context_->positional_tokens));
       return TransitionTo<ParseOptionsState>(context_);
     }
     return ReportError(UnrecognizedCommand(path_segments_));
   }
 
-  auto Handle(const TokenEvent<TokenType::Value>& event)
+  auto Handle(const TokenEvent<TokenType::kValue>& event)
     -> OneOf<DoNothing, TransitionTo<ParseOptionsState>, ReportError>
   {
     // Protect against calling `Handle` without a prior call to `Enter`
@@ -286,20 +284,18 @@ struct IdentifyCommandState {
 
     path_segments_.push_back(event.token);
     auto segments_count = path_segments_.size();
-    filtered_commands_.erase(
-      std::remove_if(filtered_commands_.begin(), filtered_commands_.end(),
-        [this, segments_count, &event](const CommandPtr& command) {
-          const auto& command_path = command->Path();
-          if (command_path.size() < segments_count
-            || command_path[segments_count - 1] != event.token) {
-            return true;
-          }
-          if (command->Path().size() == segments_count) {
-            last_matched_command_ = command;
-          }
-          return false;
-        }),
-      filtered_commands_.end());
+    std::erase_if(filtered_commands_,
+      [this, segments_count, &event](const CommandPtr& command) {
+        const auto& command_path = command->Path();
+        if (command_path.size() < segments_count
+          || command_path[segments_count - 1] != event.token) {
+          return true;
+        }
+        if (command->Path().size() == segments_count) {
+          last_matched_command_ = command;
+        }
+        return false;
+      });
     if (filtered_commands_.empty()) {
       if (!last_matched_command_) {
         if (!default_command_) {
@@ -310,8 +306,8 @@ struct IdentifyCommandState {
         // Remove the last pushed token in the path segments as it will be
         // transmitted to the ParseOptionsState as the next event.
         path_segments_.pop_back();
-        std::copy(std::begin(path_segments_), std::end(path_segments_),
-          std::back_inserter(context_->positional_tokens));
+        std::ranges::copy(
+          path_segments_, std::back_inserter(context_->positional_tokens));
         return TransitionTo<ParseOptionsState>(context_);
       }
       context_->active_command = last_matched_command_;
@@ -326,7 +322,7 @@ private:
     return context_->commands;
   }
 
-  void Reset()
+  auto Reset() -> void
   {
     filtered_commands_.clear();
     last_matched_command_.reset();
@@ -374,70 +370,72 @@ private:
  */
 struct ParseOptionsState {
 
-  template <TokenType token_type>
-  auto OnEnter(const TokenEvent<token_type>& /*event*/, std::any data) -> Status
+  template <TokenType TokenT>
+  auto OnEnter(const TokenEvent<TokenT>& /*event*/, std::any data) -> Status
   {
     DCHECK_F(data.has_value());
-    context_ = std::any_cast<ParserContextPtr>(data);
-    DCHECK_NOTNULL_F(context_->active_command);
+    context = std::any_cast<ParserContextPtr>(data);
+    DCHECK_NOTNULL_F(context->active_command);
     // recycle the event that transitioned us here so that we dispatch it
     // properly to the next state.
     return ReissueEvent {};
   }
 
-  template <TokenType token_type>
-  auto OnEnter(const TokenEvent<token_type>& /*event*/) -> Status
+  template <TokenType TokenT>
+  auto OnEnter(const TokenEvent<TokenT>& /*event*/) -> Status
   {
     // Entering from a ParseShortOptionState, which means that must already have
     // a valid parser context.
-    DCHECK_NOTNULL_F(context_);
+    DCHECK_NOTNULL_F(context);
     // recycle the event that transitioned us here so that we dispatch it
     // properly to the right event handler.
     return ReissueEvent {};
   }
 
-  auto Handle(const TokenEvent<TokenType::Value>& event) -> DoNothing
+  // ReSharper disable once CppMemberFunctionMayBeConst
+  auto Handle(const TokenEvent<TokenType::kValue>& event) -> DoNothing
   {
     // This may be a positional argument. Store it for later processing with the
     // rest of positional arguments.
-    context_->positional_tokens.push_back(event.token);
+    context->positional_tokens.push_back(event.token);
     return DoNothing {};
   }
 
-  auto Handle(const TokenEvent<TokenType::EndOfInput>& /*event*/)
+  auto Handle(const TokenEvent<TokenType::kEndOfInput>& /*event*/)
     -> TransitionTo<FinalState>
   {
-    return TransitionTo<FinalState> { context_ };
+    return TransitionTo<FinalState> { context };
   }
 
-  auto Handle(const TokenEvent<TokenType::DashDash>& /*event*/)
+  auto Handle(const TokenEvent<TokenType::kDashDash>& /*event*/)
     -> TransitionTo<DashDashState>
   {
-    return TransitionTo<DashDashState> { context_ };
+    return TransitionTo<DashDashState> { context };
   }
 
-  auto Handle(const TokenEvent<TokenType::LongOption>& /*event*/)
+  auto Handle(const TokenEvent<TokenType::kLongOption>& /*event*/)
     -> TransitionTo<ParseLongOptionState>
   {
-    return TransitionTo<ParseLongOptionState> { context_ };
+    return TransitionTo<ParseLongOptionState> { context };
   }
 
-  auto Handle(const TokenEvent<TokenType::EqualSign>& /*event*/) -> ReportError
+  // ReSharper disable once CppMemberFunctionMayBeConst
+  auto Handle(const TokenEvent<TokenType::kEqualSign>& /*event*/) -> ReportError
   {
-    return ReportError(OptionSyntaxError(context_));
+    return ReportError(OptionSyntaxError(context));
   }
 
   template <TokenType token_type>
   auto Handle(const TokenEvent<token_type>& /*event*/)
     -> TransitionTo<ParseShortOptionState>
   {
-    static_assert(token_type == TokenType::ShortOption
-      || token_type == TokenType::LoneDash);
-    return TransitionTo<ParseShortOptionState> { context_ };
+    static_assert(token_type == TokenType::kShortOption
+      || token_type == TokenType::kLoneDash);
+    return TransitionTo<ParseShortOptionState> { context };
   }
 
 private:
-  ParserContextPtr context_;
+  ParserContextPtr context;
 
   friend struct ParseOptionsStateTestData;
 };
@@ -478,7 +476,7 @@ inline auto TryImplicitValue(const ParserContextPtr& context) -> bool
  *   contains a valid `active_command`.
  * - This state will update `active_option` and `active_option_flag` fields with
  *   the option currently being parsed. Both flags are primarily used within
- *   this state but they are also used for diagnostics messages outside.
+ *   this state, but they are also used for diagnostics messages outside.
  * - If the option takes a value and the last parsed token is a
  *   `TokenType::Value`, this state will  store the option value in the context.
  *
@@ -504,28 +502,27 @@ struct ParseShortOptionState
   template <TokenType token_type>
   auto OnEnter(const TokenEvent<token_type>& event, std::any data) -> Status
   {
-    static_assert(token_type == TokenType::ShortOption
-      || token_type == TokenType::LoneDash);
+    static_assert(token_type == TokenType::kShortOption
+      || token_type == TokenType::kLoneDash);
     DCHECK_F(data.has_value());
     context_ = std::any_cast<ParserContextPtr>(data);
     DCHECK_NOTNULL_F(context_->active_command);
 
     std::optional<OptionPtr> option;
     switch (token_type) {
-    case TokenType::ShortOption:
+    case TokenType::kShortOption:
       [[fallthrough]];
-    case TokenType::LoneDash:
+    case TokenType::kLoneDash:
       context_->active_option_flag = "-" + event.token;
       option = context_->active_command->FindShortOption(event.token);
       break;
-    case TokenType::LongOption:
-    case TokenType::DashDash:
-    case TokenType::Value:
-    case TokenType::EqualSign:
-    case TokenType::EndOfInput:
-    default:
+    case TokenType::kLongOption:
+    case TokenType::kDashDash:
+    case TokenType::kValue:
+    case TokenType::kEqualSign:
+    case TokenType::kEndOfInput:
       // See contract assertions for entering this state
-      oxygen::Unreachable();
+      Unreachable();
     }
     if (!option) {
       return TerminateWithError { UnrecognizedOption(context_, event.token) };
@@ -553,7 +550,7 @@ struct ParseShortOptionState
     return Continue {};
   }
 
-  auto Handle(const TokenEvent<TokenType::Value>& event)
+  auto Handle(const TokenEvent<TokenType::kValue>& event)
     -> OneOf<DoNothing, ReportError, TransitionTo<ParseOptionsState>>
   {
     DCHECK_NOTNULL_F(context_->active_option);
@@ -561,7 +558,7 @@ struct ParseShortOptionState
     DCHECK_NOTNULL_F(semantics);
 
     // If we already accepted a value, we're done
-    // TODO(Abdessattar): possibly support multi-token values
+    // TODO(abdes): possibly support multi-token values
     if (value_) {
       return TransitionTo<ParseOptionsState> {};
     }
@@ -583,7 +580,7 @@ struct ParseShortOptionState
   }
 
 private:
-  void Reset() { value_.reset(); }
+  auto Reset() -> void { value_.reset(); }
 
   ParserContextPtr context_;
   std::optional<std::string> value_;
@@ -605,7 +602,7 @@ private:
  *   contains a valid `active_command`.
  * - This state will update the context's `action_option` and
  *   `active_option_flag` fields with the option currently being parsed. Both
- *   flags are primarily used within this state but they are also used for
+ *   flags are primarily used within this state, but they are also used for
  *   diagnostics messages outside.
  * - If the parsed option takes a value and the last parsed tokens are an
  *   optional `TokenType::EqualSign` followed by a `TokenType::Value`, this
@@ -633,33 +630,32 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
   template <TokenType token_type>
   auto OnEnter(const TokenEvent<token_type>& event, std::any data) -> Status
   {
-    static_assert(token_type == TokenType::LongOption);
+    static_assert(token_type == TokenType::kLongOption);
     DCHECK_F(data.has_value());
-    context_ = std::any_cast<ParserContextPtr>(data);
-    DCHECK_NOTNULL_F(context_->active_command);
+    context = std::any_cast<ParserContextPtr>(data);
+    DCHECK_NOTNULL_F(context->active_command);
 
     std::optional<OptionPtr> option;
     switch (token_type) {
-    case TokenType::LongOption:
-      context_->active_option_flag = "--" + event.token;
-      option = context_->active_command->FindLongOption(event.token);
+    case TokenType::kLongOption:
+      context->active_option_flag = "--" + event.token;
+      option = context->active_command->FindLongOption(event.token);
       break;
-    case TokenType::ShortOption:
-    case TokenType::LoneDash:
-    case TokenType::DashDash:
-    case TokenType::Value:
-    case TokenType::EqualSign:
-    case TokenType::EndOfInput:
-    default:
+    case TokenType::kShortOption:
+    case TokenType::kLoneDash:
+    case TokenType::kDashDash:
+    case TokenType::kValue:
+    case TokenType::kEqualSign:
+    case TokenType::kEndOfInput:
       // See contract assertions for entering this state
-      oxygen::Unreachable();
+      Unreachable();
     }
     if (!option) {
-      return TerminateWithError { UnrecognizedOption(context_, event.token) };
+      return TerminateWithError { UnrecognizedOption(context, event.token) };
     }
-    context_->active_option.swap(option.value());
-    if (!CheckMultipleOccurrence(context_)) {
-      return TerminateWithError { IllegalMultipleOccurrence(context_) };
+    context->active_option.swap(option.value());
+    if (!CheckMultipleOccurrence(context)) {
+      return TerminateWithError { IllegalMultipleOccurrence(context) };
     }
     return Continue {};
   }
@@ -667,11 +663,11 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
   template <TokenType token_type>
   auto OnLeave(const TokenEvent<token_type>& /*event*/) -> Status
   {
-    if (!value_) {
-      if (!TryImplicitValue(context_)) {
-        const auto semantics = context_->active_option->value_semantic();
+    if (!value) {
+      if (!TryImplicitValue(context)) {
+        const auto semantics = context->active_option->value_semantic();
         if (semantics->IsRequired()) {
-          return TerminateWithError { MissingValueForOption(context_) };
+          return TerminateWithError { MissingValueForOption(context) };
         }
       }
     }
@@ -680,29 +676,30 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
     return Continue {};
   }
 
-  auto Handle(const TokenEvent<TokenType::EqualSign>& /*event*/)
+  auto Handle(const TokenEvent<TokenType::kEqualSign>& /*event*/)
     -> OneOf<DoNothing, ReportError>
   {
-    DCHECK_NOTNULL_F(context_->active_option);
-    const auto semantics = context_->active_option->value_semantic();
+    DCHECK_NOTNULL_F(context->active_option);
+    const auto semantics = context->active_option->value_semantic();
     DCHECK_NOTNULL_F(semantics);
     after_equal_sign = true;
     return DoNothing {};
   }
 
-  auto Handle(const TokenEvent<TokenType::Value>& event)
+  // ReSharper disable once CppMemberFunctionMayBeConst
+  auto Handle(const TokenEvent<TokenType::kValue>& event)
     -> OneOf<DoNothing, TransitionTo<ParseOptionsState>, ReportError>
   {
-    DCHECK_NOTNULL_F(context_->active_option);
-    const auto semantics = context_->active_option->value_semantic();
+    DCHECK_NOTNULL_F(context->active_option);
+    const auto semantics = context->active_option->value_semantic();
     DCHECK_NOTNULL_F(semantics);
 
-    if (value_) {
+    if (value) {
       return TransitionTo<ParseOptionsState> {};
     }
     if (!after_equal_sign) {
-      if (!context_->allow_long_option_value_with_no_equal) {
-        return ReportError(OptionSyntaxError(context_,
+      if (!context->allow_long_option_value_with_no_equal) {
+        return ReportError(OptionSyntaxError(context,
           "option name must be followed by '=' sign because this option "
           "takes a value and does not have an implicit one"));
       }
@@ -710,31 +707,31 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
 
     // Try the value and if it fails parsing, try the implicit value, if
     // none is available, then fail
-    std::any value;
-    if (semantics->Parse(value, event.token)) {
-      context_->ovm.StoreValue(
-        context_->active_option->Key(), { value, event.token, false });
-      value_ = event.token;
+    std::any any_value;
+    if (semantics->Parse(any_value, event.token)) {
+      context->ovm.StoreValue(
+        context->active_option->Key(), { any_value, event.token, false });
+      value = event.token;
       return DoNothing {};
     }
     if (!after_equal_sign) {
-      if (TryImplicitValue(context_)) {
-        value_ = "_implicit_";
+      if (TryImplicitValue(context)) {
+        value = "_implicit_";
         return TransitionTo<ParseOptionsState> {};
       }
     }
-    return ReportError(MissingValueForOption(context_));
+    return ReportError(MissingValueForOption(context));
   }
 
 private:
-  void Reset()
+  auto Reset() -> void
   {
     after_equal_sign = false;
-    value_.reset();
+    value.reset();
   }
 
-  ParserContextPtr context_;
-  std::optional<std::string> value_;
+  ParserContextPtr context;
+  std::optional<std::string> value;
   bool after_equal_sign { false };
 
   friend struct ParseLongOptionStateTestData;
@@ -747,28 +744,28 @@ struct DashDashState : Will<ByDefault<DoNothing>> {
   auto OnEnter(const TokenEvent<token_type>& /*event*/, std::any data) -> Status
   {
     DCHECK_F(data.has_value());
-    context_ = std::any_cast<ParserContextPtr>(data);
+    context = std::any_cast<ParserContextPtr>(data);
     return Continue {};
   }
 
 private:
-  ParserContextPtr context_;
+  ParserContextPtr context;
 };
 
 struct FinalState : Will<ByDefault<DoNothing>> {
   using Will::Handle;
 
-  template <TokenType token_type>
-  auto OnEnter(const TokenEvent<token_type>& /*event*/, std::any data) -> Status
+  template <TokenType TokenT>
+  auto OnEnter(const TokenEvent<TokenT>& /*event*/, std::any data) -> Status
   {
     DCHECK_F(data.has_value());
-    context_ = std::any_cast<ParserContextPtr>(data);
+    context = std::any_cast<ParserContextPtr>(data);
 
     // process buffered positional arguments
     bool before_rest { true };
-    auto& positional_args = context_->positional_tokens;
+    auto& positional_args = context->positional_tokens;
     OptionPtr rest_option {};
-    for (const auto& option : context_->active_command->PositionalArguments()) {
+    for (const auto& option : context->active_command->PositionalArguments()) {
       DCHECK_F(option->IsPositional());
       if (!option->IsPositionalRest()) {
         if (before_rest) {
@@ -793,57 +790,58 @@ struct FinalState : Will<ByDefault<DoNothing>> {
         }
         positional_args.clear();
       } else {
-        return TerminateWithError { UnexpectedPositionalArguments(context_) };
+        return TerminateWithError { UnexpectedPositionalArguments(context) };
       }
     }
 
     // Validate options
     try {
-      CheckRequiredOptions(context_->active_command->CommandOptions());
-      CheckRequiredOptions(context_->active_command->PositionalArguments());
+      CheckRequiredOptions(context->active_command->CommandOptions());
+      CheckRequiredOptions(context->active_command->PositionalArguments());
     } catch (std::exception& error) {
       return TerminateWithError { error.what() };
     }
 
-    // FIXME(Abdessattar) implement notifiers and store_to
+    // TODO: implement notifiers and store_to
 
     return Terminate {};
   }
 
 private:
-  void CheckRequiredOptions(const std::vector<Option::Ptr>& options)
+  auto CheckRequiredOptions(const std::vector<Option::Ptr>& options) const
+    -> void
   {
     // Check if we have any required options with default values that were not
     // provided on the command line and use the defaults
     for (const auto& option : options) {
       const auto semantics = option->value_semantic();
-      if (!context_->ovm.HasOption(option->Key())) {
+      if (!context->ovm.HasOption(option->Key())) {
         std::any value;
         std::string value_as_text;
         if (!semantics->ApplyDefault(value, value_as_text)) {
           if (option->IsRequired()) {
             throw std::logic_error(
-              MissingRequiredOption(context_->active_command, option));
+              MissingRequiredOption(context->active_command, option));
           }
         } else {
-          context_->ovm.StoreValue(
+          context->ovm.StoreValue(
             option->Key(), { value, value_as_text, false });
         }
       }
     }
   }
-  void StorePositional(const OptionPtr& option, std::string token)
+
+  auto StorePositional(const OptionPtr& option, std::string token) const -> void
   {
     const auto semantics = option->value_semantic();
     DCHECK_NOTNULL_F(semantics);
     std::any value;
     if (semantics->Parse(value, token)) {
-      context_->ovm.StoreValue(
-        option->Key(), { value, std::move(token), true });
+      context->ovm.StoreValue(option->Key(), { value, std::move(token), true });
     }
   }
 
-  ParserContextPtr context_;
+  ParserContextPtr context;
 };
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -11,7 +11,7 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
 using CommandPtr = Command::Ptr;
 using CommandsList = std::vector<CommandPtr>;
@@ -72,7 +72,7 @@ struct ParserContext : CommandLineContext {
    */
   const CommandsList& commands;
   /*!
-   * \brief Tracks the `asap::clap::Option` object for the command line option
+   * \brief Tracks the `oxygen::clap::Option` object for the command line option
    * currently being parsed.
    *
    * This field is updated every time a command line argument is identified as a
@@ -110,4 +110,4 @@ private:
 };
 using ParserContextPtr = std::shared_ptr<ParserContext>;
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

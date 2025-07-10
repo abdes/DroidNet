@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -10,13 +10,13 @@
 
 using testing::IsTrue;
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
 namespace {
 
   class ParseOptionsStateTest : public StateTest {
   public:
-    [[maybe_unused]] static void SetUpTestSuite()
+    [[maybe_unused]] static auto SetUpTestSuite() -> void
     {
       const Command::Ptr my_command { CommandBuilder("with-options")
           .WithOption(Option::WithKey("first_opt")
@@ -40,7 +40,7 @@ namespace {
     }
 
   protected:
-    void SetUp() override
+    auto SetUp() -> void override
     {
       StateTest::SetUp();
       state_ = std::make_unique<ParseOptionsState>();
@@ -53,30 +53,31 @@ namespace {
 
       const auto& [token_type, token_value] = token;
       switch (token_type) {
-      case TokenType::ShortOption: {
+      case TokenType::kShortOption: {
         const auto first_event
-          = TokenEvent<TokenType::ShortOption>(token_value);
+          = TokenEvent<TokenType::kShortOption>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      case TokenType::LongOption: {
-        const auto first_event = TokenEvent<TokenType::LongOption>(token_value);
+      case TokenType::kLongOption: {
+        const auto first_event
+          = TokenEvent<TokenType::kLongOption>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      case TokenType::LoneDash: {
-        const auto first_event = TokenEvent<TokenType::LoneDash>(token_value);
+      case TokenType::kLoneDash: {
+        const auto first_event = TokenEvent<TokenType::kLoneDash>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      case TokenType::DashDash: {
-        const auto first_event = TokenEvent<TokenType::DashDash>(token_value);
+      case TokenType::kDashDash: {
+        const auto first_event = TokenEvent<TokenType::kDashDash>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      case TokenType::Value: {
-        const auto first_event = TokenEvent<TokenType::Value>(token_value);
+      case TokenType::kValue: {
+        const auto first_event = TokenEvent<TokenType::kValue>(token_value);
         return state_->OnEnter(first_event, context);
       }
         // The following token types are not allowed
-      case TokenType::EqualSign:
-      case TokenType::EndOfInput:
+      case TokenType::kEqualSign:
+      case TokenType::kEndOfInput:
       default:;
       }
       return TerminateWithError {
@@ -92,7 +93,7 @@ namespace {
 
   class ParseOptionsStateTransitionsTest
     : public ParseOptionsStateTest,
-      public ::testing::WithParamInterface<TestValueType> { };
+      public testing::WithParamInterface<TestValueType> { };
 
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(WellFormedScenarios,
@@ -157,7 +158,7 @@ namespace {
       token = tokenizer.NextToken();
       // We will never enter ParseOptionsState with an EndOfInput token, and all
       // test scenarios will have at least one token.
-      if (token.first == TokenType::EndOfInput) {
+      if (token.first == TokenType::kEndOfInput) {
         break;
       }
       if (!ProcessToken(token, state(), action_check, state_check)) {
@@ -215,4 +216,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -17,16 +17,16 @@
 
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap::parser {
+namespace oxygen::clap::parser {
 
-enum class TokenType {
-  ShortOption,
-  LongOption,
-  LoneDash,
-  DashDash,
-  Value,
-  EqualSign,
-  EndOfInput
+enum class TokenType : uint8_t {
+  kShortOption,
+  kLongOption,
+  kLoneDash,
+  kDashDash,
+  kValue,
+  kEqualSign,
+  kEndOfInput
 };
 
 OXGN_CLP_API auto operator<<(std::ostream& out, const TokenType& token_type)
@@ -73,7 +73,7 @@ public:
         return token;
       }
     }
-    return Token { TokenType::EndOfInput, "" };
+    return Token { TokenType::kEndOfInput, "" };
   }
 
   auto HasMoreTokens() const -> bool
@@ -82,17 +82,17 @@ public:
   }
 
 private:
-  OXGN_CLP_API void Tokenize(const std::string& arg) const;
+  OXGN_CLP_API auto Tokenize(const std::string& arg) const -> void;
 
   std::vector<std::string> args_;
   mutable std::vector<std::string>::const_iterator cursor_;
   mutable std::deque<Token> tokens_;
 };
 
-} // namespace asap::clap::parser
+} // namespace oxygen::clap::parser
 
 #if !defined(DOXYGEN_DOCUMENTATION_BUILD)
-template <> struct fmt::formatter<asap::clap::parser::TokenType> {
+template <> struct fmt::formatter<oxygen::clap::parser::TokenType> {
   template <typename ParseContext>
   static constexpr auto parse(ParseContext& ctx)
   {
@@ -101,7 +101,7 @@ template <> struct fmt::formatter<asap::clap::parser::TokenType> {
 
   template <typename FormatContext>
   auto format(
-    const asap::clap::parser::TokenType& token_type, FormatContext& ctx) const
+    const oxygen::clap::parser::TokenType& token_type, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}", magic_enum::enum_name(token_type));
   }
