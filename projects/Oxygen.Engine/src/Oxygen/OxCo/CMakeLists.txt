@@ -33,7 +33,7 @@ add_library(${META_MODULE_TARGET} INTERFACE)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
 set(
-  header_files
+  OXYGEN_OXCO_HEADERS
   "asio.h"
   "Algorithms.h"
   "Awaitables.h"
@@ -87,21 +87,16 @@ set(
   "Detail/Sequence.h"
 )
 
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  FILES
-    ${source_files}
-    ${header_files}
-)
-
 target_sources(
   ${META_MODULE_TARGET}
   INTERFACE
     FILE_SET HEADERS
     TYPE HEADERS
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES ${header_files}
+    BASE_DIRS ${OXYGEN_SOURCE_DIR}
+    FILES ${OXYGEN_OXCO_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 # Set include directories
 target_include_directories(
