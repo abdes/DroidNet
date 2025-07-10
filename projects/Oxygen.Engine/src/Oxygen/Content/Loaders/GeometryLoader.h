@@ -12,7 +12,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
@@ -20,6 +19,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Stream.h>
 // ReSharper disable once CppUnusedIncludeDirective
 #include <Oxygen/Content/Loaders/Helpers.h>
 

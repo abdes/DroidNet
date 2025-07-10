@@ -9,11 +9,11 @@
 #include <functional>
 #include <memory>
 
-#include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content {
 
