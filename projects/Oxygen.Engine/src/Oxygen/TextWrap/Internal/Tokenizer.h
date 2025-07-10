@@ -1,14 +1,8 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-
-/*!
- * \file
- *
- * \brief Text tokenizer and related types.
- */
 
 #pragma once
 
@@ -18,23 +12,23 @@
 #include <Oxygen/TextWrap/api_export.h>
 
 /// Internal implementation details for the text wrapper.
-namespace asap::wrap::detail {
+namespace oxygen::wrap::internal {
 
 /*!
  * \brief Different types of tokens that can be produced by this Tokenizer.
  */
-enum class TokenType {
+enum class TokenType : uint8_t {
   /// A chunk of text with no white space in it.
-  Chunk,
-  /// A series of white spaces (`<SPACE>`, `\t`, `\f`, `\r`)
-  WhiteSpace,
-  /// New line is marked by either `\n` or `\v` while `\r` and `\f` are always
-  /// replaced with a single space ' '.
-  NewLine,
+  kChunk,
+  /// A series of white spaces (`<SPACE>`, `\\t`, `\\f`, `\\r`)
+  kWhiteSpace,
+  /// New line is marked by either `\\n` or `\\v` while `\\r` and `\\f` are
+  /// always replaced with a single space ` `.
+  kNewLine,
   /// Marks a paragraph boundary (two consecutive new lines `\n\n`).
-  ParagraphMark,
+  kParagraphMark,
   /// The last token emitted by the tokenizer marking the end of input.
-  EndOfInput
+  kEndOfInput
 };
 
 //! String representation of enum values in `Format`.
@@ -176,9 +170,9 @@ public:
     const std::string& text, const TokenConsumer& consume_token) const -> bool;
 
 private:
-  const std::string tab_;
-  const bool collapse_ws_;
-  const bool break_on_hyphens_;
+  std::string tab_;
+  bool collapse_ws_;
+  bool break_on_hyphens_;
 };
 
-} // namespace asap::wrap::detail
+} // namespace oxygen::wrap::internal

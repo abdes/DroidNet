@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -137,7 +137,7 @@ auto escape(const std::string& str) -> std::string
   return result;
 }
 
-using asap::wrap::TextWrapper;
+using oxygen::wrap::TextWrapper;
 
 auto main(int /*argc*/, const char** /*argv*/) -> int
 {
@@ -150,7 +150,7 @@ auto main(int /*argc*/, const char** /*argv*/) -> int
     auto text = GenerateText(i);
     const auto size = text.size();
     for (size_t column_width = 1; column_width < size; ++column_width) {
-      const TextWrapper& text_wrapper = asap::wrap::MakeWrapper()
+      const TextWrapper& text_wrapper = oxygen::wrap::MakeWrapper()
                                           .Width(column_width)
                                           .CollapseWhiteSpace()
                                           .BreakOnHyphens()

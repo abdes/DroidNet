@@ -1,6 +1,6 @@
 # ===-----------------------------------------------------------------------===#
 # Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-# copy at https://opensource.org/licenses/BSD-3-Clause).
+# copy at https://opensource.org/licenses/BSD-3-Clause.
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
@@ -53,9 +53,9 @@ set(
 )
 set(
   OXYGEN_TEXTWRAP_PRIVATE_SOURCES
+  "Internal/Tokenizer.h"
+  "Internal/Tokenizer.cpp"
   "TextWrap.cpp"
-  "Tokenizer.h"
-  "Tokenizer.cpp"
 )
 
 target_sources(

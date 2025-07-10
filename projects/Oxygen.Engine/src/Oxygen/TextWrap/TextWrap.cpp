@@ -1,21 +1,27 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
+#include <algorithm>
 #include <iostream>
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <utility>
 
+#include <Oxygen/TextWrap/Internal/Tokenizer.h>
 #include <Oxygen/TextWrap/TextWrap.h>
-#include <Oxygen/TextWrap/Tokenizer.h>
 
-auto asap::wrap::operator<<(
-  std::ostream& out, const asap::wrap::TextWrapper& wrapper) -> std::ostream&
+using oxygen::wrap::internal::Token;
+using oxygen::wrap::internal::TokenConsumer;
+using oxygen::wrap::internal::Tokenizer;
+using oxygen::wrap::internal::TokenType;
+
+auto oxygen::wrap::operator<<(std::ostream& out, const TextWrapper& wrapper)
+  -> std::ostream&
 {
   out << "{w:" << wrapper.width_ << ",t:'" << wrapper.tab_
       << ",tl:" << wrapper.trim_lines_ << ",boh:" << wrapper.break_on_hyphens_
@@ -25,9 +31,9 @@ auto asap::wrap::operator<<(
 
 namespace {
 
-auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
-  size_t width, const std::string& indent, const std::string& initial_indent,
-  bool trim_lines) -> std::vector<std::string>
+auto WrapChunks(const std::vector<Token>& chunks, size_t width,
+  const std::string& indent, const std::string& initial_indent, bool trim_lines)
+  -> std::vector<std::string>
 {
 
   // https://www.geeksforgeeks.org/word-wrap-problem-space-optimized-solution/
@@ -36,8 +42,8 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
   const auto first_line_width = width - initial_indent.size();
   const auto other_line_width = width - indent.size();
 
-  size_t cur_chunk { 0 };
-  size_t cur_chunk_in_line { 0 };
+  size_t cur_chunk;
+  size_t cur_chunk_in_line;
 
   // Table in which costs[index] represents cost of line starting with word
   // chunks[index].
@@ -48,7 +54,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
   std::vector<size_t> optimized(num_chunks);
 
   // If only one word is present then only one line is required. Cost of last
-  // line is zero. Hence cost of this line is zero. Ending point is also n-1 as
+  // line is zero. Hence, cost of this line is zero. Ending point is also n-1 as
   // single word is present.
   costs[num_chunks - 1] = 0;
   optimized[num_chunks - 1] = num_chunks - 1;
@@ -56,7 +62,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
   if (num_chunks > 1) {
 
     // Variable to store possible minimum cost of line.
-    size_t cost { 0 };
+    size_t cost;
 
     // Make each word first word of line by iterating over each index in arr.
     cur_chunk = num_chunks - 1;
@@ -64,7 +70,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
       cur_chunk--;
 
       // Variable to store number of characters in given line.
-      size_t currlen { 0 };
+      size_t current_length { 0 };
 
       costs[cur_chunk] = std::numeric_limits<size_t>::max();
       const auto adjusted_width
@@ -76,10 +82,9 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
       // The new line token can either have a size that will break the maximum
       // width or a size of zero depending on whether it is the first chunk,
       // the first in the line or just part of a next line.
-      if (chunks[cur_chunk_in_line].first
-        == asap::wrap::detail::TokenType::NewLine) {
+      if (chunks[cur_chunk_in_line].first == TokenType::kNewLine) {
         if (cur_chunk_in_line != first_chunk_in_line) {
-          currlen = adjusted_width + 1;
+          current_length = adjusted_width + 1;
         } else {
           first_chunk_in_line++;
           cur_chunk_in_line++;
@@ -89,8 +94,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
       if (trim_lines) {
         // Skip all white space chunks at start as they will be trimmed later
         while (cur_chunk_in_line < num_chunks
-          && (chunks[cur_chunk_in_line].first
-            == asap::wrap::detail::TokenType::WhiteSpace)) {
+          && (chunks[cur_chunk_in_line].first == TokenType::kWhiteSpace)) {
           cur_chunk_in_line++;
           first_chunk_in_line++;
         }
@@ -103,24 +107,22 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
         // The new line token can either have a size that will break the maximum
         // width or a size of zero depending on whether it is the first chunk,
         // the first in the line or just part of a next line.
-        if (chunks[cur_chunk_in_line].first
-          == asap::wrap::detail::TokenType::NewLine) {
+        if (chunks[cur_chunk_in_line].first == TokenType::kNewLine) {
           if (cur_chunk_in_line != first_chunk_in_line) {
-            currlen = adjusted_width + 1;
+            current_length = adjusted_width + 1;
           }
         } else {
-          currlen += (chunks[cur_chunk_in_line].second.size());
+          current_length += (chunks[cur_chunk_in_line].second.size());
         }
 
         // If limit of characters is violated then no more words can be added to
-        // current line, unless what we are adding is white space and we've been
-        // configured to trim white space.
-        if (currlen > adjusted_width) {
-          if (chunks[cur_chunk_in_line].first
-              == asap::wrap::detail::TokenType::WhiteSpace
+        // current line, unless what we are adding is white space, and we've
+        // been configured to trim white space.
+        if (current_length > adjusted_width) {
+          if (chunks[cur_chunk_in_line].first == TokenType::kWhiteSpace
             && trim_lines) {
             // Will be trimmed later so don't count it
-            currlen -= (chunks[cur_chunk_in_line].second.size());
+            current_length -= (chunks[cur_chunk_in_line].second.size());
           }
           // Abort adding the current chunk to the current line, unless it is
           // the only chunk in the line. In that case, we accept it even if it's
@@ -137,7 +139,8 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
         if (cur_chunk_in_line == num_chunks - 1) {
           cost = 0;
         } else {
-          cost = (adjusted_width - currlen) * (adjusted_width - currlen)
+          cost = (adjusted_width - current_length)
+              * (adjusted_width - current_length)
             + costs[cur_chunk_in_line + 1];
         }
 
@@ -148,7 +151,8 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
           optimized[cur_chunk] = cur_chunk_in_line;
         }
 
-        // if (currlen > adjusted_width) {
+        // TODO: delete or understand why it is commented out
+        // if (current_length > adjusted_width) {
         //   break;
         // }
         cur_chunk_in_line++;
@@ -176,7 +180,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
     // Always trim new lines (eventually creating an empty line if needed), and
     // if TrimLines is true, then also trim whitespaces
     while (start < end) {
-      if (chunks[start].first == asap::wrap::detail::TokenType::NewLine) {
+      if (chunks[start].first == TokenType::kNewLine) {
         if (first_line) {
           // Add an empty line and continue
           result.emplace_back(line);
@@ -187,7 +191,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
           break;
         }
       } else if (trim_lines
-        && (chunks[start].first == asap::wrap::detail::TokenType::WhiteSpace)) {
+        && (chunks[start].first == TokenType::kWhiteSpace)) {
         start++;
         if (start == end) {
           // Add an empty line and continue
@@ -199,9 +203,7 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
       }
     }
     while ((end - 1) > start) {
-      if ((trim_lines
-            && (chunks[end - 1].first
-              == asap::wrap::detail::TokenType::WhiteSpace))) {
+      if ((trim_lines && (chunks[end - 1].first == TokenType::kWhiteSpace))) {
         end--;
         if (start == end) {
           // Add an empty line and continue
@@ -228,31 +230,30 @@ auto WrapChunks(const std::vector<asap::wrap::detail::Token>& chunks,
   return result;
 }
 
-void MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
+auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
+  -> void
 {
   if (dst.empty()) {
     dst = std::move(src);
   } else {
     dst.reserve(dst.size() + src.size());
-    std::move(std::begin(src), std::end(src), std::back_inserter(dst));
+    std::ranges::move(src, std::back_inserter(dst));
     src.clear();
   }
 }
 } // namespace
 
-[[nodiscard]] auto asap::wrap::TextWrapper::Wrap(const std::string& str) const
+[[nodiscard]] auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
   -> std::optional<std::vector<std::string>>
 {
-  const auto tokenizer
-    = detail::Tokenizer(tab_, collapse_ws_, break_on_hyphens_);
+  const auto tokenizer = Tokenizer(tab_, collapse_ws_, break_on_hyphens_);
 
   std::vector<std::string> result;
-  std::vector<detail::Token> chunks;
-  const detail::TokenConsumer consume_token
-    = [&chunks, this, &result](
-        detail::TokenType token_type, std::string token) -> void {
-    if ((token_type == detail::TokenType::ParagraphMark
-          || token_type == detail::TokenType::EndOfInput)
+  std::vector<Token> chunks;
+  const TokenConsumer consume_token =
+    [&chunks, this, &result](TokenType token_type, std::string token) -> void {
+    if ((token_type == TokenType::kParagraphMark
+          || token_type == TokenType::kEndOfInput)
       && !chunks.empty()) {
       if (!result.empty()) {
         result.emplace_back("");
@@ -272,7 +273,7 @@ void MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
 
   return {};
 }
-[[nodiscard]] auto asap::wrap::TextWrapper::Fill(const std::string& str) const
+[[nodiscard]] auto oxygen::wrap::TextWrapper::Fill(const std::string& str) const
   -> std::optional<std::string>
 {
 
@@ -303,56 +304,53 @@ void MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
   return std::make_optional(result);
 }
 
-auto asap::wrap::TextWrapperBuilder::Width(size_t width)
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::Width(size_t width)
+  -> TextWrapperBuilder&
 {
   wrapper.width_ = width;
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::IndentWith()
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::IndentWith() -> TextWrapperBuilder&
 {
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::Initially(std::string initial_indent)
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::Initially(std::string initial_indent)
+  -> TextWrapperBuilder&
 {
   wrapper.initial_indent_ = std::move(initial_indent);
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::Then(std::string indent)
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::Then(std::string indent)
+  -> TextWrapperBuilder&
 {
   wrapper.indent_ = std::move(indent);
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::ExpandTabs(std::string tab)
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::ExpandTabs(std::string tab)
+  -> TextWrapperBuilder&
 {
   wrapper.tab_ = std::move(tab);
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::CollapseWhiteSpace()
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::CollapseWhiteSpace()
+  -> TextWrapperBuilder&
 {
   wrapper.collapse_ws_ = true;
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::TrimLines()
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::TrimLines() -> TextWrapperBuilder&
 {
   wrapper.trim_lines_ = true;
   return *this;
 }
 
-auto asap::wrap::TextWrapperBuilder::BreakOnHyphens()
-  -> asap::wrap::TextWrapperBuilder&
+auto oxygen::wrap::TextWrapperBuilder::BreakOnHyphens() -> TextWrapperBuilder&
 {
   wrapper.break_on_hyphens_ = true;
   return *this;
