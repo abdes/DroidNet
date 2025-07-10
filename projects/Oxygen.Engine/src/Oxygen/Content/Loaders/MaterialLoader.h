@@ -9,13 +9,13 @@
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Stream.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content::loaders {
 
