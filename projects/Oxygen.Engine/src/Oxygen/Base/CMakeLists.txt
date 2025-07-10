@@ -46,58 +46,74 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_BASE_HEADERS
+  "AlwaysFalse.h"
+  "api_export.h"
+  "Concepts.h"
+  "Compilers.h"
+  "Endian.h"
+  "Finally.h"
+  "Hash.h"
+  "Logging.h"
+  "Macros.h"
+  "NoInline.h"
+  "NoStd.h"
+  "Platforms.h"
+  "Resource.h"
+  "ResourceHandle.h"
+  "ResourceTable.h"
+  "Result.h"
+  "ReturnAddress.h"
+  "Signals.h"
+  "StateMachine.h"
+  "StaticVector.h"
+  "StringTypes.h"
+  "StringUtils.h"
+  "TimeUtils.h"
+  "TypeList.h"
+  "Types/Geometry.h"
+  "Types/Overload.h"
+  "Types/Viewport.h"
+  "Unreachable.h"
+  "VariantHelpers.h"
+  "Windows/ComError.h"
+  "Windows/Exceptions.h"
+)
+set(
+  OXYGEN_BASE_PRIVATE_SOURCES
+  "Detail/loguru.cpp"
+  "Detail/signal.hpp"
+  "Windows/ComError.cpp"
+  "Windows/Exceptions.cpp"
+)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  list(
+    APPEND
+    OXYGEN_BASE_PRIVATE_SOURCES
+    "Windows/ComError.cpp"
+    "Windows/Exceptions.cpp"
+  )
+  list(
+    APPEND
+    OXYGEN_BASE_HEADERS
+    "Windows/ComError.h"
+    "Windows/Exceptions.h"
+  )
+endif()
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Detail/loguru.cpp"
-    "Detail/signal.hpp"
-    "Windows/ComError.cpp"
-    "Windows/Exceptions.cpp"
+    ${OXYGEN_BASE_PRIVATE_SOURCES}
+    ${OXYGEN_BASE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "AlwaysFalse.h"
-      "api_export.h"
-      "Compilers.h"
-      "Endian.h"
-      "Finally.h"
-      "Hash.h"
-      "Logging.h"
-      "Macros.h"
-      "NoInline.h"
-      "NoStd.h"
-      "Platforms.h"
-      "Resource.h"
-      "ResourceHandle.h"
-      "ResourceTable.h"
-      "Result.h"
-      "ReturnAddress.h"
-      "Signals.h"
-      "StaticVector.h"
-      "StringTypes.h"
-      "StringUtils.h"
-      "TimeUtils.h"
-      "TypeList.h"
-      "Types/Geometry.h"
-      "Types/Overload.h"
-      "Types/Viewport.h"
-      "Unreachable.h"
-      "VariantHelpers.h"
-      "Windows/ComError.h"
-      "Windows/Exceptions.h"
+    FILES ${OXYGEN_BASE_HEADERS}
 )
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  target_sources(
-    ${META_MODULE_TARGET}
-    PRIVATE
-      "Windows/ComError.cpp"
-      "Windows/Exceptions.cpp"
-    PUBLIC
-      FILE_SET HEADERS
-      FILES "Windows/ComError.h" "Windows/Exceptions.h"
-  )
-endif()
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -123,6 +139,14 @@ target_link_libraries(${META_MODULE_TARGET} PUBLIC fmt::fmt-header-only)
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+endif()
+
+# ------------------------------------------------------------------------------
+# Examples
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_EXAMPLES)
+  add_subdirectory("Examples")
 endif()
 
 # ------------------------------------------------------------------------------

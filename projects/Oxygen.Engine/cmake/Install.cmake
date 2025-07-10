@@ -147,13 +147,13 @@ function(oxygen_module_install)
     return()
   endif()
 
-  message(
-    STATUS
-    "Using namespace `${x_EXPORT}` for targets in module `${META_MODULE_NAME}`."
-  )
+  set(runtime "${META_MODULE_NAME}_runtime")
+  set(dev "${META_MODULE_NAME}_dev")
 
-  set(runtime "${x_MODULE_NAME}_runtime")
-  set(dev "${x_MODULE_NAME}_dev")
+  message(STATUS "[oxygen_module_install] Namespace: ${x_EXPORT}")
+  message(STATUS "[oxygen_module_install] Targets: ${x_TARGETS}")
+  message(STATUS "[oxygen_module_install] Runtime component: ${runtime}")
+  message(STATUS "[oxygen_module_install] Dev component: ${dev}")
 
   install(
     TARGETS
@@ -171,6 +171,7 @@ function(oxygen_module_install)
     FILE_SET
     HEADERS
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
+      COMPONENT ${dev}
   )
   install(
     EXPORT ${x_EXPORT}
