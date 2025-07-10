@@ -14,7 +14,7 @@
 
 namespace oxygen::content {
 
-template <PakResource T, serio::Stream S> class ResourceTable {
+template <PakResource T> class ResourceTable {
 public:
   using DescT = typename T::DescT;
   using ResourceKeyT = data::pak::ResourceIndexT;
