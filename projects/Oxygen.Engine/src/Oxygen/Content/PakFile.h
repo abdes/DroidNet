@@ -40,12 +40,10 @@ public:
   using Reader = serio::Reader<serio::FileStream<>>;
 
   //! Type alias for the buffer resource table.
-  using BuffersTableT
-    = ResourceTable<data::BufferResource, serio::FileStream<>>;
+  using BuffersTableT = ResourceTable<data::BufferResource>;
 
   //! Type alias for the texture resource table.
-  using TexturesTableT
-    = ResourceTable<data::TextureResource, serio::FileStream<>>;
+  using TexturesTableT = ResourceTable<data::TextureResource>;
 
   //! 8-byte header magic: {'O','X','P','A','K',0,0,0}
   static constexpr std::array<uint8_t, 8> kHeaderMagic
@@ -135,8 +133,7 @@ public:
    @return Pointer to ResourceTable for type T, or nullptr if not present
    @see HasTableOf, BuffersTable, TexturesTable
   */
-  template <PakResource T>
-  auto GetResourceTable() const -> ResourceTable<T, serio::FileStream<>>*
+  template <PakResource T> auto GetResourceTable() const -> ResourceTable<T>*
   {
     if constexpr (std::is_same_v<T, data::BufferResource>) {
       return buffers_table_ ? &(*buffers_table_) : nullptr;

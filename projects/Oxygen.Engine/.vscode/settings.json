@@ -102,7 +102,8 @@
     "valarray": "cpp",
     "strstream": "cpp",
     "*.impl": "cpp",
-    "gsl_util": "cpp"
+    "gsl_util": "cpp",
+    "print": "cpp"
   },
   "editor.rulers": [
     80,
