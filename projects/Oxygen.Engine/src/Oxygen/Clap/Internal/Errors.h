@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -11,7 +11,7 @@
 #include <Oxygen/Clap/Parser/Context.h>
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
 OXGN_CLP_API auto UnrecognizedCommand(
   const std::vector<std::string>& path_segments, const char* message = nullptr)
@@ -41,4 +41,4 @@ OXGN_CLP_API auto MissingRequiredOption(const CommandPtr& command,
 OXGN_CLP_API auto UnexpectedPositionalArguments(const ParserContextPtr& context,
   const char* message = nullptr) -> std::string;
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

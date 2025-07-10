@@ -1,9 +1,10 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <sstream>
 
 #include <fmt/format.h>
@@ -17,13 +18,13 @@
 #include <Oxygen/Clap/Parser/Tokenizer.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
-using asap::clap::detail::Arguments;
+using oxygen::clap::detail::Arguments;
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 CmdLineArgumentsError::~CmdLineArgumentsError() = default;
 
-auto Cli::Parse(int argc, const char** argv) -> CommandLineContext
+auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
 {
   const Arguments cla { argc, argv };
 
@@ -61,9 +62,9 @@ auto Cli::Parse(int argc, const char** argv) -> CommandLineContext
     return context;
   }
   if (HasHelpCommand()) {
-    context.out_ << fmt::format(
+    context.out << fmt::format(
       "Try '{} --help' for more information.", program_name_.value())
-                 << std::endl;
+                << '\n';
   }
   throw CmdLineArgumentsError(
     fmt::format("command line arguments parsing failed, try '{} --help' for "
@@ -77,16 +78,18 @@ auto operator<<(std::ostream& out, const Cli& cli) -> std::ostream&
   return out;
 }
 
-void Cli::PrintDefaultCommand(std::ostream& out, unsigned int width) const
+auto Cli::PrintDefaultCommand(std::ostream& out, const unsigned int width) const
+  -> void
 {
-  const auto default_command = std::find_if(commands_.begin(), commands_.end(),
-    [](const auto& command) { return command->IsDefault(); });
+  const auto default_command = std::ranges::find_if(
+    commands_, [](const auto& command) { return command->IsDefault(); });
   if (default_command != commands_.end()) {
     (*default_command)->Print(out, width);
   }
 }
 
-void Cli::PrintCommands(std::ostream& out, unsigned int width) const
+auto Cli::PrintCommands(std::ostream& out, const unsigned int width) const
+  -> void
 {
   out << "SUB-COMMANDS\n\n";
   for (const auto& command : commands_) {
@@ -98,19 +101,19 @@ void Cli::PrintCommands(std::ostream& out, unsigned int width) const
                                  .IndentWith()
                                  .Initially("     ")
                                  .Then("     ");
-      out << wrap.Fill(command->About()).value();
+      out << wrap.Fill(command->About()).value_or("__wrapping_error__");
       out << "\n\n";
     }
   }
 }
 
-void Cli::Print(std::ostream& out, unsigned int width) const
+auto Cli::Print(std::ostream& out, const unsigned int width) const -> void
 {
   PrintDefaultCommand(out, width);
   PrintCommands(out, width);
 }
 
-void Cli::EnableVersionCommand()
+auto Cli::EnableVersionCommand() -> void
 {
   const Command::Ptr command { CommandBuilder(Command::VERSION)
       .About(fmt::format(
@@ -119,13 +122,14 @@ void Cli::EnableVersionCommand()
   has_version_command_ = true;
 }
 
-void Cli::HandleVersionCommand(const CommandLineContext& context) const
+auto Cli::HandleVersionCommand(const CommandLineContext& context) const -> void
 {
-  context.out_ << fmt::format("{} version {}\n", program_name_.value(),
-    version_) << std::endl;
+  context.out << fmt::format(
+    "{} version {}\n", program_name_.value_or("__no_program_name__"), version_)
+              << '\n';
 }
 
-void Cli::EnableHelpCommand()
+auto Cli::EnableHelpCommand() -> void
 {
   const Command::Ptr command { CommandBuilder(Command::HELP)
       .About(fmt::format("Display detailed help information. `{} help` lists "
@@ -143,13 +147,13 @@ void Cli::EnableHelpCommand()
   commands_.push_back(command);
   has_help_command_ = true;
 }
-void Cli::HandleHelpCommand(const CommandLineContext& context) const
+auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
 {
   if (context.ovm.HasOption("help")) {
-    context.active_command->Print(context.out_, 80);
+    context.active_command->Print(context.out, 80);
   } else if (context.active_command->PathAsString() == "help") {
-    if (context.ovm.HasOption(Option::key_rest)) {
-      const auto& values = context.ovm.ValuesOf(Option::key_rest);
+    if (context.ovm.HasOption(Option::key_rest_)) {
+      const auto& values = context.ovm.ValuesOf(Option::key_rest_);
       DCHECK_F(!values.empty());
       std::vector<std::string> command_path;
       command_path.reserve(values.size());
@@ -157,24 +161,24 @@ void Cli::HandleHelpCommand(const CommandLineContext& context) const
         command_path.push_back(value.GetAs<std::string>());
       }
 
-      const auto& command = std::find_if(commands_.begin(), commands_.end(),
-        [&command_path](const Command::Ptr& command) {
-          return command->Path() == command_path;
+      const auto& command = std::ranges::find_if(
+        commands_, [&command_path](const Command::Ptr& cmd) {
+          return cmd->Path() == command_path;
         });
       if (command != commands_.end()) {
-        (*command)->Print(context.out_, 80);
+        (*command)->Print(context.out, 80);
       } else {
-        context.err_ << fmt::format(
+        context.err << fmt::format(
           "The path `{}` does not correspond to a known command.\n",
           fmt::join(command_path, " "));
-        context.out_ << fmt::format(
-          "Try '{} --help' for more information.", program_name_.value())
-                     << std::endl;
+        context.out << fmt::format("Try '{} --help' for more information.",
+          program_name_.value_or("__no_program_name__"))
+                    << '\n';
       }
     } else {
-      PrintDefaultCommand(context.out_, 80);
-      PrintCommands(context.out_, 80);
+      PrintDefaultCommand(context.out, 80);
+      PrintCommands(context.out, 80);
     }
   }
 }
-} // namespace asap::clap
+} // namespace oxygen::clap

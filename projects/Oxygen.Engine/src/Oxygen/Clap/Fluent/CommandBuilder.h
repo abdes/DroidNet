@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +13,7 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 /*!
  * \brief Fluent builder to properly create and configure a `Command`.
@@ -50,7 +50,7 @@ public:
   template <typename... Args>
   auto WithPositionalArguments(Args&&... options) -> Self&
   {
-    command_->WithPositionalArguments(std::move(options)...);
+    command_->WithPositionalArguments(std::forward<Args>(options)...);
     return *this;
   }
 
@@ -83,4 +83,4 @@ protected:
   }
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

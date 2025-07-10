@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -14,13 +14,13 @@
 using testing::Eq;
 using testing::IsTrue;
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
 namespace {
 
   class ParseLongOptionStateTest : public StateTest {
   public:
-    [[maybe_unused]] static void SetUpTestSuite()
+    [[maybe_unused]] static auto SetUpTestSuite() -> void
     {
       const Command::Ptr my_command { CommandBuilder("with-options")
           .WithOption(Option::WithKey("opt_no_val")
@@ -51,31 +51,31 @@ namespace {
     }
 
   protected:
-    void SetUp() override
+    auto SetUp() -> void override
     {
       StateTest::SetUp();
       state_ = std::make_unique<ParseLongOptionState>();
     }
 
     [[nodiscard]] auto EnterState(
-      const Token& token, const ParserContextPtr& context) const -> fsm::Status
+      const Token& token, const ParserContextPtr& context) const -> Status
     {
       EXPECT_NE(context->active_command, nullptr);
 
       const auto& [token_type, token_value] = token;
-      EXPECT_THAT(token_type, Eq(TokenType::LongOption));
-      const auto first_event = TokenEvent<TokenType::LongOption>(token_value);
+      EXPECT_THAT(token_type, Eq(TokenType::kLongOption));
+      const auto first_event = TokenEvent<TokenType::kLongOption>(token_value);
       return state_->OnEnter(first_event, context);
     }
 
-    void LeaveState() const override
+    auto LeaveState() const -> void override
     {
-      const auto last_event = TokenEvent<TokenType::EndOfInput>("");
+      const auto last_event = TokenEvent<TokenType::kEndOfInput>("");
       state_->OnLeave(last_event);
     }
 
     auto state() -> std::unique_ptr<ParseLongOptionState>& { return state_; }
-    void DoCheckStateAfterLastToken(const TestValueType& test_value)
+    auto DoCheckStateAfterLastToken(const TestValueType& test_value) -> void
     {
       const auto& [command_paths, args, action_check, state_check] = test_value;
 
@@ -103,7 +103,7 @@ namespace {
 
   class ParseLongOptionStateTransitionsTest
     : public ParseLongOptionStateTest,
-      public ::testing::WithParamInterface<TestValueType> { };
+      public testing::WithParamInterface<TestValueType> { };
 
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(OptionTakesNoValue,
@@ -152,7 +152,7 @@ namespace {
 
   class ParseLongOptionStateUnrecognizedOptionTest
     : public ParseLongOptionStateTest,
-      public ::testing::WithParamInterface<TestValueType> { };
+      public testing::WithParamInterface<TestValueType> { };
 
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(UnrecognizedOptions,
@@ -194,4 +194,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +11,7 @@
 
 #include <Oxygen/TextWrap/TextWrap.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 ValueSemantics::~ValueSemantics() noexcept = default;
 
@@ -40,7 +40,7 @@ auto Option::PrintValueDescription(
   out << "\n";
 }
 
-void Option::Print(std::ostream& out, unsigned int width) const
+auto Option::Print(std::ostream& out, const unsigned int width) const -> void
 {
   if (IsPositional()) {
     out << "   ";
@@ -70,7 +70,7 @@ void Option::Print(std::ostream& out, unsigned int width) const
                                    .IndentWith()
                                    .Initially("   ")
                                    .Then("   ");
-  out << wrap.Fill(About()).value();
+  out << wrap.Fill(About()).value_or("__wrapping_error__");
 }
 
 auto Option::WithKey(std::string key) -> OptionBuilder
@@ -85,7 +85,7 @@ auto Option::Positional(std::string key) -> PositionalOptionBuilder
 
 auto Option::Rest() -> PositionalOptionBuilder
 {
-  return PositionalOptionBuilder(key_rest);
+  return PositionalOptionBuilder(key_rest_);
 }
 
 auto operator<<(std::ostream& out, const Options& options) -> std::ostream&
@@ -94,19 +94,19 @@ auto operator<<(std::ostream& out, const Options& options) -> std::ostream&
   return out;
 }
 
-void Options::Print(std::ostream& out, unsigned int width) const
+auto Options::Print(std::ostream& out, const unsigned int width) const -> void
 {
-  if (!label_.empty()) {
-    out << label_ << std::endl;
+  if (!label.empty()) {
+    out << label << '\n';
   }
-  for (const auto& option : options_) {
+  for (const auto& option : options) {
     option->Print(out, width);
   }
 }
 
-void Options::Add(const std::shared_ptr<Option>& option)
+auto Options::Add(const std::shared_ptr<Option>& option) -> void
 {
-  options_.emplace_back(option);
+  options.emplace_back(option);
 }
 
-} // namespace asap::clap
+} // namespace oxygen::clap

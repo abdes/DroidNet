@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +12,7 @@
 
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap::detail {
+namespace oxygen::clap::detail {
 
 /**
  * \brief A safer type to encapsulate the program's `argc` and `argv`.
@@ -55,7 +55,7 @@ public:
   OXGN_CLP_NDAPI auto Args() const -> std::vector<std::string>&;
 
 private:
-  class ArgumentsImpl;
+  struct ArgumentsImpl;
 
   // Stores the implementation and the implementation's deleter as well to work
   // around the fact that the implementation class is an incomplete type so far.
@@ -65,4 +65,4 @@ private:
   std::unique_ptr<ArgumentsImpl, void (*)(const ArgumentsImpl*)> impl_;
 };
 
-} // namespace asap::clap::detail
+} // namespace oxygen::clap::detail

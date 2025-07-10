@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -13,12 +13,12 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
-auto asap::clap::Command::ProgramName() const -> std::string
+auto oxygen::clap::Command::ProgramName() const -> std::string
 {
   return parent_cli_ ? parent_cli_->ProgramName() : "<program>";
 }
 
-void asap::clap::Command::PrintSynopsis(std::ostream& out) const
+void oxygen::clap::Command::PrintSynopsis(std::ostream& out) const
 {
   out << ProgramName() << " " << PathAsString() << " ";
   for (const auto& option : options_) {
@@ -52,7 +52,7 @@ void asap::clap::Command::PrintSynopsis(std::ostream& out) const
   }
 }
 
-void asap::clap::Command::PrintOptions(
+void oxygen::clap::Command::PrintOptions(
   std::ostream& out, unsigned int width) const
 {
 
@@ -78,7 +78,7 @@ void asap::clap::Command::PrintOptions(
   }
 }
 
-void asap::clap::Command::Print(std::ostream& out, unsigned int width) const
+void oxygen::clap::Command::Print(std::ostream& out, unsigned int width) const
 {
   wrap::TextWrapper wrap = wrap::MakeWrapper()
                              .Width(width)
@@ -108,7 +108,7 @@ void asap::clap::Command::Print(std::ostream& out, unsigned int width) const
   PrintOptions(out, width);
 }
 
-auto asap::clap::Command::PathAsString() const -> std::string
+auto oxygen::clap::Command::PathAsString() const -> std::string
 {
   return fmt::format("{}", fmt::join(path_, " "));
 }

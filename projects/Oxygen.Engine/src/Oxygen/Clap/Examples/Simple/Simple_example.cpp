@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -10,15 +10,14 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 
-using asap::clap::Cli;
-using asap::clap::CliBuilder;
-using asap::clap::Command;
-using asap::clap::CommandBuilder;
-using asap::clap::Option;
+using oxygen::clap::Cli;
+using oxygen::clap::CliBuilder;
+using oxygen::clap::Command;
+using oxygen::clap::CommandBuilder;
+using oxygen::clap::Option;
 
-auto main(int argc, const char** argv) -> int
+auto main(const int argc, const char** argv) -> int
 {
-  std::unique_ptr<Cli> cli;
   try {
     bool quiet { false };
 
@@ -42,7 +41,7 @@ auto main(int argc, const char** argv) -> int
     //! [SimpleOptionFlag example]
 
     //! [ComplexOption example]
-    constexpr const int default_num_lines = 10;
+    constexpr int default_num_lines = 10;
     command_builder.WithOption(
       // Define an option to control a more sophisticated program
       // configuration parameter
@@ -58,16 +57,17 @@ auto main(int argc, const char** argv) -> int
         .Build());
     //! [ComplexOption example]
 
-    cli = CliBuilder()
-            .ProgramName("simple-cli")
-            .Version("1.0.0")
-            .About("This is a simple command line example to demonstrate the "
-                   "commonly used features of `asap-clap`. It uses the "
-                   "standard `version` and `help` commands and only "
-                   "implements a default command with several options.")
-            .WithVersionCommand()
-            .WithHelpCommand()
-            .WithCommand(command_builder);
+    const std::unique_ptr<Cli> cli
+      = CliBuilder()
+          .ProgramName("simple-cli")
+          .Version("1.0.0")
+          .About("This is a simple command line example to demonstrate the "
+                 "commonly used features of `asap-clap`. It uses the "
+                 "standard `version` and `help` commands and only "
+                 "implements a default command with several options.")
+          .WithVersionCommand()
+          .WithHelpCommand()
+          .WithCommand(command_builder);
 
     const auto context = cli->Parse(argc, argv);
     const auto command_path = context.active_command->PathAsString();
@@ -83,7 +83,8 @@ auto main(int argc, const char** argv) -> int
       std::cout << "-- Simple command line invoked, value of `lines` is: "
                 << ovm.ValuesOf("lines").at(0).GetAs<int>() << std::endl;
     }
+    return EXIT_SUCCESS;
   } catch (...) {
-    return -1;
+    return EXIT_FAILURE;
   }
 }

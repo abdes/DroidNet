@@ -1,6 +1,6 @@
 // ===----------------------------------------------------------------------===/
 //  Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-//  copy at https://opensource.org/licenses/BSD-3-Clause).
+//  copy at https://opensource.org/licenses/BSD-3-Clause.
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
@@ -11,13 +11,13 @@
 
 using testing::IsTrue;
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
 namespace {
 
   class ParseShortOptionStateTest : public StateTest {
   public:
-    [[maybe_unused]] static void SetUpTestSuite()
+    [[maybe_unused]] static auto SetUpTestSuite() -> void
     {
       const Command::Ptr my_command { CommandBuilder("with-options")
           .WithOption(Option::WithKey("opt_no_val")
@@ -48,42 +48,42 @@ namespace {
     }
 
   protected:
-    void SetUp() override
+    auto SetUp() -> void override
     {
       StateTest::SetUp();
       state_ = std::make_unique<ParseShortOptionState>();
     }
 
     [[nodiscard]] auto EnterState(
-      const Token& token, const ParserContextPtr& context) const -> fsm::Status
+      const Token& token, const ParserContextPtr& context) const -> Status
     {
       EXPECT_NE(context->active_command, nullptr);
 
       const auto& [token_type, token_value] = token;
-      EXPECT_THAT((token_type == TokenType::ShortOption
-                    || token_type == TokenType::LoneDash),
+      EXPECT_THAT((token_type == TokenType::kShortOption
+                    || token_type == TokenType::kLoneDash),
         IsTrue());
 
-      if (token_type == TokenType::ShortOption) {
+      if (token_type == TokenType::kShortOption) {
         const auto first_event
-          = TokenEvent<TokenType::ShortOption>(token_value);
+          = TokenEvent<TokenType::kShortOption>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      if (token_type == TokenType::LoneDash) {
-        const auto first_event = TokenEvent<TokenType::LoneDash>(token_value);
+      if (token_type == TokenType::kLoneDash) {
+        const auto first_event = TokenEvent<TokenType::kLoneDash>(token_value);
         return state_->OnEnter(first_event, context);
       }
-      return fsm::TerminateWithError { "Illegal Token" };
+      return TerminateWithError { "Illegal Token" };
     }
 
-    void LeaveState() const override
+    auto LeaveState() const -> void override
     {
-      const auto last_event = TokenEvent<TokenType::EndOfInput>("");
+      const auto last_event = TokenEvent<TokenType::kEndOfInput>("");
       state_->OnLeave(last_event);
     }
 
     auto state() -> std::unique_ptr<ParseShortOptionState>& { return state_; }
-    void DoCheckStateAfterLastToken(const TestValueType& test_value)
+    auto DoCheckStateAfterLastToken(const TestValueType& test_value) -> void
     {
       const auto& [command_paths, args, action_check, state_check] = test_value;
 
@@ -112,7 +112,7 @@ namespace {
 
   class ParseShortOptionStateTransitionsTest
     : public ParseShortOptionStateTest,
-      public ::testing::WithParamInterface<TestValueType> { };
+      public testing::WithParamInterface<TestValueType> { };
 
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(OptionTakesNoValue,
@@ -155,7 +155,7 @@ namespace {
 
   class ParseShortOptionStateUnrecognizedOptionTest
     : public ParseShortOptionStateTest,
-      public ::testing::WithParamInterface<TestValueType> { };
+      public testing::WithParamInterface<TestValueType> { };
 
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(UnrecognizedOptions,
@@ -203,4 +203,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

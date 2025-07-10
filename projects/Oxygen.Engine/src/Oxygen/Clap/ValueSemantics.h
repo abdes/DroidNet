@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +11,7 @@
 
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 /*!
  * \brief Describes how a command line option's value is to be parsed and
@@ -21,7 +21,7 @@ namespace asap::clap {
  * required or not, can be repeated or not..., has a default value or an
  * implicit value and what kind of value the option expects.
  *
- * ### Options with multiple values
+ * ### Multi-value Options with
  *
  * Multiple values can be provided to an option via a proprietary format, such
  * as comma separated values or other, to be parsed by a custom value parser. To
@@ -67,20 +67,19 @@ public:
    * line, allowing for it to take multiple values.
    */
   [[nodiscard]] virtual auto IsRepeatable() const -> bool = 0;
-  // TODO(Abdessattar) Ensure there are test cases for repeatable value
+  // TODO(abdes) Ensure there are test cases for repeatable value
 
   /**
    * \brief Indicates if this option requires a value to be specified.
    *
    * When this is \b true, the command line parser requires that:
-   * - each occurrence of the option is accompanied with a value,
+   * - each occurrence of the option is accompanied by  a value,
    * - or an implicit value is specified if the option is encountered with no
    *   value,
-   * - or a default value is specified if the option is not encountered on the
-   *   command line.
+   * - or a default value is specified if the option is not on the command line.
    */
   [[nodiscard]] virtual auto IsRequired() const -> bool = 0;
-  // TODO(Abdessattar) Ensure there are test cases for required values
+  // TODO(abdes) Ensure there are test cases for required values
 
   [[nodiscard]] virtual auto HasDefaultValue() const -> bool = 0;
 
@@ -136,8 +135,8 @@ public:
   /**
    * \brief Called when final value of an option is determined.
    */
-  virtual void Notify(const std::any& value_store) const = 0;
-  // TODO(Abdessattar) refactor callback interface
+  virtual auto Notify(const std::any& value_store) const -> void = 0;
+  // TODO(abdes) refactor callback interface
   //  - Allow to pass a callback function that gets called by the parser. The
   //  callback is always invoked (when an option is specified, when an option
   //  is not specified and when a default value is assigned to the option)
@@ -147,4 +146,4 @@ public:
   //  ==> add NotifyOnEachValue(Callback) to ValueDescriptor class
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

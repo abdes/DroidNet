@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,21 +12,21 @@
 
 #include <Oxygen/Clap/OptionValue.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 class OptionValuesMap {
 public:
   OptionValuesMap() = default;
 
   OptionValuesMap(const OptionValuesMap&) = delete;
-  OptionValuesMap(OptionValuesMap&&) = default;
+  OptionValuesMap(OptionValuesMap&&) noexcept = default;
 
   auto operator=(const OptionValuesMap&) -> OptionValuesMap& = delete;
   auto operator=(OptionValuesMap&&) -> OptionValuesMap& = delete;
 
   ~OptionValuesMap() = default;
 
-  void StoreValue(const std::string& option_name, OptionValue new_value)
+  auto StoreValue(const std::string& option_name, OptionValue new_value) -> void
   {
     const auto in_ovm = ovm_.find(option_name);
     if (in_ovm != ovm_.end()) {
@@ -46,7 +46,7 @@ public:
 
   [[nodiscard]] auto HasOption(const std::string& option_name) const -> bool
   {
-    return ovm_.find(option_name) != ovm_.cend();
+    return ovm_.contains(option_name);
   }
 
   [[nodiscard]] auto OccurrencesOf(const std::string& option_name) const
@@ -62,4 +62,4 @@ private:
   std::unordered_map<std::string, std::vector<OptionValue>> ovm_;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

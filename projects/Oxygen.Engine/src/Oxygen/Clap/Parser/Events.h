@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -8,11 +8,11 @@
 
 #include <Oxygen/Clap/Parser/Tokenizer.h>
 
-namespace asap::clap::parser::detail {
+namespace oxygen::clap::parser::detail {
 
-template <TokenType type> struct TokenEvent {
+template <TokenType TokenT> struct TokenEvent {
   std::string token;
-  TokenType token_type { type };
+  TokenType token_type { TokenT };
 
   TokenEvent() = delete;
   TokenEvent(const TokenEvent&) = default;
@@ -27,4 +27,4 @@ template <TokenType type> struct TokenEvent {
   }
 };
 
-} // namespace asap::clap::parser::detail
+} // namespace oxygen::clap::parser::detail

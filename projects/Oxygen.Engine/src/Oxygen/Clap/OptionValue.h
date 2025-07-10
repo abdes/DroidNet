@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +10,7 @@
 #include <string>
 
 /// Namespace for command line parsing related APIs.
-namespace asap::clap {
+namespace oxygen::clap {
 
 /*!
  * \brief Represents a value for a command line option.
@@ -28,7 +28,7 @@ public:
    * \param defaulted when \b true, indicates that the stored value comes from a
    * default value rather than from an explicit value on the command line.
    */
-  OptionValue(std::any value, std::string original_token, bool defaulted)
+  OptionValue(std::any value, std::string original_token, const bool defaulted)
     : value_ { std::move(value) }
     , original_token_(std::move(original_token))
     , defaulted_ { defaulted }
@@ -90,4 +90,4 @@ private:
   bool defaulted_ { false };
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

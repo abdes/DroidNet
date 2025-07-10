@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -12,13 +12,13 @@
 using testing::Eq;
 using testing::Ne;
 
-namespace asap::clap::parser {
+namespace oxygen::clap::parser {
 
 namespace {
 
   using ParamType = std::pair<std::string, std::vector<Token>>;
 
-  class TokenizerTest : public ::testing::TestWithParam<ParamType> { };
+  class TokenizerTest : public testing::TestWithParam<ParamType> { };
 
   // NOLINTNEXTLINE
   TEST_P(TokenizerTest, ProduceExpectedTokens)
@@ -40,77 +40,77 @@ namespace {
     ::testing::Values(
         std::make_pair<std::string, std::vector<Token>>("", {}),
         std::make_pair<std::string, std::vector<Token>>("-", {
-            {TokenType::LoneDash, "-"}
+            {TokenType::kLoneDash, "-"}
         }),
         std::make_pair<std::string, std::vector<Token>>("-f", {
-            {TokenType::ShortOption, "f"}
+            {TokenType::kShortOption, "f"}
         }),
         std::make_pair<std::string, std::vector<Token>>("-ffv1=2", {
-            {TokenType::ShortOption, "f"},
-            {TokenType::ShortOption, "f"},
-            {TokenType::ShortOption, "v"},
-            {TokenType::ShortOption, "1"},
-            {TokenType::ShortOption, "="},
-            {TokenType::ShortOption, "2"}
+            {TokenType::kShortOption, "f"},
+            {TokenType::kShortOption, "f"},
+            {TokenType::kShortOption, "v"},
+            {TokenType::kShortOption, "1"},
+            {TokenType::kShortOption, "="},
+            {TokenType::kShortOption, "2"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--f", {
-            {TokenType::LongOption, "f"}
+            {TokenType::kLongOption, "f"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--long", {
-            {TokenType::LongOption, "long"}
+            {TokenType::kLongOption, "long"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--long-option", {
-            {TokenType::LongOption, "long-option"}
+            {TokenType::kLongOption, "long-option"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--long--option-f", {
-            {TokenType::LongOption, "long--option-f"}
+            {TokenType::kLongOption, "long--option-f"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=v", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
-            {TokenType::Value, "v"},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
+            {TokenType::kValue, "v"},
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=value-1", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
-            {TokenType::Value, "value-1"},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
+            {TokenType::kValue, "value-1"},
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=with spaces", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
-            {TokenType::Value, "with spaces"},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
+            {TokenType::kValue, "with spaces"},
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=v=x", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
-            {TokenType::Value, "v=x"},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
+            {TokenType::kValue, "v=x"},
         }),
         std::make_pair<std::string, std::vector<Token>>("--opt=a,b,c", {
-            {TokenType::LongOption, "opt"},
-            {TokenType::EqualSign, "="},
-            {TokenType::Value, "a,b,c"},
+            {TokenType::kLongOption, "opt"},
+            {TokenType::kEqualSign, "="},
+            {TokenType::kValue, "a,b,c"},
         }),
         std::make_pair<std::string, std::vector<Token>>("=", {
-            {TokenType::Value, "="}
+            {TokenType::kValue, "="}
         }),
         std::make_pair<std::string, std::vector<Token>>("value", {
-            {TokenType::Value, "value"}
+            {TokenType::kValue, "value"}
         }),
         std::make_pair<std::string, std::vector<Token>>("va--lue-1", {
-            {TokenType::Value, "va--lue-1"}
+            {TokenType::kValue, "va--lue-1"}
         }),
         std::make_pair<std::string, std::vector<Token>>("---", {
-            {TokenType::LongOption, "-"}
+            {TokenType::kLongOption, "-"}
         }),
         std::make_pair<std::string, std::vector<Token>>("----", {
-            {TokenType::LongOption, "--"}
+            {TokenType::kLongOption, "--"}
         }),
         std::make_pair<std::string, std::vector<Token>>("--", {
-            {TokenType::DashDash, "--"}
+            {TokenType::kDashDash, "--"}
         })
     ));
   // clang-format on
@@ -121,13 +121,13 @@ namespace {
     {
       const Tokenizer tokenizer { {} };
 
-      ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::EndOfInput));
+      ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::kEndOfInput));
     }
     {
       const Tokenizer tokenizer { { "hello" } };
 
-      ASSERT_THAT(tokenizer.NextToken().first, Ne(TokenType::EndOfInput));
-      ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::EndOfInput));
+      ASSERT_THAT(tokenizer.NextToken().first, Ne(TokenType::kEndOfInput));
+      ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::kEndOfInput));
     }
   }
 
@@ -145,9 +145,9 @@ namespace {
       tokens[token_type].push_back(token_value);
     }
     //! [Tokenizer example]
-    EXPECT_THAT(tokens.at(TokenType::Value).size(), Eq(5));
+    EXPECT_THAT(tokens.at(TokenType::kValue).size(), Eq(5));
   }
 
 } // namespace
 
-} // namespace asap::clap::parser
+} // namespace oxygen::clap::parser

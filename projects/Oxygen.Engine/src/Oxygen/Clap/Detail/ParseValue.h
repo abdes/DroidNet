@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -14,13 +14,11 @@
 
 #include <magic_enum/magic_enum.hpp>
 
-namespace asap::clap::detail {
+namespace oxygen::clap::detail {
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_integral_v<AssignTo> && std::is_signed_v<AssignTo>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto NumberConversion(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_integral_v<AssignTo> && std::is_signed_v<AssignTo>)
 {
   std::size_t consumed {};
   try {
@@ -33,12 +31,10 @@ auto NumberConversion(const std::string& input, AssignTo& output) -> bool
   }
 }
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_integral_v<AssignTo> && std::is_unsigned_v<AssignTo>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto UnsignedNumberConversion(const std::string& input, AssignTo& output)
   -> bool
+  requires(std::is_integral_v<AssignTo> && std::is_unsigned_v<AssignTo>)
 {
   // Contrarily to the behavior od std::stoull, we do not accept a '-' sign
   // in the input
@@ -56,24 +52,20 @@ auto UnsignedNumberConversion(const std::string& input, AssignTo& output)
   }
 }
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_integral_v<AssignTo> && std::is_signed_v<AssignTo>
-      && !std::is_same_v<AssignTo, char> && !std::is_same_v<AssignTo, bool>
-      && !std::is_enum_v<AssignTo>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_integral_v<AssignTo> && std::is_signed_v<AssignTo>
+    && !std::is_same_v<AssignTo, char> && !std::is_same_v<AssignTo, bool>
+    && !std::is_enum_v<AssignTo>)
 {
   return NumberConversion(input, output);
 }
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_integral_v<AssignTo> && std::is_unsigned_v<AssignTo>
-      && !std::is_same_v<AssignTo, char> && !std::is_same_v<AssignTo, bool>
-      && !std::is_enum_v<AssignTo>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_integral_v<AssignTo> && std::is_unsigned_v<AssignTo>
+    && !std::is_same_v<AssignTo, char> && !std::is_same_v<AssignTo, bool>
+    && !std::is_enum_v<AssignTo>)
 {
   return UnsignedNumberConversion(input, output);
 }
@@ -81,8 +73,8 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
 /// Return a lower case version of a string
 inline auto ToLower(std::string str) -> std::string
 {
-  std::transform(std::begin(str), std::end(str), std::begin(str),
-    [](const std::string::value_type& element) {
+  std::ranges::transform(
+    str, std::begin(str), [](const std::string::value_type& element) {
       return std::tolower(element, std::locale());
     });
   return str;
@@ -119,9 +111,9 @@ inline auto StringToFlagValue(std::string val) -> std::int64_t
   return std::stoll(val);
 }
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_same_v<AssignTo, bool>, std::nullptr_t> = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_same_v<AssignTo, bool>)
 {
   try {
     const auto flag_value = StringToFlagValue(input);
@@ -137,11 +129,9 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
   }
 }
 
-template <typename AssignTo,
-  std::enable_if_t<std::is_same_v<AssignTo, char> && !std::is_enum_v<AssignTo>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_same_v<AssignTo, char> && !std::is_enum_v<AssignTo>)
 {
   if (input.size() == 1) {
     output = static_cast<AssignTo>(input[0]);
@@ -151,10 +141,9 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
 }
 
 /// Floats (TODO: TEST)
-template <typename AssignTo,
-  std::enable_if_t<std::is_floating_point_v<AssignTo>, std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_floating_point_v<AssignTo>)
 {
   std::size_t consumed {};
   try {
@@ -167,36 +156,30 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
 }
 
 /// String and similar direct assignment
-template <typename AssignTo,
-  std::enable_if_t<!std::is_floating_point_v<AssignTo>
-      && !std::is_integral_v<AssignTo>
-      && std::is_assignable_v<AssignTo&, std::string>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(!std::is_floating_point_v<AssignTo> && !std::is_integral_v<AssignTo>
+    && std::is_assignable_v<AssignTo&, std::string>)
 {
   output = input;
   return true;
 }
 
 /// String and similar constructible and copy assignment
-template <typename AssignTo,
-  std::enable_if_t<!std::is_floating_point_v<AssignTo>
-      && !std::is_integral_v<AssignTo>
-      && !std::is_assignable_v<AssignTo&, std::string>
-      && std::is_constructible_v<AssignTo, std::string>,
-    std::nullptr_t>
-  = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(!std::is_floating_point_v<AssignTo> && !std::is_integral_v<AssignTo>
+    && !std::is_assignable_v<AssignTo&, std::string>
+    && std::is_constructible_v<AssignTo, std::string>)
 {
   output = AssignTo(input);
   return true;
 }
 
 /// Enumerations
-template <typename AssignTo,
-  std::enable_if_t<std::is_enum_v<AssignTo>, std::nullptr_t> = nullptr>
+template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::is_enum_v<AssignTo>)
 {
   // first try to parse for an enum name
   auto enum_val = magic_enum::enum_cast<AssignTo>(ToLower(input));
@@ -215,4 +198,4 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
   return true;
 }
 
-} // namespace asap::clap::detail
+} // namespace oxygen::clap::detail

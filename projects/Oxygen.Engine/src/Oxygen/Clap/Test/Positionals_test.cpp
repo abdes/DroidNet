@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -17,13 +17,13 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 
-using ::testing::Eq;
+using testing::Eq;
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 namespace {
 
-  inline auto MakeBefore_1() -> std::shared_ptr<Option>
+  auto MakeBefore_1() -> std::shared_ptr<Option>
   {
     return Option::Positional("BEFORE_1")
       .About("first positional before rest")
@@ -31,7 +31,7 @@ namespace {
       .Build();
   }
 
-  inline auto MakeBefore_2() -> std::shared_ptr<Option>
+  auto MakeBefore_2() -> std::shared_ptr<Option>
   {
     return Option::Positional("BEFORE_2")
       .About("second positional before rest")
@@ -39,7 +39,7 @@ namespace {
       .Build();
   }
 
-  inline auto MakeRest() -> std::shared_ptr<Option>
+  auto MakeRest() -> std::shared_ptr<Option>
   {
     return Option::Rest()
       .About("remaining positional arguments")
@@ -47,7 +47,7 @@ namespace {
       .Build();
   }
 
-  inline auto MakeAfter_1() -> std::shared_ptr<Option>
+  auto MakeAfter_1() -> std::shared_ptr<Option>
   {
     return Option::Positional("AFTER_1")
       .About("first positional after rest")
@@ -72,7 +72,7 @@ namespace {
                                  .WithCommand(default_command);
     const auto& matches = cli->Parse(argc, argv.data()).ovm;
 
-    const auto& v_rest = matches.ValuesOf(Option::key_rest);
+    const auto& v_rest = matches.ValuesOf(Option::key_rest_);
     EXPECT_THAT(v_rest.size(), Eq(4));
     EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("r_1"));
     EXPECT_THAT(v_rest.at(1).GetAs<std::string>(), Eq("r_2"));
@@ -105,7 +105,7 @@ namespace {
     EXPECT_THAT(v_before_2.size(), Eq(1));
     EXPECT_THAT(v_before_2.at(0).GetAs<std::string>(), Eq("b_2"));
 
-    const auto& v_rest = matches.ValuesOf(Option::key_rest);
+    const auto& v_rest = matches.ValuesOf(Option::key_rest_);
     EXPECT_THAT(v_rest.size(), Eq(2));
     EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("r_1"));
     EXPECT_THAT(v_rest.at(1).GetAs<std::string>(), Eq("r_2"));
@@ -132,7 +132,7 @@ namespace {
     EXPECT_THAT(v_after_1.size(), Eq(1));
     EXPECT_THAT(v_after_1.at(0).GetAs<std::string>(), Eq("a_1"));
 
-    const auto& v_rest = matches.ValuesOf(Option::key_rest);
+    const auto& v_rest = matches.ValuesOf(Option::key_rest_);
     EXPECT_THAT(v_rest.size(), Eq(3));
     EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("r_1"));
     EXPECT_THAT(v_rest.at(1).GetAs<std::string>(), Eq("r_2"));
@@ -164,7 +164,7 @@ namespace {
     EXPECT_THAT(v_after_1.size(), Eq(1));
     EXPECT_THAT(v_after_1.at(0).GetAs<std::string>(), Eq("a_1"));
 
-    const auto& v_rest = matches.ValuesOf(Option::key_rest);
+    const auto& v_rest = matches.ValuesOf(Option::key_rest_);
     EXPECT_THAT(v_rest.size(), Eq(2));
     EXPECT_THAT(v_rest.at(0).GetAs<std::string>(), Eq("r_1"));
     EXPECT_THAT(v_rest.at(1).GetAs<std::string>(), Eq("r_2"));
@@ -193,4 +193,4 @@ namespace {
 
 } // namespace
 
-} // namespace asap::clap
+} // namespace oxygen::clap

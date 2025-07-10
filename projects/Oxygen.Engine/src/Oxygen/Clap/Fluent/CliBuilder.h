@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +13,7 @@
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/api_export.h>
 
-namespace asap::clap {
+namespace oxygen::clap {
 
 /*!
  * \brief Fluent builder to properly create and configure a `Cli`.
@@ -103,8 +103,8 @@ protected:
   }
 
 private:
-  void AddHelpOptionToCommand(Command& command);
-  void AddVersionOptionToCommand(Command& command);
+  auto AddHelpOptionToCommand(Command& command) const -> void;
+  auto AddVersionOptionToCommand(Command& command) const -> void;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap

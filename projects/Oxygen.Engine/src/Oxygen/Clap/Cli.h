@@ -1,6 +1,6 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause).
+// copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +19,7 @@
 #include <Oxygen/Clap/api_export.h>
 
 /// Namespace for command line parsing related APIs.
-namespace asap::clap {
+namespace oxygen::clap {
 
 struct CommandLineContext;
 
@@ -84,7 +84,7 @@ public:
 
   OXGN_CLP_API auto Parse(int argc, const char** argv) -> CommandLineContext;
 
-  /** Produces a human readable output of 'desc', listing options,
+  /** Produces a human-readable  output of 'desc', listing options,
       their descriptions and allowed parameters. Other options_description
       instances previously passed to add will be output separately. */
   friend OXGN_CLP_API auto operator<<(std::ostream& out, const Cli& cli)
@@ -92,8 +92,8 @@ public:
 
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API void Print(std::ostream& out, unsigned width = 80) const;
-  // TODO(Abdessattar): make the width a config parameter of the CLI
+  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 80) const -> void;
+  // TODO(abdes): make the width a config parameter of the CLI
 
   // Cli instances are created and configured only via the associated
   // CliBuilder.
@@ -102,13 +102,16 @@ public:
 private:
   Cli() = default;
 
-  void Version(std::string version) { version_ = std::move(version); }
+  auto Version(std::string version) -> void { version_ = std::move(version); }
 
-  void About(std::string about) { about_ = std::move(about); }
+  auto About(std::string about) -> void { about_ = std::move(about); }
 
-  void ProgramName(std::string name) { program_name_ = std::move(name); }
+  auto ProgramName(std::string name) -> void
+  {
+    program_name_ = std::move(name);
+  }
 
-  void WithCommand(std::shared_ptr<Command> command)
+  auto WithCommand(std::shared_ptr<Command> command) -> void
   {
     if (command->IsDefault()) {
       commands_.insert(commands_.begin(), std::move(command));
@@ -117,29 +120,31 @@ private:
     }
   }
 
-  // TODO(Abdessattar): add support for cli general options
+  // TODO(abdes): add support for cli general options
   // These general options are added directly to the Cli and not to the default
   // command. They are automatically added in a group to all commands in the CLI
   // including the default command.
 
-  // TODO(Abdessattar): add support for cli help command
+  // TODO(abdes): add support for cli help command
   // Help should be a special command that gets added to print the Cli
   // documentation. When this command is added it should also add a special
   // '--help -h' option with a custom callback that terminates the parsing.
-  OXGN_CLP_API void EnableHelpCommand();
-  OXGN_CLP_API void HandleHelpCommand(const CommandLineContext& context) const;
+  OXGN_CLP_API auto EnableHelpCommand() -> void;
+  OXGN_CLP_API auto HandleHelpCommand(const CommandLineContext& context) const
+    -> void;
 
-  // TODO(Abdessattar): add support for cli version command
+  // TODO(abdes): add support for cli version command
   // Version should be a special command that gets added to print the Cli
   // version info. When this command is added it should also add a special
   // '--version -v' option with a custom callback that terminates the parsing.
-  OXGN_CLP_API void EnableVersionCommand();
-  OXGN_CLP_API void HandleVersionCommand(
-    const CommandLineContext& context) const;
+  OXGN_CLP_API auto EnableVersionCommand() -> void;
+  OXGN_CLP_API auto HandleVersionCommand(
+    const CommandLineContext& context) const -> void;
 
-  OXGN_CLP_API void PrintDefaultCommand(
-    std::ostream& out, unsigned int width) const;
-  OXGN_CLP_API void PrintCommands(std::ostream& out, unsigned int width) const;
+  OXGN_CLP_API auto PrintDefaultCommand(
+    std::ostream& out, unsigned int width) const -> void;
+  OXGN_CLP_API auto PrintCommands(std::ostream& out, unsigned int width) const
+    -> void;
 
   std::string version_;
   std::string about_;
@@ -152,4 +157,4 @@ private:
   bool has_help_command_ = false;
 };
 
-} // namespace asap::clap
+} // namespace oxygen::clap
