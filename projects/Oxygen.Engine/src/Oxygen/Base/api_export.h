@@ -25,3 +25,5 @@
 #else
 #  define OXYGEN_BASE_API
 #endif
+
+#define OXGN_BASE_NDAPI [[nodiscard]] OXYGEN_BASE_API
