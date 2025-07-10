@@ -103,7 +103,13 @@
     "strstream": "cpp",
     "*.impl": "cpp",
     "gsl_util": "cpp",
-    "print": "cpp"
+    "print": "cpp",
+    "pointers": "cpp",
+    "gsl_algorithm": "cpp",
+    "gsl_assert": "cpp",
+    "gsl_byte": "cpp",
+    "multi_span": "cpp",
+    "string_span": "cpp"
   },
   "editor.rulers": [
     80,
