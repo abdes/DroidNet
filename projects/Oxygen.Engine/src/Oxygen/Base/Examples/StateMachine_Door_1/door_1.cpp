@@ -9,12 +9,12 @@
 
 #include <Oxygen/Base/StateMachine.h>
 
-using asap::fsm::ByDefault;
-using asap::fsm::DoNothing;
-using asap::fsm::On;
-using asap::fsm::StateMachine;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using oxygen::fsm::ByDefault;
+using oxygen::fsm::DoNothing;
+using oxygen::fsm::On;
+using oxygen::fsm::StateMachine;
+using oxygen::fsm::TransitionTo;
+using oxygen::fsm::Will;
 
 namespace {
 struct OpenEvent { };

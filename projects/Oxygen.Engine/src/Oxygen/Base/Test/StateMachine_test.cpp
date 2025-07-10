@@ -20,21 +20,21 @@ using testing::Ref;
 using testing::Return;
 using testing::Throw;
 
-using asap::fsm::ByDefault;
-using asap::fsm::Continue;
-using asap::fsm::DoNothing;
-using asap::fsm::is_one_of_v;
-using asap::fsm::Maybe;
-using asap::fsm::On;
-using asap::fsm::OneOf;
-using asap::fsm::ReissueEvent;
-using asap::fsm::ReportError;
-using asap::fsm::StateMachine;
-using asap::fsm::Status;
-using asap::fsm::Terminate;
-using asap::fsm::TerminateWithError;
-using asap::fsm::TransitionTo;
-using asap::fsm::Will;
+using oxygen::fsm::ByDefault;
+using oxygen::fsm::Continue;
+using oxygen::fsm::DoNothing;
+using oxygen::fsm::is_one_of_v;
+using oxygen::fsm::Maybe;
+using oxygen::fsm::On;
+using oxygen::fsm::OneOf;
+using oxygen::fsm::ReissueEvent;
+using oxygen::fsm::ReportError;
+using oxygen::fsm::StateMachine;
+using oxygen::fsm::Status;
+using oxygen::fsm::Terminate;
+using oxygen::fsm::TerminateWithError;
+using oxygen::fsm::TransitionTo;
+using oxygen::fsm::Will;
 
 namespace {
 
