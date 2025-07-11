@@ -5,11 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <sstream>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/PositionalOptionBuilder.h>
