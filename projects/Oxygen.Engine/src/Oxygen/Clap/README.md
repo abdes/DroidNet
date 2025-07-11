@@ -279,18 +279,19 @@ required by the project.
 | CLI help command            | ⏳    | Ensure help command is fully supported and customizable. |
 | CLI version command         | ⏳    | Ensure version command is fully supported and customizable. |
 | ValueDescriptor tests       | ⏳    | Add unit tests for ValueDescriptor with value store. |
-| Value type parsers doc      | ⏳    | Document all available value type parsers. |
-| More value type parsers     | ⏳    | Implement additional value type parsers for new types. |
+| Value type parsers doc      | ✅    | Implemented: All value type parsers are documented in detail in `Detail/ParseValue.h`. |
+| More value type parsers     | ✅    | Implemented: Comprehensive value type parsers for all major C++ types are provided in `Detail/ParseValue.h`. |
 | Repeatable value tests      | ⏳    | Add or verify tests for repeatable options. |
 | Required value tests        | ⏳    | Add or verify tests for required options. |
 | Callback interface refactor | ⏳    | Refactor the callback interface in ValueSemantics for clarity and flexibility. |
 | Multi-token value support   | ⏳    | Consider supporting option values that span multiple tokens. |
 | Notifiers/store_to support  | ⏳    | Implement notifiers and direct value storage mechanisms in parser states. |
-| Float parsing tests         | ⏳    | Add or improve tests for float value parsing. |
+| Float parsing tests         | ✅    | Implemented: Float and double parsing is fully tested and covered in `Detail/ParseValue.h` and its tests. |
 | Error type name reporting   | ⏳    | Replace placeholder type name in error messages with actual type info. |
-| OptionValuesMap tests       | ⏳    | Write comprehensive unit tests for OptionValuesMap. |
+| OptionValuesMap tests       | ✅    | Implemented: Comprehensive unit tests for OptionValuesMap are present. |
 | Usage footer in CLI tests   | ⏳    | Implement and test support for usage footers in CLI output. |
 | Multiple command names      | ⏳    | Add support and tests for commands with multiple names/aliases. |
+| Consolidate styled wrapping | ⏳    | Consolidate text wrapping and pretty printing with style for wrapped text, across all printers. |
 
 ---
 
@@ -304,7 +305,7 @@ required by the project.
 | 4        | High   | Rich error reporting & suggestions | Implement typo correction and suggestions for mistyped commands/options. Provide contextual error messages with actionable hints. |
 | 5        | Medium | Advanced validation and constraints| Allow declarative constraints (e.g., mutually exclusive options, required groups, value ranges) with clear error reporting. |
 | 6        | Medium | Interactive mode                   | Optionally prompt for missing required arguments interactively if not provided on the command line. |
-| 7        | Low    | CLI output theming                 | Support colorized and themed output for help, errors, and usage, with user-configurable styles. |
+| 7        | Low    | CLI output theming                 | **Implemented:** Colorized and themed output for help, errors, and usage, with user-configurable styles. |
 | 8        | Low    | Command/option deprecation         | Mark commands or options as deprecated, with warnings and migration hints. |
 | 9        | High   | Dynamic option/command registration| Support registering commands and options at runtime (e.g., for plugin systems or extensible tools). |
 
