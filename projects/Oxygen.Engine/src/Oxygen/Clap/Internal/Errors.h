@@ -41,4 +41,7 @@ OXGN_CLP_API auto MissingRequiredOption(const CommandPtr& command,
 OXGN_CLP_API auto UnexpectedPositionalArguments(const ParserContextPtr& context,
   const char* message = nullptr) -> std::string;
 
+OXGN_CLP_API auto PositionalAfterRestError(const ParserContextPtr& context,
+  const OptionPtr& rest_option, const char* message) -> std::string;
+
 } // namespace oxygen::clap::parser::detail

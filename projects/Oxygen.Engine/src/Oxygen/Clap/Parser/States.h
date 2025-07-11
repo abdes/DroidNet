@@ -753,6 +753,38 @@ private:
   ParserContextPtr context;
 };
 
+//! FinalState: Handles assignment and validation of positional arguments at the
+//! end of parsing.
+/*!
+ The FinalState is responsible for processing all buffered positional arguments
+ after parsing is complete. It enforces the following rules for positional
+ argument assignment:
+
+  - If a rest positional (e.g., ...args) is present, it must be the last
+    positional argument. Any positional defined after a rest positional is
+    considered an error and parsing fails.
+  - All positionals before the rest positional are assigned one argument each,
+    in order. If there are not enough arguments for required positionals,
+    parsing fails.
+  - The rest positional, if present, receives all remaining arguments (possibly
+    zero).
+  - If there is no rest positional, any extra arguments after assigning all
+    positionals result in an error.
+  - Type conversion errors for any positional argument result in a parsing
+    failure.
+  - After assignment, required options and positionals are checked for presence
+    or default values; missing required values cause parsing to fail.
+
+ This state ensures robust, idiomatic, and standards-compliant handling of all
+ positional argument scenarios, including edge cases for rest positionals and
+ illegal trailing positionals.
+
+ @warning Any positional defined after a rest positional is invalid and will
+
+ @see Option::IsPositionalRest, Option::Positional, Option::Rest
+ @see UnexpectedPositionalArguments, MissingRequiredOption
+ cause an error.
+*/
 struct FinalState : Will<ByDefault<DoNothing>> {
   using Will::Handle;
 
@@ -763,48 +795,62 @@ struct FinalState : Will<ByDefault<DoNothing>> {
     context = std::any_cast<ParserContextPtr>(data);
 
     // process buffered positional arguments
-    bool before_rest { true };
     auto& positional_args = context->positional_tokens;
+    const auto& positionals = context->active_command->PositionalArguments();
     OptionPtr rest_option {};
-    for (const auto& option : context->active_command->PositionalArguments()) {
+    std::size_t rest_index = positionals.size();
+    // 1. Find rest positional and check for after-rest positionals
+    for (std::size_t i = 0; i < positionals.size(); ++i) {
+      if (positionals[i]->IsPositionalRest()) {
+        rest_option = positionals[i];
+        rest_index = i;
+        break;
+      }
+    }
+    // Check for after-rest positionals
+    if (rest_option && rest_index + 1 < positionals.size()) {
+      // There are positionals defined after rest: this is not allowed
+      return TerminateWithError { PositionalAfterRestError(
+        context, rest_option, "") };
+    }
+    // 2. Assign tokens to before-rest positionals
+    for (std::size_t i = 0; i < rest_index; ++i) {
+      const auto& option = positionals[i];
       DCHECK_F(option->IsPositional());
-      if (!option->IsPositionalRest()) {
-        if (before_rest) {
-          // Pick a value from positional arguments starting from the front
-          StorePositional(option, positional_args.front());
-          positional_args.erase(positional_args.begin());
-        } else {
-          // Pick a value from positional arguments starting from the front
-          StorePositional(option, positional_args.back());
-          positional_args.pop_back();
-        }
-      } else {
-        rest_option = option;
-        before_rest = false;
+      if (positional_args.empty()) {
+        // Not enough arguments for this positional
+        return TerminateWithError { MissingRequiredOption(
+          context->active_command, option) };
       }
+      try {
+        StorePositional(option, positional_args.front());
+      } catch (const std::exception& e) {
+        return TerminateWithError { e.what() };
+      }
+      positional_args.erase(positional_args.begin());
     }
-    if (!positional_args.empty()) {
-      if (rest_option) {
-        // Put the rest in 'rest'
-        for (const auto& token : positional_args) {
+    // 3. Assign tokens to rest positional (if present)
+    if (rest_option) {
+      for (const auto& token : positional_args) {
+        try {
           StorePositional(rest_option, token);
+        } catch (const std::exception& e) {
+          return TerminateWithError { e.what() };
         }
-        positional_args.clear();
-      } else {
-        return TerminateWithError { UnexpectedPositionalArguments(context) };
       }
+      positional_args.clear();
+    } else if (!positional_args.empty()) {
+      // 4. Extra tokens with no rest positional
+      return TerminateWithError { UnexpectedPositionalArguments(context) };
     }
-
-    // Validate options
+    // 5. Validate options
     try {
       CheckRequiredOptions(context->active_command->CommandOptions());
       CheckRequiredOptions(context->active_command->PositionalArguments());
     } catch (std::exception& error) {
       return TerminateWithError { error.what() };
     }
-
     // TODO: implement notifiers and store_to
-
     return Terminate {};
   }
 
@@ -839,6 +885,8 @@ private:
     std::any value;
     if (semantics->Parse(value, token)) {
       context->ovm.StoreValue(option->Key(), { value, std::move(token), true });
+    } else {
+      throw std::runtime_error(InvalidValueForOption(context, token, ""));
     }
   }
 

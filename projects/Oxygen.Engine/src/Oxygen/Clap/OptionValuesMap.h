@@ -80,7 +80,11 @@ public:
   [[nodiscard]] auto ValuesOf(const std::string& option_name) const
     -> const std::vector<OptionValue>&
   {
-    return ovm_.at(option_name);
+    static const std::vector<OptionValue> empty;
+    if (const auto it = ovm_.find(option_name); it != ovm_.end()) {
+      return it->second;
+    }
+    return empty;
   }
 
   //! Check if an option was provided on the command line.
