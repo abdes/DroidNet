@@ -92,7 +92,8 @@ public:
 
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 80) const -> void;
+  OXGN_CLP_API auto Print(
+    const CommandLineContext& context, unsigned width = 80) const -> void;
   // TODO(abdes): make the width a config parameter of the CLI
 
   // Cli instances are created and configured only via the associated
@@ -142,9 +143,9 @@ private:
     const CommandLineContext& context) const -> void;
 
   OXGN_CLP_API auto PrintDefaultCommand(
-    std::ostream& out, unsigned int width) const -> void;
-  OXGN_CLP_API auto PrintCommands(std::ostream& out, unsigned int width) const
-    -> void;
+    const CommandLineContext& context, unsigned int width) const -> void;
+  OXGN_CLP_API auto PrintCommands(
+    const CommandLineContext& context, unsigned int width) const -> void;
 
   std::string version_;
   std::string about_;

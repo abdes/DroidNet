@@ -109,7 +109,8 @@
     "gsl_assert": "cpp",
     "gsl_byte": "cpp",
     "multi_span": "cpp",
-    "string_span": "cpp"
+    "string_span": "cpp",
+    "*.def": "cpp"
   },
   "editor.rulers": [
     80,

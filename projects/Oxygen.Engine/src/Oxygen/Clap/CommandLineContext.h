@@ -13,6 +13,9 @@
 
 namespace oxygen::clap {
 
+// Forward declaration; see CliTheme.h for definition
+struct CliTheme;
+
 struct CommandLineContext {
   explicit CommandLineContext(std::string _program_name,
     Command::Ptr& active_command_ref, OptionValuesMap& ovm_ref)
@@ -21,6 +24,8 @@ struct CommandLineContext {
     , ovm { ovm_ref }
   {
   }
+
+  const CliTheme* theme = nullptr;
 
   bool allow_long_option_value_with_no_equal { true };
 

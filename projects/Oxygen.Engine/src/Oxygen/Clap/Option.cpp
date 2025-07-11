@@ -4,62 +4,63 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Clap/Fluent/DSL.h>
-#include <Oxygen/Clap/Option.h>
-
 #include <utility>
 
+#include <Oxygen/Clap/CliTheme.h>
+#include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Clap/Option.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
 namespace oxygen::clap {
 
 ValueSemantics::~ValueSemantics() noexcept = default;
 
-auto operator<<(std::ostream& out, const Option& option) -> std::ostream&
-{
-  option.Print(out);
-  return out;
-}
-
 auto Option::PrintValueDescription(
-  std::ostream& out, const std::string& separator) const -> void
+  const CommandLineContext& context, const std::string& separator) const -> void
 {
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (value_semantic_ && !value_semantic_->IsFlag()) {
-    out << separator;
+    context.out << separator;
     if (!value_semantic_->IsRequired()) {
-      out << "[";
+      context.out << "[";
     }
-    out << "<" << value_semantic_->UserFriendlyName() << ">";
+    context.out << fmt::format(
+      theme.placeholder, "<{}>", value_semantic_->UserFriendlyName());
     if (value_semantic_->IsRepeatable()) {
-      out << "...";
+      context.out << "...";
     }
     if (!value_semantic_->IsRequired()) {
-      out << "[";
+      context.out << "[";
     }
   }
-  out << "\n";
+  context.out << "\n";
 }
 
-auto Option::Print(std::ostream& out, const unsigned int width) const -> void
+auto Option::Print(
+  const CommandLineContext& context, const unsigned int width) const -> void
 {
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (IsPositional()) {
-    out << "   ";
+    context.out << "   ";
     if (!IsRequired()) {
-      out << "[";
+      context.out << "[";
     }
-    out << "<" << UserFriendlyName() << ">";
+    context.out << fmt::format(theme.placeholder, "<{}>", UserFriendlyName());
     if (!IsRequired()) {
-      out << "]";
+      context.out << "]";
     }
-    out << "\n";
+    context.out << "\n";
   } else {
     if (!short_name_.empty()) {
-      out << "   -" << short_name_;
-      PrintValueDescription(out, " ");
+      context.out << "   "
+                  << fmt::format(theme.option_flag, "-{}", short_name_);
+      PrintValueDescription(context, " ");
     }
     if (!long_name_.empty()) {
-      out << "   --" << long_name_;
-      PrintValueDescription(out, "=");
+      context.out << "   "
+                  << fmt::format(theme.option_flag, "--{}", long_name_);
+      PrintValueDescription(context, "=");
     }
   }
 
@@ -70,7 +71,7 @@ auto Option::Print(std::ostream& out, const unsigned int width) const -> void
                                    .IndentWith()
                                    .Initially("   ")
                                    .Then("   ");
-  out << wrap.Fill(About()).value_or("__wrapping_error__");
+  context.out << wrap.Fill(About()).value_or("__wrapping_error__");
 }
 
 auto Option::WithKey(std::string key) -> OptionBuilder
@@ -88,19 +89,15 @@ auto Option::Rest() -> PositionalOptionBuilder
   return PositionalOptionBuilder(key_rest_);
 }
 
-auto operator<<(std::ostream& out, const Options& options) -> std::ostream&
+auto Options::Print(
+  const CommandLineContext& context, const unsigned int width) const -> void
 {
-  options.Print(out);
-  return out;
-}
-
-auto Options::Print(std::ostream& out, const unsigned int width) const -> void
-{
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (!label.empty()) {
-    out << label << '\n';
+    context.out << fmt::format(theme.section_header, "{}", label) << '\n';
   }
   for (const auto& option : options) {
-    option->Print(out, width);
+    option->Print(context, width);
   }
 }
 

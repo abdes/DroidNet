@@ -20,6 +20,8 @@
 /// Namespace for command line parsing related APIs.
 namespace oxygen::clap {
 
+struct CommandLineContext;
+
 // Forward reference used to declare the weak pointer to the parent CLI.
 class Cli;
 
@@ -109,20 +111,16 @@ public:
     return std::make_optional(*result);
   }
 
-  /** Produces a human-readable  output of 'desc', listing options,
-      their descriptions and allowed parameters. Other options_description
-      instances previously passed to add will be output separately. */
-  friend auto operator<<(std::ostream& out, const Command& command)
-    -> std::ostream&;
-
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 80) const -> void;
+  OXGN_CLP_API auto Print(
+    const CommandLineContext& context, unsigned width = 80) const -> void;
 
-  OXGN_CLP_API auto PrintSynopsis(std::ostream& out) const -> void;
-
-  OXGN_CLP_API auto PrintOptions(std::ostream& out, unsigned width) const
+  OXGN_CLP_API auto PrintSynopsis(const CommandLineContext& context) const
     -> void;
+
+  OXGN_CLP_API auto PrintOptions(
+    const CommandLineContext& context, unsigned width) const -> void;
 
   [[nodiscard]] auto CommandOptions() const -> const std::vector<Option::Ptr>&
   {
@@ -219,12 +217,5 @@ private:
 
   [[nodiscard]] auto ProgramName() const -> std::string;
 };
-
-inline auto operator<<(std::ostream& out, const Command& command)
-  -> std::ostream&
-{
-  command.Print(out);
-  return out;
-}
 
 } // namespace oxygen::clap

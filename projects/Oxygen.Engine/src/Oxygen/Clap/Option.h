@@ -18,6 +18,7 @@
 
 namespace oxygen::clap {
 
+struct CommandLineContext;
 class OptionBuilder;
 
 template <typename Builder,
@@ -122,15 +123,10 @@ public:
     return IsPositional() && key_ == key_rest_;
   }
 
-  /** Produces a human-readable  output of 'desc', listing options, their
-      descriptions and allowed parameters. Other options_description instances
-      previously passed to add will be output separately. */
-  friend OXGN_CLP_API auto operator<<(std::ostream& out, const Option& option)
-    -> std::ostream&;
-
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 0) const -> void;
+  OXGN_CLP_API auto Print(
+    const CommandLineContext& context, unsigned width = 0) const -> void;
 
   static OXGN_CLP_API auto WithKey(std::string key) -> OptionBuilder;
 
@@ -174,8 +170,8 @@ private:
   {
   }
 
-  auto PrintValueDescription(
-    std::ostream& out, const std::string& separator) const -> void;
+  auto PrintValueDescription(const CommandLineContext& context,
+    const std::string& separator) const -> void;
 };
 
 struct Options {
@@ -208,15 +204,10 @@ struct Options {
     return options.cend();
   }
 
-  /** Produces a human-readable  output of 'desc', listing options, their
-      descriptions and allowed parameters. Other options_description instances
-      previously passed to add will be output separately. */
-  friend OXGN_CLP_API auto operator<<(std::ostream& out, const Options& options)
-    -> std::ostream&;
-
   /** Outputs 'desc' to the specified stream, calling 'f' to output each
       option_description element. */
-  OXGN_CLP_API auto Print(std::ostream& out, unsigned width = 0) const -> void;
+  OXGN_CLP_API auto Print(
+    const CommandLineContext& context, unsigned width = 0) const -> void;
 
 private:
   std::string label;
