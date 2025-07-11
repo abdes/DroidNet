@@ -14,8 +14,29 @@
 
 namespace oxygen::clap {
 
+//! Stores and retrieves all values for each parsed command-line option.
+/*!
+  This class is used by the command-line parser to accumulate all values
+  associated with each option as they are parsed from the command line.
+
+  ### Key Features
+  - Supports options that may occur multiple times (e.g., repeated flags).
+  - Provides efficient lookup for all values of a given option.
+  - Allows checking for presence and counting occurrences of options.
+
+  ### Usage Example
+  ```cpp
+  OptionValuesMap ovm;
+  ovm.StoreValue("--file", OptionValue("foo.txt"));
+  ovm.StoreValue("--file", OptionValue("bar.txt"));
+  auto files = ovm.ValuesOf("--file"); // contains both values
+  ```
+
+  @see OptionValue
+*/
 class OptionValuesMap {
 public:
+  //! Construct an empty option values map.
   OptionValuesMap() = default;
 
   OptionValuesMap(const OptionValuesMap&) = delete;
@@ -26,6 +47,15 @@ public:
 
   ~OptionValuesMap() = default;
 
+  //! Store a value for the given option name.
+  /*!
+    Adds a new value for the specified option. If the option already exists,
+    the value is appended to its vector; otherwise, a new entry is created.
+
+    @param option_name The name of the option (e.g., "--file").
+    @param new_value The value to store for this option.
+    @see ValuesOf, OccurrencesOf
+  */
   auto StoreValue(const std::string& option_name, OptionValue new_value) -> void
   {
     const auto in_ovm = ovm_.find(option_name);
@@ -38,17 +68,44 @@ public:
       option_name, std::vector<OptionValue> { std::move(new_value) });
   }
 
+  //! Get all values for a given option name.
+  /*!
+    Returns a const reference to the vector of all values stored for the
+    specified option. Throws std::out_of_range if the option is not present.
+
+    @param option_name The name of the option.
+    @return A const reference to the vector of values for this option.
+    @see StoreValue, HasOption
+  */
   [[nodiscard]] auto ValuesOf(const std::string& option_name) const
     -> const std::vector<OptionValue>&
   {
     return ovm_.at(option_name);
   }
 
+  //! Check if an option was provided on the command line.
+  /*!
+    Returns true if the specified option was present (i.e., has at least one
+    value).
+
+    @param option_name The name of the option.
+    @return True if the option was provided, false otherwise.
+    @see StoreValue, ValuesOf
+  */
   [[nodiscard]] auto HasOption(const std::string& option_name) const -> bool
   {
     return ovm_.contains(option_name);
   }
 
+  //! Get the number of times an option was provided.
+  /*!
+    Returns the number of values stored for the specified option (i.e., the
+    number of occurrences).
+
+    @param option_name The name of the option.
+    @return The number of times the option was provided.
+    @see StoreValue
+  */
   [[nodiscard]] auto OccurrencesOf(const std::string& option_name) const
     -> size_t
   {
