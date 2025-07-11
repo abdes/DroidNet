@@ -73,6 +73,7 @@ set(
 set(
   OXYGEN_CLAP_PRIVATE_SOURCES
   "Cli.cpp"
+  "CliTheme.h"
   "Command.cpp"
   "Option.cpp"
   "Parser/Parser.cpp"

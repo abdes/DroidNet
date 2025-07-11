@@ -265,7 +265,6 @@ namespace {
         "head", "-n", "+20", "-q", "file.txt" } };
 
       UtilsCli cli;
-      cli.CommandLine().Print(std::cout, 80);
       const auto& matches = cli.CommandLine().Parse(argc, argv.data()).ovm;
 
       const auto& v_lines = matches.ValuesOf(("lines"));
@@ -294,7 +293,6 @@ namespace {
         "head", "--lines=+20", "--quiet", "file.txt" } };
 
       UtilsCli cli;
-      cli.CommandLine().Print(std::cout, 80);
       const auto& matches = cli.CommandLine().Parse(argc, argv.data()).ovm;
 
       const auto& v_lines = matches.ValuesOf(("lines"));

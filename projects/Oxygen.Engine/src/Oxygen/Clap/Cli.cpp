@@ -7,10 +7,12 @@
 #include <algorithm>
 
 #include <fmt/format.h>
+#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/PositionalOptionBuilder.h>
 #include <Oxygen/Clap/Internal/Args.h>
@@ -49,6 +51,7 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
 
   const parser::Tokenizer tokenizer { cla.Args() };
   CommandLineContext context(ProgramName(), active_command_, ovm_);
+  context.theme = &CliTheme::Dark(); // Set a default theme
   parser::CmdLineParser parser(context, tokenizer, commands_);
   if (parser.Parse()) {
     // Check if we need to handle a `version` or `help` command
@@ -72,45 +75,44 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
       program_name_.value()));
 }
 
-auto operator<<(std::ostream& out, const Cli& cli) -> std::ostream&
-{
-  cli.Print(out);
-  return out;
-}
-
-auto Cli::PrintDefaultCommand(std::ostream& out, const unsigned int width) const
-  -> void
+auto Cli::PrintDefaultCommand(
+  const CommandLineContext& context, const unsigned int width) const -> void
 {
   const auto default_command = std::ranges::find_if(
     commands_, [](const auto& command) { return command->IsDefault(); });
   if (default_command != commands_.end()) {
-    (*default_command)->Print(out, width);
+    (*default_command)->Print(context, width);
   }
 }
 
-auto Cli::PrintCommands(std::ostream& out, const unsigned int width) const
-  -> void
+auto Cli::PrintCommands(
+  const CommandLineContext& context, const unsigned int width) const -> void
 {
-  out << "SUB-COMMANDS\n\n";
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
+  context.out << fmt::format(theme.section_header, "SUB-COMMANDS\n\n");
   for (const auto& command : commands_) {
     if (!command->IsDefault()) {
-      out << "   " << command->PathAsString() << "\n";
+      context.out << "   "
+                  << fmt::format(
+                       theme.command_name, "{}", command->PathAsString())
+                  << "\n";
       wrap::TextWrapper wrap = wrap::MakeWrapper()
                                  .Width(width)
                                  .TrimLines()
                                  .IndentWith()
                                  .Initially("     ")
                                  .Then("     ");
-      out << wrap.Fill(command->About()).value_or("__wrapping_error__");
-      out << "\n\n";
+      context.out << wrap.Fill(command->About()).value_or("__wrapping_error__");
+      context.out << "\n\n";
     }
   }
 }
 
-auto Cli::Print(std::ostream& out, const unsigned int width) const -> void
+auto Cli::Print(
+  const CommandLineContext& context, const unsigned int width) const -> void
 {
-  PrintDefaultCommand(out, width);
-  PrintCommands(out, width);
+  PrintDefaultCommand(context, width);
+  PrintCommands(context, width);
 }
 
 auto Cli::EnableVersionCommand() -> void
@@ -150,7 +152,7 @@ auto Cli::EnableHelpCommand() -> void
 auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
 {
   if (context.ovm.HasOption("help")) {
-    context.active_command->Print(context.out, 80);
+    context.active_command->Print(context, 80);
   } else if (context.active_command->PathAsString() == "help") {
     if (context.ovm.HasOption(Option::key_rest_)) {
       const auto& values = context.ovm.ValuesOf(Option::key_rest_);
@@ -161,12 +163,12 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
         command_path.push_back(value.GetAs<std::string>());
       }
 
-      const auto& command = std::ranges::find_if(
+      auto command = std::ranges::find_if(
         commands_, [&command_path](const Command::Ptr& cmd) {
           return cmd->Path() == command_path;
         });
       if (command != commands_.end()) {
-        (*command)->Print(context.out, 80);
+        (*command)->Print(context, 80);
       } else {
         context.err << fmt::format(
           "The path `{}` does not correspond to a known command.\n",
@@ -176,8 +178,8 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
                     << '\n';
       }
     } else {
-      PrintDefaultCommand(context.out, 80);
-      PrintCommands(context.out, 80);
+      PrintDefaultCommand(context, 80);
+      PrintCommands(context, 80);
     }
   }
 }

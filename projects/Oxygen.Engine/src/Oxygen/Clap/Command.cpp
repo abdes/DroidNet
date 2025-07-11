@@ -4,15 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Logging.h"
-
 #include <sstream>
 
 #include <fmt/format.h>
+#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
 auto oxygen::clap::Command::ProgramName() const -> std::string
@@ -20,63 +22,63 @@ auto oxygen::clap::Command::ProgramName() const -> std::string
   return parent_cli_ ? parent_cli_->ProgramName() : "<program>";
 }
 
-auto oxygen::clap::Command::PrintSynopsis(std::ostream& out) const -> void
+auto oxygen::clap::Command::PrintSynopsis(
+  const CommandLineContext& context) const -> void
 {
-  out << ProgramName() << " " << PathAsString() << " ";
+  context.out << ProgramName() << " " << PathAsString() << " ";
   for (const auto& option : options_) {
-    out << (option->value_semantic()->IsRequired() ? "" : "[");
+    context.out << (option->value_semantic()->IsRequired() ? "" : "[");
     if (!option->Short().empty()) {
-      out << "-" << option->Short();
+      context.out << "-" << option->Short();
       if (!option->Long().empty()) {
-        out << ",";
+        context.out << ",";
       }
     }
     if (!option->Long().empty()) {
-      out << "--" << option->Long();
+      context.out << "--" << option->Long();
     }
-    out << (option->value_semantic()->IsRequired() ? " " : "] ");
+    context.out << (option->value_semantic()->IsRequired() ? " " : "] ");
   }
 
   for (const auto& option : positional_args_) {
     if (option->IsPositionalRest()) {
       if (!option->IsRequired()) {
-        out << "[";
+        context.out << "[";
       }
-      out << "<" << option->UserFriendlyName() << ">";
+      context.out << "<" << option->UserFriendlyName() << ">";
       if (!option->IsRequired()) {
-        out << "]";
+        context.out << "]";
       }
     } else {
-      out << " " << (option->value_semantic()->IsRequired() ? "" : "[")
-          << option->Key()
-          << (option->value_semantic()->IsRequired() ? "" : "]");
+      context.out << " " << (option->value_semantic()->IsRequired() ? "" : "[")
+                  << option->Key()
+                  << (option->value_semantic()->IsRequired() ? "" : "]");
     }
   }
 }
 
 auto oxygen::clap::Command::PrintOptions(
-  std::ostream& out, unsigned int width) const -> void
+  const CommandLineContext& context, unsigned int width) const -> void
 {
-
   for (unsigned option_index = 0; option_index < options_.size();
     ++option_index) {
     if (options_in_groups_[option_index]) {
       continue;
     }
-    options_[option_index]->Print(out, width);
-    out << "\n\n";
+    options_[option_index]->Print(context, width);
+    context.out << "\n\n";
   }
 
   for (auto [group, hidden] : groups_) {
     if (!hidden) {
-      group->Print(out, width);
-      out << "\n\n";
+      group->Print(context, width);
+      context.out << "\n\n";
     }
   }
 
   for (const auto& positional : positional_args_) {
-    positional->Print(out, width);
-    out << "\n\n";
+    positional->Print(context, width);
+    context.out << "\n\n";
   }
 }
 
@@ -103,8 +105,8 @@ auto oxygen::clap::Command::WithOption(std::shared_ptr<Option>&& option) -> void
   }
 }
 
-auto oxygen::clap::Command::Print(std::ostream& out, unsigned int width) const
-  -> void
+auto oxygen::clap::Command::Print(
+  const CommandLineContext& context, unsigned int width) const -> void
 {
   wrap::TextWrapper wrap = wrap::MakeWrapper()
                              .Width(width)
@@ -115,23 +117,24 @@ auto oxygen::clap::Command::Print(std::ostream& out, unsigned int width) const
                              .Then("   ");
   std::ostringstream ostr;
 
-  out << "SYNOPSIS\n";
-  PrintSynopsis(ostr);
-  out << wrap.Fill(ostr.str()).value();
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
+  context.out << fmt::format(theme.section_header, "SYNOPSIS\n");
+  PrintSynopsis(context);
+  context.out << wrap.Fill(ostr.str()).value();
   ostr.str("");
   ostr.clear();
-  out << "\n\n";
+  context.out << "\n\n";
 
-  out << "DESCRIPTION\n";
+  context.out << fmt::format(theme.section_header, "DESCRIPTION\n");
   if (PathAsString() == DEFAULT) {
-    out << wrap.Fill(parent_cli_->About()).value();
+    context.out << wrap.Fill(parent_cli_->About()).value();
   } else {
-    out << wrap.Fill(about_).value();
+    context.out << wrap.Fill(about_).value();
   }
-  out << "\n\n";
+  context.out << "\n\n";
 
-  out << "OPTIONS\n";
-  PrintOptions(out, width);
+  context.out << fmt::format(theme.section_header, "OPTIONS\n");
+  PrintOptions(context, width);
 }
 
 auto oxygen::clap::Command::PathAsString() const -> std::string
