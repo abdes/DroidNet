@@ -7,8 +7,9 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include <Oxygen/Clap/api_export.h>
 
@@ -45,14 +46,14 @@ public:
    * \brief The program name, originally provided as the first element of the
    * `argv` array.
    */
-  OXGN_CLP_NDAPI auto ProgramName() const -> const std::string&;
+  OXGN_CLP_NDAPI auto ProgramName() const -> std::string_view;
 
   /*!
    * \brief The program command line arguments, excluding the program name.
    *
    * \see ProgramName
    */
-  OXGN_CLP_NDAPI auto Args() const -> std::vector<std::string>&;
+  OXGN_CLP_NDAPI auto Args() const -> std::span<const std::string>;
 
 private:
   struct ArgumentsImpl;

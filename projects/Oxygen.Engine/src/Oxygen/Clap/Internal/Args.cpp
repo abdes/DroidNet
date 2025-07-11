@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <span>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Internal/Args.h>
@@ -37,11 +37,13 @@ oxygen::clap::detail::Arguments::Arguments(int argc, const char** argv)
 {
 }
 
-auto oxygen::clap::detail::Arguments::ProgramName() const -> const std::string&
+auto oxygen::clap::detail::Arguments::ProgramName() const -> std::string_view
 {
   return impl_->program_name;
 }
-auto oxygen::clap::detail::Arguments::Args() const -> std::vector<std::string>&
+
+auto oxygen::clap::detail::Arguments::Args() const
+  -> std::span<const std::string>
 {
-  return impl_->args;
+  return std::span<const std::string>(impl_->args);
 }
