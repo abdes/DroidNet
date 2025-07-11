@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -40,12 +41,33 @@ public:
   }
 
   /// Set the descriptive message about this command line program.
-  OXGN_CLP_API auto About(std::string about) -> Self&;
+  auto About(std::string about) -> Self&
+  {
+    if (!command_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    command_->About(std::move(about));
+    return *this;
+  }
 
-  OXGN_CLP_API auto WithOptions(
-    std::shared_ptr<Options> options, bool hidden = false) -> Self&;
+  auto WithOptions(std::shared_ptr<Options> options, bool hidden = false)
+    -> Self&
+  {
+    if (!command_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    command_->WithOptions(std::move(options), hidden);
+    return *this;
+  }
 
-  OXGN_CLP_API auto WithOption(std::shared_ptr<Option> option) -> Self&;
+  auto WithOption(std::shared_ptr<Option> option) -> Self&
+  {
+    if (!command_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    command_->WithOption(std::move(option));
+    return *this;
+  }
 
   template <typename... Args>
   auto WithPositionalArguments(Args&&... options) -> Self&
@@ -54,16 +76,18 @@ public:
     return *this;
   }
 
-  /// Explicitly get the encapsulated `Command` instance.
+  //! Explicitly get the encapsulated `Command` instance.
   auto Build() -> std::unique_ptr<Command> { return std::move(command_); }
 
-  /// Automatic conversion to `Command`.
+  //! Automatic conversion to `Command` smart pointer rendering the final call
+  //! to Build() unnecessary.
   operator std::unique_ptr<Command>() { return Build(); }
 
-  /// Automatic conversion to `Command`.
+  //! Automatic conversion to `Command` smart pointer rendering the final call
+  //! to Build() unnecessary.
   operator std::shared_ptr<Command>()
   {
-    return std::shared_ptr<Command> { std::move(command_) };
+    return std::shared_ptr { std::move(command_) };
   }
 
 protected:

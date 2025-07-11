@@ -49,6 +49,13 @@ set_target_properties(
 set(
   OXYGEN_CLAP_HEADERS
   "api_export.h"
+  "Cli.h"
+  "Command.h"
+  "CommandLineContext.h"
+  "Option.h"
+  "OptionValue.h"
+  "OptionValuesMap.h"
+  "ValueSemantics.h"
   "Detail/ParseValue.h"
   "Fluent/CliBuilder.h"
   "Fluent/CommandBuilder.h"
@@ -61,32 +68,22 @@ set(
   "Parser/Parser.h"
   "Parser/States.h"
   "Parser/Tokenizer.h"
-  "api_export.h"
-  "Cli.h"
-  "Command.h"
-  "CommandLineContext.h"
-  "Option.h"
-  "OptionValue.h"
-  "OptionValuesMap.h"
-  "ValueSemantics.h"
 )
 
 set(
   OXYGEN_CLAP_PRIVATE_SOURCES
+  "Cli.cpp"
+  "Command.cpp"
+  "Option.cpp"
+  "Parser/Parser.cpp"
+  "Parser/Tokenizer.cpp"
+  "Fluent/CliBuilder.cpp"
+  "Fluent/OptionBuilder.cpp"
   "Internal/Args.cpp"
   "Internal/Args.h"
   "Internal/Errors.cpp"
   "Internal/Errors.h"
   "Internal/ValueDescriptor.h"
-  "Examples/Simple/Simple_example.cpp"
-  "Fluent/CliBuilder.cpp"
-  "Fluent/CommandBuilder.cpp"
-  "Fluent/OptionBuilder.cpp"
-  "Parser/Parser.cpp"
-  "Parser/Tokenizer.cpp"
-  "Cli.cpp"
-  "Command.cpp"
-  "Option.cpp"
 )
 
 target_sources(

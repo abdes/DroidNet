@@ -9,6 +9,7 @@
 #include <any>
 #include <string>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/api_export.h>
 
 namespace oxygen::clap {
@@ -21,7 +22,7 @@ namespace oxygen::clap {
  * required or not, can be repeated or not..., has a default value or an
  * implicit value and what kind of value the option expects.
  *
- * ### Multi-value Options with
+ * ### Multi-value Options
  *
  * Multiple values can be provided to an option via a proprietary format, such
  * as comma separated values or other, to be parsed by a custom value parser. To
@@ -29,7 +30,7 @@ namespace oxygen::clap {
  * supports repeating an option multiple times on the command line. Each
  * occurrence provides one more value.
  *
- * ### Options that do not take values
+ * ### Flag Options
  *
  * Some options, such as boolean flags, do not take values. Their mere presence
  * on the command line corresponds to a specific value (such as *true*) and
@@ -51,12 +52,10 @@ class OXGN_CLP_API ValueSemantics {
 public:
   ValueSemantics() = default;
 
-  ValueSemantics(const ValueSemantics&) = delete;
-  auto operator=(const ValueSemantics&) -> ValueSemantics& = delete;
-  ValueSemantics(ValueSemantics&&) = delete;
-  auto operator=(ValueSemantics&&) -> ValueSemantics& = delete;
-
   virtual ~ValueSemantics() noexcept;
+
+  OXYGEN_MAKE_NON_COPYABLE(ValueSemantics)
+  OXYGEN_MAKE_NON_MOVABLE(ValueSemantics)
 
   [[nodiscard]] virtual auto UserFriendlyName() const -> const std::string& = 0;
 
@@ -131,19 +130,6 @@ public:
   virtual auto Parse(std::any& value_store, const std::string& token) const
     -> bool
     = 0;
-
-  /**
-   * \brief Called when final value of an option is determined.
-   */
-  virtual auto Notify(const std::any& value_store) const -> void = 0;
-  // TODO(abdes) refactor callback interface
-  //  - Allow to pass a callback function that gets called by the parser. The
-  //  callback is always invoked (when an option is specified, when an option
-  //  is not specified and when a default value is assigned to the option)
-  //  ==> add Notify(Callback) to ValueDescriptor class
-  //  - Allow for the callback to be setup to be called on every value instead
-  //  of when the final value(s) is(are) determined at the ned of parsing
-  //  ==> add NotifyOnEachValue(Callback) to ValueDescriptor class
 };
 
 } // namespace oxygen::clap

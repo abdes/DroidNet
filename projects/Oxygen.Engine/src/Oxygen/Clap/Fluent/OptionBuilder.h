@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -14,8 +15,6 @@
 #include <Oxygen/Clap/api_export.h>
 
 namespace oxygen::clap {
-
-template <typename T> class OptionValueBuilder;
 
 class OptionBuilder {
   using Self = OptionBuilder;
@@ -26,30 +25,50 @@ public:
   {
   }
 
-  OXGN_CLP_API auto Short(std::string short_name) -> Self&;
+  OXGN_CLP_API auto Short(std::string short_name) -> Self&
+  {
+    if (!option_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    option_->Short(std::move(short_name));
+    return *this;
+  }
 
-  OXGN_CLP_API auto Long(std::string long_name) -> Self&;
+  OXGN_CLP_API auto Long(std::string long_name) -> Self&
+  {
+    if (!option_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    option_->Long(std::move(long_name));
+    return *this;
+  }
 
-  OXGN_CLP_API auto About(std::string about) -> Self&;
-  OXGN_CLP_API auto Required() -> Self&;
+  OXGN_CLP_API auto About(std::string about) -> Self&
+  {
+    if (!option_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    option_->About(std::move(about));
+    return *this;
+  }
 
-  OXGN_CLP_API auto UserFriendlyName(std::string name) -> Self&;
+  OXGN_CLP_API auto Required() -> Self&
+  {
+    if (!option_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    option_->Required();
+    return *this;
+  }
 
-  // template <typename T>
-  // auto WithValue(typename ValueDescriptor<T>::Builder &option_value_builder)
-  //     -> OptionBuilder & {
-  //   ASAP_ASSERT(option_ && "builder used after Build() was called");
-  //   option_->value_semantic_ = std::move(option_value_builder.Build());
-  //   return *this;
-  // }
-
-  // template <typename T>
-  // auto WithValue(typename ValueDescriptor<T>::Builder &&option_value_builder)
-  //     -> OptionBuilder & {
-  //   ASAP_ASSERT(option_ && "builder used after Build() was called");
-  //   option_->value_semantic_ = std::move(option_value_builder.Build());
-  //   return *this;
-  // }
+  OXGN_CLP_API auto UserFriendlyName(std::string name) -> Self&
+  {
+    if (!option_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    option_->UserFriendlyName(std::move(name));
+    return *this;
+  }
 
   auto Build() -> std::shared_ptr<Option> { return std::move(option_); }
 
@@ -73,8 +92,12 @@ protected:
   }
 };
 
+template <typename T> class OptionValueBuilder;
+
+//! Specialization of the OptionBuilder for boolean values, which will
+//! automatically define an implicit value of `true`.
 template <>
-OXGN_CLP_API auto oxygen::clap::OptionBuilder::WithValue<bool>()
+OXGN_CLP_NDAPI auto OptionBuilder::WithValue<bool>()
   -> OptionValueBuilder<bool>;
 
 } // namespace oxygen::clap

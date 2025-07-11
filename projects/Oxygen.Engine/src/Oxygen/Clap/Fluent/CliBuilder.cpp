@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <stdexcept>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -17,21 +17,27 @@
 
 auto oxygen::clap::CliBuilder::Version(std::string version) -> CliBuilder&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->Version(std::move(version));
   return *this;
 }
 
 auto oxygen::clap::CliBuilder::ProgramName(std::string name) -> CliBuilder&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->ProgramName(std::move(name));
   return *this;
 }
 
 auto oxygen::clap::CliBuilder::About(std::string about) -> CliBuilder&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->About(std::move(about));
   return *this;
 }
@@ -39,21 +45,27 @@ auto oxygen::clap::CliBuilder::About(std::string about) -> CliBuilder&
 auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   -> CliBuilder&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->WithCommand(std::move(command));
   return *this;
 }
 
 auto oxygen::clap::CliBuilder::WithVersionCommand() -> Self&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->EnableVersionCommand();
   return *this;
 }
 
 auto oxygen::clap::CliBuilder::WithHelpCommand() -> Self&
 {
-  DCHECK_NOTNULL_F(cli_, "builder used after Build() was called");
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
   cli_->EnableHelpCommand();
   return *this;
 }
@@ -107,7 +119,7 @@ auto oxygen::clap::CliBuilder::Build() -> std::unique_ptr<Cli>
       }
     }
 
-    // If the CLI if did not have a default command, create one and set it up.
+    // If the CLI did not have a default command, create one and set it up.
     if (!has_default_command) {
       const std::shared_ptr<Command> command
         = CommandBuilder(cli_->ProgramName(), Command::DEFAULT);
@@ -122,7 +134,7 @@ auto oxygen::clap::CliBuilder::Build() -> std::unique_ptr<Cli>
   }
 
   // Update all CLI commands to have a weak reference to the parent CLI
-  for (auto& command : cli_->commands_) {
+  for (const auto& command : cli_->commands_) {
     command->parent_cli_ = cli_.get();
   }
 

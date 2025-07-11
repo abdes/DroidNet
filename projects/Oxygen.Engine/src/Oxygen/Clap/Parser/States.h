@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Clap/Command.h>

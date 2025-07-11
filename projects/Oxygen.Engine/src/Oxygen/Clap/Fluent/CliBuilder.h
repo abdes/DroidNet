@@ -83,7 +83,6 @@ public:
 
   /// Automatic conversion to `Cli` smart pointer rendering the final call to
   /// Build() unnecessary.
-  // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
   operator std::unique_ptr<Cli>() { return Build(); }
 
 protected:
