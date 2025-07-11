@@ -34,12 +34,17 @@ m_gtest_program(
   Basic
   SOURCES
     "Arguments_test.cpp"
-    "Command_test.cpp"
     "OptionValuesMap_test.cpp"
     "Cli_test.cpp"
-    "ParseValue_test.cpp"
 )
 
+m_gtest_program(
+  Builder
+  SOURCES
+    "Command_test.cpp"
+)
+
+m_gtest_program(ParseValue SOURCES "ParseValue_test.cpp")
 m_gtest_program(Positionals SOURCES "Positionals_test.cpp")
 
 add_subdirectory("Parser")
