@@ -108,6 +108,10 @@ inline auto StringToFlagValue(std::string val) -> std::int64_t
   if (val == "false" || val == "off" || val == "no" || val == "disable") {
     return -1;
   }
+  // Special handling for +0 and -0: treat as -1 (false), matching boolean logic
+  if (val == "+0" || val == "-0") {
+    return -1;
+  }
   return std::stoll(val);
 }
 
