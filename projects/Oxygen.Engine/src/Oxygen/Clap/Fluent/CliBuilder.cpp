@@ -48,6 +48,9 @@ auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   if (!cli_) {
     throw std::logic_error("OptionValueBuilder: method called after Build()");
   }
+  if (!command) {
+    throw std::invalid_argument("Command cannot be null");
+  }
   cli_->WithCommand(std::move(command));
   return *this;
 }
@@ -121,8 +124,8 @@ auto oxygen::clap::CliBuilder::Build() -> std::unique_ptr<Cli>
 
     // If the CLI did not have a default command, create one and set it up.
     if (!has_default_command) {
-      const std::shared_ptr<Command> command
-        = CommandBuilder(cli_->ProgramName(), Command::DEFAULT);
+      const std::shared_ptr<Command> command = CommandBuilder(Command::DEFAULT);
+      // = CommandBuilder(cli_->ProgramName(), Command::DEFAULT);
       if (cli_->HasHelpCommand()) {
         AddHelpOptionToCommand(*command);
       }
