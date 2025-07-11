@@ -20,78 +20,66 @@ template <class T> class OptionValueBuilder : public OptionBuilder {
 public:
   explicit OptionValueBuilder(std::unique_ptr<Option> option)
     : OptionBuilder(std::move(option))
-    , value_descriptor_(new ValueDescriptor<T>())
   {
-    option_->value_semantic_ = value_descriptor_;
+    // Ensure value_semantic_ is a non-const shared_ptr<ValueSemantics>
+    option_->value_semantic_ = std::static_pointer_cast<ValueSemantics>(
+      std::shared_ptr<ValueDescriptor<T>>(new ValueDescriptor<T>()));
   }
 
   auto StoreTo(T* store_to) -> Self&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->StoreTo(store_to);
+    TypedValueDesc()->StoreTo(store_to);
     return *this;
   }
 
   auto UserFriendlyName(std::string name) -> Self&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->UserFriendlyName(name);
+    TypedValueDesc()->UserFriendlyName(name);
     return *this;
   }
 
   auto DefaultValue(const T& value) -> OptionValueBuilder&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->DefaultValue(value);
+    TypedValueDesc()->DefaultValue(value);
     return *this;
   }
 
   auto DefaultValue(const T& value, const std::string& textual)
     -> OptionValueBuilder&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->DefaultValue(value, textual);
+    TypedValueDesc()->DefaultValue(value, textual);
     return *this;
   }
 
   auto ImplicitValue(const T& value) -> OptionValueBuilder&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->ImplicitValue(value);
+    TypedValueDesc()->ImplicitValue(value);
     return *this;
   }
 
   auto ImplicitValue(const T& value, const std::string& textual)
     -> OptionValueBuilder&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->ImplicitValue(value, textual);
+    TypedValueDesc()->ImplicitValue(value, textual);
     return *this;
   }
 
   auto Repeatable() -> OptionValueBuilder&
   {
-    if (!value_descriptor_) {
-      throw std::logic_error("OptionValueBuilder: method called after Build()");
-    }
-    value_descriptor_->Repeatable();
+    TypedValueDesc()->Repeatable();
     return *this;
   }
 
 private:
-  std::shared_ptr<ValueDescriptor<T>> value_descriptor_;
+  auto TypedValueDesc() const -> std::shared_ptr<ValueDescriptor<T>>
+  {
+    if (!option_ || !option_->value_semantic_) {
+      throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    // Cast from non-const base pointer
+    return std::static_pointer_cast<ValueDescriptor<T>>(
+      option_->value_semantic_);
+  }
 };
 
 } // namespace oxygen::clap

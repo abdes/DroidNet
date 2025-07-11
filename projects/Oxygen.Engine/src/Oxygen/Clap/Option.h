@@ -158,9 +158,9 @@ private:
   std::string user_friendly_name_;
   bool required_ { false };
 
-  // shared_ptr is needed to simplify memory management in
-  // copy ctor and destructor.
-  std::shared_ptr<const ValueSemantics> value_semantic_;
+  // shared_ptr is needed to simplify memory management in copy ctor and
+  // destructor.
+  std::shared_ptr<ValueSemantics> value_semantic_;
 
   explicit Option(std::string key)
     : key_(std::move(key))

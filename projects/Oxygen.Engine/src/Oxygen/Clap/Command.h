@@ -192,25 +192,10 @@ private:
     return *this;
   }
 
-  auto WithOptions(std::shared_ptr<Options> options, bool hidden) -> void
-  {
-    for (const auto& option : *options) {
-      options_.push_back(option);
-      options_in_groups_.push_back(true);
-    }
-    groups_.emplace_back(std::move(options), hidden);
-  }
+  OXGN_CLP_API auto WithOptions(std::shared_ptr<Options> options, bool hidden)
+    -> void;
 
-  auto WithOption(std::shared_ptr<Option>&& option) -> void
-  {
-    if (option->Key() == HELP || option->Key() == VERSION) {
-      options_.emplace(options_.begin(), option);
-      options_in_groups_.insert(options_in_groups_.begin(), false);
-    } else {
-      options_.push_back(std::move(option));
-      options_in_groups_.push_back(false);
-    }
-  }
+  OXGN_CLP_API auto WithOption(std::shared_ptr<Option>&& option) -> void;
 
   template <typename... Args>
   auto WithPositionalArguments(Args&&... options) -> void

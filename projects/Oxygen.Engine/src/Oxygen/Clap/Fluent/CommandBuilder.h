@@ -50,11 +50,14 @@ public:
     return *this;
   }
 
-  auto WithOptions(std::shared_ptr<Options> options, bool hidden = false)
+  auto WithOptions(std::shared_ptr<Options> options, const bool hidden = false)
     -> Self&
   {
     if (!command_) {
       throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    if (!options) {
+      throw std::invalid_argument("option cannot be null");
     }
     command_->WithOptions(std::move(options), hidden);
     return *this;
@@ -64,6 +67,9 @@ public:
   {
     if (!command_) {
       throw std::logic_error("OptionValueBuilder: method called after Build()");
+    }
+    if (!option) {
+      throw std::invalid_argument("option cannot be null");
     }
     command_->WithOption(std::move(option));
     return *this;
