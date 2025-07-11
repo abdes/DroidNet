@@ -59,14 +59,17 @@ NOLINT_TEST(OptionValuesMapTest, MissingOptionReturnsFalseAndZero)
   EXPECT_EQ(ovm.OccurrencesOf("not_present"), 0u);
 }
 
-//! Verifies ValuesOf throws for missing option.
-NOLINT_TEST(OptionValuesMapTest, ValuesOfThrowsForMissingOption)
+//! Verifies ValuesOf returns an empty vector for missing option (never throws).
+NOLINT_TEST(OptionValuesMapTest, ValuesOfReturnsEmptyVectorForMissingOption)
 {
   // Arrange
   OptionValuesMap ovm;
 
-  // Act & Assert
-  NOLINT_EXPECT_THROW({ auto _ = ovm.ValuesOf("missing"); }, std::out_of_range);
+  // Act
+  const auto& values = ovm.ValuesOf("missing");
+
+  // Assert
+  EXPECT_TRUE(values.empty());
 }
 
 //! Verifies storing and retrieving values for multiple distinct options.

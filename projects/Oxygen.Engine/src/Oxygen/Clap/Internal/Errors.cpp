@@ -114,13 +114,18 @@ auto oxygen::clap::parser::detail::InvalidValueForOption(
   const ParserContextPtr& context, const std::string& token,
   const char* message) -> std::string
 {
-
-  auto description
-    = fmt::format("{} option '{}' seen as '{}',"
-                  " got value token '{}' which failed to parse to type {},"
-                  " and the option has no implicit value",
-      CommandDiagnostic(context->active_command), context->active_option->Key(),
-      context->active_option_flag, token, "<TODO: TYPE NAME>");
+  std::string option_name = "<positional>";
+  std::string option_flag = "<positional>";
+  if (context->active_option) {
+    option_name = context->active_option->Key();
+    option_flag = context->active_option_flag;
+  }
+  auto description = fmt::format(
+    "{} option '{}' seen as '{}',"
+    " got value token '{}' which failed to parse to the expected type,"
+    " and the option has no implicit value",
+    CommandDiagnostic(context->active_command), option_name, option_flag,
+    token);
   AppendOptionalMessage(description, message);
   return description;
 }
@@ -148,6 +153,34 @@ auto oxygen::clap::parser::detail::UnexpectedPositionalArguments(
     context->positional_tokens.size() > 1 ? "s" : "",
     fmt::join(context->positional_tokens, ", "),
     context->positional_tokens.size() > 1 ? "are" : "is");
+  AppendOptionalMessage(description, message);
+  return description;
+}
+auto oxygen::clap::parser::detail::PositionalAfterRestError(
+  const ParserContextPtr& context, const OptionPtr& rest_option,
+  const char* message) -> std::string
+{
+  std::vector<std::string> after_rest_names;
+  const auto& positionals = context->active_command->PositionalArguments();
+  bool seen_rest = false;
+  for (const auto& opt : positionals) {
+    if (seen_rest) {
+      after_rest_names.push_back(opt->UserFriendlyName());
+    }
+    if (opt == rest_option) {
+      seen_rest = true;
+    }
+  }
+  std::string after_rest_str;
+  if (!after_rest_names.empty()) {
+    after_rest_str = fmt::format("{}", fmt::join(after_rest_names, ", "));
+  }
+  auto description = fmt::format(
+    "Invalid command definition: positional argument(s){}{} defined after rest "
+    "positional '{}' ({}). This is not allowed",
+    after_rest_names.empty() ? "" : " ", after_rest_str,
+    rest_option ? rest_option->UserFriendlyName() : "<rest>",
+    rest_option ? rest_option->Key() : "<rest>");
   AppendOptionalMessage(description, message);
   return description;
 }
