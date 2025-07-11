@@ -32,12 +32,12 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     program_name_ = cla.ProgramName();
   }
 
-  auto& args = cla.Args();
+  auto args = cla.Args();
 
   // Simplify processing by transforming the shor or long option forms of
   // `version` and `help` into the corresponding unified command name.
   if (!args.empty()) {
-    std::string& first = args[0];
+    std::string first = args[0];
     if (has_version_command_
       && (first == Command::VERSION_SHORT || first == Command::VERSION_LONG)) {
       first.assign(Command::VERSION);

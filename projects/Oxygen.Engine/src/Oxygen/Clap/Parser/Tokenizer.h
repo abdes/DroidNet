@@ -8,6 +8,7 @@
 
 #include <deque>
 #include <iostream>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,7 +52,7 @@ public:
    * name (argv[0]) from the command line arguments before passing the remaining
    * arguments to the tokenizer.
    */
-  explicit Tokenizer(std::vector<std::string> args)
+  explicit Tokenizer(std::span<const std::string> args)
     : args_ { std::move(args) }
     , cursor_ { args_.begin() }
   {
@@ -84,8 +85,8 @@ public:
 private:
   OXGN_CLP_API auto Tokenize(const std::string& arg) const -> void;
 
-  std::vector<std::string> args_;
-  mutable std::vector<std::string>::const_iterator cursor_;
+  std::span<const std::string> args_;
+  mutable std::span<const std::string>::iterator cursor_;
   mutable std::deque<Token> tokens_;
 };
 

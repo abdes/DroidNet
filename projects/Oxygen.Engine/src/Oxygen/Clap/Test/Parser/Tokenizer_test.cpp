@@ -24,7 +24,8 @@ namespace {
   TEST_P(TokenizerTest, ProduceExpectedTokens)
   {
     const auto& [argument, tokens] = GetParam();
-    Tokenizer tokenizer { { argument } };
+    std::array<std::string, 1> args { argument };
+    Tokenizer tokenizer { std::span<const std::string>(args) };
 
     std::for_each(tokens.cbegin(), tokens.cend(),
       [&tokenizer](const Token& expected_token) {
@@ -124,7 +125,8 @@ namespace {
       ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::kEndOfInput));
     }
     {
-      const Tokenizer tokenizer { { "hello" } };
+      std::array<std::string, 1> args { "hello" };
+      const Tokenizer tokenizer { std::span<const std::string>(args) };
 
       ASSERT_THAT(tokenizer.NextToken().first, Ne(TokenType::kEndOfInput));
       ASSERT_THAT(tokenizer.NextToken().first, Eq(TokenType::kEndOfInput));
@@ -135,9 +137,10 @@ namespace {
   TEST(TokenizerExample, ComplexCommandLine)
   {
     //! [Tokenizer example]
-    const Tokenizer tokenizer { { "doit", "-flv", "--host", "192.168.10.2:8080",
-      "--allowed_ips=10.0.0.0/8,172.16.0.1/16", "--allowed_ids", "one,two",
-      "now" } };
+    std::array<std::string, 8> args { "doit", "-flv", "--host",
+      "192.168.10.2:8080", "--allowed_ips=10.0.0.0/8,172.16.0.1/16",
+      "--allowed_ids", "one,two", "now" };
+    const Tokenizer tokenizer { std::span<const std::string>(args) };
 
     std::map<TokenType, std::vector<std::string>> tokens;
     while (tokenizer.HasMoreTokens()) {

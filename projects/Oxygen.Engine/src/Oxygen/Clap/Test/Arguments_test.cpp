@@ -14,35 +14,26 @@
 using testing::Eq;
 using testing::Ne;
 
-namespace oxygen::clap::detail {
+using oxygen::clap::detail::Arguments;
 
 namespace {
 
-  // NOLINTNEXTLINE
-  TEST(ConstructArguments, WithNonEmptyProgramName)
-  {
-    constexpr auto argc = 1;
-    std::array<const char*, 1> argv { { "bin/test-program" } };
-    const Arguments cla { argc, argv.data() };
-    EXPECT_THAT(cla.ProgramName(), Eq("bin/test-program"));
-    EXPECT_THAT(cla.Args().size(), Eq(0));
-  }
+NOLINT_TEST(ConstructArguments, WithNonEmptyProgramName)
+{
+  constexpr auto argc = 1;
+  std::array<const char*, 1> argv { { "bin/test-program" } };
+  const Arguments cla { argc, argv.data() };
+  EXPECT_THAT(cla.ProgramName(), Eq("bin/test-program"));
+  EXPECT_THAT(cla.Args(), ::testing::IsEmpty());
+}
 
-  // NOLINTNEXTLINE
-  TEST(ConstructArguments, WithManyArgs)
-  {
-    constexpr auto argc = 4;
-    std::array<const char*, 4> argv { { "test", "-x", "--opt=value", "arg" } };
-    const Arguments cla { argc, argv.data() };
-    EXPECT_THAT(cla.ProgramName(), Eq("test"));
-    EXPECT_THAT(cla.Args().size(), Eq(3));
-    for (int index = 1; index < argc; index++) {
-      EXPECT_THAT(
-        std::find(cla.Args().begin(), cla.Args().end(), argv.at(index)),
-        Ne(cla.Args().end()));
-    }
-  }
+NOLINT_TEST(ConstructArguments, WithManyArgs)
+{
+  constexpr auto argc = 4;
+  std::array<const char*, 4> argv { { "test", "-x", "--opt=value", "arg" } };
+  const Arguments cla { argc, argv.data() };
+  EXPECT_THAT(cla.ProgramName(), Eq("test"));
+  EXPECT_THAT(cla.Args(), ::testing::ElementsAre("-x", "--opt=value", "arg"));
+}
 
 } // namespace
-
-} // namespace oxygen::clap::detail
