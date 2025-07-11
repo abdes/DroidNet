@@ -257,7 +257,7 @@ INSTANTIATE_TEST_SUITE_P(InvalidInputValues, ParseBooleanErrorsTest,
 
 NOLINT_TEST_P(ParseBooleanErrorsTest, ParseWithError)
 {
-  const auto input = GetParam();
+  const auto& input = GetParam();
   bool output { true };
   EXPECT_THAT(ParseValue(input, output), IsFalse());
 }
@@ -322,7 +322,7 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseFloatTest,
     std::make_tuple("nan", std::numeric_limits<double>::quiet_NaN(), true),
     std::make_tuple("inf", std::numeric_limits<double>::infinity(), true),
     std::make_tuple("-inf", -std::numeric_limits<double>::infinity(), true),
-    std::make_tuple("notanumber", 0.0, false),
+    std::make_tuple("not-a-number", 0.0, false),
     std::make_tuple("", 0.0, false)
     // clang-format on
     ));
@@ -363,7 +363,7 @@ struct CustomStringType {
     : value(std::move(s))
   {
   }
-  bool operator==(const CustomStringType& other) const
+  auto operator==(const CustomStringType& other) const -> bool
   {
     return value == other.value;
   }
@@ -378,7 +378,7 @@ NOLINT_TEST_F(ParseStringTest, ParsesStringConstructibleType)
 
 //=== Enum Value Parser ===---------------------------------------------------//
 
-enum class Color { kRed = 1, kGreen = 2, kBlue = 3 };
+enum class Color : uint8_t { kRed = 1, kGreen = 2, kBlue = 3 };
 
 struct ParseEnumTest
   : testing::Test,
@@ -387,6 +387,7 @@ struct ParseEnumTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseEnumTest,
   testing::Values(
+    // ReSharper disable StringLiteralTypo
     // clang-format off
     std::make_tuple("red", Color::kRed, true),
     std::make_tuple("green", Color::kGreen, true),
@@ -403,12 +404,13 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseEnumTest,
     std::make_tuple("yellow", Color::kRed, false),
     std::make_tuple("0", Color::kRed, false)
     // clang-format on
+    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseEnumTest, ParsesExpectedEnumValue)
 {
   const auto& [input, expected, should_succeed] = GetParam();
-  Color output = Color::kRed;
+  auto output = Color::kRed;
   const bool result = ParseValue(input, output);
   EXPECT_THAT(result, Eq(should_succeed));
   if (should_succeed) {
@@ -431,6 +433,7 @@ struct ParseChronoDurationTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoDurationTest,
   testing::Values(
+    // ReSharper disable StringLiteralTypo
     // clang-format off
     // input, expected_value, unit, should_succeed
     std::make_tuple("1000ms", 1.0, "s", true),
@@ -446,6 +449,7 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoDurationTest,
     std::make_tuple("abcms", 0.0, "s", false), // invalid number
     std::make_tuple("", 0.0, "s", false)
     // clang-format on
+    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseChronoDurationTest, ParsesExpectedDuration)
@@ -469,6 +473,7 @@ struct ParseChronoIntDurationTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoIntDurationTest,
   testing::Values(
+    // ReSharper disable StringLiteralTypo
     // clang-format off
     std::make_tuple("1500ms", 1, true), // rounds down
     std::make_tuple("2000ms", 2, true),
@@ -481,6 +486,7 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoIntDurationTest,
     std::make_tuple("abcms", 0, false), // invalid number
     std::make_tuple("", 0, false)
     // clang-format on
+    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseChronoIntDurationTest, ParsesExpectedIntDuration)

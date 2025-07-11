@@ -437,12 +437,19 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
   }
   // Try integer value
   std::underlying_type_t<AssignTo> val;
-  if (NumberConversion(input, val)) {
-    enum_val = magic_enum::enum_cast<AssignTo>(val);
-    if (enum_val.has_value()) {
-      output = *enum_val;
-      return true;
+  if constexpr (std::is_signed_v<std::underlying_type_t<AssignTo>>) {
+    if (!NumberConversion(input, val)) {
+      return false;
     }
+  } else if constexpr (std::is_unsigned_v<std::underlying_type_t<AssignTo>>) {
+    if (!UnsignedNumberConversion(input, val)) {
+      return false;
+    }
+  }
+  enum_val = magic_enum::enum_cast<AssignTo>(val);
+  if (enum_val.has_value()) {
+    output = *enum_val;
+    return true;
   }
   return false;
 }
