@@ -7,7 +7,9 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <locale>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -144,7 +146,6 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
   return NumberConversion(input, output);
 }
 
-/// Floats (TODO: TEST)
 template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
   requires(std::is_floating_point_v<AssignTo>)
@@ -185,20 +186,87 @@ template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
   requires(std::is_enum_v<AssignTo>)
 {
-  // first try to parse for an enum name
-  auto enum_val = magic_enum::enum_cast<AssignTo>(ToLower(input));
-  if (!enum_val.has_value()) {
-    // maybe it's an integer value then
-    std::underlying_type_t<AssignTo> val;
-    if (!NumberConversion(input, val)) {
-      return false;
-    }
-    enum_val = magic_enum::enum_cast<AssignTo>(val);
-    if (!enum_val.has_value()) {
-      return false;
+  // Try case-insensitive match for the value name without 'k' prefix
+  const std::string lowered = ToLower(input);
+  for (const auto& entry : magic_enum::enum_entries<AssignTo>()) {
+    std::string_view name = entry.second;
+    if (name.size() > 1 && name[0] == 'k') {
+      const auto stripped = std::string(name.substr(1));
+      if (ToLower(stripped) == lowered) {
+        output = entry.first;
+        return true;
+      }
     }
   }
-  output = *enum_val;
+  // Try case-sensitive match for the full enum name (e.g., 'kRed')
+  auto enum_val = magic_enum::enum_cast<AssignTo>(input);
+  if (enum_val.has_value()) {
+    output = *enum_val;
+    return true;
+  }
+  // Try integer value
+  std::underlying_type_t<AssignTo> val;
+  if (NumberConversion(input, val)) {
+    enum_val = magic_enum::enum_cast<AssignTo>(val);
+    if (enum_val.has_value()) {
+      output = *enum_val;
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename AssignTo>
+auto ParseValue(const std::string& input, AssignTo& output) -> bool
+  requires(std::chrono::treat_as_floating_point<typename AssignTo::rep>::value
+    || std::is_integral_v<typename AssignTo::rep>)
+{
+  // Regex: optional whitespace, number (int/float), optional whitespace, unit,
+  // optional whitespace
+  static const std::regex re(R"(^\s*([+-]?\d*\.?\d+)\s*([a-zA-Z]+)\s*$)",
+    std::regex::ECMAScript | std::regex::icase);
+  std::smatch match;
+  if (!std::regex_match(input, match, re) || match.size() != 3) {
+    return false;
+  }
+
+  double value;
+  try {
+    value = std::stod(match[1].str());
+  } catch (...) {
+    return false;
+  }
+  std::string unit = match[2].str();
+  std::transform(unit.begin(), unit.end(), unit.begin(),
+    [](const unsigned char c) { return std::tolower(c); });
+
+  // Convert to seconds as double
+  double seconds;
+  if (unit == "ns") {
+    seconds = value * 1e-9;
+  } else if (unit == "us") {
+    seconds = value * 1e-6;
+  } else if (unit == "ms") {
+    seconds = value * 1e-3;
+  } else if (unit == "s") {
+    seconds = value;
+  } else if (unit == "min") {
+    seconds = value * 60.0;
+  } else if (unit == "h") {
+    seconds = value * 3600.0;
+  } else if (unit == "d") {
+    seconds = value * 86400.0;
+  } else {
+    return false;
+  }
+
+  using namespace std::chrono;
+  if constexpr (treat_as_floating_point<typename AssignTo::rep>::value) {
+    output = AssignTo(seconds);
+  } else {
+    output = AssignTo(static_cast<typename AssignTo::rep>(seconds));
+  }
+
   return true;
 }
 
