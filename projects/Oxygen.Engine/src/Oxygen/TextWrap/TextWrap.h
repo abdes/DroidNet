@@ -73,7 +73,7 @@ private:
 };
 
 //! Returns a string representation of the TextWrapper configuration.
-OXGN_TXW_API auto to_string(const TextWrapper& wrapper) -> std::string;
+OXGN_TXW_NDAPI auto to_string(const TextWrapper& wrapper) -> std::string;
 
 //! A fluent interface builder for TextWrapper.
 /*!
