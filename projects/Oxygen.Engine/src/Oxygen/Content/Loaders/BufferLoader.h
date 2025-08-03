@@ -20,8 +20,6 @@
 
 namespace oxygen::content::loaders {
 
-//! Loader for buffer assets.
-
 //! Loads a buffer resource from a PAK file stream.
 inline auto LoadBufferResource(LoaderContext context)
   -> std::unique_ptr<data::BufferResource>
@@ -78,6 +76,8 @@ inline auto LoadBufferResource(LoaderContext context)
   return std::make_unique<data::BufferResource>(desc);
 }
 
+static_assert(oxygen::content::LoadFunction<decltype(LoadBufferResource)>);
+
 //! Unload function for BufferResource.
 inline auto UnloadBufferResource(
   std::shared_ptr<data::BufferResource> /*resource*/, AssetLoader& /*loader*/,
@@ -86,5 +86,8 @@ inline auto UnloadBufferResource(
   if (offline) { }
   // TODO: cleanup GPU resources for the buffer.
 }
+
+static_assert(oxygen::content::UnloadFunction<decltype(UnloadBufferResource),
+  data::BufferResource>);
 
 } // namespace oxygen::content::loaders
