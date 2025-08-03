@@ -21,25 +21,31 @@ using oxygen::wrap::internal::Tokenizer;
 using oxygen::wrap::internal::TokenType;
 
 /*!
-  @param out Output stream to which formatted data will be inserted.
-  @param wrapper The TextWrapper to write to the stream.
-  @return out
+  Produces a string representation of the configuration parameters of a
+  TextWrapper instance for debugging purposes.
+
+  @param wrapper The TextWrapper to convert.
+  @return String representation of the configuration.
 
   ### Usage Example
 
   ```cpp
-  std::cout << wrapper; // {w:80,t:'\t',tl:0,boh:0}
+  std::string config = oxygen::wrap::to_string(wrapper);
+  // config: "{w:80,t:'\t',tl:0,boh:0}"
   ```
-
-  @see TextWrapper
 */
-auto oxygen::wrap::operator<<(std::ostream& out, const TextWrapper& wrapper)
-  -> std::ostream&
+auto oxygen::wrap::to_string(const TextWrapper& wrapper) -> std::string
 {
-  out << "{w:" << wrapper.width_ << ",t:'" << wrapper.tab_
-      << ",tl:" << wrapper.trim_lines_ << ",boh:" << wrapper.break_on_hyphens_
-      << "}";
-  return out;
+  std::string result = "{w:";
+  result += std::to_string(wrapper.width_);
+  result += ",t:'";
+  result += wrapper.tab_;
+  result += "',tl:";
+  result += (wrapper.trim_lines_ ? "1" : "0");
+  result += ",boh:";
+  result += (wrapper.break_on_hyphens_ ? "1" : "0");
+  result += "}";
+  return result;
 }
 
 namespace {
