@@ -20,6 +20,19 @@ using oxygen::wrap::internal::TokenConsumer;
 using oxygen::wrap::internal::Tokenizer;
 using oxygen::wrap::internal::TokenType;
 
+/*!
+  @param out Output stream to which formatted data will be inserted.
+  @param wrapper The TextWrapper to write to the stream.
+  @return out
+
+  ### Usage Example
+
+  ```cpp
+  std::cout << wrapper; // {w:80,t:'\t',tl:0,boh:0}
+  ```
+
+  @see TextWrapper
+*/
 auto oxygen::wrap::operator<<(std::ostream& out, const TextWrapper& wrapper)
   -> std::ostream&
 {
@@ -31,9 +44,9 @@ auto oxygen::wrap::operator<<(std::ostream& out, const TextWrapper& wrapper)
 
 namespace {
 
-auto WrapChunks(const std::vector<Token>& chunks, size_t width,
-  const std::string& indent, const std::string& initial_indent, bool trim_lines)
-  -> std::vector<std::string>
+auto WrapChunks(const std::vector<Token>& chunks, const size_t width,
+  const std::string& indent, const std::string& initial_indent,
+  const bool trim_lines) -> std::vector<std::string>
 {
 
   // https://www.geeksforgeeks.org/word-wrap-problem-space-optimized-solution/
@@ -80,8 +93,8 @@ auto WrapChunks(const std::vector<Token>& chunks, size_t width,
       auto first_chunk_in_line = cur_chunk_in_line;
 
       // The new line token can either have a size that will break the maximum
-      // width or a size of zero depending on whether it is the first chunk,
-      // the first in the line or just part of a next line.
+      // width or a size of zero depending on whether it is the first chunk, the
+      // first in the line or just part of a next line.
       if (chunks[cur_chunk_in_line].first == TokenType::kNewLine) {
         if (cur_chunk_in_line != first_chunk_in_line) {
           current_length = adjusted_width + 1;
@@ -99,14 +112,14 @@ auto WrapChunks(const std::vector<Token>& chunks, size_t width,
           first_chunk_in_line++;
         }
       }
-      // Keep on adding words in current line by iterating from starting word
-      // up to last word in arr.
+      // Keep on adding words in current line by iterating from starting word up
+      // to last word in arr.
       while (cur_chunk_in_line < num_chunks) {
 
-        // Update number of characters in current line.
-        // The new line token can either have a size that will break the maximum
-        // width or a size of zero depending on whether it is the first chunk,
-        // the first in the line or just part of a next line.
+        // Update number of characters in current line. The new line token can
+        // either have a size that will break the maximum width or a size of
+        // zero depending on whether it is the first chunk, the first in the
+        // line or just part of a next line.
         if (chunks[cur_chunk_in_line].first == TokenType::kNewLine) {
           if (cur_chunk_in_line != first_chunk_in_line) {
             current_length = adjusted_width + 1;
@@ -151,7 +164,7 @@ auto WrapChunks(const std::vector<Token>& chunks, size_t width,
           optimized[cur_chunk] = cur_chunk_in_line;
         }
 
-        // Do not pre-maturely break out if the current line exeeds the maximum
+        // Do not pre-maturely break out if the current line exceeds the maximum
         // width, allowing to handle the edge case when a single token is longer
         // than the line width.
 
@@ -243,7 +256,37 @@ auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
 }
 } // namespace
 
-[[nodiscard]] auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
+/*!
+ Uses a dynamic programming algorithm to wrap text so each line is at most the
+ configured width, minimizing raggedness by penalizing extra spaces.
+
+ Handles multiple paragraphs (separated by empty lines), indentation, tab
+ expansion, whitespace collapsing, and optional hyphen-based word breaking.
+
+ @param str Input string, may contain multiple paragraphs separated by empty
+ lines.
+ @return Optional vector of output lines (no trailing newlines). Returns
+ `std::nullopt` if input is empty or tokenization fails.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(n^2) for cost table, O(n) for result assembly.
+ - Memory: O(n)
+ - Optimization: Minimizes raggedness; handles edge cases for long words.
+
+ ### Usage Examples
+
+ ```cpp
+ std::string input = "Hello world.\n\nThis is Oxygen.";
+ auto wrapper = oxygen::wrap::MakeWrapper().Width(10);
+ auto lines = wrapper.Wrap(input);
+ // Output: {"Hello", "world.", "", "This is", "Oxygen."}
+ ```
+
+ @note Paragraphs are separated by empty lines in the output.
+ @see Fill, TextWrapperBuilder, TextWrap.cpp
+*/
+auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
   -> std::optional<std::vector<std::string>>
 {
   const auto tokenizer = Tokenizer(tab_, collapse_ws_, break_on_hyphens_);
@@ -273,7 +316,36 @@ auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
 
   return {};
 }
-[[nodiscard]] auto oxygen::wrap::TextWrapper::Fill(const std::string& str) const
+
+/*!
+ Wraps text so every line is at most the TextWrapper's `width` characters long
+ and returns a single string containing the result. Equivalent to joining the
+ result of `Wrap()` using `\\n`.
+
+ Returns std::nullopt if input is empty or tokenization fails.
+
+ @param str Input string, may contain multiple paragraphs separated by empty
+ lines.
+ @return A single string containing the result, lines separated by `\\n`.
+ Returns `std::nullopt` on error.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(n^2) for wrapping, O(n) for joining.
+ - Memory: O(n)
+
+ ### Usage Examples
+
+ ```cpp
+ std::string input = "Hello world.\n\nThis is Oxygen.";
+ auto wrapper = oxygen::wrap::MakeWrapper().Width(10);
+ auto lines = wrapper.Wrap(input);
+ // Output: {"Hello", "world.", "", "This is", "Oxygen."}
+ ```
+
+ @see Wrap, TextWrapperBuilder, TextWrap.cpp
+*/
+auto oxygen::wrap::TextWrapper::Fill(const std::string& str) const
   -> std::optional<std::string>
 {
 
@@ -284,7 +356,7 @@ auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
   const auto& wrap = wrap_opt.value();
   std::string result;
   auto size = std::accumulate(wrap.cbegin(), wrap.cend(),
-    static_cast<size_t>(0), [](size_t acc, const std::string& line) {
+    static_cast<size_t>(0), [](const size_t acc, const std::string& line) {
       return acc + line.length() + 1;
     });
   if (size > 0) {
@@ -304,18 +376,43 @@ auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
   return std::make_optional(result);
 }
 
-auto oxygen::wrap::TextWrapperBuilder::Width(size_t width)
+/*!
+  Sets the maximum line length for wrapped output. If any word in the input
+  exceeds this width, the line may be longer to accommodate it.
+
+  @param width Maximum line length.
+  @return Reference to this builder for chaining.
+  @see TextWrapper
+  @note Default is 80.
+*/
+auto oxygen::wrap::TextWrapperBuilder::Width(const size_t width)
   -> TextWrapperBuilder&
 {
   wrapper.width_ = width;
   return *this;
 }
 
+/*!
+  Begins configuration of indentation for wrapped output. Use Initially() and
+  Then() to set first-line and subsequent-line prefixes.
+
+  @return Reference to this builder for chaining.
+  @see Initially, Then
+*/
 auto oxygen::wrap::TextWrapperBuilder::IndentWith() -> TextWrapperBuilder&
 {
   return *this;
 }
 
+/*!
+  Sets the string prepended to the first line of wrapped output. Counts towards
+  the length of the first line. The empty string is not indented.
+
+  @param initial_indent String to prepend to the first line.
+  @return Reference to this builder for chaining.
+  @see IndentWith, Then
+  @note Default is empty string.
+*/
 auto oxygen::wrap::TextWrapperBuilder::Initially(std::string initial_indent)
   -> TextWrapperBuilder&
 {
@@ -323,6 +420,15 @@ auto oxygen::wrap::TextWrapperBuilder::Initially(std::string initial_indent)
   return *this;
 }
 
+/*!
+  Sets the string prepended to all lines except the first. Counts towards the
+  length of each line. The empty string is not indented.
+
+  @param indent String to prepend to subsequent lines.
+  @return Reference to this builder for chaining.
+  @see IndentWith, Initially
+  @note Default is empty string.
+*/
 auto oxygen::wrap::TextWrapperBuilder::Then(std::string indent)
   -> TextWrapperBuilder&
 {
@@ -330,6 +436,14 @@ auto oxygen::wrap::TextWrapperBuilder::Then(std::string indent)
   return *this;
 }
 
+/*!
+  Sets the string used to expand tab characters in input text. This is the first
+  transformation before whitespace collapsing and wrapping.
+
+  @param tab String to use for tab expansion.
+  @return Reference to this builder for chaining.
+  @note Default is "\t".
+*/
 auto oxygen::wrap::TextWrapperBuilder::ExpandTabs(std::string tab)
   -> TextWrapperBuilder&
 {
@@ -337,6 +451,15 @@ auto oxygen::wrap::TextWrapperBuilder::ExpandTabs(std::string tab)
   return *this;
 }
 
+/*!
+  Enables collapsing contiguous whitespace into a single space after tab
+  expansion. Useful for normalizing input text.
+
+  @return Reference to this builder for chaining.
+  @note White space collapsing is done after tab expansion; if tab expansion
+  uses non-whitespace, collapsing may be superseded.
+  @note Default is false.
+*/
 auto oxygen::wrap::TextWrapperBuilder::CollapseWhiteSpace()
   -> TextWrapperBuilder&
 {
@@ -344,12 +467,26 @@ auto oxygen::wrap::TextWrapperBuilder::CollapseWhiteSpace()
   return *this;
 }
 
+/*!
+  Enables trimming whitespace at the beginning and end of every line after
+  wrapping but before indenting.
+
+  @return Reference to this builder for chaining.
+  @note Default is false.
+*/
 auto oxygen::wrap::TextWrapperBuilder::TrimLines() -> TextWrapperBuilder&
 {
   wrapper.trim_lines_ = true;
   return *this;
 }
 
+/*!
+  Enables breaking compound words into separate chunks right after hyphens, as
+  is customary in English.
+
+  @return Reference to this builder for chaining.
+  @note Default is false.
+*/
 auto oxygen::wrap::TextWrapperBuilder::BreakOnHyphens() -> TextWrapperBuilder&
 {
   wrapper.break_on_hyphens_ = true;
