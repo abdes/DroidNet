@@ -20,6 +20,28 @@ using oxygen::content::LoadFunction;
 using oxygen::content::PakFile;
 using oxygen::content::PakResource;
 
+#include <Oxygen/Composition/Typed.h>
+#include <array>
+
+//=== Helpers to get Resource TypeId by index in ResourceTypeList ============//
+
+namespace {
+template <typename... Ts>
+std::array<oxygen::TypeId, sizeof...(Ts)> MakeTypeIdArray(
+  oxygen::TypeList<Ts...>)
+{
+  return { Ts::ClassTypeId()... };
+}
+
+inline oxygen::TypeId GetResourceTypeIdByIndex(std::size_t type_index)
+{
+  static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
+  return ids.at(type_index);
+}
+} // namespace
+
+//=== AssetLoader Implementation =============================================//
+
 AssetLoader::AssetLoader()
 {
   using serio::FileStream;
@@ -244,8 +266,10 @@ template <PakResource T>
 auto AssetLoader::LoadResource(const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
 {
-  const auto pak_index = GetPakIndex(pak);
-  const internal::ResourceKey internal_key(pak_index, resource_index);
+  const uint16_t pak_index = GetPakIndex(pak);
+  const uint16_t resource_type_index = IndexOf<T, ResourceTypeList>::value;
+  const internal::ResourceKey internal_key(
+    pak_index, resource_type_index, resource_index);
   auto key_hash = std::hash<internal::ResourceKey> {}(internal_key);
 
   // Check cache first using the ResourceKey directly
@@ -290,6 +314,22 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
   return true; // Successfully released
 }
 
+auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
+{
+  // Normalize the path of the input pak
+  const auto& pak_path = std::filesystem::weakly_canonical(pak.FilePath());
+
+  for (uint16_t i = 0U; i < paks_.size(); ++i) {
+    // Compare normalized paths
+    if (std::filesystem::weakly_canonical(paks_[i]->FilePath()) == pak_path) {
+      return i;
+    }
+  }
+
+  LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
+  throw std::runtime_error("PAK file not found in AssetLoader collection");
+}
+
 //=== Explicit Template Instantiations ======================================//
 
 // Instantiate for all supported asset types
@@ -325,20 +365,4 @@ auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
 {
   const internal::ResourceKey internal_key(key);
   return std::hash<internal::ResourceKey> {}(internal_key);
-}
-
-auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint32_t
-{
-  // Normalize the path of the input pak
-  const auto& pak_path = std::filesystem::weakly_canonical(pak.FilePath());
-
-  for (auto i = 0U; i < paks_.size(); ++i) {
-    // Compare normalized paths
-    if (std::filesystem::weakly_canonical(paks_[i]->FilePath()) == pak_path) {
-      return i;
-    }
-  }
-
-  LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
-  throw std::runtime_error("PAK file not found in AssetLoader collection");
 }
