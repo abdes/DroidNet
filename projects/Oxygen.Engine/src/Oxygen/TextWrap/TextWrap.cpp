@@ -10,49 +10,54 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <regex>
 #include <utility>
 
 #include <Oxygen/TextWrap/Internal/Tokenizer.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
+using oxygen::wrap::TextWrapper;
 using oxygen::wrap::internal::Token;
 using oxygen::wrap::internal::TokenConsumer;
 using oxygen::wrap::internal::Tokenizer;
 using oxygen::wrap::internal::TokenType;
 
-/*!
-  Produces a string representation of the configuration parameters of a
-  TextWrapper instance for debugging purposes.
-
-  @param wrapper The TextWrapper to convert.
-  @return String representation of the configuration.
-
-  ### Usage Example
-
-  ```cpp
-  std::string config = oxygen::wrap::to_string(wrapper);
-  // config: "{w:80,t:'\t',tl:0,boh:0}"
-  ```
-*/
-auto oxygen::wrap::to_string(const TextWrapper& wrapper) -> std::string
-{
-  std::string result = "{w:";
-  result += std::to_string(wrapper.width_);
-  result += ",t:'";
-  result += wrapper.tab_;
-  result += "',tl:";
-  result += (wrapper.trim_lines_ ? "1" : "0");
-  result += ",boh:";
-  result += (wrapper.break_on_hyphens_ ? "1" : "0");
-  result += "}";
-  return result;
-}
-
 namespace {
+
+/*!
+  Removes ANSI escape codes from a string for width calculation purposes.
+  Only CSI (Control Sequence Introducer) codes matching the regex
+  "\\x1B\\[[0-9;]*[A-Za-z]" are stripped. This covers standard SGR (Select
+  Graphic Rendition) and most formatting/color codes, but does not remove OSC,
+  DCS, or other non-CSI sequences.
+
+  @param input The string to process.
+  @return The input string with supported ANSI escape codes removed.
+
+  ### Supported ANSI Escape Codes
+
+  - CSI sequences: ESC [ ... letter (e.g., "\x1B[31m", "\x1B[1;32m")
+  - SGR (color/style): "\x1B[...m"
+  - Other CSI formatting: "\x1B[...K", etc.
+
+  ### Not Supported
+
+  - OSC (Operating System Command): "\x1B]...\x07"
+  - DCS (Device Control String): "\x1BP...\x1B\\"
+  - Non-CSI ESC codes (e.g., "\x1B7", "\x1B8")
+
+  @note This matches the feature scope and regex used in TextWrap.
+*/
+auto StripAnsiEscapeCodes(const std::string& input) -> std::string
+{
+  static const std::regex ansi_regex("\\x1B\\[[0-9;]*[A-Za-z]");
+  return std::regex_replace(input, ansi_regex, "");
+}
 
 auto WrapChunks(const std::vector<Token>& chunks, const size_t width,
   const std::string& indent, const std::string& initial_indent,
-  const bool trim_lines) -> std::vector<std::string>
+  const bool trim_lines, const bool ignore_ansi_escape_codes)
+  -> std::vector<std::string>
 {
 
   // https://www.geeksforgeeks.org/word-wrap-problem-space-optimized-solution/
@@ -131,7 +136,12 @@ auto WrapChunks(const std::vector<Token>& chunks, const size_t width,
             current_length = adjusted_width + 1;
           }
         } else {
-          current_length += (chunks[cur_chunk_in_line].second.size());
+          if (ignore_ansi_escape_codes) {
+            current_length
+              += StripAnsiEscapeCodes(chunks[cur_chunk_in_line].second).size();
+          } else {
+            current_length += chunks[cur_chunk_in_line].second.size();
+          }
         }
 
         // If limit of characters is violated then no more words can be added to
@@ -141,7 +151,13 @@ auto WrapChunks(const std::vector<Token>& chunks, const size_t width,
           if (chunks[cur_chunk_in_line].first == TokenType::kWhiteSpace
             && trim_lines) {
             // Will be trimmed later so don't count it
-            current_length -= (chunks[cur_chunk_in_line].second.size());
+            if (ignore_ansi_escape_codes) {
+              current_length
+                -= StripAnsiEscapeCodes(chunks[cur_chunk_in_line].second)
+                     .size();
+            } else {
+              current_length -= chunks[cur_chunk_in_line].second.size();
+            }
           }
           // Abort adding the current chunk to the current line, unless it is
           // the only chunk in the line. In that case, we accept it even if it's
@@ -263,34 +279,40 @@ auto MoveAppend(std::vector<std::string> src, std::vector<std::string>& dst)
 } // namespace
 
 /*!
- Uses a dynamic programming algorithm to wrap text so each line is at most the
- configured width, minimizing raggedness by penalizing extra spaces.
+  Uses a dynamic programming algorithm to wrap text so each line is at most the
+  configured width, minimizing raggedness by penalizing extra spaces.
 
- Handles multiple paragraphs (separated by empty lines), indentation, tab
- expansion, whitespace collapsing, and optional hyphen-based word breaking.
+  Handles multiple paragraphs (separated by empty lines), indentation, tab
+  expansion, whitespace collapsing, optional hyphen-based word breaking, and
+  (optionally) ignoring ANSI escape codes in width calculation.
 
- @param str Input string, may contain multiple paragraphs separated by empty
- lines.
- @return Optional vector of output lines (no trailing newlines). Returns
- `std::nullopt` if input is empty or tokenization fails.
+  If IgnoreAnsiEscapeCodes is enabled, only CSI (Control Sequence Introducer)
+  ANSI codes matching the regex "\\x1B\\[[0-9;]*[A-Za-z]" are ignored for width
+  calculation, but preserved in output. This covers SGR and most color/
+  formatting codes, but not OSC, DCS, or other non-CSI codes.
 
- ### Performance Characteristics
+  @param str Input string, may contain multiple paragraphs separated by empty
+  lines.
+  @return Optional vector of output lines (no trailing newlines). Returns
+  `std::nullopt` if input is empty or tokenization fails.
 
- - Time Complexity: O(n^2) for cost table, O(n) for result assembly.
- - Memory: O(n)
- - Optimization: Minimizes raggedness; handles edge cases for long words.
+  ### Performance Characteristics
 
- ### Usage Examples
+  - Time Complexity: O(n^2) for cost table, O(n) for result assembly.
+  - Memory: O(n)
+  - Optimization: Minimizes raggedness; handles edge cases for long words.
 
- ```cpp
- std::string input = "Hello world.\n\nThis is Oxygen.";
- auto wrapper = oxygen::wrap::MakeWrapper().Width(10);
- auto lines = wrapper.Wrap(input);
- // Output: {"Hello", "world.", "", "This is", "Oxygen."}
- ```
+  ### Usage Examples
 
- @note Paragraphs are separated by empty lines in the output.
- @see Fill, TextWrapperBuilder, TextWrap.cpp
+  ```cpp
+  std::string input = "\x1B[31mHello\x1B[0m world.";
+  auto wrapper = oxygen::wrap::MakeWrapper().Width(5).IgnoreAnsiEscapeCodes();
+  auto lines = wrapper.Wrap(input);
+  // Output: {"\x1B[31mHello\x1B[0m", "world."}
+  ```
+
+  @note Paragraphs are separated by empty lines in the output.
+  @see Fill, TextWrapperBuilder, TextWrap.cpp
 */
 auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
   -> std::optional<std::vector<std::string>>
@@ -307,8 +329,8 @@ auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
       if (!result.empty()) {
         result.emplace_back("");
       }
-      MoveAppend(
-        WrapChunks(chunks, width_, indent_, initial_indent_, trim_lines_),
+      MoveAppend(WrapChunks(chunks, width_, indent_, initial_indent_,
+                   trim_lines_, ignore_ansi_escape_codes_),
         result);
       chunks.clear();
     } else {
@@ -324,32 +346,36 @@ auto oxygen::wrap::TextWrapper::Wrap(const std::string& str) const
 }
 
 /*!
- Wraps text so every line is at most the TextWrapper's `width` characters long
- and returns a single string containing the result. Equivalent to joining the
- result of `Wrap()` using `\\n`.
+  Wraps text so every line is at most the TextWrapper's `width` characters long
+  and returns a single string containing the result. Equivalent to joining the
+  result of `Wrap()` using `\n`.
 
- Returns std::nullopt if input is empty or tokenization fails.
+  Returns std::nullopt if input is empty or tokenization fails.
 
- @param str Input string, may contain multiple paragraphs separated by empty
- lines.
- @return A single string containing the result, lines separated by `\\n`.
- Returns `std::nullopt` on error.
+  If IgnoreAnsiEscapeCodes is enabled, only CSI ANSI codes matching the regex
+  "\\x1B\\[[0-9;]*[A-Za-z]" are ignored for width calculation, but preserved
+  in output. See Wrap() for details.
 
- ### Performance Characteristics
+  @param str Input string, may contain multiple paragraphs separated by empty
+  lines.
+  @return A single string containing the result, lines separated by `\n`.
+  Returns `std::nullopt` on error.
 
- - Time Complexity: O(n^2) for wrapping, O(n) for joining.
- - Memory: O(n)
+  ### Performance Characteristics
 
- ### Usage Examples
+  - Time Complexity: O(n^2) for wrapping, O(n) for joining.
+  - Memory: O(n)
 
- ```cpp
- std::string input = "Hello world.\n\nThis is Oxygen.";
- auto wrapper = oxygen::wrap::MakeWrapper().Width(10);
- auto lines = wrapper.Wrap(input);
- // Output: {"Hello", "world.", "", "This is", "Oxygen."}
- ```
+  ### Usage Examples
 
- @see Wrap, TextWrapperBuilder, TextWrap.cpp
+  ```cpp
+  std::string input = "\x1B[31mHello\x1B[0m world.";
+  auto wrapper = oxygen::wrap::MakeWrapper().Width(5).IgnoreAnsiEscapeCodes();
+  auto filled = wrapper.Fill(input);
+  // Output: "\x1B[31mHello\x1B[0m\nworld."
+  ```
+
+  @see Wrap, TextWrapperBuilder, TextWrap.cpp
 */
 auto oxygen::wrap::TextWrapper::Fill(const std::string& str) const
   -> std::optional<std::string>
@@ -395,6 +421,24 @@ auto oxygen::wrap::TextWrapperBuilder::Width(const size_t width)
   -> TextWrapperBuilder&
 {
   wrapper.width_ = width;
+  return *this;
+}
+
+/*!
+  Enables ignoring ANSI escape codes in width calculation. When enabled, only
+  CSI (Control Sequence Introducer) ANSI codes matching the regex
+  "\\x1B\\[[0-9;]*[A-Za-z]" are ignored for width calculation, but preserved
+  in output. This covers SGR and most color/formatting codes, but not OSC, DCS,
+  or other non-CSI codes.
+
+  @return Reference to this builder for chaining.
+  @note Default is false.
+  @see StripAnsiEscapeCodes, TextWrapper, Wrap
+*/
+auto oxygen::wrap::TextWrapperBuilder::IgnoreAnsiEscapeCodes()
+  -> TextWrapperBuilder&
+{
+  wrapper.ignore_ansi_escape_codes_ = true;
   return *this;
 }
 
@@ -497,4 +541,34 @@ auto oxygen::wrap::TextWrapperBuilder::BreakOnHyphens() -> TextWrapperBuilder&
 {
   wrapper.break_on_hyphens_ = true;
   return *this;
+}
+
+/*!
+  Produces a string representation of the configuration parameters of a
+  TextWrapper instance for debugging purposes.
+
+  @param wrapper The TextWrapper to convert.
+  @return String representation of the configuration.
+
+  ### Usage Example
+
+  ```cpp
+  std::string config = wrapper.to_string();
+  // config: "{w:80,t:'\t',tl:0,boh:0}"
+  ```
+*/
+auto TextWrapper::to_string() const -> std::string
+{
+  std::string result = "{w:";
+  result += std::to_string(width_);
+  result += ",t:'";
+  result += tab_;
+  result += "',tl:";
+  result += (trim_lines_ ? "1" : "0");
+  result += ",boh:";
+  result += (break_on_hyphens_ ? "1" : "0");
+  result += ",ansi:";
+  result += (ignore_ansi_escape_codes_ ? "1" : "0");
+  result += "}";
+  return result;
 }

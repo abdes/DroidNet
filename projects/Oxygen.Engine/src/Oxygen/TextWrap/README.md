@@ -49,6 +49,8 @@ correctness.
 - **Paragraph Support:** Handles multi-paragraph input, preserving paragraph
   breaks.
 - **Hyphenation:** Optionally break lines at hyphens in compound words.
+- **ANSI Escape Code Handling:** Optionally ignore ANSI color/formatting codes
+  in width calculation (CSI/SRG only).
 
 ---
 
@@ -60,7 +62,6 @@ help display and general usability. Status is tracked below:
 | Feature                       | Status | Notes |
 |-------------------------------|--------|-------|
 | Unicode Awareness             | ❌     | Width is measured in code units, not display columns. |
-| ANSI Escape Code Handling     | ❌     | No support for ignoring ANSI color/formatting codes in width calculation. |
 | Paragraph and List Formatting | ❌     | Paragraphs supported, but no explicit list/bullet formatting. |
 
 Legend: ✅ = Implemented, ❌ = Not implemented
@@ -131,6 +132,7 @@ All options are set via the builder API:
 | `CollapseWhiteSpace()`| Collapse contiguous whitespace to a single space  | false       |
 | `TrimLines()`         | Trim whitespace at start/end of each line         | false       |
 | `BreakOnHyphens()`    | Allow breaking lines at hyphens                   | false       |
+| `IgnoreAnsiEscapeCodes()` | Ignore ANSI color/formatting codes (CSI/SRG only) in width calculation | false |
 
 **Indentation Example:**
 
@@ -182,6 +184,18 @@ auto filled = wrapper.Fill(hyphenated);
 if (filled) std::cout << *filled << std::endl;
 ```
 
+### Ignoring ANSI Escape Codes
+
+```cpp
+auto wrapper = MakeWrapper().Width(10).IgnoreAnsiEscapeCodes();
+std::string colored = "\x1B[31mRedText\x1B[0m normal";
+auto lines = wrapper.Wrap(colored);
+if (lines) {
+    for (const auto& l : *lines) std::cout << l << '\n';
+}
+// Output: "\x1B[31mRedText\x1B[0m" and "normal" (color codes ignored for width)
+```
+
 ---
 
 ## Design Notes
@@ -202,7 +216,11 @@ if (filled) std::cout << *filled << std::endl;
 - **Tokenization:** Input is split into tokens (words, whitespace, newlines,
   paragraph marks) using an internal tokenizer.
 - **Algorithm:** The core algorithm (`WrapChunks`) computes the optimal line
-  breaks for a sequence of tokens, considering all configuration options.
+  breaks for a sequence of tokens, considering all configuration options. If
+  `IgnoreAnsiEscapeCodes()` is enabled, only CSI ANSI codes matching the regex
+  `\x1B\[[0-9;]*[A-Za-z]` are ignored for width calculation, but preserved in
+  output. This covers SGR and most color/formatting codes, but not OSC, DCS, or
+  other non-CSI codes.
 - **Whitespace/Indentation:** Handles trimming, collapsing, and indentation as
   post-processing steps.
 - **Performance:** Designed for efficiency, using preallocated vectors and
@@ -220,6 +238,11 @@ if (filled) std::cout << *filled << std::endl;
 ---
 
 ## FAQ
+
+**Q: What kinds of ANSI escape codes are ignored?** A: Only CSI (Control
+Sequence Introducer) codes matching the regex `\x1B\[[0-9;]*[A-Za-z]` are
+ignored for width calculation. This covers SGR (color/style) and most formatting
+codes, but not OSC, DCS, or other non-CSI codes. Output formatting is preserved.
 
 **Q: What happens if a word is longer than the line width?** A: The word will be
 placed on its own line, even if it exceeds the width.

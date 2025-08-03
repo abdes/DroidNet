@@ -43,7 +43,6 @@ class TextWrapperBuilder;
 class TextWrapper {
 public:
   friend class TextWrapperBuilder;
-  friend OXGN_TXW_API auto to_string(const TextWrapper& wrapper) -> std::string;
 
   //! Wraps text to the configured width using a cost-optimized algorithm.
   OXGN_TXW_NDAPI auto Wrap(const std::string& str) const
@@ -52,6 +51,8 @@ public:
   //! Wraps text and returns a single string containing the result.
   OXGN_TXW_NDAPI auto Fill(const std::string& str) const
     -> std::optional<std::string>;
+
+  OXGN_TXW_NDAPI auto to_string() const -> std::string;
 
 private:
   TextWrapper() = default;
@@ -68,12 +69,17 @@ private:
 
   bool break_on_hyphens_ { false };
 
+  bool ignore_ansi_escape_codes_ { false };
+
   static constexpr size_t DEFAULT_COLUMN_WIDTH = 80;
   static constexpr auto DEFAULT_TAB_EXPANSION = "\t";
 };
 
 //! Returns a string representation of the TextWrapper configuration.
-OXGN_TXW_NDAPI auto to_string(const TextWrapper& wrapper) -> std::string;
+inline auto to_string(const TextWrapper& wrapper) -> std::string
+{
+  return wrapper.to_string();
+}
 
 //! A fluent interface builder for TextWrapper.
 /*!
@@ -132,6 +138,9 @@ public:
 
   //! Enables breaking compound words after hyphens.
   OXGN_TXW_API auto BreakOnHyphens() -> TextWrapperBuilder&;
+
+  //! Enables ignoring ANSI escape codes in width calculation.
+  OXGN_TXW_API auto IgnoreAnsiEscapeCodes() -> TextWrapperBuilder&;
 
 private:
   mutable TextWrapper wrapper;
