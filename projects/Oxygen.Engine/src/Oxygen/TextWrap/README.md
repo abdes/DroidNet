@@ -1,9 +1,10 @@
 # TextWrap Module User Guide
 
 The `TextWrap` module provides a flexible, robust, and highly configurable text
-wrapping utility for the Oxygen Engine. It is designed for formatting text into
-lines of a specified width, with advanced options for whitespace handling,
-indentation, and hyphenation.
+wrapping utility. It is designed for formatting text into lines of a specified
+width, with advanced options for whitespace handling, indentation, and
+hyphenation. Typical use cases include command line help formatting, pretty
+formatting of fized width text descriptions, etc.
 
 ---
 
@@ -18,21 +19,6 @@ indentation, and hyphenation.
 - [Implementation Details](#implementation-details)
 - [Extending TextWrap](#extending-textwrap)
 - [FAQ](#faq)
-
----
-
-## Future Enhancements
-
-The following features are planned or under consideration to improve terminal help display and general usability. Status is tracked below:
-
-| Feature                                       | Status | Notes |
-|-----------------------------------------------|--------|-------|
-| Unicode/Terminal Width Awareness              | ❌     | Width is measured in code units, not display columns. |
-| ANSI Escape Code Handling                     | ❌     | No support for ignoring ANSI color/formatting codes in width calculation. |
-| Dynamic Terminal Width Detection              | ❌     | Width must be set manually; no runtime detection. |
-| Consistent Paragraph and List Formatting      | ❌     | Paragraphs supported, but no explicit list/bullet formatting. |
-
-Legend: ✅ = Implemented, ❌ = Not implemented
 
 ---
 
@@ -63,6 +49,21 @@ correctness.
 - **Paragraph Support:** Handles multi-paragraph input, preserving paragraph
   breaks.
 - **Hyphenation:** Optionally break lines at hyphens in compound words.
+
+---
+
+## Future Enhancements
+
+The following features are planned or under consideration to improve terminal
+help display and general usability. Status is tracked below:
+
+| Feature                       | Status | Notes |
+|-------------------------------|--------|-------|
+| Unicode Awareness             | ❌     | Width is measured in code units, not display columns. |
+| ANSI Escape Code Handling     | ❌     | No support for ignoring ANSI color/formatting codes in width calculation. |
+| Paragraph and List Formatting | ❌     | Paragraphs supported, but no explicit list/bullet formatting. |
+
+Legend: ✅ = Implemented, ❌ = Not implemented
 
 ---
 
