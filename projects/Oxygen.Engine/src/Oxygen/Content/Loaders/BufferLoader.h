@@ -83,8 +83,11 @@ inline auto UnloadBufferResource(
   std::shared_ptr<data::BufferResource> /*resource*/, AssetLoader& /*loader*/,
   bool offline) noexcept -> void
 {
-  if (offline) { }
+  if (offline) {
+    return;
+  }
   // TODO: cleanup GPU resources for the buffer.
+  (void)0; // Placeholder for future GPU resource cleanup
 }
 
 static_assert(oxygen::content::UnloadFunction<decltype(UnloadBufferResource),
