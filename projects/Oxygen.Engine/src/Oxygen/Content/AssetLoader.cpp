@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Internal/ResourceKey.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
@@ -19,9 +22,6 @@ using oxygen::content::AssetLoader;
 using oxygen::content::LoadFunction;
 using oxygen::content::PakFile;
 using oxygen::content::PakResource;
-
-#include <Oxygen/Composition/Typed.h>
-#include <array>
 
 //=== Helpers to get Resource TypeId by index in ResourceTypeList ============//
 
@@ -40,7 +40,24 @@ inline oxygen::TypeId GetResourceTypeIdByIndex(std::size_t type_index)
 }
 } // namespace
 
-//=== AssetLoader Implementation =============================================//
+//=== Sanity Checking Helper =================================================//
+
+namespace {
+auto SanityCheckResourceEviction(const uint64_t key_hash, uint64_t& cacche_key,
+  oxygen::TypeId& type_id) -> bool
+{
+  CHECK_EQ_F(key_hash, cacche_key);
+  // Get the resource type index from the key
+  oxygen::content::internal::ResourceKey internal_key(cacche_key);
+  const uint16_t resource_type_index = internal_key.GetResourceTypeIndex();
+  // Get the class type id for the resource type
+  const auto class_type_id = GetResourceTypeIdByIndex(resource_type_index);
+  CHECK_EQ_F(type_id, class_type_id);
+  return true;
+}
+} // namespace
+
+//=== Basic methods ==========================================================//
 
 AssetLoader::AssetLoader()
 {
@@ -176,6 +193,9 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
           // Cache the loaded asset
           content_cache_.Store(hash_key, typed);
           return typed;
+        } else {
+          LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
+            T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
         }
       }
       return nullptr;
@@ -184,16 +204,23 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
   return nullptr;
 }
 
-auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
+auto AssetLoader::ReleaseAsset(const data::AssetKey& key, bool offline) -> bool
 {
   // Recursively release (check in) the asset and all its dependencies.
-  ReleaseAssetTree(key);
+  ReleaseAssetTree(key, offline);
   // Return true if the asset is no longer present in the cache
   return !content_cache_.Contains(HashAssetKey(key));
 }
 
-auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
+auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
+  -> void
 {
+  auto guard = content_cache_.OnEviction(
+    [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
+      DCHECK_EQ_F(HashAssetKey(key), cacche_key);
+      InvokeUnloadFunction(type_id, value, offline);
+    });
+
   // Release resource dependencies first
   auto res_dep_it = resource_dependencies_.find(key);
   if (res_dep_it != resource_dependencies_.end()) {
@@ -206,7 +233,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
   auto dep_it = asset_dependencies_.find(key);
   if (dep_it != asset_dependencies_.end()) {
     for (const auto& dep_key : dep_it->second) {
-      ReleaseAssetTree(dep_key);
+      ReleaseAssetTree(dep_key, offline);
     }
     asset_dependencies_.erase(dep_it);
   }
@@ -295,23 +322,31 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   return nullptr;
 }
 
-auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
+void oxygen::content::AssetLoader::InvokeUnloadFunction(
+  oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline)
+{
+  // Invoke the resource unload function
+  auto unload_it = unloaders_.find(type_id);
+  if (unload_it != unloaders_.end()) {
+    unload_it->second(value, *this, offline);
+  } else {
+    LOG_F(WARNING, "No unload function registered for type: {}", type_id);
+  }
+}
+
+auto AssetLoader::ReleaseResource(const ResourceKey key, bool offline) -> bool
 {
   const auto key_hash = HashResourceKey(key);
 
   // The resource should always be checked in on release. Whether it remains in
   // the cache or gets evicted is dependent on the eviction policy.
+  auto guard = content_cache_.OnEviction(
+    [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
+      DCHECK_F(SanityCheckResourceEviction(key_hash, cacche_key, type_id));
+      InvokeUnloadFunction(type_id, value, offline);
+    });
   content_cache_.CheckIn(HashResourceKey(key));
-  if (content_cache_.Contains(key_hash)) {
-    return false;
-  }
-
-  // If the resource is no longer in the cache, we can, and should, safely
-  // unload it.
-
-  // TODO: Implement unloading logic if needed
-  LOG_F(WARNING, "TODO: resource must be unloaded at this point", key);
-  return true; // Successfully released
+  return (content_cache_.Contains(key_hash)) ? false : true;
 }
 
 auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
@@ -330,7 +365,7 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
   throw std::runtime_error("PAK file not found in AssetLoader collection");
 }
 
-//=== Explicit Template Instantiations ======================================//
+//=== Explicit Template Instantiations =======================================//
 
 // Instantiate for all supported asset types
 template auto AssetLoader::LoadAsset<oxygen::data::GeometryAsset>(
@@ -354,7 +389,7 @@ template auto AssetLoader::LoadResource<oxygen::data::TextureResource>(
 //   template auto
 //   AssetLoader::LoadResource<oxygen::data::SomeNewResource>(...);
 
-//=== Hash Key Generation ===================================================//
+//=== Hash Key Generation ====================================================//
 
 auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 {

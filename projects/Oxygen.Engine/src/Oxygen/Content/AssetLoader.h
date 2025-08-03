@@ -151,6 +151,7 @@ public:
    or as a dependency, by any part of the system.
 
    @param key The asset key to release
+   @param offline Whether to release in offline mode (no GPU side effects)
    @return True if this call caused the asset to be fully evicted from the
    cache, false if the asset is still present or was not present.
 
@@ -158,7 +159,8 @@ public:
    eviction is determined individually by reference counts and dependents.
    @see LoadAsset, HasAsset, ReleaseResource
   */
-  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool;
+  OXGN_CNTT_API auto ReleaseAsset(
+    const data::AssetKey& key, bool offline = false) -> bool;
 
   //=== Resource Loading ===================================================//
 
@@ -243,13 +245,15 @@ public:
    evicted (and return true) when all users and dependents have released it.
 
    @param key The ResourceKey identifying the resource.
+   @param offline Whether to release in offline mode (no GPU side effects)
    @return True if this call caused the resource to be fully evicted from the
    cache, false if the resource is still present or was not present.
 
    @note This method is idempotent: repeated calls after eviction return false.
    @see LoadResource, HasResource, ReleaseAsset, AnyCache
   */
-  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool;
+  OXGN_CNTT_API auto ReleaseResource(ResourceKey key, bool offline = false)
+    -> bool;
 
   //! Register a load and unload functions for assets or resources (unified
   //! interface)
@@ -345,7 +349,7 @@ private:
 
   //! Helper method for the recursive descent of asset dependencies when
   //! releasing assets.
-  auto ReleaseAssetTree(const data::AssetKey& key) -> void;
+  auto ReleaseAssetTree(const data::AssetKey& key, bool offline) -> void;
 
   //=== Dependency Tracking ===-----------------------------------------------//
 
@@ -392,6 +396,9 @@ private:
   static auto MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
     const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
     -> std::shared_ptr<void>;
+
+  void InvokeUnloadFunction(
+    oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline);
 
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
