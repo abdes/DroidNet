@@ -87,6 +87,8 @@ inline auto LoadTextureResource(LoaderContext context)
   return std::make_unique<data::TextureResource>(desc);
 }
 
+static_assert(oxygen::content::LoadFunction<decltype(LoadTextureResource)>);
+
 //! Unload function for TextureResource.
 inline auto UnloadTextureResource(
   const std::shared_ptr<data::TextureResource>& /*resource*/,
@@ -98,5 +100,8 @@ inline auto UnloadTextureResource(
   // TODO: cleanup GPU resources for the texture.
   (void)0; // Placeholder for future GPU resource cleanup
 }
+
+static_assert(oxygen::content::UnloadFunction<decltype(UnloadTextureResource),
+  data::TextureResource>);
 
 } // namespace oxygen::content::loaders

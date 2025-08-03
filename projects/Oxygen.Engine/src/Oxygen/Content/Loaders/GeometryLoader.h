@@ -406,6 +406,8 @@ auto LoadGeometryAsset(LoaderContext context)
     std::move(desc), std::move(lod_meshes));
 }
 
+static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);
+
 //! Unload function for GeometryAsset.
 inline auto UnloadGeometryAsset(std::shared_ptr<data::GeometryAsset> /*asset*/,
   AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
@@ -413,5 +415,8 @@ inline auto UnloadGeometryAsset(std::shared_ptr<data::GeometryAsset> /*asset*/,
   // Nothing to do for a geometry asset, its dependency resources will do the
   // work when unloaded.
 }
+
+static_assert(oxygen::content::UnloadFunction<decltype(UnloadGeometryAsset),
+  data::GeometryAsset>);
 
 } // namespace oxygen::content::loaders

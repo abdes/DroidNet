@@ -220,6 +220,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
   return std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
 }
 
+static_assert(oxygen::content::LoadFunction<decltype(LoadMaterialAsset)>);
+
 //! Unload function for MaterialAsset.
 inline auto UnloadMaterialAsset(std::shared_ptr<data::MaterialAsset> /*asset*/,
   AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
@@ -227,5 +229,8 @@ inline auto UnloadMaterialAsset(std::shared_ptr<data::MaterialAsset> /*asset*/,
   // Nothing to do for a material asset, its dependency resources will do the
   // work when unloaded.
 }
+
+static_assert(oxygen::content::UnloadFunction<decltype(UnloadMaterialAsset),
+  data::MaterialAsset>);
 
 } // namespace oxygen::content::loaders
