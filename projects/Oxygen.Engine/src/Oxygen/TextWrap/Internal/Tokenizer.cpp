@@ -45,13 +45,6 @@ auto oxygen::wrap::internal::to_string(const TokenType value) -> const char*
   return "__Unknown__";
 }
 
-auto oxygen::wrap::internal::operator<<(
-  std::ostream& out, const TokenType& token_type) -> std::ostream&
-{
-  out << to_string(token_type);
-  return out;
-}
-
 // -----------------------------------------------------------------------------
 //  Tokenizer state machine events
 // -----------------------------------------------------------------------------
@@ -100,14 +93,13 @@ auto DispatchTokenToConsumer(const TokenConsumer& consume_token,
   token.clear();
 }
 
+//! The final state of the tokenizer state machine.
 /*!
- * \brief The final state of the tokenizer state machine.
- *
- * When the state machine enters this state, a final token event of type
- * TokenType::EndOfInput will be dispatched to the token consumer. After that,
- * the state machine is a completed execution state and no more tokens will be
- * produced. The tokenizer can be reused for a new input text.
- */
+ When the state machine enters this state, a final token event of type
+ TokenType::EndOfInput will be dispatched to the token consumer. After that, the
+ state machine is a completed execution state and no more tokens will be
+ produced. The tokenizer can be reused for a new input text.
+*/
 struct FinalState : Will<ByDefault<DoNothing>> {
   explicit FinalState(TokenConsumer callback)
     : consume_token { std::move(callback) }
@@ -125,28 +117,26 @@ private:
   TokenConsumer consume_token;
 };
 
+//! The initial state of the tokenizer state machine.
 /*!
- * \brief The initial state of the tokenizer state machine.
- *
- * This is the starting state of the tokenizer. Based on which first token will
- * be extracted from the input text, this state will transition to one of the
- * next states.
- */
+ This is the starting state of the tokenizer. Based on which first token will be
+ extracted from the input text, this state will transition to one of the next
+ states.
+*/
 struct InitialState : Will<On<NonWhiteSpaceChar, TransitionTo<WordState>>,
                         On<WhiteSpaceChar, TransitionTo<WhiteSpaceState>>,
                         On<InputEnd, TransitionTo<FinalState>>> {
   using Will::Handle;
 };
 
+//! Tokenizer state while forming a chunk of non-white-space text.
 /*!
- * \brief Tokenizer state while forming a chunk of non-white-space text.
- *
- * In this state, the tokenizer accumulates input characters into a chunk until
- * it encounters a white space character, a hyphen when break_on_hyphens is
- * `true` or the end of input. At that moment, it dispatches the chunk as a
- * token to the token consumer and transitions to the next state corresponding
- * to the last event.
- */
+ In this state, the tokenizer accumulates input characters into a chunk until it
+ encounters a white space character, a hyphen when break_on_hyphens is `true` or
+ the end of input. At that moment, it dispatches the chunk as a token to the
+ token consumer and transitions to the next state corresponding to the last
+ event.
+*/
 struct WordState : Will<On<InputEnd, TransitionTo<FinalState>>,
                      On<WhiteSpaceChar, TransitionTo<WhiteSpaceState>>> {
   using Will::Handle;
@@ -189,17 +179,15 @@ private:
   bool break_on_hyphens;
 };
 
+//! Tokenizer state while getting white-space as input characters.
 /*!
- * \brief Tokenizer state while getting white-space as input characters.
- *
- * In this state, the tokenizer is waiting for a non-white-space to start
- * forming a new chunk or for the end of input to terminate. Any white space
- * characters are collected into a temporary token to be transformed as per the
- * configured parameters (see Tokenizer class description for a detailed
- * description of these parameters). The white space token is then dispatched to
- * the token consumer and the state machine transitions into the next state
- * based on the last event.
- */
+ In this state, the tokenizer is waiting for a non-white-space to start forming
+ a new chunk or for the end of input to terminate. Any white space characters
+ are collected into a temporary token to be transformed as per the configured
+ parameters (see Tokenizer class description for a detailed description of these
+ parameters). The white space token is then dispatched to the token consumer and
+ the state machine transitions into the next state based on the last event.
+*/
 struct WhiteSpaceState : Will<On<InputEnd, TransitionTo<FinalState>>,
                            On<NonWhiteSpaceChar, TransitionTo<WordState>>> {
   using Will::Handle;
@@ -287,18 +275,26 @@ private:
 
 } // namespace
 
-/*!
- * \brief The Overload pattern allows to explicitly 'overload' lambdas and is
- * particularly useful for creating visitors, e.g. for std::variant.
- */
+//! The Overload pattern allows to explicitly 'overload' lambdas and is
+//! particularly useful for creating visitors, e.g. for std::variant.
 template <typename... Ts> // (7)
 struct Overload : Ts... {
   using Ts::operator()...;
 };
-// Deduction guide only needed for C++17. C++20 can automatically create the
-// template parameters out of the constructor arguments.
+
+//! Deduction guide only needed for C++17. C++20 can automatically create the
+//! template parameters out of the constructor arguments.
 template <class... Ts> Overload(Ts...) -> Overload<Ts...>;
 
+/*!
+ Tokens produced by the Tokenizer are consumed via the TokenConsumer passed as
+ an argument to this method.
+
+ @param text the input text to be split into tokens.
+ @param consume_token the token consumer which will be called each time a
+ token is produced.
+ @return `true` if the tokenization completed successfully; `false` otherwise.
+*/
 auto oxygen::wrap::internal::Tokenizer::Tokenize(
   const std::string& text, const TokenConsumer& consume_token) const -> bool
 {
