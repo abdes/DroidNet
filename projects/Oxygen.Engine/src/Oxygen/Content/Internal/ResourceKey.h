@@ -14,22 +14,34 @@
 
 namespace oxygen::content::internal {
 
-//! Resource key that combines PAK file index and resource index
+//! Resource key that combines PAK file index, resource type index, and resource
+//! index
 /*!
  A 64-bit key that uniquely identifies a resource across all PAK files
- managed by an AssetLoader. The upper 32 bits contain the PAK file index
- in the AssetLoader's collection, and the lower 32 bits contain the
- ResourceIndexT from the PAK format.
+ managed by an AssetLoader. The key layout is:
+
+ - Upper 16 bits: PAK file index in the AssetLoader's collection
+ - Next 16 bits: Resource type index (index in ResourceTypeList)
+ - Lower 32 bits: ResourceIndexT from the PAK format (resource index within the
+ PAK)
+
+ This allows efficient lookup and type-safe handling of resources in a bindless
+ system.
 
  @note This class is internal to AssetLoader implementation and should not
        be used directly by client code.
  */
 class ResourceKey {
+
 public:
-  //! Construct from PAK index and resource index
-  constexpr ResourceKey(const uint32_t pak_index,
+  //! Construct a ResourceKey from PAK index, resource type index, and resource
+  //! index
+  constexpr ResourceKey(const uint16_t pak_index,
+    const uint16_t resource_type_index,
     const data::pak::ResourceIndexT resource_index) noexcept
-    : key_((static_cast<uint64_t>(pak_index) << 32) | resource_index)
+    : key_((static_cast<uint64_t>(pak_index) << 48)
+        | (static_cast<uint64_t>(resource_type_index) << 32)
+        | static_cast<uint64_t>(resource_index))
   {
     static_assert(sizeof(data::pak::ResourceIndexT) <= sizeof(uint32_t));
   }
@@ -46,17 +58,23 @@ public:
   {
   }
 
-  //! Get the PAK file index (upper 32 bits)
-  [[nodiscard]] constexpr auto GetPakIndex() const noexcept -> uint32_t
+  //! Get the PAK file index (upper 16 bits of the key)
+  [[nodiscard]] constexpr auto GetPakIndex() const noexcept -> uint16_t
   {
-    return static_cast<uint32_t>(key_ >> 32);
+    return static_cast<uint16_t>(key_ >> 48);
   }
 
-  //! Get the resource index within the PAK file (lower 32 bits)
+  //! Get the resource type index (bits 32-47 of the key)
+  [[nodiscard]] constexpr auto GetResourceTypeIndex() const noexcept -> uint16_t
+  {
+    return static_cast<uint16_t>((key_ >> 32) & 0xFFFF);
+  }
+
+  //! Get the resource index within the PAK file (lower 32 bits of the key)
   [[nodiscard]] constexpr auto GetResourceIndex() const noexcept
     -> data::pak::ResourceIndexT
   {
-    return key_ & 0xFFFFFFFF;
+    return static_cast<data::pak::ResourceIndexT>(key_ & 0xFFFFFFFF);
   }
 
   //! Get the raw 64-bit key value
@@ -91,6 +109,7 @@ private:
 inline auto to_string(const ResourceKey& key) -> std::string
 {
   return "RK{pak:" + std::to_string(key.GetPakIndex())
+    + ", type:" + std::to_string(key.GetResourceTypeIndex())
     + ", idx:" + std::to_string(key.GetResourceIndex()) + "}";
 }
 

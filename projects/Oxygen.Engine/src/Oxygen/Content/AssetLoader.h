@@ -379,7 +379,7 @@ private:
   OXGN_CNTT_API static auto HashResourceKey(const ResourceKey& key) -> uint64_t;
 
   //! Get PAK file index from pointer (for resource key creation)
-  auto GetPakIndex(const PakFile& pak) const -> uint32_t;
+  auto GetPakIndex(const PakFile& pak) const -> uint16_t;
 
   //! Helper: Create asset loader call with unified error handling
   template <LoadFunction F>
