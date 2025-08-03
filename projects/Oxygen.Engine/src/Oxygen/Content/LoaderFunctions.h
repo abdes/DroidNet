@@ -29,30 +29,72 @@ concept LoadFunctionForStream = requires(F f, LoaderContext context) {
 /*!
  Load and unload functions are always registered as a pair for a specific asset
  or resource type `T`, where `T` is deduced from the load function's return
- type. The load function is responsible for constructing and returning a fully
- initialized asset or resource from a data stream, while the unload function is
- responsible for cleanup when the object is evicted from the cache. Both must
- consistently use the type `T`.
+ type. The load function constructs and returns a fully initialized asset or
+ resource from a data stream, while the unload function performs cleanup when
+ the object is evicted from the cache. Both must consistently use the type `T`.
 
  ### Load Function Requirements
 
- - Must be callable as `std::unique_ptr<T> f(LoaderContext<S>)` for a stream S.
+ - Must be callable as `std::unique_ptr<T> f(LoaderContext)`.
  - The returned type `T` must satisfy the `IsTyped` concept.
- - Failure to load must be indicated by returning a null pointer. Do not use
-   exceptions to indicate normal load errors; only throw for truly exceptional
-   situations (e.g., unrecoverable system errors).
- - The load function must not retain ownership of the context or any temporary
-   resources.
+ - Failure to load must be indicated by returning a null pointer.
+ - Must not retain ownership of the context or any temporary resources.
+
+ ### How Load Functions Are Called
+
+ - Signature: `std::unique_ptr<T> LoadFunc(LoaderContext context)`
+   - `context`: LoaderContext provides access to the asset/resource descriptor
+     stream, asset loader, current asset key, and data readers for all resource
+     types. It is always passed by value and contains all necessary state for
+     loading.
+   - The function must read from `context.desc_reader` and may use other fields
+     as needed. It must not retain ownership of the context or any temporary
+     resources.
+   - Return: A fully initialized `std::unique_ptr<T>` (where T satisfies
+     `IsTyped`). If loading fails, return a null pointer. Do not use exceptions
+     for normal load errors; only throw for unrecoverable system errors.
+
+ @param context LoaderContext for the load function (see above)
+ @param resource Shared pointer to resource for unload function
+ @param loader AssetLoader reference for unload function
+ @param offline Boolean indicating offline mode for unload function
+*/
+template <typename F>
+concept LoadFunction = LoadFunctionForStream<F>;
+
+//! Concept for asset/resource unload functions used with AssetLoader.
+/*!
+ Unload functions are registered as cleanup handlers for a specific asset or
+ resource type `T`. They are called when an asset/resource is evicted from the
+ cache or explicitly unloaded.
+
+ ### How Unload Functions Are Called
+
+ - Signature: `void UnloadFunc(std::shared_ptr<T> resource, AssetLoader& loader,
+   bool offline)`
+   - `resource`: Shared pointer to the asset/resource to be cleaned up. May be
+     null if the resource was never loaded.
+   - `loader`: Reference to the AssetLoader managing the resource. Used for
+     dependency cleanup or resource deregistration.
+   - `offline`: Indicates whether the engine is running in offline mode (no GPU
+     resources). If true, skip GPU resource cleanup.
+   - The function must handle all errors locally and only throw for exceptional
+     situations that cannot be handled internally.
 
  ### Unload Function Requirements
 
  - Must be callable as `void(std::shared_ptr<T>, AssetLoader&, bool)`.
- - Must handle all errors locally and only throw for exceptional situations that
-   cannot be handled internally.
+ - Must not return a value.
+ - Must handle all errors locally and only throw for exceptional situations.
 
- @see LoaderContext, AssetLoader
+ @param resource Shared pointer to resource for unload function
+ @param loader AssetLoader reference for unload function
+ @param offline Boolean indicating offline mode for unload function
 */
-template <typename F>
-concept LoadFunction = LoadFunctionForStream<F>;
+template <typename F, typename T>
+concept UnloadFunction = requires(
+  F f, std::shared_ptr<T> resource, AssetLoader& loader, bool offline) {
+  { f(resource, loader, offline) } -> std::same_as<void>;
+};
 
 } // namespace oxygen::content
