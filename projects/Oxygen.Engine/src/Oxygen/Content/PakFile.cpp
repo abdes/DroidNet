@@ -171,6 +171,11 @@ PakFile::PakFile(const std::filesystem::path& path)
   ReadDirectory(meta_stream_.get(), static_cast<uint32_t>(footer_.asset_count));
 }
 
+/*!
+  Looks up an asset directory entry by its key.
+  @param key Asset key to search for.
+  @return Optional directory entry if found, `std::nullopt` otherwise.
+*/
 auto PakFile::FindEntry(const AssetKey& key) const noexcept
   -> std::optional<AssetDirectoryEntry>
 {
@@ -182,22 +187,27 @@ auto PakFile::FindEntry(const AssetKey& key) const noexcept
   return std::nullopt;
 }
 
+/*!
+  Returns a span over all asset directory entries in the PAK file.
+  @return Span of asset directory entries.
+  @note Entries are ordered as in the PAK file.
+  @see FindEntry, AssetDirectoryEntry
+*/
 auto PakFile::Directory() const noexcept -> std::span<const AssetDirectoryEntry>
 {
   std::scoped_lock lock(mutex_);
   return { directory_.data(), directory_.size() };
 }
 
-auto PakFile::FormatVersion() const noexcept -> uint16_t
-{
-  return header_.version;
-}
+/*!
+  Creates a Reader object positioned at the start of the asset's data region.
 
-auto PakFile::ContentVersion() const noexcept -> uint16_t
-{
-  return header_.content_version;
-}
+  @param entry Asset directory entry to read from.
+  @return Reader for the asset's data region.
 
+  @note Reader is valid only for the lifetime of the PakFile.
+  @see Reader, AssetDirectoryEntry
+*/
 auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
 {
   std::scoped_lock lock(mutex_);
@@ -213,6 +223,37 @@ auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
   return Reader(*meta_stream_);
 }
 
+/*!
+  Returns the format version number from the PAK file header.
+  @return Format version number.
+
+  @note Used for compatibility checks.
+  @see ContentVersion
+*/
+auto PakFile::FormatVersion() const noexcept -> uint16_t
+{
+  return header_.version;
+}
+
+/*!
+  Returns the content version number from the PAK file header.
+  @return Content version number.
+
+  @note Indicates asset content revision.
+  @see FormatVersion
+*/
+auto PakFile::ContentVersion() const noexcept -> uint16_t
+{
+  return header_.content_version;
+}
+
+/*!
+  Returns a Reader positioned at the start of the buffer data region.
+
+  @return Reader for buffer data region.
+
+  @see CreateTextureDataReader, CreateDataReader
+*/
 auto PakFile::CreateBufferDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
@@ -229,6 +270,13 @@ auto PakFile::CreateBufferDataReader() const -> Reader
   return Reader(*buffer_data_stream_);
 }
 
+/*!
+  Returns a Reader positioned at the start of the texture data region.
+
+  @return Reader for texture data region.
+
+  @see CreateBufferDataReader, CreateDataReader
+*/
 auto PakFile::CreateTextureDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
@@ -246,6 +294,14 @@ auto PakFile::CreateTextureDataReader() const -> Reader
   return Reader(*texture_data_stream_);
 }
 
+/*!
+  Returns a reference to the ResourceTable for buffer resources.
+
+  @return Reference to ResourceTable for buffers.
+  @throw std::runtime_error if table is not present.
+
+  @see ResourceTable, HasTableOf
+*/
 auto PakFile::BuffersTable() const -> BuffersTableT&
 {
   if (!buffers_table_) {
@@ -255,6 +311,14 @@ auto PakFile::BuffersTable() const -> BuffersTableT&
   return *buffers_table_;
 }
 
+/*!
+  Returns a reference to the ResourceTable for texture resources.
+
+  @return Reference to ResourceTable for textures.
+  @throw std::runtime_error if table is not present.
+
+  @see ResourceTable, HasTableOf
+*/
 auto PakFile::TexturesTable() const -> TexturesTableT&
 {
   if (!textures_table_) {

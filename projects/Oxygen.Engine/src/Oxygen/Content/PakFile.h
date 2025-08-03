@@ -26,10 +26,40 @@
 
 namespace oxygen::content {
 
-//! Reader for Oxygen .pak asset containers.
-/*! Provides read-only access to asset directory and data in a .pak file.
+//! Reader and accessor for Oxygen .pak asset containers
+/*!
+ PakFile provides read-only, thread-safe access to the asset directory, resource
+ tables, and data regions of an Oxygen Engine .pak file. It supports type-safe
+ resource table queries, asset directory lookups, and region-based data
+ streaming for buffer and texture resources.
 
-  @see AssetDirectoryEntry, AssetKey
+ ### Key Features
+
+ - **Thread-Safe Reads**: Uses internal mutex for safe concurrent access.
+ - **Type-Safe Resource Table Access**: Template-based queries for buffer and
+   texture resource tables.
+ - **Asset Directory Lookup**: Fast key-to-index mapping for asset queries.
+ - **Region-Based Data Streaming**: Provides readers for buffer and texture data
+   regions, aligned for efficient I/O.
+ - **Format Versioning**: Exposes header and content version info.
+
+ ### Usage Patterns
+
+ ```cpp
+ PakFile pak{"assets.pak"};
+ auto entry = pak.FindEntry(key);
+ auto& buffers = pak.BuffersTable();
+ auto reader = pak.CreateReader(entry.value());
+ ```
+
+ ### Architecture Notes
+
+ - Designed for bindless resource management and modular asset loading.
+ - Integrates with ResourceTable and asset registry systems.
+ - Only supports reading; writing is not implemented.
+
+ @see oxygen::content::ResourceTable, data::pak::AssetDirectoryEntry,
+      data::pak::PakHeader, data::pak::PakFooter
 */
 class PakFile {
   // Internal: initialize resource tables if present in the footer
@@ -83,33 +113,17 @@ public:
   //=== Header Information ===-----------------------------------------------//
 
   //! Get the PAK format version from the header.
-  /*!
-    @return Format version number from the PAK header.
-  */
   OXGN_CNTT_NDAPI auto FormatVersion() const noexcept -> uint16_t;
 
   //! Get the PAK content version from the header.
-  /*!
-    @return Content version number from the PAK header.
-  */
   OXGN_CNTT_NDAPI auto ContentVersion() const noexcept -> uint16_t;
 
   //=== Resource Table Access ===---------------------------------------------//
 
   //! Get the resource table for buffers.
-  /*!
-    Returns a ResourceTable for buffer resources using the built-in loader.
-    @return ResourceTable for buffers, or std::nullopt if not present.
-    @see ResourceTable
-  */
   OXGN_CNTT_NDAPI auto BuffersTable() const -> BuffersTableT&;
 
   //! Get the resource table for textures.
-  /*!
-    Returns a ResourceTable for texture resources using the built-in loader.
-    @return ResourceTable for textures, or std::nullopt if not present.
-    @see ResourceTable
-  */
   OXGN_CNTT_NDAPI auto TexturesTable() const -> TexturesTableT&;
 
   //! Check if a resource table of the given type exists in the PAK file.
@@ -126,12 +140,13 @@ public:
 
   //! Get the resource table for the specified resource type.
   /*!
-   Returns a pointer to the ResourceTable for the specified resource type.
-   Uses template specialization to return the appropriate table.
+    Returns a pointer to the ResourceTable for the specified resource type.
+    Uses template specialization to return the appropriate table.
 
-   @tparam T The resource type (must satisfy PakResource concept)
-   @return Pointer to ResourceTable for type T, or nullptr if not present
-   @see HasTableOf, BuffersTable, TexturesTable
+    @tparam T Resource type (must satisfy PakResource concept)
+    @return Pointer to ResourceTable for type T, or nullptr if not present
+
+    @see HasTableOf, BuffersTable, TexturesTable
   */
   template <PakResource T> auto GetResourceTable() const -> ResourceTable<T>*
   {
@@ -146,9 +161,23 @@ public:
 
   //=== Data Regions Access ===-----------------------------------------------//
 
+  //! Create a Reader for the buffer data region.
   auto CreateBufferDataReader() const -> Reader;
+
+  //! Create a Reader for the texture data region.
   auto CreateTextureDataReader() const -> Reader;
 
+  //! Create a Reader for the data region of the specified resource type.
+  /*!
+    Returns a Reader positioned at the start of the data region for the
+    specified resource type.
+
+    @tparam T Resource type (must satisfy PakResource concept)
+    @return Reader for the resource data region.
+    @throw std::invalid_argument if resource type is unsupported.
+
+    @see CreateBufferDataReader, CreateTextureDataReader
+  */
   template <PakResource T> auto CreateDataReader() const -> Reader
   {
     if constexpr (std::is_same_v<T, data::BufferResource>) {
