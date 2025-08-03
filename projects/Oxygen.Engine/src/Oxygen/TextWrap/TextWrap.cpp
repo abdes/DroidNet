@@ -151,10 +151,10 @@ auto WrapChunks(const std::vector<Token>& chunks, size_t width,
           optimized[cur_chunk] = cur_chunk_in_line;
         }
 
-        // TODO: delete or understand why it is commented out
-        // if (current_length > adjusted_width) {
-        //   break;
-        // }
+        // Do not pre-maturely break out if the current line exeeds the maximum
+        // width, allowing to handle the edge case when a single token is longer
+        // than the line width.
+
         cur_chunk_in_line++;
       }
 
