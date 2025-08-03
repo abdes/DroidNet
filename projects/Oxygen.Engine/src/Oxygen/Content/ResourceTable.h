@@ -14,6 +14,38 @@
 
 namespace oxygen::content {
 
+//! ResourceTable: Lightweight offset resolver for PAK resource descriptors
+/*!
+ ResourceTable provides a type-safe, lightweight mechanism for resolving
+ resource descriptor offsets within a PAK file. It is parameterized by the
+ resource type and uses metadata from the PAK file to compute descriptor
+ locations and validate resource keys.
+
+ ### Key Features
+
+ - **Type-Safe Offset Resolution**: Uses resource type metadata to ensure
+   correct offset calculations.
+ - **Validation**: Checks resource key bounds and entry size consistency.
+ - **No Resource Ownership**: Does not own or manage resource data, only
+   descriptor offsets.
+
+ ### Usage Patterns
+
+ ```cpp
+ // Example usage
+ using TextureTable = ResourceTable<TextureResource>;
+ TextureTable table(meta);
+ auto offset = table.GetResourceOffset(key);
+ ```
+
+ ### Architecture Notes
+
+ - Designed for bindless resource management in Oxygen Engine.
+ - Used by resource loaders and registry systems for fast descriptor lookup.
+
+ @tparam T Resource type (must satisfy PakResource concept)
+ @see oxygen::content::PakResource, data::pak::ResourceTable
+*/
 template <PakResource T> class ResourceTable {
 public:
   using DescT = typename T::DescT;
