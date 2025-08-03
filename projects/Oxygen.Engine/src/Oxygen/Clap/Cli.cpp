@@ -98,6 +98,7 @@ auto Cli::PrintCommands(
                   << "\n";
       wrap::TextWrapper wrap = wrap::MakeWrapper()
                                  .Width(width)
+                                 .IgnoreAnsiEscapeCodes()
                                  .TrimLines()
                                  .IndentWith()
                                  .Initially("     ")

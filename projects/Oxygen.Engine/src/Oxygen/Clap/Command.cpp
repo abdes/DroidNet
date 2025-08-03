@@ -110,6 +110,7 @@ auto oxygen::clap::Command::Print(
 {
   wrap::TextWrapper wrap = wrap::MakeWrapper()
                              .Width(width)
+                             .IgnoreAnsiEscapeCodes()
                              .CollapseWhiteSpace()
                              .TrimLines()
                              .IndentWith()
