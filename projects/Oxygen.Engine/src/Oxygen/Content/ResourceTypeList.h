@@ -15,6 +15,7 @@ class TextureResource;
 } // namespace oxygen
 
 namespace oxygen::content {
+
 // List of all valid resource types for the engine
 using ResourceTypeList = oxygen::TypeList<
   // clang-format off
@@ -23,9 +24,13 @@ using ResourceTypeList = oxygen::TypeList<
   // clang-format on
   >;
 
+static_assert(TypeListSize<ResourceTypeList>::value
+    <= std::numeric_limits<std::uint16_t>::max(),
+  "ResourceTypeList size must fit in uint16_t for type index encoding");
+
 // Concept: T must be a known resource type and have DescT
 template <typename T>
 concept PakResource = requires { typename T::DescT; }
-  && (oxygen::IndexOf<T, ResourceTypeList>::value >= 0);
+  && IsTyped<T> && (oxygen::IndexOf<T, ResourceTypeList>::value >= 0);
 
 } // namespace oxygen::content
