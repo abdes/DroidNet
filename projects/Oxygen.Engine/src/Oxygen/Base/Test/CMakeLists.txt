@@ -50,12 +50,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 m_gtest_program(
+  TypeList
+  SOURCES
+    "TypeList_test.cpp"
+)
+
+m_gtest_program(
   Resource
   SOURCES
     "Resource_test.cpp"
     "ResourceHandle_test.cpp"
     "ResourceTable_test.cpp"
-    "ResourceTypeList_test.cpp"
 )
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")

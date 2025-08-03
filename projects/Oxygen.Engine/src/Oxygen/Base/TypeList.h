@@ -63,9 +63,8 @@ namespace oxygen {
 */
 template <typename... Ts> struct TypeList { };
 
+//! Template metaprogramming helper to find the index of a type in a TypeList.
 /*!
- Template metaprogramming helper to find the index of a type in a TypeList.
-
  Recursively searches through the TypeList at compile time and returns the
  zero-based index where the type is found. Generates a compile error if the type
  is not found, providing type safety.
@@ -84,6 +83,27 @@ struct IndexOf<T, TypeList<U, Ts...>>
   : std::integral_constant<std::size_t,
       1 + IndexOf<T, TypeList<Ts...>>::value> { };
 
+//! Template metaprogramming helper to compute the number of types in a
+//! TypeList.
+/*!
+ @tparam List The TypeList to compute the size of.
+ @return The number of types in the TypeList as std::size_t.
+
+ ### Usage Example
+
+ ```cpp
+ using MyTypes = oxygen::TypeList<int, float, double>;
+ constexpr std::size_t count = oxygen::TypeListSize<MyTypes>::value; // 3
+ ```
+
+ @see TypeList
+*/
+template <typename List> struct TypeListSize;
+
+template <typename... Ts>
+struct TypeListSize<TypeList<Ts...>>
+  : std::integral_constant<std::size_t, sizeof...(Ts)> { };
+
 /*!
  Template metaprogramming helper to apply a TypeList to a template.
 
@@ -94,7 +114,7 @@ struct IndexOf<T, TypeList<U, Ts...>>
  @tparam Template The template to apply the TypeList to
  @tparam List The TypeList to apply
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
  using MyTypes = TypeList<int, float, double>;
@@ -124,7 +144,7 @@ using Apply_t = typename Apply<Template, List>::type;
  type)
  @return A std::tuple of the transformed types
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
  using MyTuple = TypeListTransform<MyTypeList, std::add_pointer>::type;
