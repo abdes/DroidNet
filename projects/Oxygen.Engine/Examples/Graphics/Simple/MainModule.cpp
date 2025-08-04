@@ -33,7 +33,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 
-#include <MainModule.h>
+#include "./MainModule.h"
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
