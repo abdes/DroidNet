@@ -396,12 +396,6 @@ template auto AssetLoader::LoadResource<oxygen::data::TextureResource>(
   const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
   -> std::shared_ptr<data::TextureResource>;
 
-// TODO: When adding new resource types, remember to:
-// 1. Add explicit template instantiation for LoadResource here
-// Example for a future SomeNewResource:
-//   template auto
-//   AssetLoader::LoadResource<oxygen::data::SomeNewResource>(...);
-
 //=== Hash Key Generation ====================================================//
 
 auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
