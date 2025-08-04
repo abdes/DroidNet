@@ -55,25 +55,21 @@ inline auto LoadBufferResource(LoaderContext context)
   LOG_F(2, "usage flags    : {}", nostd::to_string(flags));
   LOG_F(2, "element stride : {}", desc.element_stride);
 
-  // Note: In offline mode, we skip any GPU resource creation
-  if (!context.offline && desc.size_bytes > 0) {
-    // TODO: Read the buffer data
-    // For now we just do some sanity checks and throw if the data cannot be
-    // fully read
+  std::vector<uint8_t> data_buffer(desc.size_bytes);
+  if (desc.size_bytes > 0) {
     constexpr std::size_t buf_index
       = IndexOf<data::BufferResource, ResourceTypeList>::value;
     auto& data_reader = *std::get<buf_index>(context.data_readers);
 
     check_result(data_reader.Seek(desc.data_offset), "Buffer Data");
-    if (desc.element_stride != 0) {
-      auto align_result = data_reader.AlignTo(desc.element_stride);
-      check_result(align_result, "Buffer Data");
-    }
-    auto data_result = data_reader.ReadBlob(desc.size_bytes);
+    // Create a span of std::byte over the same memory
+    std::span<std::byte> byte_view(
+      reinterpret_cast<std::byte*>(data_buffer.data()), data_buffer.size());
+    auto data_result = data_reader.ReadBlobInto(byte_view);
     check_result(data_result, "Buffer Data");
   }
 
-  return std::make_unique<data::BufferResource>(desc);
+  return std::make_unique<data::BufferResource>(desc, std::move(data_buffer));
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadBufferResource)>);

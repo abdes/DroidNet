@@ -7,6 +7,8 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
@@ -63,8 +65,13 @@ public:
     kImmutable = 0x200, //!< Never updated after creation
   };
 
-  explicit BufferResource(pak::BufferResourceDesc desc)
+  /*! Constructs a BufferResource with descriptor and exclusive data ownership.
+      @param desc Buffer resource descriptor from PAK file.
+      @param data Raw buffer data (ownership transferred).
+  */
+  BufferResource(pak::BufferResourceDesc desc, std::vector<uint8_t> data)
     : desc_(std::move(desc))
+    , data_(std::move(data))
   {
   }
 
@@ -78,7 +85,7 @@ public:
     return desc_.data_offset;
   }
 
-  [[nodiscard]] auto GetDataSize() const noexcept { return desc_.size_bytes; }
+  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
 
   //! Returns the buffer usage and access flags (bitfield).
   [[nodiscard]] auto GetUsageFlags() const noexcept
@@ -117,8 +124,15 @@ public:
     return GetElementFormat() == Format::kUnknown && GetElementStride() == 1;
   }
 
+  //! Returns an immutable span of the loaded buffer data.
+  [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
+  {
+    return std::span<const uint8_t>(data_.data(), data_.size());
+  }
+
 private:
   pak::BufferResourceDesc desc_ {};
+  std::vector<uint8_t> data_;
 };
 
 // Define bitwise operators for UsageFlags enum.

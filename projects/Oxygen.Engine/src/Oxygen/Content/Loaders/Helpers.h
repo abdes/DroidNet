@@ -65,7 +65,7 @@ inline auto Load(AnyReader& reader, data::pak::TextureResourceDesc& desc)
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.data_offset));
-  CHECK_RESULT(reader.ReadInto(desc.data_size));
+  CHECK_RESULT(reader.ReadInto(desc.size_bytes));
   CHECK_RESULT(reader.ReadInto(desc.texture_type));
   CHECK_RESULT(reader.ReadInto(desc.compression_type));
   CHECK_RESULT(reader.ReadInto(desc.width));

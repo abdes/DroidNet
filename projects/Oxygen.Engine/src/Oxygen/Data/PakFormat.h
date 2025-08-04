@@ -193,7 +193,7 @@ static_assert(sizeof(AssetDirectoryEntry) == 64);
 #pragma pack(push, 1)
 struct TextureResourceDesc {
   OffsetT data_offset; // Absolute offset to texture data
-  DataBlobSizeT data_size; // Size of texture data
+  DataBlobSizeT size_bytes; // Size of texture data
   uint8_t texture_type; // 2D, 3D, Cube, etc. (enum)
   uint8_t compression_type; // Compression type (e.g., BC1, BC3, etc.)
   uint32_t width; // Texture width
@@ -269,7 +269,7 @@ static_assert(sizeof(BufferResourceDesc) == 32);
 #pragma pack(push, 1)
 struct AudioResourceDesc {
   OffsetT data_offset; // Absolute offset to audio data
-  DataBlobSizeT data_size; // Size of audio data
+  DataBlobSizeT size_bytes; // Size of audio data
   uint32_t sample_rate; // Audio sample rate
   uint32_t channels; // Number of channels
   uint32_t audio_format; // PCM, Vorbis, etc.

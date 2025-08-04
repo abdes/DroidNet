@@ -7,6 +7,8 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
@@ -29,7 +31,7 @@ namespace oxygen::data {
  offset size name             description
  ------ ---- ---------------- ---------------------------------------------
  0x00   8    data_offset      Absolute offset to texture data in PAK file
- 0x08   4    data_size        Size of texture data in bytes
+ 0x08   4    size_bytes        Size of texture data in bytes
  0x0C   1    texture_type     Texture type/dimension (enum)
  0x0D   1    compression_type Compression type (enum)
  0x0E   4    width            Texture width in pixels
@@ -51,8 +53,13 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::TextureResourceDesc;
 
-  explicit TextureResource(pak::TextureResourceDesc desc)
+  /*! Constructs a TextureResource with descriptor and exclusive data ownership.
+      @param desc Texture resource descriptor from PAK file.
+      @param data Raw texture data buffer (ownership transferred).
+  */
+  TextureResource(pak::TextureResourceDesc desc, std::vector<uint8_t> data)
     : desc_(std::move(desc))
+    , data_(std::move(data))
   {
   }
 
@@ -61,15 +68,12 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(TextureResource)
   OXYGEN_DEFAULT_MOVABLE(TextureResource)
 
-  [[nodiscard]] auto GetDataOffset() const noexcept -> uint64_t
+  [[nodiscard]] auto GetDataOffset() const noexcept
   {
     return desc_.data_offset;
   }
 
-  [[nodiscard]] auto GetDataSize() const noexcept -> uint32_t
-  {
-    return desc_.data_size;
-  }
+  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
 
   OXGN_DATA_NDAPI auto GetTextureType() const noexcept -> TextureType;
 
@@ -110,8 +114,15 @@ public:
     return desc_.alignment;
   }
 
+  //! Returns an immutable span of the loaded texture data.
+  [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
+  {
+    return std::span<const uint8_t>(data_.data(), data_.size());
+  }
+
 private:
   pak::TextureResourceDesc desc_ {};
+  std::vector<uint8_t> data_;
 };
 
 } // namespace oxygen::data

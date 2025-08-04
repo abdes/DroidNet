@@ -66,7 +66,7 @@ inline auto ParseHexDumpWithOffset(const std::string& hexdump,
 template <serio::Stream DescS, serio::Stream DataS>
 auto WriteTextureDescWithData(serio::Writer<DescS>& desc_writer,
   serio::Writer<DataS>& data_writer, const std::string& hexdump,
-  const uint32_t data_size, const std::byte data_filler)
+  const uint32_t size_bytes, const std::byte data_filler)
 {
   // Parse the header
   std::vector<std::byte> buffer = ParseHexDumpWithOffset(hexdump);
@@ -79,7 +79,7 @@ auto WriteTextureDescWithData(serio::Writer<DescS>& desc_writer,
     }
   }
   {
-    buffer.resize(data_size);
+    buffer.resize(size_bytes);
     std::ranges::fill(buffer, data_filler);
     auto pack = data_writer.ScopedAlignment(256);
     auto result = data_writer.WriteBlob(buffer);
