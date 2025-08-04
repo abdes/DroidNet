@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
@@ -22,14 +23,12 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/content/ResourceKey.h>
 #include <Oxygen/data/AssetKey.h>
 #include <Oxygen/data/GeometryAsset.h>
 #include <Oxygen/data/MaterialAsset.h>
 
 namespace oxygen::content {
-
-// Type aliases for cleaner code
-using ResourceKey = uint64_t;
 
 class AssetLoader {
 public:
@@ -67,7 +66,7 @@ public:
    is removed.
 
    @param dependent The asset that has the dependency
-   @param resource_key The ResourceKey that is depended upon
+   @param resource_key The resource key that is depended upon
 
    @note The resource's reference count is incremented in the cache.
    @see AddAssetDependency, ReleaseResource
@@ -164,6 +163,18 @@ public:
 
   //=== Resource Loading ===================================================//
 
+  template <typename T>
+  inline auto MakeResourceKey(const PakFile& pak_file, uint32_t resource_index)
+    -> ResourceKey
+  {
+    auto pak_index = GetPakIndex(pak_file);
+    auto resource_type_index
+      = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
+    auto key = internal::InternalResourceKey(
+      pak_index, resource_type_index, resource_index);
+    return key.GetRawKey();
+  }
+
   //! Load or get cached resource from a specific PAK file and resource index
   /*!
    Loads a resource of type T from the specified PAK file and resource index,
@@ -205,7 +216,7 @@ public:
    a load operation.
 
    @tparam T The resource type (must satisfy PakResource concept)
-   @param key The ResourceKey identifying the resource
+   @param key The resource key identifying the resource
    @return Shared pointer to cached resource, or nullptr if not cached
 
    @note Does not increment reference count
@@ -222,7 +233,7 @@ public:
    Checks whether a resource is currently loaded in the engine-wide cache.
 
    @tparam T The resource type (must satisfy PakResource concept)
-   @param key The ResourceKey identifying the resource
+   @param key The resource key identifying the resource
    @return True if resource is cached, false otherwise
 
    @note Does not trigger loading or affect reference count
@@ -244,7 +255,7 @@ public:
    still in use elsewhere or not present. The resource will only be fully
    evicted (and return true) when all users and dependents have released it.
 
-   @param key The ResourceKey identifying the resource.
+   @param key The resource key identifying the resource.
    @param offline Whether to release in offline mode (no GPU side effects)
    @return True if this call caused the resource to be fully evicted from the
    cache, false if the resource is still present or was not present.

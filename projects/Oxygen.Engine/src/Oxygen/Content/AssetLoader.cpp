@@ -10,7 +10,6 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Internal/ResourceKey.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -48,7 +47,7 @@ auto SanityCheckResourceEviction(const uint64_t key_hash, uint64_t& cacche_key,
 {
   CHECK_EQ_F(key_hash, cacche_key);
   // Get the resource type index from the key
-  oxygen::content::internal::ResourceKey internal_key(cacche_key);
+  oxygen::content::internal::InternalResourceKey internal_key(cacche_key);
   const uint16_t resource_type_index = internal_key.GetResourceTypeIndex();
   // Get the class type id for the resource type
   const auto class_type_id = GetResourceTypeIdByIndex(resource_type_index);
@@ -139,12 +138,12 @@ auto AssetLoader::AddAssetDependency(
 }
 
 auto AssetLoader::AddResourceDependency(
-  const data::AssetKey& dependent, const ResourceKey resource_key) -> void
+  const data::AssetKey& dependent, ResourceKey resource_key) -> void
 {
   LOG_SCOPE_F(2, "Add Resource Dependency");
 
   // Decode ResourceKey for logging
-  internal::ResourceKey internal_key(resource_key);
+  internal::InternalResourceKey internal_key(resource_key);
   LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent),
     nostd::to_string(internal_key));
 
@@ -308,9 +307,9 @@ auto AssetLoader::LoadResource(const PakFile& pak,
 {
   const uint16_t pak_index = GetPakIndex(pak);
   const uint16_t resource_type_index = IndexOf<T, ResourceTypeList>::value;
-  const internal::ResourceKey internal_key(
+  const internal::InternalResourceKey internal_key(
     pak_index, resource_type_index, resource_index);
-  auto key_hash = std::hash<internal::ResourceKey> {}(internal_key);
+  auto key_hash = std::hash<internal::InternalResourceKey> {}(internal_key);
 
   // Check cache first using the ResourceKey directly
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
@@ -405,6 +404,6 @@ auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 
 auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
 {
-  const internal::ResourceKey internal_key(key);
-  return std::hash<internal::ResourceKey> {}(internal_key);
+  const internal::InternalResourceKey internal_key(key);
+  return std::hash<internal::InternalResourceKey> {}(internal_key);
 }

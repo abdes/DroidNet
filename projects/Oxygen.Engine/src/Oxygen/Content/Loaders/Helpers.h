@@ -8,6 +8,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -235,5 +237,27 @@ inline auto LoadAssetHeader(
   LOG_F(INFO, "streaming priority : {}", header.streaming_priority);
   LOG_F(INFO, "content hash       : 0x{:016X}", header.content_hash);
 }
+
+//! Helper RAII class for automatic resource cleanup when an error occurs during
+//! loading.
+class ResourceCleanupGuard {
+  AssetLoader* loader_;
+  ResourceKey key_;
+  bool disabled_;
+
+public:
+  ResourceCleanupGuard(AssetLoader& loader, ResourceKey key)
+    : loader_(&loader)
+    , key_(key)
+    , disabled_(false)
+  {
+  }
+  ~ResourceCleanupGuard()
+  {
+    if (!disabled_ && loader_)
+      loader_->ReleaseResource(key_, true);
+  }
+  void disable() { disabled_ = true; }
+};
 
 } // namespace oxygen::content::loaders

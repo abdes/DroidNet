@@ -4,6 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
+#include <glm/glm.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MeshType.h>
@@ -66,10 +70,30 @@ SubMesh::SubMesh(const Mesh& mesh, std::string name,
 Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
   std::vector<std::uint32_t> indices)
   : name_(fmt::format("LOD_{}", lod))
-  , vertices_(std::move(vertices))
-  , indices_(std::move(indices))
+  , buffer_storage_(detail::OwnedBufferStorage {
+      .vertices = std::move(vertices), .indices = std::move(indices) })
 {
-  CHECK_F(!vertices_.empty(), "Mesh must have at least one vertex");
+  auto& owned_storage = std::get<detail::OwnedBufferStorage>(buffer_storage_);
+  CHECK_F(
+    !owned_storage.vertices.empty(), "Mesh must have at least one vertex");
+  ComputeBounds();
+}
+
+Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
+  std::shared_ptr<BufferResource> index_buffer)
+  : name_(fmt::format("LOD_{}", lod))
+  , buffer_storage_(detail::ReferencedBufferStorage {
+      .vertex_buffer_resource = std::move(vertex_buffer),
+      .index_buffer_resource = std::move(index_buffer) })
+{
+  auto& referenced_storage
+    = std::get<detail::ReferencedBufferStorage>(buffer_storage_);
+  CHECK_NOTNULL_F(referenced_storage.vertex_buffer_resource,
+    "Referenced mesh must have a vertex buffer resource");
+  // Index buffer is optional for some mesh types
+
+  auto vertices = referenced_storage.GetVertices();
+  CHECK_F(!vertices.empty(), "Mesh must have at least one vertex");
   ComputeBounds();
 }
 
@@ -93,12 +117,13 @@ auto Mesh::ComputeBounds() -> void
     bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
       desc.bounding_box_max[2]);
   } else {
-    // Compute from vertices
-    if (vertices_.empty()) {
+    // Compute from vertices using the variant storage
+    auto vertices = Vertices(); // Get vertices through the variant interface
+    if (vertices.empty()) {
       bbox_min_ = bbox_max_ = glm::vec3(0.0f);
     } else {
-      bbox_min_ = bbox_max_ = vertices_.front().position;
-      for (const auto& v : vertices_) {
+      bbox_min_ = bbox_max_ = vertices.front().position;
+      for (const auto& v : vertices) {
         bbox_min_ = glm::min(bbox_min_, v.position);
         bbox_max_ = glm::max(bbox_max_, v.position);
       }
@@ -165,11 +190,23 @@ using oxygen::data::MeshBuilder;
 //! Builds and returns the immutable Mesh.
 auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
 {
-  CHECK_F(!vertices_.empty(), "Mesh must have vertices");
   CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
 
-  // Create the Mesh object
-  auto mesh = std::unique_ptr<Mesh>(new Mesh(lod_, vertices_, indices_));
+  // Create the Mesh object using the appropriate constructor
+  std::unique_ptr<Mesh> mesh;
+  if (using_owned_storage_) {
+    // Use owned storage constructor (procedural meshes)
+    CHECK_F(!vertices_.empty(), "Mesh must have vertices");
+    mesh = std::unique_ptr<Mesh>(
+      new Mesh(lod_, std::move(vertices_), std::move(indices_)));
+  } else {
+    // Use referenced storage constructor (asset meshes)
+    CHECK_NOTNULL_F(vertex_buffer_resource_,
+      "Referenced mesh must have vertex buffer resource");
+    mesh = std::unique_ptr<Mesh>(
+      new Mesh(lod_, vertex_buffer_resource_, index_buffer_resource_));
+  }
+
   mesh->SetName(name_);
 
   // Set mesh descriptor if provided
