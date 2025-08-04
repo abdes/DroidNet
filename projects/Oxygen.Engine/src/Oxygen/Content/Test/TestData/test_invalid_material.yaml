@@ -1,0 +1,31 @@
+# Test file with invalid shader configuration
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+# Define default texture (index 0) - required in all PAK files
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "ffffffff"  # Single white pixel as default
+
+# Invalid material - has shader_stages but missing shader_references
+assets:
+  - name: "invalid_material"
+    type: "material"
+    asset_key: "01234567-89ab-cdef-0123-456789abcdef"
+    material_domain: 0
+    flags: 0
+    shader_stages: 0x44  # This specifies 2 shaders (vertex + pixel)
+    base_color: [1.0, 0.0, 0.0, 1.0]  # Red material
+    # MISSING: shader_references section!

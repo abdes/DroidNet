@@ -34,9 +34,16 @@ assets:
     asset_key: "01234567-89ab-cdef-0123-456789abcdef"
     material_domain: 0
     flags: 0
-    shader_stages: 1
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
     base_color: [1.0, 0.0, 0.0, 1.0]  # Red material
     metalness: 0.0
     roughness: 0.5
     texture_refs:
       base_color_texture: "base_color_tex"
+
+    # Shader references for vertex and pixel shaders
+    shader_references:
+      - shader_unique_id: "VS@FullScreenTriangle.hlsl"
+        shader_hash: 0x1234567890abcdef
+      - shader_unique_id: "PS@FullScreenTriangle.hlsl"
+        shader_hash: 0xfedcba0987654321
