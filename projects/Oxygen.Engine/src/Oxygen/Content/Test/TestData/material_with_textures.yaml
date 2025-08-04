@@ -50,7 +50,7 @@ assets:
     asset_key: "12345678-90ab-cdef-1234-567890abcdef"
     material_domain: 0
     flags: 0
-    shader_stages: 1  # Only vertex shader stage for simplicity
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
     base_color: [1.0, 1.0, 1.0, 1.0]
     normal_scale: 1.0
     metalness: 0.2
@@ -59,3 +59,10 @@ assets:
       base_color_texture: "diffuse_tex"   # Index 1
       normal_texture: "normal_tex"        # Index 2
       roughness_texture: "roughness_tex"  # Index 3
+
+    # Shader references for vertex and pixel shaders
+    shader_references:
+      - shader_unique_id: "VS@FullScreenTriangle.hlsl"
+        shader_hash: 0x1234567890abcdef
+      - shader_unique_id: "PS@FullScreenTriangle.hlsl"
+        shader_hash: 0xfedcba0987654321

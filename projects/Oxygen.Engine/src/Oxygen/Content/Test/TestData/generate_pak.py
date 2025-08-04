@@ -154,15 +154,15 @@ def setup_debug_logger(log_file: str = "debug_pak.log") -> None:
         for handler in _debug_logger.handlers[:]:
             _debug_logger.removeHandler(handler)
 
-    _debug_logger = logging.getLogger('pak_debug')
+    _debug_logger = logging.getLogger("pak_debug")
     _debug_logger.setLevel(logging.DEBUG)
 
     # Create file handler
-    file_handler = logging.FileHandler(log_file, mode='w')  # Overwrite each run
+    file_handler = logging.FileHandler(log_file, mode="w")  # Overwrite each run
     file_handler.setLevel(logging.DEBUG)
 
     # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(formatter)
 
     # Add handler to logger
@@ -1014,6 +1014,111 @@ def validate_material_asset(
                     },
                 )
 
+    # Validate shader stages and references
+    shader_stages = asset.get("shader_stages", 0)
+    shader_refs = asset.get("shader_references", [])
+
+    if shader_stages != 0:
+        # Convert shader_stages to integer if it's a string (e.g., "0x44")
+        if isinstance(shader_stages, str):
+            try:
+                if shader_stages.startswith("0x") or shader_stages.startswith("0X"):
+                    shader_stages = int(shader_stages, 16)
+                else:
+                    shader_stages = int(shader_stages)
+                asset["shader_stages"] = shader_stages
+            except ValueError as e:
+                raise SpecificationError(
+                    f"shader_stages must be a valid integer or hex string in {context}"
+                ) from e
+
+        # Count the number of set bits in shader_stages
+        expected_shader_count = bin(shader_stages).count('1')
+
+        if expected_shader_count == 0:
+            raise ValidationError(
+                f"shader_stages is non-zero but has no bits set in {context}",
+                {
+                    "shader_stages_value": shader_stages,
+                    "expected_behavior": "shader_stages should have at least one bit set if non-zero"
+                }
+            )
+
+        # Validate that shader_references exist and match the expected count
+        if not shader_refs:
+            raise ValidationError(
+                f"shader_stages specifies {expected_shader_count} shaders but no shader_references provided in {context}",
+                {
+                    "shader_stages_value": hex(shader_stages),
+                    "expected_shader_count": expected_shader_count,
+                    "actual_shader_count": 0
+                }
+            )
+
+        if len(shader_refs) != expected_shader_count:
+            raise ValidationError(
+                f"shader_stages specifies {expected_shader_count} shaders but {len(shader_refs)} shader_references provided in {context}",
+                {
+                    "shader_stages_value": hex(shader_stages),
+                    "expected_shader_count": expected_shader_count,
+                    "actual_shader_count": len(shader_refs)
+                }
+            )
+
+        # Validate each shader reference
+        if not isinstance(shader_refs, list):
+            raise SpecificationError(
+                f"shader_references must be a list in {context}"
+            )
+
+        for i, shader_ref in enumerate(shader_refs):
+            if not isinstance(shader_ref, dict):
+                raise SpecificationError(
+                    f"shader_references[{i}] must be a dictionary in {context}"
+                )
+
+            # Validate required fields
+            if "shader_unique_id" not in shader_ref:
+                raise ValidationError(
+                    f"shader_references[{i}] missing required field 'shader_unique_id' in {context}"
+                )
+
+            if not isinstance(shader_ref["shader_unique_id"], str):
+                raise SpecificationError(
+                    f"shader_references[{i}].shader_unique_id must be a string in {context}"
+                )
+
+            if len(shader_ref["shader_unique_id"]) == 0:
+                raise ValidationError(
+                    f"shader_references[{i}].shader_unique_id cannot be empty in {context}"
+                )
+
+            # Validate shader_hash if present
+            if "shader_hash" in shader_ref:
+                try:
+                    if isinstance(shader_ref["shader_hash"], str):
+                        if shader_ref["shader_hash"].startswith("0x") or shader_ref["shader_hash"].startswith("0X"):
+                            shader_ref["shader_hash"] = int(shader_ref["shader_hash"], 16)
+                        else:
+                            shader_ref["shader_hash"] = int(shader_ref["shader_hash"])
+                    else:
+                        shader_ref["shader_hash"] = int(shader_ref["shader_hash"])
+                except (ValueError, TypeError) as e:
+                    raise SpecificationError(
+                        f"shader_references[{i}].shader_hash must be a valid integer or hex string in {context}"
+                    ) from e
+
+    elif shader_refs:
+        # If shader_stages is 0 but shader_references exist, that's inconsistent
+        raise ValidationError(
+            f"shader_references provided but shader_stages is 0 in {context}",
+            {
+                "shader_stages_value": shader_stages,
+                "shader_references_count": len(shader_refs),
+                "expected_behavior": "remove shader_references or set appropriate shader_stages"
+            }
+        )
+
 
 def validate_geometry_asset(
     asset: Dict[str, Any], context: str, available_resources: set
@@ -1779,7 +1884,9 @@ def collect_resources(
                         # Debug buffer order
                         if resource_type == "buffer":
                             debug_logger = get_debug_logger()
-                            debug_logger.debug(f"Buffer {idx}: '{name}' -> index {idx}, data size: {len(data)} bytes")
+                            debug_logger.debug(
+                                f"Buffer {idx}: '{name}' -> index {idx}, data size: {len(data)} bytes"
+                            )
 
                         logger.verbose(
                             f"  {resource_type.capitalize()} '{name}': {len(data)} bytes"
@@ -1980,7 +2087,9 @@ def write_resource_tables(
                         # Debug buffer table entries
                         if resource_type == "buffer":
                             debug_logger = get_debug_logger()
-                            debug_logger.debug(f"Resource table entry {i}: '{resource_spec['name']}' -> data_offset={data_offset}, data_size={data_size}")
+                            debug_logger.debug(
+                                f"Resource table entry {i}: '{resource_spec['name']}' -> data_offset={data_offset}, data_size={data_size}"
+                            )
 
                     # Create resource descriptor based on resource type
                     if resource_type == "buffer":
@@ -2070,7 +2179,9 @@ def create_mesh_descriptor(
 
     debug_logger.debug(f"Looking for vertex buffer: '{vertex_buffer_name}'")
     debug_logger.debug(f"Looking for index buffer: '{index_buffer_name}'")
-    debug_logger.debug(f"Available buffer resources: {list(resource_index_map['buffer'].keys())}")
+    debug_logger.debug(
+        f"Available buffer resources: {list(resource_index_map['buffer'].keys())}"
+    )
 
     vertex_buffer_idx = resource_index_map["buffer"].get(vertex_buffer_name, 0)
     index_buffer_idx = resource_index_map["buffer"].get(index_buffer_name, 0)
@@ -2088,7 +2199,9 @@ def create_mesh_descriptor(
     if mesh_type == 2:  # Procedural (kProcedural = 2)
         info = struct.pack("<I", procedural_params_size) + b"\x00" * (32 - 4)
     else:  # Standard (kStandard = 1) or Unknown (kUnknown = 0) - both use standard layout
-        debug_logger.debug(f"Packing StandardMeshInfo: vb={vertex_buffer_idx}, ib={index_buffer_idx}")
+        debug_logger.debug(
+            f"Packing StandardMeshInfo: vb={vertex_buffer_idx}, ib={index_buffer_idx}"
+        )
 
         info = (
             struct.pack("<I", vertex_buffer_idx)
@@ -2364,7 +2477,9 @@ def write_submesh_data(
     debug_logger = get_debug_logger()
 
     # Write submesh descriptor
-    debug_logger.debug(f"Writing submesh '{submesh['name']}' at offset {file_obj.tell()}")
+    debug_logger.debug(
+        f"Writing submesh '{submesh['name']}' at offset {file_obj.tell()}"
+    )
     submesh_desc = create_submesh_descriptor(submesh, material_assets)
     debug_logger.debug(f"Descriptor created, length: {len(submesh_desc)}")
     debug_logger.debug(f"Writing descriptor: {submesh_desc[:80].hex()}")
@@ -2376,7 +2491,9 @@ def write_submesh_data(
 
     try:
         bytes_written = file_obj.write(submesh_desc)
-        debug_logger.debug(f"Bytes written: {bytes_written}, expected: {len(submesh_desc)}")
+        debug_logger.debug(
+            f"Bytes written: {bytes_written}, expected: {len(submesh_desc)}"
+        )
 
         # Force flush after writing
         file_obj.flush()
