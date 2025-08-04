@@ -82,9 +82,10 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 }
 
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
-  const std::string_view type_name, LoadAssetFnErased loader) -> void
+  const std::string_view type_name, LoadAssetFnErased&& loader) -> void
 {
-  auto [it, inserted] = loaders_.insert_or_assign(type_id, std::move(loader));
+  auto [it, inserted] = asset_loaders_.insert_or_assign(
+    type_id, std::forward<LoadAssetFnErased>(loader));
   if (!inserted) {
     LOG_F(WARNING, "Replacing loader for type: {}/{}", type_id, type_name);
   } else {
@@ -93,16 +94,28 @@ auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
 }
 
 auto AssetLoader::AddTypeErasedResourceLoader(const TypeId type_id,
-  const std::string_view type_name, LoadResourceFnErased loader) -> void
+  const std::string_view type_name, LoadResourceFnErased&& loader) -> void
 {
-  auto [it, inserted]
-    = resource_loaders_.insert_or_assign(type_id, std::move(loader));
+  auto [it, inserted] = resource_loaders_.insert_or_assign(
+    type_id, std::forward<LoadResourceFnErased>(loader));
   if (!inserted) {
     LOG_F(
       WARNING, "Replacing resource loader for type: {}/{}", type_id, type_name);
   } else {
     LOG_F(
       INFO, "Registered resource loader for type: {}/{}", type_id, type_name);
+  }
+}
+
+auto AssetLoader::AddTypeErasedUnloader(const TypeId type_id,
+  const std::string_view type_name, UnloadFnErased&& unloader) -> void
+{
+  auto [it, inserted] = unloaders_.insert_or_assign(
+    type_id, std::forward<UnloadFnErased>(unloader));
+  if (!inserted) {
+    LOG_F(WARNING, "Replacing unloader for type: {}/{}", type_id, type_name);
+  } else {
+    LOG_F(INFO, "Registered unloader for type: {}/{}", type_id, type_name);
   }
 }
 
@@ -149,7 +162,7 @@ auto AssetLoader::AddResourceDependency(
 
 // ReSharper disable CppRedundantQualifier
 template <LoadFunction F>
-auto AssetLoader::MakeAssetLoaderCall(const F& fn, AssetLoader& loader,
+auto AssetLoader::InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
   const PakFile& pak, const oxygen::data::pak::AssetDirectoryEntry& entry,
   const bool offline) -> std::shared_ptr<void>
 // ReSharper enable CppRedundantQualifier
@@ -185,8 +198,8 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
   for (const auto& pak : paks_) {
     if (const auto entry_opt = pak->FindEntry(key)) {
       const auto& entry = *entry_opt;
-      auto loader_it = loaders_.find(T::ClassTypeId());
-      if (loader_it != loaders_.end()) {
+      auto loader_it = asset_loaders_.find(T::ClassTypeId());
+      if (loader_it != asset_loaders_.end()) {
         auto void_ptr = loader_it->second(*this, *pak, entry, offline);
         auto typed = std::static_pointer_cast<T>(void_ptr);
         if (typed && typed->GetTypeId() == T::ClassTypeId()) {
@@ -218,7 +231,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
   auto guard = content_cache_.OnEviction(
     [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
       DCHECK_EQ_F(HashAssetKey(key), cacche_key);
-      InvokeUnloadFunction(type_id, value, offline);
+      UnloadObject(type_id, value, offline);
     });
 
   // Release resource dependencies first
@@ -244,7 +257,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
 //=== Resource Loading  ======================================================//
 
 template <PakResource T, oxygen::content::LoadFunction F>
-auto AssetLoader::MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
+auto AssetLoader::InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
   const PakFile& pak, data::pak::ResourceIndexT resource_index,
   const bool offline) -> std::shared_ptr<void>
 {
@@ -322,7 +335,7 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   return nullptr;
 }
 
-void oxygen::content::AssetLoader::InvokeUnloadFunction(
+void oxygen::content::AssetLoader::UnloadObject(
   oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline)
 {
   // Invoke the resource unload function
@@ -343,7 +356,7 @@ auto AssetLoader::ReleaseResource(const ResourceKey key, bool offline) -> bool
   auto guard = content_cache_.OnEviction(
     [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
       DCHECK_F(SanityCheckResourceEviction(key_hash, cacche_key, type_id));
-      InvokeUnloadFunction(type_id, value, offline);
+      UnloadObject(type_id, value, offline);
     });
   content_cache_.CheckIn(HashResourceKey(key));
   return (content_cache_.Contains(key_hash)) ? false : true;
