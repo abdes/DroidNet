@@ -243,7 +243,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
       check_result(shader_result, "ShaderReferenceDesc");
       auto stage = static_cast<ShaderType>(i);
       shader_refs.emplace_back(stage, shader_result.value());
-      LOG_F(INFO, "  shader stage {}: {} (hash: 0x{:016X})", i,
+      LOG_F(INFO, "   shader stage {} : {} (hash: 0x{:016X})", i,
         shader_refs.back().GetShaderUniqueId(),
         shader_refs.back().GetShaderSourceHash());
     }
