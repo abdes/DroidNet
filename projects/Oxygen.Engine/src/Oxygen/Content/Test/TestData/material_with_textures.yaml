@@ -1,0 +1,61 @@
+# Material with multiple texture dependencies
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+# Define multiple texture resources
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "ffffffff"  # Single white pixel as default
+
+  - name: "diffuse_tex"
+    width: 512
+    height: 512
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "deadbeef"
+
+  - name: "normal_tex"
+    width: 512
+    height: 512
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "cafebabe"
+
+  - name: "roughness_tex"
+    width: 512
+    height: 512
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "feedface"
+
+# Define material with texture dependencies
+assets:
+  - name: "textured_material"
+    type: "material"
+    asset_key: "12345678-90ab-cdef-1234-567890abcdef"
+    material_domain: 0
+    flags: 0
+    shader_stages: 1  # Only vertex shader stage for simplicity
+    base_color: [1.0, 1.0, 1.0, 1.0]
+    normal_scale: 1.0
+    metalness: 0.2
+    roughness: 0.8
+    texture_refs:
+      base_color_texture: "diffuse_tex"   # Index 1
+      normal_texture: "normal_tex"        # Index 2
+      roughness_texture: "roughness_tex"  # Index 3

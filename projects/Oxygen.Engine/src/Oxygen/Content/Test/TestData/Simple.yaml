@@ -42,7 +42,7 @@
 # ```
 
 version: 1
-content_version: 0
+content_version: 1
 
 # Buffer resources emitted as:
 #  - data in the buffers data region

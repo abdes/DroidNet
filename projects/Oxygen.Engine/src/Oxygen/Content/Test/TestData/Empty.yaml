@@ -1,5 +1,5 @@
 version: 1
-content_version: 0
+content_version: 1
 
 # Empty PAK specification - no resources, no assets
 # This creates a minimal but valid PAK file with:

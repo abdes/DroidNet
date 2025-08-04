@@ -90,6 +90,13 @@ class Logger:
         """Log error message."""
         self._print(message, "✗", indent_override=0)
 
+    def critical(self, message: str, context: Optional[Dict[str, Any]] = None):
+        """Log critical error with optional context."""
+        self._print(f"CRITICAL: {message}", "✗", indent_override=0)
+        if context and self.verbose_mode:
+            for key, value in context.items():
+                self._print(f"  {key}: {value}", "✗", indent_override=0)
+
     def section(self, title: str):
         """Start a new section with increased indentation."""
         self._print(f"{title}...", "PAK")
@@ -169,6 +176,190 @@ ASSET_TYPE_MAP = {
     "geometry": 2,  # kGeometry
     "scene": 3,  # kScene
 }
+
+# Size Limits and Validation Constants
+MAX_RESOURCE_SIZES = {
+    "texture": 256 * 1024 * 1024,  # 256MB max for textures
+    "buffer": 64 * 1024 * 1024,  # 64MB max for buffers
+    "audio": 32 * 1024 * 1024,  # 32MB max for audio
+}
+
+# Maximum counts to prevent resource exhaustion
+MAX_RESOURCES_PER_TYPE = 10000
+MAX_ASSETS_TOTAL = 5000
+MAX_LODS_PER_GEOMETRY = 8
+MAX_SUBMESHES_PER_LOD = 100
+MAX_MESH_VIEWS_PER_SUBMESH = 50
+
+# Texture validation limits
+MAX_TEXTURE_DIMENSION = 8192
+MAX_TEXTURE_LAYERS = 256
+MAX_TEXTURE_MIP_LEVELS = 16
+
+# Buffer validation limits
+MAX_BUFFER_STRIDE = 1024
+MAX_VERTEX_COUNT = 1000000
+MAX_INDEX_COUNT = 3000000
+
+# String validation limits
+MAX_HEX_STRING_LENGTH = 200 * 1024 * 1024  # 200MB when decoded
+MAX_FILE_NAME_LENGTH = 255
+
+# Format validation constants
+VALID_MESH_TYPES = [0, 1, 2]  # Unknown, Standard, Procedural
+VALID_TEXTURE_FORMATS = list(range(0, 256))  # Allow any uint8 value for now
+VALID_BUFFER_FORMATS = list(range(0, 256))  # Allow any uint8 value for now
+
+# === Error Handling Framework ===--------------------------------------------//
+
+
+class PakGenerationError(Exception):
+    """Base exception for PAK generation errors."""
+
+    def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.context = context or {}
+        self.message = message
+
+    def log_error(self, logger: Logger):
+        """Log this error with full context."""
+        logger.critical(self.message, self.context)
+
+
+class SpecificationError(PakGenerationError):
+    """Error in specification file format or content."""
+
+    pass
+
+
+class ResourceError(PakGenerationError):
+    """Error in resource processing."""
+
+    pass
+
+
+class AssetError(PakGenerationError):
+    """Error in asset processing."""
+
+    pass
+
+
+class DependencyError(PakGenerationError):
+    """Error in dependency resolution."""
+
+    pass
+
+
+class BinaryFormatError(PakGenerationError):
+    """Error in binary format generation."""
+
+    pass
+
+
+class ValidationError(PakGenerationError):
+    """Error in data validation."""
+
+    pass
+
+
+def validate_data_size(size: int, max_size: int, name: str) -> None:
+    """Validate data size against maximum limit."""
+    if size > max_size:
+        raise ValidationError(
+            f"Data size exceeds maximum limit for {name}",
+            {
+                "actual_size": size,
+                "max_size": max_size,
+                "name": name,
+                "size_mb": f"{size / (1024 * 1024):.2f}",
+                "max_mb": f"{max_size / (1024 * 1024):.2f}",
+            },
+        )
+
+
+def validate_required_fields(
+    data: Dict[str, Any], required_fields: List[str], context: str
+) -> None:
+    """Validate that all required fields are present."""
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        raise SpecificationError(
+            f"Missing required fields in {context}",
+            {
+                "missing_fields": missing_fields,
+                "available_fields": list(data.keys()),
+                "context": context,
+            },
+        )
+
+
+def validate_field_type(
+    data: Dict[str, Any], field: str, expected_type: type, context: str
+) -> None:
+    """Validate field type."""
+    if field in data and not isinstance(data[field], expected_type):
+        raise SpecificationError(
+            f"Invalid type for field '{field}' in {context}",
+            {
+                "field": field,
+                "expected_type": expected_type.__name__,
+                "actual_type": type(data[field]).__name__,
+                "actual_value": str(data[field]),
+                "context": context,
+            },
+        )
+
+
+def validate_enum_value(
+    value: int, valid_values: Dict[str, int], context: str
+) -> None:
+    """Validate enum value is valid."""
+    if value not in valid_values.values():
+        raise ValidationError(
+            f"Invalid enum value in {context}",
+            {"value": value, "valid_values": valid_values, "context": context},
+        )
+
+
+def safe_convert_to_int(value: Any, field_name: str, context: str) -> int:
+    """Safely convert value to integer with error context."""
+    try:
+        return int(value)
+    except (ValueError, TypeError) as e:
+        raise SpecificationError(
+            f"Cannot convert '{field_name}' to integer in {context}",
+            {
+                "field": field_name,
+                "value": str(value),
+                "value_type": type(value).__name__,
+                "context": context,
+                "error": str(e),
+            },
+        ) from e
+
+
+def safe_read_file(file_path: Path, max_size: int = 100 * 1024 * 1024) -> bytes:
+    """Safely read file with size validation and error handling."""
+    try:
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        file_size = file_path.stat().st_size
+        validate_data_size(file_size, max_size, f"file '{file_path.name}'")
+
+        with open(file_path, "rb") as f:
+            return f.read()
+
+    except (OSError, IOError) as e:
+        raise ResourceError(
+            f"Failed to read file: {file_path}",
+            {
+                "file_path": str(file_path),
+                "error": str(e),
+                "exists": file_path.exists() if file_path else False,
+            },
+        ) from e
+
 
 # === Data Structures ===-----------------------------------------------------//
 
@@ -449,113 +640,657 @@ def resolve_asset_type(type_str: str) -> int:
 
 
 def validate_specification(spec: Dict[str, Any]) -> None:
-    """Validate specification structure and required fields.
+    """Validate specification structure and required fields with comprehensive error reporting.
 
     Args:
         spec: Specification dictionary to validate
 
     Raises:
-        ValueError: If specification is invalid
+        SpecificationError: If specification is invalid
     """
     logger = get_logger()
 
     with logger.section("Validating specification structure"):
         # Check top-level structure
         if not isinstance(spec, dict):
-            raise ValueError("Specification must be a dictionary")
+            raise SpecificationError("Specification must be a dictionary")
 
-        # Check version fields
-        version = spec.get("version")
-        if version is not None and not isinstance(version, int):
-            raise ValueError("'version' must be an integer")
+        # Validate version fields with safe conversion
+        if "version" in spec:
+            spec["version"] = safe_convert_to_int(
+                spec["version"], "version", "specification"
+            )
+            if spec["version"] < 1:
+                raise SpecificationError(
+                    "Version must be >= 1", {"version": spec["version"]}
+                )
 
-        content_version = spec.get("content_version")
-        if content_version is not None and not isinstance(content_version, int):
-            raise ValueError("'content_version' must be an integer")
+        if "content_version" in spec:
+            spec["content_version"] = safe_convert_to_int(
+                spec["content_version"], "content_version", "specification"
+            )
+            if spec["content_version"] < 1:
+                raise SpecificationError(
+                    "Content version must be >= 1",
+                    {"content_version": spec["content_version"]},
+                )
 
-        # Validate resource sections
+        # Validate resource sections with detailed checks
         resource_types = ["textures", "buffers", "audios"]
+        resource_names = set()  # Track for duplicates
+
         for resource_type in resource_types:
             if resource_type in spec:
-                resources = spec[resource_type]
-                if not isinstance(resources, list):
-                    raise ValueError(f"'{resource_type}' must be a list")
+                validate_resource_section(
+                    spec[resource_type], resource_type, resource_names
+                )
 
-                for i, resource in enumerate(resources):
-                    if not isinstance(resource, dict):
-                        raise ValueError(
-                            f"{resource_type}[{i}] must be a dictionary"
-                        )
-                    if "name" not in resource:
-                        raise ValueError(
-                            f"{resource_type}[{i}] missing required 'name' field"
-                        )
-
-        # Validate assets section
+        # Validate assets section with dependency checking
         if "assets" in spec:
-            assets = spec["assets"]
-            if not isinstance(assets, list):
-                raise ValueError("'assets' must be a list")
+            validate_assets_section(spec["assets"], resource_names)
 
-            for i, asset in enumerate(assets):
-                if not isinstance(asset, dict):
-                    raise ValueError(f"assets[{i}] must be a dictionary")
-                if "name" not in asset:
-                    raise ValueError(
-                        f"assets[{i}] missing required 'name' field"
-                    )
-                if "type" not in asset:
-                    raise ValueError(
-                        f"assets[{i}] missing required 'type' field"
-                    )
+        logger.verbose("Specification validation completed successfully")
 
-                # Validate asset type
-                asset_type = asset["type"]
-                if asset_type.lower() not in ASSET_TYPE_MAP:
-                    raise ValueError(
-                        f"assets[{i}] has invalid type '{asset_type}'. "
-                        f"Valid types: {list(ASSET_TYPE_MAP.keys())}"
-                    )
 
-        logger.step("Specification structure is valid")
+def validate_resource_section(
+    resources: Any, resource_type: str, all_resource_names: set
+) -> None:
+    """Validate a resource section (textures, buffers, audios)."""
+    if not isinstance(resources, list):
+        raise SpecificationError(
+            f"'{resource_type}' must be a list",
+            {"resource_type": resource_type},
+        )
+
+    # Validate resource count limits
+    if len(resources) > MAX_RESOURCES_PER_TYPE:
+        raise ValidationError(
+            f"Too many {resource_type} resources",
+            {
+                "count": len(resources),
+                "max": MAX_RESOURCES_PER_TYPE,
+                "resource_type": resource_type,
+            },
+        )
+
+    resource_names_in_section = set()
+
+    for i, resource in enumerate(resources):
+        context = f"{resource_type}[{i}]"
+
+        if not isinstance(resource, dict):
+            raise SpecificationError(f"{context} must be a dictionary")
+
+        # Validate required fields
+        validate_required_fields(resource, ["name"], context)
+
+        # Validate field types
+        validate_field_type(resource, "name", str, context)
+
+        name = resource["name"]
+
+        # Check for duplicate names within section
+        if name in resource_names_in_section:
+            raise SpecificationError(
+                f"Duplicate resource name '{name}' in {resource_type}",
+                {"name": name, "resource_type": resource_type},
+            )
+        resource_names_in_section.add(name)
+
+        # Check for duplicate names across all resources
+        if name in all_resource_names:
+            raise SpecificationError(
+                f"Resource name '{name}' conflicts with existing resource",
+                {"name": name, "resource_type": resource_type},
+            )
+        all_resource_names.add(name)
+
+        # Validate name length
+        if len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            raise SpecificationError(
+                f"Resource name too long in {context}",
+                {
+                    "name": name,
+                    "length_bytes": len(name.encode("utf-8")),
+                    "max_length": ASSET_NAME_MAX_LENGTH,
+                },
+            )
+
+        # Validate resource type-specific fields
+        if resource_type == "textures":
+            validate_texture_resource(resource, context)
+        elif resource_type == "buffers":
+            validate_buffer_resource(resource, context)
+        elif resource_type == "audios":
+            validate_audio_resource(resource, context)
+
+
+def validate_texture_resource(resource: Dict[str, Any], context: str) -> None:
+    """Validate texture-specific resource fields."""
+    # Validate optional integer fields
+    int_fields = [
+        "width",
+        "height",
+        "depth",
+        "array_layers",
+        "mip_levels",
+        "texture_type",
+        "compression_type",
+        "format",
+    ]
+    for field in int_fields:
+        if field in resource:
+            resource[field] = safe_convert_to_int(
+                resource[field], field, context
+            )
+            if resource[field] < 0:
+                raise SpecificationError(
+                    f"Field '{field}' must be non-negative in {context}"
+                )
+
+    # Validate texture dimensions are reasonable
+    if "width" in resource and resource["width"] > MAX_TEXTURE_DIMENSION:
+        raise ValidationError(
+            f"Texture width too large in {context}",
+            {"width": resource["width"], "max": MAX_TEXTURE_DIMENSION},
+        )
+    if "height" in resource and resource["height"] > MAX_TEXTURE_DIMENSION:
+        raise ValidationError(
+            f"Texture height too large in {context}",
+            {"height": resource["height"], "max": MAX_TEXTURE_DIMENSION},
+        )
+    if (
+        "array_layers" in resource
+        and resource["array_layers"] > MAX_TEXTURE_LAYERS
+    ):
+        raise ValidationError(
+            f"Texture array layers too large in {context}",
+            {
+                "array_layers": resource["array_layers"],
+                "max": MAX_TEXTURE_LAYERS,
+            },
+        )
+    if (
+        "mip_levels" in resource
+        and resource["mip_levels"] > MAX_TEXTURE_MIP_LEVELS
+    ):
+        raise ValidationError(
+            f"Texture mip levels too large in {context}",
+            {
+                "mip_levels": resource["mip_levels"],
+                "max": MAX_TEXTURE_MIP_LEVELS,
+            },
+        )
+
+
+def validate_buffer_resource(resource: Dict[str, Any], context: str) -> None:
+    """Validate buffer-specific resource fields."""
+    # Validate optional integer fields
+    int_fields = ["usage", "stride", "format", "bind_flags"]
+    for field in int_fields:
+        if field in resource:
+            resource[field] = safe_convert_to_int(
+                resource[field], field, context
+            )
+            if resource[field] < 0:
+                raise SpecificationError(
+                    f"Field '{field}' must be non-negative in {context}"
+                )
+
+    # Validate stride is reasonable for buffers
+    if "stride" in resource and resource["stride"] > MAX_BUFFER_STRIDE:
+        raise ValidationError(
+            f"Buffer stride too large in {context}",
+            {"stride": resource["stride"], "max": MAX_BUFFER_STRIDE},
+        )
+
+
+def validate_audio_resource(resource: Dict[str, Any], context: str) -> None:
+    """Validate audio-specific resource fields."""
+    # Audio resources currently have minimal validation
+    pass
+
+
+def validate_assets_section(assets: Any, available_resources: set) -> None:
+    """Validate assets section with dependency checking."""
+    if not isinstance(assets, list):
+        raise SpecificationError("'assets' must be a list")
+
+    # Validate asset count limits
+    if len(assets) > MAX_ASSETS_TOTAL:
+        raise ValidationError(
+            f"Too many assets", {"count": len(assets), "max": MAX_ASSETS_TOTAL}
+        )
+
+    asset_names = set()
+
+    for i, asset in enumerate(assets):
+        context = f"assets[{i}]"
+
+        if not isinstance(asset, dict):
+            raise SpecificationError(f"{context} must be a dictionary")
+
+        # Validate required fields
+        validate_required_fields(asset, ["name", "type"], context)
+
+        # Validate field types
+        validate_field_type(asset, "name", str, context)
+        validate_field_type(asset, "type", str, context)
+
+        name = asset["name"]
+        asset_type = asset["type"].lower()
+
+        # Check for duplicate asset names
+        if name in asset_names:
+            raise SpecificationError(
+                f"Duplicate asset name '{name}'",
+                {"name": name, "asset_type": asset_type},
+            )
+        asset_names.add(name)
+
+        # Validate asset type
+        if asset_type not in ASSET_TYPE_MAP:
+            raise SpecificationError(
+                f"Unknown asset type '{asset_type}' in {context}",
+                {
+                    "asset_type": asset_type,
+                    "valid_types": list(ASSET_TYPE_MAP.keys()),
+                },
+            )
+
+        # Validate name length
+        if len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            raise SpecificationError(
+                f"Asset name too long in {context}",
+                {
+                    "name": name,
+                    "length_bytes": len(name.encode("utf-8")),
+                    "max_length": ASSET_NAME_MAX_LENGTH,
+                },
+            )
+
+        # Validate asset type-specific fields
+        if asset_type == "material":
+            validate_material_asset(asset, context, available_resources)
+        elif asset_type == "geometry":
+            validate_geometry_asset(asset, context, available_resources)
+
+
+def validate_material_asset(
+    asset: Dict[str, Any], context: str, available_resources: set
+) -> None:
+    """Validate material asset fields and dependencies."""
+    # Validate optional numeric fields
+    float_fields = [
+        "normal_scale",
+        "metalness",
+        "roughness",
+        "ambient_occlusion",
+    ]
+    for field in float_fields:
+        if field in asset:
+            try:
+                asset[field] = float(asset[field])
+                if asset[field] < 0.0 or asset[field] > 1.0:
+                    raise ValidationError(
+                        f"Field '{field}' must be between 0.0 and 1.0 in {context}"
+                    )
+            except (ValueError, TypeError) as e:
+                raise SpecificationError(
+                    f"Field '{field}' must be a number in {context}"
+                ) from e
+
+    # Validate base_color array
+    if "base_color" in asset:
+        if (
+            not isinstance(asset["base_color"], list)
+            or len(asset["base_color"]) != 4
+        ):
+            raise SpecificationError(
+                f"base_color must be a 4-element array in {context}"
+            )
+        for i, component in enumerate(asset["base_color"]):
+            try:
+                asset["base_color"][i] = float(component)
+            except (ValueError, TypeError) as e:
+                raise SpecificationError(
+                    f"base_color[{i}] must be a number in {context}"
+                ) from e
+
+    # Validate texture references
+    if "texture_refs" in asset:
+        if not isinstance(asset["texture_refs"], dict):
+            raise SpecificationError(
+                f"texture_refs must be a dictionary in {context}"
+            )
+
+        for tex_field, tex_name in asset["texture_refs"].items():
+            if tex_name and tex_name not in available_resources:
+                raise DependencyError(
+                    f"Material asset references unknown texture '{tex_name}' in {context}",
+                    {
+                        "asset_name": asset["name"],
+                        "texture_field": tex_field,
+                        "texture_name": tex_name,
+                        "available_resources": sorted(available_resources),
+                    },
+                )
+
+
+def validate_geometry_asset(
+    asset: Dict[str, Any], context: str, available_resources: set
+) -> None:
+    """Validate geometry asset fields and dependencies."""
+    # Validate bounding box
+    for bbox_field in ["bounding_box_min", "bounding_box_max"]:
+        if bbox_field in asset:
+            if (
+                not isinstance(asset[bbox_field], list)
+                or len(asset[bbox_field]) != 3
+            ):
+                raise SpecificationError(
+                    f"{bbox_field} must be a 3-element array in {context}"
+                )
+            for i, component in enumerate(asset[bbox_field]):
+                try:
+                    asset[bbox_field][i] = float(component)
+                except (ValueError, TypeError) as e:
+                    raise SpecificationError(
+                        f"{bbox_field}[{i}] must be a number in {context}"
+                    ) from e
+
+    # Validate LODs
+    if "lods" in asset:
+        if not isinstance(asset["lods"], list):
+            raise SpecificationError(f"lods must be a list in {context}")
+
+        if len(asset["lods"]) == 0:
+            raise SpecificationError(
+                f"Geometry asset must have at least one LOD in {context}"
+            )
+
+        if len(asset["lods"]) > MAX_LODS_PER_GEOMETRY:
+            raise ValidationError(
+                f"Too many LODs in geometry asset {context}",
+                {"lod_count": len(asset["lods"]), "max": MAX_LODS_PER_GEOMETRY},
+            )
+
+        for lod_i, lod in enumerate(asset["lods"]):
+            lod_context = f"{context}.lods[{lod_i}]"
+            validate_geometry_lod(lod, lod_context, available_resources)
+
+
+def validate_geometry_lod(
+    lod: Dict[str, Any], context: str, available_resources: set
+) -> None:
+    """Validate geometry LOD fields and dependencies."""
+    validate_required_fields(lod, ["name"], context)
+    validate_field_type(lod, "name", str, context)
+
+    # Validate mesh type
+    if "mesh_type" in lod:
+        mesh_type = safe_convert_to_int(lod["mesh_type"], "mesh_type", context)
+        if mesh_type not in VALID_MESH_TYPES:
+            raise SpecificationError(
+                f"Invalid mesh_type {mesh_type} in {context}",
+                {"mesh_type": mesh_type, "valid_types": VALID_MESH_TYPES},
+            )
+        lod["mesh_type"] = mesh_type
+
+    # Validate buffer references
+    for buffer_field in ["vertex_buffer", "index_buffer"]:
+        if buffer_field in lod:
+            buffer_name = lod[buffer_field]
+            if buffer_name and buffer_name not in available_resources:
+                raise DependencyError(
+                    f"LOD references unknown buffer '{buffer_name}' in {context}",
+                    {
+                        "lod_name": lod["name"],
+                        "buffer_field": buffer_field,
+                        "buffer_name": buffer_name,
+                        "available_resources": sorted(available_resources),
+                    },
+                )
+
+    # Validate submeshes
+    if "submeshes" in lod:
+        if not isinstance(lod["submeshes"], list):
+            raise SpecificationError(f"submeshes must be a list in {context}")
+
+        if len(lod["submeshes"]) > MAX_SUBMESHES_PER_LOD:
+            raise ValidationError(
+                f"Too many submeshes in LOD {context}",
+                {
+                    "submesh_count": len(lod["submeshes"]),
+                    "max": MAX_SUBMESHES_PER_LOD,
+                },
+            )
+
+        for submesh_i, submesh in enumerate(lod["submeshes"]):
+            submesh_context = f"{context}.submeshes[{submesh_i}]"
+            validate_geometry_submesh(submesh, submesh_context)
+
+
+def validate_geometry_submesh(submesh: Dict[str, Any], context: str) -> None:
+    """Validate geometry submesh fields."""
+    validate_required_fields(submesh, ["name", "material"], context)
+    validate_field_type(submesh, "name", str, context)
+    validate_field_type(submesh, "material", str, context)
+
+    # Validate mesh views
+    if "mesh_views" in submesh:
+        if not isinstance(submesh["mesh_views"], list):
+            raise SpecificationError(f"mesh_views must be a list in {context}")
+
+        if len(submesh["mesh_views"]) > MAX_MESH_VIEWS_PER_SUBMESH:
+            raise ValidationError(
+                f"Too many mesh views in submesh {context}",
+                {
+                    "mesh_view_count": len(submesh["mesh_views"]),
+                    "max": MAX_MESH_VIEWS_PER_SUBMESH,
+                },
+            )
+
+        for view_i, mesh_view in enumerate(submesh["mesh_views"]):
+            view_context = f"{context}.mesh_views[{view_i}]"
+            validate_mesh_view(mesh_view, view_context)
+
+
+def validate_mesh_view(mesh_view: Dict[str, Any], context: str) -> None:
+    """Validate mesh view fields."""
+    int_fields = ["first_index", "index_count", "first_vertex", "vertex_count"]
+    for field in int_fields:
+        if field in mesh_view:
+            mesh_view[field] = safe_convert_to_int(
+                mesh_view[field], field, context
+            )
+            if mesh_view[field] < 0:
+                raise SpecificationError(
+                    f"Field '{field}' must be non-negative in {context}"
+                )
+
+    # Validate reasonable limits for vertex and index counts
+    if (
+        "vertex_count" in mesh_view
+        and mesh_view["vertex_count"] > MAX_VERTEX_COUNT
+    ):
+        raise ValidationError(
+            f"Vertex count too large in {context}",
+            {
+                "vertex_count": mesh_view["vertex_count"],
+                "max": MAX_VERTEX_COUNT,
+            },
+        )
+
+    if (
+        "index_count" in mesh_view
+        and mesh_view["index_count"] > MAX_INDEX_COUNT
+    ):
+        raise ValidationError(
+            f"Index count too large in {context}",
+            {"index_count": mesh_view["index_count"], "max": MAX_INDEX_COUNT},
+        )
 
 
 # === Data Reading Functions ===----------------------------------------------//
 
 
-def read_data_from_spec(spec_entry: Dict[str, Any], base_dir: Path) -> bytes:
-    """Unified function to read data from specification entry.
+def read_data_from_spec(
+    spec_entry: Dict[str, Any],
+    base_dir: Path,
+    max_size: int = 100 * 1024 * 1024,
+) -> bytes:
+    """Unified function to read data from specification entry with comprehensive error handling.
 
     Supports three data sources:
     - 'data_hex': Hexadecimal string
     - 'file': File path relative to base_dir
     - 'data': Direct string or bytes data
+
+    Args:
+        spec_entry: Specification entry containing data source
+        base_dir: Base directory for relative file paths
+        max_size: Maximum allowed data size in bytes
+
+    Returns:
+        Binary data
+
+    Raises:
+        ResourceError: If data cannot be read or is invalid
+        ValidationError: If data exceeds size limits
     """
-    if "data_hex" in spec_entry:
-        try:
-            return bytes.fromhex(spec_entry["data_hex"])
-        except ValueError as e:
-            raise ValueError(f"Invalid hex data: {e}") from e
+    data_sources = ["data_hex", "file", "data"]
+    available_sources = [src for src in data_sources if src in spec_entry]
 
-    if "file" in spec_entry:
-        file_path = safe_file_path(base_dir, spec_entry["file"])
-        if not file_path.exists():
-            raise FileNotFoundError(f"Data file not found: {file_path}")
-        try:
-            return file_path.read_bytes()
-        except OSError as e:
-            raise OSError(f"Failed to read file {file_path}: {e}") from e
+    if len(available_sources) == 0:
+        raise ResourceError(
+            "No data source specified in resource entry",
+            {
+                "available_fields": list(spec_entry.keys()),
+                "required_one_of": data_sources,
+            },
+        )
 
-    if "data" in spec_entry:
-        data = spec_entry["data"]
-        if isinstance(data, str):
-            return data.encode("utf-8")
-        elif isinstance(data, bytes):
-            return data
-        else:
-            raise TypeError("Data must be string or bytes")
+    if len(available_sources) > 1:
+        raise ResourceError(
+            "Multiple data sources specified in resource entry",
+            {
+                "found_sources": available_sources,
+                "should_specify_only_one": data_sources,
+            },
+        )
 
-    return b""
+    source_type = available_sources[0]
+    data = b""  # Initialize with empty bytes
+
+    try:
+        if source_type == "data_hex":
+            hex_data = spec_entry["data_hex"]
+            if not isinstance(hex_data, str):
+                raise ResourceError(
+                    "data_hex must be a string",
+                    {"type": type(hex_data).__name__, "value": str(hex_data)},
+                )
+
+            # Remove whitespace and validate hex format
+            hex_data = (
+                hex_data.replace(" ", "").replace("\n", "").replace("\t", "")
+            )
+
+            # Validate hex string length to prevent memory exhaustion
+            if len(hex_data) > MAX_HEX_STRING_LENGTH:
+                raise ValidationError(
+                    "Hex string too long",
+                    {
+                        "length": len(hex_data),
+                        "max": MAX_HEX_STRING_LENGTH,
+                        "decoded_size_mb": f"{len(hex_data) // 2 / (1024 * 1024):.2f}",
+                    },
+                )
+
+            if len(hex_data) % 2 != 0:
+                raise ResourceError(
+                    "data_hex must have even number of hex digits",
+                    {"hex_data": hex_data, "length": len(hex_data)},
+                )
+
+            try:
+                data = bytes.fromhex(hex_data)
+            except ValueError as e:
+                raise ResourceError(
+                    "Invalid hexadecimal data",
+                    {
+                        "hex_data": (
+                            hex_data[:100] + "..."
+                            if len(hex_data) > 100
+                            else hex_data
+                        ),
+                        "error": str(e),
+                    },
+                ) from e
+
+        elif source_type == "file":
+            file_path_str = spec_entry["file"]
+            if not isinstance(file_path_str, str):
+                raise ResourceError(
+                    "file path must be a string",
+                    {
+                        "type": type(file_path_str).__name__,
+                        "value": str(file_path_str),
+                    },
+                )
+
+            try:
+                file_path = safe_file_path(base_dir, file_path_str)
+            except ValueError as e:
+                raise ResourceError(
+                    "Invalid file path",
+                    {
+                        "file_path": file_path_str,
+                        "base_dir": str(base_dir),
+                        "error": str(e),
+                    },
+                ) from e
+
+            data = safe_read_file(file_path, max_size)
+
+        elif source_type == "data":
+            raw_data = spec_entry["data"]
+            if isinstance(raw_data, str):
+                data = raw_data.encode("utf-8")
+            elif isinstance(raw_data, bytes):
+                data = raw_data
+            else:
+                raise ResourceError(
+                    "data field must be string or bytes",
+                    {
+                        "type": type(raw_data).__name__,
+                        "value": str(raw_data)[:100],
+                    },
+                )
+
+        # Validate data size
+        validate_data_size(
+            len(data), max_size, f"resource data from {source_type}"
+        )
+
+        if len(data) == 0:
+            logger = get_logger()
+            logger.warning(f"Empty data from {source_type} source")
+
+        return data
+
+    except (ResourceError, ValidationError):
+        raise
+    except Exception as e:
+        raise ResourceError(
+            f"Unexpected error reading data from {source_type}",
+            {
+                "source_type": source_type,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        ) from e
 
 
 # === Asset Processing Functions ===------------------------------------------//
@@ -901,7 +1636,7 @@ class ResourceCollectionResult:
 def collect_resources(
     spec: Dict[str, Any], base_dir: Path, resource_types: List[str]
 ) -> ResourceCollectionResult:
-    """Collect resource data and descriptors from specification."""
+    """Collect resource data and descriptors from specification with comprehensive error handling."""
     logger = get_logger()
     data_blobs = {rtype: [] for rtype in resource_types}
     desc_fields = {rtype: [] for rtype in resource_types}
@@ -925,31 +1660,107 @@ def collect_resources(
                 )
 
                 for idx, resource_spec in enumerate(resource_list):
-                    if "name" not in resource_spec:
-                        raise ValueError(
-                            f"Resource {idx} missing required 'name' field"
-                        )
-
-                    name = resource_spec["name"]
-                    if name in index_map[resource_type]:
-                        raise ValueError(f"Duplicate resource name: {name}")
+                    resource_context = f"{resource_type}[{idx}]"
+                    name = "unknown"  # Default name for error reporting
 
                     try:
-                        data = read_data_from_spec(resource_spec, base_dir)
+                        # Validate basic resource structure
+                        if not isinstance(resource_spec, dict):
+                            raise ResourceError(
+                                f"Resource must be a dictionary in {resource_context}",
+                                {
+                                    "resource_type": resource_type,
+                                    "index": idx,
+                                    "type": type(resource_spec).__name__,
+                                },
+                            )
+
+                        if "name" not in resource_spec:
+                            raise ResourceError(
+                                f"Resource missing required 'name' field in {resource_context}",
+                                {
+                                    "resource_type": resource_type,
+                                    "index": idx,
+                                    "available_fields": list(
+                                        resource_spec.keys()
+                                    ),
+                                },
+                            )
+
+                        name = resource_spec["name"]
+                        if not isinstance(name, str):
+                            raise ResourceError(
+                                f"Resource name must be a string in {resource_context}",
+                                {
+                                    "resource_type": resource_type,
+                                    "name": str(name),
+                                    "type": type(name).__name__,
+                                },
+                            )
+
+                        if name in index_map[resource_type]:
+                            raise ResourceError(
+                                f"Duplicate resource name '{name}' in {resource_type}",
+                                {
+                                    "resource_type": resource_type,
+                                    "name": name,
+                                    "existing_index": index_map[resource_type][
+                                        name
+                                    ],
+                                },
+                            )
+
+                        # Read and validate resource data
+                        try:
+                            data = read_data_from_spec(resource_spec, base_dir)
+                        except (ResourceError, ValidationError) as e:
+                            # Re-raise with additional context
+                            e.context.update(
+                                {
+                                    "resource_name": name,
+                                    "resource_type": resource_type,
+                                    "resource_index": idx,
+                                }
+                            )
+                            raise
+
+                        # Validate resource size limits per type
+                        max_size = MAX_RESOURCE_SIZES.get(
+                            resource_type, 100 * 1024 * 1024
+                        )
+                        validate_data_size(
+                            len(data), max_size, f"{resource_type} '{name}'"
+                        )
+
+                        # Successfully processed resource
                         data_blobs[resource_type].append(data)
                         index_map[resource_type][name] = idx
                         desc_fields[resource_type].append(resource_spec)
+
                         logger.verbose(
                             f"  {resource_type.capitalize()} '{name}': {len(data)} bytes"
                         )
+
+                    except (ResourceError, ValidationError) as e:
+                        e.log_error(logger)
+                        raise
                     except Exception as e:
-                        raise RuntimeError(
-                            f"Failed to process {resource_type} "
-                            f"resource '{name}': {e}"
-                        ) from e
+                        error = ResourceError(
+                            f"Unexpected error processing {resource_type} resource '{name}'",
+                            {
+                                "resource_type": resource_type,
+                                "resource_index": idx,
+                                "resource_name": name,
+                                "error": str(e),
+                                "error_type": type(e).__name__,
+                            },
+                        )
+                        error.log_error(logger)
+                        raise error from e
             else:
                 logger.verbose(f"No {resource_type} resources found")
 
+    logger.verbose("Resource collection completed successfully")
     return ResourceCollectionResult(data_blobs, desc_fields, index_map)
 
 
@@ -1195,7 +2006,9 @@ def create_mesh_descriptor(
 ) -> bytes:
     """Create mesh descriptor from LOD specification, matching new PakFormat.h."""
     mesh_name = pack_name_string(lod["name"], 64)
-    mesh_type = lod.get("mesh_type", 0)  # 0 = Standard, 1 = Procedural, etc.
+    mesh_type = lod.get(
+        "mesh_type", 0
+    )  # 0 = Unknown, 1 = Standard, 2 = Procedural, etc.
     submeshes = lod.get("submeshes", [])
     mesh_view_count = sum(len(sm.get("mesh_views", [])) for sm in submeshes)
     submesh_count = len(submeshes)
@@ -1210,13 +2023,13 @@ def create_mesh_descriptor(
     mesh_bb_min = lod.get("bounding_box_min", [0.0, 0.0, 0.0])
     mesh_bb_max = lod.get("bounding_box_max", [0.0, 0.0, 0.0])
 
-    # ProceduralMeshInfo (if mesh_type == 1)
+    # ProceduralMeshInfo (if mesh_type == 2)
     procedural_params_size = lod.get("procedural_params_size", 0)
 
     # Build union info
-    if mesh_type == 1:  # Procedural
+    if mesh_type == 2:  # Procedural (kProcedural = 2)
         info = struct.pack("<I", procedural_params_size) + b"\x00" * (32 - 4)
-    else:  # Standard (default)
+    else:  # Standard (kStandard = 1) or Unknown (kUnknown = 0) - both use standard layout
         info = (
             struct.pack("<I", vertex_buffer_idx)
             + struct.pack("<I", index_buffer_idx)
@@ -1767,9 +2580,12 @@ def main() -> None:
     logger = Logger(verbose_mode=args.verbose)
     set_logger(logger)
 
+    # Initialize paths for error handling
+    spec_path = Path(args.spec)
+    output_path = None
+
     try:
         # Load and validate specification
-        spec_path = Path(args.spec)
         if not spec_path.exists():
             logger.error(f"Specification file not found: {spec_path}")
             sys.exit(1)
@@ -1834,14 +2650,62 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.error("Operation cancelled by user")
         sys.exit(130)
-    except Exception as e:
-        logger.error(f"{e}")
+    except PakGenerationError as e:
+        # Our custom errors already have detailed context
+        e.log_error(logger)
         if args.verbose:
             import traceback
 
             print("\nDetailed error information:", file=sys.stderr)
             traceback.print_exc()
         sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}")
+        if args.verbose:
+            logger.error(f"Current working directory: {Path.cwd()}")
+        sys.exit(2)
+    except PermissionError as e:
+        logger.error(f"Permission denied: {e}")
+        if args.verbose:
+            logger.error(
+                "Check file permissions and that the file is not in use by another process"
+            )
+        sys.exit(3)
+    except OSError as e:
+        logger.error(f"System error: {e}")
+        if args.verbose:
+            logger.error(
+                "This may be due to disk space, network issues, or filesystem problems"
+            )
+        sys.exit(4)
+    except yaml.YAMLError as e:
+        logger.error(f"YAML parsing error: {e}")
+        if args.verbose:
+            logger.error(f"Check the syntax of your YAML file: {spec_path}")
+        sys.exit(5)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error: {e}")
+        if args.verbose:
+            logger.error(f"Check the syntax of your JSON file: {spec_path}")
+        sys.exit(6)
+    except MemoryError:
+        logger.error("Out of memory - resource data may be too large")
+        logger.error(
+            "Try reducing resource sizes or processing fewer resources at once"
+        )
+        sys.exit(7)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.error(
+            "This appears to be an internal error in the PAK generator"
+        )
+        if args.verbose:
+            import traceback
+
+            print("\nDetailed error information:", file=sys.stderr)
+            traceback.print_exc()
+            logger.error("Please report this error with the above traceback")
+        sys.exit(8)
 
 
 if __name__ == "__main__":

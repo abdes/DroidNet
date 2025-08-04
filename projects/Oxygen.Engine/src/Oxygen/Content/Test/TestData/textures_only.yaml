@@ -1,0 +1,48 @@
+# Texture resources only for testing resource loading
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+# Define various texture types
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "ffffffff"  # Single white pixel as default
+
+  - name: "texture_2d"
+    width: 256
+    height: 256
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "deadbeef"
+
+  - name: "texture_cube"
+    width: 128
+    height: 128
+    format: 30  # kRGBA8UNorm
+    texture_type: 5  # kTextureCube
+    compression_type: 0
+    array_layers: 6
+    data_hex: "cafebabe"
+
+  - name: "texture_array"
+    width: 64
+    height: 64
+    format: 30  # kRGBA8UNorm
+    texture_type: 4  # kTexture2DArray
+    compression_type: 0
+    array_layers: 4
+    data_hex: "feedface"
+
+# No assets, just resources for resource loading tests

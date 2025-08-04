@@ -270,7 +270,7 @@ assets:
     flags: 0x0001  # Opaque
     shader_stages: 0x0007
     base_color: [0.4, 0.4, 0.45, 1.0]  # Dark gunmetal
-    normal_scale: 1.2
+    normal_scale: 0.6
     metalness: 0.9
     roughness: 0.4
     ambient_occlusion: 1.0
