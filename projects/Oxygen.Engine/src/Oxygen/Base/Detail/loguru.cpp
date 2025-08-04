@@ -537,17 +537,20 @@ static void parse_args(int& argc, char* argv[], const char* verbosity_flag)
   for (int arg_it = 1; arg_it < argc; ++arg_it) {
     auto cmd = argv[arg_it];
     auto arg_len = strlen(verbosity_flag);
+    auto cmd_len = strlen(cmd);
 
     bool last_is_alpha = false;
+    if (arg_len < cmd_len) {
 #  if LOGURU_USE_LOCALE
-    try { // locale variant of isalpha will throw on error
-      last_is_alpha = std::isalpha(cmd[arg_len], std::locale(""));
-    } catch (...) {
-      last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
-    }
+      try { // locale variant of isalpha will throw on error
+        last_is_alpha = std::isalpha(cmd[arg_len], std::locale(""));
+      } catch (...) {
+        last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
+      }
 #  else
-    last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
+      last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
 #  endif
+    }
 
     if (strncmp(cmd, verbosity_flag, arg_len) == 0 && !last_is_alpha) {
       out_argc -= 1;
