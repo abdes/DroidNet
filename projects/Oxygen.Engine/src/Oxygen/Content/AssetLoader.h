@@ -372,6 +372,11 @@ public:
     }
   }
 
+protected:
+  //! Get PAK file index from pointer (for resource key creation)
+  OXGN_CNTT_NDAPI virtual auto GetPakIndex(const PakFile& pak) const
+    -> uint16_t;
+
 private:
   std::vector<std::unique_ptr<PakFile>> paks_;
 
@@ -410,9 +415,6 @@ private:
   //! Hash an AssetKey for cache storage
   OXGN_CNTT_API static auto HashResourceKey(const ResourceKey& key) -> uint64_t;
 
-  //! Get PAK file index from pointer (for resource key creation)
-  OXGN_CNTT_NDAPI auto GetPakIndex(const PakFile& pak) const -> uint16_t;
-
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
   // Use shared_ptr<void> for type erasure, loader functions get AssetLoader&
@@ -436,11 +438,62 @@ private:
   template <LoadFunction F>
   static auto InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
     const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
-    bool offline) -> std::shared_ptr<void>;
+    bool offline) -> std::shared_ptr<void>
+  {
+    auto loader_fn = [&fn](LoaderContext context) -> std::shared_ptr<void> {
+      auto result = fn(context);
+      return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
+    };
+
+    return InvokeAssetLoaderImpl(loader_fn, loader, pak, entry, offline);
+  }
 
   template <PakResource T, LoadFunction F>
   static auto InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
     const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
+    -> std::shared_ptr<void>
+  {
+    auto loader_fn = [&fn](LoaderContext context) -> std::shared_ptr<void> {
+      auto result = fn(context);
+      return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
+    };
+
+    if constexpr (std::same_as<T, data::BufferResource>) {
+      return InvokeBufferResourceLoader(
+        loader_fn, loader, pak, resource_index, offline);
+    } else if constexpr (std::same_as<T, data::TextureResource>) {
+      return InvokeTextureResourceLoader(
+        loader_fn, loader, pak, resource_index, offline);
+    } else {
+      static_assert(std::same_as<T, data::BufferResource>
+          || std::same_as<T, data::TextureResource>,
+        "Unsupported resource type");
+    }
+  }
+
+  OXGN_CNTT_NDAPI static auto InvokeAssetLoaderImpl(
+    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+    AssetLoader& loader, const PakFile& pak,
+    const data::pak::AssetDirectoryEntry& entry, bool offline)
+    -> std::shared_ptr<void>;
+
+  template <PakResource T>
+  static [[nodiscard]] auto InvokeResourceLoaderImpl(
+    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+    AssetLoader& loader, const PakFile& pak,
+    data::pak::ResourceIndexT resource_index, bool offline)
+    -> std::shared_ptr<void>;
+
+  OXGN_CNTT_NDAPI static auto InvokeBufferResourceLoader(
+    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+    AssetLoader& loader, const PakFile& pak,
+    data::pak::ResourceIndexT resource_index, bool offline)
+    -> std::shared_ptr<void>;
+
+  OXGN_CNTT_NDAPI static auto InvokeTextureResourceLoader(
+    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+    AssetLoader& loader, const PakFile& pak,
+    data::pak::ResourceIndexT resource_index, bool offline)
     -> std::shared_ptr<void>;
 
   void UnloadObject(

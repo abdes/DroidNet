@@ -18,6 +18,7 @@
 #include <Oxygen/Data/TextureResource.h>
 
 using oxygen::content::AssetLoader;
+using oxygen::content::LoaderContext;
 using oxygen::content::LoadFunction;
 using oxygen::content::PakFile;
 using oxygen::content::PakResource;
@@ -159,12 +160,12 @@ auto AssetLoader::AddResourceDependency(
 
 //=== Asset Loading Implementations ==========================================//
 
-// ReSharper disable CppRedundantQualifier
-template <LoadFunction F>
-auto AssetLoader::InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
-  const PakFile& pak, const oxygen::data::pak::AssetDirectoryEntry& entry,
-  const bool offline) -> std::shared_ptr<void>
-// ReSharper enable CppRedundantQualifier
+// Common template implementation for asset loading
+auto AssetLoader::InvokeAssetLoaderImpl(
+  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+  AssetLoader& loader, const PakFile& pak,
+  const data::pak::AssetDirectoryEntry& entry, bool offline)
+  -> std::shared_ptr<void>
 {
   auto reader = pak.CreateReader(entry);
   // FIXME: for now we just get a reader on the PAK file itself - future mem map
@@ -179,8 +180,8 @@ auto AssetLoader::InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
     .offline = offline,
     .source_pak = &pak,
   };
-  auto result = fn(context);
-  return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
+
+  return loader_fn(context);
 }
 
 template <oxygen::IsTyped T>
@@ -255,10 +256,13 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
 
 //=== Resource Loading  ======================================================//
 
-template <PakResource T, oxygen::content::LoadFunction F>
-auto AssetLoader::InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
-  const PakFile& pak, data::pak::ResourceIndexT resource_index,
-  const bool offline) -> std::shared_ptr<void>
+// Common implementation for resource loading
+template <PakResource T>
+auto AssetLoader::InvokeResourceLoaderImpl(
+  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+  AssetLoader& loader, const PakFile& pak,
+  data::pak::ResourceIndexT resource_index, bool offline)
+  -> std::shared_ptr<void>
 {
   // Get ResourceTable and offset for this resource type
   auto* resource_table = pak.GetResourceTable<T>();
@@ -297,10 +301,29 @@ auto AssetLoader::InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
     .source_pak = &pak,
   };
 
-  auto result = fn(context);
-  return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
+  return loader_fn(context);
 }
 
+// Concrete implementations for specific resource types
+auto AssetLoader::InvokeBufferResourceLoader(
+  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+  AssetLoader& loader, const PakFile& pak,
+  data::pak::ResourceIndexT resource_index, bool offline)
+  -> std::shared_ptr<void>
+{
+  return InvokeResourceLoaderImpl<data::BufferResource>(
+    loader_fn, loader, pak, resource_index, offline);
+}
+
+auto AssetLoader::InvokeTextureResourceLoader(
+  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+  AssetLoader& loader, const PakFile& pak,
+  data::pak::ResourceIndexT resource_index, bool offline)
+  -> std::shared_ptr<void>
+{
+  return InvokeResourceLoaderImpl<data::TextureResource>(
+    loader_fn, loader, pak, resource_index, offline);
+}
 template <PakResource T>
 auto AssetLoader::LoadResource(const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
@@ -314,11 +337,6 @@ auto AssetLoader::LoadResource(const PakFile& pak,
   // Check cache first using the ResourceKey directly
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
     return cached;
-  }
-
-  // Validate PAK index
-  if (pak_index >= paks_.size()) {
-    return nullptr;
   }
 
   auto loader_it = resource_loaders_.find(T::ClassTypeId());

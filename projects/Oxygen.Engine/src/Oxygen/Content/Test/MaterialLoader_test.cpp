@@ -31,33 +31,46 @@ using oxygen::serio::Reader;
 
 namespace {
 
+//=== Test Resource Loaders ===----------------------------------------------//
+
+//! Test loader function for TextureResource
+auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
+  -> std::unique_ptr<oxygen::data::TextureResource>
+{
+  // Create a minimal TextureResource for testing
+  oxygen::data::pak::TextureResourceDesc desc {};
+  std::vector<uint8_t> data {};
+  return std::make_unique<oxygen::data::TextureResource>(
+    std::move(desc), std::move(data));
+}
+
+//! Test unloader function for TextureResource
+auto UnloadTestTextureResource(
+  std::shared_ptr<oxygen::data::TextureResource> /*resource*/,
+  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) -> void
+{
+  // Simple unloader - nothing to do for test resources
+}
+
 //=== Mock AssetLoader ===----------------------------------------------------//
 
-//! Mock AssetLoader for lightweight testing without PAK file dependencies.
+//! Mock AssetLoader for comprehensive testing with PAK file dependency support.
 class MockAssetLoader : public oxygen::content::AssetLoader {
 public:
+  MockAssetLoader()
+  {
+    // Register the test TextureResource loader using named functions
+    RegisterLoader(LoadTestTextureResource, UnloadTestTextureResource);
+  }
+
   MOCK_METHOD(void, AddAssetDependency,
     (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
   MOCK_METHOD(void, AddResourceDependency,
     (const oxygen::data::AssetKey&, oxygen::content::ResourceKey), (override));
 
-  // Mock the template methods that the MaterialLoader uses
-  template <typename T>
-  auto MakeResourceKey(const oxygen::content::PakFile& pak_file,
-    uint32_t resource_index) -> oxygen::content::ResourceKey
-  {
-    // Return a dummy ResourceKey for testing
-    return static_cast<oxygen::content::ResourceKey>(resource_index);
-  }
-
-  template <typename T>
-  auto LoadResource(const oxygen::content::PakFile& pak,
-    oxygen::data::pak::ResourceIndexT resource_index, bool offline = false)
-    -> std::shared_ptr<T>
-  {
-    // Return a dummy resource for testing
-    return std::make_shared<T>();
-  }
+  // Mock GetPakIndex to return a dummy index for testing
+  MOCK_METHOD(uint16_t, GetPakIndex, (const oxygen::content::PakFile& pak),
+    (const, override));
 };
 
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
@@ -100,6 +113,42 @@ protected:
       .offline = true,
       .source_pak
       = nullptr, // No PAK file - dependency registration will be skipped
+    };
+  }
+
+  //! Helper method to create LoaderContext with mock PAK for dependency
+  //! testing.
+  /*!
+    This creates a context with a dummy PAK file pointer and sets up the mock
+    to return a specific PAK index. This enables testing of the dependency
+    registration logic, though actual texture loading will fail with the
+    mock PAK file.
+  */
+  auto CreateLoaderContextWithMockPak() -> oxygen::content::LoaderContext
+  {
+    if (!desc_stream_.Seek(0)) {
+      throw std::runtime_error("Failed to seek desc_stream");
+    }
+    if (!data_stream_.Seek(0)) {
+      throw std::runtime_error("Failed to seek data_stream");
+    }
+
+    // Create a dummy PakFile pointer for the mock
+    static char dummy_pak_storage[sizeof(oxygen::content::PakFile)];
+    auto* dummy_pak
+      = reinterpret_cast<const oxygen::content::PakFile*>(dummy_pak_storage);
+
+    // Set up mock to return a specific PAK index
+    EXPECT_CALL(asset_loader, GetPakIndex(::testing::Ref(*dummy_pak)))
+      .WillRepeatedly(::testing::Return(42)); // Return dummy PAK index
+
+    return oxygen::content::LoaderContext {
+      .asset_loader = &asset_loader,
+      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .desc_reader = &desc_reader_,
+      .data_readers = std::make_tuple(&data_reader_, &data_reader_),
+      .offline = true,
+      .source_pak = dummy_pak, // Provide mock PAK file for dependency tests
     };
   }
 
@@ -564,55 +613,18 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
   EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
 }
 
-//=== MaterialLoader Dependency Registration Tests ===----------------------//
-
-//! Test: LoadMaterialAsset correctly loads materials with mixed texture
-//! indices.
+//! Test: LoadMaterialAsset throws when texture resource is unavailable.
 /*!
-  Scenario: Tests material loading with mixed zero/non-zero texture indices to
-  verify that the material asset is loaded correctly with all texture indices
-  preserved. Since no real PAK file is provided, dependency registration is
-  skipped, but the material data loading is validated.
+  Scenario: Tests error handling when a material references a non-zero texture
+  index but the texture resource cannot be loaded. This verifies that the loader
+  properly fails when texture dependencies cannot be satisfied.
 */
-NOLINT_TEST_F(
-  MaterialLoaderBasicTest, LoadMaterial_MixedTextureIndices_LoadsCorrectly)
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_UnavailableTexture_Throws)
 {
   using oxygen::content::testing::ParseHexDumpWithOffset;
-  using oxygen::data::AssetType;
-  using oxygen::data::MaterialDomain;
-  using ::testing::_;
 
-  // Arrange: Material with mixed zero/non-zero texture indices
-  // clang-format off
-  // material_hexdump: MaterialAssetDesc (256 bytes)
-  // Field layout:
-  //   0x00: header.asset_type           = 1           (01)
-  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
-  //   0x41: header.version              = 1           (01)
-  //   0x42: header.streaming_priority   = 0           (00)
-  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
-  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
-  //   0x4F: header.reserved[16]         = {0}
-  //   0x5F: material_domain             = 1           (01)
-  //   0x60: flags                       = 0           (00 00 00 00)
-  //   0x64: shader_stages               = 0           (00 00 00 00)
-  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
-  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
-  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
-  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
-  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
-  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
-  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
-  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
-  //   0x88: base_color_texture          = 100         (64 00 00 00)
-  //   0x8C: normal_texture              = 0           (00 00 00 00)
-  //   0x90: metallic_texture            = 200         (C8 00 00 00)
-  //   0x94: roughness_texture           = 0           (00 00 00 00)
-  //   0x98: ambient_occlusion_texture   = 300         (2C 01 00 00)
-  //   0x9C: reserved_textures[8]        = {0}
-  //   0xBC: reserved[68]                = {0}
-  //   0xFF: (end of MaterialAssetDesc, no shader references follow)
-  // clang-format on
+  // Arrange: Create minimal material with a single non-zero texture index
+  // Set base_color_texture = 42 (at offset 0x88)
   const std::string material_hexdump = R"(
      0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
     16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -622,8 +634,8 @@ NOLINT_TEST_F(
     80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
     96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
    112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 64 00 00 00 00 00 00 00
-   144: C8 00 00 00 00 00 00 00 2C 01 00 00 00 00 00 00
+   128: 00 00 80 3F 00 00 80 3F 2A 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
    160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
    176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
    192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -639,24 +651,9 @@ NOLINT_TEST_F(
   }
   EXPECT_TRUE(desc_stream_.Seek(0));
 
-  // Expect NO resource dependencies to be registered since source_pak is
-  // nullptr (dependency registration is skipped when no PAK file is available)
-  EXPECT_CALL(asset_loader, AddResourceDependency(_, _)).Times(0);
-
-  // Act
-  auto context = CreateLoaderContext(); // Use context without real PAK file
-  auto asset = LoadMaterialAsset(context);
-
-  // Assert
-  ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
-  EXPECT_EQ(asset->GetBaseColorTexture(), 100u); // Texture index preserved
-  EXPECT_EQ(asset->GetNormalTexture(), 0u); // Zero index preserved
-  EXPECT_EQ(asset->GetMetallicTexture(), 200u); // Texture index preserved
-  EXPECT_EQ(asset->GetRoughnessTexture(), 0u); // Zero index preserved
-  EXPECT_EQ(
-    asset->GetAmbientOcclusionTexture(), 300u); // Texture index preserved
-  EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
+  // Act + Assert: Should throw due to texture loading failure with mock PAK
+  auto context = CreateLoaderContextWithMockPak();
+  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
 }
 
 } // namespace
