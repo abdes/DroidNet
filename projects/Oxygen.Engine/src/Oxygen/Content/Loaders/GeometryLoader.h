@@ -64,6 +64,17 @@ namespace detail {
     // Access union field via desc.info.standard
     auto& info = desc.info.standard;
 
+    // Read vertex_buffer first (according to StandardMeshInfo layout)
+    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
+    CheckResult(vb_result, "m.vertex_buffer");
+    LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
+
+    // Read index_buffer second
+    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
+    CheckResult(ib_result, "m.index_buffer");
+    LOG_F(2, "index buffer    : {}", info.index_buffer);
+
+    // Read bounding boxes after buffer indices
     for (float& i : desc.info.standard.bounding_box_min) {
       auto min_result = reader.ReadInto<float>(i);
       CheckResult(min_result, "m.bounding_box_min");
@@ -72,16 +83,6 @@ namespace detail {
       auto max_result = reader.ReadInto<float>(i);
       CheckResult(max_result, "m.bounding_box_max");
     }
-
-    // Read vertex_buffer
-    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
-    CheckResult(vb_result, "m.vertex_buffer");
-    LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
-
-    // Read index_buffer
-    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
-    CheckResult(ib_result, "m.index_buffer");
-    LOG_F(2, "index buffer    : {}", info.index_buffer);
 
     // Load vertex and index buffer data using AssetLoader with robust error
     // handling
@@ -196,12 +197,13 @@ namespace detail {
     MeshViewDesc mesh_view_desc;
     auto mesh_view_result = desc_reader.Read<MeshViewDesc>();
     CheckResult(mesh_view_result, "m.desc");
+    mesh_view_desc = *mesh_view_result;
     LOG_F(INFO, "firs vertex   : {}", mesh_view_desc.first_vertex);
     LOG_F(INFO, "vertex count  : {}", mesh_view_desc.vertex_count);
     LOG_F(INFO, "first index   : {}", mesh_view_desc.first_index);
     LOG_F(INFO, "index count   : {}", mesh_view_desc.index_count);
 
-    return *mesh_view_result;
+    return mesh_view_desc;
   }
 
   inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
