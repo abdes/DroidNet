@@ -349,9 +349,6 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
               << reader.Position().value() << std::endl;
     auto sm_desc = detail::LoadSubMeshDesc(reader);
 
-    context.asset_loader->AddAssetDependency(
-      context.current_asset_key, sm_desc.material_asset_key);
-
     auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
     std::cerr << "[DEBUG] After MeshViewDesc offset: "
               << reader.Position().value() << std::endl;
@@ -371,9 +368,30 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
       sm_name.assign(sm_desc.name, sm_desc.name + kMaxNameSize);
     }
 
-    // TODO: Resolve the material asset key to a MaterialAsset
-    std::shared_ptr<const MaterialAsset> material
-      = MaterialAsset::CreateDefault();
+    // Resolve the material asset key to a MaterialAsset
+    std::shared_ptr<const MaterialAsset> material;
+    if (sm_desc.material_asset_key != AssetKey {}) {
+      // Attempt to load the actual material asset referenced by the submesh
+      material = context.asset_loader->LoadAsset<MaterialAsset>(
+        sm_desc.material_asset_key, context.offline);
+
+      if (material) {
+        context.asset_loader->AddAssetDependency(
+          context.current_asset_key, sm_desc.material_asset_key);
+        LOG_F(2,
+          "Successfully loaded material and registered dependency on material "
+          "asset: {}",
+          nostd::to_string(sm_desc.material_asset_key));
+      } else {
+        LOG_F(WARNING, "Failed to load material asset {}, using default",
+          nostd::to_string(sm_desc.material_asset_key));
+        material = MaterialAsset::CreateDefault();
+      }
+    } else {
+      // Use default material if no material asset key is specified
+      LOG_F(2, "No material asset key specified, using default material");
+      material = MaterialAsset::CreateDefault();
+    }
 
     auto sm_builder
       = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
