@@ -1,0 +1,30 @@
+# Buffer resources only for testing resource loading
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+  - name: "vertex_buffer_1"
+    usage: 1  # Vertex buffer
+    stride: 32
+    format: 0
+    data_hex: "deadbeefcafebabe"
+
+  - name: "index_buffer_1"
+    usage: 2  # Index buffer
+    stride: 4
+    format: 0
+    data_hex: "12345678"
+
+  - name: "uniform_buffer_1"
+    usage: 4  # Uniform buffer
+    stride: 64
+    format: 0
+    data_hex: "abcdef1234567890"
+
+# No assets, just resources for resource loading tests

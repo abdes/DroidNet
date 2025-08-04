@@ -1,0 +1,65 @@
+# Simple geometry asset test specification
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+  - name: "vertex_buffer"
+    usage: 1  # Vertex buffer usage
+    stride: 72  # Vertex size in bytes (sizeof(Vertex))
+    format: 0
+    data_hex: "000000bf000000bf0000000000000000000000000000803f0000000000000000000000803f0000000000000000000000803f0000000000000000000000803f000000000000000000000000000000803f000000003f000000bf000000000000000000000000000000803f0000803f00000000000000803f0000000000000000000000803f0000000000000000000000803f00000000000000000000803f000000000000000000000000000000000000003f00000000000000000000000000000000803f0000003f0000803f000000803f0000000000000000000000803f0000000000000000000000803f0000000000000000000000000000000000000000000000803f"
+
+  - name: "index_buffer"
+    usage: 2  # Index buffer usage
+    stride: 4   # Index size in bytes
+    format: 0
+    data_hex: "000000000100000002000000"  # Simple triangle indices
+
+# Define default texture (index 0) - required in all PAK files
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "ffffffff"  # Single white pixel as default
+
+# Define material for the geometry
+assets:
+  - name: "simple_material"
+    type: "material"
+    asset_key: "11111111-2222-3333-4444-555555555555"
+    material_domain: 0
+    flags: 0
+    shader_stages: 1
+    base_color: [0.0, 1.0, 0.0, 1.0]  # Green material
+
+  - name: "test_geometry"
+    type: "geometry"
+    asset_key: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    bounding_box_min: [-1.0, -1.0, -1.0]
+    bounding_box_max: [1.0, 1.0, 1.0]
+    lods:
+      - name: "lod0"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        vertex_buffer: "vertex_buffer"  # Reference by name
+        index_buffer: "index_buffer"    # Reference by name
+        bounding_box_min: [-1.0, -1.0, -1.0]
+        bounding_box_max: [1.0, 1.0, 1.0]
+        submeshes:
+          - name: "submesh0"
+            material: "simple_material"
+            bounding_box_min: [-1.0, -1.0, -1.0]
+            bounding_box_max: [1.0, 1.0, 1.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 3
+                first_vertex: 0
+                vertex_count: 3

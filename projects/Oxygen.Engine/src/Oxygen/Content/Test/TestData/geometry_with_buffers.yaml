@@ -1,0 +1,90 @@
+# Geometry with buffer dependencies - simplified for testing
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+    bind_flags: 0
+
+  - name: "vertex_positions"
+    usage: 1  # Vertex buffer
+    bind_flags: 1  # D3D11_BIND_VERTEX_BUFFER
+    stride: 72  # Full Vertex structure
+    # Single vertex: pos(1,0,0), normal(0,1,0), uv(0,0), tangent(0,0,1), bitangent(1,0,0), color(1,1,1,1)
+    data_hex: "0000803f0000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000803f0000803f0000000000000000000000803f0000803f0000803f0000803f"
+
+  - name: "unused_buffer_1"
+    usage: 1
+    bind_flags: 1
+    stride: 4
+    data_hex: "00000000"
+
+  - name: "unused_buffer_2"
+    usage: 1
+    bind_flags: 1
+    stride: 4
+    data_hex: "00000000"
+
+  - name: "triangle_indices"
+    usage: 2  # Index buffer
+    bind_flags: 2  # D3D11_BIND_INDEX_BUFFER
+    stride: 4   # 4 bytes per index (uint32)
+    data_hex: "00000000"  # Single point: index 0 only
+
+# Default texture at index 0 (required in all PAK files)
+textures:
+  - name: "default_empty_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3     # kTexture2D
+    compression_type: 0
+    mip_levels: 1
+    data_hex: "ffffffff"  # 1x1 white pixel
+
+# Assets - unified structure
+assets:
+  - name: "buffer_material"
+    type: "material"
+    asset_key: "99999999-8888-7777-6666-555555555555"
+    material_domain: 0
+    flags: 0
+    shader_stages: 1
+    base_color: [0.0, 0.0, 1.0, 1.0]  # Blue material
+    metalness: 0.0
+    roughness: 1.0
+    normal_scale: 1.0
+    ambient_occlusion: 1.0
+    # All texture references point to default texture (index 0)
+    base_color_texture: 0
+    normal_texture: 0
+    metallic_texture: 0
+    roughness_texture: 0
+    ambient_occlusion_texture: 0
+
+  - name: "buffered_geometry"
+    type: "geometry"
+    asset_key: "ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb"
+    bounding_box_min: [-2.0, -2.0, -2.0]
+    bounding_box_max: [2.0, 2.0, 2.0]
+    lods:
+      - name: "high_detail_lod"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        vertex_buffer: "vertex_positions"  # vertex_positions buffer
+        index_buffer: "triangle_indices"   # triangle_indices buffer
+        bounding_box_min: [-2.0, -2.0, -2.0]
+        bounding_box_max: [2.0, 2.0, 2.0]
+        submeshes:
+          - name: "main_submesh"
+            material: "buffer_material"
+            bounding_box_min: [-2.0, -2.0, -2.0]
+            bounding_box_max: [2.0, 2.0, 2.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 1  # Single point
+                first_vertex: 0
+                vertex_count: 1  # Only 1 vertex

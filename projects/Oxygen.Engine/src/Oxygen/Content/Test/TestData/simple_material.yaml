@@ -1,0 +1,42 @@
+# Simple material asset test specification
+version: 1
+content_version: 1
+
+# Define default empty buffer (index 0) - required in all PAK files
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+
+# Define texture resources
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "ffffffff"  # Single white pixel as default
+
+  - name: "base_color_tex"
+    width: 256
+    height: 256
+    format: 30  # kRGBA8UNorm
+    texture_type: 3  # kTexture2D
+    compression_type: 0
+    data_hex: "deadbeef"  # Minimal texture data
+
+# Define material asset
+assets:
+  - name: "test_material"
+    type: "material"
+    asset_key: "01234567-89ab-cdef-0123-456789abcdef"
+    material_domain: 0
+    flags: 0
+    shader_stages: 1
+    base_color: [1.0, 0.0, 0.0, 1.0]  # Red material
+    metalness: 0.0
+    roughness: 0.5
+    texture_refs:
+      base_color_texture: "base_color_tex"
