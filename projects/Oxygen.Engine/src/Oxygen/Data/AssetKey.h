@@ -15,19 +15,7 @@
 
 namespace oxygen::data {
 
-//! Uniquely identifies an asset in the system
-/*!
-  The 'guid' field is a 128-bit value stored as std::array<uint8_t, 16>.
-  The 'variant' field is a 32-bit project-defined mask or flag value. The engine
-  does not interpret this field; it is available for project-specific use (e.g.,
-  localization, skin, region, quality, animation set, etc.). LODs are always
-  built-in to geometry assets and are NOT represented by variant.
-
-  Geometry asset structure:
-    - Geometry: one or more LODs (indexed 0..N-1)
-    - Each LOD: a Mesh asset
-    - Each Mesh: zero or more MeshViews (sub-meshes), `no view` -> entire mesh
-*/
+//! Uniquely identifies an asset in the system, using a 128-bit GUID.
 struct AssetKey {
   std::array<uint8_t, 16> guid; //!< 128-bit GUID (raw bytes)
 
@@ -35,7 +23,7 @@ struct AssetKey {
 };
 static_assert(sizeof(AssetKey) == 16);
 
-//! String representation of enum values in `Format`.
+//! String representation of AssetKey.
 OXGN_DATA_NDAPI auto to_string(AssetKey value) noexcept -> std::string;
 
 //! Generates a random 128-bit GUID using stduuid and stores as array of bytes.
@@ -43,6 +31,7 @@ OXGN_DATA_NDAPI auto GenerateAssetGuid() -> std::array<uint8_t, 16>;
 
 } // namespace oxygen::data
 
+//! Hash specialization for AssetKey.
 template <> struct std::hash<oxygen::data::AssetKey> {
   size_t operator()(const oxygen::data::AssetKey& key) const noexcept
   {
