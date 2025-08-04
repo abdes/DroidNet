@@ -26,6 +26,7 @@ See --help for more details.
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import struct
@@ -138,6 +139,43 @@ def set_logger(logger: Logger):
     """Set the global logger instance."""
     global _logger
     _logger = logger
+
+
+# Debug logger for detailed debugging information
+_debug_logger: Optional[logging.Logger] = None
+
+
+def setup_debug_logger(log_file: str = "debug_pak.log") -> None:
+    """Setup Python logging for DEBUG and ERROR messages to file."""
+    global _debug_logger
+
+    # Remove existing handlers to avoid duplicates
+    if _debug_logger:
+        for handler in _debug_logger.handlers[:]:
+            _debug_logger.removeHandler(handler)
+
+    _debug_logger = logging.getLogger('pak_debug')
+    _debug_logger.setLevel(logging.DEBUG)
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file, mode='w')  # Overwrite each run
+    file_handler.setLevel(logging.DEBUG)
+
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Add handler to logger
+    _debug_logger.addHandler(file_handler)
+
+
+def get_debug_logger() -> logging.Logger:
+    """Get the debug logger instance, creating it if needed."""
+    global _debug_logger
+    if _debug_logger is None:
+        setup_debug_logger()
+    assert _debug_logger is not None
+    return _debug_logger
 
 
 # === Constants ===------------------------------------------------------------//
@@ -1734,8 +1772,14 @@ def collect_resources(
 
                         # Successfully processed resource
                         data_blobs[resource_type].append(data)
+                        # Use 0-based indexing for resource indices (test if this fixes C++ loading)
                         index_map[resource_type][name] = idx
                         desc_fields[resource_type].append(resource_spec)
+
+                        # Debug buffer order
+                        if resource_type == "buffer":
+                            debug_logger = get_debug_logger()
+                            debug_logger.debug(f"Buffer {idx}: '{name}' -> index {idx}, data size: {len(data)} bytes")
 
                         logger.verbose(
                             f"  {resource_type.capitalize()} '{name}': {len(data)} bytes"
@@ -1933,6 +1977,11 @@ def write_resource_tables(
                             f"    Data: {data_size} bytes at offset 0x{data_offset:08x}"
                         )
 
+                        # Debug buffer table entries
+                        if resource_type == "buffer":
+                            debug_logger = get_debug_logger()
+                            debug_logger.debug(f"Resource table entry {i}: '{resource_spec['name']}' -> data_offset={data_offset}, data_size={data_size}")
+
                     # Create resource descriptor based on resource type
                     if resource_type == "buffer":
                         desc = create_buffer_resource_descriptor(
@@ -2005,6 +2054,8 @@ def create_mesh_descriptor(
     lod: Dict[str, Any], resource_index_map: Dict[str, Dict[str, int]]
 ) -> bytes:
     """Create mesh descriptor from LOD specification, matching new PakFormat.h."""
+    debug_logger = get_debug_logger()
+
     mesh_name = pack_name_string(lod["name"], 64)
     mesh_type = lod.get(
         "mesh_type", 0
@@ -2014,12 +2065,19 @@ def create_mesh_descriptor(
     submesh_count = len(submeshes)
 
     # StandardMeshInfo fields (default)
-    vertex_buffer_idx = resource_index_map["buffer"].get(
-        lod.get("vertex_buffer", ""), 0
-    )
-    index_buffer_idx = resource_index_map["buffer"].get(
-        lod.get("index_buffer", ""), 0
-    )
+    vertex_buffer_name = lod.get("vertex_buffer", "")
+    index_buffer_name = lod.get("index_buffer", "")
+
+    debug_logger.debug(f"Looking for vertex buffer: '{vertex_buffer_name}'")
+    debug_logger.debug(f"Looking for index buffer: '{index_buffer_name}'")
+    debug_logger.debug(f"Available buffer resources: {list(resource_index_map['buffer'].keys())}")
+
+    vertex_buffer_idx = resource_index_map["buffer"].get(vertex_buffer_name, 0)
+    index_buffer_idx = resource_index_map["buffer"].get(index_buffer_name, 0)
+
+    debug_logger.debug(f"Vertex buffer index: {vertex_buffer_idx}")
+    debug_logger.debug(f"Index buffer index: {index_buffer_idx}")
+
     mesh_bb_min = lod.get("bounding_box_min", [0.0, 0.0, 0.0])
     mesh_bb_max = lod.get("bounding_box_max", [0.0, 0.0, 0.0])
 
@@ -2030,12 +2088,17 @@ def create_mesh_descriptor(
     if mesh_type == 2:  # Procedural (kProcedural = 2)
         info = struct.pack("<I", procedural_params_size) + b"\x00" * (32 - 4)
     else:  # Standard (kStandard = 1) or Unknown (kUnknown = 0) - both use standard layout
+        debug_logger.debug(f"Packing StandardMeshInfo: vb={vertex_buffer_idx}, ib={index_buffer_idx}")
+
         info = (
             struct.pack("<I", vertex_buffer_idx)
             + struct.pack("<I", index_buffer_idx)
             + struct.pack("<3f", *mesh_bb_min)
             + struct.pack("<3f", *mesh_bb_max)
         )
+
+        debug_logger.debug(f"StandardMeshInfo packed: {info[:8].hex()}")
+
         info += b"\x00" * (32 - len(info))  # Pad to 32 bytes
 
     mesh_desc = (
@@ -2059,14 +2122,20 @@ def create_submesh_descriptor(
     submesh: Dict[str, Any], simple_assets: List[Dict[str, Any]]
 ) -> bytes:
     """Create submesh descriptor from submesh specification."""
+    debug_logger = get_debug_logger()
+
+    debug_logger.debug(f"Creating submesh descriptor for: '{submesh['name']}'")
     sm_name = pack_name_string(submesh["name"], 64)
+    debug_logger.debug(f"Packed name: {sm_name[:20].hex()}")
     mat_name = submesh["material"]
+    debug_logger.debug(f"Looking for material: '{mat_name}'")
 
     # Find material asset key
     mat_key = None
     for asset_data in simple_assets:
         if asset_data["name"] == mat_name:
             mat_key = asset_data["key"]
+            debug_logger.debug(f"Found material key: {mat_key.hex()}")
             break
 
     if mat_key is None:
@@ -2292,10 +2361,34 @@ def write_submesh_data(
         material_assets: List of material assets for material lookup
     """
     logger = get_logger()
+    debug_logger = get_debug_logger()
 
     # Write submesh descriptor
+    debug_logger.debug(f"Writing submesh '{submesh['name']}' at offset {file_obj.tell()}")
     submesh_desc = create_submesh_descriptor(submesh, material_assets)
-    file_obj.write(submesh_desc)
+    debug_logger.debug(f"Descriptor created, length: {len(submesh_desc)}")
+    debug_logger.debug(f"Writing descriptor: {submesh_desc[:80].hex()}")
+
+    # Force flush before writing to ensure file state is consistent
+    file_obj.flush()
+    write_offset = file_obj.tell()
+    debug_logger.debug(f"About to write at offset: {write_offset}")
+
+    try:
+        bytes_written = file_obj.write(submesh_desc)
+        debug_logger.debug(f"Bytes written: {bytes_written}, expected: {len(submesh_desc)}")
+
+        # Force flush after writing
+        file_obj.flush()
+        current_pos = file_obj.tell()
+        debug_logger.debug(f"After write+flush, file position: {current_pos}")
+
+        # Note: Skipping read-back verification since file is opened in write-only mode
+        debug_logger.debug("Write operation completed successfully")
+
+    except Exception as e:
+        debug_logger.error(f"Failed to write submesh descriptor: {e}")
+        raise
 
     # Write mesh view descriptors
     mesh_views = submesh.get("mesh_views", [])
@@ -2573,12 +2666,20 @@ def main() -> None:
         action="store_true",
         help="Overwrite output file if it exists",
     )
+    parser.add_argument(
+        "--debug-log",
+        default="debug_pak.log",
+        help="Debug log file path (default: debug_pak.log)",
+    )
 
     args = parser.parse_args()
 
     # Initialize logger with verbosity setting
     logger = Logger(verbose_mode=args.verbose)
     set_logger(logger)
+
+    # Initialize debug logger
+    setup_debug_logger(args.debug_log)
 
     # Initialize paths for error handling
     spec_path = Path(args.spec)
