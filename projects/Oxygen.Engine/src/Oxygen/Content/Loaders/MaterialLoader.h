@@ -19,64 +19,86 @@
 
 namespace oxygen::content::loaders {
 
-//! Register dependencies for a material asset with the asset loader.
+//! Load and register texture dependencies for a material asset with the asset
+//! loader.
 /*!
- Registers resource dependencies for textures and handles future shader
- dependencies.
+ Loads texture resources referenced by the material asset and registers them
+ as dependencies. Uses proper error handling and resource cleanup patterns
+ following the GeometryLoader approach.
 
  @param loader The asset loader to register dependencies with
+ @param pak The PAK file containing the material and its texture resources
  @param current_asset_key The asset key of the material being loaded
  @param desc The material asset descriptor containing dependency information
+ @param offline Whether to load in offline mode (no GPU side effects)
  */
-inline auto RegisterMaterialDependencies(AssetLoader& loader,
-  const data::AssetKey& current_asset_key,
-  const data::pak::MaterialAssetDesc& desc) -> void
+inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
+  const PakFile& pak, const data::AssetKey& current_asset_key,
+  const data::pak::MaterialAssetDesc& desc, bool offline) -> void
 {
+  using data::TextureResource;
+  using data::pak::kNoResourceIndex;
   using data::pak::ResourceIndexT;
 
-  // Register resource dependencies for non-zero texture indices
-  if (desc.base_color_texture != 0) {
-    LOG_F(2, "Registering resource dependency: base_color_texture = {}",
-      desc.base_color_texture);
-    loader.AddResourceDependency(current_asset_key, desc.base_color_texture);
-  }
+  // Collection to track loaded resources for cleanup on error
+  std::vector<ResourceCleanupGuard> texture_guards;
 
-  if (desc.normal_texture != 0) {
-    LOG_F(2, "Registering resource dependency: normal_texture = {}",
-      desc.normal_texture);
-    loader.AddResourceDependency(current_asset_key, desc.normal_texture);
-  }
+  // Helper to load and register a texture dependency
+  auto load_texture
+    = [&](ResourceIndexT texture_index, const char* texture_name) {
+        if (texture_index == kNoResourceIndex) {
+          return; // No texture assigned
+        }
 
-  if (desc.metallic_texture != 0) {
-    LOG_F(2, "Registering resource dependency: metallic_texture = {}",
-      desc.metallic_texture);
-    loader.AddResourceDependency(current_asset_key, desc.metallic_texture);
-  }
+        LOG_F(2, "Loading texture dependency: {}_texture = {}", texture_name,
+          texture_index);
 
-  if (desc.roughness_texture != 0) {
-    LOG_F(2, "Registering resource dependency: roughness_texture = {}",
-      desc.roughness_texture);
-    loader.AddResourceDependency(current_asset_key, desc.roughness_texture);
-  }
+        // Create proper ResourceKey for this texture
+        auto texture_resource_key
+          = loader.MakeResourceKey<TextureResource>(pak, texture_index);
 
-  if (desc.ambient_occlusion_texture != 0) {
-    LOG_F(2, "Registering resource dependency: ambient_occlusion_texture = {}",
-      desc.ambient_occlusion_texture);
-    loader.AddResourceDependency(
-      current_asset_key, desc.ambient_occlusion_texture);
-  }
+        // Load the texture resource with proper error handling
+        auto texture_resource
+          = loader.LoadResource<TextureResource>(pak, texture_index, offline);
 
-  // TODO: Implement shader refs as resources
-  // Currently shader references are embedded data without asset keys
-  // In the future, shaders should be separate assets/resources with proper keys
-  //
-  // Register asset dependencies for shader references
-  // for (const auto& shader_ref : shader_refs) {
-  //   oxygen::data::AssetKey shader_asset_key = shader_ref.GetAssetKey();
-  //   LOG_F(2, "Registering asset dependency: shader = {}",
-  //   nostd::to_string(shader_asset_key));
-  //   loader.AddAssetDependency(current_asset_key, shader_asset_key);
-  // }
+        if (!texture_resource) {
+          LOG_F(ERROR, "-failed- to load texture resource: {}_texture = {}",
+            texture_name, texture_index);
+          throw std::runtime_error(
+            fmt::format("Failed to load texture resource: {}_texture = {}",
+              texture_name, texture_index));
+        }
+
+        LOG_F(2, "Loaded texture resource: {}_texture ({} bytes)", texture_name,
+          texture_resource->GetDataSize());
+
+        // Register resource dependency using proper ResourceKey
+        LOG_F(2, "Registering resource dependency: {}_texture = {}",
+          texture_name, texture_index);
+        loader.AddResourceDependency(current_asset_key, texture_resource_key);
+
+        // Add cleanup guard for this resource
+        texture_guards.emplace_back(loader, texture_resource_key);
+      };
+
+  try {
+    // Load and register dependencies for all texture slots
+    load_texture(desc.base_color_texture, "base_color");
+    load_texture(desc.normal_texture, "normal");
+    load_texture(desc.metallic_texture, "metallic");
+    load_texture(desc.roughness_texture, "roughness");
+    load_texture(desc.ambient_occlusion_texture, "ambient_occlusion");
+
+    // Success: disable all guards to keep the resources loaded
+    for (auto& guard : texture_guards) {
+      guard.disable();
+    }
+  } catch (...) {
+    // Error: guards will automatically clean up resources
+    LOG_F(ERROR,
+      "Failed to load material texture dependencies, cleaning up resources");
+    throw;
+  }
 }
 
 //! Loader for material assets.
@@ -194,6 +216,18 @@ inline auto LoadMaterialAsset(LoaderContext context)
   LOG_F(INFO, "roughness tex     : {}", desc.roughness_texture);
   LOG_F(INFO, "ambient occ. tex  : {}", desc.ambient_occlusion_texture);
 
+  // TODO: Implement shader refs as resources
+  // Currently shader references are embedded data without asset keys
+  // In the future, shaders should be separate assets/resources with proper keys
+  //
+  // Register asset dependencies for shader references
+  // for (const auto& shader_ref : shader_refs) {
+  //   oxygen::data::AssetKey shader_asset_key = shader_ref.GetAssetKey();
+  //   LOG_F(2, "Registering asset dependency: shader = {}",
+  //   nostd::to_string(shader_asset_key));
+  //   loader.AddAssetDependency(current_asset_key, shader_asset_key);
+  // }
+
   // Count set bits in shader_stages to determine number of shader references
   uint32_t shader_stage_bits = desc.shader_stages;
   size_t shader_count = std::popcount(shader_stage_bits);
@@ -215,9 +249,17 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
-  RegisterMaterialDependencies(loader, context.current_asset_key, desc);
+  // Register texture dependencies if we have a valid PAK file
+  if (context.source_pak) {
+    LoadAndRegisterMaterialTextureDependencies(loader, *context.source_pak,
+      context.current_asset_key, desc, context.offline);
+  }
 
-  return std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
+  // Create the material asset with the loaded shader references
+  auto material_asset
+    = std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
+
+  return material_asset;
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadMaterialAsset)>);

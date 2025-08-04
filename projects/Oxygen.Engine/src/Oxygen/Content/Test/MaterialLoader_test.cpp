@@ -40,6 +40,24 @@ public:
     (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
   MOCK_METHOD(void, AddResourceDependency,
     (const oxygen::data::AssetKey&, oxygen::content::ResourceKey), (override));
+
+  // Mock the template methods that the MaterialLoader uses
+  template <typename T>
+  auto MakeResourceKey(const oxygen::content::PakFile& pak_file,
+    uint32_t resource_index) -> oxygen::content::ResourceKey
+  {
+    // Return a dummy ResourceKey for testing
+    return static_cast<oxygen::content::ResourceKey>(resource_index);
+  }
+
+  template <typename T>
+  auto LoadResource(const oxygen::content::PakFile& pak,
+    oxygen::data::pak::ResourceIndexT resource_index, bool offline = false)
+    -> std::shared_ptr<T>
+  {
+    // Return a dummy resource for testing
+    return std::make_shared<T>();
+  }
 };
 
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
@@ -60,6 +78,11 @@ protected:
   }
 
   //! Helper method to create LoaderContext for testing.
+  /*!
+    NOTE: This creates a context with a null PAK file, which means dependency
+    registration will be skipped. This is intentional for testing basic material
+    loading without requiring a real PAK file infrastructure.
+  */
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
     if (!desc_stream_.Seek(0)) {
@@ -75,6 +98,8 @@ protected:
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
       .offline = true,
+      .source_pak
+      = nullptr, // No PAK file - dependency registration will be skipped
     };
   }
 
@@ -155,25 +180,6 @@ NOLINT_TEST_F(
    224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
    240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
   )";
-  // Patch in the actual field values at the correct offsets:
-  // (You can use a helper or do this in your test setup, but here's the raw hex
-  // for the fields) Offsets are relative to the start of the descriptor (0x00).
-  // 0x5F: material_domain = 01
-  // 0x60: flags = DD CC BB AA
-  // 0x64: shader_stages = 03 00 00 00
-  // 0x68: base_color[0] = CD CC CC 3D
-  // 0x6C: base_color[1] = 9A 99 99 3E
-  // 0x70: base_color[2] = 9A 99 99 3E
-  // 0x74: base_color[3] = CD CC CC 3E
-  // 0x78: normal_scale = 00 00 C0 3F
-  // 0x7C: metalness = 9A 99 39 3F
-  // 0x80: roughness = CD CC CC 3D
-  // 0x84: ambient_occlusion = 9A 99 73 3F
-  // 0x88: base_color_texture = 2A 00 00 00
-  // 0x8C: normal_texture = 2B 00 00 00
-  // 0x90: metallic_texture = 2C 00 00 00
-  // 0x94: roughness_texture = 2D 00 00 00
-  // 0x98: ambient_occlusion_texture = 2E 00 00 00
 
   // ShaderReferenceDesc 1: VS@main.vert, hash=0x1111
   //   0x00: name = "VS@main.vert"
@@ -274,6 +280,383 @@ NOLINT_TEST_F(
         &oxygen::data::ShaderReference::GetShaderUniqueId, Eq("PS@main.frag")),
       Property(
         &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0x2222u))));
+}
+
+//=== MaterialLoader Error Handling Tests ===---------------------------------//
+
+//! Fixture for MaterialLoader error test cases.
+class MaterialLoaderErrorTest : public MaterialLoaderBasicTest {
+  // Inherits all functionality from MaterialLoaderBasicTest
+};
+
+//! Test: LoadMaterialAsset throws when header reading fails.
+/*!
+  Scenario: Tests error handling when the material descriptor header is
+  truncated or corrupted, ensuring proper error propagation.
+*/
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_TruncatedHeader_Throws)
+{
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+
+  // Arrange: Write only partial header (insufficient bytes)
+  const std::string truncated_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto buf = ParseHexDumpWithOffset(truncated_hexdump, 32);
+    ASSERT_TRUE(desc_writer_.WriteBlob(buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  // Act + Assert: Should throw due to incomplete header
+  auto context = CreateLoaderContext();
+  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
+}
+
+//! Test: LoadMaterialAsset handles zero texture indices correctly.
+/*!
+  Scenario: Tests material loading with all texture indices set to zero,
+  verifying no resource dependencies are registered.
+*/
+NOLINT_TEST_F(
+  MaterialLoaderBasicTest, LoadMaterial_ZeroTextureIndices_NoDependencies)
+{
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+  using oxygen::data::AssetType;
+  using oxygen::data::MaterialDomain;
+  using ::testing::_;
+
+  // Arrange: Material with all texture indices = 0
+  // clang-format off
+  // material_hexdump: MaterialAssetDesc (256 bytes)
+  // Field layout:
+  //   0x00: header.asset_type           = 1           (01)
+  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
+  //   0x41: header.version              = 1           (01)
+  //   0x42: header.streaming_priority   = 0           (00)
+  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
+  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
+  //   0x4F: header.reserved[16]         = {0}
+  //   0x5F: material_domain             = 1           (01)
+  //   0x60: flags                       = 0           (00 00 00 00)
+  //   0x64: shader_stages               = 0           (00 00 00 00)
+  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
+  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
+  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
+  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
+  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
+  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
+  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
+  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
+  //   0x88: base_color_texture          = 0           (00 00 00 00)
+  //   0x8C: normal_texture              = 0           (00 00 00 00)
+  //   0x90: metallic_texture            = 0           (00 00 00 00)
+  //   0x94: roughness_texture           = 0           (00 00 00 00)
+  //   0x98: ambient_occlusion_texture   = 0           (00 00 00 00)
+  //   0x9C: reserved_textures[8]        = {0}
+  //   0xBC: reserved[68]                = {0}
+  //   0xFF: (end of MaterialAssetDesc, no shader references follow)
+  // clang-format on
+  const std::string material_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
+   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
+   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
+    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  // Expect no resource dependencies to be registered
+  EXPECT_CALL(asset_loader, AddResourceDependency(_, _)).Times(0);
+
+  // Act
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+  EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
+  EXPECT_EQ(asset->GetBaseColorTexture(), 0u);
+  EXPECT_EQ(asset->GetNormalTexture(), 0u);
+  EXPECT_EQ(asset->GetMetallicTexture(), 0u);
+  EXPECT_EQ(asset->GetRoughnessTexture(), 0u);
+  EXPECT_EQ(asset->GetAmbientOcclusionTexture(), 0u);
+  EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
+}
+
+//! Test: LoadMaterialAsset handles single shader stage correctly.
+/*!
+  Scenario: Tests material loading with only one shader stage bit set,
+  verifying correct shader parsing and popcount calculation.
+*/
+NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
+{
+  using oxygen::ShaderType;
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+  using oxygen::data::AssetType;
+  using ::testing::AllOf;
+  using ::testing::Property;
+
+  // Arrange: Material with only vertex shader (bit 3 set)
+  // clang-format off
+  // material_hexdump: MaterialAssetDesc (256 bytes)
+  // Field layout:
+  //   0x00: header.asset_type           = 1           (01)
+  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
+  //   0x41: header.version              = 1           (01)
+  //   0x42: header.streaming_priority   = 0           (00)
+  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
+  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
+  //   0x4F: header.reserved[16]         = {0}
+  //   0x5F: material_domain             = 1           (01)
+  //   0x60: flags                       = 0           (00 00 00 00)
+  //   0x64: shader_stages               = 0x8         (08 00 00 00)
+  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
+  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
+  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
+  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
+  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
+  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
+  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
+  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
+  //   0x88: base_color_texture          = 0           (00 00 00 00)
+  //   0x8C: normal_texture              = 0           (00 00 00 00)
+  //   0x90: metallic_texture            = 0           (00 00 00 00)
+  //   0x94: roughness_texture           = 0           (00 00 00 00)
+  //   0x98: ambient_occlusion_texture   = 0           (00 00 00 00)
+  //   0x9C: reserved_textures[8]        = {0}
+  //   0xBC: reserved[68]                = {0}
+  //   0xFF: (end of MaterialAssetDesc, followed by ShaderReferenceDesc array)
+  // clang-format on
+  const std::string material_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+    96: 00 00 00 00 08 00 00 00 00 00 80 3F 00 00 80 3F
+   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
+   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  )";
+
+  // ShaderReferenceDesc: VertexShader, hash=0xBBAA
+  //   0x00: name = "VertexShader"
+  //   0xC0: hash = AA BB 00 00 00 00 00 00
+  const std::string shader_hexdump = R"(
+     0: 56 65 72 74 65 78 53 68 61 64 65 72 00 00 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    96: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   112: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   128: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: AA BB 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
+    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+    auto sh_buf = ParseHexDumpWithOffset(shader_hexdump, 216);
+    ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  // Act
+  auto context = CreateLoaderContext();
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+  auto shaders = asset->GetShaders();
+  ASSERT_THAT(shaders, SizeIs(1));
+  EXPECT_THAT(shaders[0],
+    AllOf(Property(
+            &oxygen::data::ShaderReference::GetShaderType, ShaderType::kVertex),
+      Property(
+        &oxygen::data::ShaderReference::GetShaderUniqueId, Eq("VertexShader")),
+      Property(
+        &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0xBBAAu))));
+}
+
+//! Test: LoadMaterialAsset throws when shader reading fails.
+/*!
+  Scenario: Tests error handling when shader_stages indicates shaders exist
+  but reading the shader reference fails due to insufficient data.
+*/
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
+{
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+
+  // Arrange: Material indicating 1 shader but insufficient data
+  const std::string material_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+    96: 00 00 00 00 08 00 00 00 00 00 80 3F 00 00 80 3F
+   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
+   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  )";
+
+  // Incomplete shader data (needs 216 bytes but only provide 50)
+  const std::string partial_shader_hexdump = R"(
+     0: 56 65 72 74 65 78 53 68 61 64 65 72 00 00 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
+    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+    auto sh_buf = ParseHexDumpWithOffset(partial_shader_hexdump, 50);
+    ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  // Act + Assert: Should throw due to incomplete shader data
+  auto context = CreateLoaderContext();
+  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
+}
+
+//=== MaterialLoader Dependency Registration Tests ===----------------------//
+
+//! Test: LoadMaterialAsset correctly loads materials with mixed texture
+//! indices.
+/*!
+  Scenario: Tests material loading with mixed zero/non-zero texture indices to
+  verify that the material asset is loaded correctly with all texture indices
+  preserved. Since no real PAK file is provided, dependency registration is
+  skipped, but the material data loading is validated.
+*/
+NOLINT_TEST_F(
+  MaterialLoaderBasicTest, LoadMaterial_MixedTextureIndices_LoadsCorrectly)
+{
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+  using oxygen::data::AssetType;
+  using oxygen::data::MaterialDomain;
+  using ::testing::_;
+
+  // Arrange: Material with mixed zero/non-zero texture indices
+  // clang-format off
+  // material_hexdump: MaterialAssetDesc (256 bytes)
+  // Field layout:
+  //   0x00: header.asset_type           = 1           (01)
+  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
+  //   0x41: header.version              = 1           (01)
+  //   0x42: header.streaming_priority   = 0           (00)
+  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
+  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
+  //   0x4F: header.reserved[16]         = {0}
+  //   0x5F: material_domain             = 1           (01)
+  //   0x60: flags                       = 0           (00 00 00 00)
+  //   0x64: shader_stages               = 0           (00 00 00 00)
+  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
+  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
+  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
+  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
+  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
+  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
+  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
+  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
+  //   0x88: base_color_texture          = 100         (64 00 00 00)
+  //   0x8C: normal_texture              = 0           (00 00 00 00)
+  //   0x90: metallic_texture            = 200         (C8 00 00 00)
+  //   0x94: roughness_texture           = 0           (00 00 00 00)
+  //   0x98: ambient_occlusion_texture   = 300         (2C 01 00 00)
+  //   0x9C: reserved_textures[8]        = {0}
+  //   0xBC: reserved[68]                = {0}
+  //   0xFF: (end of MaterialAssetDesc, no shader references follow)
+  // clang-format on
+  const std::string material_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
+   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
+   128: 00 00 80 3F 00 00 80 3F 64 00 00 00 00 00 00 00
+   144: C8 00 00 00 00 00 00 00 2C 01 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
+    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  // Expect NO resource dependencies to be registered since source_pak is
+  // nullptr (dependency registration is skipped when no PAK file is available)
+  EXPECT_CALL(asset_loader, AddResourceDependency(_, _)).Times(0);
+
+  // Act
+  auto context = CreateLoaderContext(); // Use context without real PAK file
+  auto asset = LoadMaterialAsset(context);
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+  EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
+  EXPECT_EQ(asset->GetBaseColorTexture(), 100u); // Texture index preserved
+  EXPECT_EQ(asset->GetNormalTexture(), 0u); // Zero index preserved
+  EXPECT_EQ(asset->GetMetallicTexture(), 200u); // Texture index preserved
+  EXPECT_EQ(asset->GetRoughnessTexture(), 0u); // Zero index preserved
+  EXPECT_EQ(
+    asset->GetAmbientOcclusionTexture(), 300u); // Texture index preserved
+  EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
 }
 
 } // namespace
