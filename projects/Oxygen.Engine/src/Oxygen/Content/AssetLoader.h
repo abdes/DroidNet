@@ -161,8 +161,37 @@ public:
   OXGN_CNTT_API auto ReleaseAsset(
     const data::AssetKey& key, bool offline = false) -> bool;
 
-  //=== Resource Loading ===================================================//
+  //=== Resource Loading =====================================================//
 
+  //! Create a resource key for a specific resource type, PAK file, and index
+  /*!
+   Constructs a ResourceKey that uniquely identifies a resource of type T
+   within a specific PAK file. The resource key combines the PAK file index,
+   resource type information, and resource index into a single 64-bit key
+   for efficient lookups and dependency tracking.
+
+   @tparam T The resource type (must satisfy PakResource concept)
+   @param pak_file The PAK file containing the resource
+   @param resource_index The index of the resource within the PAK file
+   @return A ResourceKey that uniquely identifies the resource
+
+   ### Usage Examples
+
+   ```cpp
+   // In a material loader registering texture dependencies:
+   auto texture_key = loader.MakeResourceKey<TextureResource>(pak,
+   texture_index); loader.AddResourceDependency(material_key, texture_key);
+
+   // In a geometry loader registering buffer dependencies:
+   auto vertex_buffer_key = loader.MakeResourceKey<BufferResource>(pak,
+   vb_index); auto index_buffer_key =
+   loader.MakeResourceKey<BufferResource>(pak, ib_index);
+   ```
+
+   @note The resource key is deterministic and repeatable for the same inputs
+   @note Resource type T must be registered in ResourceTypeList
+   @see LoadResource, AddResourceDependency, ResourceKey
+  */
   template <typename T>
   inline auto MakeResourceKey(const PakFile& pak_file, uint32_t resource_index)
     -> ResourceKey
@@ -382,7 +411,7 @@ private:
   OXGN_CNTT_API static auto HashResourceKey(const ResourceKey& key) -> uint64_t;
 
   //! Get PAK file index from pointer (for resource key creation)
-  auto GetPakIndex(const PakFile& pak) const -> uint16_t;
+  OXGN_CNTT_NDAPI auto GetPakIndex(const PakFile& pak) const -> uint16_t;
 
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
