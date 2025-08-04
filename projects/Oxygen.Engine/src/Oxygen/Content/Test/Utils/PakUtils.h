@@ -64,7 +64,7 @@ inline auto ParseHexDumpWithOffset(const std::string& hexdump,
 }
 
 template <serio::Stream DescS, serio::Stream DataS>
-auto WriteTextureDescWithData(serio::Writer<DescS>& desc_writer,
+auto WriteDescriptorWithData(serio::Writer<DescS>& desc_writer,
   serio::Writer<DataS>& data_writer, const std::string& hexdump,
   const uint32_t size_bytes, const std::byte data_filler)
 {

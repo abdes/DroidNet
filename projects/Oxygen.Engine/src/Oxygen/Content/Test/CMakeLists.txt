@@ -35,9 +35,10 @@ include(GTestHelpers)
 m_gtest_program(
   Loaders
   SOURCES
-    "Mocks/MockStream.h"
-    "Utils/PakUtils.h"
     "AssetHeaderLoader_test.cpp"
-    "TextureLoader_test.cpp"
+    "BufferLoader_test.cpp"
     "MaterialLoader_test.cpp"
+    "Mocks/MockStream.h"
+    "TextureLoader_test.cpp"
+    "Utils/PakUtils.h"
 )
