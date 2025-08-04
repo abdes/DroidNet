@@ -37,7 +37,7 @@ namespace oxygen::data {
 
  @see BufferResourceDesc for interpretation of fields.
 */
-class BufferResource : public oxygen::Object {
+class BufferResource : public Object {
   OXYGEN_TYPED(BufferResource)
 
 public:

@@ -51,6 +51,7 @@ set(
   "AssetLoader.h"
   "LoaderContext.h"
   "LoaderFunctions.h"
+  "ResourceKey.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
 )
@@ -58,7 +59,7 @@ set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
   "AssetLoader.cpp"
   "PakFile.cpp"
-  "Internal/ResourceKey.h"
+  "Internal/InternalResourceKey.h"
   "Loaders/BufferLoader.h"
   "Loaders/GeometryLoader.h"
   "Loaders/MaterialLoader.h"

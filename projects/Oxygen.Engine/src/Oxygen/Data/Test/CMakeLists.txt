@@ -39,6 +39,7 @@ m_gtest_program(
   Mesh
   SOURCES
     "Mesh_test.cpp"
+    "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
     "SubMesh_test.cpp"

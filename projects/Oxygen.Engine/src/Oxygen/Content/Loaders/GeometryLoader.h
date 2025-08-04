@@ -50,9 +50,10 @@ namespace detail {
   }
 
   // Handles loading of vertex/index buffers for standard meshes
-  inline auto LoadStandardMeshBuffers(LoaderContext& context,
-    data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
-    std::vector<uint32_t>& indices) -> void
+  inline auto LoadStandardMeshBuffers(
+    LoaderContext& context, data::pak::MeshDesc& desc)
+    -> std::pair<std::shared_ptr<data::BufferResource>,
+      std::shared_ptr<data::BufferResource>>
   {
     using namespace oxygen::data::pak;
 
@@ -62,27 +63,6 @@ namespace detail {
 
     // Access union field via desc.info.standard
     auto& info = desc.info.standard;
-    // Read vertex_buffer
-    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
-    CheckResult(vb_result, "m.vertex_buffer");
-    LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
-    if (info.vertex_buffer != 0 && context.asset_loader) {
-      LOG_F(2, "Registering resource dependency: vertex_buffer = {}",
-        info.vertex_buffer);
-      context.asset_loader->AddResourceDependency(
-        context.current_asset_key, info.vertex_buffer);
-    }
-
-    // Read index_buffer
-    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
-    CheckResult(ib_result, "m.index_buffer");
-    LOG_F(2, "index buffer    : {}", info.index_buffer);
-    if (info.index_buffer != 0 && context.asset_loader) {
-      LOG_F(2, "Registering resource dependency: index_buffer = {}",
-        info.index_buffer);
-      context.asset_loader->AddResourceDependency(
-        context.current_asset_key, info.index_buffer);
-    }
 
     for (float& i : desc.info.standard.bounding_box_min) {
       auto min_result = reader.ReadInto<float>(i);
@@ -93,43 +73,85 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
-    // TODO: Read the vertex and index buffer data and attach to mesh
-    // For now we just do some sanity checks and throw if the data cannot be
-    // fully read
+    // Read vertex_buffer
+    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
+    CheckResult(vb_result, "m.vertex_buffer");
+    LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
 
-    const auto& buf_table
-      = context.source_pak->GetResourceTable<data::BufferResource>();
-    if (!buf_table) {
-      LOG_F(ERROR, "no resource table for buffers");
-      throw std::runtime_error("no resource table for buffers");
-    }
+    // Read index_buffer
+    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
+    CheckResult(ib_result, "m.index_buffer");
+    LOG_F(2, "index buffer    : {}", info.index_buffer);
 
-    // Save current position to restore it later, as we are going to jump around
-    auto pos_result = reader.Position();
-    CheckResult(pos_result, "Save desc reader position");
-    {
-      auto vb_offset = buf_table->GetResourceOffset(info.vertex_buffer);
-      if (!vb_offset) {
-        LOG_F(ERROR, "-failed- on vertex buffer not found: index = {}",
+    // Load vertex and index buffer data using AssetLoader with robust error
+    // handling
+
+    std::shared_ptr<data::BufferResource> vertex_buffer_resource;
+    std::shared_ptr<data::BufferResource> index_buffer_resource;
+
+    auto vb_resource_key
+      = context.asset_loader->MakeResourceKey<data::BufferResource>(
+        *context.source_pak, info.vertex_buffer);
+
+    auto ib_resource_key
+      = context.asset_loader->MakeResourceKey<data::BufferResource>(
+        *context.source_pak, info.index_buffer);
+
+    std::optional<ResourceCleanupGuard> vertex_guard;
+    std::optional<ResourceCleanupGuard> index_guard;
+
+    // Load vertex buffer resource if specified
+    if (info.vertex_buffer != 0) {
+      vertex_buffer_resource
+        = context.asset_loader->LoadResource<data::BufferResource>(
+          *context.source_pak, info.vertex_buffer, context.offline);
+      if (!vertex_buffer_resource) {
+        LOG_F(ERROR, "-failed- to load vertex buffer resource: index = {}",
           info.vertex_buffer);
-        throw std::runtime_error("Vertex buffer not found");
+        throw std::runtime_error("Failed to load vertex buffer resource");
       }
-      CheckResult(reader.Seek(*vb_offset), "Vertex Buffer Data");
-      auto buf_resource = LoadBufferResource(context);
+      LOG_F(2, "Loaded vertex buffer resource: {} bytes",
+        vertex_buffer_resource->GetData().size());
+
+      // Create cleanup guard - will auto-release if an exception occurs
+      vertex_guard.emplace(*context.asset_loader, vb_resource_key);
     }
-    {
-      auto ib_offset = buf_table->GetResourceOffset(info.index_buffer);
-      if (!ib_offset) {
-        LOG_F(ERROR, "-failed- on index buffer not found: index = {}",
+
+    // Load index buffer resource if specified
+    if (info.index_buffer != 0) {
+      index_buffer_resource
+        = context.asset_loader->LoadResource<data::BufferResource>(
+          *context.source_pak, info.index_buffer, context.offline);
+      if (!index_buffer_resource) {
+        LOG_F(ERROR, "-failed- to load index buffer resource: index = {}",
           info.index_buffer);
-        throw std::runtime_error("Vertex buffer not found");
+        throw std::runtime_error("Failed to load index buffer resource");
       }
-      CheckResult(reader.Seek(*ib_offset), "Index Buffer Data");
-      auto buf_resource = LoadBufferResource(context);
+      LOG_F(2, "Loaded index buffer resource: {} bytes",
+        index_buffer_resource->GetData().size());
+
+      // Create cleanup guard - will auto-release if an exception occurs
+      index_guard.emplace(*context.asset_loader, ib_resource_key);
     }
-    // Restore reader position after reading buffers
-    CheckResult(
-      reader.Seek(pos_result.value()), "Restore desc reader position");
+
+    // Register dependencies only after all resources are successfully loaded
+    if (info.vertex_buffer != 0) {
+      LOG_F(2, "Registering resource dependency: vertex_buffer = {}",
+        info.vertex_buffer);
+      context.asset_loader->AddResourceDependency(
+        context.current_asset_key, vb_resource_key);
+      vertex_guard->disable(); // Success - disable cleanup
+    }
+
+    if (info.index_buffer != 0) {
+      LOG_F(2, "Registering resource dependency: index_buffer = {}",
+        info.index_buffer);
+      context.asset_loader->AddResourceDependency(
+        context.current_asset_key, ib_resource_key);
+      index_guard->disable(); // Success - disable cleanup
+    }
+
+    return { vertex_buffer_resource, index_buffer_resource };
   }
 
   // Handles loading and generation for procedural meshes
@@ -287,12 +309,17 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
+  std::shared_ptr<data::BufferResource> vertex_buffer_resource;
+  std::shared_ptr<data::BufferResource> index_buffer_resource;
 
   if (desc.IsStandard()) {
-    detail::LoadStandardMeshBuffers(context, desc, vertices, indices);
+    // For standard meshes, load buffer resources (no data copying)
+    std::tie(vertex_buffer_resource, index_buffer_resource)
+      = detail::LoadStandardMeshBuffers(context, desc);
     std::cerr << "[DEBUG] MeshDesc union end offset: "
               << reader.Position().value() << std::endl;
   } else if (desc.IsProcedural()) {
+    // For procedural meshes, generate vertex/index data (owned data)
     detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
     std::cerr << "[DEBUG] MeshDesc union end offset: "
               << reader.Position().value() << std::endl;
@@ -305,7 +332,16 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     desc.name, std::find(desc.name, desc.name + kMaxNameSize, '\0'));
 
   MeshBuilder builder(/*lod=*/0, name);
-  builder.WithDescriptor(desc).WithVertices(vertices).WithIndices(indices);
+  builder.WithDescriptor(desc);
+
+  // Configure builder based on mesh type
+  if (desc.IsStandard()) {
+    // Reference external buffer resources (zero-copy)
+    builder.WithBufferResources(vertex_buffer_resource, index_buffer_resource);
+  } else if (desc.IsProcedural()) {
+    // Use owned vertex/index data (data is moved into builder)
+    builder.WithVertices(vertices).WithIndices(indices);
+  }
 
   uint32_t total_read_views { 0 };
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {

@@ -73,10 +73,12 @@ protected:
       .WithVertices(vertices)
       .WithIndices(indices)
       .BeginSubMesh("main", material)
-      .WithMeshView({ .first_index = 0,
+      .WithMeshView({
+        .first_index = 0,
         .index_count = static_cast<uint32_t>(indices.size()),
         .first_vertex = 0,
-        .vertex_count = static_cast<uint32_t>(vertices.size()) })
+        .vertex_count = static_cast<uint32_t>(vertices.size()),
+      })
       .EndSubMesh()
       .Build();
   }
@@ -162,24 +164,30 @@ protected:
   static auto MakeSimpleMesh() -> std::shared_ptr<oxygen::data::Mesh>
   {
     std::vector<Vertex> vertices = {
-      { .position = { 0, 0, 0 },
+      {
+        .position = { 0, 0, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 0, 0 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
-      { .position = { 1, 0, 0 },
+        .color = {},
+      },
+      {
+        .position = { 1, 0, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 1, 0 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
-      { .position = { 0, 1, 0 },
+        .color = {},
+      },
+      {
+        .position = { 0, 1, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 0, 1 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
+        .color = {},
+      },
     };
     std::vector<std::uint32_t> indices = { 0, 1, 2 };
     auto material = MaterialAsset::CreateDefault();
@@ -265,24 +273,30 @@ protected:
   static auto MakeSimpleMesh() -> std::shared_ptr<oxygen::data::Mesh>
   {
     std::vector<Vertex> vertices = {
-      { .position = { 0, 0, 0 },
+      {
+        .position = { 0, 0, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 0, 0 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
-      { .position = { 1, 0, 0 },
+        .color = {},
+      },
+      {
+        .position = { 1, 0, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 1, 0 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
-      { .position = { 0, 1, 0 },
+        .color = {},
+      },
+      {
+        .position = { 0, 1, 0 },
         .normal = { 0, 1, 0 },
         .texcoord = { 0, 1 },
         .tangent = { 1, 0, 0 },
         .bitangent = {},
-        .color = {} },
+        .color = {},
+      },
     };
     std::vector<std::uint32_t> indices = { 0, 1, 2 };
     auto material = MaterialAsset::CreateDefault();
@@ -290,10 +304,12 @@ protected:
       .WithVertices(vertices)
       .WithIndices(indices)
       .BeginSubMesh("main", material)
-      .WithMeshView({ .first_index = 0,
+      .WithMeshView({
+        .first_index = 0,
         .index_count = 3,
         .first_vertex = 0,
-        .vertex_count = 3 })
+        .vertex_count = 3,
+      })
       .EndSubMesh()
       .Build();
   }

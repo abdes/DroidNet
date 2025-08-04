@@ -10,6 +10,7 @@
 #include <functional>
 #include <string>
 
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::internal {
@@ -31,12 +32,14 @@ namespace oxygen::content::internal {
  @note This class is internal to AssetLoader implementation and should not
        be used directly by client code.
  */
-class ResourceKey {
+class InternalResourceKey {
+  static_assert(sizeof(content::ResourceKey) == sizeof(uint64_t),
+    "ContentResource::Key must be 64 bits");
 
 public:
   //! Construct a ResourceKey from PAK index, resource type index, and resource
   //! index
-  constexpr ResourceKey(const uint16_t pak_index,
+  constexpr InternalResourceKey(const uint16_t pak_index,
     const uint16_t resource_type_index,
     const data::pak::ResourceIndexT resource_index) noexcept
     : key_((static_cast<uint64_t>(pak_index) << 48)
@@ -47,13 +50,13 @@ public:
   }
 
   //! Construct from raw 64-bit key value
-  explicit constexpr ResourceKey(const uint64_t raw_key) noexcept
+  explicit constexpr InternalResourceKey(const uint64_t raw_key) noexcept
     : key_(raw_key)
   {
   }
 
   //! Default constructor (invalid key)
-  constexpr ResourceKey() noexcept
+  constexpr InternalResourceKey() noexcept
     : key_(0)
   {
   }
@@ -78,25 +81,28 @@ public:
   }
 
   //! Get the raw 64-bit key value
-  [[nodiscard]] constexpr auto GetRawKey() const noexcept -> uint64_t
+  [[nodiscard]] constexpr auto GetRawKey() const noexcept -> ResourceKey
   {
-    return key_;
+    return static_cast<ResourceKey>(key_);
   }
 
   //! Equality comparison
-  constexpr auto operator==(const ResourceKey& other) const noexcept -> bool
+  constexpr auto operator==(const InternalResourceKey& other) const noexcept
+    -> bool
   {
     return key_ == other.key_;
   }
 
   //! Inequality comparison
-  constexpr auto operator!=(const ResourceKey& other) const noexcept -> bool
+  constexpr auto operator!=(const InternalResourceKey& other) const noexcept
+    -> bool
   {
     return key_ != other.key_;
   }
 
   //! Less-than comparison for use in ordered containers
-  constexpr auto operator<(const ResourceKey& other) const noexcept -> bool
+  constexpr auto operator<(const InternalResourceKey& other) const noexcept
+    -> bool
   {
     return key_ < other.key_;
   }
@@ -106,7 +112,7 @@ private:
 };
 
 //! Convert ResourceKey to string for logging and debugging
-inline auto to_string(const ResourceKey& key) -> std::string
+inline auto to_string(const InternalResourceKey& key) -> std::string
 {
   return "RK{pak:" + std::to_string(key.GetPakIndex())
     + ", type:" + std::to_string(key.GetResourceTypeIndex())
@@ -116,9 +122,10 @@ inline auto to_string(const ResourceKey& key) -> std::string
 } // namespace oxygen::content::detail
 
 //! Specialization of std::hash for ResourceKey
-template <> struct std::hash<oxygen::content::internal::ResourceKey> {
+template <> struct std::hash<oxygen::content::internal::InternalResourceKey> {
   auto operator()(
-    const oxygen::content::internal::ResourceKey& key) const noexcept -> size_t
+    const oxygen::content::internal::InternalResourceKey& key) const noexcept
+    -> size_t
   {
     return key.GetRawKey();
   }

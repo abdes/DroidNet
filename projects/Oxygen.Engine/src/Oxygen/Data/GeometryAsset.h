@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -22,12 +23,14 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
 
-// Forward declaration
+// Forward declarations
+class BufferResource;
 class MaterialAsset;
 class Mesh;
 
@@ -214,6 +217,60 @@ private:
  @note Mesh is invalid if it contains no submeshes.
  @see MeshView, SubMesh, Vertex, MaterialAsset
 */
+
+//=== Buffer Storage Strategies
+//===--------------------------------------------//
+
+namespace detail {
+
+  //! Storage for meshes that own their vertex/index data (procedural meshes)
+  struct OwnedBufferStorage {
+    std::vector<Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+
+    auto GetVertices() const noexcept -> std::span<const Vertex>
+    {
+      return vertices;
+    }
+
+    auto GetIndices() const noexcept -> std::span<const std::uint32_t>
+    {
+      return indices;
+    }
+  };
+
+  //! Storage for meshes that reference external buffer resources (asset meshes)
+  struct ReferencedBufferStorage {
+    std::shared_ptr<BufferResource> vertex_buffer_resource;
+    std::shared_ptr<BufferResource> index_buffer_resource;
+
+    auto GetVertices() const noexcept -> std::span<const Vertex>
+    {
+      if (!vertex_buffer_resource)
+        return {};
+      auto data = vertex_buffer_resource->GetData();
+      return std::span<const Vertex>(
+        reinterpret_cast<const Vertex*>(data.data()),
+        data.size() / sizeof(Vertex));
+    }
+
+    auto GetIndices() const noexcept -> std::span<const std::uint32_t>
+    {
+      if (!index_buffer_resource)
+        return {};
+      auto data = index_buffer_resource->GetData();
+      return std::span<const std::uint32_t>(
+        reinterpret_cast<const std::uint32_t*>(data.data()),
+        data.size() / sizeof(std::uint32_t));
+    }
+  };
+
+  //! Variant that can hold either owned or referenced buffer data
+  using BufferStorage
+    = std::variant<OwnedBufferStorage, ReferencedBufferStorage>;
+
+} // namespace detail
+
 class Mesh {
 public:
   ~Mesh() = default;
@@ -233,32 +290,34 @@ public:
   [[nodiscard]] virtual auto Vertices() const noexcept
     -> std::span<const Vertex>
   {
-    return vertices_;
+    return std::visit([](const auto& storage) { return storage.GetVertices(); },
+      buffer_storage_);
   }
 
   //! Returns a span of all indices.
   [[nodiscard]] virtual auto Indices() const noexcept
     -> std::span<const std::uint32_t>
   {
-    return indices_;
+    return std::visit([](const auto& storage) { return storage.GetIndices(); },
+      buffer_storage_);
   }
 
   //! Returns the number of vertices.
   [[nodiscard]] auto VertexCount() const noexcept -> std::size_t
   {
-    return vertices_.size();
+    return Vertices().size();
   }
 
   //! Returns the number of indices.
   [[nodiscard]] auto IndexCount() const noexcept -> std::size_t
   {
-    return indices_.size();
+    return Indices().size();
   }
 
   //! Returns true if the mesh uses an index buffer (i.e., has indices).
   [[nodiscard]] auto IsIndexed() const noexcept -> bool
   {
-    return !indices_.empty();
+    return !Indices().empty();
   }
 
   //! Returns a span of all submeshes.
@@ -299,6 +358,11 @@ protected:
   OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
     std::vector<std::uint32_t> indices);
 
+  // For buffer resource-based meshes
+  OXGN_DATA_API Mesh(uint32_t lod,
+    std::shared_ptr<BufferResource> vertex_buffer,
+    std::shared_ptr<BufferResource> index_buffer);
+
   // Only for MeshBuilder: add a fully constructed SubMesh
   void AddSubMeshInternal(SubMesh&& submesh)
   {
@@ -330,8 +394,7 @@ private:
   glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
   std::vector<SubMesh> submeshes_;
 
-  std::vector<Vertex> vertices_;
-  std::vector<std::uint32_t> indices_;
+  detail::BufferStorage buffer_storage_;
 
   std::optional<pak::MeshDesc> desc_ {};
 };
@@ -496,23 +559,49 @@ private:
   friend class MeshBuilder;
 };
 
-//! Builder for constructing immutable Mesh objects with submeshes and views.
-/*!
-  MeshBuilder provides a fluent, safe API for assembling a Mesh and its
-  submeshes/views. It accumulates geometry and submesh definitions, then
-  produces a fully immutable Mesh instance.
-
-  @see Mesh, SubMesh, MeshView
-*/
-//=== MeshBuilder
-//===-------------------------------------------------------------//
+//=== MeshBuilder ===---------------------------------------------------------//
 
 //! Builder for constructing immutable Mesh objects with submeshes and views.
 /*!
   MeshBuilder provides a fluent, type-safe API for assembling a Mesh and its
   submeshes/views. It accumulates geometry and submesh definitions, then
-  produces a fully immutable Mesh instance. Submesh construction is enforced
-  via the SubMeshBuilder type-state pattern.
+  produces a fully immutable Mesh instance. Submesh construction is enforced via
+  the SubMeshBuilder type-state pattern.
+
+  ### Storage Type Validation
+
+  MeshBuilder enforces consistent storage usage throughout the build process:
+  - **Owned Storage**: Use `WithVertices()` and `WithIndices()` for procedural
+    meshes
+  - **Referenced Storage**: Use `WithBufferResources()` for asset-loaded meshes
+
+  Once any storage method is called, the builder locks to that storage type.
+  Attempting to mix storage types will throw `std::logic_error` with a
+  descriptive error message.
+
+  ### Usage Examples
+
+  ```cpp
+  // Procedural mesh (owned storage)
+  auto mesh = MeshBuilder()
+    .WithVertices(vertex_data)
+    .WithIndices(index_data)
+    .BeginSubMesh("default", material)
+      .WithMeshView(view_desc)
+    .EndSubMesh()
+    .Build();
+
+  // Asset mesh (referenced storage)
+  auto mesh = MeshBuilder()
+    .WithBufferResources(vertex_buffer, index_buffer)
+    .BeginSubMesh("default", material)
+      .WithMeshView(view_desc)
+    .EndSubMesh()
+    .Build();
+  ```
+
+  @warning Do not mix `WithVertices/WithIndices` and `WithBufferResources` on
+  the same builder instance.
 
   @see Mesh, SubMesh, MeshView, SubMeshBuilder
 */
@@ -529,14 +618,33 @@ public:
   //! Sets the mesh vertices (replaces any existing vertices).
   auto WithVertices(std::span<const Vertex> vertices) -> MeshBuilder&
   {
+    ValidateStorageType(StorageType::kOwned);
     vertices_.assign(vertices.begin(), vertices.end());
+    using_owned_storage_ = true;
+    storage_type_ = StorageType::kOwned;
     return *this;
   }
 
   //! Sets the mesh indices (replaces any existing indices).
   auto WithIndices(std::span<const std::uint32_t> indices) -> MeshBuilder&
   {
+    ValidateStorageType(StorageType::kOwned);
     indices_.assign(indices.begin(), indices.end());
+    using_owned_storage_ = true;
+    storage_type_ = StorageType::kOwned;
+    return *this;
+  }
+
+  //! Sets the mesh to reference external buffer resources (for asset-loaded
+  //! meshes).
+  auto WithBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
+    std::shared_ptr<BufferResource> index_buffer) -> MeshBuilder&
+  {
+    ValidateStorageType(StorageType::kReferenced);
+    vertex_buffer_resource_ = std::move(vertex_buffer);
+    index_buffer_resource_ = std::move(index_buffer);
+    using_owned_storage_ = false;
+    storage_type_ = StorageType::kReferenced;
     return *this;
   }
 
@@ -544,6 +652,24 @@ public:
   {
     desc_ = std::move(desc);
     return *this;
+  }
+
+  //! Returns true if the builder is using owned storage (vertices/indices).
+  [[nodiscard]] auto IsUsingOwnedStorage() const noexcept -> bool
+  {
+    return storage_type_ == StorageType::kOwned;
+  }
+
+  //! Returns true if the builder is using referenced storage (BufferResources).
+  [[nodiscard]] auto IsUsingReferencedStorage() const noexcept -> bool
+  {
+    return storage_type_ == StorageType::kReferenced;
+  }
+
+  //! Returns true if no storage type has been configured yet.
+  [[nodiscard]] auto IsStorageUninitialized() const noexcept -> bool
+  {
+    return storage_type_ == StorageType::kUninitialized;
   }
 
   //! Begins a new submesh definition. Returns a SubMeshBuilder for mesh view
@@ -574,10 +700,57 @@ public:
   OXGN_DATA_NDAPI auto Build() -> std::unique_ptr<Mesh>;
 
 private:
+  //! Storage type tracking for validation
+  enum class StorageType {
+    kUninitialized, //!< No storage type set yet
+    kOwned, //!< Uses owned storage (vertices/indices vectors)
+    kReferenced //!< Uses referenced storage (BufferResource pointers)
+  };
+
+  //! Validates that the requested storage type is compatible with current
+  //! state.
+  /*!
+   @param requested_type The storage type being requested
+   @throw std::logic_error if attempting to mix storage types
+  */
+  void ValidateStorageType(StorageType requested_type)
+  {
+    if (storage_type_ == StorageType::kUninitialized) {
+      // First time setting storage type - allow any type
+      return;
+    }
+
+    if (storage_type_ != requested_type) {
+      const char* current_type_name = (storage_type_ == StorageType::kOwned)
+        ? "owned storage (WithVertices/WithIndices)"
+        : "referenced storage (WithBufferResources)";
+      const char* requested_type_name = (requested_type == StorageType::kOwned)
+        ? "owned storage (WithVertices/WithIndices)"
+        : "referenced storage (WithBufferResources)";
+
+      throw std::logic_error(
+        fmt::format("Cannot mix storage types: mesh is already configured for "
+                    "{} but {} was requested",
+          current_type_name, requested_type_name));
+    }
+  }
+
   uint32_t lod_;
   std::string name_;
+
+  // Storage type tracking
+  StorageType storage_type_ = StorageType::kUninitialized;
+
+  // For owned storage (procedural meshes)
   std::vector<Vertex> vertices_;
   std::vector<std::uint32_t> indices_;
+
+  // For referenced storage (asset meshes)
+  std::shared_ptr<BufferResource> vertex_buffer_resource_;
+  std::shared_ptr<BufferResource> index_buffer_resource_;
+
+  // Tracks which storage type to use
+  bool using_owned_storage_ = true;
 
   struct SubMeshSpec {
     std::string name;
