@@ -41,37 +41,15 @@ using namespace oxygen::data::pak;
  This is separate from asset descriptors - it reads the raw binary data
  that buffers and textures point to.
  */
-auto PrintResourceData(const PakFile& pak, uint64_t data_offset,
-  uint32_t data_size, const std::string& resource_type, size_t max_bytes = 256)
-  -> void
+auto PrintResourceData(std::span<const uint8_t> data,
+  const std::string& resource_type, size_t max_bytes = 256) -> void
 {
   try {
-    // Read data directly from the PAK file at the specified offset
-    std::ifstream file(pak.FilePath(), std::ios::binary);
-    if (!file.is_open()) {
-      std::cout << "        Failed to open PAK file for data reading\n";
-      return;
-    }
-
-    file.seekg(data_offset);
-    if (file.fail()) {
-      std::cout << "        Failed to seek to data offset 0x" << std::hex
-                << data_offset << std::dec << "\n";
-      return;
-    }
-
-    size_t bytes_to_read = std::min(static_cast<size_t>(data_size), max_bytes);
-    std::vector<uint8_t> buffer(bytes_to_read);
-
-    file.read(reinterpret_cast<char*>(buffer.data()), bytes_to_read);
-    if (file.fail()) {
-      std::cout << "        Failed to read " << resource_type << " data\n";
-      return;
-    }
-
+    size_t bytes_to_read
+      = std::min(static_cast<size_t>(data.size()), max_bytes);
     std::cout << "        " << resource_type << " Data Preview ("
-              << bytes_to_read << " of " << data_size << " bytes):\n";
-    PrintUtils::HexDump(buffer.data(), bytes_to_read, max_bytes);
+              << bytes_to_read << " of " << data.size() << " bytes):\n";
+    PrintUtils::HexDump(data.data(), bytes_to_read, max_bytes);
 
   } catch (const std::exception& ex) {
     std::cout << "        Failed to read " << resource_type
@@ -455,8 +433,8 @@ public:
             }
             Field("Buffer Type", buffer_type, 8);
             if (ctx.show_resource_data) {
-              PrintResourceData(pak, buffer_resource->GetDataOffset(),
-                buffer_resource->GetDataSize(), "Buffer", ctx.max_data_bytes);
+              PrintResourceData(
+                buffer_resource->GetData(), "Buffer", ctx.max_data_bytes);
             }
           } else {
             std::cout << "      [" << i << "] Failed to load buffer resource\n";
@@ -503,7 +481,7 @@ public:
             Field(
               "Data Offset", ToHexString(texture_resource->GetDataOffset()), 8);
             Field("Data Size",
-              std::to_string(texture_resource->GetDataSize()) + " bytes", 8);
+              std::to_string(texture_resource->GetData().size()) + " bytes", 8);
             Field("Width", std::to_string(texture_resource->GetWidth()), 8);
             Field("Height", std::to_string(texture_resource->GetHeight()), 8);
             Field("Depth", std::to_string(texture_resource->GetDepth()), 8);
@@ -515,8 +493,8 @@ public:
             Field("Texture Type",
               nostd::to_string(texture_resource->GetTextureType()), 8);
             if (ctx.show_resource_data) {
-              PrintResourceData(pak, texture_resource->GetDataOffset(),
-                texture_resource->GetDataSize(), "Texture", ctx.max_data_bytes);
+              PrintResourceData(
+                texture_resource->GetData(), "Texture", ctx.max_data_bytes);
             }
           } else {
             std::cout << "      [" << i

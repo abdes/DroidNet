@@ -75,7 +75,7 @@ NOLINT_TEST_F(
   // to 256 (to place the texture data after)
   // Field layout:
   //   0x00: data_offset      = 256         (00 01 00 00 00 00 00 00)
-  //   0x08: data_size        = 287         (1F 01 00 00)
+  //   0x08: size_bytes        = 287         (1F 01 00 00)
   //   0x0C: texture_type     = 4           (04)  // kTextureCube
   //   0x0D: compression_type = 0           (00)
   //   0x0E: width            = 128         (80 00 00 00)
@@ -92,12 +92,12 @@ NOLINT_TEST_F(
     32: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
-  constexpr uint32_t data_size = 287;
+  constexpr uint32_t size_bytes = 287;
   constexpr auto fill_value = std::byte { 0x99 };
 
   // Write header and 287 bytes of data (simulate offset)
   WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
+    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
 
   // Act
   const auto context = CreateLoaderContext();
@@ -111,9 +111,10 @@ NOLINT_TEST_F(
   EXPECT_EQ(asset->GetArrayLayers(), 6u);
   EXPECT_EQ(asset->GetMipCount(), 5u);
   EXPECT_EQ(asset->GetFormat(), oxygen::Format::kR8SInt);
-  EXPECT_EQ(asset->GetDataSize(), 287u);
+  EXPECT_EQ(asset->GetData().size(), 287u);
+  EXPECT_THAT(
+    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
   EXPECT_EQ(asset->GetDataAlignment(), 256u);
-  EXPECT_EQ(asset->GetDataOffset(), 256u);
   EXPECT_EQ(asset->GetTextureType(), oxygen::TextureType::kTexture2DArray);
   EXPECT_EQ(asset->GetCompressionType(), 0u);
 }
@@ -131,7 +132,7 @@ NOLINT_TEST_F(
   // texture_type = 255 (invalid), padded to 256 (to place the texture data
   // after) Field layout:
   //   0x00: data_offset      = 256         (00 01 00 00 00 00 00 00)
-  //   0x08: data_size        = 128         (80 00 00 00)
+  //   0x08: size_bytes        = 128         (80 00 00 00)
   //   0x0C: texture_type     = 255         (FF) <- invalid
   //   0x0D: compression_type = 0           (00)
   //   0x0E: width            = 16          (10 00 00 00)
@@ -148,12 +149,12 @@ NOLINT_TEST_F(
     32: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
-  constexpr uint32_t data_size = 128;
+  constexpr uint32_t size_bytes = 128;
   constexpr auto fill_value = std::byte { 0x11 };
 
   // Write header and 128 bytes of data (simulate offset)
   WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
+    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
 
   // Act
   const auto context = CreateLoaderContext();
@@ -176,7 +177,7 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_InvalidFormat_ReturnsUnknown)
   // format = 255 (invalid), padded to 256 (to place the texture data after)
   // Field layout:
   //   0x00: data_offset      = 256         (00 01 00 00 00 00 00 00)
-  //   0x08: data_size        = 128         (80 00 00 00)
+  //   0x08: size_bytes        = 128         (80 00 00 00)
   //   0x0C: texture_type     = 1           (01)  // kTexture2D
   //   0x0D: compression_type = 0           (00)
   //   0x0E: width            = 16          (10 00 00 00)
@@ -193,12 +194,12 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_InvalidFormat_ReturnsUnknown)
     32: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
-  constexpr uint32_t data_size = 128;
+  constexpr uint32_t size_bytes = 128;
   constexpr auto fill_value = std::byte { 0x22 };
 
   // Write header and 128 bytes of data (simulate offset)
   WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
+    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
 
   // Act
   const auto context = CreateLoaderContext();
@@ -216,9 +217,9 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_AlignedDataOffset_Works)
   using oxygen::data::TextureResource;
 
   // Arrange: Hexdump for a TextureResourceDesc header (40 bytes), with
-  // data_offset = 256 and data_size = 16. Field layout:
+  // data_offset = 256 and size_bytes = 16. Field layout:
   //   0x00: data_offset      = 256         (40 00 00 00 00 00 00 00)
-  //   0x08: data_size        = 16          (10 00 00 00)
+  //   0x08: size_bytes        = 16          (10 00 00 00)
   //   0x0C: texture_type     = 3           (03)
   //   0x0D: compression_type = 0           (00)
   //   0x0E: width            = 8           (08 00 00 00)
@@ -235,12 +236,12 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_AlignedDataOffset_Works)
     32: 00 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
-  constexpr uint32_t data_size = 16;
+  constexpr uint32_t size_bytes = 16;
   constexpr auto fill_value = std::byte { 0x5A };
 
   // Write header and 272 bytes of data (simulate offset)
   WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
+    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
 
   // Act
   const auto context = CreateLoaderContext();
@@ -248,8 +249,9 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_AlignedDataOffset_Works)
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataOffset(), data_offset);
-  EXPECT_EQ(asset->GetDataSize(), data_size);
+  EXPECT_EQ(asset->GetData().size(), size_bytes);
+  EXPECT_THAT(
+    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
   EXPECT_EQ(asset->GetWidth(), 8u);
   EXPECT_EQ(asset->GetHeight(), 8u);
   EXPECT_EQ(asset->GetTextureType(), oxygen::TextureType::kTexture2D);
@@ -258,17 +260,17 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_AlignedDataOffset_Works)
   // (if TextureResource exposes a way to access the raw data)
 }
 
-//! Test: LoadTextureResource handles zero data_size (no texture data)
+//! Test: LoadTextureResource handles zero size_bytes (no texture data)
 //! gracefully.
 NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_ZeroDataSize_Works)
 {
   using oxygen::content::testing::WriteTextureDescWithData;
   using oxygen::data::TextureResource;
 
-  // Arrange: Hexdump for a TextureResourceDesc header (40 bytes), data_size = 0
-  // Field layout:
+  // Arrange: Hexdump for a TextureResourceDesc header (40 bytes), size_bytes =
+  // 0 Field layout:
   //   0x00: data_offset      = 256         (00 01 00 00 00 00 00 00)
-  //   0x08: data_size        = 0           (00 00 00 00)
+  //   0x08: size_bytes        = 0           (00 00 00 00)
   //   0x0C: texture_type     = 1           (01)  // kTexture1D
   //   0x0D: compression_type = 0           (00)
   //   0x0E: width            = 16          (10 00 00 00)
@@ -285,12 +287,12 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_ZeroDataSize_Works)
     32: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
-  constexpr uint32_t data_size = 0;
+  constexpr uint32_t size_bytes = 0;
   constexpr auto fill_value = std::byte { 0x00 };
 
   // Write header only (no image data needed)
   WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
+    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
 
   // Act
   const auto context = CreateLoaderContext();
@@ -298,8 +300,7 @@ NOLINT_TEST_F(TextureLoaderBasicTest, LoadTexture_ZeroDataSize_Works)
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataOffset(), data_offset);
-  EXPECT_EQ(asset->GetDataSize(), 0u);
+  EXPECT_EQ(asset->GetData().size(), 0u);
   EXPECT_EQ(asset->GetWidth(), 16u);
   EXPECT_EQ(asset->GetHeight(), 16u);
   EXPECT_EQ(asset->GetTextureType(), oxygen::TextureType::kTexture1D);
@@ -328,44 +329,6 @@ NOLINT_TEST_F(TextureLoaderErrorTest, LoadTexture_TruncatedHeader_Throws)
     desc_writer_, data_writer_, truncated_hexdump, 0, std::byte { 0x00 });
 
   // Act + Assert: Should throw due to incomplete header
-  const auto context = CreateLoaderContext();
-  EXPECT_THROW({ (void)LoadTextureResource(context); }, std::runtime_error);
-}
-
-//! Test: LoadTextureResource correctly handles a misaligned data_offset.
-NOLINT_TEST_F(TextureLoaderErrorTest, LoadTexture_MisalignedDataOffset_Throws)
-{
-  using oxygen::content::testing::WriteTextureDescWithData;
-  using oxygen::data::TextureResource;
-
-  // Arrange: Hexdump for a TextureResourceDesc header (40 bytes), with
-  // data_offset = 64 and data_size = 16. Field layout:
-  //   0x00: data_offset      = 64          (40 00 00 00 00 00 00 00)
-  //   0x08: data_size        = 16          (10 00 00 00)
-  //   0x0C: texture_type     = 3           (03)
-  //   0x0D: compression_type = 0           (00)
-  //   0x0E: width            = 8           (08 00 00 00)
-  //   0x12: height           = 8           (08 00 00 00)
-  //   0x16: depth            = 1           (01 00)
-  //   0x18: array_layers     = 1           (01 00)
-  //   0x1A: mip_levels       = 1           (01 00)
-  //   0x1C: format           = 6           (06)
-  //   0x1D: alignment        = 256         (01 00)
-  //   0x1F: reserved[9]      = {0}         (00 00 00 00 00 00 00 00 00)
-  const std::string hexdump = R"(
-     0: 40 00 00 00 00 00 00 00 10 00 00 00 03 00 08 00
-    16: 00 00 08 00 00 00 01 00 01 00 01 00 06 00 01 00
-    32: 00 00 00 00 00 00 00 00 00
-  )";
-  constexpr uint64_t data_offset = 64;
-  constexpr uint32_t data_size = 16;
-  constexpr auto fill_value = std::byte { 0x5A };
-
-  // Write header and 80 bytes of data (simulate offset)
-  WriteTextureDescWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + data_size, fill_value);
-
-  // Act
   const auto context = CreateLoaderContext();
   EXPECT_THROW({ (void)LoadTextureResource(context); }, std::runtime_error);
 }

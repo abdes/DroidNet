@@ -55,7 +55,7 @@ inline auto LoadTextureResource(LoaderContext context)
   auto tex_type = static_cast<TextureType>(desc.texture_type);
   auto tex_format = static_cast<Format>(desc.format);
   LOG_F(1, "data offset      : {}", desc.data_offset);
-  LOG_F(1, "data size        : {}", desc.data_size);
+  LOG_F(1, "data size        : {}", desc.size_bytes);
   LOG_F(2, "texture type     : {}", nostd::to_string(tex_type));
   LOG_F(2, "compression type : {}", desc.compression_type);
   LOG_F(2, "width            : {}", desc.width);
@@ -66,25 +66,23 @@ inline auto LoadTextureResource(LoaderContext context)
   LOG_F(2, "format           : {}", nostd::to_string(tex_format));
   LOG_F(2, "alignment        : {}", desc.alignment);
 
-  // Note: In offline mode, we skip any GPU resource creation
-  if (!context.offline && desc.data_size > 0) {
-    // TODO: Read the texture data
-    // For now we just do some sanity checks and throw if the data cannot be
-    // fully read
+  std::vector<uint8_t> data_buffer(desc.size_bytes);
+  if (desc.size_bytes > 0) {
     constexpr std::size_t tex_index
       = IndexOf<data::TextureResource, ResourceTypeList>::value;
     DCHECK_NOTNULL_F(std::get<tex_index>(context.data_readers),
       "expecting data reader for TextureResource to be valid");
     auto& data_reader = *std::get<tex_index>(context.data_readers);
 
+    // Create a span of std::byte over the same memory
+    std::span<std::byte> byte_view(
+      reinterpret_cast<std::byte*>(data_buffer.data()), data_buffer.size());
     check_result(data_reader.Seek(desc.data_offset), "Texture Data");
-    auto align_result = data_reader.AlignTo(desc.alignment);
-    check_result(align_result, "Texture Data");
-    auto data_result = data_reader.ReadBlob(desc.data_size);
+    auto data_result = data_reader.ReadBlobInto(byte_view);
     check_result(data_result, "Texture Data");
   }
 
-  return std::make_unique<data::TextureResource>(desc);
+  return std::make_unique<data::TextureResource>(desc, std::move(data_buffer));
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadTextureResource)>);
