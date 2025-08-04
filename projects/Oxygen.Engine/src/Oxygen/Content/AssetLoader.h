@@ -265,15 +265,12 @@ public:
    cache (i.e. no longer used directly or as a dependency).
 
    The target type (specific asset or resource) is automatically deduced from
-   the load function's return type. The unload function must be callable with a
-   `std::shared_ptr<T>`, an `AssetLoader&`, and a `bool` (offline flag), where
-   `T` is the `element_type` type of the smart pointer returned by the load
-   function.
+   the load function's return type. The unload function must satisfy the
+   `UnloadFunction` concept with the target type.
 
    @tparam LF The load function type (must satisfy LoadFunction)
-   @tparam UF The unload function type; must be callable as
-     `void(std::shared_ptr<T>, AssetLoader&, bool)` where T matches the load
-     function's return type.
+   @tparam UF The unload function type (must satisfy UnloadFunction, where T is
+   the type deduced from the load function's return type).
    @param load_fn The load function to register
    @param unload_fn The unload function to register
 
@@ -298,58 +295,45 @@ public:
     // Infer the type from the loader function signature
     using LoaderPtr = decltype(load_fn(std::declval<LoaderContext>()));
     using T = std::remove_pointer_t<typename LoaderPtr::element_type>;
-    static_assert(IsTyped<T>, "T must satisfy IsTyped concept");
-    static_assert(
-      std::is_invocable_r_v<void, UF, std::shared_ptr<T>, AssetLoader&, bool>,
-      "Unload function must be callable with (std::shared_ptr<T>, "
-      "AssetLoader&, bool) and return void");
+    static_assert(IsTyped<T>, "T must satisfy the `IsTyped` concept");
+    static_assert(UnloadFunction<UF, T>);
 
     auto type_id = T::ClassTypeId();
     auto type_name = T::ClassTypeNamePretty();
 
     // Store type-erased unload function
-    unloaders_[type_id]
+    UnloadFnErased unloader_erased
       = [unload_fn = std::forward<UF>(unload_fn)](
           std::shared_ptr<void> asset, AssetLoader& loader, bool offline) {
           auto typed = std::static_pointer_cast<T>(asset);
           unload_fn(typed, loader, offline);
         };
+    AddTypeErasedUnloader(type_id, type_name, std::move(unloader_erased));
 
     if constexpr (PakResource<T>) {
       // Resource loader path
-      LoadResourceFnErased erased
+      LoadResourceFnErased loader_erased
         = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
             const PakFile& pak, data::pak::ResourceIndexT resource_index,
             bool offline) -> std::shared_ptr<void> {
-        return MakeResourceLoaderCall<T>(
+        return InvokeResourceLoaderFunction<T>(
           load_fn, loader, pak, resource_index, offline);
       };
-      AddTypeErasedResourceLoader(type_id, type_name, std::move(erased));
-
+      AddTypeErasedResourceLoader(type_id, type_name, std::move(loader_erased));
     } else {
       // Asset loader path
-      LoadAssetFnErased erased
+      LoadAssetFnErased loader_erased
         = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
             const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
             bool offline) -> std::shared_ptr<void> {
-        return MakeAssetLoaderCall(load_fn, loader, pak, entry, offline);
+        return InvokeAssetLoaderFunction(load_fn, loader, pak, entry, offline);
       };
-      AddTypeErasedAssetLoader(type_id, type_name, std::move(erased));
+      AddTypeErasedAssetLoader(type_id, type_name, std::move(loader_erased));
     }
   }
 
 private:
-  // Type-erased unload function signature
-  using UnloadFnErased
-    = std::function<void(std::shared_ptr<void>, AssetLoader&, bool)>;
-
-  // Map from type id to type-erased unload function
-  std::unordered_map<TypeId, UnloadFnErased> unloaders_;
   std::vector<std::unique_ptr<PakFile>> paks_;
-
-  //! Helper method for the recursive descent of asset dependencies when
-  //! releasing assets.
-  auto ReleaseAssetTree(const data::AssetKey& key, bool offline) -> void;
 
   //=== Dependency Tracking ===-----------------------------------------------//
 
@@ -371,6 +355,10 @@ private:
   std::unordered_map<ResourceKey, std::unordered_set<data::AssetKey>>
     reverse_resource_dependencies_;
 
+  //! Helper method for the recursive descent of asset dependencies when
+  //! releasing assets.
+  auto ReleaseAssetTree(const data::AssetKey& key, bool offline) -> void;
+
   //=== Unified Content Cache ===---------------------------------------------//
 
   //! Unified content cache for both assets and resources
@@ -385,21 +373,6 @@ private:
   //! Get PAK file index from pointer (for resource key creation)
   auto GetPakIndex(const PakFile& pak) const -> uint16_t;
 
-  //! Helper: Create asset loader call with unified error handling
-  template <LoadFunction F>
-  static auto MakeAssetLoaderCall(const F& fn, AssetLoader& loader,
-    const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
-    bool offline) -> std::shared_ptr<void>;
-
-  //! Helper: Create resource loader call with unified error handling
-  template <PakResource T, LoadFunction F>
-  static auto MakeResourceLoaderCall(const F& fn, AssetLoader& loader,
-    const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
-    -> std::shared_ptr<void>;
-
-  void InvokeUnloadFunction(
-    oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline);
-
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
   // Use shared_ptr<void> for type erasure, loader functions get AssetLoader&
@@ -412,14 +385,35 @@ private:
   using LoadResourceFnErased = std::function<std::shared_ptr<void>(
     AssetLoader&, const PakFile&, data::pak::ResourceIndexT, bool)>;
 
-  std::unordered_map<TypeId, LoadAssetFnErased> loaders_;
+  // Type-erased unload function signature
+  using UnloadFnErased
+    = std::function<void(std::shared_ptr<void>, AssetLoader&, bool)>;
+
+  std::unordered_map<TypeId, LoadAssetFnErased> asset_loaders_;
   std::unordered_map<TypeId, LoadResourceFnErased> resource_loaders_;
+  std::unordered_map<TypeId, UnloadFnErased> unloaders_;
+
+  template <LoadFunction F>
+  static auto InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
+    const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
+    bool offline) -> std::shared_ptr<void>;
+
+  template <PakResource T, LoadFunction F>
+  static auto InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
+    const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
+    -> std::shared_ptr<void>;
+
+  void UnloadObject(
+    oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline);
 
   OXGN_CNTT_API auto AddTypeErasedAssetLoader(TypeId type_id,
-    std::string_view type_name, LoadAssetFnErased loader) -> void;
+    std::string_view type_name, LoadAssetFnErased&& loader) -> void;
 
   OXGN_CNTT_API auto AddTypeErasedResourceLoader(TypeId type_id,
-    std::string_view type_name, LoadResourceFnErased loader) -> void;
+    std::string_view type_name, LoadResourceFnErased&& loader) -> void;
+
+  OXGN_CNTT_API auto AddTypeErasedUnloader(TypeId type_id,
+    std::string_view type_name, UnloadFnErased&& unloader) -> void;
 };
 
 //=== Explicit Template Declarations for DLL Export ==========================//
