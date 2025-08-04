@@ -16,6 +16,16 @@ content_version: 42
 # =============================================================================
 
 textures:
+  # Default texture at index 0 (required in all PAK files)
+  - name: "default_empty_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3     # kTexture2D
+    compression_type: 0
+    mip_levels: 1
+    data_hex: "ffffffff"  # 1x1 white pixel
+
   # Hull Material Textures
   - name: "SpaceshipHull_Diffuse"
     data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daed93310e82301445bf7244141141c1b040b040b040b0"
@@ -124,41 +134,48 @@ textures:
 # =============================================================================
 
 buffers:
-  # LOD 0 Buffers (Highest Detail - 5000 vertices)
+  # Define default empty buffer (index 0) - required in all PAK files
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+    bind_flags: 0
+
+  # LOD 0 Buffers (5 vertices × 72 bytes = 360 bytes, PAK-padded to 910 bytes = ~12 vertices)
   - name: "SpaceshipLOD0_VertexBuffer"
-    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     usage: 1  # D3D11_USAGE_IMMUTABLE
     bind_flags: 1  # D3D11_BIND_VERTEX_BUFFER
-    stride: 32  # Position(12) + Normal(12) + UV(8)
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
 
   - name: "SpaceshipLOD0_IndexBuffer"
-    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    data_hex: "000000010002000300040005000600070008000000010002000300040005000600070008000000010002000300040005000600070008000000010002000300040005000600070008"
     usage: 2  # kIndexBuffer
     bind_flags: 2  # D3D11_BIND_INDEX_BUFFER
     format: 5  # Format::kR16UInt (16-bit unsigned integer for indices)
 
-  # LOD 1 Buffers (Medium Detail - 2500 vertices)
+  # LOD 1 Buffers (3 vertices × 72 bytes = 216 bytes, PAK-padded to 557 bytes = ~7 vertices)
   - name: "SpaceshipLOD1_VertexBuffer"
-    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     usage: 1
     bind_flags: 1
-    stride: 32
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
 
   - name: "SpaceshipLOD1_IndexBuffer"
-    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    data_hex: "000000010002000300040000000100020003000400000001000200030004000000010002000300040000000100020003000400000001000200030004000000010002000300040000000100020003000400000001000200030004"
     usage: 2  # kIndexBuffer
     bind_flags: 2
     format: 5  # Format::kR16UInt
 
-  # LOD 2 Buffers (Low Detail - 1000 vertices)
+  # LOD 2 Buffers (2 vertices × 72 bytes = 144 bytes, PAK-padded to 381 bytes = ~5 vertices)
   - name: "SpaceshipLOD2_VertexBuffer"
-    data_hex: "000000000000000000000000000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff000000000000803f000000000000000000000000ff000000ff0000ffff"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     usage: 1
     bind_flags: 1
-    stride: 32
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
 
   - name: "SpaceshipLOD2_IndexBuffer"
-    data_hex: "000000010002000200010003000300010004000400010005000500010006000600010007000700010008000800010009000900010000"
+    data_hex: "000000010002000300000001000200030000000100020003000000010002000300000001000200030000000100020003000000010002000300000001000200030000"
     usage: 2  # kIndexBuffer
     bind_flags: 2
     format: 5  # Format::kR16UInt
@@ -171,7 +188,7 @@ assets:
   # Hull Material (Main body of the spaceship)
   - name: "SpaceshipHullMaterial"
     type: "material"
-    asset_key: "01234567-89ab-cdef-0123-456789abcdef"
+    asset_key: "11111111-1111-1111-1111-111111111111"
     version: 1
     streaming_priority: 128
     content_hash: 0x12345678
@@ -205,7 +222,7 @@ assets:
   # Cockpit Glass Material (Transparent cockpit)
   - name: "CockpitGlassMaterial"
     type: "material"
-    asset_key: "fedcba98-7654-3210-fedc-ba9876543210"
+    asset_key: "22222222-2222-2222-2222-222222222222"
     version: 1
     streaming_priority: 96
     content_hash: 0x87654321
@@ -233,7 +250,7 @@ assets:
   # Engine Glow Material (Emissive engines)
   - name: "EngineGlowMaterial"
     type: "material"
-    asset_key: "11111111-2222-3333-4444-555555555555"
+    asset_key: "33333333-3333-3333-3333-333333333333"
     version: 1
     streaming_priority: 192
     content_hash: 0x11223344
@@ -260,7 +277,7 @@ assets:
   # Weapon Material (Metallic weapon parts)
   - name: "WeaponMaterial"
     type: "material"
-    asset_key: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    asset_key: "44444444-4444-4444-4444-444444444444"
     version: 1
     streaming_priority: 64
     content_hash: 0xAABBCCDD
@@ -292,7 +309,7 @@ assets:
   # Main Spaceship Geometry Asset
   - name: "SpaceshipGeometry"
     type: "geometry"
-    asset_key: "12345678-90ab-cdef-1234-567890abcdef"
+    asset_key: "deadbeef-cafe-babe-dead-feeddeadbeef"
     version: 3
     streaming_priority: 255
     content_hash: 0x12345678
@@ -303,10 +320,11 @@ assets:
     bounding_box_min: [-10.0, -3.0, -15.0]
     bounding_box_max: [10.0, 3.0, 15.0]
 
-    # Multiple LODs for distance-based rendering
+    # Multiple LODs for distance-based rendering (vertex counts reflect PAK padding effects)
     lods:
-      # LOD 0 - Highest Detail (Close range: 0-50 units)
+      # LOD 0 - Highest Detail (Close range: 0-50 units, ~12 vertices after PAK padding)
       - name: "SpaceshipLOD0"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
         vertex_buffer: "SpaceshipLOD0_VertexBuffer"
         index_buffer: "SpaceshipLOD0_IndexBuffer"
         bounding_box_min: [-10.0, -3.0, -15.0]
@@ -320,13 +338,9 @@ assets:
             bounding_box_max: [8.0, 2.5, 12.0]
             mesh_views:
               - first_index: 0
-                index_count: 3600
+                index_count: 9
                 first_vertex: 0
-                vertex_count: 1200
-              - first_index: 3600
-                index_count: 1800
-                first_vertex: 1200
-                vertex_count: 600
+                vertex_count: 6
 
           # Cockpit Glass Submesh
           - name: "Cockpit"
@@ -334,47 +348,14 @@ assets:
             bounding_box_min: [-2.0, 1.0, 8.0]
             bounding_box_max: [2.0, 2.5, 12.0]
             mesh_views:
-              - first_index: 5400
-                index_count: 900
-                first_vertex: 1800
-                vertex_count: 300
+              - first_index: 9
+                index_count: 9
+                first_vertex: 6
+                vertex_count: 6
 
-          # Engine Submesh
-          - name: "Engines"
-            material: "EngineGlowMaterial"
-            bounding_box_min: [-6.0, -2.0, -15.0]
-            bounding_box_max: [6.0, 0.0, -8.0]
-            mesh_views:
-              - first_index: 6300
-                index_count: 1200
-                first_vertex: 2100
-                vertex_count: 400
-              - first_index: 7500
-                index_count: 600
-                first_vertex: 2500
-                vertex_count: 200
-
-          # Weapon Systems Submesh
-          - name: "Weapons"
-            material: "WeaponMaterial"
-            bounding_box_min: [-10.0, -1.0, -5.0]
-            bounding_box_max: [10.0, 1.0, 5.0]
-            mesh_views:
-              - first_index: 8100
-                index_count: 900
-                first_vertex: 2700
-                vertex_count: 300
-              - first_index: 9000
-                index_count: 450
-                first_vertex: 3000
-                vertex_count: 150
-              - first_index: 9450
-                index_count: 450
-                first_vertex: 3150
-                vertex_count: 150
-
-      # LOD 1 - Medium Detail (Medium range: 50-150 units)
+      # LOD 1 - Medium Detail (Medium range: 50-150 units, ~7 vertices after PAK padding)
       - name: "SpaceshipLOD1"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
         vertex_buffer: "SpaceshipLOD1_VertexBuffer"
         index_buffer: "SpaceshipLOD1_IndexBuffer"
         bounding_box_min: [-10.0, -3.0, -15.0]
@@ -382,53 +363,32 @@ assets:
 
         submeshes:
           # Simplified Hull (combines hull and cockpit)
-          - name: "HullCombined"
+          - name: "Hull"
             material: "SpaceshipHullMaterial"
             bounding_box_min: [-8.0, -2.5, -12.0]
             bounding_box_max: [8.0, 2.5, 12.0]
             mesh_views:
               - first_index: 0
-                index_count: 2400
+                index_count: 9
                 first_vertex: 0
-                vertex_count: 800
+                vertex_count: 7
 
-          # Simplified Engines
-          - name: "EnginesSimple"
-            material: "EngineGlowMaterial"
-            bounding_box_min: [-6.0, -2.0, -15.0]
-            bounding_box_max: [6.0, 0.0, -8.0]
-            mesh_views:
-              - first_index: 2400
-                index_count: 900
-                first_vertex: 800
-                vertex_count: 300
-
-          # Simplified Weapons
-          - name: "WeaponsSimple"
-            material: "WeaponMaterial"
-            bounding_box_min: [-10.0, -1.0, -5.0]
-            bounding_box_max: [10.0, 1.0, 5.0]
-            mesh_views:
-              - first_index: 3300
-                index_count: 600
-                first_vertex: 1100
-                vertex_count: 200
-
-      # LOD 2 - Low Detail (Far range: 150+ units)
+      # LOD 2 - Low Detail (Far range: 150+ units, ~5 vertices after PAK padding)
       - name: "SpaceshipLOD2"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
         vertex_buffer: "SpaceshipLOD2_VertexBuffer"
         index_buffer: "SpaceshipLOD2_IndexBuffer"
         bounding_box_min: [-10.0, -3.0, -15.0]
         bounding_box_max: [10.0, 3.0, 15.0]
 
         submeshes:
-          # Single combined mesh for entire spaceship
-          - name: "SpaceshipLowDetail"
+          # Minimal geometry (just a basic shape)
+          - name: "Hull"
             material: "SpaceshipHullMaterial"
-            bounding_box_min: [-10.0, -3.0, -15.0]
-            bounding_box_max: [10.0, 3.0, 15.0]
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
             mesh_views:
               - first_index: 0
-                index_count: 1200
+                index_count: 6
                 first_vertex: 0
-                vertex_count: 400
+                vertex_count: 5

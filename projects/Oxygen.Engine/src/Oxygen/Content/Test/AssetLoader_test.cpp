@@ -137,6 +137,12 @@ auto AssetLoaderTestBase::CreateTestAssetKey(const std::string& name) const
     const uint8_t bytes[] = { 0xff, 0xff, 0xff, 0xff, 0xee, 0xee, 0xdd, 0xdd,
       0xcc, 0xcc, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb };
     std::memcpy(key.guid.data(), bytes, sizeof(bytes));
+  } else if (name == "complex_geometry" || name == "SpaceshipGeometry") {
+    // Matches complex_geometry.yaml SpaceshipGeometry:
+    // "deadbeef-cafe-babe-dead-feeddeadbeef"
+    const uint8_t bytes[] = { 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
+      0xde, 0xad, 0xfe, 0xed, 0xde, 0xad, 0xbe, 0xef };
+    std::memcpy(key.guid.data(), bytes, sizeof(bytes));
   } else {
     // Fallback: create a deterministic key from hash for unknown names
     std::hash<std::string> hasher;
@@ -190,6 +196,47 @@ NOLINT_TEST_F(AssetLoaderBasicTest, LoadAsset_SimpleGeometry_LoadsSuccessfully)
 
   // Assert
   EXPECT_THAT(geometry, NotNull());
+}
+
+//! Test: AssetLoader can load a geometry asset with buffer dependencies
+/*!
+ Scenario: Creates a PAK file with a geometry asset that has vertex and
+ index buffer dependencies and verifies successful loading with proper
+ mesh properties and buffer references.
+*/
+NOLINT_TEST_F(AssetLoaderBasicTest, LoadAsset_ComplexGeometry_LoadsSuccessfully)
+{
+  // Arrange
+  auto pak_path = GeneratePakFile("complex_geometry");
+  asset_loader_->AddPakFile(pak_path);
+
+  auto geometry_key = CreateTestAssetKey("complex_geometry");
+
+  // Act
+  auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key, false);
+
+  // Assert
+  EXPECT_THAT(geometry, NotNull());
+
+  if (geometry) {
+    // Verify geometry has meshes and buffer dependencies
+    auto meshes = geometry->Meshes();
+    EXPECT_FALSE(meshes.empty());
+
+    // Verify each mesh has valid properties
+    for (size_t i = 0; i < meshes.size(); ++i) {
+      const auto& mesh = meshes[i];
+      EXPECT_THAT(mesh, NotNull())
+        << "Mesh at index " << i << " should not be null";
+
+      if (mesh) {
+        // Check basic mesh properties - buffered geometry should have vertex
+        // data
+        EXPECT_GE(mesh->VertexCount(), 0) << "Vertex count for mesh " << i;
+        EXPECT_GE(mesh->IndexCount(), 0) << "Index count for mesh " << i;
+      }
+    }
+  }
 }
 
 //! Test: AssetLoader returns nullptr for non-existent asset

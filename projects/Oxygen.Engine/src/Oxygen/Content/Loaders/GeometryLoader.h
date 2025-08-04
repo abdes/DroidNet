@@ -215,6 +215,7 @@ namespace detail {
     using namespace oxygen::data::pak;
 
     SubMeshDesc desc;
+
     // name
     std::span submesh_name_span(
       reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
@@ -281,33 +282,22 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   auto name_result = reader.ReadBlobInto(name_span);
   detail::CheckResult(name_result, "m.name");
   LOG_F(2, "name            : {}", desc.name);
-  std::cerr << "[DEBUG] MeshDesc.name offset: "
-            << reader.Position().value() - kMaxNameSize << std::endl;
 
   // mesh_type (must be read before union)
   auto mesh_type_result = reader.ReadInto<uint8_t>(desc.mesh_type);
   detail::CheckResult(mesh_type_result, "m.mesh_type");
   LOG_F(2, "mesh type       : {}",
     nostd::to_string(static_cast<MeshType>(desc.mesh_type)));
-  std::cerr << "[DEBUG] MeshDesc.mesh_type offset: "
-            << reader.Position().value() - 1 << std::endl;
 
   // submesh_count
   auto submesh_count_result = reader.ReadInto<uint32_t>(desc.submesh_count);
   detail::CheckResult(submesh_count_result, "m.submesh_count");
   LOG_F(2, "submesh count   : {}", desc.submesh_count);
-  std::cerr << "[DEBUG] MeshDesc.submesh_count offset: "
-            << reader.Position().value() - 4 << std::endl;
 
   // mesh_view_count
   auto mesh_view_count_result = reader.ReadInto<uint32_t>(desc.mesh_view_count);
   detail::CheckResult(mesh_view_count_result, "m.mesh_view_count");
   LOG_F(2, "mesh view count : {}", desc.mesh_view_count);
-  std::cerr << "[DEBUG] MeshDesc.mesh_view_count offset: "
-            << reader.Position().value() - 4 << std::endl;
-
-  std::cerr << "[DEBUG] MeshDesc union offset: " << reader.Position().value()
-            << std::endl;
 
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
@@ -318,13 +308,9 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     // For standard meshes, load buffer resources (no data copying)
     std::tie(vertex_buffer_resource, index_buffer_resource)
       = detail::LoadStandardMeshBuffers(context, desc);
-    std::cerr << "[DEBUG] MeshDesc union end offset: "
-              << reader.Position().value() << std::endl;
   } else if (desc.IsProcedural()) {
     // For procedural meshes, generate vertex/index data (owned data)
     detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
-    std::cerr << "[DEBUG] MeshDesc union end offset: "
-              << reader.Position().value() << std::endl;
   } else {
     LOG_F(ERROR, "Unsupported mesh type: {}", static_cast<int>(desc.mesh_type));
     return nullptr;
@@ -347,13 +333,8 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 
   uint32_t total_read_views { 0 };
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {
-    std::cerr << "[DEBUG] SubMeshDesc start offset: "
-              << reader.Position().value() << std::endl;
     auto sm_desc = detail::LoadSubMeshDesc(reader);
-
     auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
-    std::cerr << "[DEBUG] After MeshViewDesc offset: "
-              << reader.Position().value() << std::endl;
     if (sm_desc.mesh_view_count != mesh_views.size()) {
       LOG_F(ERROR, "SubMesh {} has {} mesh views, expected {}", i,
         mesh_views.size(), sm_desc.mesh_view_count);
@@ -373,9 +354,22 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     // Resolve the material asset key to a MaterialAsset
     std::shared_ptr<const MaterialAsset> material;
     if (sm_desc.material_asset_key != AssetKey {}) {
+      // Save reader position before loading material asset
+      auto saved_position = reader.Position();
+
       // Attempt to load the actual material asset referenced by the submesh
       material = context.asset_loader->LoadAsset<MaterialAsset>(
         sm_desc.material_asset_key, context.offline);
+
+      // Restore reader position after material loading
+      if (saved_position.has_value()) {
+        auto restore_result = reader.Seek(saved_position.value());
+        if (!restore_result) {
+          LOG_F(
+            ERROR, "Failed to restore reader position after material loading");
+          return nullptr;
+        }
+      }
 
       if (material) {
         context.asset_loader->AddAssetDependency(
