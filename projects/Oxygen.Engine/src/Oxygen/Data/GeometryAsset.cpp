@@ -42,8 +42,9 @@ MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
   CHECK_F(desc_.index_count > 0, "MeshView must have at least one index");
   CHECK_F(desc_.first_vertex + desc_.vertex_count <= mesh.Vertices().size(),
     "MeshView vertex range exceeds mesh vertex count");
-  CHECK_F(desc_.first_index + desc_.index_count <= mesh.Indices().size(),
-    "MeshView index range exceeds mesh index count");
+  // FIXME: WRONG - Indices may not be uint32_t, check stride and format
+  // CHECK_F(desc_.first_index + desc_.index_count <= mesh.Indices().size(),
+  //   "MeshView index range exceeds mesh index count");
 }
 
 auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
