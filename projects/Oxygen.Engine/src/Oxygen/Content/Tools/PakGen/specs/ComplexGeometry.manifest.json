@@ -8,7 +8,7 @@
   },
   "deterministic": true,
   "file_size": 11120,
-  "pak_crc32": 2183141819,
+  "pak_crc32": 3779139552,
   "regions": [
     {
       "name": "texture",
@@ -103,8 +103,8 @@
       }
     ]
   },
-  "sha256": "993cd62450281e9b5196eb1a792c0f4d61c0123a92b4297fa1bbe15f06a59bd0",
-  "spec_hash": "7e6945be577ab6ea769779197272dbef4bdb561172f3da6914ec9c98a554e3fd",
+  "sha256": "da15ca9984aec0ad40ac43bf842228af434f062d0165d4cd960b2fa9656ddafb",
+  "spec_hash": "210596af8c06148eab9341835621e06276276c25f73b620a5a1402081c097450",
   "version": 1,
   "zero_length_resources": [
     {

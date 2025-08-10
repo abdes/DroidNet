@@ -13,18 +13,21 @@ buffers:
     usage: 1  # Vertex buffer
     stride: 32
     format: 0
-    data_hex: "deadbeefcafebabe"
+    # 2 vertices (example) * 32 bytes = 64 bytes (128 hex chars). Pattern: ascending uint32s 0..15.
+    data_hex: "000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000"
 
   - name: "index_buffer_1"
     usage: 2  # Index buffer
     stride: 4
     format: 0
-    data_hex: "12345678"
+    # Three indices (0,1,2) -> 12 bytes (multiple of 4).
+    data_hex: "000000000100000002000000"
 
   - name: "uniform_buffer_1"
     usage: 4  # Uniform buffer
     stride: 64
     format: 0
-    data_hex: "abcdef1234567890"
+    # Single 64-byte block (16 uint32 values 0..15) matches stride exactly.
+    data_hex: "000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000"
 
 # No assets, just resources for resource loading tests
