@@ -8,7 +8,7 @@
   },
   "deterministic": true,
   "file_size": 11632,
-  "pak_crc32": 171945166,
+  "pak_crc32": 3532780693,
   "regions": [
     {
       "name": "texture",
@@ -18,10 +18,99 @@
     {
       "name": "buffer",
       "offset": 3328,
-      "size": 3072
+      "size": 2882
     }
   ],
-  "sha256": "82f289059b2931e19fbe48cea18b3431416e7a9b952b440efa68ba42a3c12f4b",
+  "resource_index_map": {
+    "buffer": [
+      {
+        "index": 0,
+        "name": "default_empty_buffer"
+      },
+      {
+        "index": 1,
+        "name": "SpaceshipLOD0_VertexBuffer"
+      },
+      {
+        "index": 2,
+        "name": "SpaceshipLOD0_IndexBuffer"
+      },
+      {
+        "index": 3,
+        "name": "SpaceshipLOD1_VertexBuffer"
+      },
+      {
+        "index": 4,
+        "name": "SpaceshipLOD1_IndexBuffer"
+      },
+      {
+        "index": 5,
+        "name": "SpaceshipLOD2_VertexBuffer"
+      },
+      {
+        "index": 6,
+        "name": "SpaceshipLOD2_IndexBuffer"
+      }
+    ],
+    "texture": [
+      {
+        "index": 0,
+        "name": "CockpitGlass_Diffuse"
+      },
+      {
+        "index": 1,
+        "name": "CockpitGlass_Normal"
+      },
+      {
+        "index": 2,
+        "name": "EngineGlow_Diffuse"
+      },
+      {
+        "index": 3,
+        "name": "EngineGlow_Emissive"
+      },
+      {
+        "index": 4,
+        "name": "SpaceshipHull_AO"
+      },
+      {
+        "index": 5,
+        "name": "SpaceshipHull_Diffuse"
+      },
+      {
+        "index": 6,
+        "name": "SpaceshipHull_Metallic"
+      },
+      {
+        "index": 7,
+        "name": "SpaceshipHull_Normal"
+      },
+      {
+        "index": 8,
+        "name": "SpaceshipHull_Roughness"
+      },
+      {
+        "index": 9,
+        "name": "Weapon_Diffuse"
+      },
+      {
+        "index": 10,
+        "name": "Weapon_Normal"
+      },
+      {
+        "index": 11,
+        "name": "default_empty_texture"
+      }
+    ]
+  },
+  "sha256": "8905abbec3fa341f39d73a7bfc1c6cd3df9d860dacb0d64582ac22168aa8e81f",
   "spec_hash": "8fb2f3bea9a22f2ccde86c4116d2cdae657b3daa7934d722530e3f0f1efd58c5",
-  "version": 1
+  "version": 1,
+  "zero_length_resources": [
+    {
+      "index": 0,
+      "name": "default_empty_buffer",
+      "type": "buffer"
+    }
+  ]
 }
