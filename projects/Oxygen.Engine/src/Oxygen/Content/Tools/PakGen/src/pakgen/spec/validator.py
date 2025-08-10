@@ -176,6 +176,33 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
 
 def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
+    # Buffer stride/data size coherence (only when inline hex provided).
+    # Enforce: if stride > 0 then total data bytes must be an exact multiple of stride.
+    # This catches manual hex edits that drift from declared element layout.
+    for i, b in enumerate(spec.get("buffers", []) or []):
+        if not isinstance(b, dict):
+            continue
+        stride = b.get("stride", 0) or 0
+        data_hex = b.get("data_hex")
+        if stride and data_hex and isinstance(data_hex, str):
+            # Normalize hex (same rules as io.read_data_from_spec but lighter): remove spaces/newlines.
+            h = data_hex.replace(" ", "").replace("\n", "")
+            if len(h) % 2 != 0:
+                _err(
+                    errors,
+                    "E_HEX_LEN",
+                    "Buffer data_hex must have even number of hex chars",
+                    f"buffers[{i}].data_hex",
+                )
+            else:
+                byte_len = len(h) // 2
+                if stride > 0 and byte_len % stride != 0:
+                    _err(
+                        errors,
+                        "E_STRIDE_MULT",
+                        f"Buffer data size {byte_len} not multiple of stride {stride}",
+                        f"buffers[{i}].data_hex",
+                    )
     # Duplicate names per resource type
     for rtype in ["buffers", "textures", "audios"]:
         seen = set()
