@@ -34,6 +34,8 @@ def manifest_dict(
     pak_crc32: int | None = None,
     spec_hash: str | None = None,
     file_sha256: str | None = None,
+    zero_length_resources: list[dict[str, Any]] | None = None,
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     regions = [
         {
@@ -64,6 +66,10 @@ def manifest_dict(
         "spec_hash": spec_hash,
         "sha256": file_sha256,
     }
+    if zero_length_resources:
+        d["zero_length_resources"] = zero_length_resources
+    if warnings:
+        d["warnings"] = warnings
     return d
 
 
@@ -74,6 +80,8 @@ def build_manifest(
     pak_crc32: int | None = None,
     spec_hash: str | None = None,
     file_sha256: str | None = None,
+    zero_length_resources: list[dict[str, Any]] | None = None,
+    warnings: list[str] | None = None,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     data = manifest_dict(
@@ -81,6 +89,8 @@ def build_manifest(
         pak_crc32=pak_crc32,
         spec_hash=spec_hash,
         file_sha256=file_sha256,
+        zero_length_resources=zero_length_resources,
+        warnings=warnings,
     )
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True)

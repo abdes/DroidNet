@@ -119,12 +119,52 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
             file_bytes = options.output_path.read_bytes()
             pak_crc32 = compute_crc32(file_bytes)
             file_sha256 = hashlib.sha256(file_bytes).hexdigest()
+            # Derive zero-length resource info & warnings (non-first zero length)
+            zero_length: list[dict[str, Any]] = []
+            warnings: list[str] = []
+            for rtype in ["texture", "buffer", "audio"]:
+                descs = build.resources.desc_fields.get(rtype, [])
+                blobs = build.resources.data_blobs.get(rtype, [])
+                # blobs length matches non-empty data blobs only; need to infer zero-length entries by descriptor fields
+                for idx, spec in enumerate(descs):
+                    size_field = (
+                        spec.get("size")
+                        or spec.get("data_size")
+                        or spec.get("length")
+                    )
+                    declared_size = 0 if size_field in (None, 0) else size_field
+                    # Heuristic: if declared_size==0 and either no blob at that index or blob len==0
+                    blob_len = (
+                        blobs[idx]
+                        if idx < len(blobs)
+                        and isinstance(blobs[idx], (bytes, bytearray))
+                        else None
+                    )
+                    actual_len = (
+                        len(blob_len)
+                        if isinstance(blob_len, (bytes, bytearray))
+                        else 0
+                    )
+                    if declared_size == 0 and actual_len == 0:
+                        zero_length.append(
+                            {
+                                "type": rtype,
+                                "name": spec.get("name"),
+                                "index": idx,
+                            }
+                        )
+                        if idx != 0:  # Non-default slot zero length -> warning
+                            warnings.append(
+                                f"Zero-length {rtype} resource '{spec.get('name')}' at index {idx}"
+                            )
             build_manifest(
                 pak_plan,
                 options.manifest_path,
                 pak_crc32=pak_crc32,
                 spec_hash=spec_hash,
                 file_sha256=file_sha256,
+                zero_length_resources=zero_length or None,
+                warnings=warnings or None,
             )
             logger.info(
                 "Emitted manifest: %s (spec_hash=%s crc32=%s sha256=%s)",

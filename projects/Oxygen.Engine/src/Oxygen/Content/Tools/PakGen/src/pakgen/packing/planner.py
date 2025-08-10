@@ -450,19 +450,41 @@ def compute_pak_plan(
     tables: List[TablePlan] = []
     assets: List[AssetPlan] = []
 
+    # Normalize resource blobs: drop zero-length blobs so regions are only
+    # created for actual byte content. Zero-length resources still get table
+    # entries (descriptor) but point to offset 0. This avoids a mismatch where
+    # writer finds blobs but planned region size is 0 (invariant violation).
+    for _rt in ["texture", "buffer", "audio"]:
+        blobs_list = build_plan.resources.data_blobs.get(_rt, [])
+        if not blobs_list:
+            continue
+        all_empty = all(len(b) == 0 for b in blobs_list)
+        if all_empty:
+            # All blobs empty -> treat as no region; drop them entirely.
+            build_plan.resources.data_blobs[_rt] = []  # type: ignore[index]
+        else:
+            # Keep zero-length blobs intermixed with non-empty; they do not
+            # enlarge region size and will simply not advance inner cursor.
+            # Writer tolerates zero-length emission naturally.
+            pass
+
     # Resource regions (apply deterministic ordering inside each type by original spec index map key if flag set)
     for rtype in ["texture", "buffer", "audio"]:
         blobs = build_plan.resources.data_blobs.get(rtype, [])
         descs = build_plan.resources.desc_fields.get(rtype, [])
         if deterministic and descs:
-            # Pair desc + blob then sort by name field for stability
-            paired = list(zip(descs, blobs))
-            paired.sort(key=lambda p: p[0].get("name", ""))
-            if paired:
-                descs_sorted, blobs_sorted = zip(*paired)
-                build_plan.resources.desc_fields[rtype] = list(descs_sorted)  # type: ignore[index]
-                build_plan.resources.data_blobs[rtype] = list(blobs_sorted)  # type: ignore[index]
-                blobs = build_plan.resources.data_blobs.get(rtype, [])
+            # Preserve original spec order for buffers because asset descriptors
+            # reference buffer indices implicitly by their original declaration
+            # order (after default/fallback at index 0). Sorting would change
+            # semantic indices and break geometry vertex/index buffer mapping.
+            if rtype not in ("buffer",):
+                paired = list(zip(descs, blobs))
+                paired.sort(key=lambda p: p[0].get("name", ""))
+                if paired:
+                    descs_sorted, blobs_sorted = zip(*paired)
+                    build_plan.resources.desc_fields[rtype] = list(descs_sorted)  # type: ignore[index]
+                    build_plan.resources.data_blobs[rtype] = list(blobs_sorted)  # type: ignore[index]
+                    blobs = build_plan.resources.data_blobs.get(rtype, [])
         if not blobs:
             regions.append(
                 RegionPlan(
