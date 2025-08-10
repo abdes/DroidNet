@@ -157,6 +157,16 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
                             warnings.append(
                                 f"Zero-length {rtype} resource '{spec.get('name')}' at index {idx}"
                             )
+            # Build resource_index_map capturing final post-plan ordering
+            resource_index_map: dict[str, list[dict[str, Any]]] = {}
+            for rtype in ["texture", "buffer", "audio"]:
+                descs = build.resources.desc_fields.get(rtype, [])
+                if descs:
+                    resource_index_map[rtype] = [
+                        {"name": d.get("name"), "index": i}
+                        for i, d in enumerate(descs)
+                        if isinstance(d.get("name"), str)
+                    ]
             build_manifest(
                 pak_plan,
                 options.manifest_path,
@@ -165,6 +175,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
                 file_sha256=file_sha256,
                 zero_length_resources=zero_length or None,
                 warnings=warnings or None,
+                resource_index_map=resource_index_map or None,
             )
             logger.info(
                 "Emitted manifest: %s (spec_hash=%s crc32=%s sha256=%s)",
