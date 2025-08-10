@@ -79,22 +79,33 @@ auto AssetLoaderTestBase::GeneratePakFile(const std::string& spec_name)
     throw std::runtime_error("Test spec not found: " + spec_path.string());
   }
 
-  // Generate PAK file using generate_pak.py
-  auto generate_script = test_data_dir / "generate_pak.py";
-  if (!std::filesystem::exists(generate_script)) {
-    throw std::runtime_error(
-      "generate_pak.py not found at: " + generate_script.string());
+  // Generate PAK file using pakgen CLI (replaces legacy generate_pak.py).
+  // Prefer a deterministic build for reproducible tests. The pakgen editable
+  // install is configured by CMake (pakgen_editable_install target).
+  // Fallback: if pakgen is not on PATH, attempt invoking via python -m.
+  std::string command;
+  {
+    // Primary invocation
+    command = "pakgen build \"" + spec_path.string() + "\" \""
+      + output_path.string() + "\" --deterministic";
+    // If that fails we will retry with python -m pakgen.cli below.
   }
 
-  // Build command to run generate_pak.py with --force to overwrite existing
-  // files
-  std::string command = "python \"" + generate_script.string() + "\" \""
-    + spec_path.string() + "\" \"" + output_path.string() + "\" --force";
+  auto run_command
+    = [&](const std::string& cmd) -> int { return std::system(cmd.c_str()); };
 
-  // Execute the command
-  int result = std::system(command.c_str());
+  int result = run_command(command);
   if (result != 0) {
-    throw std::runtime_error("Failed to generate PAK file: " + spec_name);
+    // Retry using explicit module invocation (handles virtual env edge cases).
+    std::string module_cmd = "python -m pakgen.cli build \""
+      + spec_path.string() + "\" \"" + output_path.string()
+      + "\" --deterministic";
+    result = run_command(module_cmd);
+  }
+
+  if (result != 0) {
+    throw std::runtime_error(
+      "Failed to generate PAK file with pakgen for spec: " + spec_name);
   }
 
   // Verify the PAK file was created

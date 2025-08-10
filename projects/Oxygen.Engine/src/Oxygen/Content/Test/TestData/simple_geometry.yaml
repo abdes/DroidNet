@@ -18,7 +18,7 @@ buffers:
   - name: "index_buffer"
     usage: 2  # Index buffer usage
     stride: 4   # Index size in bytes
-    format: 0
+    format: 10  # kR32UInt
     data_hex: "000000000100000002000000"  # Simple triangle indices
 
 # Define default texture (index 0) - required in all PAK files
