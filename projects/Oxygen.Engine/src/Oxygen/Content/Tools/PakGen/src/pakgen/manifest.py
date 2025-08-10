@@ -36,6 +36,7 @@ def manifest_dict(
     file_sha256: str | None = None,
     zero_length_resources: list[dict[str, Any]] | None = None,
     warnings: list[str] | None = None,
+    resource_index_map: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     regions = [
         {
@@ -70,6 +71,8 @@ def manifest_dict(
         d["zero_length_resources"] = zero_length_resources
     if warnings:
         d["warnings"] = warnings
+    if resource_index_map:
+        d["resource_index_map"] = resource_index_map
     return d
 
 
@@ -82,6 +85,7 @@ def build_manifest(
     file_sha256: str | None = None,
     zero_length_resources: list[dict[str, Any]] | None = None,
     warnings: list[str] | None = None,
+    resource_index_map: dict[str, list[dict[str, Any]]] | None = None,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     data = manifest_dict(
@@ -91,6 +95,7 @@ def build_manifest(
         file_sha256=file_sha256,
         zero_length_resources=zero_length_resources,
         warnings=warnings,
+        resource_index_map=resource_index_map,
     )
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True)
