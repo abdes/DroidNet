@@ -1,0 +1,135 @@
+{
+  "assets": [
+    {
+      "alignment": 16,
+      "descriptor_offset": 7168,
+      "descriptor_size": 256,
+      "key": "22222222222222222222222222222222",
+      "name": "CockpitGlassMaterial",
+      "type": "material",
+      "variable_extra_size": 432,
+      "warnings": []
+    },
+    {
+      "alignment": 16,
+      "descriptor_offset": 7856,
+      "descriptor_size": 256,
+      "key": "33333333333333333333333333333333",
+      "name": "EngineGlowMaterial",
+      "type": "material",
+      "variable_extra_size": 432,
+      "warnings": []
+    },
+    {
+      "alignment": 16,
+      "descriptor_offset": 8544,
+      "descriptor_size": 256,
+      "key": "11111111111111111111111111111111",
+      "name": "SpaceshipHullMaterial",
+      "type": "material",
+      "variable_extra_size": 432,
+      "warnings": []
+    },
+    {
+      "alignment": 16,
+      "descriptor_offset": 9232,
+      "descriptor_size": 256,
+      "key": "44444444444444444444444444444444",
+      "name": "WeaponMaterial",
+      "type": "material",
+      "variable_extra_size": 432,
+      "warnings": []
+    },
+    {
+      "alignment": 256,
+      "descriptor_offset": 9984,
+      "descriptor_size": 256,
+      "key": "deadbeefcafebabedeadfeeddeadbeef",
+      "name": "SpaceshipGeometry",
+      "type": "geometry",
+      "variable_extra_size": 811,
+      "warnings": []
+    }
+  ],
+  "content_version": 42,
+  "deterministic": true,
+  "directory": {
+    "asset_count": 5,
+    "offset": 11056,
+    "padding_before": 5,
+    "size": 320
+  },
+  "file_size": 11632,
+  "footer": {
+    "offset": 11376,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {
+      "asset_geometry": 64,
+      "assets_region": 64,
+      "directory": 5,
+      "region_buffer": 252,
+      "region_texture": 192
+    },
+    "total": 577
+  },
+  "regions": [
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 256,
+      "padding_after": 0,
+      "padding_before": 192,
+      "size": 2820
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 3328,
+      "padding_after": 0,
+      "padding_before": 252,
+      "size": 3072
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    }
+  ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 1,
+      "materials": 4,
+      "total": 5
+    },
+    "variable_extra_total": 2539
+  },
+  "tables": [
+    {
+      "count": 12,
+      "entry_size": 40,
+      "name": "texture",
+      "offset": 6400,
+      "padding_before": 0
+    },
+    {
+      "count": 7,
+      "entry_size": 32,
+      "name": "buffer",
+      "offset": 6880,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    }
+  ],
+  "version": 1
+}
