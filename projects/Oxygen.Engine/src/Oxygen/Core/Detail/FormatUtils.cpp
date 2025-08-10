@@ -6,7 +6,7 @@
 
 #include <cassert>
 
-#include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 
 namespace oxygen::graphics::detail {
 

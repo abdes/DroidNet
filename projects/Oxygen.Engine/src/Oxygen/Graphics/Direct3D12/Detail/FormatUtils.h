@@ -8,15 +8,15 @@
 
 #include <dxgi.h>
 
-#include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 
 namespace oxygen::graphics::d3d12::detail {
 
 struct DxgiFormatMapping {
-    Format generic_format;
-    DXGI_FORMAT resource_format;
-    DXGI_FORMAT srv_format;
-    DXGI_FORMAT rtv_format;
+  Format generic_format;
+  DXGI_FORMAT resource_format;
+  DXGI_FORMAT srv_format;
+  DXGI_FORMAT rtv_format;
 };
 
 auto GetDxgiFormatMapping(Format generic_format) -> const DxgiFormatMapping&;
