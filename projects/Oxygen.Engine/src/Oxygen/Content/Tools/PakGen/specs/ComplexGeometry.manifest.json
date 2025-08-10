@@ -7,8 +7,8 @@
     "tables": 3
   },
   "deterministic": true,
-  "file_size": 11632,
-  "pak_crc32": 3532780693,
+  "file_size": 11120,
+  "pak_crc32": 2183141819,
   "regions": [
     {
       "name": "texture",
@@ -18,7 +18,7 @@
     {
       "name": "buffer",
       "offset": 3328,
-      "size": 2882
+      "size": 2572
     }
   ],
   "resource_index_map": {
@@ -103,8 +103,8 @@
       }
     ]
   },
-  "sha256": "8905abbec3fa341f39d73a7bfc1c6cd3df9d860dacb0d64582ac22168aa8e81f",
-  "spec_hash": "8fb2f3bea9a22f2ccde86c4116d2cdae657b3daa7934d722530e3f0f1efd58c5",
+  "sha256": "993cd62450281e9b5196eb1a792c0f4d61c0123a92b4297fa1bbe15f06a59bd0",
+  "spec_hash": "7e6945be577ab6ea769779197272dbef4bdb561172f3da6914ec9c98a554e3fd",
   "version": 1,
   "zero_length_resources": [
     {
