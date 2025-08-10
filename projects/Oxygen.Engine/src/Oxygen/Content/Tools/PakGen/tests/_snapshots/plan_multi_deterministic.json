@@ -1,0 +1,124 @@
+{
+  "assets": [
+    {
+      "alignment": 16,
+      "descriptor_offset": 1280,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "mat_a",
+      "type": "material",
+      "variable_extra_size": 0,
+      "warnings": []
+    },
+    {
+      "alignment": 16,
+      "descriptor_offset": 1536,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "mat_b",
+      "type": "material",
+      "variable_extra_size": 0,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 1792,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "geo_a",
+      "type": "geometry",
+      "variable_extra_size": 229,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 2277,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "geo_b",
+      "type": "geometry",
+      "variable_extra_size": 0,
+      "warnings": []
+    }
+  ],
+  "content_version": 2,
+  "deterministic": true,
+  "directory": {
+    "asset_count": 4,
+    "offset": 2544,
+    "padding_before": 11,
+    "size": 256
+  },
+  "file_size": 3056,
+  "footer": {
+    "offset": 2800,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {
+      "assets_region": 96,
+      "directory": 11,
+      "region_buffer": 248,
+      "region_texture": 192
+    },
+    "total": 547
+  },
+  "regions": [
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 256,
+      "padding_after": 0,
+      "padding_before": 192,
+      "size": 264
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 768,
+      "padding_after": 0,
+      "padding_before": 248,
+      "size": 272
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    }
+  ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 2,
+      "materials": 2,
+      "total": 4
+    },
+    "variable_extra_total": 229
+  },
+  "tables": [
+    {
+      "count": 2,
+      "entry_size": 40,
+      "name": "texture",
+      "offset": 1040,
+      "padding_before": 0
+    },
+    {
+      "count": 2,
+      "entry_size": 32,
+      "name": "buffer",
+      "offset": 1120,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    }
+  ],
+  "version": 1
+}
