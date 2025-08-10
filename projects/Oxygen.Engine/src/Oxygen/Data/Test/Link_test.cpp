@@ -21,7 +21,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   }
 
   std::cout << "Mesh created: " << mesh->Vertices().size() << " vertices, "
-            << mesh->Indices().size() << " indices, "
+            << mesh->IndexBuffer().Count() << " indices, "
             << mesh->SubMeshes().size() << " submeshes\n";
 
   // Print views for each submesh
@@ -31,7 +31,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     std::size_t view_idx = 0;
     for (const auto& view : submesh.MeshViews()) {
       std::cout << "    View " << view_idx++ << ": " << view.Vertices().size()
-                << " vertices, " << view.Indices().size() << " indices\n";
+                << " vertices, " << view.IndexBuffer().Count() << " indices\n";
     }
   }
 

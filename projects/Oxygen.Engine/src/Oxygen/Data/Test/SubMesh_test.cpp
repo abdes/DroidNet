@@ -45,10 +45,10 @@ private:
   {
     // Create descriptor from the mesh view data
     auto vertices = view.Vertices();
-    auto indices = view.Indices();
+    auto index_count = view.IndexBuffer().Count();
     return oxygen::data::pak::MeshViewDesc {
       .first_index = 0, // Simplified for tests
-      .index_count = static_cast<uint32_t>(indices.size()),
+      .index_count = static_cast<uint32_t>(index_count),
       .first_vertex = 0, // Simplified for tests
       .vertex_count = static_cast<uint32_t>(vertices.size()),
     };
@@ -68,8 +68,6 @@ public:
 
   MOCK_METHOD(
     (std::span<const Vertex>), Vertices, (), (const, noexcept, override));
-  MOCK_METHOD(
-    (std::span<const std::uint32_t>), Indices, (), (const, noexcept, override));
 
   std::vector<Vertex> vertices_;
   std::vector<std::uint32_t> indices_;
@@ -87,9 +85,6 @@ protected:
     ON_CALL(*mesh_, Vertices())
       .WillByDefault(
         ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
-    ON_CALL(*mesh_, Indices())
-      .WillByDefault(
-        ::testing::Return(std::span<const std::uint32_t>(mesh_->indices_)));
   }
 
   std::unique_ptr<MockMesh> mesh_;
@@ -127,9 +122,6 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -152,7 +144,7 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
   EXPECT_THAT(submesh.MeshViews(), SizeIs(1));
   EXPECT_THAT(submesh.Material(), NotNull());
   EXPECT_THAT(submesh.MeshViews()[0].Vertices(), SizeIs(2));
-  EXPECT_THAT(submesh.MeshViews()[0].Indices(), SizeIs(2));
+  EXPECT_EQ(submesh.MeshViews()[0].IndexBuffer().Count(), 2u);
 }
 
 //! Tests SubMesh handles multiple mesh views correctly.
@@ -172,9 +164,6 @@ NOLINT_TEST_F(SubMeshTestFixture, MultipleMeshViews)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -222,9 +211,6 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyMeshViews_Throws)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views; // Empty - violates design constraint
   auto material = std::make_shared<const MaterialAsset>(
@@ -248,9 +234,6 @@ NOLINT_TEST_F(SubMeshTestFixture, NullMaterial_Throws)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -277,9 +260,6 @@ NOLINT_TEST_F(SubMeshTestFixture, Move)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -316,9 +296,6 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyName)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -352,9 +329,6 @@ NOLINT_TEST_F(SubMeshTestFixture, LongName)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,

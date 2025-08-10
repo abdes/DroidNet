@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -63,6 +63,11 @@ class Mesh;
  @note MeshView is invalid if the underlying mesh data is destroyed.
  @see Mesh, Vertex
 */
+// Forward declare index view types for MeshView signature
+namespace detail {
+  struct IndexBufferView;
+}
+
 class MeshView {
 public:
   OXGN_DATA_API MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept;
@@ -74,8 +79,13 @@ public:
 
   OXGN_DATA_NDAPI auto Vertices() const noexcept -> std::span<const Vertex>;
 
-  OXGN_DATA_NDAPI auto Indices() const noexcept
-    -> std::span<const std::uint32_t>;
+  //! Returns the (possibly sliced) index buffer view for this mesh view.
+  /*!
+   Returned view shares storage with the parent Mesh and is always zero-copy.
+   If the mesh has no index buffer or this view references zero indices, the
+   returned view has type IndexType::kNone and empty bytes span.
+  */
+  OXGN_DATA_NDAPI auto IndexBuffer() const noexcept -> detail::IndexBufferView;
 
 private:
   std::reference_wrapper<const Mesh> mesh_;
@@ -223,19 +233,140 @@ private:
 
 namespace detail {
 
+  //=== Index Buffer Types ===------------------------------------------------//
+
+  //! Index element type used by meshes.
+  enum class IndexType : std::uint8_t {
+    kNone = 0, //!< No indices present
+    kUInt16, //!< 16-bit unsigned indices
+    kUInt32, //!< 32-bit unsigned indices
+  };
+
+  //! Lightweight, zero-copy view of an index buffer.
+  /*!
+   Provides typed and generic access to index data without allocations.
+   The underlying storage is exposed as bytes plus an explicit IndexType.
+   Helper methods allow accessing as the native span or iterating widened to
+   32-bit values (on-the-fly promotion for 16-bit indices, no buffering).
+  */
+  struct IndexBufferView {
+    std::span<const std::byte> bytes; //!< Raw byte span of indices
+    IndexType type { IndexType::kNone }; //!< Element type
+
+    [[nodiscard]] constexpr auto Empty() const noexcept -> bool
+    {
+      return bytes.empty() || type == IndexType::kNone;
+    }
+
+    [[nodiscard]] constexpr auto ElementSize() const noexcept -> std::size_t
+    {
+      switch (type) {
+      case IndexType::kUInt16:
+        return 2;
+      case IndexType::kUInt32:
+        return 4;
+      default:
+        return 0;
+      }
+    }
+
+    [[nodiscard]] constexpr auto Count() const noexcept -> std::size_t
+    {
+      auto es = ElementSize();
+      return es == 0 ? 0 : bytes.size() / es;
+    }
+
+    [[nodiscard]] auto AsU16() const noexcept -> std::span<const std::uint16_t>
+    {
+      if (type != IndexType::kUInt16)
+        return {};
+      return { reinterpret_cast<const std::uint16_t*>(bytes.data()), Count() };
+    }
+
+    [[nodiscard]] auto AsU32() const noexcept -> std::span<const std::uint32_t>
+    {
+      if (type != IndexType::kUInt32)
+        return {};
+      return { reinterpret_cast<const std::uint32_t*>(bytes.data()), Count() };
+    }
+
+    // Widened iteration (always yields uint32_t)
+    // --------------------------------
+    struct WidenedIterator {
+      const std::byte* data { nullptr };
+      IndexType type { IndexType::kNone };
+      std::size_t index { 0 };
+      [[nodiscard]] auto operator*() const noexcept -> std::uint32_t
+      {
+        if (type == IndexType::kUInt16) {
+          auto p = reinterpret_cast<const std::uint16_t*>(data);
+          return static_cast<std::uint32_t>(p[index]);
+        }
+        auto p = reinterpret_cast<const std::uint32_t*>(data);
+        return p[index];
+      }
+      auto operator++() noexcept -> WidenedIterator&
+      {
+        ++index;
+        return *this;
+      }
+      [[nodiscard]] friend auto operator==(
+        const WidenedIterator& a, const WidenedIterator& b) noexcept -> bool
+      {
+        return a.index == b.index;
+      }
+    };
+
+    struct WidenedRange {
+      const std::byte* data { nullptr };
+      IndexType type { IndexType::kNone };
+      std::size_t count { 0 };
+      [[nodiscard]] auto begin() const noexcept -> WidenedIterator
+      {
+        return { data, type, 0 };
+      }
+      [[nodiscard]] auto end() const noexcept -> WidenedIterator
+      {
+        return { data, type, count };
+      }
+    };
+
+    [[nodiscard]] auto Widened() const noexcept -> WidenedRange
+    {
+      return WidenedRange { bytes.data(), type, Count() };
+    }
+
+    // Slice without copying (byte-range must align with element size).
+    [[nodiscard]] auto SliceElements(
+      std::size_t first, std::size_t count) const noexcept -> IndexBufferView
+    {
+      auto es = ElementSize();
+      auto byte_off = first * es;
+      auto byte_len = count * es;
+      if (byte_off > bytes.size() || byte_off + byte_len > bytes.size()) {
+        return {}; // invalid slice -> empty
+      }
+      return IndexBufferView { bytes.subspan(byte_off, byte_len), type };
+    }
+  };
+
   //! Storage for meshes that own their vertex/index data (procedural meshes)
   struct OwnedBufferStorage {
     std::vector<Vertex> vertices;
-    std::vector<std::uint32_t> indices;
+    std::vector<std::uint32_t> indices; // always 32-bit for owned storage
 
-    auto GetVertices() const noexcept -> std::span<const Vertex>
+    [[nodiscard]] auto GetVertices() const noexcept -> std::span<const Vertex>
     {
       return vertices;
     }
 
-    auto GetIndices() const noexcept -> std::span<const std::uint32_t>
+    [[nodiscard]] auto BuildIndexBufferView() const noexcept -> IndexBufferView
     {
-      return indices;
+      if (indices.empty())
+        return {};
+      auto raw = std::span<const std::uint32_t>(indices.data(), indices.size());
+      auto bytes = std::as_bytes(raw);
+      return IndexBufferView { bytes, IndexType::kUInt32 };
     }
   };
 
@@ -244,25 +375,29 @@ namespace detail {
     std::shared_ptr<BufferResource> vertex_buffer_resource;
     std::shared_ptr<BufferResource> index_buffer_resource;
 
-    auto GetVertices() const noexcept -> std::span<const Vertex>
+    mutable IndexType cached_index_type { IndexType::kNone };
+    mutable bool initialized { false };
+
+    [[nodiscard]] auto GetVertices() const noexcept -> std::span<const Vertex>
     {
       if (!vertex_buffer_resource)
         return {};
       auto data = vertex_buffer_resource->GetData();
-      return std::span<const Vertex>(
-        reinterpret_cast<const Vertex*>(data.data()),
-        data.size() / sizeof(Vertex));
+      return { reinterpret_cast<const Vertex*>(data.data()),
+        data.size() / sizeof(Vertex) };
     }
 
-    // FIXME: WRONG - Indices may not be uint32_t, check stride and format
-    auto GetIndices() const noexcept -> std::span<const std::uint32_t>
+    OXGN_DATA_API void InitializeIndexInfo() const noexcept;
+
+    [[nodiscard]] auto BuildIndexBufferView() const noexcept -> IndexBufferView
     {
-      if (!index_buffer_resource)
+      InitializeIndexInfo();
+      if (cached_index_type == IndexType::kNone || !index_buffer_resource)
         return {};
-      auto data = index_buffer_resource->GetData();
-      return std::span<const std::uint32_t>(
-        reinterpret_cast<const std::uint32_t*>(data.data()),
-        data.size() / sizeof(std::uint32_t));
+      auto data_u8 = index_buffer_resource->GetData();
+      auto bytes_span = std::span<const std::byte>(
+        reinterpret_cast<const std::byte*>(data_u8.data()), data_u8.size());
+      return IndexBufferView { bytes_span, cached_index_type };
     }
   };
 
@@ -295,11 +430,11 @@ public:
       buffer_storage_);
   }
 
-  //! Returns a span of all indices.
-  [[nodiscard]] virtual auto Indices() const noexcept
-    -> std::span<const std::uint32_t>
+  //! Returns the index buffer view (may be empty / kNone).
+  [[nodiscard]] auto IndexBuffer() const noexcept -> detail::IndexBufferView
   {
-    return std::visit([](const auto& storage) { return storage.GetIndices(); },
+    return std::visit(
+      [](const auto& storage) { return storage.BuildIndexBufferView(); },
       buffer_storage_);
   }
 
@@ -312,13 +447,13 @@ public:
   //! Returns the number of indices.
   [[nodiscard]] auto IndexCount() const noexcept -> std::size_t
   {
-    return Indices().size();
+    return IndexBuffer().Count();
   }
 
   //! Returns true if the mesh uses an index buffer (i.e., has indices).
   [[nodiscard]] auto IsIndexed() const noexcept -> bool
   {
-    return !Indices().empty();
+    return IndexCount() != 0;
   }
 
   //! Returns a span of all submeshes.

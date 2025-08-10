@@ -16,6 +16,8 @@ using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
+using oxygen::data::detail::IndexType;
+using oxygen::data::detail::ReferencedBufferStorage;
 
 namespace {
 
@@ -33,6 +35,50 @@ auto GetNameFromDesc(const char name[oxygen::data::pak::kMaxNameSize])
 
 } // namespace
 
+namespace oxygen::data::detail {
+
+void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
+{
+  if (initialized)
+    return;
+  initialized = true;
+  if (!index_buffer_resource) {
+    cached_index_type = IndexType::kNone;
+    return;
+  }
+  auto fmt = index_buffer_resource->GetElementFormat();
+  if (fmt == Format::kR16UInt) {
+    cached_index_type = IndexType::kUInt16;
+  } else if (fmt == Format::kR32UInt) {
+    cached_index_type = IndexType::kUInt32;
+  } else if (fmt == Format::kUnknown) {
+    // Fall back to element stride
+    auto stride = index_buffer_resource->GetElementStride();
+    if (stride == 2)
+      cached_index_type = IndexType::kUInt16;
+    else if (stride == 4)
+      cached_index_type = IndexType::kUInt32;
+    else {
+      LOG_F(ERROR, "Unsupported raw index stride (must be 2 or 4)");
+      cached_index_type = IndexType::kNone;
+    }
+  } else {
+    LOG_F(ERROR, "Unsupported index format (only R16UInt/R32UInt)");
+    cached_index_type = IndexType::kNone;
+  }
+  // Validate size alignment
+  auto bytes = index_buffer_resource->GetData().size();
+  auto es = cached_index_type == IndexType::kUInt16
+    ? 2
+    : (cached_index_type == IndexType::kUInt32 ? 4 : 1);
+  if (cached_index_type != IndexType::kNone && bytes % es != 0) {
+    LOG_F(ERROR, "Index buffer byte size not multiple of element size");
+    cached_index_type = IndexType::kNone;
+  }
+}
+
+} // namespace oxygen::data::detail
+
 MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
   : mesh_(mesh)
   , desc_(std::move(desc))
@@ -42,9 +88,11 @@ MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
   CHECK_F(desc_.index_count > 0, "MeshView must have at least one index");
   CHECK_F(desc_.first_vertex + desc_.vertex_count <= mesh.Vertices().size(),
     "MeshView vertex range exceeds mesh vertex count");
-  // FIXME: WRONG - Indices may not be uint32_t, check stride and format
-  // CHECK_F(desc_.first_index + desc_.index_count <= mesh.Indices().size(),
-  //   "MeshView index range exceeds mesh index count");
+  const auto ib = mesh.IndexBuffer();
+  if (!ib.Empty()) {
+    CHECK_F(desc_.first_index + desc_.index_count <= ib.Count(),
+      "MeshView index range exceeds mesh index count");
+  }
 }
 
 auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
@@ -52,9 +100,12 @@ auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
   return mesh_.get().Vertices().subspan(desc_.first_vertex, desc_.vertex_count);
 }
 
-auto MeshView::Indices() const noexcept -> std::span<const std::uint32_t>
+auto MeshView::IndexBuffer() const noexcept -> detail::IndexBufferView
 {
-  return mesh_.get().Indices().subspan(desc_.first_index, desc_.index_count);
+  auto full = mesh_.get().IndexBuffer();
+  if (full.Empty())
+    return {};
+  return full.SliceElements(desc_.first_index, desc_.index_count);
 }
 
 SubMesh::SubMesh(const Mesh& mesh, std::string name,
