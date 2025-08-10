@@ -1,0 +1,104 @@
+"""Constants for PakGen (refactored).
+
+Mirrors C++ PakFormat.h; kept stable for binary compatibility.
+"""
+
+from __future__ import annotations
+from typing import Final
+
+MAGIC: Final = b"OXPAK\x00\x00\x00"
+FOOTER_MAGIC: Final = b"OXPAKEND"
+
+HEADER_SIZE: Final = 64
+FOOTER_SIZE: Final = 256
+DIRECTORY_ENTRY_SIZE: Final = 64
+
+MATERIAL_DESC_SIZE: Final = 256
+GEOMETRY_DESC_SIZE: Final = 256
+MESH_DESC_SIZE: Final = 105
+SUBMESH_DESC_SIZE: Final = 108
+MESH_VIEW_DESC_SIZE: Final = 16
+SHADER_REF_DESC_SIZE: Final = 216  # ShaderReferenceDesc (see PakFormat.h)
+
+DATA_ALIGNMENT: Final = 256
+TABLE_ALIGNMENT: Final = 16
+
+RESOURCE_ENTRY_SIZES: Final = {
+    "texture": 40,
+    "buffer": 32,
+    "audio": 32,
+}
+
+ASSET_NAME_MAX_LENGTH: Final = 63
+ASSET_KEY_SIZE: Final = 16
+
+ASSET_TYPE_MAP: Final = {
+    "unknown": 0,
+    "material": 1,
+    "geometry": 2,
+    "scene": 3,
+}
+
+MAX_RESOURCE_SIZES: Final = {
+    "texture": 256 * 1024 * 1024,
+    "buffer": 64 * 1024 * 1024,
+    "audio": 32 * 1024 * 1024,
+}
+
+MAX_RESOURCES_PER_TYPE: Final = 10000
+MAX_ASSETS_TOTAL: Final = 5000
+MAX_LODS_PER_GEOMETRY: Final = 8
+MAX_SUBMESHES_PER_LOD: Final = 100
+MAX_MESH_VIEWS_PER_SUBMESH: Final = 50
+
+MAX_TEXTURE_DIMENSION: Final = 8192
+MAX_TEXTURE_LAYERS: Final = 256
+MAX_TEXTURE_MIP_LEVELS: Final = 16
+
+MAX_BUFFER_STRIDE: Final = 1024
+MAX_VERTEX_COUNT: Final = 1_000_000
+MAX_INDEX_COUNT: Final = 3_000_000
+
+MAX_HEX_STRING_LENGTH: Final = 200 * 1024 * 1024
+MAX_FILE_NAME_LENGTH: Final = 255
+
+VALID_MESH_TYPES: Final = [0, 1, 2]
+VALID_TEXTURE_FORMATS: Final = list(range(0, 256))
+VALID_BUFFER_FORMATS: Final = list(range(0, 256))
+
+__all__ = [
+    "MAGIC",
+    "FOOTER_MAGIC",
+    "HEADER_SIZE",
+    "FOOTER_SIZE",
+    "DIRECTORY_ENTRY_SIZE",
+    "MATERIAL_DESC_SIZE",
+    "GEOMETRY_DESC_SIZE",
+    "MESH_DESC_SIZE",
+    "SUBMESH_DESC_SIZE",
+    "MESH_VIEW_DESC_SIZE",
+    "SHADER_REF_DESC_SIZE",
+    "DATA_ALIGNMENT",
+    "TABLE_ALIGNMENT",
+    "RESOURCE_ENTRY_SIZES",
+    "ASSET_NAME_MAX_LENGTH",
+    "ASSET_KEY_SIZE",
+    "ASSET_TYPE_MAP",
+    "MAX_RESOURCE_SIZES",
+    "MAX_RESOURCES_PER_TYPE",
+    "MAX_ASSETS_TOTAL",
+    "MAX_LODS_PER_GEOMETRY",
+    "MAX_SUBMESHES_PER_LOD",
+    "MAX_MESH_VIEWS_PER_SUBMESH",
+    "MAX_TEXTURE_DIMENSION",
+    "MAX_TEXTURE_LAYERS",
+    "MAX_TEXTURE_MIP_LEVELS",
+    "MAX_BUFFER_STRIDE",
+    "MAX_VERTEX_COUNT",
+    "MAX_INDEX_COUNT",
+    "MAX_HEX_STRING_LENGTH",
+    "MAX_FILE_NAME_LENGTH",
+    "VALID_MESH_TYPES",
+    "VALID_TEXTURE_FORMATS",
+    "VALID_BUFFER_FORMATS",
+]

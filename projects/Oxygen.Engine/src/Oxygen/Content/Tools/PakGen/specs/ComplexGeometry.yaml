@@ -1,0 +1,394 @@
+version: 1
+content_version: 42
+
+# Complex Geometry Asset Specification
+# ====================================
+# This represents a detailed 3D model (e.g., a spaceship) with:
+# - Multiple LODs for distance-based rendering
+# - Multiple materials (hull, glass, engine glow)
+# - Multiple submeshes per LOD (hull, cockpit, engines, weapons)
+# - Multiple mesh views per submesh for different detail levels
+# - Comprehensive texture set (diffuse, normal, metallic, roughness, AO, emissive)
+# - Vertex and index buffers for each LOD
+
+# =============================================================================
+# TEXTURE RESOURCES
+# =============================================================================
+
+textures:
+  # Default texture at index 0 (required in all PAK files)
+  - name: "default_empty_texture"
+    width: 1
+    height: 1
+    format: 30  # kRGBA8UNorm
+    texture_type: 3     # kTexture2D
+    compression_type: 0
+    mip_levels: 1
+    data_hex: "ffffffff"  # 1x1 white pixel
+
+  # Hull Material Textures
+  - name: "SpaceshipHull_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daed93310e82301445bf7244141141c1b040b040b040b0"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm (was incorrectly using kRGBA8UInt)
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da8080808080808080808080808080808080808080"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Metallic"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daffffffffffffffffffffffffffffffffffff"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_Roughness"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da404040404040404040404040404040404040"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "SpaceshipHull_AO"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da202020202020202020202020202020202020"
+    width: 64
+    height: 64
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Cockpit Glass Material Textures
+  - name: "CockpitGlass_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da1010101010101010101010101010101010"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "CockpitGlass_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff8080"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Engine Material Textures
+  - name: "EngineGlow_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff4000ff4000ff4000ff4000ff4000ff40"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "EngineGlow_Emissive"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff8000ff8000ff8000ff8000ff8000ff80"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  # Weapon Material Textures
+  - name: "Weapon_Diffuse"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da606060606060606060606060606060"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+  - name: "Weapon_Normal"
+    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff80"
+    width: 32
+    height: 32
+    format: 30  # Format::kRGBA8UNorm
+    mip_levels: 1
+    array_size: 1
+    texture_type: 3  # kTexture2D
+
+# =============================================================================
+# BUFFER RESOURCES
+# =============================================================================
+
+buffers:
+  # Define default empty buffer (index 0) - required in all PAK files
+  - name: "default_empty_buffer"
+    data_hex: ""  # Empty buffer
+    size: 0
+    usage: 0
+    bind_flags: 0
+
+  # LOD 0 Buffers (5 vertices × 72 bytes = 360 bytes, PAK-padded to 910 bytes = ~12 vertices)
+  - name: "SpaceshipLOD0_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    usage: 1  # D3D11_USAGE_IMMUTABLE
+    bind_flags: 1  # D3D11_BIND_VERTEX_BUFFER
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
+
+  - name: "SpaceshipLOD0_IndexBuffer"
+    data_hex: "000000010002000300040005000600070008000000010002000300040005000600070008000000010002000300040005000600070008000000010002000300040005000600070008"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2  # D3D11_BIND_INDEX_BUFFER
+    format: 5  # Format::kR16UInt (16-bit unsigned integer for indices)
+
+  # LOD 1 Buffers (3 vertices × 72 bytes = 216 bytes, PAK-padded to 557 bytes = ~7 vertices)
+  - name: "SpaceshipLOD1_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    usage: 1
+    bind_flags: 1
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
+
+  - name: "SpaceshipLOD1_IndexBuffer"
+    data_hex: "000000010002000300040000000100020003000400000001000200030004000000010002000300040000000100020003000400000001000200030004000000010002000300040000000100020003000400000001000200030004"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2
+    format: 5  # Format::kR16UInt
+
+  # LOD 2 Buffers (2 vertices × 72 bytes = 144 bytes, PAK-padded to 381 bytes = ~5 vertices)
+  - name: "SpaceshipLOD2_VertexBuffer"
+    data_hex: "000000000000000000000000000000000000000000000000000000000000803f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000803f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    usage: 1
+    bind_flags: 1
+    stride: 72  # Full Vertex struct: position(12) + normal(12) + texcoord(8) + tangent(12) + bitangent(12) + color(16) = 72 bytes
+
+  - name: "SpaceshipLOD2_IndexBuffer"
+    data_hex: "000000010002000300000001000200030000000100020003000000010002000300000001000200030000000100020003000000010002000300000001000200030000"
+    usage: 2  # kIndexBuffer
+    bind_flags: 2
+    format: 5  # Format::kR16UInt
+
+# =============================================================================
+# MATERIAL ASSETS
+# =============================================================================
+
+assets:
+  # Hull Material (Main body of the spaceship)
+  - name: "SpaceshipHullMaterial"
+    type: "material"
+    asset_key: "11111111-1111-1111-1111-111111111111"
+    version: 1
+    streaming_priority: 128
+    content_hash: 0x12345678
+    variant_flags: 0
+
+    # Material properties
+    material_domain: 0  # Surface material
+    flags: 0x0001  # Opaque
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    base_color: [0.8, 0.8, 0.9, 1.0]  # Slightly blue-tinted metal
+    normal_scale: 1.0
+    metalness: 0.8
+    roughness: 0.3
+    ambient_occlusion: 1.0
+
+    # Texture references
+    texture_refs:
+      base_color_texture: "SpaceshipHull_Diffuse"
+      normal_texture: "SpaceshipHull_Normal"
+      metallic_texture: "SpaceshipHull_Metallic"
+      roughness_texture: "SpaceshipHull_Roughness"
+      ambient_occlusion_texture: "SpaceshipHull_AO"
+
+    # Shader references
+    shader_references:
+      - shader_unique_id: "StandardPBR_VS"
+        shader_hash: 0xABCDEF01
+      - shader_unique_id: "StandardPBR_PS"
+        shader_hash: 0x23456789
+
+  # Cockpit Glass Material (Transparent cockpit)
+  - name: "CockpitGlassMaterial"
+    type: "material"
+    asset_key: "22222222-2222-2222-2222-222222222222"
+    version: 1
+    streaming_priority: 96
+    content_hash: 0x87654321
+    variant_flags: 0x0002  # Transparent variant
+
+    material_domain: 0
+    flags: 0x0002  # Transparent
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    base_color: [0.9, 0.95, 1.0, 0.3]  # Transparent blue glass
+    normal_scale: 0.5
+    metalness: 0.0
+    roughness: 0.1
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "CockpitGlass_Diffuse"
+      normal_texture: "CockpitGlass_Normal"
+
+    shader_references:
+      - shader_unique_id: "TransparentPBR_VS"
+        shader_hash: 0x34567890
+      - shader_unique_id: "TransparentPBR_PS"
+        shader_hash: 0x45678901
+
+  # Engine Glow Material (Emissive engines)
+  - name: "EngineGlowMaterial"
+    type: "material"
+    asset_key: "33333333-3333-3333-3333-333333333333"
+    version: 1
+    streaming_priority: 192
+    content_hash: 0x11223344
+    variant_flags: 0x0004  # Emissive variant
+
+    material_domain: 0
+    flags: 0x0004  # Emissive
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    base_color: [1.0, 0.25, 0.0, 1.0]  # Bright orange glow
+    normal_scale: 1.0
+    metalness: 0.0
+    roughness: 0.0
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "EngineGlow_Diffuse"
+
+    shader_references:
+      - shader_unique_id: "EmissivePBR_VS"
+        shader_hash: 0x56789012
+      - shader_unique_id: "EmissivePBR_PS"
+        shader_hash: 0x67890123
+
+  # Weapon Material (Metallic weapon parts)
+  - name: "WeaponMaterial"
+    type: "material"
+    asset_key: "44444444-4444-4444-4444-444444444444"
+    version: 1
+    streaming_priority: 64
+    content_hash: 0xAABBCCDD
+    variant_flags: 0
+
+    material_domain: 0
+    flags: 0x0001  # Opaque
+    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    base_color: [0.4, 0.4, 0.45, 1.0]  # Dark gunmetal
+    normal_scale: 0.6
+    metalness: 0.9
+    roughness: 0.4
+    ambient_occlusion: 1.0
+
+    texture_refs:
+      base_color_texture: "Weapon_Diffuse"
+      normal_texture: "Weapon_Normal"
+
+    shader_references:
+      - shader_unique_id: "StandardPBR_VS"
+        shader_hash: 0xABCDEF01
+      - shader_unique_id: "StandardPBR_PS"
+        shader_hash: 0x23456789
+
+  # ==========================================================================
+  # COMPLEX GEOMETRY ASSET
+  # ==========================================================================
+
+  # Main Spaceship Geometry Asset
+  - name: "SpaceshipGeometry"
+    type: "geometry"
+    asset_key: "deadbeef-cafe-babe-dead-feeddeadbeef"
+    version: 3
+    streaming_priority: 255
+    content_hash: 0x12345678
+    variant_flags: 0
+    alignment: 256
+
+    # Overall bounding box for the entire spaceship
+    bounding_box_min: [-10.0, -3.0, -15.0]
+    bounding_box_max: [10.0, 3.0, 15.0]
+
+    # Multiple LODs for distance-based rendering (vertex counts reflect PAK padding effects)
+    lods:
+      # LOD 0 - Highest Detail (Close range: 0-50 units, ~12 vertices after PAK padding)
+      - name: "SpaceshipLOD0"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        vertex_buffer: "SpaceshipLOD0_VertexBuffer"
+        index_buffer: "SpaceshipLOD0_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Main Hull Submesh
+          - name: "Hull"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 9
+                first_vertex: 0
+                vertex_count: 6
+
+          # Cockpit Glass Submesh
+          - name: "Cockpit"
+            material: "CockpitGlassMaterial"
+            bounding_box_min: [-2.0, 1.0, 8.0]
+            bounding_box_max: [2.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 9
+                index_count: 9
+                first_vertex: 6
+                vertex_count: 6
+
+      # LOD 1 - Medium Detail (Medium range: 50-150 units, ~7 vertices after PAK padding)
+      - name: "SpaceshipLOD1"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        vertex_buffer: "SpaceshipLOD1_VertexBuffer"
+        index_buffer: "SpaceshipLOD1_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Simplified Hull (combines hull and cockpit)
+          - name: "Hull"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 9
+                first_vertex: 0
+                vertex_count: 7
+
+      # LOD 2 - Low Detail (Far range: 150+ units, ~5 vertices after PAK padding)
+      - name: "SpaceshipLOD2"
+        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        vertex_buffer: "SpaceshipLOD2_VertexBuffer"
+        index_buffer: "SpaceshipLOD2_IndexBuffer"
+        bounding_box_min: [-10.0, -3.0, -15.0]
+        bounding_box_max: [10.0, 3.0, 15.0]
+
+        submeshes:
+          # Minimal geometry (just a basic shape)
+          - name: "Hull"
+            material: "SpaceshipHullMaterial"
+            bounding_box_min: [-8.0, -2.5, -12.0]
+            bounding_box_max: [8.0, 2.5, 12.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 6
+                first_vertex: 0
+                vertex_count: 5

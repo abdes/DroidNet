@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oxygen-pakgen"
+version = "0.1.0"
+description = "Oxygen Engine content pack generator (PakGen)"
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+authors = [ { name = "Oxygen Engine Contributors" } ]
+requires-python = ">=3.11"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+]
+
+[project.scripts]
+pakgen = "pakgen.cli:main"
+
+[project.optional-dependencies]
+color = ["rich>=13.0.0"]
+dev = [
+  "pytest>=8.0.0",
+  "mypy>=1.8.0",
+  "ruff>=0.4.0",
+]
+yaml = [
+  "PyYAML>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/abdes/DroidNet"
+Issues = "https://github.com/abdes/DroidNet/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+# The source tree is a flat module collection (api.py, cli.py, etc.) not nested
+# under Oxygen/Content/Tools/PakGen. Expose them as a single "pakgen" package
+# by creating a package directory alias via a lightweight package folder in src.
+packages = ["pakgen"]
+
+[tool.setuptools.package-data]
+pakgen = ["py.typed"]
