@@ -1,14 +1,14 @@
 {
   "counts": {
-    "assets_total": 0,
-    "geometries": 0,
-    "materials": 0,
+    "assets_total": 2,
+    "geometries": 1,
+    "materials": 1,
     "regions": 2,
     "tables": 3
   },
   "deterministic": true,
-  "file_size": 1440,
-  "pak_crc32": 44260875,
+  "file_size": 2848,
+  "pak_crc32": 4227967389,
   "regions": [
     {
       "name": "texture",
@@ -21,7 +21,7 @@
       "size": 515
     }
   ],
-  "sha256": "78ace39ad6adac2a733c021d119ad6ab4d61ca0468d5f4895ff0a1ed79d06b5e",
-  "spec_hash": "ad0be43a82860a8b3c16cee3ae11e41dc190cb3c93016b110e72635236ed7a82",
+  "sha256": "b1dc446a15544578c625be70ba47ba95c61d6f54e8c5330871197061b45d9c60",
+  "spec_hash": "a716db9e24c1b27c1be0b119134c86ce4493fe43cfa69513b197ee71571a9617",
   "version": 1
 }

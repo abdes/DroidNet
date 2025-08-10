@@ -1,0 +1,106 @@
+{
+  "assets": [
+    {
+      "alignment": 16,
+      "descriptor_offset": 1280,
+      "descriptor_size": 256,
+      "key": "11111111222233334444555555555555",
+      "name": "simple_material",
+      "type": "material",
+      "variable_extra_size": 432,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 1968,
+      "descriptor_size": 256,
+      "key": "aaaaaaaabbbbccccddddeeeeeeeeeeee",
+      "name": "test_geometry",
+      "type": "geometry",
+      "variable_extra_size": 229,
+      "warnings": []
+    }
+  ],
+  "content_version": 1,
+  "deterministic": true,
+  "directory": {
+    "asset_count": 2,
+    "offset": 2464,
+    "padding_before": 11,
+    "size": 128
+  },
+  "file_size": 2848,
+  "footer": {
+    "offset": 2592,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {
+      "assets_region": 96,
+      "directory": 11,
+      "region_buffer": 252,
+      "region_texture": 192,
+      "table_buffer": 8,
+      "table_texture": 13
+    },
+    "total": 572
+  },
+  "regions": [
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 256,
+      "padding_after": 0,
+      "padding_before": 192,
+      "size": 4
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 512,
+      "padding_after": 0,
+      "padding_before": 252,
+      "size": 515
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    }
+  ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 1,
+      "materials": 1,
+      "total": 2
+    },
+    "variable_extra_total": 661
+  },
+  "tables": [
+    {
+      "count": 1,
+      "entry_size": 40,
+      "name": "texture",
+      "offset": 1040,
+      "padding_before": 13
+    },
+    {
+      "count": 3,
+      "entry_size": 32,
+      "name": "buffer",
+      "offset": 1088,
+      "padding_before": 8
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    }
+  ],
+  "version": 1
+}

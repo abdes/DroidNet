@@ -1,0 +1,78 @@
+{
+  "assets": [],
+  "content_version": 1,
+  "deterministic": true,
+  "directory": {
+    "asset_count": 0,
+    "offset": 0,
+    "padding_before": 0,
+    "size": 0
+  },
+  "file_size": 320,
+  "footer": {
+    "offset": 64,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {},
+    "total": 0
+  },
+  "regions": [
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    }
+  ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 0,
+      "materials": 0,
+      "total": 0
+    },
+    "variable_extra_total": 0
+  },
+  "tables": [
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "texture",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "buffer",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    }
+  ],
+  "version": 1
+}
