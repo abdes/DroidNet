@@ -254,6 +254,7 @@ namespace detail {
         data.size() / sizeof(Vertex));
     }
 
+    // FIXME: WRONG - Indices may not be uint32_t, check stride and format
     auto GetIndices() const noexcept -> std::span<const std::uint32_t>
     {
       if (!index_buffer_resource)
