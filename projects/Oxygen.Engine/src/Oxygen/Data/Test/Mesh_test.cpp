@@ -90,7 +90,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, Immutability)
   // Arrange
   const auto mesh = MakeSimpleMesh();
   const auto vertices_before = mesh->Vertices();
-  const auto indices_before = mesh->Indices();
+  const auto indices_before = mesh->IndexBuffer();
 
   // Act
   // Try to mutate the returned spans (should not compile if attempted)
@@ -99,7 +99,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, Immutability)
 
   // Assert
   EXPECT_EQ(vertices_before.size(), 3);
-  EXPECT_EQ(indices_before.size(), 3);
+  EXPECT_EQ(indices_before.Count(), 3u);
 }
 
 //! Checks that Mesh computes correct bounding box.
@@ -221,9 +221,10 @@ NOLINT_TEST_F(MeshAssetViewTest, ViewValidity)
 
   // Assert
   EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
-  EXPECT_THAT(mesh_view.Indices(), SizeIs(3));
+  EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
   EXPECT_EQ(mesh_view.Vertices().data(), mesh->Vertices().data());
-  EXPECT_EQ(mesh_view.Indices().data(), mesh->Indices().data());
+  EXPECT_EQ(
+    mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
 }
 
 //! Checks that Mesh rejects out-of-bounds view creation (death test).

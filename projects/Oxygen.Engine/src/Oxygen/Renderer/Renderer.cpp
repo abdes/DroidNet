@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <unordered_map>
@@ -25,6 +26,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 using oxygen::data::Mesh;
+using oxygen::data::detail::IndexType;
 using oxygen::engine::EvictionPolicy;
 using oxygen::engine::MeshGpuResources;
 using oxygen::engine::MeshId;
@@ -177,9 +179,13 @@ auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
   DLOG_F(2, "Create index buffer");
 
   const auto& graphics = render_controller.GetGraphics();
-  const auto indices = mesh.Indices();
+  const auto indices_view = mesh.IndexBuffer();
+  const std::size_t element_size = indices_view.type == IndexType::kUInt16
+    ? sizeof(std::uint16_t)
+    : (indices_view.type == IndexType::kUInt32 ? sizeof(std::uint32_t) : 0u);
+  const auto index_count = indices_view.Count();
   const BufferDesc ib_desc {
-    .size_bytes = indices.size() * sizeof(std::uint32_t),
+    .size_bytes = index_count * element_size,
     .usage = BufferUsage::kIndex,
     .memory = BufferMemory::kDeviceLocal,
     .debug_name = std::string(mesh.GetName()) + ".IndexBuffer",
@@ -231,12 +237,15 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
   DLOG_F(2, "Upload index buffer");
 
   const auto& graphics = render_controller.GetGraphics();
-  const auto indices = mesh.Indices();
-  if (indices.empty()) {
+  const auto indices_view = mesh.IndexBuffer();
+  if (indices_view.Count() == 0) {
     return;
   }
+  const std::size_t element_size = indices_view.type == IndexType::kUInt16
+    ? sizeof(std::uint16_t)
+    : sizeof(std::uint32_t);
   const BufferDesc upload_desc {
-    .size_bytes = indices.size() * sizeof(std::uint32_t),
+    .size_bytes = indices_view.Count() * element_size,
     .usage = BufferUsage::kNone,
     .memory = BufferMemory::kUpload,
     .debug_name = std::string(mesh.GetName()) + ".IndexUploadBuffer",
@@ -244,7 +253,13 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
   auto upload_buffer = graphics.CreateBuffer(upload_desc);
   upload_buffer->SetName(upload_desc.debug_name);
   void* mapped = upload_buffer->Map();
-  memcpy(mapped, indices.data(), upload_desc.size_bytes);
+  if (indices_view.type == IndexType::kUInt16) {
+    auto src = indices_view.AsU16();
+    memcpy(mapped, src.data(), upload_desc.size_bytes);
+  } else if (indices_view.type == IndexType::kUInt32) {
+    auto src = indices_view.AsU32();
+    memcpy(mapped, src.data(), upload_desc.size_bytes);
+  }
   upload_buffer->UnMap();
   recorder.BeginTrackingResourceState(
     index_buffer, ResourceStates::kCommon, false);

@@ -30,8 +30,6 @@ public:
 
   MOCK_METHOD(
     (std::span<const Vertex>), Vertices, (), (const, noexcept, override));
-  MOCK_METHOD(
-    (std::span<const std::uint32_t>), Indices, (), (const, noexcept, override));
 
   std::vector<Vertex> vertices_;
   std::vector<std::uint32_t> indices_;
@@ -49,9 +47,6 @@ protected:
     ON_CALL(*mesh_, Vertices())
       .WillByDefault(
         ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
-    ON_CALL(*mesh_, Indices())
-      .WillByDefault(
-        ::testing::Return(std::span<const std::uint32_t>(mesh_->indices_)));
   }
 
   std::unique_ptr<MockMesh> mesh_;
@@ -97,13 +92,9 @@ NOLINT_TEST_F(MeshViewTestFixture, ConstructAndAccess)
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
   SetupMockMesh(vertices, indices);
   EXPECT_CALL(*mesh_, Vertices()).Times(::testing::AnyNumber());
-  EXPECT_CALL(*mesh_, Indices()).Times(::testing::AnyNumber());
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   // Act
   MeshView view(*mesh_,
@@ -116,9 +107,15 @@ NOLINT_TEST_F(MeshViewTestFixture, ConstructAndAccess)
 
   // Assert
   EXPECT_THAT(view.Vertices(), SizeIs(4));
-  EXPECT_THAT(view.Indices(), SizeIs(6));
+  EXPECT_EQ(view.IndexBuffer().Count(), 6u);
   EXPECT_EQ(view.Vertices().data(), vertices.data());
-  EXPECT_EQ(view.Indices().data(), indices.data());
+  {
+    auto view_indices = view.IndexBuffer().AsU32();
+    ASSERT_EQ(view_indices.size(), indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      EXPECT_EQ(view_indices[i], indices[i]);
+    }
+  }
 }
 
 //! Tests MeshView handles empty vertex and index data (should be a death test).
@@ -150,9 +147,6 @@ NOLINT_TEST_F(MeshViewTestFixture, CopyMove)
   EXPECT_CALL(*mesh_, Vertices())
     .Times(::testing::AnyNumber())
     .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
-  EXPECT_CALL(*mesh_, Indices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const std::uint32_t>(indices)));
 
   MeshView mesh_view1(*mesh_,
     oxygen::data::pak::MeshViewDesc {
@@ -168,9 +162,9 @@ NOLINT_TEST_F(MeshViewTestFixture, CopyMove)
 
   // Assert
   EXPECT_THAT(mesh_view2.Vertices(), SizeIs(2));
-  EXPECT_THAT(mesh_view2.Indices(), SizeIs(2));
+  EXPECT_EQ(mesh_view2.IndexBuffer().Count(), 2u);
   EXPECT_THAT(mesh_view3.Vertices(), SizeIs(2));
-  EXPECT_THAT(mesh_view3.Indices(), SizeIs(2));
+  EXPECT_EQ(mesh_view3.IndexBuffer().Count(), 2u);
 }
 
 } // namespace
