@@ -14,20 +14,30 @@
 #include <Oxygen/Data/MeshType.h>
 
 //! Oxygen PAK file binary format specification
-/*!
+/**!
  @file PakFormat.h
 
  ### Invariants
- - All structures are packed (1) eliminating the need for padding.
- - All offsets are absolute from the start of the PAK file.
+ - All structures are packed with `#pragma pack(push,1)` eliminating implicit
+   padding in the serialized on-disk representation. The engine may copy
+   these packed structs into runtime-aligned representations before use.
+ - All offsets are absolute from the start of the PAK file (no relative
+   offsets) and are of type `OffsetT` (uint64_t).
+ - Endianness is little-endian (Intel / x86-64). Cross-platform loaders on
+   big-endian architectures MUST byte-swap scalar fields.
  - All sizes are in bytes.
  - All strings are null-terminated.
- - All names are null-terminated strings, with a fixed-size of `kMaxNameSize
+ - All names are null-terminated strings, with a fixed-size of `kMaxNameSize`
    (including the null terminator) and padded with null bytes.
  - All indices are 0-based. Except when explicitly stated otherwise, `0` is a
    valid index.
+ - Resource index value `0` is a sentinel: if a resource category defines a
+   fallback, index `0` refers to that fallback resource; otherwise it denotes
+   an absent / not-assigned reference (see `kFallbackResourceIndex` and
+   `kNoResourceIndex`).
  - All hashes for content integrity are 32-bit CRC32 values for corruption
-   detection and performance.
+   detection and performance (standard IEEE polynomial 0x04C11DB7, initial
+   value 0xFFFFFFFF, reflected input/output, final XOR 0xFFFFFFFF).
 */
 
 // TODO: Define constants for hash algorithm enumeration
@@ -50,10 +60,15 @@ using DataBlobSizeT = uint32_t;
 //! Maximum asset name length including null terminator
 constexpr size_t kMaxNameSize = 64;
 
-//! Resource index indicating explicit fallback to default resource
+//! Resource index indicating explicit fallback to default resource.
+//! When a resource *type* defines an engine/tool-provided fallback asset,
+//! references using this value (0) resolve to that fallback.
 constexpr ResourceIndexT kFallbackResourceIndex = 0;
 
-//! Resource index indicating no resource assigned
+//! Resource index indicating "no resource assigned" for types that have no
+//! concept of fallback. For such types *both* constants compare equal; the
+//! semantic difference depends on the resource category's rules. Tooling
+//! should still emit 0 but may label it appropriately in diagnostics.
 constexpr ResourceIndexT kNoResourceIndex = 0;
 
 //! Maximum size for data blobs in bytes
@@ -149,7 +164,12 @@ struct PakFooter {
   uint8_t reserved[124] = {};
 
   // -- CRC32 Integrity --
-  // Include the entire file content, except the 4 bytes for pak_crc32 itself
+  // CRC32 covers the *entire* file, including the footer and footer magic
+  // bytes, EXCEPT these 4 bytes (`pak_crc32`) which are treated as zero /
+  // skipped during calculation.
+  // Standard IEEE CRC32 parameters: polynomial 0x04C11DB7, initial value
+  // 0xFFFFFFFF, reflect in/out, final XOR 0xFFFFFFFF.
+  // A value of 0 indicates that integrity validation SHOULD be skipped.
   uint32_t pak_crc32 = 0; // CRC32 integrity hash (excluded from calculation)
 
   // The last thing in the PAK file is the footer magic bytes.
@@ -171,7 +191,7 @@ static_assert(sizeof(PakFooter) == 256);
 struct AssetDirectoryEntry {
   AssetKey asset_key;
   uint8_t asset_type; // AssetType enum - for loader dispatch
-  OffsetT entry_offset = 0; // Absolute offset of the directory entry
+  OffsetT entry_offset = 0; // Absolute offset of *this* directory entry
   OffsetT desc_offset = 0; // Absolute offset of the asset descriptor
   uint32_t desc_size = 0; // Size of asset descriptor (for sanity check)
 
@@ -194,8 +214,8 @@ static_assert(sizeof(AssetDirectoryEntry) == 64);
 struct TextureResourceDesc {
   OffsetT data_offset; // Absolute offset to texture data
   DataBlobSizeT size_bytes; // Size of texture data
-  uint8_t texture_type; // 2D, 3D, Cube, etc. (enum)
-  uint8_t compression_type; // Compression type (e.g., BC1, BC3, etc.)
+  uint8_t texture_type; // 2D, 3D, Cube, etc. (enum) (defined externally)
+  uint8_t compression_type; // Compression (BC1, BC3, ASTC, etc.) (external)
   uint32_t width; // Texture width
   uint32_t height; // Texture height
   uint16_t depth; // For 3D textures (volume), otherwise 1
@@ -313,7 +333,7 @@ static_assert(sizeof(ShaderReferenceDesc) == 216);
 // Assets
 // -----------------------------------------------------------------------------
 
-//! Asset header - Per-Asset Metadata (96 bytes).
+//! Asset header - Per-Asset Metadata (95 bytes on disk, packed).
 /*!
  Always the first field in every asset descriptor. Contains metadata about the
  asset, such as its type, name, version, streaming priority, content hash, and
@@ -405,7 +425,8 @@ struct MaterialAssetDesc {
   AssetHeader header;
   uint8_t material_domain; // e.g. Opaque, AlphaBlended
   uint32_t flags; // Bitfield for double-sided, alpha test, etc.
-  uint32_t shader_stages; // Bitfield for shaders used for this material
+  uint32_t shader_stages; // Bitfield for shaders used; entries that follow
+                          // are in ascending bit index order (LSB->MSB)
 
   // --- Scalar factors (PBR) ---
   float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback
@@ -428,8 +449,9 @@ struct MaterialAssetDesc {
   uint8_t reserved[68] = {};
 };
 // Followed by:
-// - array of shader references:
-//   ShaderReference[count_of(set bits in shader_stages)]
+// - Array of ShaderReferenceDesc entries in ascending set-bit order of
+//   `shader_stages` (least-significant set bit first). Count is population
+//   count of `shader_stages`.
 #pragma pack(pop)
 static_assert(sizeof(MaterialAssetDesc) == 256);
 
