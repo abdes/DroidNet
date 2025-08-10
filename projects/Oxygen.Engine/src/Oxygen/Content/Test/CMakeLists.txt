@@ -44,3 +44,7 @@ m_gtest_program(
     "TextureLoader_test.cpp"
     "Utils/PakUtils.h"
 )
+
+# Ensure the Loaders tests run only after PakGen editable install so the
+# pakgen CLI is available for any dynamic pack builds performed by tests.
+add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
