@@ -52,8 +52,9 @@ set_target_properties(
 
 set(
   OXYGEN_CORE_HEADERS
-    "api_export.h"
     "AnyCache.h"
+    "api_export.h"
+    "Detail/FormatUtils.h"
     "Resources.h"
     "SafeCall.h"
     "Types/Format.h"
@@ -64,8 +65,9 @@ set(
 )
 set(
   OXYGEN_CORE_PRIVATE_SOURCES
-    "Version.cpp"
+    "Detail/FormatUtils.cpp"
     "Detail/ToStringConverters.cpp"
+    "Version.cpp"
 )
 
 target_sources(
