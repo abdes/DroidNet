@@ -37,7 +37,7 @@ Legend:
 |25 | ✅ Done | Wrap all test symbols in anonymous namespace | Prevent ODR / symbol leakage | Style | P3 | | Added anonymous namespace around fixtures/helpers in MeshView/SubMesh tests |
 |26 | ✅ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
 |27 | ⏳ Todo | Introduce constants for repeated magic numbers | Maintainability | Style | P3 | | constexpr counts (e.g., kCubeVertexCount) |
-|28 | ⏳ Todo | Parameterize procedural invalid inputs | Reduce duplication in ValidInvalidInput | Refactor | P3 | | Use array + loop or value-parameterized tests |
+|28 | ✅ Done | Parameterize procedural invalid inputs | Reduce duplication in ValidInvalidInput | Refactor | P3 | | Implemented arrays + loops in ProceduralMeshes_test.cpp |
 |29 | ⏳ Todo | Document Link_test.cpp purpose with brief comment | Clarify intent | Style | P3 | | Add //! comment at top |
 |30 | ⏳ Todo | Add test for IndexBuffer().Widened order & size for 32-bit | Ensure both paths validated | NewTest | P2 | | Compare AsU32 vs Widened iteration |
 |31 | ✅ Done | Add test verifying SubMesh material non-null enforced through builder | Completes invariant via public API | NewTest | P1 | | BeginSubMesh nullptr now throws logic_error (test added) |
