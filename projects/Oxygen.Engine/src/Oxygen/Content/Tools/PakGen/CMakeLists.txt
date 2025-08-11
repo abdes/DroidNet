@@ -103,7 +103,7 @@ add_custom_command(
     ${CMAKE_COMMAND} -E echo "[PakGen] Editable install starting"
   COMMAND
     ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
-    ${Python3_EXECUTABLE} -m pip install -e .[yaml]
+    ${Python3_EXECUTABLE} -m pip install -r requirements.txt
   COMMAND
     ${CMAKE_COMMAND} -E touch "${_pakgen_stamp}"
   WORKING_DIRECTORY "${_pakgen_dir}"
@@ -120,9 +120,10 @@ set_target_properties(
     FOLDER
       "Tools"
     OUTPUT_NAME
-      "Regenerate PakGen Specs"
+      "Editable Install of PakGen"
 )
 
+# TODO: Implement deployment install properly for PakGen
 add_custom_target(pakgen_install DEPENDS pakgen_editable_install)
 set_target_properties(
   pakgen_install
@@ -130,5 +131,5 @@ set_target_properties(
     FOLDER
       "Tools"
     OUTPUT_NAME
-      "Regenerate PakGen Specs"
+      "Deployment Install of PakGen"
 )
