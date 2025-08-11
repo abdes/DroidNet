@@ -19,7 +19,7 @@ Legend:
 | 7 | ✅ Done | Add MeshViewDeathTest_ZeroVertexCountPositiveIndexCount_Throws | Only combined zero counts tested | NewTest | P1 | | Implemented (EXPECT_DEATH, checks 'at least one vertex') |
 | 8 | ✅ Done | Add MeshViewDeathTest_EdgeOutOfRange_LastIndexPastEnd_Throws | Off-by-one boundary slice not covered | NewTest | P1 | | Implemented (EXPECT_DEATH, 'index range exceeds') |
 | 9 | ✅ Done | Add MeshViewBasicTest_16BitIndices_WidenedIterationMatches | 16-bit widening path untested | NewTest | P1 | | Implemented (referenced storage R16UInt, Widened() matches) |
-|10 | ⏳ Todo | Add SubMeshDeathTest_BuilderAddsSubMeshWithNoViews_Throws | Current test uses custom subclass; builder path untested | NewTest | P1 | | BeginSubMesh/EndSubMesh without WithMeshView death |
+|10 | ✅ Done | Add SubMeshDeathTest_BuilderAddsSubMeshWithNoViews_Throws | Current test uses custom subclass; builder path untested | NewTest | P1 | | Implemented (logic_error via EndSubMesh without WithMeshView) |
 |11 | ⏳ Todo | Add MaterialAssetBasicTest_CreateDebug_ReturnsValidMaterial | Debug factory untested | NewTest | P2 | | Validate stages, texture/shader counts |
 |12 | ⏳ Todo | Add VertexHashTest_QuantizedHash_DivergentBeyondEpsilon | Only equality within epsilon tested | NewTest | P2 | | Two vertices differing > epsilon produce different hash |
 |13 | ⏳ Todo | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Create multiple AssetKeys; uniqueness + stable to_string + hash |
