@@ -79,13 +79,13 @@ NOLINT_TEST_F(
   //   0x00: data_offset      = 256    (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 192    (C0 00 00 00)
   //   0x0C: usage_flags      = 1      (01 00 00 00) // kVertexBuffer
-  //   0x10: element_stride   = 12     (0C 00 00 00)
+  //   0x10: element_stride   = 0      (0C 00 00 00)
   //   0x14: element_format   = 27     (1B) // kRGB32Float
   //   0x15: reserved[11]     = {0}    (00 00 00 00 00 00 00 00 00 00 00)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 0C 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 192;
@@ -102,7 +102,7 @@ NOLINT_TEST_F(
   // Assert
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetDataSize(), 192u);
-  EXPECT_EQ(asset->GetElementStride(), 12u);
+  EXPECT_EQ(asset->GetElementStride(), 0);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kRGB32Float);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer));
