@@ -4,13 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
 #include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
+// Project
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>

@@ -4,10 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
 #include <memory>
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
+// Project
 #include <Oxygen/Data/MaterialAsset.h>
 
 using oxygen::data::MaterialAsset;

@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Testing/GTest.h>
+// Standard library
 #include <unordered_set>
+
+// GTest
+#include <Oxygen/Testing/GTest.h>
+
+// Project
+#include <Oxygen/Data/AssetKey.h>
 
 using oxygen::data::AssetKey;
 using oxygen::data::GenerateAssetGuid;

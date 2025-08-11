@@ -4,10 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
 #include <iostream>
 
+// Project
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+
+//! Simple link test verifying that GenerateMesh compiles & runs; prints mesh
+//! summary (not a unit test, used for linker validation of Data module).
 
 using oxygen::data::GenerateMesh;
 

@@ -4,14 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
 #include <memory>
 #include <vector>
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
+// Project
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Vertex.h>
 
 using oxygen::data::MaterialAsset;

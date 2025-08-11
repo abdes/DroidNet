@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
+// Project
 #include <Oxygen/Data/ProceduralMeshes.h>
 
 //=== Test Fixtures ===-------------------------------------------------------//

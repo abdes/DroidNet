@@ -4,8 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/BufferResource.h>
+// Standard library
+#include <cstdint>
+#include <vector>
+
+// GTest
 #include <Oxygen/Testing/GTest.h>
+
+// Project
+#include <Oxygen/Data/BufferResource.h>
 
 using oxygen::data::BufferResource;
 
