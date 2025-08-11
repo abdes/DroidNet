@@ -41,10 +41,10 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|20 | ✅ Todo | Add IndexBufferViewTest_SliceElements_ValidProducesCorrectCount | SliceElements positive case untested | NewTest | P3 | | Count/bytes align with slice |
-|21 | ✅ Todo | Add IndexBufferViewTest_SliceElements_InvalidReturnsEmpty | Invalid slice path untested | NewTest | P3 | | Out-of-range yields Empty() |
-|22 | ✅ Todo | Add IndexBufferViewTest_WidenedIteration_OnSliceMatchesExpected | Widened iteration for slice not covered | NewTest | P3 | | Sequence matches manual extraction |
-|23 | ✅ Todo | Add IndexBufferViewInvariantsTest_EmptyWhenTypeNone | Empty() semantics for kNone unverified | NewTest | P3 | | type kNone => Empty()==true |
+|20 | ✅ Done | Add IndexBufferViewTest_SliceElements_ValidProducesCorrectCount | SliceElements positive case untested | NewTest | P3 | | Count/bytes align with slice |
+|21 | ✅ Done | Add IndexBufferViewTest_SliceElements_InvalidReturnsEmpty | Invalid slice path untested | NewTest | P3 | | Out-of-range yields Empty() |
+|22 | ✅ Done | Add IndexBufferViewTest_WidenedIteration_OnSliceMatchesExpected | Widened iteration for slice not covered | NewTest | P3 | | Sequence matches manual extraction |
+|23 | ✅ Done | Add IndexBufferViewInvariantsTest_EmptyWhenTypeNone | Empty() semantics for kNone unverified | NewTest | P3 | | type kNone => Empty()==true |
 
 ## Group: BufferResource (BufferResource.h/.cpp)
 
