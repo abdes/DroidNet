@@ -65,9 +65,8 @@ EngineShaders::EngineShaders()
   // TODO: Make this better by not hard-coding the path
   ShaderManager::Config shader_manager_config {
     .backend_name = "Direct3D12",
-    .archive_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\bin\Oxygen)",
-    .source_dir
-    = R"(F:\projects\DroidNet\projects\Oxygen.Engine\src\Oxygen\Graphics\Direct3D12\Shaders)",
+    .archive_dir = R"(bin\Oxygen)",
+    .source_dir = R"(src\Oxygen\Graphics\Direct3D12\Shaders)",
     .shaders = std::span(kEngineShaders),
     .compiler = compiler_,
   };
