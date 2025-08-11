@@ -9,6 +9,7 @@
 #include <array>
 #include <compare>
 #include <cstdint>
+#include <string>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Data/api_export.h>

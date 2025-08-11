@@ -44,4 +44,5 @@ m_gtest_program(
     "ProceduralMeshes_test.cpp"
     "SubMesh_test.cpp"
     "Vertex_test.cpp"
+    "AssetKey_test.cpp"
 )
