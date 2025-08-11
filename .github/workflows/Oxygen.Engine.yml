@@ -79,16 +79,16 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -S . -B out/build -DCMAKE_BUILD_TYPE=Release
+          cmake --preset=windows
         working-directory: projects/Oxygen.Engine
 
       - name: Build
         run: |
-          cmake --build out/build --config Release
+          cmake --build --preset=windows-release
         working-directory: projects/Oxygen.Engine
 
       - name: Run tests
         run: |
-          ctest --test-dir out/build --output-on-failure --build-config Release
+          ctest --preset=test-windows --output-on-failure -C Release
         continue-on-error: true
         working-directory: projects/Oxygen.Engine
