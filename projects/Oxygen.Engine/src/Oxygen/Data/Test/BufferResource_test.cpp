@@ -24,6 +24,7 @@ class BufferResourceDeathTest : public testing::Test { };
 //! multiple of its element_stride (uint32 indices) triggers a fatal check.
 NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 {
+#if !defined(NDEBUG)
   // Arrange
   // Crafted descriptor: size_bytes=3, element_stride=4 (invalid alignment)
   oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
@@ -42,6 +43,51 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
   EXPECT_DEATH([[maybe_unused]] auto _
     = BufferResource(std::move(bad_desc), std::move(data)),
     "not aligned to element stride");
+#endif
+}
+
+//! Ensures that constructing a formatted BufferResource (element_format != 0)
+//! with nonzero stride triggers a fatal check.
+NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
+{
+#if !defined(NDEBUG)
+  // Arrange
+  oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
+    .size_bytes = 16,
+    .usage_flags
+    = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
+    .element_stride = 4, // INVALID: must be 0 for formatted
+    .element_format = 1, // formatted (not 0)
+    .reserved = {} };
+  std::vector<uint8_t> data(16, 0xAB);
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _
+    = BufferResource(std::move(bad_desc), std::move(data)),
+    "formatted buffer must have zero element_stride");
+#endif
+}
+
+//! Ensures that constructing a structured BufferResource (element_format == 0,
+//! stride > 1) with stride == 0 triggers a fatal check.
+NOLINT_TEST_F(BufferResourceDeathTest, StructuredBufferZeroStride_Throws)
+{
+#if !defined(NDEBUG)
+  // Arrange
+  oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
+    .size_bytes = 16,
+    .usage_flags
+    = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
+    .element_stride = 0, // INVALID: stride cannot be zero for structured
+    .element_format = 0, // structured
+    .reserved = {} };
+  std::vector<uint8_t> data(16, 0xAB);
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _
+    = BufferResource(std::move(bad_desc), std::move(data)),
+    "element_stride cannot be zero for structured buffer");
+#endif
 }
 
 //! Basic tests covering BufferResource classification helpers (IsFormatted,
