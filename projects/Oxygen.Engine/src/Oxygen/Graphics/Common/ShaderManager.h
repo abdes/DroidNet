@@ -62,6 +62,8 @@ public:
     std::string backend_name { "Default" };
     std::string archive_file_name { "shaders.bin" };
 
+    // TODO: make a final solution for shader locations
+    // Currently these are relative paths to the project root.
     std::optional<std::string> archive_dir;
     std::optional<std::string> source_dir;
 

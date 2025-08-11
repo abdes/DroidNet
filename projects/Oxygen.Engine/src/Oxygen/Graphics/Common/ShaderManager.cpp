@@ -140,25 +140,36 @@ inline auto Load(AnyReader& reader, ShaderType& value) -> Result<void>
 
 namespace {
 
+// Helper: Get the workspace root depending on environment (local or CI)
+auto GetWorkspaceRoot() -> std::filesystem::path
+{
+  // Detect GitHub Actions CI for running tests during CI
+  const char* github_actions = std::getenv("GITHUB_ACTIONS");
+  if (github_actions && std::string(github_actions) == "true") {
+    // Use GITHUB_WORKSPACE as base if set
+    const char* github_workspace = std::getenv("GITHUB_WORKSPACE");
+    if (github_workspace) {
+      return github_workspace;
+    } else {
+      auto cwd = std::filesystem::current_path();
+      LOG_F(WARNING, "GITHUB_WORKSPACE not set, using current directory: {}",
+        cwd.string());
+      return cwd;
+    }
+  } else {
+    // FIXME: replace hardcoded path
+    // Local/dev: use hardcoded project root
+    return "F:/projects/DroidNet/projects/Oxygen.Engine/";
+  }
+}
+
 auto GetArchivePath(const ShaderManager::Config& config)
   -> std::filesystem::path
 {
-  std::filesystem::path archive_path {};
-  if (!config.archive_dir) {
-    try {
-      archive_path = std::filesystem::current_path();
-      LOG_F(INFO, "Archive directory not set, using current directory: {}",
-        archive_path.string());
-    } catch (const std::filesystem::filesystem_error& e) {
-      LOG_F(ERROR,
-        "Archive directory not set and I failed to get the current directory: "
-        "{}",
-        e.what());
-      throw;
-    }
-  } else {
-    archive_path = *config.archive_dir;
+  std::filesystem::path archive_path = GetWorkspaceRoot();
 
+  if (config.archive_dir) {
+    archive_path /= *config.archive_dir;
     // Ensure the archive directory exists
     try {
       create_directories(archive_path);
@@ -420,8 +431,11 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
   DCHECK_F(
     config_.source_dir.has_value(), "No shader source directory specified");
 
-  std::filesystem::path source_path(config_.source_dir.value());
+  // Use workspace root as base for source_path
+  std::filesystem::path source_path = GetWorkspaceRoot();
+  source_path /= config_.source_dir.value();
   source_path /= profile.relative_path;
+
   auto bytecode = config_.compiler->CompileFromFile(source_path, profile);
   if (!bytecode) {
     return false;
