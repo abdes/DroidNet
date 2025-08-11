@@ -4,16 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <vector>
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
+// Project
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
@@ -56,7 +60,6 @@ protected:
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
 
-using ::testing::AllOf;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.

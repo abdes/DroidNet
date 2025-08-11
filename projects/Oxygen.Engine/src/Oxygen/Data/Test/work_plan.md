@@ -35,7 +35,7 @@ Legend:
 |23 | ✅ Done | Add AAA comments consistently across all tests | Style guideline compliance | Style | P3 | | Added // Arrange // Act // Assert sections to all Data tests |
 |24 | ✅ Done | Add brief //! doc comments for all fixtures | Documentation standard | Style | P3 | | Added //! briefs for all test fixtures (helper + fixture classes) |
 |25 | ✅ Done | Wrap all test symbols in anonymous namespace | Prevent ODR / symbol leakage | Style | P3 | | Added anonymous namespace around fixtures/helpers in MeshView/SubMesh tests |
-|26 | ⏳ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
+|26 | ✅ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
 |27 | ⏳ Todo | Introduce constants for repeated magic numbers | Maintainability | Style | P3 | | constexpr counts (e.g., kCubeVertexCount) |
 |28 | ⏳ Todo | Parameterize procedural invalid inputs | Reduce duplication in ValidInvalidInput | Refactor | P3 | | Use array + loop or value-parameterized tests |
 |29 | ⏳ Todo | Document Link_test.cpp purpose with brief comment | Clarify intent | Style | P3 | | Add //! comment at top |

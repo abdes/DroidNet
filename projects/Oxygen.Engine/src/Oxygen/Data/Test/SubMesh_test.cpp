@@ -4,15 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
 #include <memory>
 #include <vector>
 
+// GTest
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Base/Logging.h>
+// Project
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat.h>
 
 using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
@@ -37,8 +38,6 @@ protected:
 //=== SubMesh Tests ===------------------------------------------------------//
 // (Tests continue within same anonymous namespace.)
 
-using ::testing::AllOf;
-using ::testing::HasSubstr;
 using ::testing::NotNull;
 using ::testing::SizeIs;
 
