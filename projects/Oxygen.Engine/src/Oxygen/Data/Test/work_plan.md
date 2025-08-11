@@ -95,6 +95,6 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|44 | ✅ Todo | Add ToStringConvertersTest_BufferUsageFlags_AllFlagsPresent | to_string coverage for all flags missing | NewTest | P3 | | Each flag token appears once |
-|45 | ✅ Todo | Add ToStringConvertersTest_FormatEnum_AllKnownFormatsMapped | Format enum mapping completeness untested | NewTest | P3 | | All known formats produce strings |
+|44 | ✅ Done | Add ToStringConvertersTest_BufferUsageFlags_AllFlagsPresent | to_string coverage for all flags missing | NewTest | P3 | | Each flag token appears once |
+|45 | ✅ Done | Add ToStringConvertersTest_FormatEnum_AllKnownFormatsMapped | Format enum mapping completeness untested | NewTest | P3 | | All known formats produce strings |
 |46 | ✅ Todo | Add AssetKeyOrderingTest_LexicalOrderConsistentWithGuid | Ordering operator behavior untested | NewTest | P3 | | Sort order matches string order |

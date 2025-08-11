@@ -49,5 +49,6 @@ m_gtest_program(
     "ProceduralMeshes_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"
+    "ToStringConverters_test.cpp"
     "Vertex_test.cpp"
 )
