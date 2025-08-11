@@ -174,6 +174,52 @@ protected:
   std::shared_ptr<const MaterialAsset> material_;
 };
 
+//! Test fixture for MeshBuilder death / invariant enforcement scenarios
+class MeshBuilderDeathTest : public testing::Test {
+protected:
+  void SetUp() override
+  {
+    // Provide a small but non-trivial owned storage set
+    vertices_ = { {
+                    .position = { 0.0f, 0.0f, 0.0f },
+                    .normal = { 0.0f, 1.0f, 0.0f },
+                    .texcoord = { 0.0f, 0.0f },
+                    .tangent = { 1.0f, 0.0f, 0.0f },
+                    .bitangent = {},
+                    .color = {},
+                  },
+      {
+        .position = { 1.0f, 0.0f, 0.0f },
+        .normal = { 0.0f, 1.0f, 0.0f },
+        .texcoord = { 1.0f, 0.0f },
+        .tangent = { 1.0f, 0.0f, 0.0f },
+        .bitangent = {},
+        .color = {},
+      } };
+    indices_ = { 0, 1 };
+    material_ = MaterialAsset::CreateDefault();
+
+    // Valid referenced storage buffers for tests needing them
+    pak::BufferResourceDesc vertex_desc = { .data_offset = 0,
+      .size_bytes
+      = static_cast<pak::DataBlobSizeT>(vertices_.size() * sizeof(Vertex)),
+      .usage_flags
+      = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
+      .element_stride = sizeof(Vertex),
+      .element_format = 0,
+      .reserved = {} };
+    std::vector<uint8_t> vbytes(vertices_.size() * sizeof(Vertex));
+    std::memcpy(vbytes.data(), vertices_.data(), vbytes.size());
+    vertex_buffer_
+      = std::make_shared<BufferResource>(vertex_desc, std::move(vbytes));
+  }
+
+  std::vector<Vertex> vertices_;
+  std::vector<std::uint32_t> indices_;
+  std::shared_ptr<BufferResource> vertex_buffer_; // for referenced path
+  std::shared_ptr<const MaterialAsset> material_;
+};
+
 //=== Storage Type Query Tests ===--------------------------------------------//
 
 //! Tests that a new MeshBuilder starts in uninitialized storage state
@@ -396,10 +442,10 @@ NOLINT_TEST_F(MeshBuilderBasicTest, Build_WithReferencedStorage_Succeeds)
   EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
 }
 
-//=== Additional Negative/Edge Case Build Tests (Work Plan Items 1-5) ===--//
+//=== Unsuccessful Build Tests (Death) ===------------------------------------//
 
 //! (1) Ensures Build() fails when no submeshes were added.
-NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutSubMesh_Death)
+NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutSubMesh_Death)
 {
   // Arrange
   MeshBuilder builder;
@@ -411,7 +457,7 @@ NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutSubMesh_Death)
 }
 
 //! (2) Ensures Build() fails when no storage was set (uninitialized storage).
-NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutStorage_Death)
+NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutStorage_Death)
 {
   // Arrange
   MeshBuilder builder;
@@ -428,7 +474,7 @@ NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutStorage_Death)
 }
 
 //! (3) Clarifies behavior: indices-only then Build should death (no vertices).
-NOLINT_TEST_F(MeshBuilderErrorTest, IndicesOnlyThenBuild_Death)
+NOLINT_TEST_F(MeshBuilderDeathTest, IndicesOnlyThenBuild_Death)
 {
   // Arrange
   MeshBuilder builder;
@@ -445,7 +491,7 @@ NOLINT_TEST_F(MeshBuilderErrorTest, IndicesOnlyThenBuild_Death)
 }
 
 //! (4) Vertices-only Build now invalid: must supply indices for owned storage.
-NOLINT_TEST_F(MeshBuilderErrorTest, VerticesOnlyThenBuild_Death)
+NOLINT_TEST_F(MeshBuilderDeathTest, VerticesOnlyThenBuild_Death)
 {
   // Arrange
   MeshBuilder builder;
@@ -463,7 +509,7 @@ NOLINT_TEST_F(MeshBuilderErrorTest, VerticesOnlyThenBuild_Death)
 
 //! (5) Referenced storage: mismatch between declared size & element stride.
 //! Crafts an index buffer whose size is not a multiple of index element size.
-NOLINT_TEST_F(MeshBuilderErrorTest, ReferencedIndexBufferSizeMisaligned_Death)
+NOLINT_TEST_F(MeshBuilderDeathTest, ReferencedIndexBufferSizeMisaligned_Death)
 {
   // Arrange
   // Create misaligned index buffer: 3 bytes with 4-byte stride (uint32_t)
@@ -489,6 +535,19 @@ NOLINT_TEST_F(MeshBuilderErrorTest, ReferencedIndexBufferSizeMisaligned_Death)
 
   // Act & Assert: Expect death when Build validates alignment.
   EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+}
+
+//! (10) Ensures EndSubMesh() without any prior WithMeshView call throws.
+NOLINT_TEST_F(MeshBuilderDeathTest, BuilderAddsSubMeshWithNoViews_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+
+  // Act & Assert: EndSubMesh should throw logic_error before Build phase
+  NOLINT_EXPECT_THROW(
+    { builder.BeginSubMesh("invalid", material_).EndSubMesh(); },
+    std::logic_error);
 }
 
 } // namespace
