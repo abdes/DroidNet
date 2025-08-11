@@ -754,6 +754,11 @@ public:
   //! Sets the mesh vertices (replaces any existing vertices).
   auto WithVertices(std::span<const Vertex> vertices) -> MeshBuilder&
   {
+    if (submesh_in_progress_) {
+      throw std::logic_error(
+        "Cannot change storage while a SubMesh is in progress (call EndSubMesh "
+        "before modifying storage)");
+    }
     ValidateStorageType(StorageType::kOwned);
     vertices_.assign(vertices.begin(), vertices.end());
     using_owned_storage_ = true;
@@ -764,6 +769,11 @@ public:
   //! Sets the mesh indices (replaces any existing indices).
   auto WithIndices(std::span<const std::uint32_t> indices) -> MeshBuilder&
   {
+    if (submesh_in_progress_) {
+      throw std::logic_error(
+        "Cannot change storage while a SubMesh is in progress (call EndSubMesh "
+        "before modifying storage)");
+    }
     ValidateStorageType(StorageType::kOwned);
     indices_.assign(indices.begin(), indices.end());
     using_owned_storage_ = true;
@@ -776,6 +786,11 @@ public:
   auto WithBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
     std::shared_ptr<BufferResource> index_buffer) -> MeshBuilder&
   {
+    if (submesh_in_progress_) {
+      throw std::logic_error(
+        "Cannot change storage while a SubMesh is in progress (call EndSubMesh "
+        "before modifying storage)");
+    }
     ValidateStorageType(StorageType::kReferenced);
     vertex_buffer_resource_ = std::move(vertex_buffer);
     index_buffer_resource_ = std::move(index_buffer);
