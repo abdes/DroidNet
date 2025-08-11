@@ -4,17 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <unordered_set>
+
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
-#include <Oxygen/Testing/GTest.h>
-#include <unordered_set>
 
 using oxygen::data::QuantizedVertexHash;
 using oxygen::data::Vertex;
 
 namespace {
-// VertexBasicTest: epsilon-based equality, quantized hash consistency
+//! Fixture for basic vertex equality and quantized hash behavior tests.
 class VertexBasicTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
@@ -74,7 +76,7 @@ NOLINT_TEST_F(VertexBasicTest, QuantizedHash_Consistency)
                        "almost equal vertices.";
 }
 
-// VertexEdgeTest: NaN, Inf, zero vectors
+//! Fixture for edge-case vertex comparisons (NaN, Inf, zero vectors).
 class VertexEdgeTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexEdgeTest, HandlesNaN)
@@ -161,7 +163,7 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesZeroVectors)
     << "Zero vectors should compare equal (bitwise).";
 }
 
-// VertexHashTest: Vertex in hash-based containers with custom hash/equality
+//! Fixture for vertex hashing scenarios in unordered containers.
 class VertexHashTest : public testing::Test { };
 
 NOLINT_TEST_F(VertexHashTest, HashSet_AlmostEqualKey)

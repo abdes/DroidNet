@@ -19,7 +19,7 @@ using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::Vertex;
 
-// Test-only thin wrapper to access protected Mesh constructor without mocks
+//! Test-only thin wrapper to access protected Mesh constructor without mocks.
 class TestMesh : public Mesh {
 public:
   TestMesh(int device_id, const std::vector<Vertex>& vertices,
@@ -163,7 +163,8 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
   // Assert
   EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
   EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
-  EXPECT_THAT(mesh_view.Vertices(), ::testing::ElementsAreArray(mesh->Vertices()));
+  EXPECT_THAT(
+    mesh_view.Vertices(), ::testing::ElementsAreArray(mesh->Vertices()));
   EXPECT_EQ(
     mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
 }

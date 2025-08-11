@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Data/ProceduralMeshes.h>
 
 //=== Test Fixtures ===-------------------------------------------------------//
 
 namespace {
 
-// ProceduralMeshTest: valid/invalid input, mesh validity, bounding box, default
-// view, per-mesh-type
+//! Fixture covering procedural mesh factory validation and geometry sanity.
 class ProceduralMeshTest : public testing::Test { };
 
 using testing::AllOf;

@@ -18,6 +18,7 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
+//! Fixture exercising SubMesh creation & view/material invariants via builder.
 class SubMeshBuilderFixture : public ::testing::Test {
 protected:
   void SetUp() override { }
