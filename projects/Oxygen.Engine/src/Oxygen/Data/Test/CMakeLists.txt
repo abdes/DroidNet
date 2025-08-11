@@ -41,6 +41,7 @@ m_gtest_program(
     "AssetKey_test.cpp"
     "BufferResource_test.cpp"
     "Mesh_test.cpp"
+    "MeshBoundingSphere_test.cpp"
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
