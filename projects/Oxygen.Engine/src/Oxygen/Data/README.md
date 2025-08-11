@@ -92,13 +92,15 @@ asset descriptors; they are not listed in the asset directory themselves.
 
 | Invariant | Enforced Where |
 |-----------|----------------|
-| Mesh has ≥1 vertex | Mesh ctor (CHECK_F) |
+| Mesh has ≥1 vertex (owned storage) | Mesh ctor (CHECK_F) |
 | Mesh has ≥1 submesh | `MeshBuilder::Build` |
 | SubMesh has ≥1 MeshView | Builder + death tests |
 | SubMesh has exactly 1 material (non-null) | SubMesh ctor |
 | MeshView ranges in-bounds & counts > 0 | MeshView ctor |
 | Single storage mode per MeshBuilder | `ValidateStorageType` (logic_error) |
 | Index buffer element count aligns with size | Referenced storage init |
+| Referenced mesh may omit index buffer (vertex-only allowed) | Builder + tests (IndexCount==0 path) |
+| Owned-storage mesh must provide indices when vertices supplied (enforced via tests) | MeshBuilder death tests |
 | Procedural params in valid range | Each generator (returns std::nullopt) |
 
 Failing invariants: debug builds abort (tests assert). Production loaders must
