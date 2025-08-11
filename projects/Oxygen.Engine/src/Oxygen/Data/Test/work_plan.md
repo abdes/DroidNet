@@ -50,12 +50,12 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|24 | ✅ Todo | Add BufferResourceBasicTest_ClassificationVariants_Correct | IsFormatted/IsStructured/IsRaw branches untested | NewTest | P2 | | Three descriptor variants verified |
-|25 | ✅ Todo | Add BufferResourceFlagsTest_BitwiseCombination_PreservesBits | Flag operator helpers untested | NewTest | P3 | | OR/AND produce expected mask |
-|26 | ✅ Todo | Add BufferResourceFlagsTest_ToString_IncludesAllSetFlags | to_string of flags unverified | NewTest | P3 | | All tokens present |
-|27 | ✅ Todo | Add BufferResourceMoveTest_MoveConstructor_TransfersOwnership | Move semantics safety untested | NewTest | P3 | | Dest data size>0; source size==0 |
-|28 | ✅ Todo | Add BufferResourceBasicTest_DataSizeMatchesDescriptor | Data size vs descriptor mismatch unnoticed | NewTest | P2 | | size_bytes == GetDataSize() |
-|29 | ✅ Todo | Add BufferResourceBasicTest_DataOffsetPreserved | GetDataOffset passthrough untested | NewTest | P3 | | Offset equals descriptor value |
+|24 | ✅ Done | Add BufferResourceBasicTest_ClassificationVariants_Correct | IsFormatted/IsStructured/IsRaw branches untested | NewTest | P2 | | Three descriptor variants verified |
+|25 | ✅ Done | Add BufferResourceFlagsTest_BitwiseCombination_PreservesBits | Flag operator helpers untested | NewTest | P3 | | OR/AND produce expected mask |
+|26 | ✅ Done | Add BufferResourceFlagsTest_ToString_IncludesAllSetFlags | to_string of flags unverified | NewTest | P3 | | All tokens present |
+|27 | ✅ Done | Add BufferResourceMoveTest_MoveConstructor_TransfersOwnership | Move semantics safety untested | NewTest | P3 | | Dest data size>0; source size==0 |
+|28 | ✅ Done | Add BufferResourceBasicTest_DataSizeMatchesDescriptor | Data size vs descriptor mismatch unnoticed | NewTest | P2 | | size_bytes == GetDataSize() |
+|29 | ✅ Done | Add BufferResourceBasicTest_DataOffsetPreserved | GetDataOffset passthrough untested | NewTest | P3 | | Offset equals descriptor value |
 
 ## Group: MaterialAsset / ShaderReference (MaterialAsset.h, ShaderReference.h)
 
