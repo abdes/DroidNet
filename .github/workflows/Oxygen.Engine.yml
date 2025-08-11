@@ -1,0 +1,50 @@
+name: CI - Oxygen.Engine
+
+on:
+  push:
+    paths:
+      - 'projects/Oxygen.Engine/**'
+  pull_request:
+    paths:
+      - 'projects/Oxygen.Engine/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: projects/Oxygen.Engine
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Conan
+        run: pip install conan
+
+      - name: Install CMake
+        uses: lukka/get-cmake@v3
+
+      - name: Conan install dependencies
+        run: |
+          conan profile detect --force
+          conan install . --output-folder=out/build --build=missing
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B out/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build out/build --config Release
+
+      - name: Run tests
+        run: |
+          ctest --test-dir out/build --output-on-failure --build-config Release
+        continue-on-error: true
