@@ -61,6 +61,9 @@ jobs:
           if (conan remote list | Select-String 'mycenter') { conan remote remove mycenter }
           conan remote add mycenter $env:GITHUB_WORKSPACE\conan-center-index
 
+      - name: Set up MSVC
+        uses: ilammy/setup-msvc@v1
+
       - name: Show tool versions
         run: |
           python --version
@@ -71,9 +74,6 @@ jobs:
 
       - name: Set up CMake
         uses: jwlawson/actions-setup-cmake@v1
-
-      - name: Set up MSVC
-        uses: ilammy/setup-msvc@v1
 
       - name: Conan install dependencies
         run: |
