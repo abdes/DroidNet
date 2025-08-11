@@ -818,6 +818,9 @@ public:
         "Cannot begin a new SubMesh while another SubMesh is in progress (did "
         "you forget to call EndSubMesh?)");
     }
+    if (!material) {
+      throw std::logic_error("SubMesh material must not be null");
+    }
     submesh_in_progress_ = true;
     return SubMeshBuilder(*this, std::move(name), std::move(material));
   }
