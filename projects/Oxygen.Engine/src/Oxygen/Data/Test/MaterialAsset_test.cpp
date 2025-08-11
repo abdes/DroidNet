@@ -52,4 +52,22 @@ NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsDistinctInstances)
   EXPECT_EQ(material1->GetShaderStages(), material2->GetShaderStages());
 }
 
+//! Tests MaterialAsset debug material creation.
+NOLINT_TEST(MaterialAssetBasicTest, CreateDebug_ReturnsValidMaterial)
+{
+  // Act
+  auto debug_material = MaterialAsset::CreateDebug();
+
+  // Assert
+  EXPECT_THAT(debug_material, NotNull());
+  // Debug material should share same basic material type as default (unlit/basic)
+  EXPECT_EQ(debug_material->GetMaterialType(), 1u);
+  // Should target same core shader stages (vertex + fragment) for visibility
+  EXPECT_EQ(debug_material->GetShaderStages(), 0x09u);
+  // No bound textures by default
+  EXPECT_EQ(debug_material->GetTextureCount(), 0u);
+  EXPECT_THAT(debug_material->GetShaderIds(), SizeIs(2));
+  EXPECT_THAT(debug_material->GetTextureIds(), SizeIs(0));
+}
+
 } // namespace
