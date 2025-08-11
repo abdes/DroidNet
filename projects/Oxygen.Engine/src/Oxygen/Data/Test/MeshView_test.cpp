@@ -19,6 +19,8 @@ using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::Vertex;
 
+namespace { // anonymous to limit test symbols
+
 //! Test-only thin wrapper to access protected Mesh constructor without mocks.
 class TestMesh : public Mesh {
 public:
@@ -53,8 +55,6 @@ protected:
 
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
-
-namespace {
 
 using ::testing::AllOf;
 using ::testing::SizeIs;

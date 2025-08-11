@@ -18,6 +18,8 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
+namespace { // anonymous to confine fixture symbol
+
 //! Fixture exercising SubMesh creation & view/material invariants via builder.
 class SubMeshBuilderFixture : public ::testing::Test {
 protected:
@@ -33,8 +35,7 @@ protected:
 };
 
 //=== SubMesh Tests ===------------------------------------------------------//
-
-namespace {
+// (Tests continue within same anonymous namespace.)
 
 using ::testing::AllOf;
 using ::testing::HasSubstr;
@@ -243,5 +244,4 @@ NOLINT_TEST_F(SubMeshBuilderFixture, LongName)
   EXPECT_EQ(mesh->SubMeshes()[0].GetName(), long_name);
   EXPECT_EQ(mesh->SubMeshes()[0].GetName().size(), 1000);
 }
-
 } // namespace
