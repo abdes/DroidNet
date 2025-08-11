@@ -183,4 +183,39 @@ NOLINT_TEST_F(VertexHashTest, HashSet_AlmostEqualKey)
     << "Hash set should treat almost equal vertices as the same key.";
 }
 
+//! Verifies that vertices differing beyond epsilon quantize to different
+//! hashes.
+NOLINT_TEST_F(VertexHashTest, QuantizedHash_DivergentBeyondEpsilon)
+{
+  // Arrange
+  QuantizedVertexHash hasher; // epsilon = 1e-5
+  Vertex v1 {
+    .position = { 1.00000f, 2.00000f, 3.00000f },
+    .normal = { 0.0f, 1.0f, 0.0f },
+    .texcoord = { 0.5f, 0.5f },
+    .tangent = { 1.0f, 0.0f, 0.0f },
+    .bitangent = {},
+    .color = {},
+  };
+  // Choose deltas > epsilon (1e-5) to cross a quantization boundary.
+  Vertex v2 {
+    .position = { 1.0f + 2e-5f, 2.0f - 3e-5f, 3.0f + 4e-5f },
+    .normal = { 0.0f, 1.0f, 0.0f },
+    .texcoord = { 0.5f, 0.5f },
+    .tangent = { 1.0f, 0.0f, 0.0f },
+    .bitangent = {},
+    .color = {},
+  };
+
+  // Act
+  auto h1 = hasher(v1);
+  auto h2 = hasher(v2);
+
+  // Assert
+  EXPECT_NE(h1, h2)
+    << "Hashes should differ when components differ beyond epsilon.";
+  EXPECT_FALSE(v1 == v2)
+    << "Equality operator should also report inequality beyond epsilon.";
+}
+
 } // namespace
