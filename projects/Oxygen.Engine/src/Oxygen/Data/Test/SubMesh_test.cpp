@@ -7,88 +7,41 @@
 #include <memory>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 
 using oxygen::data::MaterialAsset;
-using oxygen::data::Mesh;
-using oxygen::data::MeshView;
-using oxygen::data::SubMesh;
+using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
-// Test-only wrapper to expose protected SubMesh constructor
-class TestSubMesh : public SubMesh {
-public:
-  TestSubMesh(const Mesh& mesh, std::string name,
-    std::vector<MeshView> meshviews,
-    std::shared_ptr<const MaterialAsset> material)
-    : SubMesh(mesh, std::move(name), std::move(material))
-  {
-    // Enforce design constraint that MeshBuilder would enforce
-    CHECK_F(!meshviews.empty(),
-      "SubMesh must have at least one MeshView (1:N constraint)");
-
-    // Add mesh views after construction (mimicking MeshBuilder behavior)
-    for (const auto& view : meshviews) {
-      auto desc = GetMeshViewDesc(view);
-      AddMeshViewInternal(std::move(desc));
-    }
-  }
-
-private:
-  // Helper to extract descriptor from MeshView
-  static oxygen::data::pak::MeshViewDesc GetMeshViewDesc(const MeshView& view)
-  {
-    // Create descriptor from the mesh view data
-    auto vertices = view.Vertices();
-    auto index_count = view.IndexBuffer().Count();
-    return oxygen::data::pak::MeshViewDesc {
-      .first_index = 0, // Simplified for tests
-      .index_count = static_cast<uint32_t>(index_count),
-      .first_vertex = 0, // Simplified for tests
-      .vertex_count = static_cast<uint32_t>(vertices.size()),
-    };
-  }
-};
-
-class SubMeshTestFixture : public ::testing::Test {
+class SubMeshBuilderFixture : public ::testing::Test {
 protected:
   void SetUp() override { }
   void TearDown() override { }
 
-  void SetupMesh(const std::vector<Vertex>& vertices,
-    const std::vector<std::uint32_t>& indices)
+  std::shared_ptr<const MaterialAsset> MakeMaterial() const
   {
-    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
+    return std::make_shared<const MaterialAsset>(
+      oxygen::data::pak::MaterialAssetDesc {},
+      std::vector<oxygen::data::ShaderReference> {});
   }
-
-  // Minimal test-only mesh exposing protected constructor
-  class TestMesh : public Mesh {
-  public:
-    TestMesh(int device_id, const std::vector<Vertex>& vertices,
-      const std::vector<std::uint32_t>& indices)
-      : Mesh(device_id, vertices, indices)
-    {
-    }
-  };
-
-  std::unique_ptr<TestMesh> mesh_;
 };
 
 //=== SubMesh Tests ===------------------------------------------------------//
 
 namespace {
 
-using ::testing::IsNull;
+using ::testing::AllOf;
+using ::testing::HasSubstr;
 using ::testing::NotNull;
 using ::testing::SizeIs;
 
-//! Tests SubMesh construction with valid data and accessor methods.
-NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
+//! Tests SubMesh construction with valid data and accessor methods via builder.
+NOLINT_TEST_F(SubMeshBuilderFixture, ConstructAndAccess)
 {
   // Arrange
   std::vector<Vertex> vertices = {
@@ -106,26 +59,24 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1 };
-
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 2,
-      .first_vertex = 0,
-      .vertex_count = 2,
-    });
-
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
+  auto material = MakeMaterial();
 
   // Act
-  TestSubMesh submesh(*mesh_, "test_submesh", std::move(mesh_views), material);
+  auto mesh = MeshBuilder(0, "test_mesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("test_submesh", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 2,
+                  .first_vertex = 0,
+                  .vertex_count = 2 })
+                .EndSubMesh()
+                .Build();
 
   // Assert
+  ASSERT_NE(mesh, nullptr);
+  ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
+  const auto& submesh = mesh->SubMeshes()[0];
   EXPECT_EQ(submesh.GetName(), "test_submesh");
   EXPECT_THAT(submesh.MeshViews(), SizeIs(1));
   EXPECT_THAT(submesh.Material(), NotNull());
@@ -133,8 +84,8 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
   EXPECT_EQ(submesh.MeshViews()[0].IndexBuffer().Count(), 2u);
 }
 
-//! Tests SubMesh handles multiple mesh views correctly.
-NOLINT_TEST_F(SubMeshTestFixture, MultipleMeshViews)
+//! Tests SubMesh handles multiple mesh views correctly via builder.
+NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
 {
   // Arrange
   std::vector<Vertex> vertices = {
@@ -146,177 +97,144 @@ NOLINT_TEST_F(SubMeshTestFixture, MultipleMeshViews)
     // clang-format on
   };
   std::vector<std::uint32_t> indices = { 0, 1, 2, 0, 2, 3 };
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 3,
-      .first_vertex = 0,
-      .vertex_count = 3,
-    });
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 3,
-      .index_count = 3,
-      .first_vertex = 1,
-      .vertex_count = 3,
-    });
-
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
+  auto material = MakeMaterial();
 
   // Act
-  TestSubMesh submesh(
-    *mesh_, "multi_view_submesh", std::move(mesh_views), material);
+  auto mesh = MeshBuilder(0, "mv_mesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("multi_view_submesh", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .WithMeshView({ .first_index = 3,
+                  .index_count = 3,
+                  .first_vertex = 1,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
 
   // Assert
+  ASSERT_NE(mesh, nullptr);
+  ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
+  const auto& submesh = mesh->SubMeshes()[0];
   EXPECT_EQ(submesh.GetName(), "multi_view_submesh");
   EXPECT_THAT(submesh.MeshViews(), SizeIs(2));
   EXPECT_THAT(submesh.MeshViews()[0].Vertices(), SizeIs(3));
   EXPECT_THAT(submesh.MeshViews()[1].Vertices(), SizeIs(3));
 }
 
-//! Tests SubMesh rejects empty mesh views collection (violates 1:N constraint).
-NOLINT_TEST_F(SubMeshTestFixture, EmptyMeshViews_Throws)
+//! Tests EndSubMesh throws when no mesh views were added (1:N constraint).
+NOLINT_TEST_F(SubMeshBuilderFixture, EmptyMeshViews_Throws)
 {
   // Arrange
-  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
-    .normal = { 0, 1, 0 },
-    .texcoord = { 0, 0 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = {},
-    .color = {} } };
-  std::vector<std::uint32_t> indices = { 0 };
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views; // Empty - violates design constraint
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
+  std::vector<Vertex> vertices(1);
+  std::vector<std::uint32_t> indices { 0 };
+  auto material = MakeMaterial();
+  MeshBuilder builder(0, "empty_views");
+  builder.WithVertices(vertices).WithIndices(indices);
 
   // Act & Assert
-  EXPECT_DEATH(TestSubMesh submesh(
-                 *mesh_, "empty_submesh", std::move(mesh_views), material),
-    ".*");
+  NOLINT_EXPECT_THROW(
+    { builder.BeginSubMesh("empty", material).EndSubMesh(); },
+    std::logic_error);
 }
 
-//! Tests SubMesh rejects null material pointer (violates 1:1 constraint).
-NOLINT_TEST_F(SubMeshTestFixture, NullMaterial_Throws)
+//! Tests BeginSubMesh throws when material is null.
+NOLINT_TEST_F(SubMeshBuilderFixture, NullMaterial_Throws)
 {
   // Arrange
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices { 0, 1 };
-
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 2,
-      .first_vertex = 0,
-      .vertex_count = 2,
-    });
+  MeshBuilder builder(0, "null_mat");
+  builder.WithVertices(vertices).WithIndices(indices);
 
   // Act & Assert
-  EXPECT_DEATH(TestSubMesh submesh(*mesh_, "null_material_submesh",
-                 std::move(mesh_views), nullptr),
-    ".*");
+  NOLINT_EXPECT_THROW(
+    { (void)builder.BeginSubMesh("null_material_submesh", nullptr); },
+    std::logic_error);
 }
 
-//! Tests SubMesh move semantics work correctly.
-NOLINT_TEST_F(SubMeshTestFixture, Move)
+//! Tests SubMesh move semantics indirectly (mesh remains valid after build).
+NOLINT_TEST_F(SubMeshBuilderFixture, Move)
 {
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 3,
-      .first_vertex = 0,
-      .vertex_count = 3,
-    });
-
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
-  TestSubMesh submesh1(
-    *mesh_, "movable_submesh", std::move(mesh_views), material);
+  auto material = MakeMaterial();
 
   // Act
-  TestSubMesh submesh2 = std::move(submesh1);
+  auto mesh = MeshBuilder(0, "movable")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("movable_submesh", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+  auto moved = std::move(mesh);
 
   // Assert
-  EXPECT_EQ(submesh2.GetName(), "movable_submesh");
-  EXPECT_THAT(submesh2.MeshViews(), SizeIs(1));
-  EXPECT_THAT(submesh2.Material(), NotNull());
-  EXPECT_THAT(submesh2.MeshViews()[0].Vertices(), SizeIs(3));
+  ASSERT_NE(moved, nullptr);
+  ASSERT_THAT(moved->SubMeshes(), SizeIs(1));
+  EXPECT_EQ(moved->SubMeshes()[0].GetName(), "movable_submesh");
 }
 
-//! Tests SubMesh accepts empty name string.
-NOLINT_TEST_F(SubMeshTestFixture, EmptyName)
+//! Tests SubMesh accepts empty name string via builder.
+NOLINT_TEST_F(SubMeshBuilderFixture, EmptyName)
 {
   // Arrange
   std::vector<Vertex> vertices(1);
   std::vector<std::uint32_t> indices { 0 };
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 1,
-      .first_vertex = 0,
-      .vertex_count = 1,
-    });
-
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
+  auto material = MakeMaterial();
 
   // Act
-  TestSubMesh submesh(*mesh_, "", std::move(mesh_views), material);
+  auto mesh = MeshBuilder(0, "empty_name_mesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 1,
+                  .first_vertex = 0,
+                  .vertex_count = 1 })
+                .EndSubMesh()
+                .Build();
 
   // Assert
-  EXPECT_EQ(submesh.GetName(), "");
-  EXPECT_THAT(submesh.MeshViews(), SizeIs(1));
+  ASSERT_NE(mesh, nullptr);
+  ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
+  EXPECT_EQ(mesh->SubMeshes()[0].GetName(), "");
 }
 
-//! Tests SubMesh handles very long name strings.
-NOLINT_TEST_F(SubMeshTestFixture, LongName)
+//! Tests SubMesh handles very long name strings via builder.
+NOLINT_TEST_F(SubMeshBuilderFixture, LongName)
 {
   // Arrange
-  std::string long_name(1000, 'a'); // 1000 character name
+  std::string long_name(1000, 'a');
   std::vector<Vertex> vertices(1);
   std::vector<std::uint32_t> indices { 0 };
-  SetupMesh(vertices, indices);
-
-  std::vector<MeshView> mesh_views;
-  mesh_views.emplace_back(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 1,
-      .first_vertex = 0,
-      .vertex_count = 1,
-    });
-
-  auto material = std::make_shared<const MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
-    std::vector<oxygen::data::ShaderReference> {});
+  auto material = MakeMaterial();
 
   // Act
-  TestSubMesh submesh(*mesh_, long_name, std::move(mesh_views), material);
+  auto mesh = MeshBuilder(0, "long_name_mesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh(long_name, material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 1,
+                  .first_vertex = 0,
+                  .vertex_count = 1 })
+                .EndSubMesh()
+                .Build();
 
   // Assert
-  EXPECT_EQ(submesh.GetName(), long_name);
-  EXPECT_EQ(submesh.GetName().size(), 1000);
+  ASSERT_NE(mesh, nullptr);
+  ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
+  EXPECT_EQ(mesh->SubMeshes()[0].GetName(), long_name);
+  EXPECT_EQ(mesh->SubMeshes()[0].GetName().size(), 1000);
 }
 
 } // namespace

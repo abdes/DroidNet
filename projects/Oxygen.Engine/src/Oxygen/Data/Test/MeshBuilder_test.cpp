@@ -418,6 +418,18 @@ NOLINT_TEST_F(MeshBuilderErrorTest, EndSubMeshWithoutBegin_Throws)
     { builder.EndSubMesh(std::move(orphan)); }, std::logic_error);
 }
 
+//! (33) Ensures BeginSubMesh rejects null material pointer.
+NOLINT_TEST_F(MeshBuilderErrorTest, BeginSubMeshNullMaterial_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+
+  // Act & Assert
+  NOLINT_EXPECT_THROW(
+    { (void)builder.BeginSubMesh("null_mat", nullptr); }, std::logic_error);
+}
+
 //=== Successful Build Tests ===----------------------------------------------//
 
 //! Tests that owned storage mesh can be built successfully
