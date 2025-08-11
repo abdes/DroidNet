@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #define ASIO_NO_TYPEID
+#include <asio/ip/address.hpp>
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 #include <asio/write.hpp>
@@ -55,7 +56,7 @@ NOLINT_TEST_F(AsioTest, SmokeTest)
 {
   ::Run(*io_, [&]() -> Co<> {
     asio::steady_timer t(*io_);
-    t.expires_from_now(100ms);
+    t.expires_after(100ms);
     const auto from = Clock::now();
     co_await t.async_wait(asio_awaitable);
     EXPECT_GE(Clock::now() - from, 90ms);
@@ -66,8 +67,8 @@ NOLINT_TEST_F(AsioTest, AnyOf)
 {
   ::Run(*io_, [&]() -> Co<> {
     asio::steady_timer t1(*io_), t2(*io_);
-    t1.expires_from_now(100ms);
-    t2.expires_from_now(500ms);
+    t1.expires_after(100ms);
+    t2.expires_after(500ms);
     const auto from = Clock::now();
     auto [s1, s2] = co_await AnyOf(
       t1.async_wait(asio_awaitable), t2.async_wait(asio_awaitable));
@@ -108,9 +109,8 @@ NOLINT_TEST_F(AsioTest, SocketSmoke)
       [&]() -> Co<> {
         tcp::socket sock(*io_);
         DLOG_F(WARNING, "connecting");
-        co_await sock.async_connect(
-          tcp::endpoint(asio::ip::address::from_string("127.0.0.1"), 8078),
-          asio_awaitable);
+        auto endpoint = tcp::endpoint(asio::ip::address_v4(0x7f000001), 8078);
+        co_await sock.async_connect(endpoint, asio_awaitable);
         DLOG_F(WARNING, "connected");
         char buf[12];
         const size_t n
