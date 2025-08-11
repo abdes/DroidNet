@@ -5,6 +5,7 @@ on:
     paths:
       - 'projects/Oxygen.Engine/**'
   pull_request:
+    # Run on all PRs, but only build if Oxygen.Engine is affected
     paths:
       - 'projects/Oxygen.Engine/**'
 
@@ -15,6 +16,7 @@ jobs:
     defaults:
       run:
         working-directory: projects/Oxygen.Engine
+        shell: pwsh
 
     steps:
       - name: Checkout repository
@@ -25,11 +27,46 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('projects/Oxygen.Engine/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
       - name: Install Conan
         run: pip install conan
 
-      - name: Install CMake
-        uses: lukka/get-cmake@v3
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('projects/Oxygen.Engine/conanfile.*') }}
+          restore-keys: |
+            ${{ runner.os }}-conan-
+
+      - name: Clone custom conan-center-index
+        run: |
+          git clone https://github.com/abdes/conan-center-index.git $env:USERPROFILE\conan-center-index
+
+      - name: Configure Conan remotes
+        run: |
+          if (conan remote list | Select-String 'mycenter') { conan remote remove mycenter }
+          conan remote add mycenter $env:USERPROFILE\conan-center-index
+
+      - name: Show tool versions
+        run: |
+          python --version
+          pip --version
+          conan --version
+          cmake --version
+
+      - name: Set up CMake
+        uses: jwlawson/actions-setup-cmake@v1
 
       - name: Conan install dependencies
         run: |
