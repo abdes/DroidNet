@@ -53,12 +53,13 @@ jobs:
 
       - name: Clone custom conan-center-index
         run: |
-          git clone https://github.com/abdes/conan-center-index.git $env:USERPROFILE\conan-center-index
+          git clone https://github.com/abdes/conan-center-index.git $env:GITHUB_WORKSPACE\conan-center-index
 
       - name: Configure Conan remotes
         run: |
+          if (conan remote list | Select-String 'conancenter') { conan remote remove conancenter }
           if (conan remote list | Select-String 'mycenter') { conan remote remove mycenter }
-          conan remote add mycenter $env:USERPROFILE\conan-center-index
+          conan remote add mycenter $env:GITHUB_WORKSPACE\conan-center-index
 
       - name: Show tool versions
         run: |
@@ -72,8 +73,7 @@ jobs:
 
       - name: Conan install dependencies
         run: |
-          conan profile detect --force
-          conan install . --output-folder=out/build --build=missing
+          conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
 
       - name: Configure CMake
         run: |
