@@ -27,8 +27,8 @@ Legend:
 |15 | ✅ Done | Add MeshBoundingSphereTest_ComputedSphereContainsAllVertices | Bounding sphere (if implemented) untested | NewTest | P2 | | Implemented (owned + referenced storage; all vertices within radius) |
 |16 | ✅ Done | Add ProceduralMeshBoundaryTest_SphereMinimumValidSegments | Boundary acceptance vs rejection | NewTest | P2 | | Implemented (2 or 3 invalid edges; (3,3) minimum valid) |
 |17 | ✅ Done | Add ProceduralMeshBoundaryTest_PlaneMinimumResolution | Edge of validity not tested | NewTest | P2 | | Implemented (invalid: x=0,z=0,size<=0; (2,2) valid; (1,1) observed conditional) |
-|18 | ⏳ Todo | Add MeshBuilderErrorTest_DuplicateBeginSubMeshWithoutEnd_Throws | Misuse sequence not covered | NewTest | P2 | | Call BeginSubMesh twice; expect failure |
-|19 | ⏳ Todo | Add MeshBuilderErrorTest_EndSubMeshWithoutBegin_Throws | Defensive behavior not tested | NewTest | P2 | | Direct EndSubMesh call invalid |
+|18 | ✅ Todo | Add MeshBuilderErrorTest_DuplicateBeginSubMeshWithoutEnd_Throws | Misuse sequence not covered | NewTest | P2 | | Call BeginSubMesh twice; expect failure |
+|19 | ✅ Todo | Add MeshBuilderErrorTest_EndSubMeshWithoutBegin_Throws | Defensive behavior not tested | NewTest | P2 | | Direct EndSubMesh call invalid |
 |20 | ⏳ Todo | Consolidate MeshView tests into one file | Reduce duplication (Mesh_test + MeshView_test) | Consolidation | P3 | | Move scenarios; keep focused fixtures |
 |21 | ⏳ Todo | Remove gmock from MeshView/SubMesh tests | Overkill; can use real MeshBuilder products | Refactor | P3 | | Replace mocks with real mesh creation helpers |
 |22 | ⏳ Todo | Remove TestSubMesh subclass usage | Tests internal implementation path | Refactor | P3 | | Exercise invariants via MeshBuilder API |
