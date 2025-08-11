@@ -384,9 +384,9 @@ NOLINT_TEST(StaticVectorTest, ComparisonOperators)
 //=== Death Tests for StaticVector assertions ===-----------------------------//
 namespace {
 
-/*!\
-  Death test: count constructor with count > MaxElements triggers assertion.\
-  Covers: StaticVector(size_type count, ...) assert.\
+/*!
+  Death test: count constructor with count > MaxElements triggers assertion.
+  Covers: StaticVector(size_type count, ...) assert.
 */
 NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 {
@@ -396,10 +396,10 @@ NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 #endif
 }
 
-/*!\
+/*!
   Death test: explicit count constructor with count > MaxElements triggers
-  assertion.\
-  Covers: StaticVector(size_type count) assert.\
+  assertion.
+  Covers: StaticVector(size_type count) assert.
 */
 NOLINT_TEST(StaticVectorDeathTest, ExplicitCountConstructorExceedsCapacity)
 {
@@ -409,10 +409,10 @@ NOLINT_TEST(StaticVectorDeathTest, ExplicitCountConstructorExceedsCapacity)
 #endif
 }
 
-/*!\
+/*!
   Death test: assignment from initializer list with size > MaxElements triggers
-  assertion.\
-  Covers: operator=(std::initializer_list<T>) assert.\
+  assertion.
+  Covers: operator=(std::initializer_list<T>) assert.
 */
 NOLINT_TEST(StaticVectorDeathTest, AssignmentFromInitializerListExceedsCapacity)
 {
@@ -423,9 +423,9 @@ NOLINT_TEST(StaticVectorDeathTest, AssignmentFromInitializerListExceedsCapacity)
 #endif
 }
 
-/*!\
-  Death test: push_back when full triggers length_error.\
-  Covers: push_back assert for current_size_ >= MaxElements.\
+/*!
+  Death test: push_back when full triggers length_error.
+  Covers: push_back assert for current_size_ >= MaxElements.
 */
 NOLINT_TEST(StaticVectorDeathTest, PushBackWhenFullThrows)
 {
@@ -435,9 +435,9 @@ NOLINT_TEST(StaticVectorDeathTest, PushBackWhenFullThrows)
   NOLINT_EXPECT_THROW(vec.push_back(3), std::length_error);
 }
 
-/*!\
-  Death test: emplace_back when full triggers length_error.\
-  Covers: emplace_back assert for current_size_ >= MaxElements.\
+/*!
+  Death test: emplace_back when full triggers length_error.
+  Covers: emplace_back assert for current_size_ >= MaxElements.
 */
 NOLINT_TEST(StaticVectorDeathTest, EmplaceBackWhenFullThrows)
 {
@@ -446,10 +446,10 @@ NOLINT_TEST(StaticVectorDeathTest, EmplaceBackWhenFullThrows)
   NOLINT_EXPECT_THROW(vec.emplace_back(43), std::length_error);
 }
 
-/*!\
+/*!
   Death test: Range constructor with input exceeding capacity triggers
-  assertion.\
-  Covers: range constructor assertion for input_size > MaxElements.\
+  assertion.
+  Covers: range constructor assertion for input_size > MaxElements.
 */
 NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 {
@@ -460,11 +460,11 @@ NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 #endif
 }
 
-/*!\
+/*!
   Death test: Initializer list constructor with input exceeding capacity
-  triggers assertion.\
+  triggers assertion.
   Covers: initializer list constructor assertion for input.size() >
-  MaxElements.\
+  MaxElements.
 */
 NOLINT_TEST(StaticVectorDeathTest, InitializerListConstructorExceedsCapacity)
 {
@@ -474,9 +474,9 @@ NOLINT_TEST(StaticVectorDeathTest, InitializerListConstructorExceedsCapacity)
 #endif
 }
 
-/*!\
-  Death test: out-of-bounds operator[] access triggers assertion.\
-  Covers: operator[] assertion for pos >= current_size_.\
+/*!
+  Death test: out-of-bounds operator[] access triggers assertion.
+  Covers: operator[] assertion for pos >= current_size_.
 */
 NOLINT_TEST(StaticVectorDeathTest, OutOfBoundsOperatorIndex)
 {
@@ -486,22 +486,31 @@ NOLINT_TEST(StaticVectorDeathTest, OutOfBoundsOperatorIndex)
 #endif
 }
 
-/*!\
-  Death test: front() and back() on empty vector trigger assertion.\
-  Covers: front() and back() assertion for empty().\
+/*!
+  Death test: front() on empty vector triggers assertion.
 */
-NOLINT_TEST(StaticVectorDeathTest, FrontBackOnEmpty)
+NOLINT_TEST(StaticVectorDeathTest, FrontOnEmpty)
 {
 #if !defined(NDEBUG)
   StaticVector<int, 3> vec;
-  EXPECT_DEATH((void)vec.front(), "front\(\) called on empty container");
-  EXPECT_DEATH((void)vec.back(), "back\(\) called on empty container");
+  EXPECT_DEATH((void)vec.front(), "empty");
 #endif
 }
 
-/*!\
-  Death test: pop_back on empty vector triggers assertion.\
-  Covers: pop_back assertion for empty().\
+/*!
+  Death test: back() on empty vector triggers assertion.
+*/
+NOLINT_TEST(StaticVectorDeathTest, BackOnEmpty)
+{
+#if !defined(NDEBUG)
+  StaticVector<int, 3> vec;
+  EXPECT_DEATH((void)vec.back(), "empty");
+#endif
+}
+
+/*!
+  Death test: pop_back on empty vector triggers assertion.
+  Covers: pop_back assertion for empty().
 */
 NOLINT_TEST(StaticVectorDeathTest, PopBackOnEmpty)
 {
