@@ -38,6 +38,8 @@ NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
   };
 
   // Act
+  // (Comparison occurs in assertion.)
+
   // Assert
   EXPECT_EQ(v1, v2);
 }
@@ -95,7 +97,10 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesNaN)
     .color = {},
   };
 
-  // Act & Assert
+  // Act
+  // (StrictlyEqual evaluated in assertion.)
+
+  // Assert
   EXPECT_FALSE(StrictlyEqual(v_nan, v_zero))
     << "NaN should not compare equal to zero (bitwise).";
 }
@@ -120,7 +125,10 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesInf)
     .color = {},
   };
 
-  // Act & Assert
+  // Act
+  // (StrictlyEqual evaluated in assertion.)
+
+  // Assert
   EXPECT_FALSE(StrictlyEqual(v_inf, v_zero))
     << "Inf should not compare equal to zero (bitwise).";
 }
@@ -145,7 +153,10 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesZeroVectors)
     .color = {},
   };
 
-  // Act & Assert
+  // Act
+  // (StrictlyEqual evaluated in assertion.)
+
+  // Assert
   EXPECT_TRUE(StrictlyEqual(v1, v2))
     << "Zero vectors should compare equal (bitwise).";
 }

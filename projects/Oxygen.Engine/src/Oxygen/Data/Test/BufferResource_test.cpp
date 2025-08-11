@@ -28,7 +28,10 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
     .reserved = {} };
   std::vector<uint8_t> data(3, 0xCD);
 
-  // Act & Assert
+  // Act
+  // (Construction attempt is part of the assertion expression below.)
+
+  // Assert
   EXPECT_DEATH([[maybe_unused]] auto _
     = BufferResource(std::move(bad_desc), std::move(data)),
     "not aligned to element stride");

@@ -135,7 +135,10 @@ NOLINT_TEST_F(SubMeshBuilderFixture, EmptyMeshViews_Throws)
   MeshBuilder builder(0, "empty_views");
   builder.WithVertices(vertices).WithIndices(indices);
 
-  // Act & Assert
+  // Act
+  // (EndSubMesh attempt below.)
+
+  // Assert
   NOLINT_EXPECT_THROW(
     { builder.BeginSubMesh("empty", material).EndSubMesh(); },
     std::logic_error);
@@ -150,7 +153,10 @@ NOLINT_TEST_F(SubMeshBuilderFixture, NullMaterial_Throws)
   MeshBuilder builder(0, "null_mat");
   builder.WithVertices(vertices).WithIndices(indices);
 
-  // Act & Assert
+  // Act
+  // (BeginSubMesh attempt below.)
+
+  // Assert
   NOLINT_EXPECT_THROW(
     { (void)builder.BeginSubMesh("null_material_submesh", nullptr); },
     std::logic_error);

@@ -22,6 +22,9 @@ using ::testing::SizeIs;
 //! Tests MaterialAsset default material creation.
 NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsValidMaterial)
 {
+  // Arrange
+  // (No setup needed beyond calling the factory.)
+
   // Act
   auto default_material = MaterialAsset::CreateDefault();
 
@@ -38,6 +41,9 @@ NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsValidMaterial)
 //! Tests MaterialAsset default material is reusable.
 NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsDistinctInstances)
 {
+  // Arrange
+  // (No pre-existing state required.)
+
   // Act
   auto material1 = MaterialAsset::CreateDefault();
   auto material2 = MaterialAsset::CreateDefault();
@@ -55,6 +61,9 @@ NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsDistinctInstances)
 //! Tests MaterialAsset debug material creation.
 NOLINT_TEST(MaterialAssetBasicTest, CreateDebug_ReturnsValidMaterial)
 {
+  // Arrange
+  // (No setup beyond factory invocation.)
+
   // Act
   auto debug_material = MaterialAsset::CreateDebug();
 

@@ -206,7 +206,10 @@ NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
                 .Build();
   ASSERT_NE(mesh, nullptr);
 
-  // Act & Assert
+  // Act
+  // (Construction attempts below are the act steps.)
+
+  // Assert
   EXPECT_DEATH((MeshView { *mesh,
                  oxygen::data::pak::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
@@ -241,7 +244,10 @@ NOLINT_TEST_F(MeshViewDeathTest, Empty)
   std::vector<std::uint32_t> indices;
   SetupMesh(vertices, indices);
 
-  // Act & Assert
+  // Act
+  // (Construction within EXPECT_DEATH)
+
+  // Assert
   EXPECT_DEATH(MeshView mesh_view(*mesh_,
                  oxygen::data::pak::MeshViewDesc {
                    .first_index = 0,
@@ -287,7 +293,10 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   SetupMesh(vertices, indices);
 
-  // Act & Assert
+  // Act
+  // (Construction under EXPECT_DEATH)
+
+  // Assert
   EXPECT_DEATH((MeshView { *mesh_,
                  oxygen::data::pak::MeshViewDesc {
                    .first_index = 0,
@@ -306,7 +315,10 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   SetupMesh(vertices, indices);
 
-  // Act & Assert
+  // Act
+  // (Construction under EXPECT_DEATH)
+
+  // Assert
   EXPECT_DEATH((MeshView { *mesh_,
                  oxygen::data::pak::MeshViewDesc {
                    .first_index = 0,
@@ -334,7 +346,10 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
       .vertex_count = static_cast<uint32_t>(vertices.size()),
     } }));
 
-  // Act & Assert: one past end should death
+  // Act
+  // (Construction below attempts invalid slice.)
+
+  // Assert: one past end should death
   EXPECT_DEATH(
     (MeshView { *mesh_,
       oxygen::data::pak::MeshViewDesc {

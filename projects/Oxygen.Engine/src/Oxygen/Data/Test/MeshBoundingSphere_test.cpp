@@ -64,11 +64,12 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
     .EndSubMesh();
   auto mesh = builder.Build();
 
+  // Act
   const auto sphere = mesh->BoundingSphere(); // center.xyz, radius.w
   const glm::vec3 center { sphere.x, sphere.y, sphere.z };
   const float radius = sphere.w;
 
-  // Act & Assert
+  // Assert
   for (const auto& v : vertices) {
     const float dist = glm::length(v.position - center);
     EXPECT_LE(dist, radius + 1e-4f)
@@ -166,11 +167,12 @@ NOLINT_TEST_F(
     .EndSubMesh();
   auto mesh = builder.Build();
 
+  // Act
   const auto sphere = mesh->BoundingSphere();
   const glm::vec3 center { sphere.x, sphere.y, sphere.z };
   const float radius = sphere.w;
 
-  // Act & Assert
+  // Assert
   for (const auto& v : vertices) {
     const float dist = glm::length(v.position - center);
     EXPECT_LE(dist, radius + 1e-4f)

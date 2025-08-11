@@ -27,7 +27,10 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
   // Arrange
   using namespace oxygen::data;
 
-  // Act & Assert
+  // Act
+  // (Calls inline below.)
+
+  // Assert
   EXPECT_FALSE(MakeSphereMeshAsset(2, 2).has_value());
   EXPECT_TRUE(MakeSphereMeshAsset(8, 8).has_value());
 
@@ -133,8 +136,9 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 //! >=3.
 NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
 {
-  // Arrange & Act & Assert
+  // Arrange
   using namespace oxygen::data;
+  // Act & Assert
   EXPECT_FALSE(MakeSphereMeshAsset(2, 3).has_value())
     << "Latitude=2 should be invalid (min 3)";
   EXPECT_FALSE(MakeSphereMeshAsset(3, 2).has_value())
@@ -147,8 +151,10 @@ NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
 //! Verifies documented constraints: x_segments>=1, z_segments>=1, size>0.
 NOLINT_TEST_F(ProceduralMeshTest, PlaneMinimumResolution)
 {
+  // Arrange
   using namespace oxygen::data;
   // Invalid just-below boundaries
+  // Act & Assert
   EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0f).has_value())
     << "x_segments=0 invalid";
   EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0f).has_value())

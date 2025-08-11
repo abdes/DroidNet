@@ -32,7 +32,7 @@ Legend:
 |20 | ✅ Todo | Consolidate MeshView tests into one file | Reduce duplication (Mesh_test + MeshView_test) | Consolidation | P3 | | Move scenarios; keep focused fixtures |
 |21 | ✅ Done | Remove gmock from MeshView/SubMesh tests | Overkill; replaced with real Mesh instances (no mocks) | Refactor | P3 | | Replaced MockMesh + EXPECT/ON_CALL with direct Mesh construction |
 |22 | ✅ Done | Remove TestSubMesh subclass usage | Tests internal implementation path | Refactor | P3 | | Rewritten using MeshBuilder; no subclass present |
-|23 | ⏳ Todo | Add AAA comments consistently across all tests | Style guideline compliance | Style | P3 | | Ensure // Arrange // Act // Assert present |
+|23 | ✅ Done | Add AAA comments consistently across all tests | Style guideline compliance | Style | P3 | | Added // Arrange // Act // Assert sections to all Data tests |
 |24 | ⏳ Todo | Add brief //! doc comments for all fixtures | Documentation standard | Style | P3 | | Each fixture has brief description |
 |25 | ⏳ Todo | Wrap all test symbols in anonymous namespace | Prevent ODR / symbol leakage | Style | P3 | | Ensure top-level classes/functions enclosed |
 |26 | ⏳ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
