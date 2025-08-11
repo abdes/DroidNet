@@ -40,6 +40,7 @@ m_gtest_program(
   SOURCES
     "AssetKey_test.cpp"
     "BufferResource_test.cpp"
+    "GeometryAsset_test.cpp"
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"
     "MeshBuilder_test.cpp"
