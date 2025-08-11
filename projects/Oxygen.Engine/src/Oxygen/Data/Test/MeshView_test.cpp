@@ -60,6 +60,8 @@ protected:
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
 
+using ::testing::AllOf;
+using ::testing::HasSubstr;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.
@@ -433,6 +435,216 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   for (size_t i = 0; i < u16_indices.size(); ++i) {
     EXPECT_EQ(widened[i], static_cast<uint32_t>(u16_indices[i]));
   }
+}
+
+//! (11) Referenced storage: 16-bit index buffer detection caches kUInt16.
+NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
+{
+  // Arrange
+  using oxygen::data::BufferResource;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  namespace pak = oxygen::data::pak;
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
+  std::vector<std::uint16_t> indices16 { 0, 1, 2 };
+  pak::BufferResourceDesc vdesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    .usage_flags = 0x01,
+    .element_stride = sizeof(Vertex),
+    .element_format = 0,
+    .reserved = {},
+  };
+  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
+  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
+  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  pak::BufferResourceDesc idesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(indices16.size() * sizeof(uint16_t)),
+    .usage_flags = 0x02,
+    .element_stride = 0,
+    .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
+    .reserved = {},
+  };
+  std::vector<uint8_t> ibytes(indices16.size() * sizeof(uint16_t));
+  std::memcpy(ibytes.data(), indices16.data(), ibytes.size());
+  auto ibuf = std::make_shared<BufferResource>(idesc, std::move(ibytes));
+  auto material = MaterialAsset::CreateDefault();
+  auto mesh = MeshBuilder()
+                .WithBufferResources(vbuf, ibuf)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+
+  // Act
+  auto ib_view = mesh->IndexBuffer();
+
+  // Assert
+  EXPECT_EQ(ib_view.type, oxygen::data::detail::IndexType::kUInt16);
+  EXPECT_EQ(ib_view.Count(), indices16.size());
+}
+
+//! (12) Vertex-only mesh: MeshView should expose empty index buffer view.
+NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
+{
+  // Arrange
+  using oxygen::data::BufferResource;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  namespace pak = oxygen::data::pak;
+
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
+  pak::BufferResourceDesc vdesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    .usage_flags = 0x01,
+    .element_stride = sizeof(Vertex),
+    .element_format = 0,
+    .reserved = {},
+  };
+  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
+  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
+  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto material = MaterialAsset::CreateDefault();
+  auto mesh = MeshBuilder()
+                .WithBufferResources(vbuf, nullptr)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 1, // placeholder to satisfy invariant
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+
+  // Act
+  auto ib = view.IndexBuffer();
+
+  // Assert
+  EXPECT_EQ(ib.Count(), 0u);
+  EXPECT_EQ(ib.type, oxygen::data::detail::IndexType::kNone);
+}
+
+//! (13) Vertex-only mesh: Mesh IsIndexed()==false and IndexCount()==0.
+NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
+{
+  // Arrange
+  using oxygen::data::BufferResource;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  namespace pak = oxygen::data::pak;
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {}, Vertex {} };
+  pak::BufferResourceDesc vdesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    .usage_flags = 0x01,
+    .element_stride = sizeof(Vertex),
+    .element_format = 0,
+    .reserved = {},
+  };
+  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
+  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
+  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto material = MaterialAsset::CreateDefault();
+  auto mesh = MeshBuilder()
+                .WithBufferResources(vbuf, nullptr)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 1,
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+
+  // Act & Assert
+  EXPECT_FALSE(mesh->IsIndexed());
+  EXPECT_EQ(mesh->IndexCount(), 0u);
+}
+
+//! (14) Zero-copy guarantee: MeshView vertex span shares underlying storage.
+NOLINT_TEST_F(MeshViewBasicTest, VerticesSpanSharesUnderlyingStorage)
+{
+  // Arrange
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
+  std::vector<uint32_t> indices = { 0, 1, 2 };
+  SetupMesh(vertices, indices);
+  MeshView view(*mesh_,
+    oxygen::data::pak::MeshViewDesc { .first_index = 0,
+      .index_count = 3,
+      .first_vertex = 0,
+      .vertex_count = 3 });
+
+  // Act
+  const Vertex* mesh_ptr = mesh_->Vertices().data();
+  const Vertex* view_ptr = view.Vertices().data();
+
+  // Assert
+  EXPECT_EQ(mesh_ptr, view_ptr);
+}
+
+//! (15) Referenced storage: IndexBufferView bytes size matches resource size.
+NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
+{
+  // Arrange
+  using oxygen::data::BufferResource;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  namespace pak = oxygen::data::pak;
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
+  std::vector<uint32_t> indices = { 0, 1, 2 };
+  pak::BufferResourceDesc vdesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    .usage_flags = 0x01,
+    .element_stride = sizeof(Vertex),
+    .element_format = 0,
+    .reserved = {},
+  };
+  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
+  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
+  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  pak::BufferResourceDesc idesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(indices.size() * sizeof(uint32_t)),
+    .usage_flags = 0x02,
+    .element_stride = sizeof(uint32_t),
+    .element_format = 0,
+    .reserved = {},
+  };
+  std::vector<uint8_t> ibytes(indices.size() * sizeof(uint32_t));
+  std::memcpy(ibytes.data(), indices.data(), ibytes.size());
+  auto ibuf = std::make_shared<BufferResource>(idesc, std::move(ibytes));
+  auto material = MaterialAsset::CreateDefault();
+  auto mesh = MeshBuilder()
+                .WithBufferResources(vbuf, ibuf)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = static_cast<uint32_t>(indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+
+  // Act
+  auto ib_view = mesh->IndexBuffer();
+
+  // Assert
+  EXPECT_EQ(ib_view.bytes.size(), ibuf->GetDataSize());
+  EXPECT_EQ(ib_view.Count(), indices.size());
 }
 
 //! (30) 32-bit indices: Widened() iteration yields identical sequence & count

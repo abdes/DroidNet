@@ -18,6 +18,7 @@
 
 using oxygen::data::MaterialAsset;
 using oxygen::data::Mesh;
+using oxygen::data::MeshBuilder;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
 
@@ -203,5 +204,40 @@ protected:
       .Build();
   }
 };
+
+//! (10) Verifies IsValid() reflects presence of at least one submesh.
+NOLINT_TEST(MeshBasicTest, IsValidReflectsSubMeshPresence)
+{
+  // Arrange
+  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
+                                     .normal = {},
+                                     .texcoord = {},
+                                     .tangent = {},
+                                     .bitangent = {},
+                                     .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} } };
+  std::vector<std::uint32_t> indices { 0, 1 };
+  auto material = MaterialAsset::CreateDefault();
+
+  // Act
+  auto mesh = MeshBuilder(0, "valid")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 2,
+                  .first_vertex = 0,
+                  .vertex_count = 2 })
+                .EndSubMesh()
+                .Build();
+
+  // Assert
+  EXPECT_TRUE(mesh->IsValid());
+}
 
 } // namespace

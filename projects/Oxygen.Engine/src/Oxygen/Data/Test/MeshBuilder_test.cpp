@@ -421,6 +421,102 @@ NOLINT_TEST_F(MeshBuilderErrorTest, EndSubMeshWithoutBegin_Throws)
     { builder.EndSubMesh(std::move(orphan)); }, std::logic_error);
 }
 
+//! (6 / 19) Build while a SubMesh is still active should death with message
+//! mentioning 'active SubMesh'.
+NOLINT_TEST(MeshBuilderErrorMessageTest, BuildWithActiveSubMesh_MentionsActive)
+{
+  // Arrange
+  MeshBuilder builder;
+  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
+                                     .normal = {},
+                                     .texcoord = {},
+                                     .tangent = {},
+                                     .bitangent = {},
+                                     .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} } };
+  std::vector<uint32_t> indices { 0, 1 };
+  auto material = MaterialAsset::CreateDefault();
+  builder.WithVertices(vertices).WithIndices(indices);
+  auto sm = builder.BeginSubMesh("sm", material);
+  sm.WithMeshView({ .first_index = 0,
+    .index_count = 2,
+    .first_vertex = 0,
+    .vertex_count = 2 });
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), "active SubMesh");
+}
+
+//! (16) Reusing SubMeshBuilder after EndSubMesh should throw logic_error.
+NOLINT_TEST_F(MeshBuilderErrorTest, SubMeshBuilderReuseAfterEnd_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
+                                     .normal = {},
+                                     .texcoord = {},
+                                     .tangent = {},
+                                     .bitangent = {},
+                                     .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} } };
+  std::vector<uint32_t> indices { 0, 1 };
+  auto material = MaterialAsset::CreateDefault();
+  builder.WithVertices(vertices).WithIndices(indices);
+  auto submesh_builder = builder.BeginSubMesh("sm", material);
+  submesh_builder.WithMeshView({ .first_index = 0,
+    .index_count = 2,
+    .first_vertex = 0,
+    .vertex_count = 2 });
+  builder.EndSubMesh(std::move(submesh_builder));
+
+  // Act & Assert: attempt to reuse ended builder (undefined behavior -> throw)
+  NOLINT_EXPECT_THROW(
+    { builder.EndSubMesh(std::move(submesh_builder)); }, std::logic_error);
+}
+
+//! (17) Double EndSubMesh (calling EndSubMesh twice on same active builder)
+//! should throw logic_error.
+NOLINT_TEST_F(MeshBuilderErrorTest, SubMeshBuilderDoubleEnd_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
+                                     .normal = {},
+                                     .texcoord = {},
+                                     .tangent = {},
+                                     .bitangent = {},
+                                     .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} } };
+  std::vector<uint32_t> indices { 0, 1 };
+  auto material = MaterialAsset::CreateDefault();
+  builder.WithVertices(vertices).WithIndices(indices);
+  auto submesh_builder = builder.BeginSubMesh("sm", material);
+  submesh_builder.WithMeshView({ .first_index = 0,
+    .index_count = 2,
+    .first_vertex = 0,
+    .vertex_count = 2 });
+  builder.EndSubMesh(std::move(submesh_builder));
+
+  // Act & Assert: second EndSubMesh on already-ended builder
+  NOLINT_EXPECT_THROW(
+    { builder.EndSubMesh(std::move(submesh_builder)); }, std::logic_error);
+}
+
 //! (33) Ensures BeginSubMesh rejects null material pointer.
 NOLINT_TEST_F(MeshBuilderErrorTest, BeginSubMeshNullMaterial_Throws)
 {

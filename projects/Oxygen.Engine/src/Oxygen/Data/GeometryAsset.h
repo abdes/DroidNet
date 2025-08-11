@@ -140,6 +140,18 @@ public:
   */
   auto GetName() const noexcept -> std::string_view { return name_; }
 
+  //! Returns the minimum corner of the submesh's axis-aligned bounding box.
+  [[nodiscard]] auto BoundingBoxMin() const noexcept -> const glm::vec3&
+  {
+    return bbox_min_;
+  }
+
+  //! Returns the maximum corner of the submesh's axis-aligned bounding box.
+  [[nodiscard]] auto BoundingBoxMax() const noexcept -> const glm::vec3&
+  {
+    return bbox_max_;
+  }
+
   [[nodiscard]] auto MeshViews() const noexcept -> std::span<const MeshView>
   {
     return mesh_views_;

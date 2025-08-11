@@ -20,22 +20,22 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-| 4 | ✅ Todo | Add MeshBuilderErrorTest_MixOwnedThenReferencedStorage_Throws | Mixing storage before submesh not tested | NewTest | P1 | | WithVertices then WithBufferResources throws |
-| 5 | ✅ Todo | Add MeshBuilderErrorTest_MixReferencedThenOwnedStorage_Throws | Reverse mixing path not tested | NewTest | P1 | | WithBufferResources then WithVertices/Indices throws |
-| 6 | ✅ Todo | Add MeshBuilderErrorTest_BuildWithActiveSubMesh_Throws | Build while submesh in progress not covered | NewTest | P1 | | BeginSubMesh w/o EndSubMesh then Build death |
-| 7 | ✅ Todo | Add SubMeshBasicTest_MultipleMeshViews_AggregatedCorrectly | Multi-view submesh branch untested | NewTest | P2 | | Two MeshViews merged; counts sum |
-| 8 | ✅ Todo | Add SubMeshBasicTest_DescriptorBoundsUsed | Descriptor-provided bounds code path untested | NewTest | P2 | | Provide SubMeshDesc; ensure not recomputed |
-| 9 | ✅ Todo | Add SubMeshBasicTest_ComputedBoundsMatchVertices | Computed bounds path for procedural submesh untested | NewTest | P2 | | Bounds encloses all view vertices |
-|10 | ✅ Todo | Add MeshBasicTest_IsValidReflectsSubMeshPresence | IsValid() semantics not directly asserted | NewTest | P2 | | False before submesh, true after |
-|11 | ✅ Todo | Add MeshReferencedStorageTest_16BitIndexDetection_Works | Referenced 16-bit index type detection untested | NewTest | P2 | | IndexType cached as kUInt16 |
-|12 | ✅ Todo | Add MeshViewBasicTest_VertexOnlyMesh_IndexBufferEmpty | Vertex-only mesh view index buffer semantics untested | NewTest | P2 | | IndexBuffer().Count()==0, type==kNone |
-|13 | ✅ Todo | Add MeshBasicTest_VertexOnlyMesh_IsIndexedFalse | IsIndexed() on vertex-only mesh not asserted | NewTest | P2 | | IsIndexed false; IndexCount==0 |
-|14 | ✅ Todo | Add MeshViewBasicTest_VerticesSpanSharesUnderlyingStorage | Zero-copy guarantee not asserted | NewTest | P3 | | Vertex pointer equality w/ mesh data |
-|15 | ✅ Todo | Add MeshReferencedStorageTest_IndexBufferView_NoCopySizeMatches | Referenced storage view non-copy path untested | NewTest | P3 | | bytes size == underlying buffer size |
-|16 | ✅ Todo | Add SubMeshBuilderErrorTest_ReuseAfterEnd_Throws | SubMeshBuilder reuse semantics untested | NewTest | P3 | | Second EndSubMesh or WithMeshView fails |
-|17 | ✅ Todo | Add SubMeshBuilderErrorTest_DoubleEndSubMesh_Throws | Double-end misuse untested | NewTest | P3 | | Second EndSubMesh throws logic_error |
-|18 | ✅ Todo | Add MeshBuilderErrorMessageTest_MixStorage_ErrorContainsBothTypeNames | Error message specificity not asserted | NewTest | P3 | | Message lists both storage kinds |
-|19 | ✅ Todo | Add MeshBuilderErrorMessageTest_BuildWithActiveSubMesh_MentionsActive | Error text clarity not asserted | NewTest | P3 | | Contains 'active SubMesh' fragment |
+| 4 | ✅ Done | Add MeshBuilderErrorTest_MixOwnedThenReferencedStorage_Throws | Mixing storage before submesh not tested | NewTest | P1 | | StorageValidation_ProvidesDescriptiveErrorMessage covers |
+| 5 | ✅ Done | Add MeshBuilderErrorTest_MixReferencedThenOwnedStorage_Throws | Reverse mixing path not tested | NewTest | P1 | | StorageValidation_MentionsCorrectStorageTypes_ReferencedThenOwned |
+| 6 | ✅ Done | Add MeshBuilderErrorTest_BuildWithActiveSubMesh_Throws | Build while submesh in progress not covered | NewTest | P1 | | BuildWithActiveSubMesh_MentionsActive death test |
+| 7 | ✅ Done | Add SubMeshBasicTest_MultipleMeshViews_AggregatedCorrectly | Multi-view submesh branch untested | NewTest | P2 | | MultipleMeshViews_AggregatedCorrectly implemented |
+| 8 | ✅ Done | Add SubMeshBasicTest_DescriptorBoundsUsed | Descriptor-provided bounds code path untested | NewTest | P2 | | DescriptorBoundsUsed implemented (now passing after ComputeBounds call) |
+| 9 | ✅ Done | Add SubMeshBasicTest_ComputedBoundsMatchVertices | Computed bounds path for procedural submesh untested | NewTest | P2 | | ComputedBoundsMatchVertices implemented (now passing) |
+|10 | ✅ Done | Add MeshBasicTest_IsValidReflectsSubMeshPresence | IsValid() semantics not directly asserted | NewTest | P2 | | IsValidReflectsSubMeshPresence implemented |
+|11 | ✅ Done | Add MeshReferencedStorageTest_16BitIndexDetection_Works | Referenced 16-bit index type detection untested | NewTest | P2 | | SixteenBitIndices_IndexTypeCached test |
+|12 | ✅ Done | Add MeshViewBasicTest_VertexOnlyMesh_IndexBufferEmpty | Vertex-only mesh view index buffer semantics untested | NewTest | P2 | | VertexOnlyMesh_IndexBufferEmpty implemented |
+|13 | ✅ Done | Add MeshBasicTest_VertexOnlyMesh_IsIndexedFalse | IsIndexed() on vertex-only mesh not asserted | NewTest | P2 | | VertexOnlyMesh_IsIndexedFalse implemented |
+|14 | ✅ Done | Add MeshViewBasicTest_VerticesSpanSharesUnderlyingStorage | Zero-copy guarantee not asserted | NewTest | P3 | | VerticesSpanSharesUnderlyingStorage implemented |
+|15 | ✅ Done | Add MeshReferencedStorageTest_IndexBufferView_NoCopySizeMatches | Referenced storage view non-copy path untested | NewTest | P3 | | IndexBufferView_NoCopySizeMatches implemented |
+|16 | ✅ Done | Add SubMeshBuilderErrorTest_ReuseAfterEnd_Throws | SubMeshBuilder reuse semantics untested | NewTest | P3 | | SubMeshBuilderReuseAfterEnd_Throws implemented |
+|17 | ✅ Done | Add SubMeshBuilderErrorTest_DoubleEndSubMesh_Throws | Double-end misuse untested | NewTest | P3 | | SubMeshBuilderDoubleEnd_Throws implemented |
+|18 | ✅ Done | Add MeshBuilderErrorMessageTest_MixStorage_ErrorContainsBothTypeNames | Error message specificity not asserted | NewTest | P3 | | StorageValidation_ProvidesDescriptiveErrorMessage covers |
+|19 | ✅ Done | Add MeshBuilderErrorMessageTest_BuildWithActiveSubMesh_MentionsActive | Error text clarity not asserted | NewTest | P3 | | BuildWithActiveSubMesh_MentionsActive contains phrase |
 
 ## Group: IndexBufferView utilities (detail::IndexBufferView)
 
