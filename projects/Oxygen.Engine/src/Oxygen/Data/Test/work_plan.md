@@ -8,39 +8,93 @@ Legend:
 - Type: NewTest, Refactor, Style, Consolidation
 - Status: Todo / InProgress / Done / Deferred
 
+## Group: GeometryAsset (GeometryAsset.h / related)
+
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-| 1 | ✅ Done | Add MeshBuilderErrorTest_BuildWithoutSubMesh_Throws | Invariant: mesh must have ≥1 submesh; currently untested | NewTest | P1 | | Implemented (EXPECT_DEATH, message fragment) |
-| 2 | ✅ Done | Add MeshBuilderErrorTest_BuildWithoutStorage_Throws | Building before selecting storage mode untested | NewTest | P1 | | Implemented (EXPECT_DEATH) |
-| 3 | ✅ Done | Add MeshBuilderErrorTest_WithIndicesOnlyThenBuild_Throws | Mesh cannot exist with indices but missing vertices | NewTest | P1 | | Implemented (EXPECT_DEATH) |
-| 4 | ✅ Done | Add MeshBuilderErrorTest_WithVerticesOnlyThenBuild_Throws | Vertices-only mesh invalid; enforced by death test | NewTest | P1 | | Implemented (EXPECT_DEATH) |
-| 5 | ✅ Done | Add MeshBuilderErrorTest_ReferencedBuffers_SizeMismatch_Throws | Index buffer size/stride alignment invariant not exercised | NewTest | P1 | | Implemented; added Build validation |
-| 6 | ✅ Done | Add MeshViewDeathTest_ZeroIndexCountPositiveVertexCount_Throws | Only combined zero counts tested | NewTest | P1 | | Implemented (EXPECT_DEATH, checks 'at least one index') |
-| 7 | ✅ Done | Add MeshViewDeathTest_ZeroVertexCountPositiveIndexCount_Throws | Only combined zero counts tested | NewTest | P1 | | Implemented (EXPECT_DEATH, checks 'at least one vertex') |
-| 8 | ✅ Done | Add MeshViewDeathTest_EdgeOutOfRange_LastIndexPastEnd_Throws | Off-by-one boundary slice not covered | NewTest | P1 | | Implemented (EXPECT_DEATH, 'index range exceeds') |
-| 9 | ✅ Done | Add MeshViewBasicTest_16BitIndices_WidenedIterationMatches | 16-bit widening path untested | NewTest | P1 | | Implemented (referenced storage R16UInt, Widened() matches) |
-|10 | ✅ Done | Add SubMeshDeathTest_BuilderAddsSubMeshWithNoViews_Throws | Current test uses custom subclass; builder path untested | NewTest | P1 | | Implemented (logic_error via EndSubMesh without WithMeshView) |
-|11 | ✅ Done | Add MaterialAssetBasicTest_CreateDebug_ReturnsValidMaterial | Debug factory untested | NewTest | P2 | | Implemented (stages, texture/shader counts) |
-|12 | ✅ Done | Add VertexHashTest_QuantizedHash_DivergentBeyondEpsilon | Only equality within epsilon tested | NewTest | P2 | | Implemented (different hash & inequality) |
-|13 | ✅ Done | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Implemented (32 generated keys; distinct value/string/hash; deterministic) |
-|14 | ✅ Done | Add BufferResourceDeathTest_IndexBufferSizeNotAligned_Throws | Alignment invariant missing | NewTest | P2 | | Implemented (construct misaligned index BufferResource -> EXPECT_DEATH on stride check) |
-|15 | ✅ Done | Add MeshBoundingSphereTest_ComputedSphereContainsAllVertices | Bounding sphere (if implemented) untested | NewTest | P2 | | Implemented (owned + referenced storage; all vertices within radius) |
-|16 | ✅ Done | Add ProceduralMeshBoundaryTest_SphereMinimumValidSegments | Boundary acceptance vs rejection | NewTest | P2 | | Implemented (2 or 3 invalid edges; (3,3) minimum valid) |
-|17 | ✅ Done | Add ProceduralMeshBoundaryTest_PlaneMinimumResolution | Edge of validity not tested | NewTest | P2 | | Implemented (invalid: x=0,z=0,size<=0; (2,2) valid; (1,1) observed conditional) |
-|18 | ✅ Todo | Add MeshBuilderErrorTest_DuplicateBeginSubMeshWithoutEnd_Throws | Misuse sequence not covered | NewTest | P2 | | Call BeginSubMesh twice; expect failure |
-|19 | ✅ Todo | Add MeshBuilderErrorTest_EndSubMeshWithoutBegin_Throws | Defensive behavior not tested | NewTest | P2 | | Direct EndSubMesh call invalid |
-|20 | ✅ Todo | Consolidate MeshView tests into one file | Reduce duplication (Mesh_test + MeshView_test) | Consolidation | P3 | | Move scenarios; keep focused fixtures |
-|21 | ✅ Done | Remove gmock from MeshView/SubMesh tests | Overkill; replaced with real Mesh instances (no mocks) | Refactor | P3 | | Replaced MockMesh + EXPECT/ON_CALL with direct Mesh construction |
-|22 | ✅ Done | Remove TestSubMesh subclass usage | Tests internal implementation path | Refactor | P3 | | Rewritten using MeshBuilder; no subclass present |
-|23 | ✅ Done | Add AAA comments consistently across all tests | Style guideline compliance | Style | P3 | | Added // Arrange // Act // Assert sections to all Data tests |
-|24 | ✅ Done | Add brief //! doc comments for all fixtures | Documentation standard | Style | P3 | | Added //! briefs for all test fixtures (helper + fixture classes) |
-|25 | ✅ Done | Wrap all test symbols in anonymous namespace | Prevent ODR / symbol leakage | Style | P3 | | Added anonymous namespace around fixtures/helpers in MeshView/SubMesh tests |
-|26 | ✅ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
-|27 | ⏳ Todo | Introduce constants for repeated magic numbers | Maintainability | Style | P3 | | constexpr counts (e.g., kCubeVertexCount) |
-|28 | ✅ Done | Parameterize procedural invalid inputs | Reduce duplication in ValidInvalidInput | Refactor | P3 | | Implemented arrays + loops in ProceduralMeshes_test.cpp |
-|29 | ✅ Done | Document Link_test.cpp purpose with brief comment | Clarify intent | Style | P3 | | Added detailed brief + block doc at top of Link_test.cpp |
-|30 | ✅ Done | Add test for IndexBuffer().Widened order & size for 32-bit | Ensure both paths validated | NewTest | P2 | | Added MeshViewIndexTypeTest.ThirtyTwoBitIndices_WidenedMatchesAsU32 |
-|31 | ✅ Done | Add test verifying SubMesh material non-null enforced through builder | Completes invariant via public API | NewTest | P1 | | BeginSubMesh nullptr now throws logic_error (test added) |
-|32 | ✅ Done | Add test for MeshBuilder mixing storage after starting submesh | Additional misuse path | NewTest | P2 | | Implemented (WithBufferResources after BeginSubMesh -> logic_error) |
-|33 | ✅ Done | Verify Build with referenced storage missing index buffer (if API allows separating) | Edge case not tested | NewTest | P2 | | Implemented (Build succeeds w/ vertex buffer only; IndexCount==0) |
-|34 | ✅ Done | Update README invariants section after clarifying vertex-only legality | Keep docs consistent | Documentation | P2 | | Adjust text plus tests alignment |
+| 1 | ✅ Todo | Add GeometryAssetBasicTest_LodAccessors_ReturnExpected | No tests cover GeometryAsset LOD accessors | NewTest | P2 | | Meshes(), MeshAt valid indices, LodCount() |
+| 2 | ✅ Todo | Add GeometryAssetErrorTest_MeshAt_OutOfRange_ReturnsNull | Out-of-range LOD access undefined in tests | NewTest | P2 | | MeshAt(large) returns null shared_ptr |
+| 3 | ✅ Todo | Add GeometryAssetBasicTest_BoundingBoxMatchesDescriptor | Bounding box passthrough unverified | NewTest | P2 | | Compare descriptor min/max to accessors |
+
+## Group: Mesh / MeshBuilder / SubMesh (GeometryAsset.h portions)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+| 4 | ✅ Todo | Add MeshBuilderErrorTest_MixOwnedThenReferencedStorage_Throws | Mixing storage before submesh not tested | NewTest | P1 | | WithVertices then WithBufferResources throws |
+| 5 | ✅ Todo | Add MeshBuilderErrorTest_MixReferencedThenOwnedStorage_Throws | Reverse mixing path not tested | NewTest | P1 | | WithBufferResources then WithVertices/Indices throws |
+| 6 | ✅ Todo | Add MeshBuilderErrorTest_BuildWithActiveSubMesh_Throws | Build while submesh in progress not covered | NewTest | P1 | | BeginSubMesh w/o EndSubMesh then Build death |
+| 7 | ✅ Todo | Add SubMeshBasicTest_MultipleMeshViews_AggregatedCorrectly | Multi-view submesh branch untested | NewTest | P2 | | Two MeshViews merged; counts sum |
+| 8 | ✅ Todo | Add SubMeshBasicTest_DescriptorBoundsUsed | Descriptor-provided bounds code path untested | NewTest | P2 | | Provide SubMeshDesc; ensure not recomputed |
+| 9 | ✅ Todo | Add SubMeshBasicTest_ComputedBoundsMatchVertices | Computed bounds path for procedural submesh untested | NewTest | P2 | | Bounds encloses all view vertices |
+|10 | ✅ Todo | Add MeshBasicTest_IsValidReflectsSubMeshPresence | IsValid() semantics not directly asserted | NewTest | P2 | | False before submesh, true after |
+|11 | ✅ Todo | Add MeshReferencedStorageTest_16BitIndexDetection_Works | Referenced 16-bit index type detection untested | NewTest | P2 | | IndexType cached as kUInt16 |
+|12 | ✅ Todo | Add MeshViewBasicTest_VertexOnlyMesh_IndexBufferEmpty | Vertex-only mesh view index buffer semantics untested | NewTest | P2 | | IndexBuffer().Count()==0, type==kNone |
+|13 | ✅ Todo | Add MeshBasicTest_VertexOnlyMesh_IsIndexedFalse | IsIndexed() on vertex-only mesh not asserted | NewTest | P2 | | IsIndexed false; IndexCount==0 |
+|14 | ✅ Todo | Add MeshViewBasicTest_VerticesSpanSharesUnderlyingStorage | Zero-copy guarantee not asserted | NewTest | P3 | | Vertex pointer equality w/ mesh data |
+|15 | ✅ Todo | Add MeshReferencedStorageTest_IndexBufferView_NoCopySizeMatches | Referenced storage view non-copy path untested | NewTest | P3 | | bytes size == underlying buffer size |
+|16 | ✅ Todo | Add SubMeshBuilderErrorTest_ReuseAfterEnd_Throws | SubMeshBuilder reuse semantics untested | NewTest | P3 | | Second EndSubMesh or WithMeshView fails |
+|17 | ✅ Todo | Add SubMeshBuilderErrorTest_DoubleEndSubMesh_Throws | Double-end misuse untested | NewTest | P3 | | Second EndSubMesh throws logic_error |
+|18 | ✅ Todo | Add MeshBuilderErrorMessageTest_MixStorage_ErrorContainsBothTypeNames | Error message specificity not asserted | NewTest | P3 | | Message lists both storage kinds |
+|19 | ✅ Todo | Add MeshBuilderErrorMessageTest_BuildWithActiveSubMesh_MentionsActive | Error text clarity not asserted | NewTest | P3 | | Contains 'active SubMesh' fragment |
+
+## Group: IndexBufferView utilities (detail::IndexBufferView)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|20 | ✅ Todo | Add IndexBufferViewTest_SliceElements_ValidProducesCorrectCount | SliceElements positive case untested | NewTest | P3 | | Count/bytes align with slice |
+|21 | ✅ Todo | Add IndexBufferViewTest_SliceElements_InvalidReturnsEmpty | Invalid slice path untested | NewTest | P3 | | Out-of-range yields Empty() |
+|22 | ✅ Todo | Add IndexBufferViewTest_WidenedIteration_OnSliceMatchesExpected | Widened iteration for slice not covered | NewTest | P3 | | Sequence matches manual extraction |
+|23 | ✅ Todo | Add IndexBufferViewInvariantsTest_EmptyWhenTypeNone | Empty() semantics for kNone unverified | NewTest | P3 | | type kNone => Empty()==true |
+
+## Group: BufferResource (BufferResource.h/.cpp)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|24 | ✅ Todo | Add BufferResourceBasicTest_ClassificationVariants_Correct | IsFormatted/IsStructured/IsRaw branches untested | NewTest | P2 | | Three descriptor variants verified |
+|25 | ✅ Todo | Add BufferResourceFlagsTest_BitwiseCombination_PreservesBits | Flag operator helpers untested | NewTest | P3 | | OR/AND produce expected mask |
+|26 | ✅ Todo | Add BufferResourceFlagsTest_ToString_IncludesAllSetFlags | to_string of flags unverified | NewTest | P3 | | All tokens present |
+|27 | ✅ Todo | Add BufferResourceMoveTest_MoveConstructor_TransfersOwnership | Move semantics safety untested | NewTest | P3 | | Dest data size>0; source size==0 |
+|28 | ✅ Todo | Add BufferResourceBasicTest_DataSizeMatchesDescriptor | Data size vs descriptor mismatch unnoticed | NewTest | P2 | | size_bytes == GetDataSize() |
+|29 | ✅ Todo | Add BufferResourceBasicTest_DataOffsetPreserved | GetDataOffset passthrough untested | NewTest | P3 | | Offset equals descriptor value |
+
+## Group: MaterialAsset / ShaderReference (MaterialAsset.h, ShaderReference.h)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|30 | ✅ Todo | Add MaterialAssetBasicTest_DefaultMaterialDomainAndFlags | Domain/flags not asserted | NewTest | P2 | | GetMaterialDomain(), GetFlags() expected |
+|31 | ✅ Todo | Add MaterialAssetBasicTest_DefaultTextureIndicesUnset | Default texture indices untested | NewTest | P2 | | All texture indices sentinel/zero |
+|32 | ✅ Todo | Add MaterialAssetConsistencyTest_ShaderRefsMatchStageMask | Stage mask vs shader_refs size mismatch undetected | NewTest | P2 | | popcount(mask)==shader refs count |
+|33 | ✅ Todo | Add MaterialAssetBasicTest_DefaultScalarsStable | Scalar property getters untested | NewTest | P3 | | BaseColor size=4; scalars exact |
+|34 | ✅ Todo | Add ShaderReferenceBasicTest_ConstructionAndAccessors | ShaderReference type unused by tests | NewTest | P3 | | Fields accessible, stage matches |
+
+## Group: TextureResource (TextureResource.h/.cpp)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|35 | ✅ Todo | Add TextureResourceBasicTest_AccessorsReturnDescriptorValues | TextureResource entirely untested | NewTest | P2 | | Dimensions, format, mip count |
+|36 | ✅ Todo | Add TextureResourceErrorTest_InvalidDescriptor_Throws | Invalid texture descriptor path untested | NewTest | P2 | | EXPECT_DEATH/throw on bad params |
+
+## Group: Vertex (Vertex.h hashing/equality)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|37 | ✅ Todo | Add VertexHashTest_WithinEpsilon_EqualSameHash | Boundary equality at epsilon not distinct | NewTest | P2 | | Hash/equality hold at epsilon |
+|38 | ✅ Todo | Add VertexHashTest_JustBeyondEpsilon_InequalDifferentHash | Boundary beyond epsilon divergence not isolated | NewTest | P2 | | Slight delta breaks equality/hash |
+|39 | ✅ Todo | Add VertexHashTest_FieldPerturbations_ChangeHash | Field contribution coverage partial | NewTest | P2 | | Normal/tangent/color changes affect hash |
+
+## Group: Procedural Mesh Generators (Procedural/*.cpp)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|40 | ✅ Todo | Add ProceduralMeshBasicTest_ShapesTopologyValid | Per-shape topology invariants missing | NewTest | P2 | | Each shape: verts>0, indices%3==0, in-range |
+|41 | ✅ Todo | Add ProceduralMeshQualityTest_ShapesNormalsAndUVsValid | Normal length & UV range not verified | NewTest | P3 | | normals≈1, 0<=uv<=1 |
+|42 | ✅ Todo | Add ProceduralMeshQualityTest_Torus_NoDegenerateTriangles | Degenerate triangle avoidance untested | NewTest | P3 | | No duplicate consecutive indices |
+|43 | ✅ Todo | Add ProceduralMeshOptimizationTest_ConeCapVertexReuse | Cap vertex reuse optimization untested | NewTest | P3 | | Fewer unique cap verts than faces |
+
+## Group: Converters & AssetKey (ToStringConverters.cpp / AssetKey)
+
+| ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
+|----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
+|44 | ✅ Todo | Add ToStringConvertersTest_BufferUsageFlags_AllFlagsPresent | to_string coverage for all flags missing | NewTest | P3 | | Each flag token appears once |
+|45 | ✅ Todo | Add ToStringConvertersTest_FormatEnum_AllKnownFormatsMapped | Format enum mapping completeness untested | NewTest | P3 | | All known formats produce strings |
+|46 | ✅ Todo | Add AssetKeyOrderingTest_LexicalOrderConsistentWithGuid | Ordering operator behavior untested | NewTest | P3 | | Sort order matches string order |
