@@ -22,7 +22,7 @@ Legend:
 |10 | ✅ Done | Add SubMeshDeathTest_BuilderAddsSubMeshWithNoViews_Throws | Current test uses custom subclass; builder path untested | NewTest | P1 | | Implemented (logic_error via EndSubMesh without WithMeshView) |
 |11 | ✅ Done | Add MaterialAssetBasicTest_CreateDebug_ReturnsValidMaterial | Debug factory untested | NewTest | P2 | | Implemented (stages, texture/shader counts) |
 |12 | ✅ Done | Add VertexHashTest_QuantizedHash_DivergentBeyondEpsilon | Only equality within epsilon tested | NewTest | P2 | | Implemented (different hash & inequality) |
-|13 | ⏳ Todo | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Create multiple AssetKeys; uniqueness + stable to_string + hash |
+|13 | ✅ Done | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Implemented (32 generated keys; distinct value/string/hash; deterministic) |
 |14 | ⏳ Todo | Add BufferResourceDeathTest_IndexBufferSizeNotAligned_Throws | Alignment invariant missing | NewTest | P2 | | size_bytes not multiple of stride -> death |
 |15 | ⏳ Todo | Add MeshBoundingSphereTest_ComputedSphereContainsAllVertices | Bounding sphere (if implemented) untested | NewTest | P2 | | Skip / defer if feature absent |
 |16 | ⏳ Todo | Add ProceduralMeshBoundaryTest_SphereMinimumValidSegments | Boundary acceptance vs rejection | NewTest | P2 | | Use documented minimum (e.g., 3 or 4); confirm generator code |
