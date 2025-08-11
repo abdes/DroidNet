@@ -291,7 +291,7 @@ template <> struct EventLoopTraits<asio::io_context> {
   {
     io.get_executor().on_work_started();
     io.run();
-    io.reset();
+    io.restart();
   }
 
   static void Stop(asio::io_context& io)
@@ -344,7 +344,7 @@ namespace detail {
     Timer(asio::io_context& io, std::chrono::duration<R, P> delay)
       : timer_(io)
     {
-      timer_.expires_from_now(delay);
+      timer_.expires_after(delay);
     }
 
     auto operator co_await() -> Awaiter auto
