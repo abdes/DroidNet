@@ -115,6 +115,10 @@ jobs:
           path: ~/.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('projects/Oxygen.Engine/conanfile.*') }}
 
+      - name: Install DXC compiler
+        run: ./GetDXC.ps1 packages/DXC
+        working-directory: projects/Oxygen.Engine
+
       - name: Configure CMake
         working-directory: projects/Oxygen.Engine
         env:
