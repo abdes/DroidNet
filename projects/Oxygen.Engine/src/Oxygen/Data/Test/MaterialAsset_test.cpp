@@ -60,7 +60,7 @@ NOLINT_TEST(MaterialAssetBasicTest, CreateDebug_ReturnsValidMaterial)
 
   // Assert
   EXPECT_THAT(debug_material, NotNull());
-  // Debug material should share same basic material type as default (unlit/basic)
+  // Debug material should share same basic material type as default
   EXPECT_EQ(debug_material->GetMaterialType(), 1u);
   // Should target same core shader stages (vertex + fragment) for visibility
   EXPECT_EQ(debug_material->GetShaderStages(), 0x09u);
