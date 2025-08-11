@@ -21,7 +21,7 @@ Legend:
 | 9 | ✅ Done | Add MeshViewBasicTest_16BitIndices_WidenedIterationMatches | 16-bit widening path untested | NewTest | P1 | | Implemented (referenced storage R16UInt, Widened() matches) |
 |10 | ✅ Done | Add SubMeshDeathTest_BuilderAddsSubMeshWithNoViews_Throws | Current test uses custom subclass; builder path untested | NewTest | P1 | | Implemented (logic_error via EndSubMesh without WithMeshView) |
 |11 | ✅ Done | Add MaterialAssetBasicTest_CreateDebug_ReturnsValidMaterial | Debug factory untested | NewTest | P2 | | Implemented (stages, texture/shader counts) |
-|12 | ⏳ Todo | Add VertexHashTest_QuantizedHash_DivergentBeyondEpsilon | Only equality within epsilon tested | NewTest | P2 | | Two vertices differing > epsilon produce different hash |
+|12 | ✅ Done | Add VertexHashTest_QuantizedHash_DivergentBeyondEpsilon | Only equality within epsilon tested | NewTest | P2 | | Implemented (different hash & inequality) |
 |13 | ⏳ Todo | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Create multiple AssetKeys; uniqueness + stable to_string + hash |
 |14 | ⏳ Todo | Add BufferResourceDeathTest_IndexBufferSizeNotAligned_Throws | Alignment invariant missing | NewTest | P2 | | size_bytes not multiple of stride -> death |
 |15 | ⏳ Todo | Add MeshBoundingSphereTest_ComputedSphereContainsAllVertices | Bounding sphere (if implemented) untested | NewTest | P2 | | Skip / defer if feature absent |
