@@ -12,9 +12,9 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-| 1 | ✅ Todo | Add GeometryAssetBasicTest_LodAccessors_ReturnExpected | No tests cover GeometryAsset LOD accessors | NewTest | P2 | | Meshes(), MeshAt valid indices, LodCount() |
-| 2 | ✅ Todo | Add GeometryAssetErrorTest_MeshAt_OutOfRange_ReturnsNull | Out-of-range LOD access undefined in tests | NewTest | P2 | | MeshAt(large) returns null shared_ptr |
-| 3 | ✅ Todo | Add GeometryAssetBasicTest_BoundingBoxMatchesDescriptor | Bounding box passthrough unverified | NewTest | P2 | | Compare descriptor min/max to accessors |
+| 1 | ✅ Done | Add GeometryAssetBasicTest_LodAccessors_ReturnExpected | No tests cover GeometryAsset LOD accessors | NewTest | P2 | | Meshes(), MeshAt valid indices, LodCount() |
+| 2 | ✅ Done | Add GeometryAssetErrorTest_MeshAt_OutOfRange_ReturnsNull | Out-of-range LOD access undefined in tests | NewTest | P2 | | MeshAt(large) returns null shared_ptr |
+| 3 | ✅ Done | Add GeometryAssetBasicTest_BoundingBoxMatchesDescriptor | Bounding box passthrough unverified | NewTest | P2 | | Compare descriptor min/max to accessors |
 
 ## Group: Mesh / MeshBuilder / SubMesh (GeometryAsset.h portions)
 
