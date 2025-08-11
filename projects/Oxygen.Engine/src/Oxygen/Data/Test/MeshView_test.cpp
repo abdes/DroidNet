@@ -9,15 +9,20 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
+#include <Oxygen/Data/MaterialAsset.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::Vertex;
 
-// Mock Mesh for MeshView construction
+// NOTE: Existing tests previously used a gmock-based MockMesh. Work plan items
+// will remove gmock usage; for now we retain minimal mock until helper factory
+// introduced. We categorize tests into Basic, Death, and IndexType fixtures.
+
+// Mock Mesh for MeshView construction (temporary until helper removal)
 class MockMesh : public Mesh {
 public:
   MockMesh(const std::vector<Vertex>& vertices,
@@ -35,11 +40,9 @@ public:
   std::vector<std::uint32_t> indices_;
 };
 
-class MeshViewTestFixture : public ::testing::Test {
+//! Fixture for basic MeshView construction and accessor scenarios
+class MeshViewBasicTest : public ::testing::Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
-
   void SetupMockMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
@@ -48,9 +51,25 @@ protected:
       .WillByDefault(
         ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
   }
-
   std::unique_ptr<MockMesh> mesh_;
 };
+
+//! Fixture for death/error boundary validation scenarios
+class MeshViewDeathTest : public ::testing::Test {
+protected:
+  void SetupMockMesh(const std::vector<Vertex>& vertices,
+    const std::vector<std::uint32_t>& indices)
+  {
+    mesh_ = std::make_unique<MockMesh>(vertices, indices);
+    ON_CALL(*mesh_, Vertices())
+      .WillByDefault(
+        ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
+  }
+  std::unique_ptr<MockMesh> mesh_;
+};
+
+//! Fixture for index type widening / promotion behavior
+class MeshViewIndexTypeTest : public ::testing::Test { };
 
 //=== MeshView Tests ===-----------------------------------------------------//
 
@@ -60,7 +79,7 @@ using ::testing::AllOf;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.
-NOLINT_TEST_F(MeshViewTestFixture, ConstructAndAccess)
+NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
 {
   // Arrange
   std::vector<Vertex> vertices = {
@@ -119,7 +138,7 @@ NOLINT_TEST_F(MeshViewTestFixture, ConstructAndAccess)
 }
 
 //! Tests MeshView handles empty vertex and index data (should be a death test).
-NOLINT_TEST_F(MeshViewTestFixture, Empty)
+NOLINT_TEST_F(MeshViewDeathTest, Empty)
 {
   // Arrange
   std::vector<Vertex> vertices(2);
@@ -138,7 +157,7 @@ NOLINT_TEST_F(MeshViewTestFixture, Empty)
 }
 
 //! Tests MeshView copy and move semantics work correctly.
-NOLINT_TEST_F(MeshViewTestFixture, CopyMove)
+NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
 {
   // Arrange
   std::vector<Vertex> vertices(2);
@@ -165,6 +184,152 @@ NOLINT_TEST_F(MeshViewTestFixture, CopyMove)
   EXPECT_EQ(mesh_view2.IndexBuffer().Count(), 2u);
   EXPECT_THAT(mesh_view3.Vertices(), SizeIs(2));
   EXPECT_EQ(mesh_view3.IndexBuffer().Count(), 2u);
+}
+
+//! (6) Death: zero index_count but positive vertex_count should fail
+NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
+{
+  // Arrange
+  std::vector<Vertex> vertices(3);
+  std::vector<std::uint32_t> indices { 0, 1, 2 };
+  SetupMockMesh(vertices, indices);
+  EXPECT_CALL(*mesh_, Vertices())
+    .Times(::testing::AnyNumber())
+    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+
+  // Act & Assert
+  EXPECT_DEATH((MeshView { *mesh_,
+                 oxygen::data::pak::MeshViewDesc {
+                   .first_index = 0,
+                   .index_count = 0, // invalid
+                   .first_vertex = 0,
+                   .vertex_count = 3, // valid
+                 } }),
+    "at least one index");
+}
+
+//! (7) Death: zero vertex_count but positive index_count should fail
+NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
+{
+  // Arrange
+  std::vector<Vertex> vertices(3);
+  std::vector<std::uint32_t> indices { 0, 1, 2 };
+  SetupMockMesh(vertices, indices);
+  EXPECT_CALL(*mesh_, Vertices())
+    .Times(::testing::AnyNumber())
+    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+
+  // Act & Assert
+  EXPECT_DEATH((MeshView { *mesh_,
+                 oxygen::data::pak::MeshViewDesc {
+                   .first_index = 0,
+                   .index_count = 3, // valid
+                   .first_vertex = 0,
+                   .vertex_count = 0, // invalid
+                 } }),
+    "at least one vertex");
+}
+
+//! (8) Death: last index past end (off-by-one) should fail (boundary)
+NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
+{
+  // Arrange
+  std::vector<Vertex> vertices(4);
+  std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
+  SetupMockMesh(vertices, indices);
+  EXPECT_CALL(*mesh_, Vertices())
+    .Times(::testing::AnyNumber())
+    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+
+  // Sanity: a valid slice touching the end should succeed
+  NOLINT_EXPECT_NO_THROW((MeshView { *mesh_,
+    oxygen::data::pak::MeshViewDesc {
+      .first_index = 0,
+      .index_count = static_cast<uint32_t>(indices.size()),
+      .first_vertex = 0,
+      .vertex_count = static_cast<uint32_t>(vertices.size()),
+    } }));
+
+  // Act & Assert: one past end should death
+  EXPECT_DEATH(
+    (MeshView { *mesh_,
+      oxygen::data::pak::MeshViewDesc {
+        .first_index = 1, // shift by 1
+        .index_count = static_cast<uint32_t>(indices.size()), // now overflows
+        .first_vertex = 0,
+        .vertex_count = static_cast<uint32_t>(vertices.size()),
+      } }),
+    "index range exceeds");
+}
+
+//! (9) 16-bit indices: Widened() iteration yields same sequence as source
+NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
+{
+  // Arrange
+  // Build a referenced-storage mesh manually: we only need index bytes & format
+  // Reuse MockMesh path: construct Mesh with 32-bit indices then adapt? Instead
+  // build a small mesh builder with referenced buffers (preferred path).
+  // We'll construct a standalone Mesh with 16-bit indices using BufferResource.
+  using oxygen::data::BufferResource;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  namespace pak = oxygen::data::pak;
+
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {}, Vertex {} };
+  std::vector<std::uint16_t> u16_indices { 0, 1, 2, 2, 3, 0 };
+
+  // Vertex buffer desc (structured: stride = sizeof(Vertex), format=0)
+  pak::BufferResourceDesc vertex_desc { .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    .usage_flags = 0x01, // VertexBuffer
+    .element_stride = sizeof(Vertex),
+    .element_format = 0,
+    .reserved = {} };
+  std::vector<uint8_t> vertex_bytes(vertices.size() * sizeof(Vertex));
+  std::memcpy(vertex_bytes.data(), vertices.data(), vertex_bytes.size());
+  auto vbuf
+    = std::make_shared<BufferResource>(vertex_desc, std::move(vertex_bytes));
+
+  // Index buffer desc: element_format = kR16UInt, stride inferred by format
+  pak::BufferResourceDesc index_desc { .data_offset = 0,
+    .size_bytes
+    = static_cast<pak::DataBlobSizeT>(u16_indices.size() * sizeof(uint16_t)),
+    .usage_flags = 0x02, // IndexBuffer
+    .element_stride = 0, // unused because format specifies size
+    .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
+    .reserved = {} };
+  std::vector<uint8_t> index_bytes(u16_indices.size() * sizeof(uint16_t));
+  std::memcpy(index_bytes.data(), u16_indices.data(), index_bytes.size());
+  auto ibuf
+    = std::make_shared<BufferResource>(index_desc, std::move(index_bytes));
+
+  auto material = MaterialAsset::CreateDefault();
+  MeshBuilder builder;
+  auto mesh = builder.WithBufferResources(vbuf, ibuf)
+                .BeginSubMesh("m", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = static_cast<uint32_t>(u16_indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+  ASSERT_EQ(mesh->IndexCount(), u16_indices.size());
+
+  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+
+  // Act
+  std::vector<uint32_t> widened;
+  for (auto v : view.IndexBuffer().Widened()) {
+    widened.push_back(v);
+  }
+
+  // Assert
+  ASSERT_EQ(widened.size(), u16_indices.size());
+  for (size_t i = 0; i < u16_indices.size(); ++i) {
+    EXPECT_EQ(widened[i], static_cast<uint32_t>(u16_indices[i]));
+  }
 }
 
 } // namespace
