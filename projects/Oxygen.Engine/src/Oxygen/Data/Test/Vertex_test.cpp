@@ -233,4 +233,133 @@ NOLINT_TEST_F(VertexHashTest, QuantizedHash_DivergentBeyondEpsilon)
     << "Equality operator should also report inequality beyond epsilon.";
 }
 
+//! Verifies equality & hash stability exactly at the epsilon boundary.
+NOLINT_TEST_F(VertexHashTest, WithinEpsilon_EqualSameHash)
+{
+  // Arrange (base vertex + variant differing by <= epsilon on each component)
+  using oxygen::data::kVertexEpsilon;
+  Vertex base {
+    .position = { 10.0f, -2.5f, 0.125f },
+    .normal = { 0.0f, 1.0f, 0.0f },
+    .texcoord = { 0.25f, 0.75f },
+    .tangent = { 1.0f, 0.0f, 0.0f },
+    .bitangent = { 0.0f, 0.0f, 1.0f },
+    .color = { 1.0f, 0.5f, 0.25f, 1.0f },
+  };
+  // Apply a small delta (<< epsilon) so quantization & equality both match.
+  constexpr float delta = 1e-6f; // one tenth of kVertexEpsilon
+  Vertex within {
+    .position = { 10.0f + delta, -2.5f - delta, 0.125f + delta },
+    .normal = { 0.0f, 1.0f - delta, 0.0f + delta },
+    .texcoord = { 0.25f + delta, 0.75f - delta },
+    .tangent = { 1.0f - delta, 0.0f + delta, 0.0f },
+    .bitangent = { 0.0f, 0.0f + delta, 1.0f - delta },
+    .color = { 1.0f - delta, 0.5f + delta, 0.25f - delta, 1.0f },
+  };
+  QuantizedVertexHash hasher; // epsilon = kVertexEpsilon
+
+  // Act
+  auto h_base = hasher(base);
+  auto h_within = hasher(within);
+
+  // Assert
+  EXPECT_EQ(base, within)
+    << "Vertices exactly at epsilon should compare equal.";
+  EXPECT_EQ(h_base, h_within)
+    << "Quantized hash must remain stable for components within <= epsilon.";
+}
+
+//! Verifies inequality & hash divergence for a delta just beyond epsilon.
+NOLINT_TEST_F(VertexHashTest, JustBeyondEpsilon_InequalDifferentHash)
+{
+  // Arrange
+  using oxygen::data::kVertexEpsilon;
+  const float e = kVertexEpsilon;
+  Vertex base {
+    .position = { 5.0f, 6.0f, 7.0f },
+    .normal = { 0.0f, 0.0f, 1.0f },
+    .texcoord = { 0.1f, 0.9f },
+    .tangent = { 0.0f, 1.0f, 0.0f },
+    .bitangent = { 1.0f, 0.0f, 0.0f },
+    .color = { 0.2f, 0.4f, 0.6f, 0.8f },
+  };
+  // Use 1.05 * epsilon deltas to minimally exceed tolerance.
+  const float d = e * 1.05f;
+  Vertex beyond {
+    .position = { 5.0f + d, 6.0f - d, 7.0f },
+    .normal = { 0.0f, d, 1.0f },
+    .texcoord = { 0.1f, 0.9f + d },
+    .tangent = { 0.0f, 1.0f, d },
+    .bitangent = { 1.0f - d, 0.0f, 0.0f },
+    .color = { 0.2f, 0.4f + d, 0.6f, 0.8f },
+  };
+  QuantizedVertexHash hasher;
+
+  // Act
+  auto h_base = hasher(base);
+  auto h_beyond = hasher(beyond);
+
+  // Assert
+  EXPECT_NE(base, beyond)
+    << "Vertex equality must fail when any component exceeds epsilon.";
+  EXPECT_NE(h_base, h_beyond)
+    << "Hash must diverge when a component exceeds quantization cell.";
+}
+
+//! Verifies that perturbing individual attribute groups changes the hash.
+NOLINT_TEST_F(VertexHashTest, FieldPerturbations_ChangeHash)
+{
+  // Arrange
+  using oxygen::data::kVertexEpsilon;
+  const float e = kVertexEpsilon;
+  Vertex base {
+    .position = { 1.0f, 2.0f, 3.0f },
+    .normal = { 0.0f, 1.0f, 0.0f },
+    .texcoord = { 0.5f, 0.25f },
+    .tangent = { 1.0f, 0.0f, 0.0f },
+    .bitangent = { 0.0f, 1.0f, 0.0f },
+    .color = { 0.9f, 0.8f, 0.7f, 1.0f },
+  };
+  QuantizedVertexHash hasher;
+  const auto h_base = hasher(base);
+
+  // Act & Assert (each perturbation > epsilon must change hash & equality)
+  {
+    Vertex v = base;
+    v.position.x += 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "position.x";
+  }
+  {
+    Vertex v = base;
+    v.normal.y += 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "normal.y";
+  }
+  {
+    Vertex v = base;
+    v.texcoord.x += 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "texcoord.x";
+  }
+  {
+    Vertex v = base;
+    v.tangent.z += 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "tangent.z";
+  }
+  {
+    Vertex v = base;
+    v.bitangent.x += 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "bitangent.x";
+  }
+  {
+    Vertex v = base;
+    v.color.r -= 2 * e;
+    EXPECT_NE(hasher(v), h_base);
+    EXPECT_FALSE(v == base) << "color.r";
+  }
+}
+
 } // namespace
