@@ -1,203 +1,342 @@
-# Oxygen Engine Data Module
+# Oxygen Engine Data Module – Developer Onboarding Guide
 
-## Overview
-
-The `Data` module defines and manages all immutable, shareable asset types used
-throughout the Oxygen Engine. This includes geometry, materials, textures, and
-other data-centric resources referenced by scene components, rendering systems,
-and asset pipelines.
+This guide gives you everything you need to become productive inside the
+`src/Oxygen/Data` module: architecture, core types, build & test workflow,
+extension points, and common pitfalls.
 
 ---
 
-## Design Principles
+## 1. Purpose & Scope
 
-- **Immutability:** All asset types (`Mesh`, `SubMesh`, `MeshView`,
-  `GeometryAsset`, `MaterialAsset`, `TextureResource`, etc.) are immutable after
-  creation. Any modification requires creating a new instance. This ensures
-  thread safety, predictable behavior, and efficient sharing.
-- **Reference Counting:** Assets are managed via `std::shared_ptr` for robust
-  lifetime management and deduplication.
-- **Separation of Concerns:** Asset definitions are decoupled from scene,
-  component, and runtime logic.
-- **Extensibility:** The module is designed to accommodate new asset types
-  (e.g., animation, audio) as the engine evolves.
+The Data module provides the immutable runtime representations of engine
+assets and low-level resources that originate from offline content (PAK files)
+or are generated procedurally at runtime. It covers:
 
----
+* Asset metadata base (`Asset`) + concrete assets (`GeometryAsset`, `MaterialAsset`).
+* Resource wrappers that are NOT first-class assets (`BufferResource`, `TextureResource`, `ShaderReference`).
+* Geometry composition hierarchy (`Mesh`, `SubMesh`, `MeshView`) plus the
+  `MeshBuilder` / `SubMeshBuilder` fluent construction API.
+* Procedural primitive generation utilities (`ProceduralMeshes.*` & individual
+  shape files under `Procedural/`).
+* Shared value and enum types: `Vertex`, `AssetKey`, `AssetType`, `MeshType`,
+  `MaterialDomain`, string conversion helpers.
+* PAK binary layout specification (`PakFormat.h`).
 
-## Key Asset Types
+Everything is designed to be:
 
-- **Mesh:**
-  - Stores immutable geometry data: vertex buffer (`std::vector<Vertex>`), index
-    buffer (`std::vector<uint32_t>`), submesh descriptors
-    (`std::vector<SubMesh>`), and precomputed bounding box (`glm::vec3
-    bbox_min_`, `glm::vec3 bbox_max_`).
-  - Referenced by scene components such as `MeshComponent`.
-  - Construction is all-or-nothing; partial or invalid meshes are never exposed.
-
-- **SubMesh:**
-  - Groups one or more contiguous `MeshView` instances and associates them with
-    a `MaterialAsset`.
-  - Logical partitions of a mesh for rendering, material binding, and culling.
-
-- **MeshView:**
-  - Non-owning, value-type view into a contiguous subrange of a mesh's vertex
-    and index data.
-  - Only `Mesh` can construct `MeshView` instances, ensuring safe, non-owning
-    access.
-
-- **GeometryAsset:**
-  - Owns one or more LOD meshes (`std::vector<std::shared_ptr<Mesh>>`).
-  - Provides asset-level metadata and bounding volumes.
-
-- **MaterialAsset:**
-  - Describes shader/material properties, textures, and render states.
-  - Shared by many renderable instances.
-
-- **TextureResource:**
-  - Represents immutable image data for use in materials, UI, etc.
-
-See the corresponding header files for details: `MeshType.h`, `Vertex.h`,
-`MaterialAsset.h`, `TextureResource.h`, `GeometryAsset.h`, `ProceduralMeshes.h`.
+* **Immutable after construction** – safe concurrent reads, easier reasoning.
+* **Explicit & validated early** – invariants enforced via debug checks.
+* **Shareable** – `std::shared_ptr` for lifetime across systems.
+* **Zero‑copy viewing** – `MeshView` slices without data duplication.
 
 ---
 
-## Typical Usage Pattern
+## 2. Architecture at a Glance
 
-1. **Asset Creation/Loading:**
-   - Assets are created by importers, loaders, or procedural generators.
-   - All data is provided at construction; assets are immutable after.
+Layered model:
 
-2. **Asset Management:**
-   - Assets are registered in an asset table or manager for deduplication and
-     streaming.
-   - Referenced via `std::shared_ptr` from scene components or systems.
+1. Binary Schema (PAK) – Packed POD structs (`PakFormat.h`).
+2. Thin Runtime Wrappers – Mirror descriptors while adding typed accessors.
+3. Geometry Composition – Owns / references raw buffers, exposes logical views.
+4. Builders & Procedural Generators – Safe assembly + primitive creation.
+5. Tests – Scenario-based invariants ensuring correctness & regression safety.
 
-3. **Scene Integration:**
-   - Scene nodes/components reference assets for rendering, animation, etc.
-   - Asset data is extracted and batched for efficient rendering pipelines.
+Relationships:
+`GeometryAsset` → LOD vector of `Mesh` → vector of `SubMesh` → vector of `MeshView` → spans into vertex & index buffers.
 
----
-
-## Mesh, SubMesh, MeshView: Implementation Details
-
-**Mesh** is the core immutable geometry container. It owns all vertex and index
-data, manages submeshes, and precomputes bounding volumes. Meshes are
-constructed with all data provided up front; partial or invalid meshes are never
-exposed. All access is read-only, and sharing is via `std::shared_ptr`.
-
-**SubMesh** groups one or more contiguous MeshView instances and associates them
-with a MaterialAsset. SubMeshes are logical partitions for rendering, material
-binding, and culling. Only Mesh can construct SubMesh instances, ensuring
-correct ownership and encapsulation.
-
-**MeshView** is a non-owning, value-type view into a contiguous subrange of a
-mesh's vertex and index data. MeshView does not own memory and is only
-constructible by Mesh, guaranteeing safe, in-bounds access. All validation and
-bounds checking is performed externally by the code that creates or uses
-MeshView.
-
-**GeometryAsset** owns one or more LOD meshes and provides asset-level metadata
-and bounding volumes. It is the top-level container for geometry resources
-referenced by scene components and rendering systems.
-
-**MaterialAsset** and **TextureResource** describe shader/material properties
-and immutable image data, respectively. These are shared by many renderable
-instances and referenced by submeshes and materials.
-
-Procedural mesh generation is implemented via free functions, not as methods of
-Mesh. These factories guarantee valid, manifold geometry and always return
-complete vertex/index buffers suitable for mesh construction. All procedural
-assets use designated initializers and are formatted for maintainability.
-
-All asset and view creation functions validate input and fail fast on invalid
-parameters. Mesh construction is all-or-nothing; partial or invalid assets are
-never exposed. MeshView instances are only created by Mesh, ensuring all views
-reference valid, in-bounds ranges.
-
-For asset references, always use `std::shared_ptr`; never use raw pointers or
-stack instances for shared assets. Never mutate asset data after creation; any
-change requires creating a new asset instance. Use C++20 ranges and algorithms
-for all asset and submesh access. Asset serialization, hot-reloading, and
-importers operate only on immutable asset data.
+Resources (`BufferResource`, `TextureResource`) are referenced by index from
+asset descriptors; they are not listed in the asset directory themselves.
 
 ---
 
-## Vertex: Implementation Details
+## 3. Core Types Cheat Sheet
 
-The Vertex structure defines the per-vertex attributes used for mesh geometry.
-It is standalone and reusable across engine systems (procedural generation,
-import/export, GPU upload, or physics). Vertex is not tightly coupled to Mesh
-and can be referenced wherever vertex data is needed. Attributes include
-position, normal, texcoord, tangent, bitangent, and color. The structure is
-extensible for future needs such as skin weights or bone indices. Equality and
-hashing are epsilon-based for geometric data; strict bitwise equality is
-available for serialization or deduplication.
-
----
-
-## MeshView: Implementation Details
-
-MeshView is a modern, encapsulated, memory-safe, and fully immutable value type
-that describes a non-owning, read-only view into a subset of a Mesh's index
-buffer. MeshView is intentionally decoupled from its parent mesh; it does not
-hold a pointer or reference to the parent Mesh, and all validation or bounds
-checking must be performed externally. MeshView is lightweight, copyable, and
-non-mutating, designed for clarity, safety, and efficient use in real-time
-rendering pipelines. Only Mesh can construct MeshView instances, ensuring all
-views reference valid, in-bounds ranges.
+| Type | Responsibility | Notes |
+|------|----------------|-------|
+| `Asset` | Base class for asset metadata | Provides type, name, version, hash, variant flags |
+| `AssetKey` | 128‑bit GUID | Stable identity; hash + to_string |
+| `GeometryAsset` | Group of LOD meshes + bounds | Holds `std::vector<std::shared_ptr<Mesh>>` |
+| `Mesh` | Vertex/index storage + submeshes + bounds | Storage variant: owned vs referenced |
+| `SubMesh` | Material + ≥1 `MeshView` | Enforces 1:1 material & ≥1 view |
+| `MeshView` | Non-owning slice of mesh data | Ranges validated on creation |
+| `MeshBuilder` | Fluent safe construction | Prevents mixed storage modes |
+| `MaterialAsset` | PBR parameters + texture indices + shader refs | Factories: `CreateDefault`, `CreateDebug` |
+| `ShaderReference` | Stage + unique id + source hash | Inline after material desc |
+| `BufferResource` | Raw / typed / structured buffer descriptor + bytes | Usage flags + format interpretation |
+| `TextureResource` | Texture descriptor + bytes | Width/height/depth/mips/format |
+| `Vertex` | Position/normal/UV/tangent frame/color | Epsilon equality + quantized hash |
 
 ---
 
-## Procedural Mesh Generation
+## 4. Geometry Data Flow
 
-Procedural mesh factories (cube, sphere, plane, cylinder, cone, torus, quad,
-arrow gizmo) are implemented as free functions, not as methods of Mesh. This
-ensures Mesh remains immutable and decoupled from generation logic. Each factory
-guarantees valid, manifold geometry and always returns complete vertex/index
-buffers suitable for mesh construction. All procedural mesh assets use
-designated initializers and are formatted for maintainability.
+### From PAK (standard asset load)
 
----
+1. Read directory entry (contains `AssetKey`, descriptor offsets).
+2. Read `GeometryAssetDesc`, then mesh + submesh + view descriptors.
+3. Create `BufferResource` objects for vertex & index tables.
+4. Use `MeshBuilder.WithBufferResources(...)`, add SubMeshes & MeshViews.
+5. Wrap meshes into a `GeometryAsset`.
 
-## Error Handling and Validation
+### Procedural Generation
 
-All asset and view creation functions validate input and fail fast on invalid
-parameters. Mesh construction is all-or-nothing; partial or invalid assets are
-never exposed. MeshView instances are only created by Mesh, ensuring all views
-reference valid, in-bounds ranges. All bounds checking and validation is the
-responsibility of the code that creates or uses MeshView, not the view itself.
-
----
-
-## Developer Guidance and Best Practices
-
-Always use `std::shared_ptr<Mesh>` for asset references; never use raw pointers
-or stack instances for shared assets. Never mutate asset data after creation;
-any change requires creating a new asset instance. Use C++20 ranges and
-algorithms for all asset and submesh access. Prefer procedural mesh factories
-for test assets, debugging, and editor tools. When extending asset types (e.g.,
-animation, audio), follow the same immutability, encapsulation, and shared
-ownership patterns. Asset serialization, hot-reloading, and importers should
-operate only on immutable asset data.
+1. Call e.g. `MakeCubeMeshAsset()` → `(vertices, indices)` pair OR
+  `GenerateMesh("Sphere/MySphere", param_bytes)` → ready `Mesh`.
+2. Build mesh with `MeshBuilder.WithVertices/WithIndices`.
+3. Attach default or debug material; add single full-range view.
+4. (Optional) Promote to `GeometryAsset` if you need LOD semantics.
 
 ---
 
-## Unit Testing
+## 5. Invariants & Validation (Read First)
 
-Unit tests for the Data module focus on correctness, immutability, and
-robustness of all core types and procedural mesh factories. Tests cover Vertex
-(equality, hashing, edge cases), Mesh (immutability, bounding box, shared
-ownership), MeshView (encapsulation, accessors, comparison), SubMesh (material
-association, view grouping), GeometryAsset (LOD mesh management, bounding
-volumes), and procedural mesh factories (valid/invalid input, mesh validity,
-bounding box). Tests follow scenario-based naming, AAA pattern, and use Google
-Test matchers and fixtures as described in the project’s unit test instructions.
+| Invariant | Enforced Where |
+|-----------|----------------|
+| Mesh has ≥1 vertex | Mesh ctor (CHECK_F) |
+| Mesh has ≥1 submesh | `MeshBuilder::Build` |
+| SubMesh has ≥1 MeshView | Builder + death tests |
+| SubMesh has exactly 1 material (non-null) | SubMesh ctor |
+| MeshView ranges in-bounds & counts > 0 | MeshView ctor |
+| Single storage mode per MeshBuilder | `ValidateStorageType` (logic_error) |
+| Index buffer element count aligns with size | Referenced storage init |
+| Procedural params in valid range | Each generator (returns std::nullopt) |
+
+Failing invariants: debug builds abort (tests assert). Production loaders must
+ensure descriptors are sanitized before constructing objects.
 
 ---
 
-## Engine Data Future Extensions
+## 6. Typical Code Snippets
 
-- Animation assets (skeletons, clips)
-- Audio assets
-- Asset serialization and hot-reloading
-- Asset pipeline tooling and importers
+Create procedural sphere mesh:
+
+```cpp
+auto data = oxygen::data::MakeSphereMeshAsset(16, 32);
+if (!data) return; // invalid params
+auto [verts, inds] = std::move(*data);
+auto material = oxygen::data::MaterialAsset::CreateDefault();
+auto mesh = oxygen::data::MeshBuilder(0, "SphereLOD0")
+  .WithVertices(verts)
+  .WithIndices(inds)
+  .BeginSubMesh("full", material)
+    .WithMeshView({ .first_index = 0,
+                    .index_count = (uint32_t)inds.size(),
+                    .first_vertex = 0,
+                    .vertex_count = (uint32_t)verts.size() })
+  .EndSubMesh()
+  .Build();
+```
+
+Iterate indices agnostic of underlying 16/32-bit storage:
+
+```cpp
+auto view = mesh->SubMeshes()[0].MeshViews()[0];
+for (uint32_t idx : view.IndexBuffer().Widened()) { /* ... */ }
+```
+
+---
+
+## 7. Building This Module
+
+Preferred workflow: use CMake presets (they encapsulate cache variables,
+toolchain, Conan integration, and multi-config build logic). Manual commands
+are still documented as a fallback or for CI scripting.
+
+### 7.1 Preset-Based Build (Recommended)
+
+First run Conan to materialize dependencies and generate the Conan CMake
+toolchain + included preset snippet (required for both preset and manual
+workflows):
+
+```powershell
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
+```
+
+Then configure (creates build dir, consumes Conan toolchain, sets cache vars):
+
+```powershell
+cmake --preset windows -DOXYGEN_BUILD_TESTS=ON
+```
+
+Build (Debug):
+
+```powershell
+cmake --build --preset windows-debug --target oxygen-data Oxygen.Data.Mesh.Tests Oxygen.Data.LinkTest
+```
+
+Build (Release):
+
+```powershell
+cmake --build --preset windows-release --target oxygen-data
+```
+
+Run tests with preset (Debug config implied by build preset):
+
+```powershell
+ctest --preset test-windows -R Oxygen.Data --output-on-failure
+```
+
+Notes:
+
+* `windows` configure preset inherits `conan-default` (see `tools/presets/*`).
+* Build presets choose configuration: `windows-debug` / `windows-release`.
+* You can still pass extra cache vars: `cmake --preset windows -DOXYGEN_BUILD_TESTS=OFF`.
+
+### 7.2 Manual (Fallback) Build
+
+Only use if you must override preset logic explicitly (e.g., experimental
+toolchain path). Equivalent to the preset steps above:
+
+```powershell
+conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
+cmake -S . -B out/build -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=out/build/conan_toolchain.cmake -DOXYGEN_BUILD_TESTS=ON
+cmake --build out/build --target oxygen-data Oxygen.Data.Mesh.Tests Oxygen.Data.LinkTest --config Debug
+```
+
+Target names (from CMake):
+
+* Library: `oxygen-data` (alias `oxygen::data`).
+* Link test exe: `Oxygen.Data.LinkTest`.
+* Mesh tests exe: `Oxygen.Data.Mesh.Tests` (aggregated GTest sources).
+* Historical/alt aggregated name in docs/code examples: `Mesh_tests` (older helper macro output).
+
+---
+
+## 8. Running Tests
+
+After building with `-DOXYGEN_BUILD_TESTS=ON`:
+
+```powershell
+ctest --test-dir out/build --output-on-failure -C Debug -R Oxygen.Data
+# Or run specific target executable directly
+out/build/bin/Debug/Oxygen.Data.LinkTest.exe
+out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=MeshAssetBasicTest.*
+```
+
+Filtering examples (new exe name):
+
+```powershell
+out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=ProceduralMeshTest.MeshValidity
+```
+
+---
+
+## 9. Writing New Tests
+
+Follow rules in `.github/instructions/unit_tests.instructions.md`:
+
+* Include `#include <Oxygen/Testing/GTest.h>` (wrapper) only.
+* Use scenario-based names: `MeshBuilderErrorTest_WithVerticesAfterBuffers_Throws`.
+* Use AAA structure with comments (Arrange / Act / Assert) & blank lines.
+* Place tests in `src/Oxygen/Data/Test` – add file to `Test/CMakeLists.txt` if
+  not using existing GTest macro (or extend `m_gtest_program` list).
+* For death tests use `EXPECT_DEATH` and keep regex minimal.
+* Use provided matchers (`SizeIs`, `AllOf`, etc.) and helper macros (`NOLINT_TEST`, `NOLINT_TEST_F`).
+* Validate both positive and negative paths; prefer consolidating closely
+  related error cases into one parameterized-style loop if possible.
+* When asserting on thrown logic_error, check diagnostic substring quality.
+
+Edge cases worth testing when adding features:
+
+* Empty / malformed descriptors rejected at construction.
+* Mixed storage mode misuse (already covered—mirror style if adding new mode).
+* Bounding box/sphere correctness for new vertex attribute variations.
+* Serialization / versioning changes (add regression tests once loader exists).
+
+---
+
+## 10. Extending the Module
+
+Adding a new asset type:
+
+1. Define enum entry in `AssetType` + update `to_string`.
+2. Add packed descriptor struct to `PakFormat.h` (respect size & alignment; bump
+  format version if layout changed globally).
+3. Create wrapper class deriving from `Asset` with typed accessors.
+4. Implement loader path (out of scope here) + tests (constructor correctness,
+  invalid descriptor rejection, accessor integrity).
+
+Adding a new procedural shape:
+
+1. Add `<Shape>.cpp` under `Procedural/` modeled on existing ones.
+2. Implement `Make<Shape>MeshAsset` returning `optional<pair<vector<Vertex>, vector<uint32_t>>>`.
+3. Update dispatch in `ProceduralMeshes.cpp` (`InvokeGenerator` / parsing path).
+4. Add tests: invalid params, minimal geometry counts, bounding box sanity.
+
+Adding skinned / morph mesh support (future):
+
+* Extend `MeshType` enum + `to_string`.
+* Add new union branch in mesh descriptor (Pak format) & adapt `MeshBuilder`.
+* Provide specialized validation (e.g., bone weights sum ≈ 1).
+
+Performance tweaks (safe & optional):
+
+* Reserve capacities in generators (e.g., plane, sphere) to reduce reallocs.
+* Cache default/debug materials (singleton) if profiling shows allocation hot spots.
+
+---
+
+## 11. Troubleshooting
+
+| Symptom | Likely Cause | Action |
+|---------|--------------|--------|
+| Crash inside MeshView ctor | Out-of-range descriptor values | Validate source descriptor before construction |
+| Empty index buffer unexpectedly | Index format/stride mismatch or size misaligned | Inspect `BufferResource` element_format & stride; logging will warn |
+| Logic error mixing storage | Called `WithBufferResources` after `WithVertices` (or vice versa) | Use one storage mode per builder instance |
+| Bounding sphere seems large | Sphere derived from AABB, not minimal | Implement tighter sphere if necessary |
+| Procedural generator returns nullopt | Invalid parameters (below minimums) | Re-check segment/size constraints |
+
+---
+
+## 12. Future Work (Planned Directions)
+
+* Skinned / morph target mesh descriptors.
+* Audio & animation asset wrappers.
+* Optional cached materials & procedural mesh registry introspection.
+* Tight bounding sphere computation (Ritter / Exact) if needed for culling.
+* Loader integration tests once full asset streaming system lands.
+
+---
+
+## 13. Quick Reference Commands
+
+Configure + build (preset example):
+
+```powershell
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
+cmake --preset windows -DOXYGEN_BUILD_TESTS=ON
+cmake --build --preset windows-release --target oxygen-data
+```
+
+Manual fallback (Release):
+
+```powershell
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
+cmake -S . -B out/build -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=out/build/conan_toolchain.cmake -DOXYGEN_BUILD_TESTS=ON
+cmake --build out/build --target oxygen-data --config Release
+```
+
+Test subset (preset):
+
+```powershell
+ctest --preset test-windows -R MeshAssetBasicTest --output-on-failure
+```
+
+Run single executable (Debug preset already built):
+
+```powershell
+out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=MeshBuilderBasicTest.*
+```
+
+---
+
+## 14. Guiding Principles Recap
+
+* Validate *early*, fail *loudly* in debug.
+* Keep runtime objects lean & immutable.
+* Separate raw resource ownership from logical views.
+* Prefer composition (builder + views) over inheritance for geometry.
+* Make extension points obvious (enums + descriptors + builders).
+
+Welcome aboard—start by reading `PakFormat.h`, then skim `GeometryAsset.h`
+and `MeshBuilder` usage in tests to cement the mental model.

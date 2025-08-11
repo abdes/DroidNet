@@ -49,6 +49,12 @@ for reuse, instancing, and runtime overrides.
 
 ### 🔖 Material Asset Properties
 
+This section distinguishes between what is IMPLEMENTED in the current PAK
+format (v1) and what is PLANNED / FUTURE. Earlier revisions of this document
+were aspirational and mentioned fields not yet present in
+`MaterialAssetDesc`. The snapshot below reflects the actual layout of
+`MaterialAssetDesc` (256 bytes) as of this commit.
+
 Material properties are grouped into the following categories:
 
 #### A. Identification & Metadata
@@ -59,87 +65,104 @@ Material properties are grouped into the following categories:
 
 #### B. Texture References
 
-The following table summarizes the most common material texture slots in leading
-engines, with those considered **core** for a minimal physically-based rendering
-(PBR) workflow in Oxygen Engine (Core column is now #2):
+Current implementation exposes EXACTLY five core texture indices:
 
-| Texture Name        | Core | Purpose / Usage                                                      |
-|---------------------|------|-----------------------------------------------------------------------|
-| BaseColor / Albedo  | Yes  | Main color of the surface, without lighting or shadowing              |
-| Normal Map          | Yes  | Encodes surface normals for detailed lighting and bump effects        |
-| Metallic            | Yes  | Controls metalness (0 = dielectric, 1 = metal)                        |
-| Roughness           | Yes  | Controls surface microfacet roughness (0 = smooth, 1 = rough)         |
-| Ambient Occlusion   | Yes  | Stores occlusion/shadowing from ambient light                         |
-| Emissive            | No   | Adds self-illumination (glow) to the surface                          |
-| Height / Parallax   | No   | Used for parallax mapping or displacement effects                     |
-| Opacity / Mask      | No   | Controls transparency or cutout (alpha masking)                       |
-| Detail / Overlay    | No   | Additional fine detail, often tiled at higher frequency               |
-| Subsurface / SSS    | No   | Subsurface scattering mask or color for skin, wax, etc.               |
-| Cavity / Curvature  | No   | Enhances small-scale shadowing or edge highlights                     |
-| Sheen / Clearcoat   | No   | Special effects for fabrics or layered surfaces                       |
-| Transmission        | No   | Controls light passing through (for glass, thin objects)              |
+| Texture (PAK Field)         | Implemented | Notes |
+|-----------------------------|-------------|-------|
+| base_color_texture          | Yes         | Fallback to `base_color[4]` if `kNoResourceIndex (0)` |
+| normal_texture              | Yes         | Scaled by `normal_scale` |
+| metallic_texture            | Yes         | Metalness channel (no packing with roughness) |
+| roughness_texture           | Yes         | Roughness channel (separate from metallic) |
+| ambient_occlusion_texture   | Yes         | Multiplies lighting; fallback scalar `ambient_occlusion` |
+| reserved_textures[0..7]     | Reserved    | Future extensions (emissive, opacity, etc.) |
+
+Future (not yet in descriptor – treat as roadmap, not available at runtime):
+
+| Potential Texture Slot | Rationale |
+|------------------------|-----------|
+| emissive_texture       | Glow / unlit contribution |
+| opacity_texture        | Cutout / blended alpha control |
+| height_parallax_tex    | Parallax / displacement mapping |
+| clearcoat_texture      | Layered specular (automotive paint) |
+| sheen_texture          | Cloth / fabric response |
+| transmission_texture   | Thin transparency / glass |
+| subsurface_texture     | SSS mask or color |
 
 #### C. Scalar Factors (PBR)
 
-Scalar (fallback) factors are used to modulate or replace texture values. They are part of nearly all material asset systems in modern engines, enabling both simple and complex materials, runtime overrides, and robust fallback behavior when textures are missing. The following table summarizes typical scalar factors for PBR workflows, consistent with the texture table above:
+Implemented scalars (in `MaterialAssetDesc`):
 
-| Scalar Factor        | Core | Type    | Purpose / Usage                                                      |
-|----------------------|------|---------|-----------------------------------------------------------------------|
-| base_color           | Yes  | float4  | Surface color (RGBA). Used if no base color texture is present. Alpha supports cutout/opacity. |
-| normal_scale         | Yes  | float   | Scales the effect of the normal map. 1.0 = full, 0.0 = flat.          |
-| metalness            | Yes  | float   | Metalness value. Used if no metallic texture is present.              |
-| roughness            | Yes  | float   | Roughness value. Used if no roughness texture is present.             |
-| ambient_occlusion    | Yes  | float   | AO multiplier. Used if no AO texture is present.                      |
-| emissive_factor      | No   | float3  | Emissive color multiplier. Used if no emissive texture is present.    |
-| opacity              | No   | float   | Alpha for transparency/cutout. Used if no opacity/mask texture.       |
-| height_scale         | No   | float   | Parallax/displacement amount. Used if no height/parallax texture.     |
-| subsurface           | No   | float   | Subsurface scattering strength. Used if no SSS texture is present.    |
-| clearcoat            | No   | float   | Clearcoat layer strength. Used if no clearcoat texture is present.    |
-| sheen                | No   | float   | Sheen effect strength. Used if no sheen texture is present.           |
-| transmission         | No   | float   | Transmission (thin transparency) amount. Used if no transmission texture is present. |
+| Field              | Type   | Purpose |
+|--------------------|--------|---------|
+| base_color[4]      | float4 | Fallback RGBA (alpha currently not used for blending in core code) |
+| normal_scale       | float  | Scales sampled normal map (0 = flat) |
+| metalness          | float  | Fallback if metallic_texture == 0 |
+| roughness          | float  | Fallback if roughness_texture == 0 |
+| ambient_occlusion  | float  | Fallback if ambient_occlusion_texture == 0 |
 
-✅ These factors support simple materials without textures, allow runtime overrides, and provide robust fallback for missing or incomplete texture sets.
+Planned (NOT in current binary layout): emissive_factor, opacity, height_scale,
+subsurface, clearcoat, sheen, transmission. Adding any of these requires a
+format version bump or usage of reserved bytes.
 
 #### D. Flags & Options
 
-- A 32-bit bitfield for flags that can further control the render state and shader branching for the material. Examples include:
-  - `double_sided`
-  - `alpha_test`
-  - `depth_write`
-  - `transparent`
+`flags` (uint32) is a generic bitfield. The current codebase does not define a
+public enum for individual bits yet; proposed semantics (subject to change):
+
+| Bit (Conceptual) | Meaning |
+|------------------|---------|
+| 0                | Double-sided (disable backface culling) |
+| 1                | Alpha test (cutout) |
+| 2                | Receives shadows |
+| 3                | Casts shadows |
+| 4                | Unlit (skip PBR lighting) |
+| 5                | Wireframe (debug) |
+| 6..31            | Reserved / engine-specific |
+
+Until codified in a shared header, treat these as advisory only.
 
 ---
 
 ### 🧩 Material Asset Structure
 
-A typical material asset includes:
+Current PAK v1 layout (summarized):
 
-- **Shader References**: Vertex, pixel, and optionally hull/domain shaders.
-- **Texture References**: As bindless indices into a global descriptor heap.
-- **Scalar/Vector Parameters**: PBR factors and color/emissive overrides.
-- **Render States**: Flags for transparency, culling, depth behavior, etc.
-- **Metadata**: Name, domain, version.
+| Offset | Size | Field | Notes |
+|--------|------|-------|-------|
+| 0x00   | 96   | header | `AssetHeader` (name, type, version) |
+| 0x60   | 1    | material_domain | Cast to `MaterialDomain` |
+| 0x61   | 4    | flags | Bitfield (see advisory table) |
+| 0x65   | 4    | shader_stages | Bitfield population count → number of `ShaderReferenceDesc` following |
+| 0x69   | 16   | base_color | float[4] RGBA |
+| 0x79   | 4    | normal_scale | float |
+| 0x7D   | 4    | metalness | float |
+| 0x81   | 4    | roughness | float |
+| 0x85   | 4    | ambient_occlusion | float |
+| 0x89   | 4    | base_color_texture | Resource index (0 = none) |
+| 0x8D   | 4    | normal_texture | Resource index |
+| 0x91   | 4    | metallic_texture | Resource index |
+| 0x95   | 4    | roughness_texture | Resource index |
+| 0x99   | 4    | ambient_occlusion_texture | Resource index |
+| 0x9D   | 32   | reserved_textures[8] | Future texture indices |
+| 0xBD   | 68   | reserved | Future scalar/flags expansion |
+| 0x100  | ...  | ShaderReferenceDesc[] | One per set bit in `shader_stages` |
+
+`static_assert(sizeof(MaterialAssetDesc)==256)` ensures binary stability.
 
 ---
 
 ### 🧬 Instancing and Parameter Overrides
 
-Material instancing allows lightweight variation without duplicating the base
-asset.
+Status: NOT YET IMPLEMENTED in code (conceptual design only). Current runtime
+representation (`MaterialAsset`) is immutable and does not expose an override
+API. Planned approach:
 
-- **Swapping**: Replace one material with another at runtime.
-- **Instancing**: Override specific parameters (e.g., color tint) per instance.
+1. Maintain a GPU-visible structured buffer of per-instance override records.
+2. Each record references a base material index + packed override mask.
+3. Shader blends fallback scalars with override values at draw time.
 
-> Example:
-> A tree model uses a shared leaf material. To add natural variation, each tree
-> instance can override the leaf color using a per-instance parameter table. The
-> renderer applies these overrides when building low-level render items, so each
-> tree appears unique without duplicating the material asset or storing
-> overrides in the asset file.
-
-- Per-instance overrides are runtime-only and stored in a parameter override
-  table or GPU buffer.
-- The base material remains immutable and shared across instances.
+Until implemented, variation should be achieved by distinct material assets or
+via vertex/instance data (e.g., color tints).
 
 ### Error Handling and Fallbacks
 
@@ -207,51 +230,29 @@ efficiency, and runtime flexibility.
 
 ---
 
-### 🎨 Material System
+### 🎨 Material System (Runtime Access Pattern)
 
-- The `Material` struct is GPU-friendly and compact:
+Rather than a bespoke CPU `Material` struct, the engine currently exposes an
+immutable `MaterialAsset` wrapper over the binary descriptor. Example usage:
 
-  ```cpp
-  enum class MaterialDomain : uint8_t
-  {
-      Opaque,         // Standard opaque material
-      AlphaBlended,   // Transparent material (add more as needed)
-  };
+```cpp
+using oxygen::data::MaterialAsset;
 
-  struct Material
-  {
-    std::string name;                        // For debugging and asset tracking
-    MaterialDomain domain = Opaque;          // Controls blending, depth, etc.
+auto mat = MaterialAsset::CreateDefault();
 
-    // Texture indices into the global bindless descriptor heap
-    uint32_t baseColorTextureIndex = 0;
-    uint32_t normalTextureIndex = 0;
-    uint32_t metallicRoughnessTextureIndex = 0;
-    uint32_t emissiveTextureIndex = 0;
+auto domain = mat->GetMaterialDomain();
+auto baseColor = mat->GetBaseColor(); // span<float,4>
+auto baseColorTex = mat->GetBaseColorTexture();
+if (baseColorTex == 0) {
+  // Use fallback scalar base_color[]
+}
+auto roughnessTex = mat->GetRoughnessTexture();
+float roughness = mat->GetRoughness(); // fallback if texture missing
+```
 
-    // Scalar fallback factors (used if textures are missing)
-    float3 baseColor = float3(1.0f);
-    float roughness = 1.0f;
-    float metalness = 0.0f;
-    float3 emissiveFactor = float3(0.0f);
-    float opacity = 1.0f;
-
-    uint32_t flags = 0; // Bitfield for double-sided, alpha test, etc.
-  };
-
-  // No CPU-side pointers or handles to textures—only indices for GPU access.
-  // The asset system manages texture lifetimes and deduplication.
-  // The renderer and shaders use only these indices to fetch resources from the global heap.
-  ```
-
-- When a material is created or loaded:
-  - The asset system resolves texture references to logical IDs.
-  - The renderer resolves these IDs to descriptor heap indices on demand.
-  - The material struct is populated with indices and scalar parameters.
-
-- At render time:
-  - The material struct is uploaded to a GPU-visible buffer (e.g., structured buffer or bindless array).
-  - Shaders use the indices to fetch textures from the global heap.
+Shader-side, a tightly packed GPU struct will mirror only the fields actually
+needed; that packing step (and potential compression) is a renderer concern and
+not part of the `MaterialAsset` API.
 
 ---
 
@@ -284,6 +285,32 @@ efficiency, and runtime flexibility.
 
 ### 🛠 Implementation Notes
 
-- Descriptor heap size should be large enough to accommodate all scene resources (e.g., 64K entries).
-- Consider double-buffering or ring-buffering the heap if dynamic updates are needed.
-- Material structs can be stored in a GPU-visible buffer and indexed per draw or per instance.
+- Only five texture indices are consumed today; plan headroom before choosing a
+  packing / compression strategy for future additions.
+- `reserved_textures` and `reserved` bytes in the descriptor allow additive
+  evolution without immediate format break; larger semantic changes should
+  still bump a version constant (not yet present—recommend adding when first
+  extension lands).
+- Default & debug materials are factory-created helpers (`CreateDefault`,
+  `CreateDebug`) returning shared immutable assets.
+- Define a canonical bit layout for `flags` before shipping public builds to
+  avoid content divergence.
+- Consider a small indirection table for GPU-packed materials to allow hot
+  re-packing without touching all instance records.
+
+---
+
+## 📌 Extension Guide (Adding Emissive Support Example)
+
+1. Repurpose `reserved_textures[0]` as `emissive_texture` (retain 0 as none).
+2. Allocate 12 bytes inside `reserved` for `float emissive_color[3]` + padding.
+3. Add getters to `MaterialAsset` (e.g., `GetEmissiveTexture()` /
+   `GetEmissiveColor()`).
+4. Update PAK writer to emit new fields; increment internal material format
+   minor revision (introduce a version in descriptor if absent).
+5. Update shaders to sample emissive when texture or non-zero color present.
+6. Add unit tests: default emissive zero, fallback path, texture index
+   propagation.
+
+Repeat analogous steps for opacity / transmission, ensuring careful reservation
+consumption order documented in the descriptor comment block.
