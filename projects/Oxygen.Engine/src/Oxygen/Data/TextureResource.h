@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -61,6 +63,7 @@ public:
     : desc_(std::move(desc))
     , data_(std::move(data))
   {
+    Validate();
   }
 
   ~TextureResource() override = default;
@@ -123,6 +126,97 @@ public:
 private:
   pak::TextureResourceDesc desc_ {};
   std::vector<uint8_t> data_;
+
+  void Validate()
+  {
+    // Alignment invariant (spec states 256 for textures)
+    if (desc_.alignment != 256) {
+      throw std::invalid_argument("TextureResource: alignment must be 256");
+    }
+
+    // Basic dimension checks
+    if (desc_.width == 0) {
+      throw std::invalid_argument("TextureResource: width must be > 0");
+    }
+    if (desc_.mip_levels == 0) {
+      throw std::invalid_argument("TextureResource: mip_levels must be > 0");
+    }
+
+    // Height/depth rules per texture type (only enforce obvious invariants)
+    switch (static_cast<TextureType>(desc_.texture_type)) {
+    case TextureType::kTexture1D:
+    case TextureType::kTexture1DArray:
+      if (desc_.height != 1) {
+        throw std::invalid_argument(
+          "TextureResource: 1D textures must have height == 1");
+      }
+      if (desc_.depth != 1) {
+        throw std::invalid_argument(
+          "TextureResource: 1D textures must have depth == 1");
+      }
+      break;
+    case TextureType::kTexture2D:
+    case TextureType::kTexture2DArray:
+    case TextureType::kTexture2DMultiSample:
+    case TextureType::kTexture2DMultiSampleArray:
+    case TextureType::kTextureCube:
+    case TextureType::kTextureCubeArray:
+      if (desc_.height == 0) {
+        throw std::invalid_argument(
+          "TextureResource: 2D-like textures must have height > 0");
+      }
+      if (desc_.depth != 1) {
+        throw std::invalid_argument(
+          "TextureResource: 2D-like textures must have depth == 1");
+      }
+      break;
+    case TextureType::kTexture3D:
+      if (desc_.height == 0) {
+        throw std::invalid_argument(
+          "TextureResource: 3D textures must have height > 0");
+      }
+      if (desc_.depth == 0) {
+        throw std::invalid_argument(
+          "TextureResource: 3D textures must have depth > 0");
+      }
+      break;
+    default:
+      // Unknown enum is allowed (will map to kUnknown); enforce minimal height
+      if (desc_.height == 0) {
+        throw std::invalid_argument(
+          "TextureResource: height must be > 0 for unknown texture type");
+      }
+      if (desc_.depth == 0) {
+        throw std::invalid_argument(
+          "TextureResource: depth must be > 0 for unknown texture type");
+      }
+      break;
+    }
+
+    // Array layers must be >= 1
+    if (desc_.array_layers == 0) {
+      throw std::invalid_argument("TextureResource: array_layers must be >= 1");
+    }
+
+    // Mip level upper bound: floor(log2(max_dim)) + 1
+    const auto max_dim = std::max({ desc_.width, desc_.height,
+      static_cast<uint32_t>(desc_.depth == 0 ? 1 : desc_.depth) });
+    uint16_t max_mip_levels = 1;
+    uint32_t tmp = max_dim;
+    while (tmp > 1) {
+      tmp >>= 1u;
+      ++max_mip_levels;
+    }
+    if (desc_.mip_levels > max_mip_levels) {
+      throw std::invalid_argument("TextureResource: mip_levels exceed limit");
+    }
+
+    // Data size consistency
+    if (desc_.size_bytes != data_.size()) {
+      throw std::invalid_argument(
+        "TextureResource: descriptor size_bytes mismatch with data size");
+    }
+  }
 };
 
 } // namespace oxygen::data

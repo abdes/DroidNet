@@ -71,8 +71,8 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|35 | ✅ Todo | Add TextureResourceBasicTest_AccessorsReturnDescriptorValues | TextureResource entirely untested | NewTest | P2 | | Dimensions, format, mip count |
-|36 | ✅ Todo | Add TextureResourceErrorTest_InvalidDescriptor_Throws | Invalid texture descriptor path untested | NewTest | P2 | | EXPECT_DEATH/throw on bad params |
+|35 | ✅ Done | Add TextureResourceBasicTest_AccessorsReturnDescriptorValues | TextureResource entirely untested | NewTest | P2 | | Dimensions, format, mip count |
+|36 | ✅ Done | Add TextureResourceErrorTest_InvalidDescriptor_Throws | Invalid texture descriptor path untested | NewTest | P2 | | EXPECT_DEATH/throw on bad params |
 
 ## Group: Vertex (Vertex.h hashing/equality)
 

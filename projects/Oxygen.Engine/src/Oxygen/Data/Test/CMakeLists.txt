@@ -48,5 +48,6 @@ m_gtest_program(
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
     "SubMesh_test.cpp"
+    "TextureResource_test.cpp"
     "Vertex_test.cpp"
 )
