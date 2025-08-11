@@ -505,6 +505,41 @@ NOLINT_TEST_F(MeshBuilderBasicTest, Build_WithReferencedStorage_Succeeds)
   EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
 }
 
+//! (33a) Tests that referenced storage mesh can be built without an index
+//! buffer (constructor comment says optional). MeshView still requires at
+//! least one index logically, so we provide index_count=1; resulting Mesh has
+//! zero actual indices (IndexBuffer empty) and IsIndexed()==false.
+NOLINT_TEST_F(
+  MeshBuilderBasicTest, Build_WithReferencedStorage_NoIndexBuffer_Succeeds)
+{
+  // Arrange
+  // Create a vertex buffer only; intentionally omit index buffer
+  MeshBuilder builder;
+  auto vertex_only_builder = MeshBuilder();
+  // Reuse existing vertex_buffer_ from fixture but pass nullptr for index
+  // buffer
+
+  // Act
+  auto mesh
+    = builder.WithBufferResources(vertex_buffer_, nullptr)
+        .BeginSubMesh("vertex_only", material_)
+        .WithMeshView({
+          .first_index = 0,
+          .index_count = 1, // Satisfy MeshView invariant although no buffer
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(vertices_.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  // Assert
+  ASSERT_NE(mesh, nullptr);
+  EXPECT_EQ(mesh->VertexCount(), vertices_.size());
+  EXPECT_EQ(mesh->IndexCount(), 0u);
+  EXPECT_FALSE(mesh->IsIndexed());
+  EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
+}
+
 //=== Unsuccessful Build Tests (Death) ===------------------------------------//
 
 //! (1) Ensures Build() fails when no submeshes were added.

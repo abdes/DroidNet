@@ -42,5 +42,5 @@ Legend:
 |30 | ✅ Done | Add test for IndexBuffer().Widened order & size for 32-bit | Ensure both paths validated | NewTest | P2 | | Added MeshViewIndexTypeTest.ThirtyTwoBitIndices_WidenedMatchesAsU32 |
 |31 | ✅ Done | Add test verifying SubMesh material non-null enforced through builder | Completes invariant via public API | NewTest | P1 | | BeginSubMesh nullptr now throws logic_error (test added) |
 |32 | ✅ Done | Add test for MeshBuilder mixing storage after starting submesh | Additional misuse path | NewTest | P2 | | Implemented (WithBufferResources after BeginSubMesh -> logic_error) |
-|33 | ⏳ Todo | Verify Build with referenced storage missing index buffer (if API allows separating) | Edge case not tested | NewTest | P2 | | If illegal, expect failure; else document |
+|33 | ✅ Done | Verify Build with referenced storage missing index buffer (if API allows separating) | Edge case not tested | NewTest | P2 | | Implemented (Build succeeds w/ vertex buffer only; IndexCount==0) |
 |34 | ⏳ Todo | Update README invariants section after clarifying vertex-only legality | Keep docs consistent | Documentation | P2 | | Adjust text plus tests alignment |
