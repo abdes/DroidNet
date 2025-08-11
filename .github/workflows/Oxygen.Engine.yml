@@ -21,6 +21,8 @@ jobs:
         shell: pwsh
 
     steps:
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -60,10 +62,6 @@ jobs:
           if (conan remote list | Select-String 'conancenter') { conan remote remove conancenter }
           if (conan remote list | Select-String 'mycenter') { conan remote remove mycenter }
           conan remote add mycenter $env:GITHUB_WORKSPACE\conan-center-index
-
-      - name: Set up MSVC
-        uses: ilammy/setup-msvc@v1
-
       - name: Show tool versions
         run: |
           python --version
@@ -76,22 +74,22 @@ jobs:
         uses: jwlawson/actions-setup-cmake@v1
 
       - name: Conan install dependencies
+        working-directory: projects/Oxygen.Engine
         run: |
           conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
-        working-directory: projects/Oxygen.Engine
 
       - name: Configure CMake
+        working-directory: projects/Oxygen.Engine
         run: |
           cmake -S . -B out/build -DCMAKE_BUILD_TYPE=Release
-        working-directory: projects/Oxygen.Engine
 
       - name: Build
+        working-directory: projects/Oxygen.Engine
         run: |
           cmake --build out/build --config Release
-        working-directory: projects/Oxygen.Engine
 
       - name: Run tests
+        working-directory: projects/Oxygen.Engine
         run: |
           ctest --test-dir out/build --output-on-failure --build-config Release
         continue-on-error: true
-        working-directory: projects/Oxygen.Engine
