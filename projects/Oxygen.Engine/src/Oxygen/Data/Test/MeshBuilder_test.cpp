@@ -389,6 +389,35 @@ NOLINT_TEST_F(MeshBuilderErrorTest,
   }
 }
 
+//! (18) Ensures calling BeginSubMesh twice without ending the first throws.
+NOLINT_TEST_F(MeshBuilderErrorTest, DuplicateBeginSubMeshWithoutEnd_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+
+  // Act
+  auto first = builder.BeginSubMesh("first", material_);
+
+  // Assert
+  NOLINT_EXPECT_THROW(
+    { (void)builder.BeginSubMesh("second", material_); }, std::logic_error);
+  (void)first; // suppress unused (keeps first alive for clarity)
+}
+
+//! (19) Ensures calling EndSubMesh when no submesh is in progress throws.
+NOLINT_TEST_F(MeshBuilderErrorTest, EndSubMeshWithoutBegin_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+
+  // Act & Assert: construct an orphan SubMeshBuilder directly (unsupported)
+  oxygen::data::SubMeshBuilder orphan(builder, "orphan", material_);
+  NOLINT_EXPECT_THROW(
+    { builder.EndSubMesh(std::move(orphan)); }, std::logic_error);
+}
+
 //=== Successful Build Tests ===----------------------------------------------//
 
 //! Tests that owned storage mesh can be built successfully

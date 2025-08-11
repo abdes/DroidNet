@@ -813,6 +813,12 @@ public:
   auto BeginSubMesh(std::string name,
     std::shared_ptr<const MaterialAsset> material) -> SubMeshBuilder
   {
+    if (submesh_in_progress_) {
+      throw std::logic_error(
+        "Cannot begin a new SubMesh while another SubMesh is in progress (did "
+        "you forget to call EndSubMesh?)");
+    }
+    submesh_in_progress_ = true;
     return SubMeshBuilder(*this, std::move(name), std::move(material));
   }
 
@@ -820,6 +826,10 @@ public:
   //! SubMeshBuilder.
   auto EndSubMesh(SubMeshBuilder&& submesh_builder) -> MeshBuilder&
   {
+    if (!submesh_in_progress_) {
+      throw std::logic_error(
+        "Cannot end a SubMesh when none has been begun (no active SubMesh)");
+    }
     if (!submesh_builder.HasMeshViews()) {
       throw std::logic_error("SubMesh must have at least one MeshView");
     }
@@ -829,6 +839,7 @@ public:
       .mesh_views = submesh_builder.MeshViews(),
       .desc = submesh_builder.desc_,
     });
+    submesh_in_progress_ = false;
     return *this;
   }
 
@@ -896,6 +907,8 @@ private:
   };
   std::vector<SubMeshSpec> submeshes_;
   std::optional<pak::MeshDesc> desc_;
+  bool submesh_in_progress_
+    = false; //!< Tracks an active (unfinalized) SubMeshBuilder
 
   friend class SubMeshBuilder;
   void AddSubMeshFromBuilder(const SubMeshBuilder& builder)
@@ -911,10 +924,15 @@ private:
 
 inline auto SubMeshBuilder::EndSubMesh() -> MeshBuilder&
 {
+  if (!parent_.get().submesh_in_progress_) {
+    throw std::logic_error(
+      "Cannot end a SubMesh when none has been begun (no active SubMesh)");
+  }
   if (!HasMeshViews()) {
     throw std::logic_error("SubMesh must have at least one MeshView");
   }
   parent_.get().AddSubMeshFromBuilder(*this);
+  parent_.get().submesh_in_progress_ = false;
   return parent_;
 }
 
