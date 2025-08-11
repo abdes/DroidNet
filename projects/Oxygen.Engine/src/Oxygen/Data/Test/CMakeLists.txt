@@ -36,13 +36,14 @@ add_test(NAME "Oxygen.Data.LinkTest" COMMAND "Oxygen.Data.LinkTest")
 include(GTestHelpers)
 
 m_gtest_program(
-  Mesh
+  All
   SOURCES
+    "AssetKey_test.cpp"
+    "BufferResource_test.cpp"
     "Mesh_test.cpp"
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
     "SubMesh_test.cpp"
     "Vertex_test.cpp"
-    "AssetKey_test.cpp"
 )

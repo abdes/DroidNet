@@ -65,15 +65,9 @@ public:
     kImmutable = 0x200, //!< Never updated after creation
   };
 
-  /*! Constructs a BufferResource with descriptor and exclusive data ownership.
-      @param desc Buffer resource descriptor from PAK file.
-      @param data Raw buffer data (ownership transferred).
-  */
-  BufferResource(pak::BufferResourceDesc desc, std::vector<uint8_t> data)
-    : desc_(std::move(desc))
-    , data_(std::move(data))
-  {
-  }
+  //! Constructs a BufferResource with descriptor + exclusive data ownership.
+  OXGN_DATA_API BufferResource(
+    pak::BufferResourceDesc desc, std::vector<uint8_t> data);
 
   ~BufferResource() override = default;
 
