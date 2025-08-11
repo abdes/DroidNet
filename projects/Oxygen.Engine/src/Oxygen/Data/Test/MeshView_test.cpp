@@ -13,14 +13,11 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::Vertex;
-
-// NOTE: Existing tests previously used a gmock-based MockMesh. Work plan items
-// will remove gmock usage; for now we retain minimal mock until helper factory
-// introduced. We categorize tests into Basic, Death, and IndexType fixtures.
 
 // Mock Mesh for MeshView construction (temporary until helper removal)
 class MockMesh : public Mesh {
@@ -68,10 +65,8 @@ protected:
   std::unique_ptr<MockMesh> mesh_;
 };
 
-//! Fixture for index type widening / promotion behavior
+//! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
-
-//=== MeshView Tests ===-----------------------------------------------------//
 
 namespace {
 
@@ -135,6 +130,124 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
       EXPECT_EQ(view_indices[i], indices[i]);
     }
   }
+}
+
+//! Real mesh (non-mock) construction & access path (basic scenario).
+NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
+{
+  // Arrange
+  auto material = oxygen::data::MaterialAsset::CreateDefault();
+  std::vector<Vertex> vertices = {
+    { .position = { 0, 0, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 0, 0 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 1, 0 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+    { .position = { 0, 1, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 0, 1 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+  };
+  std::vector<std::uint32_t> indices { 0, 1, 2 };
+  auto mesh = oxygen::data::MeshBuilder(0, "triangle")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("main", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+
+  // Act
+  MeshView mesh_view(*mesh,
+    oxygen::data::pak::MeshViewDesc { .first_index = 0,
+      .index_count = 3,
+      .first_vertex = 0,
+      .vertex_count = 3 });
+
+  // Assert
+  EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
+  EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
+  EXPECT_EQ(mesh_view.Vertices().data(), mesh->Vertices().data());
+  EXPECT_EQ(
+    mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
+}
+
+//! Out-of-bounds view creation (death scenarios consolidated from old file).
+NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
+{
+  // Arrange
+  auto material = oxygen::data::MaterialAsset::CreateDefault();
+  std::vector<Vertex> vertices = {
+    { .position = { 0, 0, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 0, 0 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+    { .position = { 1, 0, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 1, 0 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+    { .position = { 0, 1, 0 },
+      .normal = { 0, 1, 0 },
+      .texcoord = { 0, 1 },
+      .tangent = { 1, 0, 0 },
+      .bitangent = {},
+      .color = {} },
+  };
+  std::vector<std::uint32_t> indices { 0, 1, 2 };
+  auto mesh = oxygen::data::MeshBuilder(0, "triangle")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("main", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+
+  // Act & Assert
+  EXPECT_DEATH((MeshView { *mesh,
+                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                   .index_count = 3,
+                   .first_vertex = 10,
+                   .vertex_count = 3 } }),
+    "");
+  EXPECT_DEATH((MeshView { *mesh,
+                 oxygen::data::pak::MeshViewDesc { .first_index = 10,
+                   .index_count = 3,
+                   .first_vertex = 0,
+                   .vertex_count = 3 } }),
+    "");
+  EXPECT_DEATH((MeshView { *mesh,
+                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                   .index_count = 3,
+                   .first_vertex = 5,
+                   .vertex_count = 1 } }),
+    "");
+  EXPECT_DEATH((MeshView { *mesh,
+                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                   .index_count = 1,
+                   .first_vertex = 3,
+                   .vertex_count = 5 } }),
+    "");
 }
 
 //! Tests MeshView handles empty vertex and index data (should be a death test).

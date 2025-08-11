@@ -16,16 +16,12 @@
 
 using oxygen::data::MaterialAsset;
 using oxygen::data::Mesh;
-using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
-using oxygen::data::pak::MeshViewDesc;
 
 namespace {
 
 using ::testing::SizeIs;
-
-//=== Test Fixtures ===-------------------------------------------------------//
 
 // MeshAssetBasicTest: immutability, bounding box correctness, shared ownership
 class MeshAssetBasicTest : public testing::Test {
@@ -156,116 +152,6 @@ NOLINT_TEST_F(MeshAssetBasicTest, ConstructorRejectsEmpty)
     [[maybe_unused]] auto _ = MakeMeshFrom(one_vertex, empty_indices), "");
   EXPECT_DEATH(
     [[maybe_unused]] auto _ = MakeMeshFrom(empty_vertices, empty_indices), "");
-}
-
-// MeshAssetViewTest: view validity, in-bounds checks
-class MeshAssetViewTest : public testing::Test {
-protected:
-  static auto MakeSimpleMesh() -> std::shared_ptr<oxygen::data::Mesh>
-  {
-    std::vector<Vertex> vertices = {
-      {
-        .position = { 0, 0, 0 },
-        .normal = { 0, 1, 0 },
-        .texcoord = { 0, 0 },
-        .tangent = { 1, 0, 0 },
-        .bitangent = {},
-        .color = {},
-      },
-      {
-        .position = { 1, 0, 0 },
-        .normal = { 0, 1, 0 },
-        .texcoord = { 1, 0 },
-        .tangent = { 1, 0, 0 },
-        .bitangent = {},
-        .color = {},
-      },
-      {
-        .position = { 0, 1, 0 },
-        .normal = { 0, 1, 0 },
-        .texcoord = { 0, 1 },
-        .tangent = { 1, 0, 0 },
-        .bitangent = {},
-        .color = {},
-      },
-    };
-    std::vector<std::uint32_t> indices = { 0, 1, 2 };
-    auto material = MaterialAsset::CreateDefault();
-    return oxygen::data::MeshBuilder(0, "triangle")
-      .WithVertices(vertices)
-      .WithIndices(indices)
-      .BeginSubMesh("main", material)
-      .WithMeshView({ .first_index = 0,
-        .index_count = 3,
-        .first_vertex = 0,
-        .vertex_count = 3 })
-      .EndSubMesh()
-      .Build();
-  }
-};
-
-//! Checks that Mesh can create valid MeshView and that view is in-bounds.
-NOLINT_TEST_F(MeshAssetViewTest, ViewValidity)
-{
-  // Arrange
-  const auto mesh = MakeSimpleMesh();
-
-  // Act
-  auto mesh_view = MeshView(*mesh,
-    MeshViewDesc {
-      .first_index = 0,
-      .index_count = 3,
-      .first_vertex = 0,
-      .vertex_count = 3,
-    });
-
-  // Assert
-  EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
-  EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
-  EXPECT_EQ(mesh_view.Vertices().data(), mesh->Vertices().data());
-  EXPECT_EQ(
-    mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
-}
-
-//! Checks that Mesh rejects out-of-bounds view creation (death test).
-NOLINT_TEST_F(MeshAssetViewTest, InBoundsChecks)
-{
-  // Arrange
-  const auto mesh = MakeSimpleMesh();
-
-  // Act & Assert
-  EXPECT_DEATH([[maybe_unused]] auto _ = MeshView(*mesh,
-                 MeshViewDesc {
-                   .first_index = 0,
-                   .index_count = 3,
-                   .first_vertex = 10,
-                   .vertex_count = 3,
-                 }),
-    "");
-  EXPECT_DEATH([[maybe_unused]] auto _ = MeshView(*mesh,
-                 MeshViewDesc {
-                   .first_index = 10,
-                   .index_count = 3,
-                   .first_vertex = 0,
-                   .vertex_count = 3,
-                 }),
-    "");
-  EXPECT_DEATH([[maybe_unused]] auto _ = MeshView(*mesh,
-                 MeshViewDesc {
-                   .first_index = 0,
-                   .index_count = 3,
-                   .first_vertex = 5,
-                   .vertex_count = 1,
-                 }),
-    "");
-  EXPECT_DEATH([[maybe_unused]] auto _ = MeshView(*mesh,
-                 MeshViewDesc {
-                   .first_index = 0,
-                   .index_count = 1,
-                   .first_vertex = 3,
-                   .vertex_count = 5,
-                 }),
-    "");
 }
 
 // MeshAssetSubMeshTest: submesh creation, validity, material association
