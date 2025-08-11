@@ -435,4 +435,42 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   }
 }
 
+//! (30) 32-bit indices: Widened() iteration yields identical sequence & count
+//! to direct 32-bit view (should be zero-copy / direct for 32-bit path).
+NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
+{
+  // Arrange
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
+  std::vector<std::uint32_t> indices { 0, 2, 1, 1, 2, 0 };
+  auto material = MaterialAsset::CreateDefault();
+  auto mesh = MeshBuilder(0, "widen32")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("s", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = static_cast<uint32_t>(indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+  ASSERT_NE(mesh, nullptr);
+  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+
+  // Act
+  std::vector<uint32_t> widened;
+  widened.reserve(view.IndexBuffer().Count());
+  for (auto v : view.IndexBuffer().Widened()) {
+    widened.push_back(v);
+  }
+  auto direct = view.IndexBuffer().AsU32();
+
+  // Assert
+  ASSERT_EQ(widened.size(), direct.size());
+  for (size_t i = 0; i < direct.size(); ++i) {
+    EXPECT_EQ(widened[i], direct[i]);
+  }
+}
+
 } // namespace
