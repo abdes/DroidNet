@@ -25,8 +25,8 @@ Legend:
 |13 | ✅ Done | Add AssetKeyBasicTest_GenerateDistinct_StableStringHash | Asset identity currently untested | NewTest | P2 | | Implemented (32 generated keys; distinct value/string/hash; deterministic) |
 |14 | ✅ Done | Add BufferResourceDeathTest_IndexBufferSizeNotAligned_Throws | Alignment invariant missing | NewTest | P2 | | Implemented (construct misaligned index BufferResource -> EXPECT_DEATH on stride check) |
 |15 | ✅ Done | Add MeshBoundingSphereTest_ComputedSphereContainsAllVertices | Bounding sphere (if implemented) untested | NewTest | P2 | | Implemented (owned + referenced storage; all vertices within radius) |
-|16 | ⏳ Todo | Add ProceduralMeshBoundaryTest_SphereMinimumValidSegments | Boundary acceptance vs rejection | NewTest | P2 | | Use documented minimum (e.g., 3 or 4); confirm generator code |
-|17 | ⏳ Todo | Add ProceduralMeshBoundaryTest_PlaneMinimumResolution | Edge of validity not tested | NewTest | P2 | | Smallest valid plane passes; just-below fails |
+|16 | ✅ Done | Add ProceduralMeshBoundaryTest_SphereMinimumValidSegments | Boundary acceptance vs rejection | NewTest | P2 | | Implemented (2 or 3 invalid edges; (3,3) minimum valid) |
+|17 | ✅ Done | Add ProceduralMeshBoundaryTest_PlaneMinimumResolution | Edge of validity not tested | NewTest | P2 | | Implemented (invalid: x=0,z=0,size<=0; (2,2) valid; (1,1) observed conditional) |
 |18 | ⏳ Todo | Add MeshBuilderErrorTest_DuplicateBeginSubMeshWithoutEnd_Throws | Misuse sequence not covered | NewTest | P2 | | Call BeginSubMesh twice; expect failure |
 |19 | ⏳ Todo | Add MeshBuilderErrorTest_EndSubMeshWithoutBegin_Throws | Defensive behavior not tested | NewTest | P2 | | Direct EndSubMesh call invalid |
 |20 | ⏳ Todo | Consolidate MeshView tests into one file | Reduce duplication (Mesh_test + MeshView_test) | Consolidation | P3 | | Move scenarios; keep focused fixtures |
