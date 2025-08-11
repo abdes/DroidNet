@@ -433,6 +433,25 @@ NOLINT_TEST_F(MeshBuilderErrorTest, BeginSubMeshNullMaterial_Throws)
     { (void)builder.BeginSubMesh("null_mat", nullptr); }, std::logic_error);
 }
 
+//! (32) Ensures attempting to change storage type after starting a SubMesh
+//! (before EndSubMesh) throws a logic_error to prevent inconsistent state.
+NOLINT_TEST_F(
+  MeshBuilderErrorTest, WithBufferResources_AfterBeginSubMesh_Throws)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+  auto submesh_builder = builder.BeginSubMesh("in_progress", material_);
+
+  // Act & Assert: attempting to switch to referenced storage mid-submesh
+  NOLINT_EXPECT_THROW(
+    { builder.WithBufferResources(vertex_buffer_, index_buffer_); },
+    std::logic_error);
+
+  // Cleanup (not reached if exception message incorrect, but keep pattern)
+  (void)submesh_builder; // keep alive for clarity
+}
+
 //=== Successful Build Tests ===----------------------------------------------//
 
 //! Tests that owned storage mesh can be built successfully
