@@ -38,7 +38,7 @@ Legend:
 |26 | ✅ Todo | Remove duplicate includes & unused using directives | Cleanliness | Style | P3 | | E.g., duplicate GTest include, unused AllOf |
 |27 | ⏳ Todo | Introduce constants for repeated magic numbers | Maintainability | Style | P3 | | constexpr counts (e.g., kCubeVertexCount) |
 |28 | ✅ Done | Parameterize procedural invalid inputs | Reduce duplication in ValidInvalidInput | Refactor | P3 | | Implemented arrays + loops in ProceduralMeshes_test.cpp |
-|29 | ⏳ Todo | Document Link_test.cpp purpose with brief comment | Clarify intent | Style | P3 | | Add //! comment at top |
+|29 | ✅ Done | Document Link_test.cpp purpose with brief comment | Clarify intent | Style | P3 | | Added detailed brief + block doc at top of Link_test.cpp |
 |30 | ⏳ Todo | Add test for IndexBuffer().Widened order & size for 32-bit | Ensure both paths validated | NewTest | P2 | | Compare AsU32 vs Widened iteration |
 |31 | ✅ Done | Add test verifying SubMesh material non-null enforced through builder | Completes invariant via public API | NewTest | P1 | | BeginSubMesh nullptr now throws logic_error (test added) |
 |32 | ⏳ Todo | Add test for MeshBuilder mixing storage after starting submesh | Additional misuse path | NewTest | P2 | | BeginSubMesh then try WithBufferResources -> logic_error |

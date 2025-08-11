@@ -4,6 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+//! Link test entry point for Data module.
+/*!
+ @file Link_test.cpp
+
+ Ensures procedural mesh generation code links & executes by invoking
+ GenerateMesh on a cube asset and printing a short summary. This is not a
+ unit test (no assertions); it's used to surface unresolved symbol or ODR
+ issues during the link stage for Data-related objects.
+
+ ### Notes
+
+ - Prints vertex/index counts and submesh/view breakdown.
+ - Exits with failure if mesh generation returns null.
+ - Kept minimal intentionally; expand only if link coverage gaps appear.
+
+ @see GenerateMesh
+*/
+
 // Standard library
 #include <iostream>
 
