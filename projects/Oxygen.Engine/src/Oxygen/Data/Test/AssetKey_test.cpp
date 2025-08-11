@@ -69,4 +69,39 @@ NOLINT_TEST_F(AssetKeyBasicTest, GenerateDistinct_StableStringHash)
   }
 }
 
+//! Tests that AssetKey ordering matches lexical order of their string
+//! representations.
+class AssetKeyOrderingTest : public testing::Test { };
+
+NOLINT_TEST_F(AssetKeyOrderingTest, LexicalOrderConsistentWithGuid)
+{
+  // Arrange
+  constexpr int kKeyCount = 32;
+  std::vector<AssetKey> keys;
+  keys.reserve(kKeyCount);
+  for (int i = 0; i < kKeyCount; ++i) {
+    keys.push_back(AssetKey { .guid = GenerateAssetGuid() });
+  }
+
+  // Act: sort by AssetKey ordering
+  std::vector<AssetKey> sorted_keys = keys;
+  std::sort(sorted_keys.begin(), sorted_keys.end());
+
+  // Get string representations in sorted order
+  std::vector<std::string> sorted_strings;
+  for (const auto& k : sorted_keys) {
+    sorted_strings.push_back(to_string(k));
+  }
+
+  // Copy and sort the string representations lexicographically
+  std::vector<std::string> lex_sorted = sorted_strings;
+  std::sort(lex_sorted.begin(), lex_sorted.end());
+
+  // Assert: the order of string representations matches the order of sorted
+  // AssetKeys
+  EXPECT_EQ(sorted_strings, lex_sorted)
+    << "AssetKey ordering must match lexical order of to_string "
+       "representation.";
+}
+
 } // namespace
