@@ -163,7 +163,7 @@ cmake --preset windows -DOXYGEN_BUILD_TESTS=ON
 Build (Debug):
 
 ```powershell
-cmake --build --preset windows-debug --target oxygen-data Oxygen.Data.Mesh.Tests Oxygen.Data.LinkTest
+cmake --build --preset windows-debug --target oxygen-data Oxygen.Data.All.Tests Oxygen.Data.LinkTest
 ```
 
 Build (Release):
@@ -192,14 +192,14 @@ toolchain path). Equivalent to the preset steps above:
 ```powershell
 conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
 cmake -S . -B out/build -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=out/build/conan_toolchain.cmake -DOXYGEN_BUILD_TESTS=ON
-cmake --build out/build --target oxygen-data Oxygen.Data.Mesh.Tests Oxygen.Data.LinkTest --config Debug
+cmake --build out/build --target oxygen-data Oxygen.Data.All.Tests Oxygen.Data.LinkTest --config Debug
 ```
 
 Target names (from CMake):
 
 * Library: `oxygen-data` (alias `oxygen::data`).
 * Link test exe: `Oxygen.Data.LinkTest`.
-* Mesh tests exe: `Oxygen.Data.Mesh.Tests` (aggregated GTest sources).
+* Mesh tests exe: `Oxygen.Data.All.Tests` (aggregated GTest sources).
 * Historical/alt aggregated name in docs/code examples: `Mesh_tests` (older helper macro output).
 
 ---
@@ -212,13 +212,13 @@ After building with `-DOXYGEN_BUILD_TESTS=ON`:
 ctest --test-dir out/build --output-on-failure -C Debug -R Oxygen.Data
 # Or run specific target executable directly
 out/build/bin/Debug/Oxygen.Data.LinkTest.exe
-out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=MeshAssetBasicTest.*
+out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=MeshAssetBasicTest.*
 ```
 
 Filtering examples (new exe name):
 
 ```powershell
-out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=ProceduralMeshTest.MeshValidity
+out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=ProceduralMeshTest.MeshValidity
 ```
 
 ---
@@ -327,7 +327,7 @@ ctest --preset test-windows -R MeshAssetBasicTest --output-on-failure
 Run single executable (Debug preset already built):
 
 ```powershell
-out/build/bin/Debug/Oxygen.Data.Mesh.Tests.exe --gtest_filter=MeshBuilderBasicTest.*
+out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=MeshBuilderBasicTest.*
 ```
 
 ---
