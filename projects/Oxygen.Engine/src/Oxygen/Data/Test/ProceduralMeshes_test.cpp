@@ -112,13 +112,13 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
   // Act & Assert
   for (const auto& c : sphere_cases) {
     const bool has = MakeSphereMeshAsset(c.lat, c.lon).has_value();
-    EXPECT_EQ(has, c.valid) << "Sphere(" << c.lat << "," << c.lon << ") "
-                            << c.note;
+    EXPECT_EQ(has, c.valid)
+      << "Sphere(" << c.lat << "," << c.lon << ") " << c.note;
   }
   for (const auto& c : plane_cases) {
     const bool has = MakePlaneMeshAsset(c.x, c.z, c.size).has_value();
-    EXPECT_EQ(has, c.valid) << "Plane(" << c.x << "," << c.z << "," << c.size
-                            << ") " << c.note;
+    EXPECT_EQ(has, c.valid)
+      << "Plane(" << c.x << "," << c.z << "," << c.size << ") " << c.note;
   }
   for (const auto& c : cylinder_cases) {
     const bool has
@@ -129,21 +129,20 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
   for (const auto& c : cone_cases) {
     const bool has
       = MakeConeMeshAsset(c.segments, c.height, c.radius).has_value();
-    EXPECT_EQ(has, c.valid) << "Cone(" << c.segments << "," << c.height
-                            << "," << c.radius << ") " << c.note;
+    EXPECT_EQ(has, c.valid) << "Cone(" << c.segments << "," << c.height << ","
+                            << c.radius << ") " << c.note;
   }
   for (const auto& c : torus_cases) {
-    const bool has = MakeTorusMeshAsset(c.major_seg, c.minor_seg, c.major_r,
-      c.minor_r)
-                       .has_value();
-    EXPECT_EQ(has, c.valid) << "Torus(" << c.major_seg << "," << c.minor_seg
-                            << "," << c.major_r << "," << c.minor_r << ") "
-                            << c.note;
+    const bool has
+      = MakeTorusMeshAsset(c.major_seg, c.minor_seg, c.major_r, c.minor_r)
+          .has_value();
+    EXPECT_EQ(has, c.valid)
+      << "Torus(" << c.major_seg << "," << c.minor_seg << "," << c.major_r
+      << "," << c.minor_r << ") " << c.note;
   }
   for (const auto& c : quad_cases) {
     const bool has = MakeQuadMeshAsset(c.w, c.h).has_value();
-    EXPECT_EQ(has, c.valid) << "Quad(" << c.w << "," << c.h << ") "
-                            << c.note;
+    EXPECT_EQ(has, c.valid) << "Quad(" << c.w << "," << c.h << ") " << c.note;
   }
 
   // Always-valid generators
