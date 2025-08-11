@@ -78,9 +78,9 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|37 | ✅ Todo | Add VertexHashTest_WithinEpsilon_EqualSameHash | Boundary equality at epsilon not distinct | NewTest | P2 | | Hash/equality hold at epsilon |
-|38 | ✅ Todo | Add VertexHashTest_JustBeyondEpsilon_InequalDifferentHash | Boundary beyond epsilon divergence not isolated | NewTest | P2 | | Slight delta breaks equality/hash |
-|39 | ✅ Todo | Add VertexHashTest_FieldPerturbations_ChangeHash | Field contribution coverage partial | NewTest | P2 | | Normal/tangent/color changes affect hash |
+|37 | ✅ Done | Add VertexHashTest_WithinEpsilon_EqualSameHash | Boundary equality at epsilon not distinct | NewTest | P2 | | Hash/equality hold at epsilon |
+|38 | ✅ Done | Add VertexHashTest_JustBeyondEpsilon_InequalDifferentHash | Boundary beyond epsilon divergence not isolated | NewTest | P2 | | Slight delta breaks equality/hash |
+|39 | ✅ Done | Add VertexHashTest_FieldPerturbations_ChangeHash | Field contribution coverage partial | NewTest | P2 | | Normal/tangent/color changes affect hash |
 
 ## Group: Procedural Mesh Generators (Procedural/*.cpp)
 
