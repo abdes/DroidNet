@@ -64,19 +64,8 @@ jobs:
           install_ccache: true
           update_packager_index: false
           prepend_symlinks_to_path: false
+          remove_stale_cache: false
           windows_compile_environment: msvc # this field is required
-
-      - name: Set up ccache environment
-        run: |
-          echo "CCACHE_DIR=${{ runner.temp }}\.ccache" >> $GITHUB_ENV
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}\.ccache
-          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ hashFiles('**/*.cpp') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-
 
       - name: Show tool versions
         run: |
