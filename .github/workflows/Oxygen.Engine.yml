@@ -113,4 +113,7 @@ jobs:
         working-directory: projects/Oxygen.Engine
         run: |
           ctest --preset=test-windows --output-on-failure -C Release
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "##[warning]Some tests failed. See previous step for details."
+          }
         continue-on-error: true
