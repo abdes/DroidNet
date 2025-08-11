@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'projects/Oxygen.Engine/**'
+      - '.github/workflows/Oxygen.Engine.yml'
   pull_request:
-    # Run on all PRs, but only build if Oxygen.Engine is affected
+    # Run on all PRs, but only build if Oxygen.Engine or this workflow is affected
     paths:
       - 'projects/Oxygen.Engine/**'
+      - '.github/workflows/Oxygen.Engine.yml'
 
 jobs:
   build:
@@ -25,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13.5'
 
       - name: Cache pip
         uses: actions/cache@v4
