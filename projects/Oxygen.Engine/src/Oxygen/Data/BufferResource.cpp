@@ -70,7 +70,7 @@ BufferResource::BufferResource(
   }
   // 2. Structured/raw buffers (element_format == 0) with stride > 1 must have
   //    size_bytes a multiple of element_stride.
-  if (desc_.element_format == 0 && desc_.element_stride > 1) {
+  if (desc_.element_format == 0) {
     DCHECK_F(desc_.element_stride != 0,
       "element_stride cannot be zero for structured buffer");
     DCHECK_F(desc_.size_bytes % desc_.element_stride == 0,
