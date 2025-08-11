@@ -19,50 +19,36 @@ using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::Vertex;
 
-// Mock Mesh for MeshView construction (temporary until helper removal)
-class MockMesh : public Mesh {
+// Test-only thin wrapper to access protected Mesh constructor without mocks
+class TestMesh : public Mesh {
 public:
-  MockMesh(const std::vector<Vertex>& vertices,
+  TestMesh(int device_id, const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
-    : Mesh(0, vertices, indices)
-    , vertices_(vertices)
-    , indices_(indices)
+    : Mesh(device_id, vertices, indices)
   {
   }
-
-  MOCK_METHOD(
-    (std::span<const Vertex>), Vertices, (), (const, noexcept, override));
-
-  std::vector<Vertex> vertices_;
-  std::vector<std::uint32_t> indices_;
 };
 
-//! Fixture for basic MeshView construction and accessor scenarios
+//! Fixture for basic MeshView construction and accessor scenarios (real Mesh)
 class MeshViewBasicTest : public ::testing::Test {
 protected:
-  void SetupMockMesh(const std::vector<Vertex>& vertices,
+  void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
-    mesh_ = std::make_unique<MockMesh>(vertices, indices);
-    ON_CALL(*mesh_, Vertices())
-      .WillByDefault(
-        ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
+    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
   }
-  std::unique_ptr<MockMesh> mesh_;
+  std::unique_ptr<TestMesh> mesh_;
 };
 
-//! Fixture for death/error boundary validation scenarios
+//! Fixture for death/error boundary validation scenarios (real Mesh)
 class MeshViewDeathTest : public ::testing::Test {
 protected:
-  void SetupMockMesh(const std::vector<Vertex>& vertices,
+  void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
-    mesh_ = std::make_unique<MockMesh>(vertices, indices);
-    ON_CALL(*mesh_, Vertices())
-      .WillByDefault(
-        ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
+    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
   }
-  std::unique_ptr<MockMesh> mesh_;
+  std::unique_ptr<TestMesh> mesh_;
 };
 
 //! Fixture for index type widening / promotion behavior (edge / format cases)
@@ -104,11 +90,7 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices()).Times(::testing::AnyNumber());
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   // Act
   MeshView view(*mesh_,
@@ -122,7 +104,8 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
   // Assert
   EXPECT_THAT(view.Vertices(), SizeIs(4));
   EXPECT_EQ(view.IndexBuffer().Count(), 6u);
-  EXPECT_EQ(view.Vertices().data(), vertices.data());
+  // Verify all vertex attributes (operator== performs epsilon-based compare).
+  EXPECT_THAT(view.Vertices(), ::testing::ElementsAreArray(vertices));
   {
     auto view_indices = view.IndexBuffer().AsU32();
     ASSERT_EQ(view_indices.size(), indices.size());
@@ -180,7 +163,7 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
   // Assert
   EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
   EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
-  EXPECT_EQ(mesh_view.Vertices().data(), mesh->Vertices().data());
+  EXPECT_THAT(mesh_view.Vertices(), ::testing::ElementsAreArray(mesh->Vertices()));
   EXPECT_EQ(
     mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
 }
@@ -256,7 +239,7 @@ NOLINT_TEST_F(MeshViewDeathTest, Empty)
   // Arrange
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices;
-  SetupMockMesh(vertices, indices);
+  SetupMesh(vertices, indices);
 
   // Act & Assert
   EXPECT_DEATH(MeshView mesh_view(*mesh_,
@@ -275,10 +258,7 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
   // Arrange
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices { 0, 1 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   MeshView mesh_view1(*mesh_,
     oxygen::data::pak::MeshViewDesc {
@@ -305,10 +285,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   // Act & Assert
   EXPECT_DEATH((MeshView { *mesh_,
@@ -327,10 +304,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   // Act & Assert
   EXPECT_DEATH((MeshView { *mesh_,
@@ -349,10 +323,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
   // Arrange
   std::vector<Vertex> vertices(4);
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   // Sanity: a valid slice touching the end should succeed
   NOLINT_EXPECT_NO_THROW((MeshView { *mesh_,

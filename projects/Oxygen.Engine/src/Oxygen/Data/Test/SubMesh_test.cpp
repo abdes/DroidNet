@@ -55,39 +55,28 @@ private:
   }
 };
 
-// Mock Mesh for SubMesh construction
-class MockMesh : public Mesh {
-public:
-  MockMesh(const std::vector<Vertex>& vertices,
-    const std::vector<std::uint32_t>& indices)
-    : Mesh(0, vertices, indices)
-    , vertices_(vertices)
-    , indices_(indices)
-  {
-  }
-
-  MOCK_METHOD(
-    (std::span<const Vertex>), Vertices, (), (const, noexcept, override));
-
-  std::vector<Vertex> vertices_;
-  std::vector<std::uint32_t> indices_;
-};
-
 class SubMeshTestFixture : public ::testing::Test {
 protected:
   void SetUp() override { }
   void TearDown() override { }
 
-  void SetupMockMesh(const std::vector<Vertex>& vertices,
+  void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
-    mesh_ = std::make_unique<MockMesh>(vertices, indices);
-    ON_CALL(*mesh_, Vertices())
-      .WillByDefault(
-        ::testing::Return(std::span<const Vertex>(mesh_->vertices_)));
+    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
   }
 
-  std::unique_ptr<MockMesh> mesh_;
+  // Minimal test-only mesh exposing protected constructor
+  class TestMesh : public Mesh {
+  public:
+    TestMesh(int device_id, const std::vector<Vertex>& vertices,
+      const std::vector<std::uint32_t>& indices)
+      : Mesh(device_id, vertices, indices)
+    {
+    }
+  };
+
+  std::unique_ptr<TestMesh> mesh_;
 };
 
 //=== SubMesh Tests ===------------------------------------------------------//
@@ -118,10 +107,7 @@ NOLINT_TEST_F(SubMeshTestFixture, ConstructAndAccess)
   };
   std::vector<std::uint32_t> indices { 0, 1 };
 
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -160,10 +146,7 @@ NOLINT_TEST_F(SubMeshTestFixture, MultipleMeshViews)
     // clang-format on
   };
   std::vector<std::uint32_t> indices = { 0, 1, 2, 0, 2, 3 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -207,10 +190,7 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyMeshViews_Throws)
     .bitangent = {},
     .color = {} } };
   std::vector<std::uint32_t> indices = { 0 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views; // Empty - violates design constraint
   auto material = std::make_shared<const MaterialAsset>(
@@ -230,10 +210,7 @@ NOLINT_TEST_F(SubMeshTestFixture, NullMaterial_Throws)
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices { 0, 1 };
 
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -256,10 +233,7 @@ NOLINT_TEST_F(SubMeshTestFixture, Move)
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -292,10 +266,7 @@ NOLINT_TEST_F(SubMeshTestFixture, EmptyName)
   // Arrange
   std::vector<Vertex> vertices(1);
   std::vector<std::uint32_t> indices { 0 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
@@ -325,10 +296,7 @@ NOLINT_TEST_F(SubMeshTestFixture, LongName)
   std::string long_name(1000, 'a'); // 1000 character name
   std::vector<Vertex> vertices(1);
   std::vector<std::uint32_t> indices { 0 };
-  SetupMockMesh(vertices, indices);
-  EXPECT_CALL(*mesh_, Vertices())
-    .Times(::testing::AnyNumber())
-    .WillRepeatedly(::testing::Return(std::span<const Vertex>(vertices)));
+  SetupMesh(vertices, indices);
 
   std::vector<MeshView> mesh_views;
   mesh_views.emplace_back(*mesh_,
