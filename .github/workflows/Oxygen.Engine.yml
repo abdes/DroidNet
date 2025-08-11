@@ -45,6 +45,12 @@ jobs:
       - name: Install Conan
         run: pip install conan
 
+      - name: Save pip cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('projects/Oxygen.Engine/requirements.txt') }}
+
       - name: Cache Conan
         uses: actions/cache@v4
         with:
@@ -62,34 +68,79 @@ jobs:
           if (conan remote list | Select-String 'conancenter') { conan remote remove conancenter }
           if (conan remote list | Select-String 'mycenter') { conan remote remove mycenter }
           conan remote add mycenter $env:GITHUB_WORKSPACE\conan-center-index
+
+      - name: Set up CMake
+        uses: jwlawson/actions-setup-cmake@v1
+
+      - name: Setup ccache
+        uses: Chocobo1/setup-ccache-action@v1
+        with:
+          install_ccache: true
+          update_packager_index: false
+          prepend_symlinks_to_path: false
+          windows_compile_environment: msvc # this field is required
+
+      - name: Set up ccache environment
+        run: |
+          echo "CCACHE_DIR=${{ runner.temp }}\.ccache" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
       - name: Show tool versions
         run: |
           python --version
           pip --version
           conan --version
           cmake --version
+          ccache --version
           if (Get-Command cl.exe -ErrorAction SilentlyContinue) { cl.exe } else { Write-Host 'cl.exe not found in PATH' }
-
-      - name: Set up CMake
-        uses: jwlawson/actions-setup-cmake@v1
+          ccache --version
 
       - name: Conan install dependencies
         working-directory: projects/Oxygen.Engine
+        env:
+          CCACHE_DIR: ${{ runner.temp }}\.ccache
         run: |
           conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
 
+      - name: Save Conan cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('projects/Oxygen.Engine/conanfile.*') }}
+
       - name: Configure CMake
         working-directory: projects/Oxygen.Engine
+        env:
+          CCACHE_DIR: ${{ runner.temp }}\.ccache
+          CC: ccache cl
+          CXX: ccache cl
         run: |
           cmake --preset=windows
 
       - name: Build
         working-directory: projects/Oxygen.Engine
+        env:
+          CCACHE_DIR: ${{ env.CCACHE_DIR }}
         run: |
           cmake --build --preset=windows-release
 
       - name: Run tests
         working-directory: projects/Oxygen.Engine
+        env:
+          CCACHE_DIR: ${{ env.CCACHE_DIR }}
         run: |
           ctest --preset=test-windows --output-on-failure -C Release
         continue-on-error: true
+
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ github.sha }}
