@@ -61,11 +61,11 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|30 | ✅ Todo | Add MaterialAssetBasicTest_DefaultMaterialDomainAndFlags | Domain/flags not asserted | NewTest | P2 | | GetMaterialDomain(), GetFlags() expected |
-|31 | ✅ Todo | Add MaterialAssetBasicTest_DefaultTextureIndicesUnset | Default texture indices untested | NewTest | P2 | | All texture indices sentinel/zero |
-|32 | ✅ Todo | Add MaterialAssetConsistencyTest_ShaderRefsMatchStageMask | Stage mask vs shader_refs size mismatch undetected | NewTest | P2 | | popcount(mask)==shader refs count |
-|33 | ✅ Todo | Add MaterialAssetBasicTest_DefaultScalarsStable | Scalar property getters untested | NewTest | P3 | | BaseColor size=4; scalars exact |
-|34 | ✅ Todo | Add ShaderReferenceBasicTest_ConstructionAndAccessors | ShaderReference type unused by tests | NewTest | P3 | | Fields accessible, stage matches |
+|30 | ✅ Done | Add MaterialAssetBasicTest_DefaultMaterialDomainAndFlags | Domain/flags not asserted | NewTest | P2 | | GetMaterialDomain(), GetFlags() expected |
+|31 | ✅ Done | Add MaterialAssetBasicTest_DefaultTextureIndicesUnset | Default texture indices untested | NewTest | P2 | | All texture indices sentinel/zero |
+|32 | ✅ Done | Add MaterialAssetConsistencyTest_ShaderRefsMatchStageMask | Stage mask vs shader_refs size mismatch undetected | NewTest | P2 | | popcount(mask)==shader refs count |
+|33 | ✅ Done | Add MaterialAssetBasicTest_DefaultScalarsStable | Scalar property getters untested | NewTest | P3 | | BaseColor size=4; scalars exact |
+|34 | ✅ Done | Add ShaderReferenceBasicTest_ConstructionAndAccessors | ShaderReference type unused by tests | NewTest | P3 | | Fields accessible, stage matches |
 
 ## Group: TextureResource (TextureResource.h/.cpp)
 
