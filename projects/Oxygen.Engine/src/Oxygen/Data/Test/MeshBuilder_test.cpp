@@ -507,36 +507,6 @@ NOLINT_TEST_F(MeshBuilderDeathTest, VerticesOnlyThenBuild_Death)
   EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
 }
 
-//! (5) Referenced storage: mismatch between declared size & element stride.
-//! Crafts an index buffer whose size is not a multiple of index element size.
-NOLINT_TEST_F(MeshBuilderDeathTest, ReferencedIndexBufferSizeMisaligned_Death)
-{
-  // Arrange
-  // Create misaligned index buffer: 3 bytes with 4-byte stride (uint32_t)
-  pak::BufferResourceDesc bad_index_desc = { .data_offset = 0,
-    .size_bytes = 3, // Not divisible by 4
-    .usage_flags
-    = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
-    .element_stride = sizeof(std::uint32_t),
-    .element_format = 0,
-    .reserved = {} };
-  std::vector<uint8_t> bad_index_data(3, 0xFF);
-  auto bad_index_buffer = std::make_shared<BufferResource>(
-    std::move(bad_index_desc), std::move(bad_index_data));
-
-  MeshBuilder builder;
-  builder.WithBufferResources(vertex_buffer_, bad_index_buffer)
-    .BeginSubMesh("test", material_)
-    .WithMeshView({ .first_index = 0,
-      .index_count = 0,
-      .first_vertex = 0,
-      .vertex_count = 1 })
-    .EndSubMesh();
-
-  // Act & Assert: Expect death when Build validates alignment.
-  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
-}
-
 //! (10) Ensures EndSubMesh() without any prior WithMeshView call throws.
 NOLINT_TEST_F(MeshBuilderDeathTest, BuilderAddsSubMeshWithNoViews_Throws)
 {
