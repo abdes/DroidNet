@@ -666,7 +666,7 @@ NOLINT_TEST_F(ComponentPoolErrorTest, Allocate_UniquePtr_WrongType_ThrowsOrDies)
     = std::make_unique<TestRenderComponent>("bad");
 #ifdef NDEBUG
   // In release, expect exception
-  EXPECT_THROW(pool_->Allocate(std::move(*wrong_type_ptr)), std::exception);
+  EXPECT_THROW(pool_->Allocate(std::move(*wrong_type)), std::exception);
 #else
   // In debug, expect death
   EXPECT_DEATH(pool_->Allocate(std::move(wrong_type)), "");
