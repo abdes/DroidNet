@@ -255,6 +255,17 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
     // Use referenced storage constructor (asset meshes)
     CHECK_NOTNULL_F(vertex_buffer_resource_,
       "Referenced mesh must have vertex buffer resource");
+    // If an index buffer is present, validate element stride alignment.
+    if (index_buffer_resource_) {
+      const auto stride = index_buffer_resource_->GetElementStride();
+      if (stride > 1) {
+        const auto size = index_buffer_resource_->GetDataSize();
+        CHECK_F(size % stride == 0,
+          "Index buffer size must be a multiple of element stride (size=%zu "
+          "stride=%u)",
+          static_cast<size_t>(size), static_cast<unsigned>(stride));
+      }
+    }
     mesh = std::unique_ptr<Mesh>(
       new Mesh(lod_, vertex_buffer_resource_, index_buffer_resource_));
   }

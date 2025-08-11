@@ -396,4 +396,99 @@ NOLINT_TEST_F(MeshBuilderBasicTest, Build_WithReferencedStorage_Succeeds)
   EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
 }
 
+//=== Additional Negative/Edge Case Build Tests (Work Plan Items 1-5) ===--//
+
+//! (1) Ensures Build() fails when no submeshes were added.
+NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutSubMesh_Death)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_).WithIndices(indices_);
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(),
+    "Mesh must have at least one submesh");
+}
+
+//! (2) Ensures Build() fails when no storage was set (uninitialized storage).
+NOLINT_TEST_F(MeshBuilderErrorTest, BuildWithoutStorage_Death)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.BeginSubMesh("test", material_)
+    .WithMeshView({ .first_index = 0,
+      .index_count = 1,
+      .first_vertex = 0,
+      .vertex_count = 1 })
+    .EndSubMesh();
+
+  // Act & Assert
+  EXPECT_DEATH(
+    [[maybe_unused]] auto _ = builder.Build(), "Mesh must have vertices");
+}
+
+//! (3) Clarifies behavior: indices-only then Build should death (no vertices).
+NOLINT_TEST_F(MeshBuilderErrorTest, IndicesOnlyThenBuild_Death)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithIndices(indices_)
+    .BeginSubMesh("test", material_)
+    .WithMeshView({ .first_index = 0,
+      .index_count = 1,
+      .first_vertex = 0,
+      .vertex_count = 1 }) // vertex_count placeholder
+    .EndSubMesh();
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+}
+
+//! (4) Vertices-only Build now invalid: must supply indices for owned storage.
+NOLINT_TEST_F(MeshBuilderErrorTest, VerticesOnlyThenBuild_Death)
+{
+  // Arrange
+  MeshBuilder builder;
+  builder.WithVertices(vertices_)
+    .BeginSubMesh("test", material_)
+    .WithMeshView({ .first_index = 0,
+      .index_count = 0, // Intentionally zero
+      .first_vertex = 0,
+      .vertex_count = static_cast<uint32_t>(vertices_.size()) })
+    .EndSubMesh();
+
+  // Act & Assert
+  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+}
+
+//! (5) Referenced storage: mismatch between declared size & element stride.
+//! Crafts an index buffer whose size is not a multiple of index element size.
+NOLINT_TEST_F(MeshBuilderErrorTest, ReferencedIndexBufferSizeMisaligned_Death)
+{
+  // Arrange
+  // Create misaligned index buffer: 3 bytes with 4-byte stride (uint32_t)
+  pak::BufferResourceDesc bad_index_desc = { .data_offset = 0,
+    .size_bytes = 3, // Not divisible by 4
+    .usage_flags
+    = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
+    .element_stride = sizeof(std::uint32_t),
+    .element_format = 0,
+    .reserved = {} };
+  std::vector<uint8_t> bad_index_data(3, 0xFF);
+  auto bad_index_buffer = std::make_shared<BufferResource>(
+    std::move(bad_index_desc), std::move(bad_index_data));
+
+  MeshBuilder builder;
+  builder.WithBufferResources(vertex_buffer_, bad_index_buffer)
+    .BeginSubMesh("test", material_)
+    .WithMeshView({ .first_index = 0,
+      .index_count = 0,
+      .first_vertex = 0,
+      .vertex_count = 1 })
+    .EndSubMesh();
+
+  // Act & Assert: Expect death when Build validates alignment.
+  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+}
+
 } // namespace
