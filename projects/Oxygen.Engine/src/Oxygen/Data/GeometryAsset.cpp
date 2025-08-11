@@ -242,6 +242,11 @@ using oxygen::data::MeshBuilder;
 //! Builds and returns the immutable Mesh.
 auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
 {
+  if (submesh_in_progress_) {
+    CHECK_F(false,
+      "Cannot build Mesh while a SubMesh is in progress (active SubMesh not "
+      "ended)");
+  }
   CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
 
   // Create the Mesh object using the appropriate constructor
@@ -292,6 +297,9 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
     for (const auto& view_desc : spec.mesh_views) {
       submesh.AddMeshViewInternal(std::move(view_desc));
     }
+    // Compute bounds (descriptor-provided or computed from mesh views) before
+    // adding
+    submesh.ComputeBounds();
     mesh->AddSubMeshInternal(std::move(submesh));
   }
 

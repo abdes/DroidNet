@@ -126,6 +126,183 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
   EXPECT_THAT(submesh.MeshViews()[1].Vertices(), SizeIs(3));
 }
 
+//! (7) Aggregation correctness: total indices/vertices across views sum as
+//! expected.
+NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews_AggregatedCorrectly)
+{
+  // Arrange
+  std::vector<Vertex> vertices = {
+    {
+      .position = { 0, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 0, 1, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 1, 1, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
+  std::vector<std::uint32_t> indices = { 0, 1, 2, 1, 3, 2 };
+  auto material = MakeMaterial();
+
+  // Act
+  auto mesh = MeshBuilder(0, "agg_mesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("agg", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .WithMeshView({ .first_index = 3,
+                  .index_count = 3,
+                  .first_vertex = 1,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+
+  // Assert
+  ASSERT_NE(mesh, nullptr);
+  const auto& sm = mesh->SubMeshes()[0];
+  EXPECT_EQ(sm.MeshViews().size(), 2u);
+  const auto first_count = sm.MeshViews()[0].IndexBuffer().Count();
+  const auto second_count = sm.MeshViews()[1].IndexBuffer().Count();
+  EXPECT_EQ(first_count + second_count, indices.size());
+}
+
+//! (8) Descriptor-provided bounds are copied (not recomputed from vertices).
+NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
+{
+  // Arrange: descriptor bounds intentionally NOT matching actual vertices.
+  std::vector<Vertex> vertices = {
+    {
+      .position = { 10, 10, 10 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 20, 20, 20 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
+  std::vector<std::uint32_t> indices { 0, 1 };
+  auto material = MakeMaterial();
+  oxygen::data::pak::SubMeshDesc desc {
+    .name = {},
+    .material_asset_key = {},
+    .mesh_view_count = 1,
+    .bounding_box_min = { 0.0f, 0.0f, 0.0f },
+    .bounding_box_max = { 1.0f, 2.0f, 3.0f },
+  };
+
+  // Act
+  auto mesh = MeshBuilder(0, "desc_bounds")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("sm", material)
+                .WithDescriptor(desc)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 2,
+                  .first_vertex = 0,
+                  .vertex_count = 2 })
+                .EndSubMesh()
+                .Build();
+
+  // Assert
+  const auto& sm = mesh->SubMeshes()[0];
+  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(0.0f, 0.0f, 0.0f));
+  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(1.0f, 2.0f, 3.0f));
+}
+
+//! (9) Computed bounds path: bounds enclose all vertices (no descriptor).
+NOLINT_TEST_F(SubMeshBuilderFixture, ComputedBoundsMatchVertices)
+{
+  // Arrange
+  std::vector<Vertex> vertices = {
+    {
+      .position = { -1, 2, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 3, -4, 5 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 2, 1, -2 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
+  std::vector<std::uint32_t> indices { 0, 1, 2 };
+  auto material = MakeMaterial();
+
+  // Act
+  auto mesh = MeshBuilder(0, "comp_bounds")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = 3 })
+                .EndSubMesh()
+                .Build();
+
+  // Assert
+  const auto& sm = mesh->SubMeshes()[0];
+  const auto min = sm.BoundingBoxMin();
+  const auto max = sm.BoundingBoxMax();
+  for (const auto& v : vertices) {
+    EXPECT_LE(v.position.x, max.x);
+    EXPECT_GE(v.position.x, min.x);
+    EXPECT_LE(v.position.y, max.y);
+    EXPECT_GE(v.position.y, min.y);
+    EXPECT_LE(v.position.z, max.z);
+    EXPECT_GE(v.position.z, min.z);
+  }
+}
+
 //! Tests EndSubMesh throws when no mesh views were added (1:N constraint).
 NOLINT_TEST_F(SubMeshBuilderFixture, EmptyMeshViews_Throws)
 {
