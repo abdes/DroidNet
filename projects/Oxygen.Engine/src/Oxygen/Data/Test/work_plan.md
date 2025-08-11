@@ -86,10 +86,10 @@ Legend:
 
 | ID | Status | Action | Rationale / Gap Addressed | Type | Priority | Owner | Notes / Acceptance Criteria |
 |----|--------|--------|---------------------------|------|----------|-------|-----------------------------|
-|40 | ✅ Todo | Add ProceduralMeshBasicTest_ShapesTopologyValid | Per-shape topology invariants missing | NewTest | P2 | | Each shape: verts>0, indices%3==0, in-range |
-|41 | ✅ Todo | Add ProceduralMeshQualityTest_ShapesNormalsAndUVsValid | Normal length & UV range not verified | NewTest | P3 | | normals≈1, 0<=uv<=1 |
-|42 | ✅ Todo | Add ProceduralMeshQualityTest_Torus_NoDegenerateTriangles | Degenerate triangle avoidance untested | NewTest | P3 | | No duplicate consecutive indices |
-|43 | ✅ Todo | Add ProceduralMeshOptimizationTest_ConeCapVertexReuse | Cap vertex reuse optimization untested | NewTest | P3 | | Fewer unique cap verts than faces |
+|40 | ✅ Done | Add ProceduralMeshBasicTest_ShapesTopologyValid | Per-shape topology invariants missing | NewTest | P2 | | Each shape: verts>0, indices%3==0, in-range |
+|41 | ✅ Done | Add ProceduralMeshQualityTest_ShapesNormalsAndUVsValid | Normal length & UV range not verified | NewTest | P3 | | normals≈1, 0<=uv<=1 |
+|42 | ✅ Done | Add ProceduralMeshQualityTest_Torus_NoDegenerateTriangles | Degenerate triangle avoidance untested | NewTest | P3 | | No duplicate consecutive indices |
+|43 | ✅ Done | Add ProceduralMeshOptimizationTest_ConeCapVertexReuse | Cap vertex reuse optimization untested | NewTest | P3 | | Fewer unique cap verts than faces |
 
 ## Group: Converters & AssetKey (ToStringConverters.cpp / AssetKey)
 

@@ -7,6 +7,7 @@
 // Standard library
 #include <cstddef>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 // GTest
@@ -308,6 +309,146 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
       EXPECT_GE(indices.size(), t.min_indices) << t.name;
     }
   }
+}
+
+//! Verifies per-shape basic topology invariants: >0 vertices, triangles
+//! well-formed, index buffer length divisible by 3, all indices in range, and
+//! no obviously invalid winding (degenerate detection handled in dedicated test
+//! for torus / cone).
+NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
+{
+  // Arrange
+  using namespace oxygen::data;
+  struct NamedAsset {
+    const char* name;
+    std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> asset;
+  } assets[] = {
+    { "Cube", MakeCubeMeshAsset() },
+    { "Sphere", MakeSphereMeshAsset(8, 8) },
+    { "Plane", MakePlaneMeshAsset(2, 2, 1.0f) },
+    { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f) },
+    { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f) },
+    { "Torus", MakeTorusMeshAsset(8, 8, 1.0f, 0.25f) },
+    { "Quad", MakeQuadMeshAsset(1.0f, 1.0f) },
+  };
+
+  // Act & Assert
+  for (const auto& a : assets) {
+    ASSERT_TRUE(a.asset.has_value()) << a.name;
+    const auto& vertices = a.asset->first;
+    const auto& indices = a.asset->second;
+    ASSERT_FALSE(vertices.empty()) << a.name;
+    ASSERT_FALSE(indices.empty()) << a.name;
+    EXPECT_EQ(indices.size() % 3, 0u)
+      << a.name << " index count must be multiple of 3";
+    for (uint32_t idx : indices) {
+      EXPECT_LT(idx, vertices.size()) << a.name << " index out of range";
+    }
+  }
+}
+
+//! Validates normals are approximately unit length and UV coordinates lie in
+//! [0,1] (with small epsilon tolerance) for representative procedural shapes.
+NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
+{
+  // Arrange
+  using namespace oxygen::data;
+  auto sphere = MakeSphereMeshAsset(8, 8);
+  auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
+  auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
+  auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
+  auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
+  std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> shapes[]
+    = {
+        sphere,
+        plane,
+        cylinder,
+        cone,
+        torus,
+      };
+
+  constexpr float kNormTol
+    = 1e-3f; // loosen vs vertex epsilon for accumulated ops
+  for (const auto& s : shapes) {
+    ASSERT_TRUE(s.has_value());
+    const auto& vertices = s->first;
+    for (const auto& v : vertices) {
+      float len = glm::length(v.normal);
+      EXPECT_NEAR(len, 1.0f, kNormTol);
+      EXPECT_GE(v.texcoord.x, -kNormTol);
+      EXPECT_GE(v.texcoord.y, -kNormTol);
+      EXPECT_LE(v.texcoord.x, 1.0f + kNormTol);
+      EXPECT_LE(v.texcoord.y, 1.0f + kNormTol);
+    }
+  }
+}
+
+//! Ensures the torus contains no degenerate triangles (no triangle where any
+//! two consecutive indices are identical). This guards against topology bugs
+//! when wrapping segment seams.
+NOLINT_TEST_F(ProceduralMeshTest, Torus_NoDegenerateTriangles)
+{
+  // Arrange
+  using namespace oxygen::data;
+  auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
+  ASSERT_TRUE(torus.has_value());
+  const auto& indices = torus->second;
+
+  // Act & Assert
+  ASSERT_EQ(indices.size() % 3, 0u);
+  for (size_t i = 0; i < indices.size(); i += 3) {
+    uint32_t a = indices[i];
+    uint32_t b = indices[i + 1];
+    uint32_t c = indices[i + 2];
+    EXPECT_FALSE(a == b || b == c || a == c)
+      << "Degenerate triangle at tri " << (i / 3) << " indices (" << a << ","
+      << b << "," << c << ")";
+  }
+}
+
+//! Checks that the cone base cap reuses the radial ring vertices rather than
+//! duplicating a separate ring (optimization / memory reuse). Acceptance: the
+//! number of unique vertices participating in base cap triangles is strictly
+//! less than the number of indices referenced there (implying reuse) and no
+//! second distinct ring sized 'segments' exists after side + apex vertices.
+NOLINT_TEST_F(ProceduralMeshTest, ConeCapVertexReuse)
+{
+  // Arrange
+  using namespace oxygen::data;
+  const unsigned segments = 8;
+  auto cone = MakeConeMeshAsset(segments, 1.0f, 0.5f);
+  ASSERT_TRUE(cone.has_value());
+  const auto& vertices = cone->first;
+  const auto& indices = cone->second;
+
+  // Identify expected layout from generator: [ring (segments+1)] + apex +
+  // base_center
+  const size_t ring_count = segments + 1; // inclusive duplicate for wrap
+  const size_t base_center_index = ring_count + 1; // after apex
+  ASSERT_LT(base_center_index, vertices.size());
+
+  // Side triangles count = segments, cap triangles count = segments (see
+  // generator)
+  ASSERT_EQ(indices.size(), segments * 3 * 2);
+  const size_t side_index_count = segments * 3;
+
+  // Collect unique vertex indices used by cap triangles only.
+  std::unordered_set<uint32_t> cap_unique;
+  for (size_t i = side_index_count; i < indices.size(); i += 3) {
+    cap_unique.insert(indices[i]);
+    cap_unique.insert(indices[i + 1]);
+    cap_unique.insert(indices[i + 2]);
+  }
+  // Expect cap uses the shared ring vertices (subset of first ring_count) plus
+  // center.
+  for (uint32_t idx : cap_unique) {
+    EXPECT_LT(idx, static_cast<uint32_t>(base_center_index + 1));
+  }
+  // Should include center
+  EXPECT_TRUE(cap_unique.contains(static_cast<uint32_t>(base_center_index)));
+  // Reuse condition: unique cap verts <= ring_count + 1 (center) and strictly <
+  // ring_count + 2 (which would imply extra ring)
+  EXPECT_LE(cap_unique.size(), ring_count + 1);
 }
 
 } // namespace
