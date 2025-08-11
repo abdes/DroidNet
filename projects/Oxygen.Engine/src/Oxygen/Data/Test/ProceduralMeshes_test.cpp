@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Standard library
+#include <cstddef>
+#include <optional>
+#include <vector>
+
 // GTest
 #include <Oxygen/Testing/GTest.h>
 
@@ -29,38 +34,119 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
   // Arrange
   using namespace oxygen::data;
 
-  // Act
-  // (Calls inline below.)
+  struct SphereCase {
+    int lat;
+    int lon;
+    bool valid;
+    const char* note;
+  } sphere_cases[] = {
+    { 2, 2, false, "both below min" },
+    { 8, 8, true, "typical valid" },
+  };
 
-  // Assert
-  EXPECT_FALSE(MakeSphereMeshAsset(2, 2).has_value());
-  EXPECT_TRUE(MakeSphereMeshAsset(8, 8).has_value());
+  struct PlaneCase {
+    int x;
+    int z;
+    float size;
+    bool valid;
+    const char* note;
+  } plane_cases[] = {
+    { 0, 1, 1.0f, false, "x=0 invalid" },
+    { 1, 0, 1.0f, false, "z=0 invalid" },
+    { 1, 1, 0.0f, false, "size=0 invalid" },
+    { 2, 2, 1.0f, true, "baseline valid" },
+  };
 
-  EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0f).has_value());
-  EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0f).has_value());
-  EXPECT_FALSE(MakePlaneMeshAsset(1, 1, 0.0f).has_value());
-  EXPECT_TRUE(MakePlaneMeshAsset(2, 2, 1.0f).has_value());
+  struct CylinderCase {
+    int segments;
+    float height;
+    float radius;
+    bool valid;
+    const char* note;
+  } cylinder_cases[] = {
+    { 2, 1.0f, 0.5f, false, "segments below min" },
+    { 8, -1.0f, 0.5f, false, "negative height" },
+    { 8, 1.0f, -0.5f, false, "negative radius" },
+    { 8, 1.0f, 0.5f, true, "valid" },
+  };
 
-  EXPECT_FALSE(MakeCylinderMeshAsset(2, 1.0f, 0.5f).has_value());
-  EXPECT_FALSE(MakeCylinderMeshAsset(8, -1.0f, 0.5f).has_value());
-  EXPECT_FALSE(MakeCylinderMeshAsset(8, 1.0f, -0.5f).has_value());
-  EXPECT_TRUE(MakeCylinderMeshAsset(8, 1.0f, 0.5f).has_value());
+  struct ConeCase {
+    int segments;
+    float height;
+    float radius;
+    bool valid;
+    const char* note;
+  } cone_cases[] = {
+    { 2, 1.0f, 0.5f, false, "segments below min" },
+    { 8, -1.0f, 0.5f, false, "negative height" },
+    { 8, 1.0f, -0.5f, false, "negative radius" },
+    { 8, 1.0f, 0.5f, true, "valid" },
+  };
 
-  EXPECT_FALSE(MakeConeMeshAsset(2, 1.0f, 0.5f).has_value());
-  EXPECT_FALSE(MakeConeMeshAsset(8, -1.0f, 0.5f).has_value());
-  EXPECT_FALSE(MakeConeMeshAsset(8, 1.0f, -0.5f).has_value());
-  EXPECT_TRUE(MakeConeMeshAsset(8, 1.0f, 0.5f).has_value());
+  struct TorusCase {
+    int major_seg;
+    int minor_seg;
+    float major_r;
+    float minor_r;
+    bool valid;
+    const char* note;
+  } torus_cases[] = {
+    { 2, 8, 1.0f, 0.25f, false, "major segments below min" },
+    { 8, 2, 1.0f, 0.25f, false, "minor segments below min" },
+    { 8, 8, -1.0f, 0.25f, false, "negative major radius" },
+    { 8, 8, 1.0f, -0.25f, false, "negative minor radius" },
+    { 8, 8, 1.0f, 0.25f, true, "valid" },
+  };
 
-  EXPECT_FALSE(MakeTorusMeshAsset(2, 8, 1.0f, 0.25f).has_value());
-  EXPECT_FALSE(MakeTorusMeshAsset(8, 2, 1.0f, 0.25f).has_value());
-  EXPECT_FALSE(MakeTorusMeshAsset(8, 8, -1.0f, 0.25f).has_value());
-  EXPECT_FALSE(MakeTorusMeshAsset(8, 8, 1.0f, -0.25f).has_value());
-  EXPECT_TRUE(MakeTorusMeshAsset(8, 8, 1.0f, 0.25f).has_value());
+  struct QuadCase {
+    float w;
+    float h;
+    bool valid;
+    const char* note;
+  } quad_cases[] = {
+    { 0.0f, 1.0f, false, "zero width" },
+    { 1.0f, 0.0f, false, "zero height" },
+    { 1.0f, 1.0f, true, "valid" },
+  };
 
-  EXPECT_FALSE(MakeQuadMeshAsset(0.0f, 1.0f).has_value());
-  EXPECT_FALSE(MakeQuadMeshAsset(1.0f, 0.0f).has_value());
-  EXPECT_TRUE(MakeQuadMeshAsset(1.0f, 1.0f).has_value());
+  // Act & Assert
+  for (const auto& c : sphere_cases) {
+    const bool has = MakeSphereMeshAsset(c.lat, c.lon).has_value();
+    EXPECT_EQ(has, c.valid) << "Sphere(" << c.lat << "," << c.lon << ") "
+                            << c.note;
+  }
+  for (const auto& c : plane_cases) {
+    const bool has = MakePlaneMeshAsset(c.x, c.z, c.size).has_value();
+    EXPECT_EQ(has, c.valid) << "Plane(" << c.x << "," << c.z << "," << c.size
+                            << ") " << c.note;
+  }
+  for (const auto& c : cylinder_cases) {
+    const bool has
+      = MakeCylinderMeshAsset(c.segments, c.height, c.radius).has_value();
+    EXPECT_EQ(has, c.valid) << "Cylinder(" << c.segments << "," << c.height
+                            << "," << c.radius << ") " << c.note;
+  }
+  for (const auto& c : cone_cases) {
+    const bool has
+      = MakeConeMeshAsset(c.segments, c.height, c.radius).has_value();
+    EXPECT_EQ(has, c.valid) << "Cone(" << c.segments << "," << c.height
+                            << "," << c.radius << ") " << c.note;
+  }
+  for (const auto& c : torus_cases) {
+    const bool has = MakeTorusMeshAsset(c.major_seg, c.minor_seg, c.major_r,
+      c.minor_r)
+                       .has_value();
+    EXPECT_EQ(has, c.valid) << "Torus(" << c.major_seg << "," << c.minor_seg
+                            << "," << c.major_r << "," << c.minor_r << ") "
+                            << c.note;
+  }
+  for (const auto& c : quad_cases) {
+    const bool has = MakeQuadMeshAsset(c.w, c.h).has_value();
+    EXPECT_EQ(has, c.valid) << "Quad(" << c.w << "," << c.h << ") "
+                            << c.note;
+  }
 
+  // Always-valid generators
   EXPECT_TRUE(MakeArrowGizmoMeshAsset().has_value());
   EXPECT_TRUE(MakeCubeMeshAsset().has_value());
 }
