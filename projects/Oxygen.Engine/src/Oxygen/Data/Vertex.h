@@ -34,7 +34,29 @@ struct Vertex {
   // Extend as needed: skin weights, bone indices, etc.
 };
 
-//! Strict bitwise equality for Vertex (all fields, no epsilon tolerance)
+//! Default geometric epsilon used for vertex fuzzy comparisons & hashing.
+/*!
+ Chosen larger than std::numeric_limits<float>::epsilon() to account for
+ accumulated floating-point error across typical mesh processing (imports,
+ tangent generation, minor transforms). Keeps equality stable while avoiding
+ collapsing distinct vertices under normal scale (~1 unit world space).
+
+ @warning Adjust with care: must remain consistent with @ref operator== and
+ QuantizedVertexHash to preserve equivalence relation used in unordered
+ containers. Changing it requires updating tests relying on approximate equality
+ semantics.
+*/
+inline constexpr float kVertexEpsilon = 1e-5f; // domain-tuned tolerance
+
+//! Strict bitwise-like equality for Vertex (all fields, no epsilon tolerance)
+/*!
+ Compares every component exactly (delegates to glm component == operators).
+ This is suitable for scenarios requiring deterministic reproducibility (e.g.,
+ serialization round-trips) or hashing with a separate exact hash.
+
+ @note Floating-point semantics: this treats +0 and -0 as equal (per glm), and
+ NaN fields will compare unequal (propagating typical IEEE rules).
+*/
 inline auto StrictlyEqual(const Vertex& a, const Vertex& b) noexcept -> bool
 {
   return a.position == b.position && a.normal == b.normal
@@ -42,11 +64,41 @@ inline auto StrictlyEqual(const Vertex& a, const Vertex& b) noexcept -> bool
     && a.bitangent == b.bitangent && a.color == b.color;
 }
 
-//! Epsilon-based equality operator for Vertex (quantized, matches
-//! QuantizedVertexHash)
+//! Approximate component-wise equality using kVertexEpsilon.
+/*!
+ Provides fuzzy equality tolerant to small floating-point perturbations. The
+ epsilon is uniform across all components for simplicity. This matches the
+ quantization grid used by QuantizedVertexHash ensuring that (a == b) implies
+ equal hash codes (consistency for unordered containers).
+
+ @warning Not a strict equivalence relation mathematically; transitivity can
+ fail near tolerance boundaries. Avoid relying on chaining (a==b && b==c)
+ implying (a==c) when values differ by ~epsilon.
+*/
 inline auto operator==(const Vertex& lhs, const Vertex& rhs) noexcept -> bool
 {
-  constexpr float epsilon = 1e-5f;
+  const float e = kVertexEpsilon;
+  return glm::all(glm::epsilonEqual(lhs.position, rhs.position, e))
+    && glm::all(glm::epsilonEqual(lhs.normal, rhs.normal, e))
+    && glm::all(glm::epsilonEqual(lhs.texcoord, rhs.texcoord, e))
+    && glm::all(glm::epsilonEqual(lhs.tangent, rhs.tangent, e))
+    && glm::all(glm::epsilonEqual(lhs.bitangent, rhs.bitangent, e))
+    && glm::all(glm::epsilonEqual(lhs.color, rhs.color, e));
+}
+
+//! Fuzzy comparison with custom epsilon overriding kVertexEpsilon.
+/*!
+ Useful when a caller requires stricter or looser tolerance while preserving
+ semantics consistent with QuantizedVertexHash (if using same epsilon).
+
+ @param lhs Left vertex
+ @param rhs Right vertex
+ @param epsilon Comparison tolerance (absolute per component)
+ @return true if all components differ by <= epsilon
+*/
+inline auto AlmostEqual(const Vertex& lhs, const Vertex& rhs,
+  float epsilon = kVertexEpsilon) noexcept -> bool
+{
   return glm::all(glm::epsilonEqual(lhs.position, rhs.position, epsilon))
     && glm::all(glm::epsilonEqual(lhs.normal, rhs.normal, epsilon))
     && glm::all(glm::epsilonEqual(lhs.texcoord, rhs.texcoord, epsilon))
@@ -55,7 +107,8 @@ inline auto operator==(const Vertex& lhs, const Vertex& rhs) noexcept -> bool
     && glm::all(glm::epsilonEqual(lhs.color, rhs.color, epsilon));
 }
 
-//! Hash functor for Vertex using quantization compatible with AlmostEqual.
+//! Hash functor for Vertex using quantization compatible with operator== /
+//! AlmostEqual.
 /*!
  Computes a hash value for a Vertex by quantizing all floating-point fields to
  a grid defined by the given epsilon. This ensures that vertices considered
@@ -69,7 +122,7 @@ inline auto operator==(const Vertex& lhs, const Vertex& rhs) noexcept -> bool
  @see Vertex, AlmostEqual
 */
 struct QuantizedVertexHash {
-  float epsilon = 1e-5f;
+  float epsilon = kVertexEpsilon;
   auto operator()(const Vertex& v) const noexcept -> std::size_t
   {
     auto quantize = [e = epsilon](const float x) -> int32_t {
@@ -90,7 +143,8 @@ struct QuantizedVertexHash {
 
 } // namespace oxygen::data
 
-//! std::hash specialization for Vertex using quantized hash (epsilon = 1e-5f)
+//! std::hash specialization for Vertex using quantized hash (epsilon =
+//! kVertexEpsilon)
 template <> struct std::hash<oxygen::data::Vertex> {
   auto operator()(const oxygen::data::Vertex& v) const noexcept -> std::size_t
   {
