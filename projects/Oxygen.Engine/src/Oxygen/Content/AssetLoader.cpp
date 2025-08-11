@@ -228,11 +228,12 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key, bool offline) -> bool
 auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
   -> void
 {
-  auto guard = content_cache_.OnEviction(
-    [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
-      DCHECK_EQ_F(HashAssetKey(key), cacche_key);
-      UnloadObject(type_id, value, offline);
-    });
+  auto guard
+    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
+                                  std::shared_ptr<void> value, TypeId type_id) {
+        DCHECK_EQ_F(HashAssetKey(key), cache_key);
+        UnloadObject(type_id, value, offline);
+      });
 
   // Release resource dependencies first
   auto res_dep_it = resource_dependencies_.find(key);
@@ -370,11 +371,12 @@ auto AssetLoader::ReleaseResource(const ResourceKey key, bool offline) -> bool
 
   // The resource should always be checked in on release. Whether it remains in
   // the cache or gets evicted is dependent on the eviction policy.
-  auto guard = content_cache_.OnEviction(
-    [&](uint64_t cacche_key, std::shared_ptr<void> value, TypeId type_id) {
-      DCHECK_F(SanityCheckResourceEviction(key_hash, cacche_key, type_id));
-      UnloadObject(type_id, value, offline);
-    });
+  auto guard
+    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
+                                  std::shared_ptr<void> value, TypeId type_id) {
+        DCHECK_F(SanityCheckResourceEviction(key_hash, cache_key, type_id));
+        UnloadObject(type_id, value, offline);
+      });
   content_cache_.CheckIn(HashResourceKey(key));
   return (content_cache_.Contains(key_hash)) ? false : true;
 }
