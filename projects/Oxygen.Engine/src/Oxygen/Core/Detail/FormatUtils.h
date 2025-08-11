@@ -10,7 +10,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen::graphics::detail {
 
@@ -43,7 +43,7 @@ struct FormatInfo {
  \param format The format to retrieve information for.
  \return A reference to the format information structure.
 */
-OXYGEN_GFX_API auto GetFormatInfo(Format format) -> const FormatInfo&;
+OXGN_CORE_NDAPI auto GetFormatInfo(Format format) -> const FormatInfo&;
 
 //! Flags indicating what operations are supported by a format.
 enum class FormatSupport : uint32_t { // NOLINT(*-enum-size)
