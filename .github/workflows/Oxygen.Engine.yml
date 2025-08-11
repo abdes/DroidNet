@@ -34,7 +34,7 @@ jobs:
       - name: Cache pip
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
+          path: C:\Users\runneradmin\AppData\Local\pip\Cache
           key: ${{ runner.os }}-pip-${{ hashFiles('projects/Oxygen.Engine/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
@@ -44,20 +44,6 @@ jobs:
 
       - name: Install Conan
         run: pip install conan
-
-      - name: Save pip cache
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('projects/Oxygen.Engine/requirements.txt') }}
-
-      - name: Cache Conan
-        uses: actions/cache@v4
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-conan-${{ hashFiles('projects/Oxygen.Engine/conanfile.*') }}
-          restore-keys: |
-            ${{ runner.os }}-conan-
 
       - name: Clone custom conan-center-index
         run: |
@@ -87,8 +73,8 @@ jobs:
       - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ github.sha }}
+          path: ${{ runner.temp }}\.ccache
+          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ hashFiles('**/*.cpp') }}
           restore-keys: |
             ${{ runner.os }}-ccache-
 
@@ -109,42 +95,22 @@ jobs:
         run: |
           conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
 
-      - name: Save Conan cache
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-conan-${{ hashFiles('projects/Oxygen.Engine/conanfile.*') }}
-
       - name: Install DXC compiler
         run: ./GetDXC.ps1 packages/DXC
         working-directory: projects/Oxygen.Engine
 
       - name: Configure CMake
         working-directory: projects/Oxygen.Engine
-        env:
-          CCACHE_DIR: ${{ runner.temp }}\.ccache
-          CC: ccache cl
-          CXX: ccache cl
         run: |
           cmake --preset=windows
 
       - name: Build
         working-directory: projects/Oxygen.Engine
-        env:
-          CCACHE_DIR: ${{ env.CCACHE_DIR }}
         run: |
           cmake --build --preset=windows-release
 
       - name: Run tests
         working-directory: projects/Oxygen.Engine
-        env:
-          CCACHE_DIR: ${{ env.CCACHE_DIR }}
         run: |
           ctest --preset=test-windows --output-on-failure -C Release
         continue-on-error: true
-
-      - name: Save ccache
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ github.sha }}
