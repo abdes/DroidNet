@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdio>
 #include <iostream>
 
 #include <Oxygen/Base/StateMachine.h>
@@ -82,9 +83,9 @@ auto main() -> int
 
     std::cout << "-- sending close event\n";
     door.Handle(CloseEvent {});
-  } catch (const std::exception& err) {
-    std::cerr << "An exception was thrown: " << err.what() << '\n';
+  } catch (const std::exception&) {
+    puts("An exception was thrown.");
   } catch (...) {
-    std::cerr << "An unknown exception was thrown" << '\n';
+    puts("An unknown exception was thrown.");
   }
 }
