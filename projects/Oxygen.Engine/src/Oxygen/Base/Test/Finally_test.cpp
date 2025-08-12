@@ -16,17 +16,20 @@ void f(int& i) { i += 1; }
 int j = 0;
 void g() { j += 1; }
 
-NOLINT_TEST(FinallyTest, Lambda)
+//! Scenario: Finally executes a lambda at scope exit.
+NOLINT_TEST(FinallyTest, WhenScopeExits_ThenLambdaIsExecuted)
 {
+  constexpr int test_value = 42;
   int i = 0;
   {
-    auto f = oxygen::Finally([&]() { i = 42; });
+    auto f = oxygen::Finally([&]() { i = test_value; });
     EXPECT_EQ(i, 0);
   }
-  EXPECT_EQ(i, 42);
+  EXPECT_EQ(i, test_value);
 }
 
-NOLINT_TEST(FinallyTest, LambdaMove)
+//! Scenario: Finally executes a moved lambda only once at scope exit.
+NOLINT_TEST(FinallyTest, WhenMoved_ThenLambdaIsExecutedOnlyOnce)
 {
   int i = 0;
   {
@@ -37,6 +40,8 @@ NOLINT_TEST(FinallyTest, LambdaMove)
     }
     EXPECT_TRUE(i == 1);
     {
+      // For testing purpose, we will use the object after it was moved from
+      // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move,bugprone-use-after-move)
       auto _2 = std::move(_1);
       EXPECT_TRUE(i == 1);
     }
@@ -45,7 +50,9 @@ NOLINT_TEST(FinallyTest, LambdaMove)
   EXPECT_TRUE(i == 1);
 }
 
-NOLINT_TEST(FinallyTest, ConstLvalueLambda)
+//! Scenario: Finally works with a const lvalue lambda.
+NOLINT_TEST(
+  FinallyTest, GivenConstLvalueLambda_WhenScopeExits_ThenLambdaIsExecuted)
 {
   int i = 0;
   {
@@ -56,7 +63,9 @@ NOLINT_TEST(FinallyTest, ConstLvalueLambda)
   EXPECT_TRUE(i == 1);
 }
 
-NOLINT_TEST(FinallyTest, MutableLvalueLambda)
+//! Scenario: Finally works with a mutable lvalue lambda.
+NOLINT_TEST(
+  FinallyTest, GivenMutableLvalueLambda_WhenScopeExits_ThenLambdaIsExecuted)
 {
   int i = 0;
   {
@@ -67,17 +76,21 @@ NOLINT_TEST(FinallyTest, MutableLvalueLambda)
   EXPECT_TRUE(i == 1);
 }
 
-NOLINT_TEST(FinallyTest, FunctionWithBind)
+//! Scenario: Finally executes a lambda bound with a reference at scope exit.
+NOLINT_TEST(
+  FinallyTest, GivenLambdaWithReferenceBind_WhenScopeExits_ThenLambdaIsExecuted)
 {
   int i = 0;
   {
-    auto _ = Finally([&i] { return f(i); });
+    auto _ = Finally([&i] { f(i); });
     EXPECT_TRUE(i == 0);
   }
   EXPECT_TRUE(i == 1);
 }
 
-NOLINT_TEST(FinallyTest, FunctionPointer)
+//! Scenario: Finally works with a function pointer.
+NOLINT_TEST(
+  FinallyTest, GivenFunctionPointer_WhenScopeExits_ThenFunctionIsExecuted)
 {
   j = 0;
   {
@@ -87,7 +100,9 @@ NOLINT_TEST(FinallyTest, FunctionPointer)
   EXPECT_TRUE(j == 1);
 }
 
-NOLINT_TEST(FinallyTest, Function)
+//! Scenario: Finally works with a function object.
+NOLINT_TEST(
+  FinallyTest, GivenFunctionObject_WhenScopeExits_ThenFunctionIsExecuted)
 {
   j = 0;
   {
