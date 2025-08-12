@@ -105,7 +105,7 @@ void oxygen::windows::detail::HandleComErrorImpl(
   HRESULT hr, const std::string& utf8_message)
 {
   if (!utf8_message.empty()) {
-    LOG_F(ERROR, "{}", utf8_message);
+    LOG_F(ERROR, "{}", utf8_message.c_str());
   }
 
   if (FAILED(hr)) {
@@ -117,13 +117,11 @@ void oxygen::windows::detail::HandleComErrorImpl(
       err_info_hr == S_OK) {
       // Retrieve error information
       error_message.assign(GetComErrorMessage(hr, p_error_info));
-      DLOG_F(1, "COM Error: 0x{:08X} - {}", static_cast<unsigned long>(hr),
-        error_message);
+      DLOG_F(1, "COM Error: 0x{:08X} - {}", hr, error_message.c_str());
       p_error_info->Release();
     } else {
-      error_message.assign(
-        fmt::format("COM Error: 0x{:08X}", static_cast<unsigned long>(hr)));
-      DLOG_F(1, "{}", error_message);
+      error_message.assign(fmt::format("COM Error: 0x{:08X}", hr));
+      DLOG_F(1, "{}", error_message.c_str());
     }
     ComError::Throw(static_cast<ComErrorEnum>(hr), std::move(error_message));
   }
