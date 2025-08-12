@@ -582,9 +582,11 @@ public:
   public:
     EvictionNotificationScope(AnyCache& cache, EvictionCallbackFunction cb)
       : cache_(cache)
-      , prev_(std::move(cache_.on_eviction_))
+      , prev_([&] {
+        std::swap(cache.on_eviction_, cb);
+        return std::move(cb);
+      }())
     {
-      cache_.on_eviction_ = std::move(cb);
     }
 
     ~EvictionNotificationScope() { cache_.on_eviction_ = std::move(prev_); }
