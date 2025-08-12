@@ -178,20 +178,6 @@
       "text": "Use conventional commit message format."
     }
   ],
-  "github.copilot.chat.codeGeneration.instructions": [
-    {
-      "file": ".github/instructions/unit_tests.instructions.md",
-    },
-    {
-      "file": ".github/instructions/cpp_coding_style.instructions.md",
-    },
-    {
-      "file": ".github/instructions/doc_comments.instructions.md",
-    },
-    {
-      "text": "Refrein from useless praises. Challenge my assumptions and provide constructive counter arguments. Rephrase implicit questions. Ask for clarifications if needed, before you start answering."
-    }
-  ],
   "github.copilot.chat.agent.thinkingTool": true,
   "C_Cpp.clang_format_style": "file",
   "black-formatter.args": [
