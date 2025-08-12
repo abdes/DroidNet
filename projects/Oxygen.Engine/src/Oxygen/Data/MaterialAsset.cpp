@@ -43,7 +43,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
   // Safe string copy with null termination
   constexpr const char* default_name = "Default";
   std::size_t copy_len
-    = std::min(sizeof(desc.header.name) - 1, std::strlen(default_name));
+    = (std::min)(sizeof(desc.header.name) - 1, std::strlen(default_name));
   std::memcpy(desc.header.name, default_name, copy_len);
   desc.header.name[copy_len] = '\0';
   desc.header.version = 1;
@@ -112,7 +112,7 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   // Safe string copy with null termination
   constexpr const char* debug_name = "Debug";
   std::size_t copy_len
-    = std::min(sizeof(debug_desc.header.name) - 1, std::strlen(debug_name));
+    = (std::min)(sizeof(debug_desc.header.name) - 1, std::strlen(debug_name));
   std::memcpy(debug_desc.header.name, debug_name, copy_len);
   debug_desc.header.name[copy_len] = '\0';
 

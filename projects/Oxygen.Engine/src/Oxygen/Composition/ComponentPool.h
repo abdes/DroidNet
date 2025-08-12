@@ -145,16 +145,16 @@ public:
       auto erased = table_.Erase(handle);
       if (erased != 1) {
         LOG_F(WARNING, "Component({}) not removed from table",
-          oxygen::to_string_compact(handle));
+          oxygen::to_string_compact(handle).c_str());
       }
       return erased;
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "exception when deallocating component({}): {}",
-        oxygen::to_string_compact(handle), ex.what());
+        oxygen::to_string_compact(handle).c_str(), ex.what());
     } catch (...) {
       // Any exception is non-recoverable, log and return 0
       LOG_F(ERROR, "unknown exception when deallocating component({})",
-        oxygen::to_string_compact(handle));
+        oxygen::to_string_compact(handle).c_str());
     }
     return 0;
   }

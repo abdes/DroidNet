@@ -43,7 +43,7 @@ struct Color {
   {
     auto almost_equal = [](const float x, const float y) {
       return std::abs(x - y)
-        <= epsilon * std::max({ 1.0f, std::abs(x), std::abs(y) });
+        <= epsilon * (std::max)({ 1.0f, std::abs(x), std::abs(y) });
     };
     return almost_equal(r, other.r) && almost_equal(g, other.g)
       && almost_equal(b, other.b) && almost_equal(a, other.a);

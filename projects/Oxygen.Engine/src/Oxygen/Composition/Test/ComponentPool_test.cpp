@@ -370,7 +370,7 @@ NOLINT_TEST_F(ComponentPoolBasicTest, DefragmentWithComparison_OrdersComponents)
   // Assert - descending order due to reverse insertion sort
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
-  int prev_x = std::numeric_limits<int>::max();
+  int prev_x = (std::numeric_limits<int>::max)();
   pool_->ForEach([&](const TestTransformComponent& component) {
     if (count > 0) {
       EXPECT_GE(prev_x, component.GetX());
@@ -406,7 +406,7 @@ NOLINT_TEST_F(
   // Assert - still produces descending order
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
-  int prev_y = std::numeric_limits<int>::max();
+  int prev_y = (std::numeric_limits<int>::max)();
   pool_->ForEach([&](const TestTransformComponent& component) {
     if (count == 0) {
       EXPECT_EQ(component.GetY(), 20); // Largest first

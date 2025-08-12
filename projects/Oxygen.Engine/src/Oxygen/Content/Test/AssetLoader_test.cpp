@@ -159,7 +159,7 @@ auto AssetLoaderTestBase::CreateTestAssetKey(const std::string& name) const
     std::hash<std::string> hasher;
     auto hash = hasher(name);
     std::memcpy(
-      key.guid.data(), &hash, std::min(sizeof(hash), key.guid.size()));
+      key.guid.data(), &hash, (std::min)(sizeof(hash), key.guid.size()));
   }
 
   return key;

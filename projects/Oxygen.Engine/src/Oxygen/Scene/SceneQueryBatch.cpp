@@ -597,7 +597,7 @@ public:
     for (auto& op : operations_) {
       // Aggregate metrics
       result.nodes_examined
-        = std::max(result.nodes_examined, op.result.nodes_examined);
+        = (std::max)(result.nodes_examined, op.result.nodes_examined);
       result.total_matches += op.result.nodes_matched;
 
       result.success &= static_cast<bool>(op.result);

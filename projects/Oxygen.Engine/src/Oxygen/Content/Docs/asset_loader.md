@@ -166,7 +166,7 @@ corral::task<GpuBuffer> load_gltf_buffer_chunked(ThreadPool& pool, UploadQueue& 
     GpuBuffer gpuBuffer = create_gpu_buffer(fileSize);
 
     for (size_t offset = 0; offset < fileSize; offset += chunkSize) {
-        size_t thisChunk = std::min(chunkSize, fileSize - offset);
+        size_t thisChunk = (std::min)(chunkSize, fileSize - offset);
         // Read chunk from disk on ThreadPool
         std::vector<uint8_t> data = co_await co_threadpool(pool, [=] { return read_file_chunk(bufferPath, offset, thisChunk); });
         // Upload chunk to GPU

@@ -38,7 +38,7 @@ TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
   {
     constexpr char kTestName[] = "TestAsset";
     std::fill(std::begin(header->name), std::end(header->name), '\0');
-    std::copy_n(kTestName, std::min(sizeof(header->name), sizeof(kTestName)),
+    std::copy_n(kTestName, (std::min)(sizeof(header->name), sizeof(kTestName)),
       header->name);
   }
   header->version = 42;
@@ -73,7 +73,7 @@ TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
     constexpr char kInvalidName[] = "InvalidType";
     std::fill(std::begin(header->name), std::end(header->name), '\0');
     std::copy_n(kInvalidName,
-      std::min(sizeof(header->name), sizeof(kInvalidName)), header->name);
+      (std::min)(sizeof(header->name), sizeof(kInvalidName)), header->name);
   }
 
   MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));

@@ -30,9 +30,9 @@ public:
       // Check for size limits
       using difference_type = std::vector<char>::difference_type;
       if (pos_
-          > static_cast<size_t>(std::numeric_limits<difference_type>::max())
-        || size
-          > static_cast<size_t>(std::numeric_limits<difference_type>::max())) {
+          > static_cast<size_t>((std::numeric_limits<difference_type>::max)())
+        || size > static_cast<size_t>(
+             (std::numeric_limits<difference_type>::max)())) {
         return std::make_error_code(std::errc::value_too_large);
       }
 
@@ -69,9 +69,10 @@ public:
 
     // Check for size limits
     using difference_type = std::vector<char>::difference_type;
-    if (pos_ > static_cast<size_t>(std::numeric_limits<difference_type>::max())
+    if (pos_
+        > static_cast<size_t>((std::numeric_limits<difference_type>::max)())
       || size
-        > static_cast<size_t>(std::numeric_limits<difference_type>::max())) {
+        > static_cast<size_t>((std::numeric_limits<difference_type>::max)())) {
       return std::make_error_code(std::errc::value_too_large);
     }
 

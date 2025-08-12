@@ -453,7 +453,7 @@ auto TestSceneFactory::CreateLinearChainScene(
   std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
 {
   // Calculate capacity: depth nodes in a linear chain
-  const std::size_t capacity = std::max(0, depth);
+  const std::size_t capacity = (std::max)(0, depth);
   const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
 
   auto scene = CreateScene(scene_name);
@@ -536,9 +536,11 @@ auto TestSceneFactory::CreateBinaryTreeScene(
 auto TestSceneFactory::CreateForestScene(std::string_view scene_name,
   int root_count, int children_per_root) const -> std::shared_ptr<Scene>
 {
-  // Calculate capacity: root_count roots + (root_count * children_per_root) children
+  // Calculate capacity: root_count roots + (root_count * children_per_root)
+  // children
   const std::size_t capacity = static_cast<std::size_t>(root_count)
-    + static_cast<std::size_t>(root_count) * static_cast<std::size_t>(children_per_root);
+    + static_cast<std::size_t>(root_count)
+      * static_cast<std::size_t>(children_per_root);
   const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
 
   auto scene = CreateScene(scene_name);

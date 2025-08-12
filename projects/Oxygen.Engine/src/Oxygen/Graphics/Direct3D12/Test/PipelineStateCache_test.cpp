@@ -364,7 +364,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_BindlessCbvSrvTable)
             // SRVs start at heap index 1
             .view_type = ResourceViewType::kStructuredBuffer_SRV,
             .base_index = 1,
-            .count = std::numeric_limits<uint32_t>::max(), // Unbounded
+            .count = (std::numeric_limits<uint32_t>::max)(), // Unbounded
         },
     };
   const auto pipeline_desc
@@ -423,7 +423,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_DirectCbvSrvTable)
                   .data = DescriptorTableBinding {
                       .view_type = ResourceViewType::kStructuredBuffer_SRV,
                       .base_index = 0,
-                      .count = std::numeric_limits<uint32_t>::max(),
+                      .count = (std::numeric_limits<uint32_t>::max)(),
                   },
               })
               .Build();
@@ -491,7 +491,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_SamplerTable)
                   .data = DescriptorTableBinding {
                       .view_type = ResourceViewType::kSampler,
                       .base_index = 0,
-                      .count = std::numeric_limits<uint32_t>::max(),
+                      .count = (std::numeric_limits<uint32_t>::max)(),
                   },
               })
               .Build();
@@ -532,7 +532,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, ComputePipeline_BindlessCbvSrv)
                   .data = DescriptorTableBinding {
                       .view_type = ResourceViewType::kStructuredBuffer_SRV,
                       .base_index = 1,
-                      .count = std::numeric_limits<uint32_t>::max(),
+                      .count = (std::numeric_limits<uint32_t>::max)(),
                   },
               })
               .Build();

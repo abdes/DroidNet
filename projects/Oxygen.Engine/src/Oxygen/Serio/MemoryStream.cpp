@@ -35,7 +35,7 @@ auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
     return std::make_error_code(std::errc::invalid_argument);
   }
 
-  if (size > std::numeric_limits<size_t>::max() - pos_) {
+  if (size > (std::numeric_limits<size_t>::max)() - pos_) {
     return std::make_error_code(std::errc::value_too_large);
   }
 
@@ -73,7 +73,7 @@ auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
   }
 
   const auto available = buffer.size() - pos_;
-  const auto read_size = std::min(size, available);
+  const auto read_size = (std::min)(size, available);
 
   if (read_size < size) {
     return std::make_error_code(std::errc::io_error);

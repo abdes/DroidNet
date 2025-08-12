@@ -23,16 +23,16 @@ auto TextureSlice::Resolve(const TextureDesc& desc) const -> TextureSlice
     mip_level, desc.mip_levels);
 
   if (std::cmp_equal(width, -1)) {
-    ret.width = std::max(desc.width >> mip_level, 1u);
+    ret.width = (std::max)(desc.width >> mip_level, 1u);
   }
 
   if (std::cmp_equal(height, -1)) {
-    ret.height = std::max(desc.height >> mip_level, 1u);
+    ret.height = (std::max)(desc.height >> mip_level, 1u);
   }
 
   if (std::cmp_equal(depth, -1)) {
     if (desc.texture_type == TextureType::kTexture3D) {
-      ret.depth = std::max(desc.depth >> mip_level, 1u);
+      ret.depth = (std::max)(desc.depth >> mip_level, 1u);
     } else {
       ret.depth = 1;
     }
@@ -51,9 +51,9 @@ auto TextureSubResourceSet::Resolve(const TextureDesc& desc,
     ret.num_mip_levels = 1;
   } else {
     const auto last_mip_level_plus_one
-      = std::min(base_mip_level + num_mip_levels, desc.mip_levels);
+      = (std::min)(base_mip_level + num_mip_levels, desc.mip_levels);
     ret.num_mip_levels = static_cast<MipLevel>(
-      std::max(0u, last_mip_level_plus_one - base_mip_level));
+      (std::max)(0u, last_mip_level_plus_one - base_mip_level));
   }
 
   switch (desc.texture_type) // NOLINT(clang-diagnostic-switch-enum)
@@ -65,9 +65,9 @@ auto TextureSubResourceSet::Resolve(const TextureDesc& desc,
   case TextureType::kTexture2DMultiSampleArray: {
     ret.base_array_slice = base_array_slice;
     const auto last_array_slice_plus_one
-      = std::min(base_array_slice + num_array_slices, desc.array_size);
+      = (std::min)(base_array_slice + num_array_slices, desc.array_size);
     ret.num_array_slices = static_cast<ArraySlice>(
-      std::max(0u, last_array_slice_plus_one - base_array_slice));
+      (std::max)(0u, last_array_slice_plus_one - base_array_slice));
     break;
   }
   default:

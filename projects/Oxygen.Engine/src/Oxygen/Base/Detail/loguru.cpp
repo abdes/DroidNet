@@ -1011,7 +1011,7 @@ static void on_callback_change()
 {
   s_max_out_verbosity = Verbosity_OFF;
   for (const auto& callback : s_callbacks) {
-    s_max_out_verbosity = std::max(s_max_out_verbosity, callback.verbosity);
+    s_max_out_verbosity = (std::max)(s_max_out_verbosity, callback.verbosity);
   }
 }
 

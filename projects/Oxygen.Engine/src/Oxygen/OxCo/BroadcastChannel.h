@@ -399,7 +399,7 @@ public:
   [[nodiscard]] auto Space() const noexcept
   {
     if (!bounded_) {
-      return std::numeric_limits<size_t>::max();
+      return (std::numeric_limits<size_t>::max)();
     }
 
     // Start with maximum space available
@@ -408,7 +408,7 @@ public:
     // Find minimum available space across all readers
     for (const auto& reader : readers_) {
       size_t current_space = max_size_ - reader.Size();
-      min_space = std::min(min_space, current_space);
+      min_space = (std::min)(min_space, current_space);
     }
     return min_space;
   }

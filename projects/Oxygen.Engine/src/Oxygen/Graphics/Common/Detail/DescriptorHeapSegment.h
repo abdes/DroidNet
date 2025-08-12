@@ -62,63 +62,76 @@ namespace oxygen::graphics::detail {
 */
 class DescriptorHeapSegment {
 public:
-    //! Alias the descriptor handle index type for convenience.
-    using IndexT = DescriptorHandle::IndexT;
+  //! Alias the descriptor handle index type for convenience.
+  using IndexT = DescriptorHandle::IndexT;
 
-    DescriptorHeapSegment() noexcept = default;
-    virtual ~DescriptorHeapSegment() noexcept = default;
+  DescriptorHeapSegment() noexcept = default;
+  virtual ~DescriptorHeapSegment() noexcept = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
-    OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
+  OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
 
-    //! Allocates a descriptor index from this segment.
-    /*!
-     \return The allocated index, or std::numeric_limits<uint32_t>::max() if the segment is full.
-    */
-    [[nodiscard]] virtual auto Allocate() noexcept -> IndexT = 0;
+  //! Allocates a descriptor index from this segment.
+  /*!
+   \return The allocated index, or (std::numeric_limits<uint32_t>::max)() if the
+   segment is full.
+  */
+  [[nodiscard]] virtual auto Allocate() noexcept -> IndexT = 0;
 
-    //! Releases a descriptor index back to this segment.
-    /*!
-     \param index The global index to release.
-     \return True if the index was successfully released, false otherwise.
-    */
-    virtual auto Release(IndexT index) noexcept -> bool = 0;
+  //! Releases a descriptor index back to this segment.
+  /*!
+   \param index The global index to release.
+   \return True if the index was successfully released, false otherwise.
+  */
+  virtual auto Release(IndexT index) noexcept -> bool = 0;
 
-    //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] virtual auto GetAvailableCount() const noexcept -> IndexT = 0;
+  //! Returns the number of descriptors currently available in this segment.
+  [[nodiscard]] virtual auto GetAvailableCount() const noexcept -> IndexT = 0;
 
-    //! Returns the resource view type of this segment.
-    [[nodiscard]] virtual auto GetViewType() const noexcept -> ResourceViewType = 0;
+  //! Returns the resource view type of this segment.
+  [[nodiscard]] virtual auto GetViewType() const noexcept -> ResourceViewType
+    = 0;
 
-    //! Returns the visibility of this segment.
-    [[nodiscard]] virtual auto GetVisibility() const noexcept -> DescriptorVisibility = 0;
+  //! Returns the visibility of this segment.
+  [[nodiscard]] virtual auto GetVisibility() const noexcept
+    -> DescriptorVisibility
+    = 0;
 
-    //! Returns the base index of this segment.
-    [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> IndexT = 0;
+  //! Returns the base index of this segment.
+  [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> IndexT = 0;
 
-    //! Returns the capacity of this segment.
-    [[nodiscard]] virtual auto GetCapacity() const noexcept -> IndexT = 0;
+  //! Returns the capacity of this segment.
+  [[nodiscard]] virtual auto GetCapacity() const noexcept -> IndexT = 0;
 
-    //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] virtual auto GetAllocatedCount() const noexcept -> IndexT = 0;
+  //! Returns the current size (number of allocated descriptors) of this
+  //! segment.
+  [[nodiscard]] virtual auto GetAllocatedCount() const noexcept -> IndexT = 0;
 
-    //! Returns the shader-visible (local) index for a descriptor handle within
-    //! this segment.
-    /*!
-     \param handle The descriptor handle to query.
+  //! Returns the shader-visible (local) index for a descriptor handle within
+  //! this segment.
+  /*!
+   \param handle The descriptor handle to query.
 
-     \return The local (shader-visible) index within this segment, if the handle
-             is valid, was allocated from this segment and is still allocated;
-             otherwise returns `DescriptorHandle::kInvalidIndex`.
-    */
-    [[nodiscard]] virtual auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT = 0;
+   \return The local (shader-visible) index within this segment, if the handle
+           is valid, was allocated from this segment and is still allocated;
+           otherwise returns `DescriptorHandle::kInvalidIndex`.
+  */
+  [[nodiscard]] virtual auto GetShaderVisibleIndex(
+    const DescriptorHandle& handle) const noexcept -> IndexT
+    = 0;
 
-    //! Checks if the segment is empty (i.e., no allocated descriptors).
-    [[nodiscard]] auto IsEmpty() const noexcept { return GetAllocatedCount() == 0; }
+  //! Checks if the segment is empty (i.e., no allocated descriptors).
+  [[nodiscard]] auto IsEmpty() const noexcept
+  {
+    return GetAllocatedCount() == 0;
+  }
 
-    //! Checks if the segment is full (i.e., all capacity is used for allocated
-    //! descriptors).
-    [[nodiscard]] auto IsFull() const noexcept { return GetAllocatedCount() == GetCapacity(); }
+  //! Checks if the segment is full (i.e., all capacity is used for allocated
+  //! descriptors).
+  [[nodiscard]] auto IsFull() const noexcept
+  {
+    return GetAllocatedCount() == GetCapacity();
+  }
 };
 
 } // namespace oxygen::graphics::detail
