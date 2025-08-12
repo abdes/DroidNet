@@ -59,7 +59,7 @@ set(
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
-    "DepthPrepass.cpp"
+    "DepthPrePass.cpp"
     "RenderItem.cpp"
     "Renderer.cpp"
     "RenderPass.cpp"
