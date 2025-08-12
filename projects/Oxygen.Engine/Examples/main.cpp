@@ -6,6 +6,7 @@
 
 #include <crtdbg.h>
 #include <cstdlib>
+#include <exception>
 #include <span>
 #include <string_view>
 
