@@ -1,4 +1,3 @@
-
 # State Machine Library Documentation
 
 ## Overview
@@ -79,7 +78,7 @@ action. Use the provided base classes to compose transition logic:
 - `On<Event, Action>` — Handle a specific event with a specific action.
 - `ByDefault<Action>` — Fallback handler for unhandled events.
 
-You can also implement `OnEnter` and `OnLeave` methods for side effects during
+You can implement `OnEnter` and `OnLeave` methods for side effects during
 transitions.
 
 ### Example: Basic Door State Machine
