@@ -9,7 +9,7 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Renderer/Detail/ContextScope.h>
+#include <Oxygen/Renderer/Internal/RenderScope.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/RenderPass.h>
@@ -26,7 +26,7 @@ RenderPass::RenderPass(const std::string_view name)
 auto RenderPass::PrepareResources(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
-  detail::ContextScope ctx_scope(context_, context);
+  detail::RenderScope ctx_scope(context_, context);
 
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
   DLOG_F(2, "pass: {}", GetName());
@@ -48,7 +48,7 @@ auto RenderPass::Execute(
 {
   DCHECK_F(!NeedRebuildPipelineState()); // built in PrepareResources
 
-  detail::ContextScope ctx_scope(context_, context);
+  detail::RenderScope ctx_scope(context_, context);
 
   DLOG_SCOPE_F(2, "RenderPass Execute");
   DLOG_F(2, "pass: {}", GetName());

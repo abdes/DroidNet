@@ -15,18 +15,18 @@ struct RenderContext;
 namespace detail {
 
   //! RAII helper for render context management.
-  class ContextScope {
+  class RenderScope {
   public:
-    ContextScope(const RenderContext*& context_ptr, const RenderContext& ctx)
+    RenderScope(const RenderContext*& context_ptr, const RenderContext& ctx)
       : context_ptr_(&context_ptr)
     {
       *context_ptr_ = &ctx;
     }
 
-    ~ContextScope() { context_ptr_ = nullptr; }
+    ~RenderScope() { context_ptr_ = nullptr; }
 
-    OXYGEN_MAKE_NON_COPYABLE(ContextScope)
-    OXYGEN_DEFAULT_MOVABLE(ContextScope)
+    OXYGEN_MAKE_NON_COPYABLE(RenderScope)
+    OXYGEN_DEFAULT_MOVABLE(RenderScope)
 
   private:
     const RenderContext** context_ptr_;
