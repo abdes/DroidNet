@@ -142,8 +142,7 @@
   },
   "C_Cpp.codeAnalysis.clangTidy.enabled": true,
   "C_Cpp.codeAnalysis.clangTidy.args": [
-    "--config-file=${workspaceFolder}/.clang-tidy",
-    "--stdlib=libstdc++"
+    "--config-file=${workspaceFolder}/.clang-tidy"
   ],
   "terminal.integrated.profiles.windows": {
     "PowerShell": {
