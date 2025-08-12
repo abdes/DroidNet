@@ -144,6 +144,9 @@
   "C_Cpp.codeAnalysis.clangTidy.args": [
     "--config-file=${workspaceFolder}/.clang-tidy"
   ],
+  "C_Cpp.codeAnalysis.exclude": {
+    "**/*.h.in": true
+  },
   "terminal.integrated.profiles.windows": {
     "PowerShell": {
       "source": "PowerShell",
@@ -180,6 +183,7 @@
   "github.copilot.chat.agent.thinkingTool": true,
   "C_Cpp.clang_format_style": "file",
   "black-formatter.args": [
-    "--line-length", "80"
+    "--line-length",
+    "80"
   ]
 }
