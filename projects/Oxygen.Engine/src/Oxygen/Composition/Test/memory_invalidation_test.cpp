@@ -36,6 +36,11 @@ public:
     const std::function<Component&(TypeId)>& get_component) noexcept
     -> void override
   {
+    // We do not use RTTI, and thus cannot use dynamic_cast, but our type system
+    // and the guarantees of Composition, ensure that if the Composition has a
+    // component of a certain type, then that component can be safely cast to
+    // that type.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     base_ptr_ = &static_cast<BaseComponent&>(
       get_component(BaseComponent::ClassTypeId()));
   }
@@ -86,13 +91,14 @@ NOLINT_TEST(DependencyPointerTest, PointersValidAfterVectorReallocation)
   // Create composition with small initial capacity to force reallocation
   TestComposition composition(2);
 
+  constexpr int test_value = 42;
   // Add base component
-  auto& base = composition.AddComponent<BaseComponent>(42);
+  auto& base = composition.AddComponent<BaseComponent>(test_value);
 
   // Add dependent component - stores pointer to base component
   auto& dependent = composition.AddComponent<DependentComponent>();
   // Verify initial state
-  EXPECT_EQ(dependent.GetBaseValue(), 42);
+  EXPECT_EQ(dependent.GetBaseValue(), test_value);
   EXPECT_EQ(dependent.GetBasePtr(), &base);
 
   // Force vector reallocation by exceeding initial capacity
@@ -101,7 +107,7 @@ NOLINT_TEST(DependencyPointerTest, PointersValidAfterVectorReallocation)
   composition.AddComponent<DummyComponent3>();
 
   // Verify dependency pointer is still valid after potential reallocation
-  EXPECT_EQ(dependent.GetBaseValue(), 42)
+  EXPECT_EQ(dependent.GetBaseValue(), test_value)
     << "Dependent component should still access correct value";
   EXPECT_EQ(dependent.GetBasePtr(), &base)
     << "Stored pointer should still point to the same base component";
