@@ -27,13 +27,13 @@ using oxygen::content::PakResource;
 
 namespace {
 template <typename... Ts>
-std::array<oxygen::TypeId, sizeof...(Ts)> MakeTypeIdArray(
-  oxygen::TypeList<Ts...>)
+auto MakeTypeIdArray(oxygen::TypeList<Ts...> /*unused*/)
+  -> std::array<oxygen::TypeId, sizeof...(Ts)>
 {
   return { Ts::ClassTypeId()... };
 }
 
-inline oxygen::TypeId GetResourceTypeIdByIndex(std::size_t type_index)
+inline auto GetResourceTypeIdByIndex(std::size_t type_index)
 {
   static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
   return ids.at(type_index);
@@ -125,8 +125,8 @@ auto AssetLoader::AddAssetDependency(
   const data::AssetKey& dependent, const data::AssetKey& dependency) -> void
 {
   LOG_SCOPE_F(2, "Add Asset Dependency");
-  LOG_F(2, "dependent: {} -> dependency: {}", nostd::to_string(dependent),
-    nostd::to_string(dependency));
+  LOG_F(2, "dependent: {} -> dependency: {}",
+    nostd::to_string(dependent).c_str(), nostd::to_string(dependency).c_str());
 
   // Add forward dependency
   asset_dependencies_[dependent].insert(dependency);
@@ -145,8 +145,8 @@ auto AssetLoader::AddResourceDependency(
 
   // Decode ResourceKey for logging
   internal::InternalResourceKey internal_key(resource_key);
-  LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent),
-    nostd::to_string(internal_key));
+  LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent).c_str(),
+    nostd::to_string(internal_key).c_str());
 
   // Add forward dependency
   resource_dependencies_[dependent].insert(resource_key);
@@ -269,13 +269,14 @@ auto AssetLoader::InvokeResourceLoaderImpl(
   auto* resource_table = pak.GetResourceTable<T>();
   if (!resource_table) {
     LOG_F(ERROR, "PAK file '{}' does not contain resource table for {}",
-      pak.FilePath().string(), T::ClassTypeNamePretty());
+      pak.FilePath().string().c_str(), T::ClassTypeNamePretty());
     return nullptr;
   }
   auto offset = resource_table->GetResourceOffset(resource_index);
   if (!offset) {
     LOG_F(ERROR, "Resource({}) index {} not found in PAK file '{}'",
-      T::ClassTypeNamePretty(), resource_index, pak.FilePath().string());
+      T::ClassTypeNamePretty(), resource_index,
+      pak.FilePath().string().c_str());
     return nullptr;
   }
 
@@ -285,7 +286,7 @@ auto AssetLoader::InvokeResourceLoaderImpl(
     = std::make_unique<serio::FileStream<>>(pak.FilePath(), std::ios::in);
   if (!table_stream->Seek(*offset)) {
     LOG_F(ERROR, "Failed to seek to resource offset {} in PAK file '{}'",
-      *offset, pak.FilePath().string());
+      *offset, pak.FilePath().string().c_str());
     return nullptr;
   }
   serio::Reader reader(*table_stream);

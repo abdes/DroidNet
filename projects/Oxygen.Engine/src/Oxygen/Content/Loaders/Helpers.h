@@ -207,7 +207,8 @@ inline auto LoadAssetHeader(
 
   auto result = reader.ReadInto<AssetHeader>(header);
   if (!result) {
-    LOG_F(INFO, "-failed- on AssetHeader: {}", result.error().message());
+    LOG_F(
+      INFO, "-failed- on AssetHeader: {}", result.error().message().c_str());
     throw std::runtime_error(
       fmt::format("error reading asset header: {}", result.error().message()));
   }
