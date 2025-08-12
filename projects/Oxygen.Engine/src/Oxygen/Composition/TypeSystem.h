@@ -99,8 +99,8 @@ public:
 
    @note Used internally for demangling.
   */
-  OXGN_COM_API static auto ExtractQualifiedClassName(std::string_view signature)
-    -> std::string_view;
+  OXGN_COM_API static auto ExtractQualifiedClassName(
+    std::string_view signature) noexcept -> std::string_view;
 
 private:
   class Impl;

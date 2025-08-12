@@ -54,9 +54,13 @@ public:                                                                        \
   inline static auto ClassTypeNamePretty() noexcept -> std::string_view        \
   {                                                                            \
     static std::string pretty {};                                              \
-    if (pretty.empty()) {                                                      \
-      pretty                                                                   \
-        = ::oxygen::TypeRegistry::ExtractQualifiedClassName(ClassTypeName());  \
+    try {                                                                      \
+      if (pretty.empty()) {                                                    \
+        pretty = ::oxygen::TypeRegistry::ExtractQualifiedClassName(            \
+          ClassTypeName());                                                    \
+      }                                                                        \
+    } catch (...) {                                                            \
+      return ClassTypeName();                                                  \
     }                                                                          \
     return pretty;                                                             \
   }                                                                            \

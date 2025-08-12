@@ -81,7 +81,7 @@ auto TypeRegistry::GetTypeName(TypeId id) const -> std::string_view
   if (it == impl_->id_to_name_.end()) {
     throw std::invalid_argument("no type with given id is registered");
   }
-  return it->second.c_str();
+  return it->second;
 }
 
 auto TypeRegistry::GetTypeNamePretty(TypeId id) const -> std::string_view
@@ -89,13 +89,14 @@ auto TypeRegistry::GetTypeNamePretty(TypeId id) const -> std::string_view
   return ExtractQualifiedClassName(GetTypeName(id));
 }
 
-auto TypeRegistry::ExtractQualifiedClassName(std::string_view signature)
-  -> std::string_view
+auto TypeRegistry::ExtractQualifiedClassName(
+  std::string_view signature) noexcept -> std::string_view
 {
   // Find the start of the fully qualified class
   auto method_pos = signature.rfind("::");
-  if (method_pos == std::string_view::npos)
+  if (method_pos == std::string_view::npos) {
     return {};
+  }
 
   // Walk backward to find the start of the class name
   std::size_t start = method_pos;
