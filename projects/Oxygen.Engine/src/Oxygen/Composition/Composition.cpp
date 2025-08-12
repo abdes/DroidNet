@@ -34,7 +34,7 @@ auto TryGetTypeNamePretty(const TypeId type_id) -> std::string_view
 
 Composition::PooledEntry::~PooledEntry() noexcept
 {
-  if (!pool_ptr || !handle.IsValid()) {
+  if ((pool_ptr == nullptr) || !handle.IsValid()) {
     return;
   }
   try {
@@ -53,7 +53,7 @@ Composition::PooledEntry::~PooledEntry() noexcept
 
 auto Composition::PooledEntry::GetComponent() const -> Component*
 {
-  return pool_ptr ? pool_ptr->GetUntyped(handle) : nullptr;
+  return (pool_ptr != nullptr) ? pool_ptr->GetUntyped(handle) : nullptr;
 }
 
 // --- Composition ---
@@ -121,21 +121,40 @@ auto Composition::TopologicallySortedPooledEntries() -> std::vector<TypeId>
 auto Composition::DestroyComponents() noexcept -> void
 {
   std::unique_lock lock(mutex_);
-  for (auto type_id : TopologicallySortedPooledEntries()) {
-    if (auto pooled_it = pooled_components_.find(type_id);
-      pooled_it != pooled_components_.end()) {
-      DCHECK_NOTNULL_F(pooled_it->second, "corrupted pooled entry, null");
-      pooled_components_.erase(pooled_it);
-      continue;
+  std::vector<TypeId> sorted_ids;
+  try {
+    sorted_ids = TopologicallySortedPooledEntries();
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Exception during component dependency sort: {}", ex.what());
+    return;
+  } catch (...) {
+    LOG_F(ERROR, "Unknown exception during component dependency sort");
+    return;
+  }
+
+  for (auto type_id : sorted_ids) {
+    try {
+      if (auto pooled_it = pooled_components_.find(type_id);
+        pooled_it != pooled_components_.end()) {
+        DCHECK_NOTNULL_F(pooled_it->second, "corrupted pooled entry, null");
+        pooled_components_.erase(pooled_it);
+        continue;
+      }
+      auto local_it = std::ranges::find_if(local_components_,
+        [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
+      DCHECK_NE_F(local_it, local_components_.end());
+      if (local_it->use_count() == 1) {
+        DLOG_F(1, "Destroying local component(t={}/{})",
+          (*local_it)->GetTypeId(), (*local_it)->GetTypeNamePretty());
+      }
+      local_components_.erase(local_it);
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "Exception while destroying component (type_id={}): {}",
+        type_id, ex.what());
+    } catch (...) {
+      LOG_F(ERROR, "Unknown exception while destroying component (type_id={})",
+        type_id);
     }
-    auto local_it = std::ranges::find_if(local_components_,
-      [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
-    DCHECK_NE_F(local_it, local_components_.end());
-    if (local_it->use_count() == 1) {
-      DLOG_F(1, "Destroying local component(t={}/{})", (*local_it)->GetTypeId(),
-        (*local_it)->GetTypeNamePretty());
-    }
-    local_components_.erase(local_it);
   }
 }
 
@@ -156,12 +175,24 @@ auto Composition::operator=(const Composition& other) -> Composition&
   return *this;
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 Composition::Composition(Composition&& other) noexcept
   : local_components_(std::move(other.local_components_))
   , pooled_components_(std::move(other.pooled_components_))
 {
+  static_assert(
+    std::is_nothrow_move_constructible_v<decltype(local_components_)>,
+    "local_components_ must be nothrow-move-constructible");
+  // NOTE: The following static_assert fails on some standard libraries
+  // due to conservative noexcept propagation for std::unordered_map,
+  // even with the default allocator. See
+  // https://en.cppreference.com/w/cpp/container/unordered_map/unordered_map
+  // static_assert(
+  //   std::is_nothrow_move_constructible_v<decltype(pooled_components_)>,
+  //   "pooled_components_ must be nothrow-move-constructible");
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto Composition::operator=(Composition&& other) noexcept -> Composition&
 {
   if (this != &other) {
@@ -173,7 +204,7 @@ auto Composition::operator=(Composition&& other) noexcept -> Composition&
 }
 
 Composition::Composition(
-  const std::size_t local_capacity, const size_t pooled_capacity)
+  const LocalCapacity local_capacity, const PooledCapacity pooled_capacity)
 {
   local_components_.reserve(local_capacity);
   pooled_components_.reserve(pooled_capacity);
@@ -198,7 +229,7 @@ auto ValidateDependencies(
     }
   }
 }
-}
+} // namespace
 
 auto Composition::EnsureDependencies(const TypeId comp_id,
   const std::span<const TypeId> dependencies) const -> void
@@ -244,11 +275,11 @@ auto Composition::GetComponentImpl(TypeId type_id) const -> const Component&
   if (const auto pooled_it = pooled_components_.find(type_id);
     pooled_it != pooled_components_.end()) {
     auto* pool = pooled_it->second->pool_ptr;
-    if (!pool) {
+    if (pool == nullptr) {
       throw ComponentError("Pooled component pool pointer is null");
     }
     auto* ptr = pool->GetUntyped(pooled_it->second->handle);
-    if (!ptr) {
+    if (ptr == nullptr) {
       throw ComponentError("Pooled component handle invalid");
     }
     return *ptr;
@@ -260,10 +291,20 @@ auto Composition::GetComponentImpl(TypeId type_id) const -> const Component&
   }
   return **it;
 }
+
+//! Non-const overload implemented via const version.
+/*!
+ Safe because storage never holds const Component. In this implementation, both
+ local and pooled components are stored as mutable objects (e.g.,
+ std::shared_ptr<Component> and pointers from pools), so the returned reference
+ is to a non-const object unless the Composition itself is const.
+*/
 auto Composition::GetComponentImpl(const TypeId type_id) -> Component&
 {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
   return const_cast<Component&>(std::as_const(*this).GetComponentImpl(type_id));
 }
+
 auto Composition::GetPooledComponentImpl(
   const composition::detail::ComponentPoolUntyped& pool,
   const TypeId type_id) const -> const Component&
@@ -272,14 +313,23 @@ auto Composition::GetPooledComponentImpl(
   if (it == pooled_components_.end()) {
     throw ComponentError("Component not found");
   }
-  auto* ptr = pool.GetUntyped(it->second->handle);
+  const auto* ptr = pool.GetUntyped(it->second->handle);
   DCHECK_NOTNULL_F(ptr, "unexpected invalid pooled component");
   return *ptr;
 }
+
+//! Non-const overload implemented via const version.
+/*!
+ Safe because storage never holds const Component. In this implementation, both
+ local and pooled components are stored as mutable objects (e.g.,
+ std::shared_ptr<Component> and pointers from pools), so the returned reference
+ is to a non-const object unless the Composition itself is const.
+*/
 auto Composition::GetPooledComponentImpl(
   const composition::detail::ComponentPoolUntyped& pool, const TypeId type_id)
   -> Component&
 {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
   return const_cast<Component&>(
     std::as_const(*this).GetPooledComponentImpl(pool, type_id));
 }
@@ -336,7 +386,7 @@ auto Composition::DeepCopyPooledComponentsFrom(const Composition& other) -> void
   for (const auto& [type_id, entry] : other.pooled_components_) {
     auto* pool = entry->pool_ptr;
     auto src_handle = entry->handle;
-    if (!pool || !src_handle.IsValid()) {
+    if ((pool == nullptr) || !src_handle.IsValid()) {
       throw ComponentError("Invalid pooled entry in source composition");
     }
     const Component* src_comp = pool->GetUntyped(src_handle);
@@ -369,7 +419,7 @@ auto EnsureTypeIsNoInDependenciesOf(const Component& comp, TypeId type_id)
         comp.GetTypeNamePretty()));
   }
 }
-}
+} // namespace
 
 auto Composition::EnsureNotRequired(const TypeId type_id) const -> void
 {
@@ -393,7 +443,7 @@ auto Composition::PrintComponentInfo(std::ostream& out, const TypeId type_id,
   const Component* comp) const -> void
 {
   out << "   [" << type_id << "] " << type_name << " (" << kind << ")";
-  if (!comp) {
+  if (comp == nullptr) {
     out << " [INVALID]\n";
     return;
   }
@@ -419,6 +469,11 @@ auto Composition::PrintComponentInfo(std::ostream& out, const TypeId type_id,
 auto Composition::GetDebugName() const -> std::string_view
 {
   if (HasComponent<ObjectMetaData>()) {
+    // We do not use RTTI, and thus cannot use dynamic_cast, but our type system
+    // and the guarantees of Composition, ensure that if the Composition has a
+    // component of a certain type, then that component can be safely cast to
+    // that type.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     return static_cast<const ObjectMetaData&>(
       GetComponentImpl(ObjectMetaData::ClassTypeId()))
       .GetName();
@@ -430,7 +485,7 @@ auto Composition::LogComponentInfo(const TypeId type_id,
   const std::string_view type_name, const std::string_view kind,
   const Component* comp) const -> void
 {
-  if (!comp) {
+  if (comp == nullptr) {
     LOG_F(INFO, "[{}] {} ({}) [INVALID]", type_id, type_name, kind);
     return;
   }
@@ -462,7 +517,7 @@ auto Composition::PrintComponents(std::ostream& out) const -> void
       "Direct", entry.get());
   }
   for (const auto& [type_id, pooled_entry] : pooled_components_) {
-    const Component* comp = (pooled_entry && pooled_entry->pool_ptr
+    const Component* comp = (pooled_entry && (pooled_entry->pool_ptr != nullptr)
                               && pooled_entry->handle.IsValid())
       ? pooled_entry->GetComponent()
       : nullptr;
@@ -489,8 +544,9 @@ auto Composition::LogComponents() const -> void
     LOG_SCOPE_F(INFO, "Pooled Components");
     LOG_F(INFO, "count: {}", pooled_components_.size());
     for (const auto& [type_id, pooled_entry] : pooled_components_) {
-      const Component* comp = (pooled_entry && pooled_entry->pool_ptr
-                                && pooled_entry->handle.IsValid())
+      const Component* comp
+        = (pooled_entry && (pooled_entry->pool_ptr != nullptr)
+            && pooled_entry->handle.IsValid())
         ? pooled_entry->GetComponent()
         : nullptr;
       LogComponentInfo(type_id, TryGetTypeNamePretty(type_id), "Pooled", comp);

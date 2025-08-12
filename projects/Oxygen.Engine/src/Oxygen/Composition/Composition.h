@@ -166,6 +166,23 @@ public:
   OXGN_COM_API auto LogComponents() const -> void;
 
 protected:
+  struct LocalTag { };
+  struct PooledTag { };
+
+  template <typename Tag> struct Capacity {
+    std::size_t value;
+    explicit Capacity(std::size_t v)
+      : value(v)
+    {
+    }
+    operator std::size_t() const { return value; }
+  };
+
+  //! Named strong type for local component capacity.
+  using LocalCapacity = Capacity<LocalTag>;
+  //! Named strong type for pooled component capacity.
+  using PooledCapacity = Capacity<PooledTag>;
+
   //! Constructs a new empty composition.
   /*!
    @note Compositions can only be constructed from their concrete subclasses.
@@ -181,7 +198,7 @@ protected:
    @param pooled_capacity Initial capacity for pooled components.
   */
   OXGN_COM_API explicit Composition(
-    std::size_t local_capacity, std::size_t pooled_capacity);
+    LocalCapacity local_capacity, PooledCapacity pooled_capacity);
 
   /*!
    Adds a new component of type `T` to the composition, constructing it in-place
