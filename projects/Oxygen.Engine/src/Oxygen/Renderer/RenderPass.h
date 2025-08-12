@@ -103,8 +103,7 @@ public:
     graphics::CommandRecorder& recorder) -> co::Co<>;
 
   //! Get the name of this pass (from Named interface).
-  [[nodiscard]] OXGN_RNDR_API auto GetName() const noexcept
-    -> std::string_view override;
+  OXGN_RNDR_NDAPI auto GetName() const noexcept -> std::string_view override;
 
   //! Set the name of this pass (from Named interface).
   OXGN_RNDR_API auto SetName(std::string_view name) noexcept -> void override;
