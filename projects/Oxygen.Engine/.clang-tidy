@@ -21,4 +21,8 @@ CheckOptions:
 
 HeaderFilterRegex: '^<Oxygen/.*>$'
 ExcludeHeaderFilterRegex: '^<Oxygen/.*signal\.hpp>$'
+
+ExtraArgs:
+  - -Wno-inconsistent-dllimport
+  - -Wno-format-extra-args
 ...
