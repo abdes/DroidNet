@@ -39,7 +39,8 @@ inline auto LoadTextureResource(LoaderContext context)
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
-      LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message());
+      LOG_F(
+        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
       throw std::runtime_error(
         fmt::format("error reading texture resource ({}): {}", field,
           result.error().message()));

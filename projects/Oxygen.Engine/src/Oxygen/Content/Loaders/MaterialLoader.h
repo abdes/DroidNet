@@ -122,7 +122,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
-      LOG_F(INFO, "-failed- on {}: {}", field, result.error().message());
+      LOG_F(
+        INFO, "-failed- on {}: {}", field, result.error().message().c_str());
       throw std::runtime_error(
         fmt::format("error reading material asset ({}): {}", field,
           result.error().message()));

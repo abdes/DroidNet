@@ -34,7 +34,8 @@ inline auto LoadBufferResource(LoaderContext context)
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {
-      LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message());
+      LOG_F(
+        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
       throw std::runtime_error(
         fmt::format("error reading buffer resource ({}): {}", field,
           result.error().message()));
@@ -52,7 +53,7 @@ inline auto LoadBufferResource(LoaderContext context)
   LOG_F(1, "data offset    : {}", desc.data_offset);
   LOG_F(1, "data size      : {}", desc.size_bytes);
   LOG_F(2, "element format : {}", nostd::to_string(buf_format));
-  LOG_F(2, "usage flags    : {}", nostd::to_string(flags));
+  LOG_F(2, "usage flags    : {}", nostd::to_string(flags).c_str());
   LOG_F(2, "element stride : {}", desc.element_stride);
 
   std::vector<uint8_t> data_buffer(desc.size_bytes);

@@ -101,14 +101,15 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataSize(), 192u);
+  EXPECT_EQ(asset->GetDataSize(), 192U);
   EXPECT_EQ(asset->GetElementStride(), 0);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kRGB32Float);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer));
-  EXPECT_EQ(asset->GetData().size(), 192u);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
+  EXPECT_EQ(asset->GetData().size(), 192U);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<const uint8_t>(fill_value));
+  }
   EXPECT_TRUE(asset->IsFormatted());
   EXPECT_FALSE(asset->IsStructured());
   EXPECT_FALSE(asset->IsRaw());
@@ -151,14 +152,15 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataSize(), 96u);
-  EXPECT_EQ(asset->GetElementStride(), 0u);
+  EXPECT_EQ(asset->GetDataSize(), 96U);
+  EXPECT_EQ(asset->GetElementStride(), 0U);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kR32SInt);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer));
-  EXPECT_EQ(asset->GetData().size(), 96u);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
+  EXPECT_EQ(asset->GetData().size(), 96U);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<uint8_t>(fill_value));
+  }
   EXPECT_TRUE(asset->IsFormatted());
   EXPECT_FALSE(asset->IsStructured());
   EXPECT_FALSE(asset->IsRaw());
@@ -199,14 +201,15 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataSize(), 320u);
-  EXPECT_EQ(asset->GetElementStride(), 64u);
+  EXPECT_EQ(asset->GetDataSize(), 320U);
+  EXPECT_EQ(asset->GetElementStride(), 64U);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kUnknown);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kStorageBuffer));
-  EXPECT_EQ(asset->GetData().size(), 320u);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
+  EXPECT_EQ(asset->GetData().size(), 320U);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<uint8_t>(fill_value));
+  }
   EXPECT_FALSE(asset->IsFormatted());
   EXPECT_TRUE(asset->IsStructured());
   EXPECT_FALSE(asset->IsRaw());
@@ -246,14 +249,15 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_RawBuffer_ReturnsBufferAsset)
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetDataSize(), 128u);
-  EXPECT_EQ(asset->GetElementStride(), 1u);
+  EXPECT_EQ(asset->GetDataSize(), 128U);
+  EXPECT_EQ(asset->GetElementStride(), 1U);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kUnknown);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kConstantBuffer));
-  EXPECT_EQ(asset->GetData().size(), 128u);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
+  EXPECT_EQ(asset->GetData().size(), 128U);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<uint8_t>(fill_value));
+  }
   EXPECT_FALSE(asset->IsFormatted());
   EXPECT_FALSE(asset->IsStructured());
   EXPECT_TRUE(asset->IsRaw());
@@ -337,9 +341,10 @@ NOLINT_TEST_F(
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer
       | BufferResource::UsageFlags::kStorageBuffer));
-  EXPECT_EQ(asset->GetData().size(), 256u);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
+  EXPECT_EQ(asset->GetData().size(), 256U);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<uint8_t>(fill_value));
+  }
   EXPECT_TRUE(asset->IsFormatted());
 }
 
@@ -378,9 +383,10 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_AlignedDataOffset_Works)
   // Assert
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetData().size(), size_bytes);
-  EXPECT_THAT(
-    asset->GetData(), ::testing::Each(static_cast<uint8_t>(fill_value)));
-  EXPECT_EQ(asset->GetDataSize(), 32u);
+  for (const auto& v : asset->GetData()) {
+    EXPECT_EQ(v, static_cast<const uint8_t>(fill_value));
+  }
+  EXPECT_EQ(asset->GetDataSize(), 32U);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kRG32UInt);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kIndirectBuffer));
@@ -423,8 +429,8 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_ZeroDataSize_Works)
 
   // Assert
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetData().size(), 0u);
-  EXPECT_EQ(asset->GetDataSize(), 0u);
+  EXPECT_EQ(asset->GetData().size(), 0U);
+  EXPECT_EQ(asset->GetDataSize(), 0U);
   EXPECT_EQ(asset->GetElementFormat(), oxygen::Format::kRG8UInt);
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kConstantBuffer));
@@ -468,7 +474,7 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_CPUAccessFlags_Works)
   EXPECT_EQ(static_cast<uint32_t>(asset->GetUsageFlags()),
     static_cast<uint32_t>(BufferResource::UsageFlags::kCPUWritable
       | BufferResource::UsageFlags::kCPUReadable));
-  EXPECT_EQ(asset->GetElementStride(), 4u);
+  EXPECT_EQ(asset->GetElementStride(), 4U);
   EXPECT_TRUE(asset->IsStructured());
   EXPECT_FALSE(asset->IsFormatted());
   EXPECT_FALSE(asset->IsRaw());

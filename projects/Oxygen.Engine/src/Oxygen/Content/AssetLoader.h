@@ -478,7 +478,7 @@ private:
     -> std::shared_ptr<void>;
 
   template <PakResource T>
-  static [[nodiscard]] auto InvokeResourceLoaderImpl(
+  static auto InvokeResourceLoaderImpl(
     std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
     AssetLoader& loader, const PakFile& pak,
     data::pak::ResourceIndexT resource_index, bool offline)

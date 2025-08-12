@@ -32,7 +32,8 @@ namespace detail {
   auto CheckResult(const ResultT& result, const char* field_name) -> void
   {
     if (!result) {
-      LOG_F(ERROR, "-failed- on {}: {}", field_name, result.error().message());
+      LOG_F(ERROR, "-failed- on {}: {}", field_name,
+        result.error().message().c_str());
       throw std::runtime_error(
         fmt::format("error reading geometry asset ({}): {}", field_name,
           result.error().message()));
@@ -227,7 +228,8 @@ namespace detail {
     auto mat_key_result
       = desc_reader.ReadInto<AssetKey>(desc.material_asset_key);
     CheckResult(mat_key_result, "sm.material_asset_key");
-    LOG_F(2, "material asset : {}", nostd::to_string(desc.material_asset_key));
+    LOG_F(2, "material asset : {}",
+      nostd::to_string(desc.material_asset_key).c_str());
 
     // mesh_view_count
     auto mesh_view_count_result
@@ -377,10 +379,10 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
         LOG_F(2,
           "Successfully loaded material and registered dependency on material "
           "asset: {}",
-          nostd::to_string(sm_desc.material_asset_key));
+          nostd::to_string(sm_desc.material_asset_key).c_str());
       } else {
         LOG_F(WARNING, "Failed to load material asset {}, using default",
-          nostd::to_string(sm_desc.material_asset_key));
+          nostd::to_string(sm_desc.material_asset_key).c_str());
         material = MaterialAsset::CreateDefault();
       }
     } else {
