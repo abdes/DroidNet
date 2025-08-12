@@ -47,27 +47,38 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-target_sources(
-  ${META_MODULE_TARGET}
-  PRIVATE
+set(
+  OXYGEN_RENDERER_HEADERS
+    "api_export.h"
+    "DepthPrePass.h"
+    "RenderContext.h"
+    "Renderer.h"
+    "RenderItem.h"
+    "RenderPass.h"
+    "ShaderPass.h"
+)
+set(
+  OXYGEN_RENDERER_PRIVATE_SOURCES
     "DepthPrepass.cpp"
     "RenderItem.cpp"
     "Renderer.cpp"
     "RenderPass.cpp"
     "ShaderPass.cpp"
-    "Detail/ContextScope.h"
+    "Internal/RenderScope.h"
+)
+
+target_sources(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_RENDERER_PRIVATE_SOURCES}
+    ${OXYGEN_RENDERER_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "DepthPrePass.h"
-      "RenderContext.h"
-      "Renderer.h"
-      "RenderItem.h"
-      "RenderPass.h"
-      "ShaderPass.h"
+    FILES ${OXYGEN_RENDERER_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
