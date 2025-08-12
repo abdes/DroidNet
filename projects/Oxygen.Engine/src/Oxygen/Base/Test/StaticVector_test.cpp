@@ -75,7 +75,7 @@ public:
     return value_ == other.value_;
   }
 
-  static void reset()
+  static auto reset() -> void
   {
     default_constructs_ = 0;
     copy_constructs_ = 0;
@@ -91,7 +91,7 @@ thread_local int Counter::destructs_ = 0;
 
 NOLINT_TEST(StaticVectorTest, DefaultConstructor)
 {
-  StaticVector<int, 5> vec;
+  constexpr StaticVector<int, 5> vec;
   EXPECT_EQ(vec.size(), 0);
   EXPECT_TRUE(vec.empty());
   EXPECT_EQ(vec.capacity(), 5);
@@ -128,7 +128,7 @@ NOLINT_TEST(StaticVectorTest, CountConstructor)
 
 NOLINT_TEST(StaticVectorTest, RangeConstructor)
 {
-  std::array<int, 7> arr = { 1, 2, 3, 4, 5, 6, 7 };
+  std::array arr = { 1, 2, 3, 4, 5, 6, 7 };
 
   // Normal case
   StaticVector<int, 10> vec1(arr.begin(), arr.end());
@@ -148,8 +148,8 @@ NOLINT_TEST(StaticVectorTest, InitializerListConstructor)
 NOLINT_TEST(StaticVectorTest, CopyConstructor)
 {
   const StaticVector<int, 5> vec1 = { 1, 2, 3 };
-  StaticVector vec2(
-    vec1); // NOLINT(*-unnecessary-copy-initialization) - testing
+  // NOLINTNEXTLINE(*-unnecessary-copy-initialization) - testing
+  StaticVector vec2(vec1);
 
   EXPECT_EQ(vec2.size(), 3);
   EXPECT_EQ(vec2[0], 1);
@@ -167,10 +167,10 @@ NOLINT_TEST(StaticVectorTest, MoveConstructor)
   vec1.emplace_back(3);
 
   Counter::reset();
-  StaticVector<Counter, 5> vec2(std::move(vec1));
+  StaticVector vec2(std::move(vec1));
   EXPECT_EQ(vec2.size(), 3);
-  EXPECT_EQ(vec1.size(),
-    0); // NOLINT(bugprone-use-after-move) - leave other in good state
+  // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
+  EXPECT_EQ(vec1.size(), 0);
   EXPECT_EQ(vec2[0].value_, 1);
   EXPECT_EQ(vec2[2].value_, 3);
   EXPECT_EQ(Counter::move_constructs_, 3);
@@ -180,8 +180,8 @@ NOLINT_TEST(StaticVectorTest, AssignmentOperators)
 {
   // Copy assignment
   const StaticVector<int, 5> vec1 = { 1, 2, 3 };
-  StaticVector<int, 5> vec2
-    = vec1; // NOLINT(*-unnecessary-copy-initialization) - testing
+  // NOLINTNEXTLINE(*-unnecessary-copy-initialization) - testing
+  StaticVector<int, 5> vec2 = vec1;
 
   EXPECT_EQ(vec2.size(), 3);
   EXPECT_EQ(vec2[0], 1);
@@ -196,8 +196,8 @@ NOLINT_TEST(StaticVectorTest, AssignmentOperators)
   // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
   vec4 = std::move(vec3);
   EXPECT_EQ(vec4.size(), 2);
-  EXPECT_EQ(vec3.size(),
-    0); // NOLINT(bugprone-use-after-move) - leave other in good state
+  // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
+  EXPECT_EQ(vec3.size(), 0);
   EXPECT_EQ(vec4[0].value_, 1);
   EXPECT_EQ(vec4[1].value_, 2);
   EXPECT_EQ(Counter::move_constructs_, 2);
@@ -454,7 +454,7 @@ NOLINT_TEST(StaticVectorDeathTest, EmplaceBackWhenFullThrows)
 NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 {
 #if !defined(NDEBUG)
-  std::array<int, 7> arr = { 1, 2, 3, 4, 5, 6, 7 };
+  std::array arr = { 1, 2, 3, 4, 5, 6, 7 };
   EXPECT_DEATH(([&] { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(),
     "range constructor input exceeds maximum size");
 #endif

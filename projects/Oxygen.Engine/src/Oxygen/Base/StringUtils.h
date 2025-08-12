@@ -27,6 +27,7 @@ template <typename T>
 concept ResizableString = requires(T t) {
   { t.clear() } -> std::same_as<void>;
   { t.resize(std::declval<size_t>()) } -> std::same_as<void>;
+  // ReSharper disable once CppRedundantTypenameKeyword
   { t.data() } -> std::same_as<typename T::value_type*>;
   requires std::convertible_to<typename T::value_type, char>;
 };
@@ -117,7 +118,7 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
   }
 
   out.resize(size_needed);
-  int ret = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, in.data(),
+  const int ret = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, in.data(),
     static_cast<int>(in.size()),
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     reinterpret_cast<char*>(out.data()), size_needed, nullptr, nullptr);

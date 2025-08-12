@@ -19,7 +19,7 @@
 
   Key Features
   - **Type Safety**: The Result class uses std::variant to hold either a value
-    of type T or an std::error_code. This ensures that the result is always in a
+    of type T or a std::error_code. This ensures that the result is always in a
     valid state and can only be one of the two types.
   - **Error Handling**: By encapsulating the error state within the Result
     class, it provides a clear and explicit way to handle errors, avoiding the
@@ -100,7 +100,7 @@ public:
     return std::get<T>(value_);
   }
 
-  //! Retrieves the value from the Result as an rvalue reference.
+  //! Retrieves the value from the Result as a rvalue reference.
   constexpr auto value() && -> T&& { return std::get<T>(std::move(value_)); }
 
   //! Moves the value from the Result.

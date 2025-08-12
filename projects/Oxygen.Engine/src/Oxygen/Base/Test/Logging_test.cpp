@@ -12,24 +12,23 @@ namespace {
 
 #if LOGURU_USE_FMTLIB
 
-class LoggingNoExceptTest : public ::testing::Test {
+class LoggingNoExceptTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Save verbosity to restore later
     saved_verbosity_ = loguru::g_stderr_verbosity;
-    // Set verbosity to a level that will not throw exceptions
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     // Restore verbosity to what was before
     loguru::g_stderr_verbosity = saved_verbosity_;
   }
 
 private:
-  loguru::Verbosity saved_verbosity_;
+  // Set verbosity to a level that will not throw exceptions
+  loguru::Verbosity saved_verbosity_ { loguru::Verbosity_OFF };
 };
 
 NOLINT_TEST_F(LoggingNoExceptTest, NoExcept)
@@ -44,15 +43,15 @@ NOLINT_TEST_F(LoggingNoExceptTest, NoExcept_NullFormatString)
 NOLINT_TEST_F(LoggingNoExceptTest, NoExcept_InvalidFormatSpecifier)
 {
   NOLINT_EXPECT_NO_THROW({
-    // fmtlib will throw on truly invalid format, but LOG_F should catch and not
-    // propagate
+    // fmt lib will throw on truly invalid format, but LOG_F should catch and
+    // not propagate
     LOG_F(INFO, "Invalid format: {0} {1} {2} {bogus}", 42, 3.14, "test");
   });
 }
 NOLINT_TEST_F(LoggingNoExceptTest, NoExcept_LongMessage)
 {
   NOLINT_EXPECT_NO_THROW({
-    std::string long_msg(10000, 'x');
+    const std::string long_msg(10000, 'x');
     LOG_F(INFO, "{}", long_msg);
   });
 }

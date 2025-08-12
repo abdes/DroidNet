@@ -12,9 +12,9 @@ using oxygen::Finally;
 
 namespace {
 
-void f(int& i) { i += 1; }
+auto f(int& i) -> void { i += 1; }
 int j = 0;
-void g() { j += 1; }
+auto g() -> void { j += 1; }
 
 //! Scenario: Finally executes a lambda at scope exit.
 NOLINT_TEST(FinallyTest, WhenScopeExits_ThenLambdaIsExecuted)
@@ -22,7 +22,7 @@ NOLINT_TEST(FinallyTest, WhenScopeExits_ThenLambdaIsExecuted)
   constexpr int test_value = 42;
   int i = 0;
   {
-    auto f = oxygen::Finally([&]() { i = test_value; });
+    auto f = Finally([&] { i = test_value; });
     EXPECT_EQ(i, 0);
   }
   EXPECT_EQ(i, test_value);
@@ -33,7 +33,7 @@ NOLINT_TEST(FinallyTest, WhenMoved_ThenLambdaIsExecutedOnlyOnce)
 {
   int i = 0;
   {
-    auto _1 = Finally([&]() { f(i); });
+    auto _1 = Finally([&] { f(i); });
     {
       auto _2 = std::move(_1);
       EXPECT_TRUE(i == 0);
@@ -56,7 +56,7 @@ NOLINT_TEST(
 {
   int i = 0;
   {
-    const auto const_lvalue_lambda = [&]() { f(i); };
+    const auto const_lvalue_lambda = [&] { f(i); };
     auto _ = Finally(const_lvalue_lambda);
     EXPECT_TRUE(i == 0);
   }
@@ -69,7 +69,7 @@ NOLINT_TEST(
 {
   int i = 0;
   {
-    auto mutable_lvalue_lambda = [&]() { f(i); };
+    auto mutable_lvalue_lambda = [&] { f(i); };
     auto _ = Finally(mutable_lvalue_lambda);
     EXPECT_TRUE(i == 0);
   }

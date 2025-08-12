@@ -28,7 +28,7 @@ class TestResource final : public Resource<TestResource, TestResourceTypeList> {
 public:
   using Resource::Resource;
 
-  void InvalidateResource() { Invalidate(); }
+  auto InvalidateResource() -> void { Invalidate(); }
 };
 
 class AnotherTestResource final
@@ -36,7 +36,7 @@ class AnotherTestResource final
 public:
   using Resource::Resource;
 
-  void InvalidateResource() { Invalidate(); }
+  auto InvalidateResource() -> void { Invalidate(); }
 };
 
 //=== Basic Resource Construction Tests ===-----------------------------------//
@@ -136,8 +136,8 @@ NOLINT_TEST(ResourceTest, MoveConstructor_TransfersOwnership)
   // Assert
   EXPECT_EQ(resource2.GetHandle(), handle);
   EXPECT_TRUE(resource2.IsValid());
-  EXPECT_FALSE(resource1
-      .IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
+  // NOLINTNEXTLINE(bugprone-use-after-move) for testing purposes
+  EXPECT_FALSE(resource1.IsValid());
 }
 
 //! Test move assignment transfers resource ownership
@@ -157,8 +157,8 @@ NOLINT_TEST(ResourceTest, MoveAssignment_TransfersOwnership)
   // Assert
   EXPECT_EQ(resource2.GetHandle(), handle);
   EXPECT_TRUE(resource2.IsValid());
-  EXPECT_FALSE(resource1
-      .IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
+  // NOLINTNEXTLINE(bugprone-use-after-move) for testing purposes
+  EXPECT_FALSE(resource1.IsValid());
 }
 
 //=== Resource State Management Tests ===-------------------------------------//
@@ -192,7 +192,7 @@ NOLINT_TEST(ResourceTest, Invalidate_ChangesValidityState)
 */
 NOLINT_TEST(ResourceTest, CompileTimeResourceTypes_AreUnique)
 {
-  using ::testing::Ne;
+  using testing::Ne;
 
   // Arrange & Act
   constexpr auto test_resource_type = TestResource::GetResourceType();

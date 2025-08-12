@@ -67,10 +67,6 @@ INSTANTIATE_TEST_SUITE_P( // NOLINT
     // Return a simple name based on the index
     return std::to_string(info.index);
   });
-void PrintTo(
-  const StringConversionTestParam& /*unused*/, std::ostream* /*unused*/)
-{
-}
 
 NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
 {
@@ -160,10 +156,6 @@ INSTANTIATE_TEST_SUITE_P( // NOLINT
     // Return a simple name based on the index
     return std::to_string(info.index);
   });
-void PrintTo(
-  const WideStringConversionTestParam& /*unused*/, std::ostream* /*unused*/)
-{
-}
 
 NOLINT_TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
 {

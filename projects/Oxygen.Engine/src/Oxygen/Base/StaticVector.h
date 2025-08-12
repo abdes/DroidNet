@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <assert.h>
+#include <cassert>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -43,7 +43,7 @@ namespace oxygen {
        builds, truncation is silent.
 */
 template <typename T, std::size_t MaxElements> class StaticVector {
-  alignas(T) std::byte storage_[sizeof(T) * MaxElements];
+  alignas(T) std::byte storage_[sizeof(T) * MaxElements] {};
   std::size_t current_size_ { 0 };
 
 public:
@@ -64,7 +64,7 @@ public:
 
   constexpr ~StaticVector() noexcept { clear(); }
 
-  constexpr StaticVector(size_type count, const T& value)
+  constexpr StaticVector(const size_type count, const T& value)
     : current_size_((std::min)(count, MaxElements))
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
@@ -73,7 +73,7 @@ public:
     }
   }
 
-  constexpr explicit StaticVector(size_type count)
+  constexpr explicit StaticVector(const size_type count)
     requires std::default_initializable<T>
     : current_size_((std::min)(count, MaxElements))
   {
@@ -87,7 +87,7 @@ public:
     requires std::input_iterator<InputIt>
   constexpr StaticVector(InputIt first, InputIt last)
   {
-    size_type input_size = static_cast<size_type>(std::distance(first, last));
+    const auto input_size = static_cast<size_type>(std::distance(first, last));
     current_size_ = (std::min)(input_size, MaxElements);
     auto it = first;
     for (size_type i = 0; i < current_size_; ++i, ++it) {
@@ -187,13 +187,13 @@ public:
     return (*this)[pos];
   }
 
-  [[nodiscard]] constexpr auto operator[](size_type pos) -> reference
+  [[nodiscard]] constexpr auto operator[](const size_type pos) -> reference
   {
     assert(pos < current_size_ && "StaticVector: out of bounds access");
     return *reinterpret_cast<pointer>(storage_ + pos * sizeof(T));
   }
 
-  [[nodiscard]] constexpr auto operator[](size_type pos) const
+  [[nodiscard]] constexpr auto operator[](const size_type pos) const
     -> const_reference
   {
     assert(pos < current_size_ && "StaticVector: out of bounds access");
@@ -311,7 +311,7 @@ public:
     --current_size_;
   }
 
-  constexpr void resize(size_type new_size)
+  constexpr void resize(const size_type new_size)
     requires std::default_initializable<T>
   {
     if (new_size > MaxElements) {
@@ -332,7 +332,7 @@ public:
     current_size_ = new_size;
   }
 
-  constexpr void resize(size_type new_size, const value_type& value)
+  constexpr void resize(const size_type new_size, const value_type& value)
   {
     if (new_size > MaxElements) {
       throw std::length_error(

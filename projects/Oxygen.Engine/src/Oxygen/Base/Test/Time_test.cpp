@@ -36,18 +36,18 @@ struct MockTime {
 
 class TimeTest : public testing::Test {
 protected:
-  void SetUp() override { MockTime::mock = &mock_now; }
-  void TearDown() override { MockTime::mock = nullptr; }
+  auto SetUp() -> void override { MockTime::mock = &mock_now_; }
+  auto TearDown() -> void override { MockTime::mock = nullptr; }
 
 public:
-  MockNow mock_now;
+  MockNow mock_now_;
 };
 
 using ElapsedTimeTest = TimeTest;
 
 NOLINT_TEST_F(ElapsedTimeTest, StartTime)
 {
-  EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
+  EXPECT_CALL(mock_now_, Now).Times(1).WillOnce(Return(10us));
 
   const ElapsedTimeType<MockTime> elapsed;
   EXPECT_EQ(elapsed.StartTime(), 10us);
@@ -55,7 +55,7 @@ NOLINT_TEST_F(ElapsedTimeTest, StartTime)
 
 NOLINT_TEST_F(ElapsedTimeTest, ElapsedTime)
 {
-  EXPECT_CALL(mock_now, Now)
+  EXPECT_CALL(mock_now_, Now)
     .Times(2)
     .WillOnce(Return(10us))
     .WillOnce(Return(25us));
@@ -69,7 +69,7 @@ using DeltaTimeTest = TimeTest;
 
 NOLINT_TEST_F(DeltaTimeTest, AtCreation)
 {
-  EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
+  EXPECT_CALL(mock_now_, Now).Times(1).WillOnce(Return(10us));
 
   const DeltaTimeType<MockTime> delta;
   EXPECT_TRUE(delta.LastStepTime() == 10us);
@@ -78,7 +78,7 @@ NOLINT_TEST_F(DeltaTimeTest, AtCreation)
 
 NOLINT_TEST_F(DeltaTimeTest, AfterUpdate)
 {
-  EXPECT_CALL(mock_now, Now)
+  EXPECT_CALL(mock_now_, Now)
     .Times(2)
     .WillOnce(Return(10us))
     .WillOnce(Return(30us));
@@ -93,7 +93,7 @@ using ChangePerSecondTest = TimeTest;
 
 NOLINT_TEST_F(ChangePerSecondTest, AtCreation)
 {
-  EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
+  EXPECT_CALL(mock_now_, Now).Times(1).WillOnce(Return(10us));
 
   const ChangePerSecondType<MockTime> cps;
   EXPECT_EQ(cps.Value(), 0U);
@@ -102,7 +102,7 @@ NOLINT_TEST_F(ChangePerSecondTest, AtCreation)
 
 NOLINT_TEST_F(ChangePerSecondTest, AfterUpdate)
 {
-  EXPECT_CALL(mock_now, Now)
+  EXPECT_CALL(mock_now_, Now)
     .Times(4)
     .WillOnce(Return(0us))
     .WillOnce(Return(10us))

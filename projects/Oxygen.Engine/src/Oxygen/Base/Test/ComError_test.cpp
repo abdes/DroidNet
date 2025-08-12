@@ -8,26 +8,25 @@
 
 #if defined(OXYGEN_WINDOWS)
 
-#  include <Oxygen/Base/Windows/ComError.h>
 #  include <atlcomcli.h>
 #  include <windows.h>
 
 #  include <Oxygen/Testing/GTest.h>
-#  include <gmock/gmock-matchers.h>
+
+#  include <Oxygen/Base/Windows/ComError.h>
 
 using oxygen::windows::ComError;
-using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::windows {
 
 class ComErrorTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Setup code if needed
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     // Cleanup code if needed
   }
@@ -87,8 +86,8 @@ NOLINT_TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
 
   CComPtr<IErrorInfo> p_error_info;
   hr = p_create_error_info->QueryInterface(IID_IErrorInfo,
-    reinterpret_cast<void**>(
-      &p_error_info)); // NOLINT(*-pro-type-reinterpret-cast)
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    reinterpret_cast<void**>(&p_error_info));
   ASSERT_TRUE(SUCCEEDED(hr));
 
   // Set error description
@@ -115,7 +114,7 @@ NOLINT_TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
   CoUninitialize();
 }
 
-template <typename T>
+template <typename /*T*/>
 class ThrowOnFailedStringTypeTest : public testing::Test { };
 
 using StringTypes = testing::Types<const char*, const char8_t*, const wchar_t*>;
@@ -126,6 +125,7 @@ TYPED_TEST_SUITE(ThrowOnFailedStringTypeTest, StringTypes);
 TYPED_TEST(ThrowOnFailedStringTypeTest, HandlesDifferentStringTypes)
 {
   HRESULT hr = E_FAIL;
+  // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
   auto message = reinterpret_cast<TypeParam>("Operation failed");
   try {
     ThrowOnFailed(hr, message);

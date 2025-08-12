@@ -16,15 +16,12 @@ namespace {
 // Test helper class to access protected default constructor
 class TestResourceHandle : public ResourceHandle {
 public:
-  TestResourceHandle()
-    : ResourceHandle()
-  {
-  }
+  TestResourceHandle() = default;
 };
 
 NOLINT_TEST(ResourceHandleTest, InvalidHandle)
 {
-  const TestResourceHandle handle;
+  constexpr TestResourceHandle handle;
   ASSERT_FALSE(handle.IsValid());
 }
 
@@ -37,7 +34,7 @@ NOLINT_TEST(ResourceHandleTest, ToString)
 
 NOLINT_TEST(ResourceHandleTest, ToString_InvalidHandle)
 {
-  const TestResourceHandle handle;
+  constexpr TestResourceHandle handle;
   ASSERT_FALSE(handle.IsValid());
   NOLINT_EXPECT_NO_THROW(nostd::to_string(handle));
   NOLINT_EXPECT_NO_THROW(oxygen::to_string_compact(handle));

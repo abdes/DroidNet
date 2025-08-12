@@ -123,51 +123,51 @@ public:
 
   [[nodiscard]] constexpr auto IsValid() const noexcept -> bool;
 
-  constexpr void Invalidate();
+  constexpr auto Invalidate() -> void;
 
   [[nodiscard]] constexpr auto Index() const -> IndexT;
 
-  constexpr void SetIndex(IndexT index);
+  constexpr auto SetIndex(IndexT index) -> void;
 
   [[nodiscard]] constexpr auto Generation() const -> GenerationT;
 
-  constexpr void NewGeneration();
+  constexpr auto NewGeneration() -> void;
 
   [[nodiscard]] constexpr auto ResourceType() const -> ResourceTypeT;
 
-  constexpr void SetResourceType(ResourceTypeT type);
+  constexpr auto SetResourceType(ResourceTypeT type) -> void;
 
   [[nodiscard]] constexpr auto Custom() const -> CustomT;
 
-  constexpr void SetCustom(CustomT custom);
+  constexpr auto SetCustom(CustomT custom) -> void;
 
   [[nodiscard]] constexpr auto Reserved() const -> ReservedT;
 
-  constexpr void SetReserved(ReservedT reserved);
+  constexpr auto SetReserved(ReservedT reserved) -> void;
 
   [[nodiscard]] constexpr auto IsFree() const -> bool;
 
-  constexpr void SetFree(bool flag);
+  constexpr auto SetFree(bool flag) -> void;
 
 private:
   HandleT handle_ { kHandleMask };
-  constexpr void SetGeneration(GenerationT generation);
+  constexpr auto SetGeneration(GenerationT generation) -> void;
   static constexpr HandleT kCustomSetMask
-    = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
-    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits));
+    = (HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1
+    | kHandleMask << (kIndexBits + kGenerationBits + kCustomBits);
 
   static constexpr HandleT kResourceTypeSetMask
-    = ((HandleT { 1 } << (kIndexBits + kGenerationBits + kCustomBits)) - 1)
-    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits
-         + kResourceTypeBits));
+    = (HandleT { 1 } << (kIndexBits + kGenerationBits + kCustomBits)) - 1
+    | kHandleMask << (kIndexBits + kGenerationBits + kCustomBits
+        + kResourceTypeBits);
 
   static constexpr HandleT kGenerationSetMask
-    = (kHandleMask << (kIndexBits + kGenerationBits)) | kIndexMask;
+    = kHandleMask << (kIndexBits + kGenerationBits) | kIndexMask;
 
   static constexpr HandleT kIndexSetMask = kHandleMask << kIndexBits;
 
   static constexpr HandleT kReservedSetMask
-    = ((HandleT { 1 } << (kHandleBits - kReservedBits)) - 1);
+    = (HandleT { 1 } << (kHandleBits - kReservedBits)) - 1;
 
   //=== Static Assertions ===-------------------------------------------------//
 
@@ -268,7 +268,10 @@ constexpr auto ResourceHandle::IsValid() const noexcept -> bool
   return Index() != kInvalidIndex;
 }
 
-constexpr void ResourceHandle::Invalidate() { this->handle_ = kHandleMask; }
+constexpr auto ResourceHandle::Invalidate() -> void
+{
+  this->handle_ = kHandleMask;
+}
 
 constexpr auto ResourceHandle::Handle() const -> HandleT { return handle_; }
 
@@ -277,7 +280,7 @@ constexpr auto ResourceHandle::Index() const -> IndexT
   return handle_ & kIndexMask;
 }
 
-constexpr void ResourceHandle::SetIndex(const IndexT index)
+constexpr auto ResourceHandle::SetIndex(const IndexT index) -> void
 {
   assert(index <= kIndexMax); // max value is invalid
   handle_ = (handle_ & kIndexSetMask) |
@@ -288,50 +291,50 @@ constexpr void ResourceHandle::SetIndex(const IndexT index)
 constexpr auto ResourceHandle::ResourceType() const -> ResourceTypeT
 {
   return static_cast<ResourceTypeT>(
-    (handle_ >> (kIndexBits + kGenerationBits + kCustomBits))
+    handle_ >> (kIndexBits + kGenerationBits + kCustomBits)
     & kResourceTypeMask);
 }
 
-constexpr void ResourceHandle::SetResourceType(const ResourceTypeT type)
+constexpr auto ResourceHandle::SetResourceType(const ResourceTypeT type) -> void
 {
   assert(type <= kResourceTypeMax); // max value is not-initialized
   handle_ = (handle_ & kResourceTypeSetMask)
-    | (static_cast<HandleT>(type)
-      << (kIndexBits + kGenerationBits + kCustomBits));
+    | static_cast<HandleT>(type)
+      << (kIndexBits + kGenerationBits + kCustomBits);
 }
 
 constexpr auto ResourceHandle::Custom() const -> CustomT
 {
   return static_cast<CustomT>(
-    (handle_ >> (kIndexBits + kGenerationBits)) & kCustomMask);
+    handle_ >> (kIndexBits + kGenerationBits) & kCustomMask);
 }
 
-constexpr void ResourceHandle::SetCustom(const CustomT custom)
+constexpr auto ResourceHandle::SetCustom(const CustomT custom) -> void
 {
   assert(custom <= kCustomMax);
   handle_ = (handle_ & kCustomSetMask)
-    | (static_cast<HandleT>(custom) << (kIndexBits + kGenerationBits));
+    | static_cast<HandleT>(custom) << (kIndexBits + kGenerationBits);
 }
 
 constexpr auto ResourceHandle::Reserved() const -> ReservedT
 {
   return static_cast<ReservedT>(
-    (handle_ >> (kHandleBits - kReservedBits)) & kReservedMask);
+    handle_ >> (kHandleBits - kReservedBits) & kReservedMask);
 }
 
-constexpr void ResourceHandle::SetReserved(const ReservedT reserved)
+constexpr auto ResourceHandle::SetReserved(const ReservedT reserved) -> void
 {
   assert(reserved <= kReservedMax);
   handle_ = (handle_ & kReservedSetMask)
-    | (static_cast<HandleT>(reserved) << (kHandleBits - kReservedBits));
+    | static_cast<HandleT>(reserved) << (kHandleBits - kReservedBits);
 }
 
 constexpr auto ResourceHandle::Generation() const -> GenerationT
 {
-  return (handle_ >> (kIndexBits)) & kGenerationMask;
+  return handle_ >> kIndexBits & kGenerationMask;
 }
 
-constexpr void ResourceHandle::SetGeneration(GenerationT generation)
+constexpr auto ResourceHandle::SetGeneration(GenerationT generation) -> void
 {
   assert(generation <= kGenerationMax);
   // Wrap around
@@ -340,32 +343,32 @@ constexpr void ResourceHandle::SetGeneration(GenerationT generation)
     generation = 0;
   }
   handle_ = (handle_ & kGenerationSetMask)
-    | (static_cast<HandleT>(generation) << kIndexBits);
+    | static_cast<HandleT>(generation) << kIndexBits;
 }
 
-constexpr void ResourceHandle::NewGeneration()
+constexpr auto ResourceHandle::NewGeneration() -> void
 {
   const auto current_generation = Generation();
   assert(current_generation <= kGenerationMax);
   const auto new_generation {
-    (current_generation == kGenerationMax) ? 0 : current_generation + 1U
+    current_generation == kGenerationMax ? 0 : current_generation + 1U
   };
   // Wrap around
   handle_ = (handle_ & kGenerationSetMask)
-    | (static_cast<HandleT>(new_generation) << kIndexBits);
+    | static_cast<HandleT>(new_generation) << kIndexBits;
 }
 
 constexpr auto ResourceHandle::IsFree() const -> bool
 {
-  return (handle_ & (HandleT { 1 } << (kHandleBits - kReservedBits - 1))) != 0;
+  return (handle_ & HandleT { 1 } << (kHandleBits - kReservedBits - 1)) != 0;
 }
 
-constexpr void ResourceHandle::SetFree(const bool flag)
+constexpr auto ResourceHandle::SetFree(const bool flag) -> void
 {
-  const auto free_bit_position = kHandleBits - kReservedBits - 1;
+  constexpr auto free_bit_position = kHandleBits - kReservedBits - 1;
   handle_ &= ~(HandleT { 1 } << free_bit_position);
   if (flag) {
-    handle_ |= (HandleT { 1 } << free_bit_position);
+    handle_ |= HandleT { 1 } << free_bit_position;
   }
 }
 
