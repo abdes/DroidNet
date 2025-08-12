@@ -68,7 +68,7 @@ public:
   using Base = Composition;
 
   explicit TestComposition(std::size_t capacity)
-    : Composition(capacity, capacity)
+    : Composition(LocalCapacity(capacity), PooledCapacity(capacity))
   {
   }
 
