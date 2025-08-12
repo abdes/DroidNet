@@ -10,6 +10,9 @@
 #include <span>
 #include <utility>
 
+#include <fmt/core.h>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
@@ -200,7 +203,7 @@ public:
       // Any other exception is unexpected, return nullptr
       LOG_F(ERROR,
         "Unexpected exception when getting a component for handle: {}",
-        oxygen::to_string_compact(handle));
+        oxygen::to_string_compact(handle).c_str());
       return nullptr;
     }
   }
@@ -389,7 +392,7 @@ private:
       // In DEBUG builds, we will assert to force fixing this programming error.
       ABORT_F(msg.c_str());
 #else
-      throw std::invalid_argument("ComponentPool::Allocate: type mismatch");
+      throw std::invalid_argument(std::move(msg));
 #endif // NDEBUG
     }
   }
