@@ -41,13 +41,13 @@ Composition::PooledEntry::~PooledEntry() noexcept
 #if !defined(NDEBUG)
     if (const auto* comp = pool_ptr->GetUntyped(handle)) {
       DLOG_F(1, "Destroying pooled component(t={}/{}, h={})", comp->GetTypeId(),
-        comp->GetTypeNamePretty(), oxygen::to_string_compact(handle));
+        comp->GetTypeNamePretty(), oxygen::to_string_compact(handle).c_str());
     }
 #endif
     pool_ptr->Deallocate(handle);
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "exception caught while freeing pooled component({}): {}",
-      oxygen::to_string_compact(handle), ex.what());
+      oxygen::to_string_compact(handle).c_str(), ex.what());
   }
 }
 
