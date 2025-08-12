@@ -40,10 +40,13 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
 namespace {
+//! Returns a unique MeshId for the given mesh instance.
+/*!
+ Uses the address of the mesh object as the identifier.
+*/
 auto GetMeshId(const Mesh& mesh) -> MeshId
 {
-  // Use pointer value or a unique mesh identifier if available
-  return reinterpret_cast<MeshId>(&mesh);
+  return std::bit_cast<MeshId>(&mesh);
 }
 
 //===----------------------------------------------------------------------===//
@@ -180,9 +183,12 @@ auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
 
   const auto& graphics = render_controller.GetGraphics();
   const auto indices_view = mesh.IndexBuffer();
-  const std::size_t element_size = indices_view.type == IndexType::kUInt16
-    ? sizeof(std::uint16_t)
-    : (indices_view.type == IndexType::kUInt32 ? sizeof(std::uint32_t) : 0u);
+  std::size_t element_size = 0U;
+  if (indices_view.type == IndexType::kUInt16) {
+    element_size = sizeof(std::uint16_t);
+  } else if (indices_view.type == IndexType::kUInt32) {
+    element_size = sizeof(std::uint32_t);
+  }
   const auto index_count = indices_view.Count();
   const BufferDesc ib_desc {
     .size_bytes = index_count * element_size,
