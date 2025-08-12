@@ -18,6 +18,7 @@
 #define NOLINT_ASSERT_NO_THROW(st) ASSERT_NO_THROW(st) // NOLINT
 #define NOLINT_EXPECT_NO_THROW(st) EXPECT_NO_THROW(st) // NOLINT
 #define NOLINT_ASSERT_DEATH(st, msg) ASSERT_DEATH(st, msg) // NOLINT
+#define NOLINT_EXPECT_DEATH(st, msg) EXPECT_DEATH(st, msg) // NOLINT
 
 // A void test-function using ASSERT_ or EXPECT_ calls with a custom message
 // should be encapsulated by this macro. Example:
