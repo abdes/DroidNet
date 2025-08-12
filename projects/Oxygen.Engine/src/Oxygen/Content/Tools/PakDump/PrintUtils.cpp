@@ -41,7 +41,7 @@ void Bytes(
 
 void HexDump(const uint8_t* data, size_t size, size_t max_bytes)
 {
-  size_t bytes_to_show = std::min(size, max_bytes);
+  size_t bytes_to_show = (std::min)(size, max_bytes);
   for (size_t i = 0; i < bytes_to_show; i += 16) {
     std::string line = fmt::format("{:>4}: {:08x} ", i, i);
     for (size_t j = 0; j < 16; ++j) {

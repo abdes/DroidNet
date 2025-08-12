@@ -65,7 +65,7 @@ public:
   constexpr ~StaticVector() noexcept { clear(); }
 
   constexpr StaticVector(size_type count, const T& value)
-    : current_size_(std::min(count, MaxElements))
+    : current_size_((std::min)(count, MaxElements))
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
     for (size_type i = 0; i < current_size_; ++i) {
@@ -75,7 +75,7 @@ public:
 
   constexpr explicit StaticVector(size_type count)
     requires std::default_initializable<T>
-    : current_size_(std::min(count, MaxElements))
+    : current_size_((std::min)(count, MaxElements))
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
     for (size_type i = 0; i < current_size_; ++i) {
@@ -88,7 +88,7 @@ public:
   constexpr StaticVector(InputIt first, InputIt last)
   {
     size_type input_size = static_cast<size_type>(std::distance(first, last));
-    current_size_ = std::min(input_size, MaxElements);
+    current_size_ = (std::min)(input_size, MaxElements);
     auto it = first;
     for (size_type i = 0; i < current_size_; ++i, ++it) {
       new (storage_ + i * sizeof(T)) T(*it);
@@ -98,7 +98,7 @@ public:
   }
 
   constexpr StaticVector(std::initializer_list<T> init)
-    : current_size_(std::min(init.size(), MaxElements))
+    : current_size_((std::min)(init.size(), MaxElements))
   {
     assert(init.size() <= MaxElements
       && "StaticVector: initializer list size exceeds maximum size");
@@ -155,7 +155,7 @@ public:
   constexpr auto operator=(std::initializer_list<T> list) -> StaticVector&
   {
     clear();
-    current_size_ = std::min(list.size(), MaxElements);
+    current_size_ = (std::min)(list.size(), MaxElements);
     assert(list.size() <= MaxElements
       && "StaticVector: initializer list size exceeds maximum size");
     auto it = list.begin();

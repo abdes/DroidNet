@@ -278,7 +278,7 @@ public:
 
   //! Construct a cache with a given budget.
   explicit AnyCache(typename EvictionPolicyType::CostType budget
-    = std::numeric_limits<typename EvictionPolicyType::CostType>::max())
+    = (std::numeric_limits<typename EvictionPolicyType::CostType>::max)())
     : eviction_(budget)
   {
     if (budget == 0) {

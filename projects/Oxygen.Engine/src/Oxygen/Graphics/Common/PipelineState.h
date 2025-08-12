@@ -308,7 +308,7 @@ struct BindingSlotDesc {
 struct DescriptorTableBinding {
   ResourceViewType view_type = ResourceViewType::kNone;
   uint32_t base_index = 0;
-  uint32_t count = std::numeric_limits<uint32_t>::max();
+  uint32_t count = (std::numeric_limits<uint32_t>::max)();
   auto operator==(const DescriptorTableBinding&) const -> bool = default;
 };
 

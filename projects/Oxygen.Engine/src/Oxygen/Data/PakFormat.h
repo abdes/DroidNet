@@ -72,7 +72,8 @@ constexpr ResourceIndexT kFallbackResourceIndex = 0;
 constexpr ResourceIndexT kNoResourceIndex = 0;
 
 //! Maximum size for data blobs in bytes
-constexpr DataBlobSizeT kDataBlobMaxSize = std::numeric_limits<uint32_t>::max();
+constexpr DataBlobSizeT kDataBlobMaxSize
+  = (std::numeric_limits<uint32_t>::max)();
 
 //=== PAK File Format Structures ===------------------------------------------//
 

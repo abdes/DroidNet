@@ -86,7 +86,7 @@ ShaderCompiler::~ShaderCompiler() = default;
 auto ShaderCompiler::CompileFromSource(const std::u8string& shader_source,
   const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>
 {
-  DCHECK_F(shader_source.size() < std::numeric_limits<uint32_t>::max());
+  DCHECK_F(shader_source.size() < (std::numeric_limits<uint32_t>::max)());
 
   if (shader_source.empty()) {
     LOG_F(WARNING, "Attempt to compile a shader from source,");

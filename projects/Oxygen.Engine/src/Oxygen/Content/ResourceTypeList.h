@@ -25,7 +25,7 @@ using ResourceTypeList = oxygen::TypeList<
   >;
 
 static_assert(TypeListSize<ResourceTypeList>::value
-    <= std::numeric_limits<std::uint16_t>::max(),
+    <= (std::numeric_limits<std::uint16_t>::max)(),
   "ResourceTypeList size must fit in uint16_t for type index encoding");
 
 // Concept: T must be a known resource type and have DescT

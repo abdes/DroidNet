@@ -495,7 +495,8 @@ class FileStreamErrorTest : public FileStreamBasicTest { };
 NOLINT_TEST_F(FileStreamErrorTest, Write_Fails_WhenSizeExceedsLimit)
 {
   // Arrange
-  constexpr auto too_high = 1ULL + std::numeric_limits<std::streamsize>::max();
+  constexpr auto too_high
+    = 1ULL + (std::numeric_limits<std::streamsize>::max)();
   const std::vector bytes = { 'd'_b, 'a'_b, 't'_b, 'a'_b };
 
   // Act
@@ -527,7 +528,8 @@ NOLINT_TEST_F(FileStreamErrorTest, Read_Fails_WhenSizeExceedsLimit)
 {
   // Arrange
   std::vector<std::byte> buffer(1);
-  constexpr auto too_high = 1ULL + std::numeric_limits<std::streamsize>::max();
+  constexpr auto too_high
+    = 1ULL + (std::numeric_limits<std::streamsize>::max)();
 
   // Act
   const auto result = sut_->Read(buffer.data(), too_high);

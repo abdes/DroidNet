@@ -86,7 +86,7 @@ SHA256 hash = co_await tp.run(
 
         SHA256_Init(&ctx);
         while (size != 0 && !cancelled) {
-            size_t chunkSize = std::min(size, 4096);
+            size_t chunkSize = (std::min)(size, 4096);
             SHA256_Update(&ctx, begin, chunkSize);
             begin += chunkSize, size -= chunkSize;
         }

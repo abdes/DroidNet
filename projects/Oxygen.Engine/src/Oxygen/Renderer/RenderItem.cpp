@@ -23,9 +23,10 @@ auto ComputeTransformedBoundingSphere(const RenderItem& item) -> glm::vec4
   const glm::vec4& local_sphere = item.mesh->BoundingSphere();
   auto center_ws = glm::vec3(item.world_transform
     * glm::vec4(local_sphere.x, local_sphere.y, local_sphere.z, 1.0f));
-  float max_scale = std::max({ glm::length(glm::vec3(item.world_transform[0])),
-    glm::length(glm::vec3(item.world_transform[1])),
-    glm::length(glm::vec3(item.world_transform[2])) });
+  float max_scale
+    = (std::max)({ glm::length(glm::vec3(item.world_transform[0])),
+      glm::length(glm::vec3(item.world_transform[1])),
+      glm::length(glm::vec3(item.world_transform[2])) });
   float radius_ws = local_sphere.w * max_scale;
   return glm::vec4(center_ws, radius_ws);
 }
@@ -47,7 +48,7 @@ auto ComputeTransformedBoundingBoxMin(const RenderItem& item) -> glm::vec3
     { bb_min.x, bb_max.y, bb_max.z },
     { bb_max.x, bb_max.y, bb_max.z },
   };
-  glm::vec3 min_ws(std::numeric_limits<float>::max());
+  glm::vec3 min_ws((std::numeric_limits<float>::max)());
   for (int i = 0; i < 8; ++i) {
     auto ws
       = glm::vec3(item.world_transform * glm::vec4(local_corners[i], 1.0f));

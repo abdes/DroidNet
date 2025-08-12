@@ -46,7 +46,7 @@ auto PrintResourceData(std::span<const uint8_t> data,
 {
   try {
     size_t bytes_to_read
-      = std::min(static_cast<size_t>(data.size()), max_bytes);
+      = (std::min)(static_cast<size_t>(data.size()), max_bytes);
     std::cout << "        " << resource_type << " Data Preview ("
               << bytes_to_read << " of " << data.size() << " bytes):\n";
     PrintUtils::HexDump(data.data(), bytes_to_read, max_bytes);
@@ -207,7 +207,7 @@ auto PrintAssetData(const PakFile& pak, const AssetDirectoryEntry& entry,
         std::cout << "    Asset Descriptor Preview (" << data.size()
                   << " bytes read):\n";
         PrintUtils::HexDump(reinterpret_cast<const uint8_t*>(data.data()),
-          std::min(data.size(), ctx.max_data_bytes), ctx.max_data_bytes);
+          (std::min)(data.size(), ctx.max_data_bytes), ctx.max_data_bytes);
       }
 
       // If this is a material asset, print all descriptor fields
@@ -404,7 +404,7 @@ public:
     Field("Buffer Count", buffer_count);
     if (ctx.verbose && buffer_count > 0) {
       std::cout << "    Buffer entries:\n";
-      for (size_t i = 0; i < std::min(buffer_count, static_cast<size_t>(20));
+      for (size_t i = 0; i < (std::min)(buffer_count, static_cast<size_t>(20));
         ++i) {
         try {
           auto buffer_resource = asset_loader.LoadResource<BufferResource>(
@@ -471,7 +471,7 @@ public:
     Field("Texture Count", texture_count);
     if (ctx.verbose && texture_count > 0) {
       std::cout << "    Texture entries:\n";
-      for (size_t i = 0; i < std::min(texture_count, static_cast<size_t>(20));
+      for (size_t i = 0; i < (std::min)(texture_count, static_cast<size_t>(20));
         ++i) {
         try {
           auto texture_resource = asset_loader.LoadResource<TextureResource>(

@@ -96,7 +96,7 @@ auto WrapChunks(const std::vector<Token>& chunks, const size_t width,
       // Variable to store number of characters in given line.
       size_t current_length { 0 };
 
-      costs[cur_chunk] = std::numeric_limits<size_t>::max();
+      costs[cur_chunk] = (std::numeric_limits<size_t>::max)();
       const auto adjusted_width
         = (cur_chunk == 0 ? first_line_width : other_line_width);
 

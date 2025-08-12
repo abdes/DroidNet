@@ -315,7 +315,7 @@ public:
       return 0;
     }
     if (!bounded_) {
-      return std::numeric_limits<size_t>::max();
+      return (std::numeric_limits<size_t>::max)();
     }
     return buf_.Capacity() - buf_.Size();
   }

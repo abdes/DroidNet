@@ -199,7 +199,7 @@ private:
     }
 
     // Mip level upper bound: floor(log2(max_dim)) + 1
-    const auto max_dim = std::max({ desc_.width, desc_.height,
+    const auto max_dim = (std::max)({ desc_.width, desc_.height,
       static_cast<uint32_t>(desc_.depth == 0 ? 1 : desc_.depth) });
     uint16_t max_mip_levels = 1;
     uint32_t tmp = max_dim;

@@ -75,265 +75,276 @@ namespace oxygen::graphics::detail {
 */
 template <ResourceViewType ViewType>
 class StaticDescriptorHeapSegment : public DescriptorHeapSegment {
-    static_assert(ViewType < ResourceViewType::kMaxResourceViewType && ViewType != ResourceViewType::kNone,
-        "StaticDescriptorHeapSegment: ViewType must be a valid ResourceViewType (not kMax or greater)");
+  static_assert(ViewType < ResourceViewType::kMaxResourceViewType
+      && ViewType != ResourceViewType::kNone,
+    "StaticDescriptorHeapSegment: ViewType must be a valid ResourceViewType "
+    "(not kMax or greater)");
 
 public:
-    StaticDescriptorHeapSegment(
-        const DescriptorVisibility visibility,
-        const IndexT base_index) noexcept
-        : visibility_(visibility)
-        , base_index_(base_index)
-        , next_index_(0)
-    {
+  StaticDescriptorHeapSegment(
+    const DescriptorVisibility visibility, const IndexT base_index) noexcept
+    : visibility_(visibility)
+    , base_index_(base_index)
+    , next_index_(0)
+  {
+  }
+
+  //! Destructor.
+  /*!
+   This destructor does not own any resources that require explicit cleanup.
+   However, it is not a good practice to destroy a segment while it still has
+   allocated descriptors. When this class is extended, the derived class
+   should ensure that all descriptors are released before destruction.
+  */
+  ~StaticDescriptorHeapSegment() noexcept override
+  {
+    try {
+      // Do not call the virtual method GetSize() in the destructor.
+      if (const auto size
+        = next_index_ - static_cast<uint32_t>(free_list_.size());
+        size > 0U) {
+        LOG_F(
+          WARNING, "Destroying segment with allocated descriptors ({})", size);
+      }
+    } catch (...) {
+      // Nothing to do, but adding a placeholder statement to avoid warnings.
+      [[maybe_unused]] auto _ = 0;
+    }
+  }
+
+  OXYGEN_MAKE_NON_COPYABLE(StaticDescriptorHeapSegment)
+  OXYGEN_DEFAULT_MOVABLE(StaticDescriptorHeapSegment)
+
+  //! Allocates a descriptor index from this segment.
+  /*!
+   \return The allocated index, or DescriptorHandle::kInvalidIndex if the
+           segment is full, or an error occurs. Errors are logged but not
+           propagated.
+  */
+  [[nodiscard]] auto Allocate() noexcept -> IndexT override
+  {
+    // First try to reuse a released descriptor (LIFO for better cache locality)
+    if (!free_list_.empty()) {
+      auto local_index = free_list_.back();
+      free_list_.pop_back();
+      released_flags_.reset(local_index);
+      DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})", local_index,
+        GetAvailableCount(), GetCapacity());
+      return base_index_ + local_index;
     }
 
-    //! Destructor.
-    /*!
-     This destructor does not own any resources that require explicit cleanup.
-     However, it is not a good practice to destroy a segment while it still has
-     allocated descriptors. When this class is extended, the derived class
-     should ensure that all descriptors are released before destruction.
-    */
-    ~StaticDescriptorHeapSegment() noexcept override
-    {
-        try {
-            // Do not call the virtual method GetSize() in the destructor.
-            if (const auto size = next_index_ - static_cast<uint32_t>(free_list_.size()); size > 0U) {
-                LOG_F(WARNING, "Destroying segment with allocated descriptors ({})", size);
-            }
-        } catch (...) {
-            // Nothing to do, but adding a placeholder statement to avoid warnings.
-            [[maybe_unused]] auto _ = 0;
-        }
+    // If no freed descriptors, allocate a new one
+    if (next_index_ < GetCapacity()) {
+      DLOG_F(2, "Allocated new descriptor index {} (remaining: {}/{})",
+        next_index_, GetAvailableCount(), GetCapacity());
+      return base_index_ + next_index_++;
     }
 
-    OXYGEN_MAKE_NON_COPYABLE(StaticDescriptorHeapSegment)
-    OXYGEN_DEFAULT_MOVABLE(StaticDescriptorHeapSegment)
+    return DescriptorHandle::kInvalidIndex;
+  }
 
-    //! Allocates a descriptor index from this segment.
-    /*!
-     \return The allocated index, or DescriptorHandle::kInvalidIndex if the
-             segment is full, or an error occurs. Errors are logged but not
-             propagated.
-    */
-    [[nodiscard]] auto Allocate() noexcept -> IndexT override
-    {
-        // First try to reuse a released descriptor (LIFO for better cache locality)
-        if (!free_list_.empty()) {
-            auto local_index = free_list_.back();
-            free_list_.pop_back();
-            released_flags_.reset(local_index);
-            DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})",
-                local_index, GetAvailableCount(), GetCapacity());
-            return base_index_ + local_index;
-        }
+  //! Releases a descriptor index back to this segment.
+  /*!
+   \param index The index to release. Must be within the segment's range.
+   \return True if the index was successfully released, false otherwise.
 
-        // If no freed descriptors, allocate a new one
-        if (next_index_ < GetCapacity()) {
-            DLOG_F(2, "Allocated new descriptor index {} (remaining: {}/{})",
-                next_index_, GetAvailableCount(), GetCapacity());
-            return base_index_ + next_index_++;
-        }
-
-        return DescriptorHandle::kInvalidIndex;
+   Validates that the index belongs to this segment before releasing it, then
+   adds the released index to the free list for future reuse.
+   Ensures the same descriptor cannot be released twice.
+  */
+  auto Release(const IndexT index) noexcept -> bool override
+  {
+    // Check if the index belongs to this segment
+    if (index < base_index_ || index >= base_index_ + GetCapacity()) {
+      return false;
     }
 
-    //! Releases a descriptor index back to this segment.
-    /*!
-     \param index The index to release. Must be within the segment's range.
-     \return True if the index was successfully released, false otherwise.
-
-     Validates that the index belongs to this segment before releasing it, then
-     adds the released index to the free list for future reuse.
-     Ensures the same descriptor cannot be released twice.
-    */
-    auto Release(const IndexT index) noexcept -> bool override
-    {
-        // Check if the index belongs to this segment
-        if (index < base_index_ || index >= base_index_ + GetCapacity()) {
-            return false;
-        }
-
-        // Convert to local index
-        auto local_index = ToLocalIndex(index);
-        if (local_index == DescriptorHandle::kInvalidIndex) {
-            return false;
-        }
-
-        // Check if this index was never allocated or is beyond the currently allocated range.
-        if (!IsAllocated(local_index)) {
-            LOG_F(WARNING, "local index {} is already released", local_index);
-            return false;
-        }
-
-        // Add to the free list
-        try {
-            free_list_.emplace_back(local_index);
-        } catch (const std::exception& ex) {
-            // The only reason this would fail is due to memory allocation failure.
-            LOG_F(ERROR, "Failed to add released index {} to free list: {}", local_index, ex.what());
-            return false;
-        }
-        // Mark as released
-        released_flags_.set(local_index);
-
-        DLOG_F(2, "Released descriptor index {} (remaining: {}/{})",
-            local_index, GetAvailableCount(), GetCapacity());
-        return true;
+    // Convert to local index
+    auto local_index = ToLocalIndex(index);
+    if (local_index == DescriptorHandle::kInvalidIndex) {
+      return false;
     }
 
-    //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] auto GetAvailableCount() const noexcept -> IndexT override
-    {
-        return GetCapacity() - next_index_ + FreeListSize();
+    // Check if this index was never allocated or is beyond the currently
+    // allocated range.
+    if (!IsAllocated(local_index)) {
+      LOG_F(WARNING, "local index {} is already released", local_index);
+      return false;
     }
 
-    //! Returns the resource view type of this segment.
-    [[nodiscard]] auto GetViewType() const noexcept -> ResourceViewType override
-    {
-        return ViewType;
+    // Add to the free list
+    try {
+      free_list_.emplace_back(local_index);
+    } catch (const std::exception& ex) {
+      // The only reason this would fail is due to memory allocation failure.
+      LOG_F(ERROR, "Failed to add released index {} to free list: {}",
+        local_index, ex.what());
+      return false;
+    }
+    // Mark as released
+    released_flags_.set(local_index);
+
+    DLOG_F(2, "Released descriptor index {} (remaining: {}/{})", local_index,
+      GetAvailableCount(), GetCapacity());
+    return true;
+  }
+
+  //! Returns the number of descriptors currently available in this segment.
+  [[nodiscard]] auto GetAvailableCount() const noexcept -> IndexT override
+  {
+    return GetCapacity() - next_index_ + FreeListSize();
+  }
+
+  //! Returns the resource view type of this segment.
+  [[nodiscard]] auto GetViewType() const noexcept -> ResourceViewType override
+  {
+    return ViewType;
+  }
+
+  //! Returns the visibility of this segment.
+  [[nodiscard]] auto GetVisibility() const noexcept
+    -> DescriptorVisibility override
+  {
+    return visibility_;
+  }
+
+  //! Returns the base index of this segment.
+  [[nodiscard]] auto GetBaseIndex() const noexcept -> IndexT override
+  {
+    return base_index_;
+  }
+
+  //! Returns the capacity of this segment.
+  [[nodiscard]] constexpr auto GetCapacity() const noexcept -> IndexT override
+  {
+    return GetOptimalCapacity();
+  }
+
+  //! Returns the current size (number of allocated descriptors) of this
+  //! segment.
+  [[nodiscard]] auto GetAllocatedCount() const noexcept -> IndexT override
+  {
+    return next_index_ - FreeListSize();
+  }
+
+  [[nodiscard]] auto GetShaderVisibleIndex(
+    const DescriptorHandle& handle) const noexcept -> IndexT override
+  {
+    // Check if the handle is valid
+    if (!handle.IsValid()) {
+      LOG_F(WARNING, "Invalid descriptor handle");
+      return DescriptorHandle::kInvalidIndex;
     }
 
-    //! Returns the visibility of this segment.
-    [[nodiscard]] auto GetVisibility() const noexcept -> DescriptorVisibility override
-    {
-        return visibility_;
+    // Find the local index from the global index
+    const auto local_index = ToLocalIndex(handle.GetIndex());
+    if (local_index == DescriptorHandle::kInvalidIndex) {
+      return DescriptorHandle::kInvalidIndex;
     }
 
-    //! Returns the base index of this segment.
-    [[nodiscard]] auto GetBaseIndex() const noexcept -> IndexT override
-    {
-        return base_index_;
+    // Check if the descriptor is allocated
+    if (!IsAllocated(local_index)) {
+      LOG_F(WARNING, "Descriptor handle {} is not allocated",
+        nostd::to_string(handle));
+      return DescriptorHandle::kInvalidIndex;
     }
 
-    //! Returns the capacity of this segment.
-    [[nodiscard]] constexpr auto GetCapacity() const noexcept -> IndexT override
-    {
-        return GetOptimalCapacity();
-    }
-
-    //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] auto GetAllocatedCount() const noexcept -> IndexT override
-    {
-        return next_index_ - FreeListSize();
-    }
-
-    [[nodiscard]] auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept
-        -> IndexT override
-    {
-        // Check if the handle is valid
-        if (!handle.IsValid()) {
-            LOG_F(WARNING, "Invalid descriptor handle");
-            return DescriptorHandle::kInvalidIndex;
-        }
-
-        // Find the local index from the global index
-        const auto local_index = ToLocalIndex(handle.GetIndex());
-        if (local_index == DescriptorHandle::kInvalidIndex) {
-            return DescriptorHandle::kInvalidIndex;
-        }
-
-        // Check if the descriptor is allocated
-        if (!IsAllocated(local_index)) {
-            LOG_F(WARNING, "Descriptor handle {} is not allocated", nostd::to_string(handle));
-            return DescriptorHandle::kInvalidIndex;
-        }
-
-        // Return the local index as the shader-visible index
-        return local_index;
-    }
+    // Return the local index as the shader-visible index
+    return local_index;
+  }
 
 protected:
-    //! Releases all descriptors in this segment.
-    /*!
-     Releases all allocated descriptors, resetting the segment to its initial
-     state. Use with caution, as this will make all allocated indices, in use
-     anywhere, invalid.
-     */
-    void ReleaseAll()
-    {
-        // Clear the free list and reset the released flags
-        free_list_.clear();
-        released_flags_.reset();
-        // Reset the next index to the base index
-        next_index_ = 0;
-    }
+  //! Releases all descriptors in this segment.
+  /*!
+   Releases all allocated descriptors, resetting the segment to its initial
+   state. Use with caution, as this will make all allocated indices, in use
+   anywhere, invalid.
+   */
+  void ReleaseAll()
+  {
+    // Clear the free list and reset the released flags
+    free_list_.clear();
+    released_flags_.reset();
+    // Reset the next index to the base index
+    next_index_ = 0;
+  }
 
 private:
-    //! Returns the optimal capacity for this specific resource view type.
-    /*!
-     Different resource types benefit from different segment sizes based on
-     typical usage patterns and hardware considerations. The intent is to
-     minimize the number of segments used by an allocator while also minimizing
-     the wasted space in the segments.
-    */
-    [[nodiscard]] static constexpr auto GetOptimalCapacity() noexcept -> uint32_t
-    {
-        switch (ViewType) {
-        case ResourceViewType::kConstantBuffer:
-            return 64; // CBVs are typically used in smaller groups
+  //! Returns the optimal capacity for this specific resource view type.
+  /*!
+   Different resource types benefit from different segment sizes based on
+   typical usage patterns and hardware considerations. The intent is to
+   minimize the number of segments used by an allocator while also minimizing
+   the wasted space in the segments.
+  */
+  [[nodiscard]] static constexpr auto GetOptimalCapacity() noexcept -> uint32_t
+  {
+    switch (ViewType) {
+    case ResourceViewType::kConstantBuffer:
+      return 64; // CBVs are typically used in smaller groups
 
-        case ResourceViewType::kTexture_SRV:
-            return 256; // Texture SRVs have high/medium frequency of use
+    case ResourceViewType::kTexture_SRV:
+      return 256; // Texture SRVs have high/medium frequency of use
 
-        case ResourceViewType::kTypedBuffer_SRV: // NOLINT(bugprone-branch-clone)
-        case ResourceViewType::kStructuredBuffer_SRV:
-        case ResourceViewType::kRawBuffer_SRV:
-            return 64; // Buffer SRVs used in smaller groups
+    case ResourceViewType::kTypedBuffer_SRV: // NOLINT(bugprone-branch-clone)
+    case ResourceViewType::kStructuredBuffer_SRV:
+    case ResourceViewType::kRawBuffer_SRV:
+      return 64; // Buffer SRVs used in smaller groups
 
-        case ResourceViewType::kTexture_UAV:
-        case ResourceViewType::kTypedBuffer_UAV:
-        case ResourceViewType::kStructuredBuffer_UAV:
-        case ResourceViewType::kRawBuffer_UAV:
-        case ResourceViewType::kSamplerFeedbackTexture_UAV:
-            return 64; // UAVs typically used in smaller groups
+    case ResourceViewType::kTexture_UAV:
+    case ResourceViewType::kTypedBuffer_UAV:
+    case ResourceViewType::kStructuredBuffer_UAV:
+    case ResourceViewType::kRawBuffer_UAV:
+    case ResourceViewType::kSamplerFeedbackTexture_UAV:
+      return 64; // UAVs typically used in smaller groups
 
-        case ResourceViewType::kSampler:
-            return 32; // Samplers are reused frequently
+    case ResourceViewType::kSampler:
+      return 32; // Samplers are reused frequently
 
-        case ResourceViewType::kTexture_RTV:
-        case ResourceViewType::kTexture_DSV:
-        case ResourceViewType::kRayTracingAccelStructure:
-            return 16; // RT/DS/RT-AS views are used in small numbers
+    case ResourceViewType::kTexture_RTV:
+    case ResourceViewType::kTexture_DSV:
+    case ResourceViewType::kRayTracingAccelStructure:
+      return 16; // RT/DS/RT-AS views are used in small numbers
 
-        case ResourceViewType::kNone:
-        case ResourceViewType::kMaxResourceViewType:
-        default: // NOLINT(clang-diagnostic-covered-switch-default)
-            OXYGEN_UNREACHABLE_RETURN(128);
-        }
+    case ResourceViewType::kNone:
+    case ResourceViewType::kMaxResourceViewType:
+    default: // NOLINT(clang-diagnostic-covered-switch-default)
+      OXYGEN_UNREACHABLE_RETURN(128);
     }
+  }
 
-    [[nodiscard]] auto FreeListSize() const -> IndexT
-    {
-        const size_t free_count = free_list_.size();
-        DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
-            "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
-        return static_cast<IndexT>(free_count);
+  [[nodiscard]] auto FreeListSize() const -> IndexT
+  {
+    const size_t free_count = free_list_.size();
+    DCHECK_LE_F(free_count, (std::numeric_limits<IndexT>::max)(),
+      "unexpected size of free list ({}), larger than what IndexT can hold",
+      free_count);
+    return static_cast<IndexT>(free_count);
+  }
+
+  [[nodiscard]] auto ToLocalIndex(const IndexT global_index) const noexcept
+    -> IndexT
+  {
+    const auto local_index = global_index - base_index_;
+    if (local_index < 0 || local_index >= GetCapacity()) {
+      LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range",
+        global_index);
+      return DescriptorHandle::kInvalidIndex;
     }
+    return local_index;
+  }
 
-    [[nodiscard]] auto ToLocalIndex(const IndexT global_index) const noexcept -> IndexT
-    {
-        const auto local_index = global_index - base_index_;
-        if (local_index < 0 || local_index >= GetCapacity()) {
-            LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range", global_index);
-            return DescriptorHandle::kInvalidIndex;
-        }
-        return local_index;
-    }
+  [[nodiscard]] auto IsAllocated(uint32_t local_index) const noexcept -> bool
+  {
+    return std::cmp_greater_equal(local_index, 0) && local_index < next_index_
+      && !released_flags_[local_index];
+  }
 
-    [[nodiscard]] auto IsAllocated(uint32_t local_index) const noexcept -> bool
-    {
-        return std::cmp_greater_equal(local_index, 0)
-            && local_index < next_index_
-            && !released_flags_[local_index];
-    }
-
-    DescriptorVisibility visibility_;
-    IndexT base_index_;
-    IndexT next_index_;
-    std::bitset<GetOptimalCapacity()> released_flags_ {};
-    StaticVector<IndexT, GetOptimalCapacity()> free_list_ {};
+  DescriptorVisibility visibility_;
+  IndexT base_index_;
+  IndexT next_index_;
+  std::bitset<GetOptimalCapacity()> released_flags_ {};
+  StaticVector<IndexT, GetOptimalCapacity()> free_list_ {};
 };
 
 } // namespace oxygen::graphics::detail

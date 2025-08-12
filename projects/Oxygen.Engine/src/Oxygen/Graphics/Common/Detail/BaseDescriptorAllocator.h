@@ -425,7 +425,7 @@ private:
     DCHECK_NE_F(prev_capacity, 0U, "previous capacity must be > 0");
 
     // The new capacity cannot be greater than the max value of IndexT.
-    constexpr auto kMax = std::numeric_limits<IndexT>::max();
+    constexpr auto kMax = (std::numeric_limits<IndexT>::max)();
 
     const auto result
       = static_cast<double>(prev_capacity) * static_cast<double>(growth_factor);

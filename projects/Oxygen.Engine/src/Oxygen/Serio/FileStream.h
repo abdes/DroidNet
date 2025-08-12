@@ -325,7 +325,8 @@ auto FileStream<StreamType>::Write(
   if (data == nullptr && size > 0) {
     return std::make_error_code(std::errc::invalid_argument);
   }
-  if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+  if (size
+    > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
     return std::make_error_code(std::errc::invalid_argument);
   }
   try {
@@ -350,7 +351,8 @@ auto FileStream<StreamType>::Read(std::byte* data, const size_t size) noexcept
   if (data == nullptr && size > 0) {
     return std::make_error_code(std::errc::invalid_argument);
   }
-  if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+  if (size
+    > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
     return std::make_error_code(std::errc::invalid_argument);
   }
   try {
@@ -403,7 +405,8 @@ template <BackingStream StreamType>
 auto FileStream<StreamType>::Seek(const size_t pos) noexcept -> Result<void>
 {
   try {
-    if (pos > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
+    if (pos
+      > static_cast<size_t>((std::numeric_limits<std::streamoff>::max)())) {
       return std::make_error_code(std::errc::invalid_argument);
     }
 

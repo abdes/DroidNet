@@ -68,12 +68,12 @@ struct BufferRange {
   [[nodiscard]] auto Resolve(const BufferDesc& desc) const -> BufferRange
   {
     BufferRange result;
-    result.offset_bytes = std::min(offset_bytes, desc.size_bytes);
+    result.offset_bytes = (std::min)(offset_bytes, desc.size_bytes);
     if (size_bytes == 0) {
       result.size_bytes = desc.size_bytes - result.offset_bytes;
     } else {
       result.size_bytes
-        = std::min(size_bytes, desc.size_bytes - result.offset_bytes);
+        = (std::min)(size_bytes, desc.size_bytes - result.offset_bytes);
     }
     return result;
   }
