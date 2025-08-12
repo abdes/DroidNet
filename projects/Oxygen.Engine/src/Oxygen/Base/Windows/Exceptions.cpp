@@ -23,10 +23,6 @@ using oxygen::windows::WindowsException;
 
 namespace {
 
-struct LocalFreeHelper {
-  void operator()(void* to_free) const { LocalFree(to_free); }
-};
-
 auto GetErrorMessage(const DWORD error_code) -> std::string
 {
   try {

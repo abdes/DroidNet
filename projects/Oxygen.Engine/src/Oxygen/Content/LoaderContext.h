@@ -6,12 +6,8 @@
 
 #pragma once
 
-#include <functional>
-#include <memory>
-
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -53,8 +49,8 @@ struct LoaderContext {
    @note The tuple order matches ResourceTypeList.
    @see ResourceTypeList
   */
-  using DataReadersTuple =
-    typename TypeListTransform<ResourceTypeList, DataReaderRef>::type;
+  using DataReadersTuple
+    = TypeListTransform<ResourceTypeList, DataReaderRef>::Type;
   DataReadersTuple data_readers {};
 
   //! Whether loading is performed in offline mode

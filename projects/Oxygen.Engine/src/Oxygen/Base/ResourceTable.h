@@ -113,8 +113,8 @@ public:
 
   virtual ~ResourceTable() = default;
 
-  OXYGEN_MAKE_NON_COPYABLE(ResourceTable);
-  OXYGEN_MAKE_NON_MOVABLE(ResourceTable);
+  OXYGEN_MAKE_NON_COPYABLE(ResourceTable)
+  OXYGEN_MAKE_NON_MOVABLE(ResourceTable)
 
   [[nodiscard]] auto GetItemType() const -> ResourceHandle::ResourceTypeT
   {
@@ -166,7 +166,7 @@ public:
   This operation is slower than `Reset()`, but safer for the detection of
   stale handles later. Complexity is linear.
   */
-  void Clear() noexcept;
+  auto Clear() noexcept -> void;
 
   /*
   Removes all items, destroying the sparse set. Leaves the container's
@@ -175,7 +175,7 @@ public:
   This is faster than `Clear()`, but cannot safely detect lookups by stale
   handles obtained before the reset. Complexity is constant.
   */
-  void Reset() noexcept;
+  auto Reset() noexcept -> void;
 
   /*
   De-fragmentation uses the comparison function `comp` to establish an ideal
@@ -215,7 +215,7 @@ private:
   {
     // Having the front at the max index value, means the freelist is empty.
     // The back will implicitly be equal to the front.
-    return (freelist_front_ == ResourceHandle::kIndexMax);
+    return freelist_front_ == ResourceHandle::kIndexMax;
   }
 
   // Index of the first item in the freelist
@@ -293,7 +293,7 @@ auto ResourceTable<T>::Contains(const ResourceHandle& handle) const noexcept
   }
 
   assert(inner_id.Index() < items_.size());
-  return (handle.Generation() == inner_id.Generation());
+  return handle.Generation() == inner_id.Generation();
 }
 
 template <typename T>
@@ -332,14 +332,14 @@ template <typename URef>
   requires std::is_same_v<std::remove_cvref_t<URef>, T>
 auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
 {
-  return InsertImpl([&]() { items_.push_back(std::forward<URef>(item)); });
+  return InsertImpl([&] { items_.push_back(std::forward<URef>(item)); });
 }
 
 template <typename T>
 template <typename... Params>
 auto ResourceTable<T>::Emplace(Params&&... args) -> ResourceHandle
 {
-  return InsertImpl([&]() {
+  return InsertImpl([&] {
     // Use perfect forwarding to construct the item in place
     items_.emplace_back(std::forward<Params>(args)...);
   });
@@ -355,9 +355,9 @@ auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
     && "index will be out of range, increase bit size of the index values");
 
   // Check if we're about to exceed capacity and log a warning
-  const bool will_reallocate_items = (items_.size() == items_.capacity());
+  const bool will_reallocate_items = items_.size() == items_.capacity();
   const bool will_reallocate_sparse
-    = (IsFreeListEmpty() && sparse_table_.size() == sparse_table_.capacity());
+    = IsFreeListEmpty() && sparse_table_.size() == sparse_table_.capacity();
 
   if (will_reallocate_items || will_reallocate_sparse) {
     LOG_F(WARNING,
@@ -395,7 +395,8 @@ auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
   }
 
   // Delegate item creation to the provided functor
-  item_creator();
+  const auto& item_creator_ref = std::forward<ItemCreator>(item_creator);
+  item_creator_ref();
   meta_.push_back({ handle.Index() });
 
   return handle;
@@ -462,7 +463,7 @@ auto ResourceTable<T>::EraseItems(const HandleSet& handles) -> size_t
   return count;
 }
 
-template <typename T> void ResourceTable<T>::Clear() noexcept
+template <typename T> auto ResourceTable<T>::Clear() noexcept -> void
 {
   if (const uint32_t size = detail::NewIndex(sparse_table_); size > 0) {
     items_.clear();
@@ -482,7 +483,7 @@ template <typename T> void ResourceTable<T>::Clear() noexcept
   }
 }
 
-template <typename T> void ResourceTable<T>::Reset() noexcept
+template <typename T> auto ResourceTable<T>::Reset() noexcept -> void
 {
   freelist_front_ = ResourceHandle::kIndexMax;
   freelist_back_ = ResourceHandle::kIndexMax;

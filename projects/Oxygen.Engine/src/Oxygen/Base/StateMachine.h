@@ -247,8 +247,8 @@ template <typename TargetState> struct TransitionTo {
   {
     // Call OnLeave and if it fails or requests termination, do not transition
     // to the next state.
-    Status status = Leave(prevState, event);
-    if (std::holds_alternative<Terminate>(status)
+    if (Status status = Leave(prevState, event);
+      std::holds_alternative<Terminate>(status)
       || std::holds_alternative<TerminateWithError>(status)) {
       return status;
     }
@@ -263,12 +263,12 @@ template <typename TargetState> struct TransitionTo {
 
   template <typename ActionType> [[nodiscard]] auto IsA() const noexcept -> bool
   {
-    return std::is_same_v<ActionType, TransitionTo<TargetState>>;
+    return std::is_same_v<ActionType, TransitionTo>;
   }
 
   template <typename ActionType> auto GetAs() -> ActionType&
   {
-    static_assert(std::is_same_v<ActionType, TransitionTo<TargetState>>,
+    static_assert(std::is_same_v<ActionType, TransitionTo>,
       "do not use GetAs() with the wrong type");
     return static_cast<ActionType&>(*this);
   }
@@ -276,7 +276,7 @@ template <typename TargetState> struct TransitionTo {
   template <typename ActionType>
   [[nodiscard]] auto GetAs() const -> const ActionType&
   {
-    static_assert(std::is_same_v<ActionType, TransitionTo<TargetState>>,
+    static_assert(std::is_same_v<ActionType, TransitionTo>,
       "do not use GetAs() with the wrong type");
     return static_cast<const ActionType&>(*this);
   }
@@ -521,12 +521,7 @@ private:
 };
 
 //! Concept to identify if a particular type is a OneOf<...Actions> type.
-/*!
- Evaluates to true if T is a specialization of OneOf, false otherwise.
-
- @tparam T The type to check.
-*/
-template <typename T> struct is_one_of : std::false_type { };
+template <typename /*T*/> struct is_one_of : std::false_type { };
 template <typename... Actions>
 struct is_one_of<OneOf<Actions...>> : std::true_type { };
 template <typename T> constexpr bool is_one_of_v = is_one_of<T>::value;

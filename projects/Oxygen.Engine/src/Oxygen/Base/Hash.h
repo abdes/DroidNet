@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <utility>
-
 namespace oxygen {
 
 //! Combines a hash seed with the hash of a value.
@@ -24,8 +22,16 @@ namespace oxygen {
 */
 template <class T> void HashCombine(size_t& seed, const T& v)
 {
+  // Magic constant for hash mixing, derived from the golden ratio.
+  constexpr size_t golden_ratio = 0x9e3779b9;
+  // Number of bits to shift left in hash mixing.
+  constexpr size_t shift_left = 6;
+  // Number of bits to shift right in hash mixing.
+  constexpr size_t shift_right = 2;
+
   std::hash<T> hasher;
-  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  seed
+    ^= hasher(v) + golden_ratio + (seed << shift_left) + (seed >> shift_right);
 }
 
 } // namespace oxygen

@@ -11,7 +11,7 @@
 #  include <intrin.h>
 #  pragma intrinsic(_ReturnAddress)
 namespace oxygen::detail {
-[[nodiscard]] inline void* GetReturnAddress() noexcept
+[[nodiscard]] inline auto GetReturnAddress() noexcept -> void*
 {
   return _ReturnAddress();
 }
@@ -31,8 +31,8 @@ namespace oxygen::detail {
 
 namespace oxygen {
 // User-facing constexpr template function
-template <typename T = void>
-[[nodiscard]] constexpr void* ReturnAddress() noexcept
+template <typename /*T*/ = void>
+[[nodiscard]] constexpr auto ReturnAddress() noexcept -> void*
 {
 #if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
   return detail::GetReturnAddress();

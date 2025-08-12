@@ -127,17 +127,17 @@ template <template <typename...> class Template, typename List> struct Apply;
 
 template <template <typename...> class Template, typename... Types>
 struct Apply<Template, TypeList<Types...>> {
-  using type = Template<Types...>;
+  using Type = Template<Types...>;
 };
 
 //! Convenience alias for Apply<Template, List>::type
 template <template <typename...> class Template, typename List>
-using Apply_t = typename Apply<Template, List>::type;
+using ApplyT = typename Apply<Template, List>::Type;
 
 //! Transforms a TypeList<Ts...> into a new TypeList with a template applied to
 //! each type.
 /*!
- Applies the template Template to each type in the TypeList.
+ Applies the template `Template` to each type in the TypeList.
 
  @tparam List The TypeList to transform
  @tparam Template The template to apply (must be a template taking a single
@@ -159,7 +159,7 @@ struct TypeListTransform;
 template <template <typename...> class TypeList, typename... Ts,
   template <typename> class Template>
 struct TypeListTransform<TypeList<Ts...>, Template> {
-  using type = std::tuple<Template<Ts>...>;
+  using Type = std::tuple<Template<Ts>...>;
 };
 
 } // namespace oxygen

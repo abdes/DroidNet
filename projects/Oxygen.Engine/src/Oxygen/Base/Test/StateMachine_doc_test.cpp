@@ -33,7 +33,7 @@ struct OpenEvent { };
 struct CloseEvent { };
 
 struct LockEvent {
-  uint32_t newKey; // the lock code chosen by the user
+  uint32_t new_key; // the lock code chosen by the user
 };
 
 struct UnlockEvent {
@@ -42,7 +42,7 @@ struct UnlockEvent {
 
 struct ClosedState;
 struct OpenState;
-struct LockedState;
+class LockedState;
 
 struct ClosedState
   : Will<ByDefault<DoNothing>, On<LockEvent, TransitionTo<LockedState>>,
@@ -51,17 +51,18 @@ struct ClosedState
 struct OpenState
   : Will<ByDefault<DoNothing>, On<CloseEvent, TransitionTo<ClosedState>>> { };
 
-struct LockedState : ByDefault<DoNothing> {
+class LockedState : ByDefault<DoNothing> {
+public:
   using ByDefault::Handle;
 
-  explicit LockedState(uint32_t key)
+  explicit LockedState(const uint32_t key)
     : key_(key)
   {
   }
 
   [[maybe_unused]] auto OnEnter(const LockEvent& event) -> Status
   {
-    key_ = event.newKey;
+    key_ = event.new_key;
     return Continue {};
   }
 

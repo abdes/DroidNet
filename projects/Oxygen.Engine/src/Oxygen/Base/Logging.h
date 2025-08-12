@@ -224,7 +224,7 @@ public:
   {
   }
   ~Text();
-  Text(Text&& t)
+  Text(Text&& t) noexcept
   {
     _str = t._str;
     t._str = nullptr;
@@ -238,7 +238,7 @@ public:
 
   char* release()
   {
-    auto result = _str;
+    const auto result = _str;
     _str = nullptr;
     return result;
   }
@@ -591,7 +591,7 @@ void raw_vlog(Verbosity verbosity, const char* file, unsigned line,
 
 // Actual logging function. Use the LOG macro instead of calling this directly.
 template <typename... Args>
-void log(Verbosity verbosity, const char* file, unsigned line,
+void log(const Verbosity verbosity, const char* file, const unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, const Args&... args) noexcept
 {
   if (format == nullptr) {
@@ -612,7 +612,7 @@ void log(Verbosity verbosity, const char* file, unsigned line,
 
 // Log without any preamble or indentation.
 template <typename... Args>
-void raw_log(Verbosity verbosity, const char* file, unsigned line,
+void raw_log(const Verbosity verbosity, const char* file, const unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
 {
   raw_vlog(verbosity, file, line, format, fmt::make_format_args(args...));
@@ -639,7 +639,12 @@ void raw_log(Verbosity verbosity, const char* file, unsigned line,
 class LOGURU_EXPORT LogScopeRAII {
 public:
   LogScopeRAII()
-    : _file(nullptr)
+    : _verbosity(0)
+    , _file(nullptr)
+    , _line(0)
+    , _indent_stderr(false)
+    , _start_time_ns(0)
+    , _name {}
   {
   } // No logging
   LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
@@ -652,9 +657,9 @@ public:
     LOGURU_PRINTF_LIKE(2, 0);
 
 #  if defined(_MSC_VER) && _MSC_VER > 1800
-  // older MSVC default move ctors close the scope on move. See
+  // older MSVC default move constructors close the scope on move. See
   // issue #43
-  LogScopeRAII(LogScopeRAII&& other)
+  LogScopeRAII(LogScopeRAII&& other) noexcept
     : _verbosity(other._verbosity)
     , _file(other._file)
     , _line(other._line)
@@ -694,8 +699,8 @@ LOGURU_NORETURN void vlog_and_abort(int stack_trace_skip, const char* expr,
   const char* file, unsigned line, LOGURU_FORMAT_STRING_TYPE format,
   fmt::format_args);
 template <typename... Args>
-LOGURU_NORETURN void log_and_abort(int stack_trace_skip, const char* expr,
-  const char* file, unsigned line, LOGURU_FORMAT_STRING_TYPE format,
+LOGURU_NORETURN void log_and_abort(const int stack_trace_skip, const char* expr,
+  const char* file, const unsigned line, LOGURU_FORMAT_STRING_TYPE format,
   const Args&... args)
 {
   vlog_and_abort(
@@ -717,10 +722,7 @@ LOGURU_NORETURN void log_and_abort(
 LOGURU_EXPORT
 void flush();
 
-template <class T> inline Text format_value(const T&)
-{
-  return textprintf("N/A");
-}
+template <class T> Text format_value(const T&) { return textprintf("N/A"); }
 template <> inline Text format_value(const char& v)
 {
   return textprintf(LOGURU_FMT(c), v);
@@ -908,7 +910,7 @@ template <typename T> class EcEntryData : public EcEntryBase {
 public:
   using Printer = Text (*)(T data);
 
-  EcEntryData(const char* file, unsigned line, const char* descr, T data,
+  EcEntryData(const char* file, const unsigned line, const char* descr, T data,
     Printer&& printer)
     : EcEntryBase(file, line, descr)
     , _data(data)
@@ -916,7 +918,7 @@ public:
   {
   }
 
-  virtual void print_value(StringStream& out_string_stream) const override
+  void print_value(StringStream& out_string_stream) const override
   {
     const auto str = _printer(_data);
     stream_print(out_string_stream, str.c_str());
@@ -969,8 +971,7 @@ template <class T> struct make_const_ptr<T*> {
 };
 
 template <class T> struct make_ec_type {
-  using type =
-    typename make_const_ptr<typename decay_char_array<T>::type>::type;
+  using type = make_const_ptr<typename decay_char_array<T>::type>::type;
 };
 
 /* 	A stack trace gives you the names of the function at the point of a

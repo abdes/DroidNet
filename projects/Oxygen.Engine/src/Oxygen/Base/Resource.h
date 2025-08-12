@@ -92,7 +92,7 @@ namespace oxygen {
 
  @tparam ResourceT The derived resource type (CRTP pattern - must be the
  inheriting class)
- @tparam ResourceTypeList Centralized TypeList containing ALL resource types
+ @tparam ResourceTypeListT Centralized TypeList containing ALL resource types
  (order matters!)
  @tparam HandleT Handle type for indirection (defaults to ResourceHandle)
 
@@ -114,7 +114,7 @@ public:
   //! Get the compile-time unique resource type ID for the `ResourceT` type,
   //! provided it has been registered in the global `ResourceTypeList`.
   /*!
-   Returns the zero-based index of Resource concreter type within
+   Returns the zero-based index of Resource concrete type within
    ResourceTypeList, providing zero runtime overhead type resolution through
    template metaprogramming.
 
@@ -144,6 +144,7 @@ public:
   OXYGEN_DEFAULT_COPYABLE(Resource)
   OXYGEN_DEFAULT_MOVABLE(Resource)
 
+  // ReSharper disable once CppHiddenFunction
   [[nodiscard]] constexpr auto GetHandle() const noexcept -> const HandleT&
   {
     return handle_;

@@ -406,6 +406,7 @@
 // Pragma
 // -----------------------------------------------------------------------------
 
+// NOLINTNEXTLINE(readability-avoid-unconditional-preprocessor-if)
 #if (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L))               \
   || defined(__clang__) || OXYGEN_GCC_VERSION_CHECK(3, 0, 0)
 #  define OXYGEN_PRAGMA(value) _Pragma(#value)
@@ -439,16 +440,15 @@
 #  undef OXYGEN_DIAGNOSTIC_DISABLE
 #endif
 
-#if defined(__clang__)
+#if defined(OXYGEN_CLANG_VERSION)
 #  define OXYGEN_DIAGNOSTIC_PUSH _Pragma("clang diagnostic push")
 #  define OXYGEN_DIAGNOSTIC_POP _Pragma("clang diagnostic pop")
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id)                                        \
-    _Pragma("clang diagnostic ignored \"" #id "\"")
+    OXYGEN_PRAGMA(clang diagnostic ignored id)
 #elif OXYGEN_GCC_VERSION_CHECK(4, 6, 0)
 #  define OXYGEN_DIAGNOSTIC_PUSH _Pragma("GCC diagnostic push")
 #  define OXYGEN_DIAGNOSTIC_POP _Pragma("GCC diagnostic pop")
-#  define OXYGEN_DIAGNOSTIC_DISABLE(id)                                        \
-    _Pragma("GCC diagnostic ignored \"" #id "\"")
+#  define OXYGEN_DIAGNOSTIC_DISABLE(id) OXYGEN_PRAGMA(GCC diagnostic ignored id)
 #elif OXYGEN_MSVC_VERSION_CHECK(15, 0, 0)
 #  define OXYGEN_DIAGNOSTIC_PUSH __pragma(warning(push))
 #  define OXYGEN_DIAGNOSTIC_POP __pragma(warning(pop))

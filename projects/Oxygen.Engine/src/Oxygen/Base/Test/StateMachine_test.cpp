@@ -214,7 +214,7 @@ NOLINT_TEST(StateMachine, DoNothingExample)
     }
   };
 
-  StateMachine<TestState> machine { TestState {} };
+  StateMachine machine { TestState {} };
   machine.Handle(DoNothingEvent {});
   //! [DoNothing action example]
 
@@ -244,8 +244,7 @@ NOLINT_TEST(StateMachine, ByDefaultExample)
     }
   };
 
-  StateMachine<FirstState, SecondState> machine { FirstState {},
-    SecondState {} };
+  StateMachine machine { FirstState {}, SecondState {} };
 
   machine.Handle(NotForMeEvent {}); // DoNothing
   ASSERT_THAT(machine.IsIn<FirstState>(), IsTrue());
@@ -264,8 +263,7 @@ NOLINT_TEST(StateMachine, OnExample)
 
   struct FirstState : Will<On<SpecialEvent, TransitionTo<SecondState>>> { };
 
-  StateMachine<FirstState, SecondState> machine { FirstState {},
-    SecondState {} };
+  StateMachine machine { FirstState {}, SecondState {} };
 
   machine.Handle(SpecialEvent {}); // TransitionTo AnotherState
   ASSERT_THAT(machine.IsIn<SecondState>(), IsTrue());
@@ -842,13 +840,13 @@ template <typename Action> struct DynamicActionTestValue {
 
 template <typename Action> class DynamicActionTest : public testing::Test {
 protected:
-  static std::vector<DynamicActionTestValue<Action>> test_actions;
+  static std::vector<DynamicActionTestValue<Action>> test_actions_;
 };
 TYPED_TEST_SUITE_P(DynamicActionTest);
 
 TYPED_TEST_P(DynamicActionTest, CheckAction)
 {
-  for (const auto& value : DynamicActionTest<TypeParam>::test_actions) {
+  for (const auto& value : DynamicActionTest<TypeParam>::test_actions_) {
     // Test the action
     auto check = value.action.template IsA<TransitionTo<State>>();
     EXPECT_THAT(check, Eq(value.is_transition_to_state));
@@ -875,7 +873,7 @@ TYPED_TEST_SUITE(DynamicActionTest, ActionTypes, );
 
 template <>
 std::vector<DynamicActionTestValue<OneOf_TT_State>>
-  DynamicActionTest<OneOf_TT_State>::test_actions {
+  DynamicActionTest<OneOf_TT_State>::test_actions_ {
     {
       .action = TransitionTo<State> {},
       .is_transition_to_state = true,
@@ -888,7 +886,7 @@ std::vector<DynamicActionTestValue<OneOf_TT_State>>
 
 template <>
 std::vector<DynamicActionTestValue<OneOf_TT_OtherState>>
-  DynamicActionTest<OneOf_TT_OtherState>::test_actions {
+  DynamicActionTest<OneOf_TT_OtherState>::test_actions_ {
     {
       .action = TransitionTo<OtherState> {},
       .is_transition_to_state = false,
@@ -901,7 +899,7 @@ std::vector<DynamicActionTestValue<OneOf_TT_OtherState>>
 
 template <>
 std::vector<DynamicActionTestValue<TransitionTo<State>>>
-  DynamicActionTest<TransitionTo<State>>::test_actions {
+  DynamicActionTest<TransitionTo<State>>::test_actions_ {
     {
       .action = TransitionTo<State> {},
       .is_transition_to_state = true,
@@ -910,7 +908,7 @@ std::vector<DynamicActionTestValue<TransitionTo<State>>>
 
 template <>
 std::vector<DynamicActionTestValue<DoNothing>>
-  DynamicActionTest<DoNothing>::test_actions {
+  DynamicActionTest<DoNothing>::test_actions_ {
     {
       .action = DoNothing {},
       .is_transition_to_state = false,

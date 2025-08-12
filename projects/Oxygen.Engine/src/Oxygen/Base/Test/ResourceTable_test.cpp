@@ -173,8 +173,8 @@ NOLINT_TEST(ResourceTableBasicTest, EraseItemCallsItsDestructor)
     }
     ~Item() { item_destroyed = true; }
 
-    OXYGEN_DEFAULT_COPYABLE(Item);
-    OXYGEN_DEFAULT_MOVABLE(Item);
+    OXYGEN_DEFAULT_COPYABLE(Item)
+    OXYGEN_DEFAULT_MOVABLE(Item)
 
     std::string value;
   };
@@ -493,7 +493,7 @@ public:
   }
 
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     for (auto index = 1U; index <= kCapacity; index++) {
       handles_.push_back(table_.Emplace(std::to_string(index)));
