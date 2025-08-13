@@ -10,6 +10,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+// Include first to avoid conflicts between winsock2(asio) and windows.h
+#include <Oxygen/Platform/Platform.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -26,7 +29,6 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
-#include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/RenderContext.h>

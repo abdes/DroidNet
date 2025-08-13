@@ -11,6 +11,8 @@
 #include <utility>
 #include <variant>
 
+#include <fmt/format.h>
+
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Coroutine.h>

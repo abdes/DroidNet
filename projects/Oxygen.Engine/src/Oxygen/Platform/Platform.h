@@ -13,6 +13,8 @@
 
 #include <asio/signal_set.hpp>
 
+#include <Oxygen/OxCo/asio.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PlatformConfig.h>
@@ -23,7 +25,6 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Display.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
