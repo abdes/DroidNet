@@ -1,5 +1,35 @@
 # Asynchronous Asset Loading and GPU Upload System
 
+---
+
+## Current Implementation Status (August 2025)
+
+**Implemented:**
+
+- Loader functions for Geometry, Material, and Texture assets
+- Resource loader functions for Buffer and Texture resources
+- Asset and resource dependency registration during asset loading (via LoaderContext)
+- Centralized cache (AnyCache) for assets and resources
+- Reference counting and safe eviction for assets/resources
+- Recursive release of asset/resource dependency trees
+- Loader/unloader registration for all supported types
+- Unload functions for resource cleanup
+
+**Partially Implemented / Planned:**
+
+- Asynchronous coroutine-based pipeline (design present, not implemented)
+- GPU upload queue and thread pool integration (design present, not implemented)
+- Hot-reload and memory budget tracking (design present, not implemented)
+
+**Not Implemented:**
+
+- Full async asset loading and upload pipeline
+- Streaming prioritization and residency management
+
+**Summary:**
+
+The codebase fully implements asset and resource loading for supported types (geometry, material, texture, buffer), including unified cache, reference counting, dependency tracking, and safe unloading. AssetLoader orchestrates loader/unloader registration, dependency management, and recursive release of dependency trees. Asynchronous pipeline, streaming, and GPU upload queue are designed but not yet implemented. The documentation below describes both the current implementation and the intended future direction.
+
 ## Overview
 
 This system provides a modern, efficient, and scalable pipeline for loading, processing, and uploading assets (geometry, textures, etc.) in a C++ game engine. It leverages C++20 coroutines, the [Corral](https://github.com/hudson-trading/corral) coroutine library, and a ThreadPool for CPU-bound work, as well as a dedicated GPU copy engine for asynchronous GPU uploads.

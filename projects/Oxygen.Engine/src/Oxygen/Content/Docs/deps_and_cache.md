@@ -1,9 +1,11 @@
 # Asset Dependency Validation and Caching Design
 
+---
+
 ## Current Status
 
-**✅ Implemented**: Dependency registration during loading via LoaderContext
-**❌ Not Implemented**: Asset caching, dependency validation for safe unloading, reference counting
+**✅ Implemented**: Unified cache for assets and resources with reference counting (`content_cache_`); forward and reverse dependency tracking; safe unloading and cascading release (`ReleaseAssetTree`); loader and unload functions for all supported asset/resource types
+**❌ Not Implemented**: Hot-reload and memory budget tracking; priority-based eviction (LRU, etc.); circular dependency detection; asynchronous loading (all logic is synchronous)
 
 ## Core Philosophy
 
