@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <type_traits>
 
 #include <glm/glm.hpp>
@@ -244,7 +245,7 @@ auto MainModule::SetupFramebuffers() -> void
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;
     depth_desc.use_clear_value = true;
-    depth_desc.clear_value = { 1.0f, 0.0f, 0.0f, 0.0f };
+    depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
     depth_desc.initial_state = graphics::ResourceStates::kDepthWrite;
     const auto depth_tex = gfx->CreateTexture(depth_desc);
 
@@ -283,102 +284,6 @@ auto MainModule::SetupShaders() const -> void
 // - The Resource Indices CBV for bindless rendering is always (register b0).
 // - All other resources (SRVs, UAVs) are placed in the heap starting at
 // index 1.
-auto MainModule::EnsureVertexBufferSrv() -> void
-{
-  if (vertex_srv_created_) {
-    return;
-  }
-
-  auto& resource_registry = render_controller_->GetResourceRegistry();
-
-  // Use the mesh from the first render item
-  if (render_items_.empty() || !render_items_.front().mesh) {
-    LOG_F(ERROR, "No mesh asset available for SRV registration");
-    return;
-  }
-  const auto& mesh = render_items_.front().mesh;
-  auto vertex_buffer = renderer_->GetVertexBuffer(*mesh);
-
-  graphics::BufferViewDescription srv_view_desc {
-    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = Format::kUnknown,
-    .stride = sizeof(Vertex),
-  };
-
-  auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
-  auto srv_handle = descriptor_allocator.Allocate(
-    graphics::ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
-
-  if (!srv_handle.IsValid()) {
-    LOG_F(ERROR, "Failed to allocate descriptor handle for vertex buffer SRV!");
-    return;
-  }
-
-  // Actually create the native view (SRV) in the backend
-  const auto view = vertex_buffer->GetNativeView(srv_handle, srv_view_desc);
-
-  vertex_srv_shader_visible_index_
-    = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
-
-  resource_registry.RegisterView(
-    *vertex_buffer, view, std::move(srv_handle), srv_view_desc);
-
-  LOG_F(INFO, "Vertex buffer SRV registered at index {}",
-    vertex_srv_shader_visible_index_);
-
-  vertex_srv_created_ = true;
-}
-
-auto MainModule::EnsureIndexBufferSrv() -> void
-{
-  if (index_srv_created_) {
-    return;
-  }
-
-  auto& resource_registry = render_controller_->GetResourceRegistry();
-
-  // Use the mesh from the first render item
-  if (render_items_.empty() || !render_items_.front().mesh) {
-    LOG_F(ERROR, "No mesh asset available for index buffer SRV registration");
-    return;
-  }
-  const auto& mesh = render_items_.front().mesh;
-  auto index_buffer = renderer_->GetIndexBuffer(*mesh);
-
-  graphics::BufferViewDescription srv_view_desc {
-    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = Format::kR32UInt, // Index buffer format
-    .stride = sizeof(uint32_t), // 32-bit indices
-  };
-
-  auto& descriptor_allocator = render_controller_->GetDescriptorAllocator();
-  auto srv_handle = descriptor_allocator.Allocate(
-    graphics::ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
-
-  if (!srv_handle.IsValid()) {
-    LOG_F(ERROR, "Failed to allocate descriptor handle for index buffer SRV!");
-    return;
-  }
-
-  // Actually create the native view (SRV) in the backend
-  const auto view = index_buffer->GetNativeView(srv_handle, srv_view_desc);
-
-  index_srv_shader_visible_index_
-    = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
-
-  resource_registry.RegisterView(
-    *index_buffer, view, std::move(srv_handle), srv_view_desc);
-
-  LOG_F(INFO, "Index buffer SRV registered at index {}",
-    index_srv_shader_visible_index_);
-
-  index_srv_created_ = true;
-}
-
 // Removed: indices buffer creation/upload now handled by Renderer.
 
 auto MainModule::ExtractMaterialConstants(
@@ -415,24 +320,7 @@ auto MainModule::ExtractMaterialConstants(
   return constants;
 }
 
-auto MainModule::EnsureMeshDrawResources() -> void
-{
-  try {
-    EnsureVertexBufferSrv();
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Error while ensuring vertex buffer SRV: {}", e.what());
-    throw;
-  }
-  try {
-    EnsureIndexBufferSrv();
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Error while ensuring index buffer SRV: {}", e.what());
-    throw;
-  }
-  // Provide indices to renderer (transitional Phase 1 API).
-  renderer_->SetDrawResourceIndices(
-    { vertex_srv_shader_visible_index_, index_srv_shader_visible_index_, 1u });
-}
+// Phase 2: SRVs and indices are ensured in Renderer::EnsureMeshResources.
 
 // === Data-driven RenderItem/scene system integration ===
 
@@ -457,8 +345,8 @@ auto MainModule::RenderScene() -> co::Co<>
     RenderItem cube_item {
       .mesh = cube_mesh,
       .material = cube_material,
-      .world_transform = glm::mat4(1.0f), // Not used directly in shader
-      .normal_transform = glm::mat4(1.0f),
+      .world_transform = glm::mat4(1.0F), // Not used directly in shader
+      .normal_transform = glm::mat4(1.0F),
       .cast_shadows = false,
       .receive_shadows = false,
       .render_layer = 0u,
@@ -466,12 +354,72 @@ auto MainModule::RenderScene() -> co::Co<>
     };
     cube_item.UpdateComputedProperties();
     render_items_.push_back(cube_item);
-  }
 
-  // Transitional Phase 1: ensure mesh draw resources & indices (will be
-  // superseded in Phase 2 by Renderer::EnsureMeshResources + automatic index
-  // derivation without explicit SRV management here).
-  EnsureMeshDrawResources();
+    // Add a second mesh: an offset copy of the cube so they don't overlap.
+    // Shaders currently treat object space == world space, so bake translation.
+    {
+      using oxygen::data::MeshBuilder;
+      using oxygen::data::detail::IndexType;
+      using oxygen::data::pak::MeshViewDesc;
+
+      const auto vspan = cube_mesh->Vertices();
+      std::vector<Vertex> translated_vertices(vspan.begin(), vspan.end());
+      const glm::vec3 offset
+        = { 2.5F, 0.0F, 0.0F }; // Closer separation for better framing
+      for (auto& v : translated_vertices) {
+        v.position += offset;
+      }
+
+      // Debug: Log a few vertex positions to verify offset
+      DLOG_F(INFO, "Second cube vertex positions:");
+      for (size_t i = 0; i < (std::min)(size_t(4), translated_vertices.size());
+        ++i) {
+        const auto& pos = translated_vertices[i].position;
+        DLOG_F(INFO, "  Vertex[{}]: ({:.2F}, {:.2F}, {:.2F})", i, pos.x, pos.y,
+          pos.z);
+      }
+
+      std::vector<uint32_t> indices32;
+      const auto ib = cube_mesh->IndexBuffer();
+      if (ib.type == IndexType::kUInt16) {
+        auto src = ib.AsU16();
+        indices32.resize(src.size());
+        for (size_t i = 0; i < src.size(); ++i)
+          indices32[i] = src[i];
+      } else if (ib.type == IndexType::kUInt32) {
+        auto src = ib.AsU32();
+        indices32.assign(src.begin(), src.end());
+      }
+
+      auto offset_mesh
+        = MeshBuilder(0, "Cube/OffsetMesh")
+            .WithVertices(std::move(translated_vertices))
+            .WithIndices(std::move(indices32))
+            .BeginSubMesh("default", data::MaterialAsset::CreateDefault())
+            .WithMeshView(MeshViewDesc {
+              .first_index = 0,
+              .index_count = static_cast<uint32_t>(ib.Count()),
+              .first_vertex = 0,
+              .vertex_count = static_cast<uint32_t>(cube_mesh->VertexCount()),
+            })
+            .EndSubMesh()
+            .Build();
+
+      const auto cube2_material = data::MaterialAsset::CreateDebug();
+      RenderItem cube2_item {
+        .mesh = std::move(offset_mesh),
+        .material = cube2_material,
+        .world_transform = glm::mat4(1.0F),
+        .normal_transform = glm::mat4(1.0F),
+        .cast_shadows = false,
+        .receive_shadows = false,
+        .render_layer = 0u,
+        .render_flags = 0u,
+      };
+      cube2_item.UpdateComputedProperties();
+      render_items_.push_back(std::move(cube2_item));
+    }
+  }
 
   auto gfx = gfx_weak_.lock();
   const auto recorder = render_controller_->AcquireCommandRecorder(
@@ -486,6 +434,13 @@ auto MainModule::RenderScene() -> co::Co<>
   context_.opaque_draw_list
     = std::span<const RenderItem> { render_items_.data(),
         render_items_.size() };
+
+  // Ensure GPU resources (buffers + SRVs) are resident for all meshes in the
+  // draw list BEFORE calling ExecuteRenderGraph, so the renderer can upload
+  // bindless indices with valid SRV slots in PreExecute.
+  if (renderer_) {
+    renderer_->EnsureResourcesForDrawList(context_.opaque_draw_list);
+  }
 
   // --- DepthPrePass integration ---
   static std::shared_ptr<engine::DepthPrePass> depth_pass;
@@ -504,7 +459,7 @@ auto MainModule::RenderScene() -> co::Co<>
   if (!shader_pass_config) {
     shader_pass_config = std::make_shared<engine::ShaderPassConfig>();
     shader_pass_config->clear_color
-      = graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f }; // Custom clear color
+      = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F }; // Custom clear color
     shader_pass_config->debug_name = "ShaderPass";
   }
   if (!shader_pass) {
@@ -512,27 +467,28 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   // Animate rotation angle
-  static float rotation_angle = 0.0f; // radians
-  rotation_angle += 0.01f; // radians per frame, adjust as needed
+  static float rotation_angle = 0.0F; // radians
+  rotation_angle += 0.01F; // radians per frame, adjust as needed
 
   // Rotation removed temporarily (object space == world space in shaders).
 
-  auto corner = glm::vec3(-0.5f, 0.5f, 0.5f);
-  glm::vec3 view_dir = glm::normalize(corner); // Diagonal direction from origin
-  float distance = 3.0f; // Move camera back from the corner
-  glm::vec3 camera_position = corner + view_dir * distance;
+  // Look from an angle to see both cubes clearly with closer positioning
+  glm::vec3 camera_position = glm::vec3(
+    1.25F, 1.5F, -5.0F); // Much closer to the cubes, centered between them
+  glm::vec3 target
+    = glm::vec3(1.25F, 0.0F, 0.0F); // Look at center between cubes (0 and 2.5)
   auto up = glm::vec3(0, 1, 0);
 
-  scene_constants_.view_matrix = glm::lookAt(camera_position, corner, up);
+  scene_constants_.view_matrix = glm::lookAt(camera_position, target, up);
   const float aspect = static_cast<float>(surface_->Width())
     / static_cast<float>(surface_->Height());
-  scene_constants_.projection_matrix
-    = glm::perspective(glm::radians(45.0f), // fov y
-      aspect, // aspect
-      0.1f, // zNear
-      600.0f // zFar
-    );
-  scene_constants_.camera_position = { 0.0f, 0.0f, -3.5f };
+  scene_constants_.projection_matrix = glm::perspective(
+    glm::radians(45.0F), // Narrower field of view for better framing
+    aspect, // aspect
+    0.1F, // zNear
+    600.0F // zFar
+  );
+  scene_constants_.camera_position = { 0.0F, 0.0F, -3.5F };
 
   if (renderer_) {
     renderer_->SetSceneConstants(scene_constants_);

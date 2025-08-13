@@ -106,6 +106,14 @@ public:
     uint32_t root_parameter_index, uint64_t buffer_gpu_address)
     = 0;
 
+  virtual void SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values)
+    = 0;
+
+  virtual void SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values)
+    = 0;
+
   //=== Render State ===----------------------------------------------------//
 
   virtual void SetRenderTargets(

@@ -106,24 +106,65 @@ example.
 
 Tasks:
 
-* [ ] Introduce `Renderer::EnsureMeshResources(const data::Mesh&)` which:
-  * Uploads mesh if not resident;
-  * Registers (or reuses) SRVs for vertex & index buffers;
-  * Updates internal DrawResourceIndices table.
-* [ ] Internal caching keyed by mesh asset id (LRU already present – extend if
-  necessary).
-* [ ] Remove public exposure of descriptor allocator in example path (keep for
+* [x] Introduce `Renderer::EnsureMeshResources(const data::Mesh&)` which:
+  * [x] Uploads mesh if not resident (invoked internally by Ensure path).
+  * [x] Registers (or reuses) SRVs for vertex & index buffers and stores shader
+    indices in `MeshGpuResources`.
+  * [x] Updates internal `DrawResourceIndices` snapshot automatically from the
+    ensured mesh (transitional until per-item indices arrive in later phases).
+* [x] Internal caching keyed by mesh identity with LRU eviction policy.
+  (Implemented; currently keyed by mesh object address. Revisit to switch to a
+  stable asset id when available.)
+* [x] Remove public exposure of descriptor allocator in example path (keep for
   advanced cases elsewhere).
-* [ ] Add debug logging summarizing assigned shader-visible indices at first
+* [x] Add debug logging summarizing assigned shader-visible indices at first
   creation.
-* [ ] Example migration (checkpoint 2): delete `EnsureVertexBufferSrv`,
-  `EnsureIndexBufferSrv`, `EnsureBindlessIndexingBuffer`,
-  `EnsureMeshDrawResources` usage – replaced by a single call per mesh per frame
-  (or per asset load) to `EnsureMeshResources`.
-* [ ] Docs: bindless_conventions.md (clarify vertex/index SRV lifecycle),
-  data_flow.md (resource preparation stage).
+* [x] Example migration (checkpoint 2): delete `EnsureVertexBufferSrv`,
+  `EnsureIndexBufferSrv`, `EnsureBindlessIndexingBuffer`, and
+  `EnsureMeshDrawResources` usage – replaced by a single call per mesh per
+  frame (or per asset load) to `EnsureMeshResources`.
+* [~] Docs: bindless_conventions.md (clarify vertex/index SRV lifecycle),
+  data_flow.md (resource preparation stage). (Update references to show SRVs
+  are created by Renderer on first ensure.)
 
 Deliverable: Example no longer manipulates descriptor handles directly.
+
+Current status (2025-08-13):
+
+* Mesh buffer creation/upload, SRV registration, and caching are implemented in
+  `Renderer`. Shader-visible indices are stored with `MeshGpuResources`.
+* `Renderer` updates the per-frame `DrawResourceIndices` snapshot when mesh
+  resources are ensured and propagates the dynamic bindless slot into
+  `SceneConstants`.
+* Example calls `renderer_->EnsureMeshResources(*mesh)` and no longer touches
+  descriptor allocator or sets draw indices manually.
+
+Next steps to complete Phase 2:
+
+1) Finalize doc updates: SRV lifecycle and resource prep sequence.
+
+## Phase 2.5 – Multi-Draw Item Support (Complete)
+
+Goal: Support multiple draw items (meshes) in a single frame.
+
+**Status: [x] Complete**
+
+Tasks:
+
+* [x] Add `kDrawIndexConstant` root binding for passing per-draw indices via root constants
+* [x] Implement `SetGraphicsRoot32BitConstant()` and `SetComputeRoot32BitConstant()` in CommandRecorder
+* [x] Add `BindDrawIndexConstant()` method to RenderPass base class
+* [x] Update `IssueDrawCalls()` to bind draw index before each draw call
+* [x] Modify shaders to use `g_DrawIndex` root constant instead of `SV_InstanceID`
+* [x] Ensure consistent root signature layout across all passes (DepthPrePass, ShaderPass)
+* [x] Update renderer to build `DrawResourceIndices` array for multiple items
+* [x] Fix D3D12 bindless rendering limitation where `SV_InstanceID` doesn't work without input layout
+
+**Solution**: Root constants provide the Microsoft-recommended approach for passing per-draw data in bindless scenarios. Each draw call now receives a unique `draw_index` via root constant (b3, space0), allowing shaders to access the correct `DrawResourceIndices[g_DrawIndex]` entry.
+
+**Result**: Multiple meshes can now be rendered in a single frame with correct per-mesh resource binding.
+
+Deliverable: Engine supports rendering multiple distinct meshes per frame using proper D3D12 bindless patterns.
 
 ## Phase 3 – RenderItem Validation & Container Introduction
 
@@ -343,3 +384,5 @@ Revision History:
 * Added PreExecute validation assert for single SceneConstants set per frame – 2025-08-13.
 * Phase 1 example migration checkpoint: example now uses Renderer setters for scene/material constants & draw resource indices (removed manual constants upload) – 2025-08-13.
 * Updated data_flow.md (detailed constants population sequence) & render_items.md (material override timing) – 2025-08-13.
+* Phase 2 status analyzed and plan updated; marked caching complete and outlined SRV/indices migration steps – 2025-08-13.
+* Phase 2 implementation: Renderer now owns mesh SRVs and updates DrawResourceIndices automatically; example migrated to EnsureMeshResources – 2025-08-13.

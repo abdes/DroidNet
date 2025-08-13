@@ -574,6 +574,27 @@ void CommandRecorder::SetComputeRootConstantBufferView(
     root_parameter_index, buffer_gpu_address);
 }
 
+void CommandRecorder::SetGraphicsRoot32BitConstant(
+  uint32_t root_parameter_index, uint32_t src_data,
+  uint32_t dest_offset_in_32bit_values)
+{
+  const auto* command_list = GetConcreteCommandList();
+  DCHECK_NOTNULL_F(command_list);
+  auto* d3d12_command_list = command_list->GetCommandList();
+  d3d12_command_list->SetGraphicsRoot32BitConstant(
+    root_parameter_index, src_data, dest_offset_in_32bit_values);
+}
+
+void CommandRecorder::SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+  uint32_t src_data, uint32_t dest_offset_in_32bit_values)
+{
+  const auto* command_list = GetConcreteCommandList();
+  DCHECK_NOTNULL_F(command_list);
+  auto* d3d12_command_list = command_list->GetCommandList();
+  d3d12_command_list->SetComputeRoot32BitConstant(
+    root_parameter_index, src_data, dest_offset_in_32bit_values);
+}
+
 void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 {
   if (barriers.empty()) {

@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <bit>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -18,7 +20,9 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -111,7 +115,7 @@ Renderer::Renderer(std::weak_ptr<RenderController> render_controller,
 {
 }
 
-Renderer::~Renderer() { mesh_resources_.clear(); }
+Renderer::~Renderer() = default;
 
 auto Renderer::GetVertexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
 {
@@ -167,6 +171,8 @@ auto Renderer::PostExecute(RenderContext& context) -> void
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
   context.Reset();
+  // Reset per-frame metrics after a full Execute.
+  scene_constants_set_count_ = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -175,7 +181,7 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 
 auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
 {
-  if (!bindless_indices_cpu_) {
+  if (bindless_indices_cpu_.empty()) {
     return; // optional feature not used this frame
   }
   if (bindless_indices_buffer_ && !bindless_indices_dirty_) {
@@ -188,56 +194,84 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
     return;
   }
   auto& rc = *rc_ptr;
-  auto& graphics = rc.GetGraphics();
-  DCHECK_F(scene_constants_set_count_ == 1,
-    "SceneConstants must be set exactly once per frame before PreExecute; got "
-    "%u",
-    scene_constants_set_count_);
-  const auto size_bytes = sizeof(DrawResourceIndices);
-  if (!bindless_indices_buffer_) {
-    graphics::BufferDesc desc { .size_bytes = size_bytes,
-      .usage = graphics::BufferUsage::kConstant, // structured SRV usage
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = std::string("DrawResourceIndices") };
-    bindless_indices_buffer_ = graphics.CreateBuffer(desc);
-    bindless_indices_buffer_->SetName(desc.debug_name);
-    rc.GetResourceRegistry().Register(bindless_indices_buffer_);
-
-    // Descriptor allocation & view registration (only once)
-    scene_constants_set_count_ = 0; // reset for next frame
-    auto& descriptor_allocator = rc.GetDescriptorAllocator();
-    graphics::BufferViewDescription srv_view_desc {
-      .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = Format::kUnknown,
-      .stride = sizeof(DrawResourceIndices),
-    };
-    auto srv_handle = descriptor_allocator.Allocate(
-      graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
-    if (!srv_handle.IsValid()) {
-      LOG_F(
-        ERROR, "Failed to allocate descriptor for DrawResourceIndices buffer");
-    } else {
-      const auto view
-        = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
-      bindless_indices_heap_slot_
-        = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
-      rc.GetResourceRegistry().RegisterView(
-        *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
-      if (!bindless_indices_slot_assigned_) {
-        LOG_F(INFO,
-          "DrawResourceIndices buffer SRV registered at heap index %u",
-          bindless_indices_heap_slot_);
-        bindless_indices_slot_assigned_ = true;
-      }
-    }
+  if (scene_constants_set_count_ != 1) {
+    // Relaxed: warn but continue to avoid crashing interactive examples.
+    // Contract remains that callers should set scene constants exactly once
+    // per frame before ExecuteRenderGraph.
+    LOG_F(WARNING,
+      "SceneConstants should be set exactly once per frame before PreExecute;"
+      " got %u",
+      scene_constants_set_count_);
   }
-  // Upload CPU snapshot
-  void* mapped = bindless_indices_buffer_->Map();
-  memcpy(mapped, bindless_indices_cpu_.get(), size_bytes);
-  bindless_indices_buffer_->UnMap();
+  const auto size_bytes = static_cast<size_t>(bindless_indices_cpu_.size())
+    * sizeof(DrawResourceIndices);
+  // Create or resize + (re)register SRV if needed
+  const bool need_recreate = !bindless_indices_buffer_
+    || bindless_indices_buffer_->GetSize() < size_bytes;
+  if (need_recreate) {
+    CreateOrResizeDrawIndicesBuffer(size_bytes, rc);
+    RegisterDrawIndicesSrv(rc);
+  }
+
+  // Upload CPU snapshot (entire array)
+  UploadDrawIndicesCPUToGPU(bindless_indices_cpu_.data(), size_bytes);
   bindless_indices_dirty_ = false;
+}
+
+auto Renderer::CreateOrResizeDrawIndicesBuffer(
+  std::size_t size_bytes, RenderController& rc) -> void
+{
+  auto& graphics = rc.GetGraphics();
+  graphics::BufferDesc desc {
+    .size_bytes = size_bytes,
+    .usage = graphics::BufferUsage::kConstant,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = std::string("DrawResourceIndices"),
+  };
+  bindless_indices_buffer_ = graphics.CreateBuffer(desc);
+  bindless_indices_buffer_->SetName(desc.debug_name);
+  rc.GetResourceRegistry().Register(bindless_indices_buffer_);
+
+  // Reset slot assignment flag since we're creating a new buffer
+  bindless_indices_slot_assigned_ = false;
+}
+
+auto Renderer::RegisterDrawIndicesSrv(RenderController& rc) -> void
+{
+  auto& descriptor_allocator = rc.GetDescriptorAllocator();
+  graphics::BufferViewDescription srv_view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = oxygen::Format::kUnknown,
+    .stride = sizeof(DrawResourceIndices),
+  };
+  auto srv_handle = descriptor_allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  if (!srv_handle.IsValid()) {
+    LOG_F(
+      ERROR, "Failed to allocate descriptor for DrawResourceIndices buffer");
+    return;
+  }
+  const auto view
+    = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
+  bindless_indices_heap_slot_
+    = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+  rc.GetResourceRegistry().RegisterView(
+    *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
+  if (!bindless_indices_slot_assigned_) {
+    LOG_F(INFO, "DrawResourceIndices buffer SRV registered at heap index {}",
+      bindless_indices_heap_slot_);
+    bindless_indices_slot_assigned_ = true;
+  }
+}
+
+auto Renderer::UploadDrawIndicesCPUToGPU(
+  const void* src, std::size_t size_bytes) -> void
+{
+  void* mapped = bindless_indices_buffer_->Map();
+  std::memcpy(mapped, src, size_bytes);
+  bindless_indices_buffer_->UnMap();
 }
 
 auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
@@ -245,14 +279,15 @@ auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
   if (!scene_constants_cpu_) {
     return; // validated earlier; defensive
   }
-  const uint32_t previous_slot = scene_constants_cpu_->bindless_indices_slot;
-  uint32_t new_slot = oxygen::engine::kInvalidDescriptorSlot; // sentinel
-  if (bindless_indices_cpu_ && bindless_indices_slot_assigned_) {
+  const auto previous_slot = scene_constants_cpu_->bindless_indices_slot;
+  auto new_slot = oxygen::engine::kInvalidDescriptorSlot; // sentinel
+  if (!bindless_indices_cpu_.empty() && bindless_indices_slot_assigned_) {
     new_slot = bindless_indices_heap_slot_;
   }
   if (new_slot != previous_slot) {
     scene_constants_cpu_->bindless_indices_slot = new_slot;
     scene_constants_dirty_ = true;
+    LOG_F(INFO, "SceneConstants.bindless_indices_slot = {}", new_slot);
   }
 }
 
@@ -273,16 +308,18 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
   auto& graphics = rc.GetGraphics();
   const auto size_bytes = sizeof(SceneConstants);
   if (!scene_constants_buffer_) {
-    graphics::BufferDesc desc { .size_bytes = size_bytes,
+    graphics::BufferDesc desc {
+      .size_bytes = size_bytes,
       .usage = graphics::BufferUsage::kConstant,
       .memory = graphics::BufferMemory::kUpload,
-      .debug_name = std::string("SceneConstants") };
+      .debug_name = std::string("SceneConstants"),
+    };
     scene_constants_buffer_ = graphics.CreateBuffer(desc);
     scene_constants_buffer_->SetName(desc.debug_name);
     rc.GetResourceRegistry().Register(scene_constants_buffer_);
   }
   void* mapped = scene_constants_buffer_->Map();
-  memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
+  std::memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
   scene_constants_buffer_->UnMap();
   scene_constants_dirty_ = false;
 }
@@ -304,16 +341,18 @@ auto Renderer::MaybeUpdateMaterialConstants() -> void
   auto& graphics = rc.GetGraphics();
   const auto size_bytes = sizeof(MaterialConstants);
   if (!material_constants_buffer_) {
-    graphics::BufferDesc desc { .size_bytes = size_bytes,
+    graphics::BufferDesc desc {
+      .size_bytes = size_bytes,
       .usage = graphics::BufferUsage::kConstant,
       .memory = graphics::BufferMemory::kUpload,
-      .debug_name = std::string("MaterialConstants") };
+      .debug_name = std::string("MaterialConstants"),
+    };
     material_constants_buffer_ = graphics.CreateBuffer(desc);
     material_constants_buffer_->SetName(desc.debug_name);
     rc.GetResourceRegistry().Register(material_constants_buffer_);
   }
   void* mapped = material_constants_buffer_->Map();
-  memcpy(mapped, material_constants_cpu_.get(), size_bytes);
+  std::memcpy(mapped, material_constants_cpu_.get(), size_bytes);
   material_constants_buffer_->UnMap();
   material_constants_dirty_ = false;
 }
@@ -345,28 +384,22 @@ auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
   -> void
 {
-  if (!bindless_indices_cpu_) {
-    bindless_indices_cpu_ = std::make_unique<DrawResourceIndices>(indices);
-    bindless_indices_dirty_ = true;
-    return;
-  }
-  if (memcmp(bindless_indices_cpu_.get(), &indices, sizeof(DrawResourceIndices))
-    != 0) {
-    *bindless_indices_cpu_ = indices;
-    bindless_indices_dirty_ = true;
-  }
+  // Transitional helper: set single entry array
+  bindless_indices_cpu_.assign(1, indices);
+  bindless_indices_dirty_ = true;
 }
 
 auto Renderer::GetDrawResourceIndices() const -> const DrawResourceIndices&
 {
-  return *bindless_indices_cpu_;
+  DCHECK_F(!bindless_indices_cpu_.empty());
+  return bindless_indices_cpu_.front();
 }
 
 namespace {
 auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
   -> std::shared_ptr<Buffer>
 {
-  DLOG_F(2, "Create vertex buffe");
+  DLOG_F(2, "Create vertex buffer");
 
   const auto& graphics = render_controller.GetGraphics();
   const auto vertices = mesh.Vertices();
@@ -427,7 +460,7 @@ auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
   auto upload_buffer = graphics.CreateBuffer(upload_desc);
   upload_buffer->SetName(upload_desc.debug_name);
   void* mapped = upload_buffer->Map();
-  memcpy(mapped, vertices.data(), upload_desc.size_bytes);
+  std::memcpy(mapped, vertices.data(), upload_desc.size_bytes);
   upload_buffer->UnMap();
   recorder.BeginTrackingResourceState(
     vertex_buffer, ResourceStates::kCommon, false);
@@ -467,10 +500,10 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
   void* mapped = upload_buffer->Map();
   if (indices_view.type == IndexType::kUInt16) {
     auto src = indices_view.AsU16();
-    memcpy(mapped, src.data(), upload_desc.size_bytes);
+    std::memcpy(mapped, src.data(), upload_desc.size_bytes);
   } else if (indices_view.type == IndexType::kUInt32) {
     auto src = indices_view.AsU32();
-    memcpy(mapped, src.data(), upload_desc.size_bytes);
+    std::memcpy(mapped, src.data(), upload_desc.size_bytes);
   }
   upload_buffer->UnMap();
   recorder.BeginTrackingResourceState(
@@ -487,7 +520,110 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
     upload_buffer, render_controller.GetPerFrameResourceManager());
 }
 
+// Create a StructuredBuffer SRV for a vertex buffer and register it.
+auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
+  -> uint32_t
+{
+  using oxygen::Format;
+  using oxygen::data::Vertex;
+  using oxygen::graphics::BufferViewDescription;
+  using oxygen::graphics::DescriptorVisibility;
+  using oxygen::graphics::ResourceViewType;
+
+  auto& descriptor_allocator = rc.GetDescriptorAllocator();
+  auto& registry = rc.GetResourceRegistry();
+
+  BufferViewDescription srv_desc {
+    .view_type = ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .format = Format::kUnknown,
+    .stride = sizeof(Vertex),
+  };
+  auto handle = descriptor_allocator.Allocate(
+    oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+    oxygen::graphics::DescriptorVisibility::kShaderVisible);
+  if (!handle.IsValid()) {
+    LOG_F(ERROR, "Failed to allocate descriptor for vertex buffer SRV");
+    return 0U;
+  }
+  const auto view = vertex_buffer.GetNativeView(handle, srv_desc);
+  const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
+  registry.RegisterView(vertex_buffer, view, std::move(handle), srv_desc);
+  LOG_F(INFO, "Vertex buffer SRV registered at heap index {}", index);
+  return index;
+}
+
+// Create a typed SRV for an index buffer (R16/R32) and register it.
+auto CreateAndRegisterIndexSrv(
+  RenderController& rc, Buffer& index_buffer, IndexType index_type) -> uint32_t
+{
+  using oxygen::Format;
+  using oxygen::graphics::BufferViewDescription;
+  using oxygen::graphics::DescriptorVisibility;
+  using oxygen::graphics::ResourceViewType;
+
+  auto& descriptor_allocator = rc.GetDescriptorAllocator();
+  auto& registry = rc.GetResourceRegistry();
+
+  const auto typed_format
+    = index_type == IndexType::kUInt16 ? Format::kR16UInt : Format::kR32UInt;
+  BufferViewDescription srv_desc {
+    .view_type = ResourceViewType::kTypedBuffer_SRV,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .format = typed_format,
+    .stride = 0,
+  };
+  auto handle = descriptor_allocator.Allocate(
+    ResourceViewType::kTypedBuffer_SRV, DescriptorVisibility::kShaderVisible);
+  if (!handle.IsValid()) {
+    LOG_F(ERROR, "Failed to allocate descriptor for index buffer SRV");
+    return 0U;
+  }
+  const auto view = index_buffer.GetNativeView(handle, srv_desc);
+  const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
+  registry.RegisterView(index_buffer, view, std::move(handle), srv_desc);
+  LOG_F(INFO, "Index buffer SRV registered at heap index {}", index);
+  return index;
+}
+
 } // namespace
+
+auto Renderer::EnsureResourcesForDrawList(std::span<const RenderItem> draw_list)
+  -> void
+{
+  // Build per-draw array of indices in submission order
+  std::vector<DrawResourceIndices> per_draw;
+  per_draw.reserve(draw_list.size());
+  for (const auto& item : draw_list) {
+    if (item.mesh) {
+      const auto& ensured = EnsureMeshResources(*item.mesh);
+      per_draw.emplace_back(DrawResourceIndices {
+        .vertex_buffer_index = ensured.vertex_srv_index,
+        .index_buffer_index = ensured.index_srv_index,
+        .is_indexed = item.mesh->IsIndexed() ? 1U : 0U,
+      });
+    }
+  }
+  // Upload the full per-draw array once
+  if (!per_draw.empty()) {
+    bindless_indices_cpu_ = std::move(per_draw);
+    bindless_indices_dirty_ = true;
+    // Verification logging for multi-draw: size and first few entries
+    LOG_F(3, "Prepared {} DrawResourceIndices entries for this frame",
+      bindless_indices_cpu_.size());
+    for (size_t i = 0; i < bindless_indices_cpu_.size(); ++i) {
+      const auto& e = bindless_indices_cpu_[i];
+      LOG_F(3, "  [{}] vb_idx={}, ib_idx={}, indexed={}", i,
+        e.vertex_buffer_index, e.index_buffer_index, e.is_indexed);
+      if (i >= 3) { // limit verbosity
+        if (bindless_indices_cpu_.size() > 4) {
+          LOG_F(3, "  ... (truncated)");
+        }
+        break;
+      }
+    }
+  }
+}
 
 auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 {
@@ -511,8 +647,7 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   const auto vertex_buffer = CreateVertexBuffer(mesh, *render_controller);
   const auto index_buffer = CreateIndexBuffer(mesh, *render_controller);
 
-  // Acquire a command recorder for uploading buffers. Will be immediately
-  // submitted on destruction.
+  // Upload both buffers in a single command recorder scope.
   {
     const auto recorder = render_controller->AcquireCommandRecorder(
       SingleQueueStrategy().GraphicsQueueName(), "MeshBufferUpload");
@@ -524,10 +659,17 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   gpu.vertex_buffer = vertex_buffer;
   gpu.index_buffer = index_buffer;
 
-  auto [iter, inserted] = mesh_resources_.emplace(id, std::move(gpu));
+  // Create SRVs and register to obtain shader-visible indices
+  gpu.vertex_srv_index
+    = CreateAndRegisterVertexSrv(*render_controller, *vertex_buffer);
+  gpu.index_srv_index = CreateAndRegisterIndexSrv(
+    *render_controller, *index_buffer, mesh.IndexBuffer().type);
+
+  auto [iter, _] = mesh_resources_.emplace(id, std::move(gpu));
   if (eviction_policy_) {
     eviction_policy_->OnMeshAccess(id);
   }
+
   return iter->second;
 }
 
@@ -539,7 +681,14 @@ auto Renderer::SetSceneConstants(const SceneConstants& constants) -> void
     ++scene_constants_set_count_;
     return;
   }
+
+  // TODO: properly implement = operator and preserve internally set fields
+
+  // Preserve the bindless_indices_slot that was set by the renderer
+  const auto preserved_slot = scene_constants_cpu_->bindless_indices_slot;
   *scene_constants_cpu_ = constants;
+  scene_constants_cpu_->bindless_indices_slot = preserved_slot;
+
   scene_constants_dirty_ = true;
   ++scene_constants_set_count_;
 }

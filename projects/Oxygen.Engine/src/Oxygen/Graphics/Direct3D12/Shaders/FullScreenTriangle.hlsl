@@ -60,6 +60,11 @@ cbuffer MaterialConstants : register(b2) {
     uint _pad1;                             // Padding for alignment
 }
 
+// Draw index passed as a root constant (32-bit value at register b3)
+cbuffer DrawIndexConstant : register(b3) {
+    uint g_DrawIndex;
+}
+
 // Access to the bindless descriptor heap
 // Modern SM 6.6+ approach using ResourceDescriptorHeap for direct heap indexing
 // No resource declarations needed - ResourceDescriptorHeap provides direct access
@@ -82,7 +87,8 @@ VSOutput VS(uint vertexID : SV_VertexID) {
         return output;
     }
     StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[bindless_indices_slot];
-    DrawResourceIndices indices = indices_buffer[0];
+    // Select per-draw entry using the draw index provided via root constant
+    DrawResourceIndices indices = indices_buffer[g_DrawIndex];
 
     uint vertex_buffer_index = indices.vertex_buffer_index;
     uint index_buffer_index = indices.index_buffer_index;

@@ -19,11 +19,15 @@ ValidateConfig() -> (maybe) CreatePipelineStateDesc() -> DoPrepareResources() ->
 ## Root Binding Conventions
 
 `enum class RenderPass::RootBindings { kBindlessTableSrv = 0, kSceneConstantsCbv
-= 1, kMaterialConstantsCbv = 2 };`
+= 1, kMaterialConstantsCbv = 2, kDrawIndexConstant = 3 };`
 
-* DepthPrePass uses indices 0,1.
-* ShaderPass uses 0,1,2 (binds material constants only if `material_constants`
+* DepthPrePass uses indices 0,1,2*,3 (*MaterialConstants included for consistency but unused).
+* ShaderPass uses 0,1,2,3 (binds material constants only if `material_constants`
   is non-null).
+
+All passes now support multi-draw items through root constant binding at index 3.
+Before each draw call, `BindDrawIndexConstant()` sets the current draw index,
+allowing shaders to access the correct `DrawResourceIndices` entry via `g_DrawIndex`.
 
 See: [bindless conventions](bindless_conventions.md).
 
