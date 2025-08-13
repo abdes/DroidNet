@@ -332,15 +332,10 @@ auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
 {
   if (!material_constants_cpu_) {
     material_constants_cpu_ = std::make_unique<MaterialConstants>(constants);
-    material_constants_dirty_ = true;
-    return;
-  }
-  if (memcmp(
-        material_constants_cpu_.get(), &constants, sizeof(MaterialConstants))
-    != 0) {
+  } else {
     *material_constants_cpu_ = constants;
-    material_constants_dirty_ = true;
   }
+  material_constants_dirty_ = true;
 }
 
 auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
@@ -351,8 +346,6 @@ auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
   -> void
 {
-  static_assert(sizeof(DrawResourceIndices) == 12,
-    "Unexpected DrawResourceIndices size (packing change?)");
   if (!draw_resource_indices_cpu_) {
     draw_resource_indices_cpu_ = std::make_unique<DrawResourceIndices>(indices);
     draw_resource_indices_dirty_ = true;

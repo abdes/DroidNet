@@ -28,6 +28,7 @@ namespace oxygen::engine {
 struct RenderContext;
 struct SceneConstants;
 struct MaterialConstants;
+
 //! Provides shader-visible indices for current vertex/index buffers (Phase 1
 //! transitional).
 struct DrawResourceIndices {
@@ -35,6 +36,10 @@ struct DrawResourceIndices {
   uint32_t index_buffer_index;
   uint32_t is_indexed; // 1 if indexed draw, 0 otherwise
 };
+// Expected packed size of DrawResourceIndices in bytes (3 x uint32_t) as per
+// the shaders.
+static_assert(sizeof(DrawResourceIndices) == 3U * sizeof(std::uint32_t),
+  "Unexpected DrawResourceIndices size (packing change?)");
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
