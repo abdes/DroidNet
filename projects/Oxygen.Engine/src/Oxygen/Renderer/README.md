@@ -1,109 +1,133 @@
-# Oxygen Renderer Design Overview
+# Oxygen Renderer – Design Overview & Guide Map
 
-## Philosophy and Architecture
+This README is the entry point to the Renderer module design. It gives a terse
+overview and links to focused documents. Each linked file owns a single concern;
+cross‑references replace duplication.
 
-Oxygen's rendering system is built around a code-driven, algorithmic RenderGraph. Each pass is a function (callable object, lambda, or coroutine) that can be enabled, disabled, or replaced at runtime. Passes encapsulate both data and behavior, supporting conditional execution, debug/diagnostic passes, and dynamic pipeline construction. The Renderer orchestrates resource lifetime, caching, streaming, and threading, while the RenderGraph coordinates the flow of render items and resources between passes.
+## 1. Philosophy & High‑Level Architecture
 
-### Key Principles
+Oxygen uses a code‑driven (not data-file authored) RenderGraph built from
+coroutines. Each render pass is a small composable type whose lifecycle is:
+validate → prepare resources (explicit transitions) → execute GPU work →
+(optionally) register for downstream access. The graph itself is ordinary C++
+control flow so conditional execution, feature toggles, debug passes, and hot
+replacement are trivial.
 
-- RenderGraph is not a generic data-driven DAG, but a code-driven pipeline.
-- Passes are modular, composable, and coroutine-friendly.
-- Renderer manages high-level resource orchestration; RenderGraph manages data flow.
-- Modern C++ (lambdas, coroutines, std::function) is leveraged for flexibility.
-- The pipeline is built in code, not in data.
+Key principles:
 
-This approach enables robust, scalable, and maintainable rendering, supporting advanced features and future extensibility without unnecessary complexity.
+* Code-built pipeline (no generic runtime DAG builder required now).
+* Passes are coroutine friendly and modular.
+* Renderer = mesh GPU resource manager + graph driver; RenderContext = per-frame
+  shared data + pass registry.
+* Explicit resource state management; bindless-friendly root layout.
+* Minimal global context; passes own their configuration.
+
+See: [philosophy & responsibilities](Docs/responsibilities.md), [render pass
+lifecycle](Docs/render_pass_lifecycle.md).
+
+## 2. Core Responsibilities (Quick Map)
+
+| Concern | Owner | Detail |
+|---------|-------|--------|
+| GPU resource objects & views | ResourceRegistry | Allocation, view caching, no implicit eviction |
+| Frame orchestration, descriptor allocators | RenderController | Backend specific, provides CommandRecorder(s) |
+| Mesh → GPU buffers, eviction | Renderer | Lazy creation + LRU policy (pluggable) |
+| Per-frame shared data | RenderContext | Frame constants, draw lists, scene/material constant buffers |
+| Pass logic | RenderPass subclasses | DepthPrePass, ShaderPass (more later) |
+| Pass registry (typed) | RenderContext | Fixed compile-time list (`KnownPassTypes`) |
+
+Details: [responsibilities & ownership](Docs/responsibilities.md), [mesh
+resource management](Docs/gpu_resource_management.md), [render context & pass
+registry](Docs/render_graph.md).
+
+## 3. Current Concrete Passes
+
+Implemented today:
+
+* DepthPrePass – depth-only population (+ required for later light / visibility
+  stages).
+* ShaderPass – color shading pass (forward style) using scene & (optional)
+  material constants.
+
+Design docs: [DepthPrePass](Docs/passes/depth_pre_pass.md),
+[ShaderPass](Docs/passes/shader_pass.md). Both inherit the common [render pass
+lifecycle](Docs/render_pass_lifecycle.md).
+
+## 4. Data Units
+
+* RenderItem: immutable per-frame snapshot of a renderable entity (mesh/material
+  pointers, transforms, flags). See [Render Items](Docs/render_items.md).
+* View abstraction (camera snapshot + render-specific state) – planned
+  integration; see [View abstraction](Docs/view_abstraction.md).
+
+## 5. RenderGraph Construction
+
+Graphs are plain coroutines; pass registration uses a fixed type list
+(`KnownPassTypes`) instead of the older `unordered_map<TypeId>` prototype shown
+in early sketches. A lightweight DSL concept for pass metadata is exploratory
+only. See [rendergraph patterns](Docs/render_graph_patterns.md).
+
+## 6. Bindless & Root Signature Conventions
+
+Root binding order (enum `RenderPass::RootBindings`): 0 – Bindless SRV table
+(indices / structured buffers) 1 – Scene constants (CBV, b1 space0) 2 – Material
+constants (CBV, b2 space0 – only present in passes that need it)
+
+DepthPrePass currently uses only (0,1). ShaderPass uses (0,1,2). Details &
+future extension guidance: [bindless conventions](Docs/bindless_conventions.md).
+
+## 7. Data Flow & Pass IO Summary
+
+Consolidated pass input/output expectations and evolution path: [data
+flow](Docs/passes/data_flow.md).
+
+## 8. Migration / Integration Tracking
+
+Ongoing assimilation with Scene & Data systems tracked separately: [integration
+& migration plan](Docs/render_integration_plan.md).
+
+## 9. Mesh Resource Caching & Eviction
+
+Lazy creation of vertex/index buffers + upload staging occurs inside
+`Renderer::EnsureMeshResources`. A default LRU (frame age) policy is provided;
+policies are pluggable. See [mesh resource
+management](Docs/gpu_resource_management.md).
+
+## 10. Where to Start
+
+1. Read [responsibilities](Docs/responsibilities.md)
+2. Inspect [render_pass_lifecycle](Docs/render_pass_lifecycle.md)
+3. Review existing passes under `Docs/passes/`
+4. Consult [render_items](Docs/render_items.md) for feeding draw lists
+5. Extend with a new pass using the patterns in
+   [render_graph_patterns](Docs/render_graph_patterns.md)
 
 ---
 
-## Responsibilities Split
+## Historical / Prototype Note
 
-### ResourceRegistry
-
-- Registers, replaces, and removes GPU resources (buffers, textures, etc.).
-- Maintains strong references for resource lifetime management.
-- Explicit eviction: resources are only removed when explicitly unregistered.
-- Caches resource views (SRV/UAV) keyed by resource and view description.
-- No automatic LRU or usage-based eviction (policy-free, low-level).
-
-### RenderController
-
-- Backend-specific factory for GPU resources and surfaces.
-- Manages frame lifecycle and device/context.
-- Does not manage high-level resource usage or scene logic.
-
-### Renderer
-
-- Backend-agnostic (uses only `graphics::common`).
-- Holds a weak reference to its RenderController.
-- Manages mapping from mesh assets to GPU resources (vertex/index buffers, etc.).
-- Implements LRU or explicit eviction policy for mesh resources.
-- Requests eviction from the ResourceRegistry of its RenderController as needed.
-- Provides API to get buffer(s) for a mesh, abstracting resource management from the rest of the engine.
-- In the future, will coordinate with AssetLoader/Manager for streaming and hot-reload.
+Earlier documentation used a dynamic `unordered_map<TypeId, RenderPass*>` inside
+`RenderContext`. The current implementation replaces this with a compile‑time
+`KnownPassTypes` array for O(1) indexed lookup and stronger type safety.
+Prototype examples in older discussions should be interpreted accordingly.
 
 ---
 
-## Lifetime and Ownership
-
-- **ResourceRegistry**: Owns and tracks GPU resources for the lifetime of the registry (typically per RenderController).
-- **RenderController**: Created for a specific surface/window; owns device/context and its ResourceRegistry.
-- **Renderer**: Created by the application; references (but does not own) a RenderController; manages mesh-to-resource mapping and eviction policy.
-- **Application**: Owns both Renderer and RenderController, and is responsible for their creation and destruction.
-
----
-
-## Design Objectives
-
-- Backend-agnostic and portable renderer.
-- Explicit, robust, and scalable resource management.
-- Policy-free ResourceRegistry; only tracks what is registered.
-- Renderer is the right place for per-mesh resource management and eviction policy.
-- Future extensibility for asset streaming and hot-reload.
-
----
-
-## Best Practices
-
-- Always check RenderController validity (weak_ptr lock) before issuing commands from Renderer.
-- Keep resource management logic simple and explicit; start with manual or LRU eviction.
-- Ensure thread safety for background streaming or multi-threaded rendering.
-- Make buffer access and eviction APIs clear and robust.
-
----
-
-## Renderer API Sketch
+## Appendix: Minimal Renderer API Sketch (Reference)
 
 ```cpp
-class Renderer
-{
+class Renderer {
 public:
-  //— Lazy fetch: if we haven't created GPU buffers for 'mesh' yet,
-  //  we'll pull the MeshAsset from the AssetManager, create & register
-  //  the vertex/index buffers, cache them, and return.
-  //
-  //  Throws or returns nullptr if mesh can't be found/loaded.
   std::shared_ptr<Buffer> GetVertexBuffer(const MeshAsset& mesh);
   std::shared_ptr<Buffer> GetIndexBuffer (const MeshAsset& mesh);
-
-  //— Optional explicit unload if you know a mesh is retired
-  // for the asset manager use for example
   void UnregisterMesh(const MeshAsset& mesh);
-
-  //— Sweep out any mesh resources that haven't been used
-  // Ask the policy which meshes to evict, then remove them
   void EvictUnusedMeshResources(size_t currentFrame);
-
   template <typename RenderGraphCoroutine>
   co::Co<> ExecuteRenderGraph(RenderGraphCoroutine&& graphCoroutine, RenderContext& ctx) {
       co_await std::forward<RenderGraphCoroutine>(graphCoroutine)(ctx);
   }
-
 private:
-  // internal map: MeshAssetID → GPU buffers
   std::unordered_map<MeshID, MeshGpuResources> mesh_resources_;
-
-  // helper that does the on-demand create/register logic
   MeshGpuResources& EnsureMeshResources(const MeshAsset& mesh);
 };
 
@@ -140,7 +164,7 @@ std::shared_ptr<Buffer> Renderer::GetIndexBuffer(const MeshAsset& mesh)
 }
 ```
 
-### Pluggable Eviction Policy
+### Pluggable Eviction Policy (Excerpt)
 
 ```cpp
 // IEvictionPolicy.h
@@ -183,7 +207,7 @@ void Renderer::EvictUnusedMeshResources(size_t currentFrame)
 }
 ```
 
-#### Simple LRU Policy
+#### Simple LRU Policy (Excerpt)
 
 ```cpp
 // LruEvictionPolicy.h
@@ -232,7 +256,7 @@ private:
 
 ---
 
-## Mesh-to-Resources Map
+## Mesh-to-Resources Map (Excerpt)
 
 ```cpp
 struct MeshGpuResources {
@@ -245,78 +269,20 @@ struct MeshGpuResources {
 std::unordered_map<const MeshAsset*, MeshGpuResources> mesh_resource_map_;
 ```
 
-- On first use, the Renderer creates and registers the GPU buffers for a mesh and stores them in the map.
-- On eviction or mesh unload, the Renderer removes the entry and unregisters the resources from the ResourceRegistry.
-- The map enables fast lookup for draw calls and resource management.
+* On first use, the Renderer creates and registers the GPU buffers for a mesh
+  and stores them in the map.
+* On eviction or mesh unload, the Renderer removes the entry and unregisters the
+  resources from the ResourceRegistry.
+* The map enables fast lookup for draw calls and resource management.
 
 ---
 
-## RenderGraph Context and Data Flow
+## RenderGraph Example: Pass Pointer Mechanism (Prototype Reference)
 
-### Context Structure
-
-Only data that is truly global to the entire render graph—engine-wide and application-wide data that is shared across passes—should be included in the render context. Backend resources and per-pass configuration are owned/configured by each pass, not by the render context.
-
-#### Engine Data
-
-- Frame constants (time, frame index, random seeds)
-- Profiling/timing context
-
-#### Application Data
-
-- Camera parameters (view/projection matrices, camera position, frustum)
-- Scene constants (lighting environment, fog, global exposure, etc.)
-- Render item lists (opaque, transparent, decals, particles, etc.)
-- Light lists (from Scene)
-- Pass enable/disable flags
-
----
-
-### Graphics Backend Resources Table
-
-| Resource/Capability | Provider | Purpose | Lifetime | Access |
-|--------------------|----------|---------|----------|--------|
-| G-buffer textures (albedo, normals, depth, etc.) | `Texture` via `Framebuffer`/`ResourceRegistry` | Per-pixel scene data for deferred shading, post-processing, material evaluation | Lifetime of framebuffer or pass | `ResourceRegistry`, framebuffer APIs |
-| Shadow maps | `Texture` via `ResourceRegistry` | Depth from light's perspective for shadow testing | Shadow pass lifetime | `ResourceRegistry` |
-| Light lists/tiles buffers (Forward+) | `Buffer` via `ResourceRegistry` | Per-tile/clustered light indices for Forward+/clustered shading | Pass duration | `ResourceRegistry` |
-| Scene constant buffers | `Buffer` via `ResourceRegistry` | Per-frame/scene constants for shaders | Frame/scene lifetime | `ResourceRegistry` |
-| Pipeline state objects | `GraphicsPipelineDesc`, `ComputePipelineDesc` | GPU state for rendering/compute | Pipeline lifetime | Pipeline state APIs |
-| Descriptor tables/root signatures | `DescriptorTableBinding`, `RootBindingDesc`, etc. | Bindless resource access | Pass/frame | `DescriptorAllocator`, `ResourceRegistry`, pipeline state APIs |
-| Output render targets | `Framebuffer`, `Texture` via `RenderController` | Final rendered image | Rendering context lifetime | `RenderController`, framebuffer APIs |
-| Resource registry/allocator handles | `ResourceRegistry`, `DescriptorAllocator` | Centralized GPU resource/descriptor management | Rendering context lifetime | `RenderController` |
-| Device object creation | `Graphics` | Factory for persistent GPU resources/queues | App lifetime | `Graphics::Create*`, `GetCommandQueue`, etc. |
-| Command queue/list pooling | `Graphics` | Pools for rendering/compute work | See above | See above |
-| Per-frame resource management | `RenderController` | Per-frame resources, descriptor allocators, registry | See above | `RenderController` |
-| Command recording, state transitions | `CommandRecorder` | Command list recording, state setup, transitions | Per frame/task | `CommandList`, `CommandQueue` |
-| Command submission/batching | `RenderController` | Batching, frame sync, presentation | See above | `Graphics`, `CommandQueue` |
-| Shader management | `Graphics` | Compiled/cached shaders by ID | See above | `GetShader` |
-
----
-
-### Pass Input/Output Summary
-
-**Outputs:**
-
-- DepthPrePass: Depth buffer/texture, possibly early Z statistics
-- LightCullingPass: Per-tile/clustered light lists, light grid/indices buffer
-- OpaquePass: G-buffer outputs (if deferred), color buffer, normal buffer, material buffer
-- TransparentPass: Accumulation buffer, transparency resolve buffer
-- PostProcessPass: Final color buffer, tone-mapped output, bloom buffer, etc.
-- DebugOverlayPass: Debug overlay texture, visualization buffer
-
-**Inputs:**
-
-- LightCullingPass: Needs depth buffer from DepthPrePass, camera/scene constants, light list
-- OpaquePass: Needs light lists from LightCullingPass, depth buffer from DepthPrePass, camera/scene constants, render item list
-- TransparentPass: Needs color/depth buffers from OpaquePass, camera/scene constants, transparent render item list
-- PostProcessPass: Needs color buffer from OpaquePass or TransparentPass, possibly depth buffer, scene constants
-- DebugOverlayPass: Needs final color buffer from PostProcessPass, debug/selection info from application context
-
----
-
-## RenderGraph Example: Pass Pointer Mechanism
-
-A RenderGraph in Oxygen is implemented as a coroutine, where each pass is created/configured, executed, and then registered in the context. The context acts as a registry of pass pointers, enabling explicit, type-safe, and modular pass-to-pass data flow.
+A RenderGraph in Oxygen is implemented as a coroutine, where each pass is
+created/configured, executed, and then registered in the context. The context
+acts as a registry of pass pointers, enabling explicit, type-safe, and modular
+pass-to-pass data flow.
 
 ```cpp
 struct RenderContext {
@@ -390,18 +356,12 @@ void OpaquePass::Run(RenderContext& ctx) {
 }
 ```
 
-**Pattern rationale:**
+For the current implementation details and differences from this early
+prototype, see [render context & pass
+registry](Docs/render_graph.md) and [rendergraph
+patterns](Docs/render_graph_patterns.md).
 
-- Each pass is constructed/configured with its own config object, not via the global context.
-- After execution, the pass pointer is registered in the context for downstream passes.
-- Downstream passes retrieve previous passes via `ctx.GetPass<T>()` and access their outputs as needed.
-- This pattern keeps the context clean and makes dependencies explicit.
-- Minimal context pollution: Only pass pointers are stored, not all outputs.
-- Explicit dependencies: Passes must request the previous pass they depend on, and will decide what to do if they were present/absent, successful or not.
-- Type safety: Passes can expose only the necessary interface for consumers.
-- Extensibility: New passes can be added without changing the context structure.
-
-## Enhancement - Mini-DSL for pass metadata (Oxygen OxCo idiomatic, custom Awaitable)
+## Enhancement – Mini-DSL Prototype (Exploratory)
 
 ```cpp
 //===----------------------------------------------------------------------===//
@@ -520,9 +480,5 @@ void RunGraph(RenderContext& ctx) {
 }
 ```
 
-**Notes:**
-
-- This version does not override or extend the OxCo Promise type.
-- Pass metadata is recorded by a custom Awaiter (`PassBuilder::Awaiter`) that mutates the `PassGraph` when `co_await`ed.
-- Usage: `co_await std::move(PassBuilder(...)).co_await(graph);` is idiomatic and safe for OxCo.
-- All coroutine machinery (cancellation, exceptions, etc.) is handled by OxCo.
+See [render graph patterns](Docs/render_graph_patterns.md) for context, status,
+and guidance before adopting this pattern.
