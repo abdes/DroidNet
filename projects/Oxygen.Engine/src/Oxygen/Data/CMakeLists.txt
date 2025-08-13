@@ -20,6 +20,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 find_package(stduuid CONFIG REQUIRED)
 
 # ==============================================================================
@@ -111,6 +112,7 @@ target_link_libraries(
     oxygen::core
     oxygen::composition
     oxygen::serio
+    fmt::fmt-header-only
     glm::glm
     stduuid::stduuid
 )

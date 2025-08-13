@@ -18,7 +18,9 @@ stored directly on the pass (optional, default derived from depth texture size).
 
 Rebuilt when depth texture format or sample count changes (see
 `NeedRebuildPipelineState`). Uses depth-only framebuffer layout (no color
-targets) and culls back faces (`CullMode::kBack`).
+targets) and culls back faces (`CullMode::kBack`). **Root signature includes
+MaterialConstants binding for consistency with other passes but does not use it.**
+Supports multi-draw items through draw index root constant.
 
 ## Resource Preparation
 
@@ -31,7 +33,9 @@ descriptor creation of DSV occurs during execution helper
 1. Prepare DSV (create or reuse cached view via `ResourceRegistry`).
 2. Set viewport & scissors (full texture if none explicitly set).
 3. Clear depth (no stencil usage).
-4. Bind DSV (no RTVs) & issue geometry draw calls.
+4. **Bind DSV (no RTVs) & issue geometry draw calls with multi-draw support**:
+   * For each draw item: call `BindDrawIndexConstant(draw_index)` then `Draw()`
+   * Shaders use `g_DrawIndex` root constant to access correct `DrawResourceIndices` entry
 5. Register pass.
 
 Draw list source: `RenderContext::opaque_draw_list` (placeholder until more

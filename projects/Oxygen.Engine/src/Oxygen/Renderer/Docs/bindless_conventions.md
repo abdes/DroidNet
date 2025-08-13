@@ -10,15 +10,49 @@ enum class RenderPass::RootBindings : uint8_t {
   kBindlessTableSrv = 0,      // descriptor table (SRVs) t0 space0
   kSceneConstantsCbv = 1,     // direct CBV b1 space0
   kMaterialConstantsCbv = 2,  // direct CBV b2 space0 (material snapshot; provided when material shading required)
+  kDrawIndexConstant = 3,     // root constant for draw index (32-bit value, b3 space0)
 };
 ```
 
 ## Current Pass Usage
 
-| Pass | Uses kBindlessTableSrv | Uses kSceneConstantsCbv | Uses kMaterialConstantsCbv |
-|------|------------------------|--------------------------|----------------------------|
-| DepthPrePass | Yes | Yes | No |
-| ShaderPass | Yes | Yes | Yes |
+| Pass | Uses kBindlessTableSrv | Uses kSceneConstantsCbv | Uses kMaterialConstantsCbv | Uses kDrawIndexConstant |
+|------|------------------------|--------------------------|----------------------------|-------------------------|
+| DepthPrePass | Yes | Yes | Yes* | Yes |
+| ShaderPass | Yes | Yes | Yes | Yes |
+
+*DepthPrePass includes MaterialConstants binding for root signature consistency but does not use it.
+
+## Multi-Draw Item Support
+
+The renderer now supports multiple draw items (meshes) in a single frame through:
+
+1. **Root Constants for Draw Index**: Each draw call receives a unique `draw_index` via root constant (b3, space0)
+2. **Per-Draw Resource Binding**: Before each draw call, `BindDrawIndexConstant()` sets the current draw index
+3. **Shader Access Pattern**: Shaders use `g_DrawIndex` root constant to index into `DrawResourceIndices` array
+
+### Draw Index Flow
+
+```cpp
+// Per draw call in IssueDrawCalls():
+BindDrawIndexConstant(command_recorder, draw_index);  // Set root constant
+command_recorder.Draw(vertex_count, 1, 0, 0);        // Normal draw call
+```
+
+### Shader Usage
+
+```hlsl
+// Root constant declaration in shaders:
+[[vk::push_constant]]
+cbuffer DrawIndexConstants : register(b3, space0) {
+  uint g_DrawIndex;
+}
+
+// Usage in vertex shader:
+DrawResourceIndices drawRes = g_DrawResourceIndices[g_DrawIndex];
+```
+
+**Note**: Previous attempts to use `SV_InstanceID` with `firstInstance` parameter failed in D3D12 bindless rendering because the pipeline has no input layout (`pInputElementDescs = nullptr`), bypassing the input assembler where `SV_InstanceID` is generated. Root constants provide the Microsoft-recommended solution for passing per-draw data in bindless scenarios.
 
 ## Descriptor Allocation
 
@@ -87,16 +121,17 @@ Notes:
 
 ## DrawResourceIndices Structured Buffer (Dynamic Bindless Slot)
 
-The `DrawResourceIndices` structured buffer holds the mapping from the current
-draw's vertex & index buffers to their shader-visible descriptor heap indices
-plus an `is_indexed` flag. Earlier revisions relied on the descriptor being at
-heap slot 0; that brittle ordering assumption has been removed. The actual SRV
-slot is written each frame into `SceneConstants.bindless_indices_slot`.
-Shaders must read this slot and index the bindless table dynamically. A value
-of `0xFFFFFFFF` indicates the buffer is not available (no geometry this frame)
-and shaders must branch accordingly.
+The `DrawResourceIndices` structured buffer holds the mapping from each draw's
+vertex & index buffers to their shader-visible descriptor heap indices plus an
+`is_indexed` flag. **The renderer now supports multiple draw items per frame**,
+with each entry in the array corresponding to a different mesh/draw call.
 
-Layout (12 bytes):
+The actual SRV slot is written each frame into `SceneConstants.bindless_indices_slot`.
+Shaders access the appropriate entry using the draw index passed via root constant:
+`g_DrawResourceIndices[g_DrawIndex]`. A `bindless_indices_slot` value of `0xFFFFFFFF`
+indicates the buffer is not available (no geometry this frame).
+
+Layout (12 bytes per draw item):
 
 ```c++
 struct DrawResourceIndices {
@@ -107,30 +142,30 @@ struct DrawResourceIndices {
 static_assert(sizeof(DrawResourceIndices)==12);
 ```
 
-Update Protocol:
+Update Protocol (Current Implementation):
 
-* Application (or future internal mesh system) calls
-  `Renderer::SetDrawResourceIndices(indices)` (last-wins).
-* Renderer allocates a structured buffer + SRV on first use, uploads when
-  dirty.
-* Renderer writes the SRV's heap slot into
-  `SceneConstants.bindless_indices_slot` prior to uploading the scene
-  constants buffer for the frame.
-* Shaders fetch the slot: `uint slot = Scene.bindless_indices_slot;`
-  and then conditionally access `g_DrawResourceIndices[0]` via that slot
-  indirection (implementation dependent). A slot of `0xFFFFFFFF` means skip.
+* Renderer creates SRVs for mesh vertex/index buffers and caches their indices
+* `EnsureResourcesForDrawList()` builds a `DrawResourceIndices` array with one entry per draw item
+* Array is uploaded to a structured buffer, and the SRV slot is stored in `SceneConstants.bindless_indices_slot`
+* Each draw call uses `BindDrawIndexConstant()` to set the current index before drawing
+* Shaders use `g_DrawIndex` root constant to access the correct array entry
 
-Future Phases:
+Multi-Draw Shader Access Pattern:
 
-* A subsequent phase relocates per-mesh SRV allocation & indices derivation to
-  automated packet build removing any need for an external caller to set the
-  snapshot.
-* Later (DrawPacket introduction) the buffer may evolve into a broader geometry
-  indirection table or be superseded entirely.
+```hlsl
+// Get resources for current draw:
+DrawResourceIndices drawRes = g_DrawResourceIndices[g_DrawIndex];
+
+// Access vertex data:
+StructuredBuffer<Vertex> vertices = ResourceDescriptorHeap[drawRes.vertex_buffer_index];
+StructuredBuffer<uint> indices = ResourceDescriptorHeap[drawRes.index_buffer_index];
+```
 
 Limitations:
 
-* Single global snapshot – multiple meshes with distinct buffers require updating the snapshot between draws (Phase 1 acceptable constraint; will be removed in DrawPacket phase).
+* **Resolved**: Previous single-item limitation removed; now supports multiple meshes per frame
+* Each draw item must have its own entry in the `DrawResourceIndices` array
+* Root constant binding required before each draw call for proper indexing
 
 ## Future Extensions
 

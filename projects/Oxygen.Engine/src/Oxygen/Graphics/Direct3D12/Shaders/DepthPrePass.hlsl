@@ -48,6 +48,11 @@ cbuffer SceneConstants : register(b1) {
     uint _reserved[2]; // updated padding (matches C++ struct)
 }
 
+// Draw index passed as a root constant (32-bit value at register b3)
+cbuffer DrawIndexConstant : register(b3) {
+    uint g_DrawIndex;
+}
+
 // Output structure for the Vertex Shader
 struct VS_OUTPUT_DEPTH {
     float4 clipSpacePosition : SV_POSITION;
@@ -68,7 +73,8 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
         return output;
     }
     StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[bindless_indices_slot];
-    DrawResourceIndices indices = indices_buffer[0];
+    // Use the draw index from the root constant to index into the DrawResourceIndices array
+    DrawResourceIndices indices = indices_buffer[g_DrawIndex];
 
     uint vertex_buffer_index = indices.vertex_buffer_index;
     uint index_buffer_index = indices.index_buffer_index;

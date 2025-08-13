@@ -6,12 +6,16 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -46,6 +50,10 @@ struct MeshGpuResources {
   std::shared_ptr<graphics::Buffer> vertex_buffer;
   std::shared_ptr<graphics::Buffer> index_buffer;
   // Optionally, descriptor indices, views, etc.
+  //! Shader-visible descriptor heap index for the vertex buffer SRV.
+  uint32_t vertex_srv_index { 0 };
+  //! Shader-visible descriptor heap index for the index buffer SRV.
+  uint32_t index_srv_index { 0 };
 };
 
 using MeshId = std::size_t;
@@ -92,6 +100,12 @@ public:
   //! Explicitly unregisters a mesh and its GPU resources.
   OXGN_RNDR_API auto UnregisterMesh(const data::Mesh& mesh) -> void;
 
+  //! Ensures GPU resources (buffers + SRVs) are resident for all meshes in the
+  //! provided draw list. Must be called before ExecuteRenderGraph to guarantee
+  //! residency before bindless indices upload.
+  OXGN_RNDR_API auto EnsureResourcesForDrawList(
+    std::span<const RenderItem> draw_list) -> void;
+
   //! Evicts unused mesh resources according to the eviction policy.
   OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t current_frame)
     -> void;
@@ -136,6 +150,8 @@ private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
+  //! Ensures GPU buffers and SRVs for a mesh are created/uploaded/registered.
+  //! Returns the cached GPU resources and shader-visible SRV indices.
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
 
   //! PreExecute helpers broken out to reduce cyclomatic complexity. Kept
@@ -152,6 +168,13 @@ private:
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
 
+  // Internal helpers for DrawResourceIndices buffer lifecycle
+  auto CreateOrResizeDrawIndicesBuffer(
+    std::size_t size_bytes, graphics::RenderController& rc) -> void;
+  auto RegisterDrawIndicesSrv(graphics::RenderController& rc) -> void;
+  auto UploadDrawIndicesCPUToGPU(const void* src, std::size_t size_bytes)
+    -> void;
+
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
@@ -166,10 +189,11 @@ private:
   std::unique_ptr<MaterialConstants> material_constants_cpu_;
   bool material_constants_dirty_ { false };
 
-  // Draw resource indices management (bindless vertex/index SRV indices). The
-  // structured buffer's descriptor heap slot is dynamic; SceneConstants carries
-  // the slot each frame (bindless_indices_slot) instead of assuming 0.
-  std::unique_ptr<DrawResourceIndices> bindless_indices_cpu_;
+  // Draw resource indices management (bindless vertex/index SRV indices).
+  // Structured buffer now holds a per-draw array of DrawResourceIndices.
+  // The descriptor heap slot is dynamic; SceneConstants carries the slot each
+  // frame (bindless_indices_slot) instead of assuming 0.
+  std::vector<DrawResourceIndices> bindless_indices_cpu_;
   std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
   bool bindless_indices_dirty_ { false };
   uint32_t bindless_indices_heap_slot_ { 0 };
@@ -178,6 +202,8 @@ private:
   // Validation: track how many times SceneConstants were set in the current
   // frame. Reset in PostExecute; asserted in PreExecute.
   uint32_t scene_constants_set_count_ { 0 };
+
+  // Internal ensure that optionally updates the per-frame indices snapshot.
 };
 
 } // namespace oxygen::engine

@@ -60,6 +60,12 @@ public:
   void SetComputeRootConstantBufferView(
     uint32_t root_parameter_index, uint64_t buffer_gpu_address) override;
 
+  void SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) override;
+
+  void SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) override;
+
   OXYGEN_D3D12_API void SetRenderTargets(
     std::span<NativeObject> rtvs, std::optional<NativeObject> dsv) override;
   void SetViewport(const ViewPort& viewport) override;

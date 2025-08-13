@@ -293,11 +293,13 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::FillMode;
   using graphics::FramebufferLayoutDesc;
   using graphics::PrimitiveType;
+  using graphics::PushConstantsBinding;
   using graphics::RasterizerStateDesc;
   using graphics::RootBindingDesc;
   using graphics::RootBindingItem;
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
+  using oxygen::graphics::GraphicsPipelineDesc;
 
   // Set up rasterizer and blend state for standard color rendering
   constexpr RasterizerStateDesc raster_desc {
@@ -404,9 +406,19 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .data = DirectBufferBinding {}
   };
 
+  // Root Parameter 5: DrawIndex constant (32-bit root constant)
+  constexpr RootBindingDesc draw_index_constant_desc {
+    .binding_slot_desc = BindingSlotDesc {
+      .register_index = 3, // b3
+      .register_space = 0, // space0
+    },
+    .visibility = ShaderStageFlags::kAll,
+    .data = PushConstantsBinding { .size = 1 } // 1 32-bit value
+  };
+
   // Modern bindless root signature: one unbounded SRV table (t0, space0),
   // direct CBVs for scene and material constants.
-  return graphics::GraphicsPipelineDesc::Builder()
+  return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
     .SetPixelShader(ShaderStageDesc { .shader
@@ -422,6 +434,8 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
     // Root Parameter 2: MaterialConstants CBV (b2, space0)
     .AddRootBinding(RootBindingItem(material_constants_cbv_desc))
+    // Root Parameter 3: DrawIndex constant (b3, space0)
+    .AddRootBinding(RootBindingItem(draw_index_constant_desc))
     .Build();
 }
 

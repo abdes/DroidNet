@@ -18,7 +18,8 @@ presence.
 
 Rebuilt when color format or sample count changes. Depth test enabled only if a
 depth attachment is present; depth writes disabled (expect depth already
-populated by `DepthPrePass`). Root bindings include scene & material CBVs.
+populated by `DepthPrePass`). Root bindings include scene & material CBVs plus
+draw index constant for multi-draw support.
 
 ## Resource Preparation
 
@@ -31,7 +32,9 @@ populated by `DepthPrePass`). Root bindings include scene & material CBVs.
 2. Set viewport & scissors to full target area.
 3. Clear framebuffer color (and depth if chosen to read? currently color only).
 4. Bind material constants (optional).
-5. Draw geometry from `opaque_draw_list`.
+5. **Draw geometry from `opaque_draw_list` with multi-draw support**:
+   * For each draw item: call `BindDrawIndexConstant(draw_index)` then `Draw()`
+   * Shaders use `g_DrawIndex` root constant to access correct `DrawResourceIndices` entry
 6. Register pass.
 
 ## Future Considerations

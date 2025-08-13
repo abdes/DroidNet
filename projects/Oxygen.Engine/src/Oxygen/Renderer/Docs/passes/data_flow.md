@@ -36,7 +36,7 @@ Textures / buffers referenced above are owned via `ResourceRegistry` /
 Related: [bindless conventions](../bindless_conventions.md), [render pass
 lifecycle](../render_pass_lifecycle.md).
 
-## Frame Setup Sequence (Phase 1)
+## Frame Setup Sequence (Phase 2)
 
 1. Application prepares camera + timing → fills `SceneConstants` CPU struct
    (must happen exactly once per frame).
@@ -45,14 +45,15 @@ lifecycle](../render_pass_lifecycle.md).
 3. (Optional) Extract current material selection →
    `renderer->SetMaterialConstants(material_constants)` (0 or 1 times per frame;
    dirty memcmp avoids redundant upload).
-4. (Optional) Provide transitional `DrawResourceIndices` (vertex / index heap
-   indices + is_indexed flag) via `renderer->SetDrawResourceIndices(...)`
-   (removed in later phases when per-mesh indices auto-derived).
+4. Ensure mesh resources once (or when assets change):
+   `renderer->EnsureMeshResources(mesh)` – creates GPU buffers (if needed),
+   registers SRVs, caches shader-visible indices, and updates the per-frame
+   `DrawResourceIndices` CPU snapshot automatically.
 5. Populate `RenderContext` draw lists (e.g., `opaque_draw_list`). Do NOT set
    `scene_constants` / `material_constants` pointers directly; renderer injects
    them.
 6. Invoke `renderer->ExecuteRenderGraph(...)` – during `PreExecute` the
-   renderer:
+   renderer (PreExecute):
     * Ensures / uploads DrawResourceIndices structured buffer if dirty.
     * Propagates its descriptor heap slot into
       `SceneConstants.bindless_indices_slot` (or 0xFFFFFFFF if absent).

@@ -97,15 +97,7 @@ private:
 
   co::Nursery* nursery_ { nullptr };
   // Removed: EnsureBindlessIndexingBuffer (Renderer now owns indices upload).
-  auto EnsureVertexBufferSrv() -> void;
-  auto EnsureIndexBufferSrv() -> void;
-  auto EnsureMeshDrawResources() -> void;
-
-  uint32_t vertex_srv_shader_visible_index_ { 1 };
-  uint32_t index_srv_shader_visible_index_ { 2 };
-  bool recreate_indices_cbv_ { false }; // legacy flag retired
-  bool vertex_srv_created_ { false };
-  bool index_srv_created_ { false };
+  // Phase 2: SRVs and indices handled by Renderer; no per-example SRV state.
 };
 
 } // namespace oxygen::examples

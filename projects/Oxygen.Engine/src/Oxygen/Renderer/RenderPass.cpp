@@ -146,6 +146,29 @@ auto RenderPass::BindMaterialConstantsBuffer(CommandRecorder& recorder) const
     Context().material_constants->GetGPUVirtualAddress());
 }
 
+auto RenderPass::BindDrawIndexConstant(
+  CommandRecorder& recorder, uint32_t draw_index) const -> void
+{
+  using graphics::PushConstantsBinding;
+
+  DCHECK_F(LastBuiltPsoDesc().has_value());
+
+  constexpr auto root_param_index
+    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
+      RootBindings::kDrawIndexConstant);
+  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
+
+  DCHECK_F(std::holds_alternative<PushConstantsBinding>(root_param.data),
+    "Expected root parameter {}'s data to be PushConstantsBinding",
+    root_param_index);
+
+  // Bind the draw index as a root constant (32-bit value)
+  recorder.SetGraphicsRoot32BitConstant(
+    root_param.GetRootParameterIndex(), // should be binding 4 for draw index
+    draw_index,
+    0); // offset within the constant (0 for single 32-bit value)
+}
+
 auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
 {
   using data::Vertex;
@@ -161,13 +184,19 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
   // for these specific transient resources on D3D12.
 
   const auto& context = Context();
-  for (const auto& item : GetDrawList()) {
+  const auto& draw_list = GetDrawList();
+  LOG_F(3, "DEBUG: Processing {} items in draw list", draw_list.size());
+
+  uint32_t draw_index = 0;
+  for (const auto& item : draw_list) {
+    LOG_F(3, "DEBUG: Processing item {} with mesh: {}", draw_index,
+      item.mesh ? "valid" : "null");
     if (!item.mesh || item.mesh->VertexCount() == 0) {
-      LOG_F(INFO, "Skipping RenderItem with no mesh or no vertices.");
+      LOG_F(3, "Skipping RenderItem with no mesh or no vertices.");
       continue;
     }
 
-    // Use cached vertex buffer from renderer
+    // Use cached vertex buffer from renderer for each individual mesh
     const auto vertex_buffer
       = context.GetRenderer().GetVertexBuffer(*item.mesh);
     if (!vertex_buffer) {
@@ -176,24 +205,31 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
       continue;
     }
 
-    const std::shared_ptr<Buffer> buffer_array[1] = { vertex_buffer };
-    constexpr uint32_t stride_array[1]
-      = { static_cast<uint32_t>(sizeof(Vertex)) };
-    command_recorder.SetVertexBuffers(1, buffer_array, stride_array);
+    // For separate meshes, bind the draw index as a root constant
+    // This allows each draw call to access the correct entry in
+    // DrawResourceIndices array
+    BindDrawIndexConstant(command_recorder, draw_index);
 
-    // In bindless rendering, both vertex and index buffers are accessed through
-    // SRVs The shader handles index lookups internally, so we always use Draw
-    // with IndexCount for indexed meshes (the shader reads indices from the
-    // bindless index buffer)
     if (item.mesh->IsIndexed()) {
-      // Draw with the number of indices (shader will resolve vertex indices
-      // internally)
-      command_recorder.Draw(
-        static_cast<uint32_t>(item.mesh->IndexCount()), 1, 0, 0);
+      // For indexed meshes in bindless rendering, use Draw with index count
+      // The shader will perform index lookup through ResourceDescriptorHeap
+      const auto index_count = static_cast<uint32_t>(item.mesh->IndexCount());
+      LOG_F(3,
+        "Draw call {} (indexed): indices={}, instances=1, firstVertex=0, "
+        "drawIndex={}",
+        draw_index, index_count, draw_index);
+      // Use normal Draw call since draw index is now passed via root constant
+      command_recorder.Draw(index_count, 1, 0, 0);
     } else {
-      // Draw with the number of vertices for non-indexed meshes
-      command_recorder.Draw(
-        static_cast<uint32_t>(item.mesh->VertexCount()), 1, 0, 0);
+      // For non-indexed meshes, use Draw with vertex count
+      const auto vertex_count = static_cast<uint32_t>(item.mesh->VertexCount());
+      LOG_F(3,
+        "Draw call {} (non-indexed): vertices={}, instances=1, firstVertex=0, "
+        "drawIndex={}",
+        draw_index, vertex_count, draw_index);
+      // Use normal Draw call since draw index is now passed via root constant
+      command_recorder.Draw(vertex_count, 1, 0, 0);
     }
+    ++draw_index;
   }
 }
