@@ -64,11 +64,11 @@ static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
 
 //! Holds all data shared across the render graph for a single frame.
 /*!
-    Contains engine-wide and application-wide data that is shared across passes.
-    Backend resources and per-pass configuration are owned/configured by each
-   pass, not by the context.
+ Contains engine-wide and application-wide data that is shared across passes.
+ Backend resources and per-pass configuration are owned/configured by each pass,
+ not by the context.
 
-    @see Renderer, RenderPass
+ @see Renderer, RenderPass
 */
 struct RenderContext {
   // Engine data
