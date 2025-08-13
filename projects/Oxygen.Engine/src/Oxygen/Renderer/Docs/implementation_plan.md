@@ -91,14 +91,13 @@ Tasks:
   layout section.
 * [x] Add validation in `Renderer::PreExecute` (assert scene constants provided
   once per frame).
-* [ ] Update example: remove local constant buffer creation &
+* [x] Update example: remove local constant buffer creation &
   `UploadIndicesIfNeeded` style logic (checkpoint 1).
-* [ ] Docs: update data_flow.md (constants population stage) & render_items.md
+* [x] Docs: update data_flow.md (constants population stage) & render_items.md
   (material override timing).
 
 Deliverable: Example sets camera/world matrices via Renderer API only; no direct
 buffer mapping for scene/material/indices.
-
 
 ## Phase 2 – Mesh Resource & Bindless Abstraction (Descriptor Detachment)
 
@@ -126,7 +125,6 @@ Tasks:
 
 Deliverable: Example no longer manipulates descriptor handles directly.
 
-
 ## Phase 3 – RenderItem Validation & Container Introduction
 
 Goal: Provide a managed container that enforces invariants, simplifying example
@@ -148,7 +146,6 @@ Tasks:
 
 Deliverable: Example delegates validation & computed property updates; manual
 vector removed.
-
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
@@ -172,7 +169,6 @@ Tasks:
 Deliverable: Example no longer manually creates a cube per frame; uses scene
 extraction.
 
-
 ## Phase 5 – Light Culling Pass (Stub → Minimal Functional)
 
 (Formerly old Phase 3.)
@@ -192,7 +188,6 @@ Stage B – Minimal Functional:
 * [ ] Add passes/light_culling_pass.md documenting memory layout & limits.
 * [ ] Integrate buffers into RenderContext (future per-item light influence
   deferred [d]).
-
 
 ## Phase 6 – DrawPacket Introduction & Opaque Submission Refactor
 
@@ -216,7 +211,6 @@ Tasks:
 * [ ] Docs: render_items.md (finalization), implementation_plan.md references
   updated, performance note (packet build vs direct submission).
 
-
 ## Phase 7 – Transparent Pass (Basic Sorting)
 
 Goal: Support alpha blended geometry after opaque packet pipeline stable.
@@ -231,7 +225,6 @@ Tasks:
 * [ ] Docs updates: data_flow.md, passes docs.
 
 Deferred: OIT techniques.
-
 
 ## Phase 8 – Post Process Pass (Tone Map Stub)
 
@@ -248,7 +241,6 @@ Tasks:
 
 Deferred: Bloom, HDR exposure, FX chain.
 
-
 ## Phase 9 – Resource Lifetime & Memory Optimizations
 
 Goal: Prepare for more passes & memory pressure.
@@ -264,7 +256,6 @@ Tasks:
 * [ ] Evaluate static vs dynamic item partition for culling + sorting reuse.
 
 Deferred: Actual aliasing implementation (Phase 10 if complexity warrants).
-
 
 ## Phase 10 – Visibility & Performance Enhancements
 
@@ -283,7 +274,6 @@ Tasks:
 
 Deferred: Occlusion culling (software depth buffer) / GPU queries.
 
-
 ## Phase 11 – Advanced Light Culling (GPU Compute)
 
 Prereq: Phase 5 Stage B stable.
@@ -298,7 +288,6 @@ Tasks:
 * [ ] Integrate GPU light index buffer consumption into ShaderPass / DrawPacket.
 
 Deferred: Temporal light list reuse.
-
 
 ## Phase 12 – Quality / Hardening
 
@@ -320,7 +309,6 @@ Tasks:
 * [ ] Validation: Assert `UpdateComputedProperties` invoked before render graph
   (debug build).
 
-
 ## Deferred / Explicitly Out of Scope (Reassess Later)
 
 * Full generic render graph with automated resource lifetime solver.
@@ -328,7 +316,6 @@ Tasks:
 * Advanced order-independent transparency (per-pixel linked lists, weighted
   blended, etc.).
 * Ray tracing integration.
-
 
 ## Maintenance Checklist (Per Merge)
 
@@ -354,3 +341,5 @@ Revision History:
 * Marked dirty tracking & just-in-time upload (scene/material/draw indices) implemented via refactored PreExecute helpers – 2025-08-13.
 * Extended bindless_conventions.md with constant/material/draw indices buffer layout & slot propagation details – 2025-08-13.
 * Added PreExecute validation assert for single SceneConstants set per frame – 2025-08-13.
+* Phase 1 example migration checkpoint: example now uses Renderer setters for scene/material constants & draw resource indices (removed manual constants upload) – 2025-08-13.
+* Updated data_flow.md (detailed constants population sequence) & render_items.md (material override timing) – 2025-08-13.

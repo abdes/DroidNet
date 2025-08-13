@@ -470,11 +470,9 @@ auto MainModule::RenderScene() -> co::Co<>
     render_items_.push_back(cube_item);
   }
 
-  // Ensure renderer has uploaded mesh resources
-  if (!render_items_.empty() && render_items_.front().mesh) {
-    renderer_->GetVertexBuffer(*render_items_.front().mesh);
-    renderer_->GetIndexBuffer(*render_items_.front().mesh);
-  }
+  // Transitional Phase 1: ensure mesh draw resources & indices (will be
+  // superseded in Phase 2 by Renderer::EnsureMeshResources + automatic index
+  // derivation without explicit SRV management here).
   EnsureMeshDrawResources();
 
   auto gfx = gfx_weak_.lock();

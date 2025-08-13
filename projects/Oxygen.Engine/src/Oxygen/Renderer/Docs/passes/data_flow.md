@@ -7,13 +7,15 @@ duplicating pipeline details found elsewhere.
 
 ### DepthPrePass
 
-* Inputs: `RenderContext::opaque_draw_list`, `scene_constants` (injected by renderer), depth texture.
+* Inputs: `RenderContext::opaque_draw_list`, `scene_constants` (injected by
+  renderer), depth texture.
 * Outputs: populated depth texture.
 
 ### ShaderPass
 
 * Inputs: depth texture (read-only if present), `opaque_draw_list`,
-  `scene_constants` (injected by renderer), optional `material_constants`, color texture.
+  `scene_constants` (injected by renderer), optional `material_constants`, color
+  texture.
 * Outputs: color render target (first color attachment or override texture).
 
 ## Planned / Placeholder (Not Implemented Yet)
@@ -36,8 +38,24 @@ lifecycle](../render_pass_lifecycle.md).
 
 ## Frame Setup Sequence (Phase 1)
 
-1. Application prepares camera + timing → fills `SceneConstants` CPU struct.
-2. Calls `renderer->SetSceneConstants(constants)`.
-3. Populates `RenderContext` draw lists & optional `material_constants`.
-4. Invokes `renderer->ExecuteRenderGraph(...)` – renderer uploads & injects
-  constant buffer during `PreExecute`.
+1. Application prepares camera + timing → fills `SceneConstants` CPU struct
+   (must happen exactly once per frame).
+2. Calls `renderer->SetSceneConstants(constants)` (increments internal per-frame
+   counter; last call would win but assert enforces single call).
+3. (Optional) Extract current material selection →
+   `renderer->SetMaterialConstants(material_constants)` (0 or 1 times per frame;
+   dirty memcmp avoids redundant upload).
+4. (Optional) Provide transitional `DrawResourceIndices` (vertex / index heap
+   indices + is_indexed flag) via `renderer->SetDrawResourceIndices(...)`
+   (removed in later phases when per-mesh indices auto-derived).
+5. Populate `RenderContext` draw lists (e.g., `opaque_draw_list`). Do NOT set
+   `scene_constants` / `material_constants` pointers directly; renderer injects
+   them.
+6. Invoke `renderer->ExecuteRenderGraph(...)` – during `PreExecute` the
+   renderer:
+    * Ensures / uploads DrawResourceIndices structured buffer if dirty.
+    * Propagates its descriptor heap slot into
+      `SceneConstants.draw_resource_indices_slot` (or 0xFFFFFFFF if absent).
+    * Uploads SceneConstants & optional MaterialConstants if dirty.
+    * Wires buffer handles into the transient `RenderContext` (cleared in
+      `PostExecute`).
