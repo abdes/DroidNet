@@ -28,6 +28,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
+#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -482,50 +483,10 @@ auto MainModule::EnsureBindlessIndexingBuffer() -> void
   recreate_indices_cbv_ = false; // Reset the flag
 }
 
-auto MainModule::EnsureMaterialConstantsBuffer() -> void
-{
-  // Only create and update the buffer. No descriptor/view registration needed
-  // for direct root CBV binding.
-  if (!material_constants_buffer_) {
-    DLOG_F(INFO, "Creating material constants buffer");
-    const graphics::BufferDesc cb_desc {
-      .size_bytes = sizeof(MaterialConstants),
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Material Constants Buffer",
-    };
-
-    CHECK_F(!gfx_weak_.expired());
-    const auto gfx = gfx_weak_.lock();
-
-    material_constants_buffer_ = gfx->CreateBuffer(cb_desc);
-    material_constants_buffer_->SetName("Material Constants Buffer");
-
-    context_.material_constants = material_constants_buffer_;
-  }
-}
-
-auto MainModule::UpdateMaterialConstantsBuffer(
-  const MaterialConstants& constants) const -> void
-{
-  if (!material_constants_buffer_) {
-    LOG_F(ERROR, "Material constants buffer is not initialized");
-    return;
-  }
-  // Map the buffer and copy the constants
-  if (void* mapped = material_constants_buffer_->Map()) {
-    memcpy(mapped, &constants, sizeof(MaterialConstants));
-    material_constants_buffer_->UnMap();
-  } else {
-    LOG_F(ERROR, "Failed to map material constants buffer for update");
-  }
-  DLOG_F(2, "Material constants buffer updated");
-}
-
 auto MainModule::ExtractMaterialConstants(
-  const data::MaterialAsset& material) const -> MaterialConstants
+  const data::MaterialAsset& material) const -> engine::MaterialConstants
 {
-  MaterialConstants constants;
+  engine::MaterialConstants constants;
 
   // Extract base color (RGBA)
   const auto base_color_span = material.GetBaseColor();
@@ -589,12 +550,6 @@ auto MainModule::EnsureMeshDrawResources() -> void
   }
   try {
     EnsureBindlessIndexingBuffer();
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
-    throw;
-  }
-  try {
-    EnsureMaterialConstantsBuffer();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
     throw;
@@ -708,10 +663,10 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   // Update material constants from the first render item's material
-  if (!render_items_.empty() && render_items_.front().material) {
+  if (!render_items_.empty() && render_items_.front().material && renderer_) {
     const auto material_constants
       = ExtractMaterialConstants(*render_items_.front().material);
-    UpdateMaterialConstantsBuffer(material_constants);
+    renderer_->SetMaterialConstants(material_constants);
   }
 
   // Assemble and run the render graph

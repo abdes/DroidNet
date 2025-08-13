@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
     "api_export.h"
     "DepthPrePass.h"
+    "MaterialConstants.h"
     "RenderContext.h"
     "Renderer.h"
     "RenderItem.h"

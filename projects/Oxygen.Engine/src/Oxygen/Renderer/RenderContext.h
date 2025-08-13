@@ -199,7 +199,7 @@ private:
    repopulate them each frame as needed):
    - Clears the pass pointer registry.
    - Resets the renderer and render controller pointers to null.
-   - Clears scene_constants and material_constants (they are frame-scoped).
+  - Clears scene_constants and material_constants (renderer-owned snapshots).
    - Does NOT touch persistent configuration fields the application may add
      in the future (only engine-injected per-frame pointers are cleared).
   */
@@ -209,9 +209,7 @@ private:
     renderer = nullptr;
     render_controller = nullptr;
     scene_constants.reset();
-    // TODO: uncomment once material constants are properly handled by the
-    // renderer
-    // material_constants.reset();
+    material_constants.reset();
   }
 
   mutable Renderer* renderer { nullptr };

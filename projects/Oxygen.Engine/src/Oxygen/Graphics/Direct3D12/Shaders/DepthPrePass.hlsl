@@ -43,7 +43,7 @@ cbuffer SceneConstants : register(b1) {
     float3 camera_position;
     float time_seconds;
     uint frame_index;
-    uint3 _pad; // padding for alignment
+    uint _reserved[3]; // padding / future expansion (matches C++ struct)
 }
 
 // Output structure for the Vertex Shader
