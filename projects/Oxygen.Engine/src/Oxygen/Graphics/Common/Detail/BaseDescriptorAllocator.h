@@ -71,8 +71,8 @@ public:
       if (segments_count == 0) {
         continue;
       }
-      DLOG_F(1, "Cleaning up heap `{}` with {} segment{}", key, segments_count,
-        segments_count == 1 ? "" : "s");
+      DLOG_F(1, "Cleaning up heap `{}` with {} segment{}", key.c_str(),
+        segments_count, segments_count == 1 ? "" : "s");
       LOG_SCOPE_F(1, "Releasing segments");
       for (const auto& segment : segments) {
         if (!segment->IsEmpty()) {

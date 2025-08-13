@@ -126,30 +126,34 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states)
 // Static helper functions to process specific barrier types
 auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(4, ". buffer barrier: {} {} -> {}", nostd::to_string(desc.resource),
-    nostd::to_string(desc.before), nostd::to_string(desc.after));
+  DLOG_F(4, ". buffer barrier: {} {} -> {}",
+    nostd::to_string(desc.resource).c_str(),
+    nostd::to_string(desc.before).c_str(),
+    nostd::to_string(desc.after).c_str());
 
   auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
   DCHECK_NOTNULL_F(
     p_resource, "Transition barrier (Buffer) cannot have a null resource.");
 
-  const D3D12_RESOURCE_BARRIER d3d12_barrier { .Type
-    = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+  const D3D12_RESOURCE_BARRIER d3d12_barrier {
+    .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
     .Transition = { .pResource = p_resource,
-      .Subresource
-      = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, // TODO: Or specific
-                                                 // sub-resource if provided
+      // TODO: Or specific sub-resource if provided
+      .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
       .StateBefore = ConvertResourceStates(desc.before),
-      .StateAfter = ConvertResourceStates(desc.after) } };
+      .StateAfter = ConvertResourceStates(desc.after), },
+  };
   return d3d12_barrier;
 }
 
 auto ProcessBarrierDesc(const TextureBarrierDesc& desc)
   -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(4, ". texture barrier: {} {} -> {}", nostd::to_string(desc.resource),
-    nostd::to_string(desc.before), nostd::to_string(desc.after));
+  DLOG_F(4, ". texture barrier: {} {} -> {}",
+    nostd::to_string(desc.resource).c_str(),
+    nostd::to_string(desc.before).c_str(),
+    nostd::to_string(desc.after).c_str());
 
   auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
   DCHECK_NOTNULL_F(
@@ -159,17 +163,18 @@ auto ProcessBarrierDesc(const TextureBarrierDesc& desc)
     = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
     .Transition = { .pResource = p_resource,
+      // TODO(abdes): Or specific sub-resource if provided
       .Subresource
-      = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, // TODO: Or specific
-                                                 // sub-resource if provided
+      = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
       .StateBefore = ConvertResourceStates(desc.before),
-      .StateAfter = ConvertResourceStates(desc.after) } };
+      .StateAfter = ConvertResourceStates(desc.after), }, };
   return d3d12_barrier;
 }
 
 auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(4, ". memory barrier: 0x{:X}", nostd::to_string(desc.resource));
+  DLOG_F(
+    4, ". memory barrier: 0x{:X}", nostd::to_string(desc.resource).c_str());
 
   const D3D12_RESOURCE_BARRIER d3d12_barrier
     = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
@@ -775,7 +780,7 @@ void CommandRecorder::SetRenderTargets(
   for (const auto& rtv : rtvs) {
     if (!rtv.IsValid()) {
       LOG_F(ERROR, "invalid render target view: {} view, skipped",
-        nostd::to_string(rtv));
+        nostd::to_string(rtv).c_str());
       continue; // Skip invalid RTVs
     }
     rtv_handles.push_back({ .ptr = rtv.AsInteger() });
@@ -785,7 +790,7 @@ void CommandRecorder::SetRenderTargets(
   if (dsv.has_value()) {
     if (!dsv->IsValid()) {
       LOG_F(ERROR, "invalid depth/stencil view: {}, dropped",
-        nostd::to_string(*dsv));
+        nostd::to_string(*dsv).c_str());
     } else {
       D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv->AsInteger() };
       dsv_handle_ptr = &dsv_handle;
