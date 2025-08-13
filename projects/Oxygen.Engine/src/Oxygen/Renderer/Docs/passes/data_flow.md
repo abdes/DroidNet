@@ -7,13 +7,13 @@ duplicating pipeline details found elsewhere.
 
 ### DepthPrePass
 
-* Inputs: `RenderContext::opaque_draw_list`, `scene_constants`, depth texture.
+* Inputs: `RenderContext::opaque_draw_list`, `scene_constants` (injected by renderer), depth texture.
 * Outputs: populated depth texture.
 
 ### ShaderPass
 
 * Inputs: depth texture (read-only if present), `opaque_draw_list`,
-  `scene_constants`, optional `material_constants`, color texture.
+  `scene_constants` (injected by renderer), optional `material_constants`, color texture.
 * Outputs: color render target (first color attachment or override texture).
 
 ## Planned / Placeholder (Not Implemented Yet)
@@ -33,3 +33,11 @@ Textures / buffers referenced above are owned via `ResourceRegistry` /
 
 Related: [bindless conventions](../bindless_conventions.md), [render pass
 lifecycle](../render_pass_lifecycle.md).
+
+## Frame Setup Sequence (Phase 1)
+
+1. Application prepares camera + timing → fills `SceneConstants` CPU struct.
+2. Calls `renderer->SetSceneConstants(constants)`.
+3. Populates `RenderContext` draw lists & optional `material_constants`.
+4. Invokes `renderer->ExecuteRenderGraph(...)` – renderer uploads & injects
+  constant buffer during `PreExecute`.

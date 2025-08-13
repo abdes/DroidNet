@@ -192,15 +192,26 @@ private:
 
   //! Resets the render context for a new graph run.
   /*!
-   Called at the start of each graph run only by the Renderer.
+   Called at the start (or end) of each graph run only by the Renderer.
+   Performs a shallow, per-frame cleanup of engine-managed pointers so that
+   subsequent frames begin with a clean slate while preserving any
+   application-populated value semantics (the application is expected to
+   repopulate them each frame as needed):
    - Clears the pass pointer registry.
    - Resets the renderer and render controller pointers to null.
+   - Clears scene_constants and material_constants (they are frame-scoped).
+   - Does NOT touch persistent configuration fields the application may add
+     in the future (only engine-injected per-frame pointers are cleared).
   */
-  auto Reset() const -> void
+  auto Reset() -> void
   {
     std::ranges::fill(known_passes, nullptr);
     renderer = nullptr;
     render_controller = nullptr;
+    scene_constants.reset();
+    // TODO: uncomment once material constants are properly handled by the
+    // renderer
+    // material_constants.reset();
   }
 
   mutable Renderer* renderer { nullptr };

@@ -31,6 +31,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/SceneConstants.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 
 #include "./MainModule.h"
@@ -481,46 +482,6 @@ auto MainModule::EnsureBindlessIndexingBuffer() -> void
   recreate_indices_cbv_ = false; // Reset the flag
 }
 
-auto MainModule::EnsureSceneConstantsBuffer() -> void
-{
-  // Only create and update the buffer. No descriptor/view registration needed
-  // for direct root CBV binding.
-  if (!scene_constants_buffer_) {
-    DLOG_F(INFO, "Creating scene constants buffer");
-    const graphics::BufferDesc cb_desc {
-      .size_bytes = sizeof(SceneConstants),
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Scene Constants Buffer",
-    };
-
-    CHECK_F(!gfx_weak_.expired());
-    const auto gfx = gfx_weak_.lock();
-
-    scene_constants_buffer_ = gfx->CreateBuffer(cb_desc);
-    scene_constants_buffer_->SetName("Scene Constants Buffer");
-
-    context_.scene_constants = scene_constants_buffer_;
-  }
-}
-
-auto MainModule::UpdateSceneConstantsBuffer(
-  const SceneConstants& constants) const -> void
-{
-  if (!scene_constants_buffer_) {
-    LOG_F(ERROR, "Scene constants buffer is not initialized");
-    return;
-  }
-  // Map the buffer and copy the constants
-  if (void* mapped = scene_constants_buffer_->Map()) {
-    memcpy(mapped, &constants, sizeof(SceneConstants));
-    scene_constants_buffer_->UnMap();
-  } else {
-    LOG_F(ERROR, "Failed to map scene constants buffer for update");
-  }
-  DLOG_F(2, "Scene constants buffer updated");
-}
-
 auto MainModule::EnsureMaterialConstantsBuffer() -> void
 {
   // Only create and update the buffer. No descriptor/view registration needed
@@ -633,12 +594,6 @@ auto MainModule::EnsureMeshDrawResources() -> void
     throw;
   }
   try {
-    EnsureSceneConstantsBuffer();
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
-    throw;
-  }
-  try {
     EnsureMaterialConstantsBuffer();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
@@ -729,8 +684,7 @@ auto MainModule::RenderScene() -> co::Co<>
   static float rotation_angle = 0.0f; // radians
   rotation_angle += 0.01f; // radians per frame, adjust as needed
 
-  scene_constants_.world_matrix
-    = glm::rotate(glm::mat4(1.0f), rotation_angle, glm::vec3(0.5f, 1.0f, 0.0f));
+  // Rotation removed temporarily (object space == world space in shaders).
 
   auto corner = glm::vec3(-0.5f, 0.5f, 0.5f);
   glm::vec3 view_dir = glm::normalize(corner); // Diagonal direction from origin
@@ -749,7 +703,9 @@ auto MainModule::RenderScene() -> co::Co<>
     );
   scene_constants_.camera_position = { 0.0f, 0.0f, -3.5f };
 
-  UpdateSceneConstantsBuffer(scene_constants_);
+  if (renderer_) {
+    renderer_->SetSceneConstants(scene_constants_);
+  }
 
   // Update material constants from the first render item's material
   if (!render_items_.empty() && render_items_.front().material) {

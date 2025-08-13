@@ -77,7 +77,7 @@ example into Renderer public API.
 
 Tasks:
 
-* [ ] Define/Finalize `SceneConstants` (matrices, camera position, frame index,
+* [x] Define/Finalize `SceneConstants` (matrices, camera position, frame index,
   time) in a shared header; expose `Renderer::SetSceneConstants(const
   SceneConstants&)` (stores & marks dirty before Execute).
 * [ ] Define minimal `MaterialConstants` struct &

@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/SceneConstants.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
@@ -145,14 +146,43 @@ auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
     eviction_policy_->OnMeshRemoved(id);
   }
 }
-auto Renderer::PreExecute(const RenderContext& context) -> void
+auto Renderer::PreExecute(RenderContext& context) -> void
 {
-  CHECK_NOTNULL_F(
-    context.scene_constants, "Scene constants buffer is required");
+  // Contract: caller must not populate context.scene_constants directly.
+  DCHECK_F(!context.scene_constants,
+    "RenderContext.scene_constants must be null; use "
+    "Renderer::SetSceneConstants");
+  DCHECK_NOTNULL_F(scene_constants_cpu_.get(),
+    "Renderer::SetSceneConstants must be called before ExecuteRenderGraph");
+
+  // Upload if dirty or buffer not yet created.
+  if (!scene_constants_buffer_ || scene_constants_dirty_) {
+    auto& rc = *render_controller_.lock();
+    auto& graphics = rc.GetGraphics();
+    const auto size_bytes = sizeof(SceneConstants);
+    if (!scene_constants_buffer_) {
+      graphics::BufferDesc desc { .size_bytes = size_bytes,
+        .usage = graphics::BufferUsage::kConstant,
+        .memory = graphics::BufferMemory::kUpload,
+        .debug_name = std::string("SceneConstants") };
+      scene_constants_buffer_ = graphics.CreateBuffer(desc);
+      scene_constants_buffer_->SetName(desc.debug_name);
+      rc.GetResourceRegistry().Register(scene_constants_buffer_);
+    }
+    void* mapped = scene_constants_buffer_->Map();
+    memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
+    scene_constants_buffer_->UnMap();
+    scene_constants_dirty_ = false;
+  }
+  // Inject buffer into context (const_cast due to interface design expecting
+  // caller fill before).
+  context.scene_constants = scene_constants_buffer_;
   context.SetRenderer(this, render_controller_.lock().get());
 }
-auto Renderer::PostExecute(const RenderContext& context) -> void
+auto Renderer::PostExecute(RenderContext& context) -> void
 {
+  // RenderContext::Reset now clears per-frame injected buffers (scene &
+  // material).
   context.Reset();
 }
 
@@ -324,4 +354,21 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
     eviction_policy_->OnMeshAccess(id);
   }
   return ins->second;
+}
+
+auto Renderer::SetSceneConstants(const SceneConstants& constants) -> void
+{
+  if (!scene_constants_cpu_) {
+    scene_constants_cpu_ = std::make_unique<SceneConstants>(constants);
+    scene_constants_dirty_ = true;
+    return;
+  }
+  *scene_constants_cpu_ = constants;
+  scene_constants_dirty_ = true;
+}
+
+auto Renderer::GetSceneConstants() const -> const SceneConstants&
+{
+  DCHECK_NOTNULL_F(scene_constants_cpu_.get());
+  return *scene_constants_cpu_;
 }

@@ -38,11 +38,12 @@ struct DrawResourceIndices {
 // root CBV (not indexed from the descriptor heap), allowing fast and efficient
 // updates for per-frame or per-draw constants.
 cbuffer SceneConstants : register(b1) {
-    float4x4 world_matrix;
     float4x4 view_matrix;
     float4x4 projection_matrix;
     float3 camera_position;
-    float _pad0; // Padding to match C++ struct alignment
+    float time_seconds;
+    uint frame_index;
+    uint3 _pad; // padding for alignment
 }
 
 // Output structure for the Vertex Shader
@@ -80,8 +81,8 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     VertexData currentVertex = vertex_buffer[actual_vertex_index];
 
     // Transform position from object space to clip space using world, view, projection
-    float4 world_pos = mul(world_matrix, float4(currentVertex.position, 1.0f));
-    float4 view_pos = mul(view_matrix, world_pos);
+    // Object space == world space until per-item transforms are added.
+    float4 view_pos = mul(view_matrix, float4(currentVertex.position, 1.0f));
     output.clipSpacePosition = mul(projection_matrix, view_pos);
 
     return output;

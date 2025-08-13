@@ -55,6 +55,7 @@ set(
     "Renderer.h"
     "RenderItem.h"
     "RenderPass.h"
+    "SceneConstants.h"
     "ShaderPass.h"
 )
 set(
