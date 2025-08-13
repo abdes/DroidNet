@@ -22,6 +22,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneConstants.h>
@@ -177,6 +178,28 @@ auto Renderer::PreExecute(RenderContext& context) -> void
   // Inject buffer into context (const_cast due to interface design expecting
   // caller fill before).
   context.scene_constants = scene_constants_buffer_;
+  // Material constants are optional; upload if provided and dirty.
+  if (material_constants_cpu_) {
+    if (!material_constants_buffer_ || material_constants_dirty_) {
+      auto& rc = *render_controller_.lock();
+      auto& graphics = rc.GetGraphics();
+      const auto size_bytes = sizeof(MaterialConstants);
+      if (!material_constants_buffer_) {
+        graphics::BufferDesc desc { .size_bytes = size_bytes,
+          .usage = graphics::BufferUsage::kConstant,
+          .memory = graphics::BufferMemory::kUpload,
+          .debug_name = std::string("MaterialConstants") };
+        material_constants_buffer_ = graphics.CreateBuffer(desc);
+        material_constants_buffer_->SetName(desc.debug_name);
+        rc.GetResourceRegistry().Register(material_constants_buffer_);
+      }
+      void* mapped = material_constants_buffer_->Map();
+      memcpy(mapped, material_constants_cpu_.get(), size_bytes);
+      material_constants_buffer_->UnMap();
+      material_constants_dirty_ = false;
+    }
+    context.material_constants = material_constants_buffer_;
+  }
   context.SetRenderer(this, render_controller_.lock().get());
 }
 auto Renderer::PostExecute(RenderContext& context) -> void
@@ -184,6 +207,26 @@ auto Renderer::PostExecute(RenderContext& context) -> void
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
   context.Reset();
+}
+
+auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
+{
+  if (!material_constants_cpu_) {
+    material_constants_cpu_ = std::make_unique<MaterialConstants>(constants);
+    material_constants_dirty_ = true;
+    return;
+  }
+  if (memcmp(
+        material_constants_cpu_.get(), &constants, sizeof(MaterialConstants))
+    != 0) {
+    *material_constants_cpu_ = constants;
+    material_constants_dirty_ = true;
+  }
+}
+
+auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
+{
+  return *material_constants_cpu_;
 }
 
 namespace {

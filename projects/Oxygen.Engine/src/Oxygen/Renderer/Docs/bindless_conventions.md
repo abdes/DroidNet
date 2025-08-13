@@ -9,7 +9,7 @@ passes.
 enum class RenderPass::RootBindings : uint8_t {
   kBindlessTableSrv = 0,      // descriptor table (SRVs) t0 space0
   kSceneConstantsCbv = 1,     // direct CBV b1 space0
-  kMaterialConstantsCbv = 2,  // direct CBV b2 space0 (optional)
+  kMaterialConstantsCbv = 2,  // direct CBV b2 space0 (material snapshot; provided when material shading required)
 };
 ```
 
@@ -18,7 +18,7 @@ enum class RenderPass::RootBindings : uint8_t {
 | Pass | Uses kBindlessTableSrv | Uses kSceneConstantsCbv | Uses kMaterialConstantsCbv |
 |------|------------------------|--------------------------|----------------------------|
 | DepthPrePass | Yes | Yes | No |
-| ShaderPass | Yes | Yes | Conditional (if material constants buffer present) |
+| ShaderPass | Yes | Yes | Yes |
 
 ## Descriptor Allocation
 
@@ -52,17 +52,29 @@ Notes:
 * Must remain 16-byte size-aligned; append new fields before `_reserved`.
 * Exactly one upload per frame (last-wins if multiple `SetSceneConstants`).
 * Renderer asserts `RenderContext.scene_constants` is null before injection.
-* Renderer clears the injected buffer pointer in `RenderContext::Reset`; only
-  `scene_constants` is renderer-owned in Phase 1 (material constants remain
-  caller-managed until a dedicated API is added).
+* Renderer clears injected buffer pointers (`scene_constants`, `material_constants`) in `RenderContext::Reset`.
+
+## Material Constants (b2, space0)
+
+`MaterialConstants` is a per-frame (current material selection) snapshot.
+The example sets it once per frame using the first (and only) item's material.
+When provided via `Renderer::SetMaterialConstants` it is uploaded just-in-time
+in `PreExecute` (only if the CPU copy differs from previous frame – memcmp
+dirty check). Passes that rely on material shading (e.g., `ShaderPass`)
+consume it; passes like `DepthPrePass` ignore it.
+
+Layout mirrors HLSL cbuffer `MaterialConstants` (see `MaterialConstants.h`).
+Padding uses explicit `uint _pad0`, `_pad1` to maintain 16-byte alignment.
+Renderer clears the injected pointer in `RenderContext::Reset` along with
+scene constants.
 
 ## Future Extensions
 
 * Additional root parameters for per-pass dynamic descriptors (e.g., light
   lists) should be appended (maintain ordering stability for existing indices).
-* Material constants will transition to the same snapshot pattern via
-  `Renderer::SetMaterialConstants` (future Phase 1 task); until then the caller
-  may populate `RenderContext.material_constants` directly.
+* Additional per-pass constant ranges should prefer extending existing
+  snapshot structs (scene/material) before introducing new root parameters
+  (limits root signature churn).
 * Consider separating geometry / material / sampler spaces if shader conventions
   evolve.
 

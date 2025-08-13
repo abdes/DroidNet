@@ -80,9 +80,9 @@ Tasks:
 * [x] Define/Finalize `SceneConstants` (matrices, camera position, frame index,
   time) in a shared header; expose `Renderer::SetSceneConstants(const
   SceneConstants&)` (stores & marks dirty before Execute).
-* [ ] Define minimal `MaterialConstants` struct &
-  `Renderer::SetMaterialConstants(const MaterialConstants&)` (optional;
-  ShaderPass tolerates absence).
+* [x] Define minimal `MaterialConstants` struct &
+  `Renderer::SetMaterialConstants(const MaterialConstants&)` (optional in API;
+  ShaderPass now consumes when provided; example sets it each frame).
 * [ ] Centralize bindless DrawResourceIndices (vertex/index/is_indexed) in
   Renderer; expose read-only accessor (example stops writing its own upload
   code).
@@ -360,3 +360,5 @@ Revision History:
 * Added Phase 6 DrawPacket refactor (retained; moved after extraction) –
   2025-08-13 (original concept preserved).
 * Initial plan (pre-reorg) captured earlier baseline roadmap – 2025-08-13.
+* Marked Phase 1 MaterialConstants task complete; implemented Renderer-managed
+  material snapshot & example migration – 2025-08-13.

@@ -38,7 +38,7 @@ cbuffer SceneConstants : register(b1) {
     float3 camera_position;
     float time_seconds;
     uint frame_index;
-    uint3 _pad;
+    uint _reserved[3];
 }
 
 // Material constants buffer (matches C++ MaterialConstants struct layout)
@@ -54,8 +54,8 @@ cbuffer MaterialConstants : register(b2) {
     uint roughness_texture_index;
     uint ambient_occlusion_texture_index;
     uint flags;                             // Material flags
-    float _mat_pad0;                        // Padding for alignment
-    float _mat_pad1;                        // Padding for alignment
+    uint _pad0;                             // Padding for alignment
+    uint _pad1;                             // Padding for alignment
 }
 
 // Access to the bindless descriptor heap

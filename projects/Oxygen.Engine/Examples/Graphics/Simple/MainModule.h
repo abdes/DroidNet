@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/SceneConstants.h>
@@ -63,23 +64,8 @@ private:
   // pending later phase)
   oxygen::engine::SceneConstants scene_constants_ {};
 
-  // Material constants structure matching shader layout
-  struct MaterialConstants {
-    glm::vec4 base_color { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback color
-    float metalness { 0.0f }; // Metalness scalar
-    float roughness { 0.8f }; // Roughness scalar
-    float normal_scale { 1.0f }; // Normal map scale
-    float ambient_occlusion { 1.0f }; // AO scalar
-    // Texture indices (bindless)
-    uint32_t base_color_texture_index { 0 };
-    uint32_t normal_texture_index { 0 };
-    uint32_t metallic_texture_index { 0 };
-    uint32_t roughness_texture_index { 0 };
-    uint32_t ambient_occlusion_texture_index { 0 };
-    uint32_t flags { 0 }; // Material flags
-    float _pad0 { 0.0f }; // Padding for alignment
-    float _pad1 { 0.0f }; // Padding for alignment
-  };
+  // Use engine::MaterialConstants through renderer snapshot API (no local
+  // buffer management) Legacy local struct removed.
 
   // === Bindless resource indices tracking ===
   struct DrawResourceIndices {
@@ -114,14 +100,9 @@ private:
 
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
   std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
-  std::shared_ptr<graphics::Buffer> material_constants_buffer_;
-
-  // Helper methods for material support
-  auto EnsureMaterialConstantsBuffer() -> void;
-  auto UpdateMaterialConstantsBuffer(const MaterialConstants& constants) const
-    -> void;
+  // Helper method to translate asset to engine::MaterialConstants
   auto ExtractMaterialConstants(const data::MaterialAsset& material) const
-    -> MaterialConstants;
+    -> engine::MaterialConstants;
 
   // === Data-driven RenderItem/scene system members ===
   std::vector<engine::RenderItem> render_items_;

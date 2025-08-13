@@ -27,6 +27,7 @@ namespace oxygen::engine {
 
 struct RenderContext;
 struct SceneConstants;
+struct MaterialConstants;
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
@@ -99,6 +100,13 @@ public:
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
+  //! Sets per-material constants snapshot (optional each frame before execute).
+  //! If never called in a frame, material constants will not be bound.
+  OXGN_RNDR_API auto SetMaterialConstants(const MaterialConstants& constants)
+    -> void;
+  //! Returns last set material constants (undefined before first set).
+  OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
+
 private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
@@ -113,6 +121,11 @@ private:
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
   std::unique_ptr<SceneConstants> scene_constants_cpu_;
   bool scene_constants_dirty_ { false };
+
+  // Material constants management
+  std::shared_ptr<graphics::Buffer> material_constants_buffer_;
+  std::unique_ptr<MaterialConstants> material_constants_cpu_;
+  bool material_constants_dirty_ { false };
 };
 
 } // namespace oxygen::engine
