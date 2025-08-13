@@ -83,7 +83,7 @@ Tasks:
 * [x] Define minimal `MaterialConstants` struct &
   `Renderer::SetMaterialConstants(const MaterialConstants&)` (optional in API;
   ShaderPass now consumes when provided; example sets it each frame).
-* [ ] Centralize bindless DrawResourceIndices (vertex/index/is_indexed) in
+* [x] Centralize bindless DrawResourceIndices (vertex/index/is_indexed) in
   Renderer; expose read-only accessor (example stops writing its own upload
   code).
 * [ ] Implement internal dirty tracking & upload just before graph execution.
@@ -99,7 +99,6 @@ Tasks:
 Deliverable: Example sets camera/world matrices via Renderer API only; no direct
 buffer mapping for scene/material/indices.
 
----
 
 ## Phase 2 – Mesh Resource & Bindless Abstraction (Descriptor Detachment)
 
@@ -127,7 +126,6 @@ Tasks:
 
 Deliverable: Example no longer manipulates descriptor handles directly.
 
----
 
 ## Phase 3 – RenderItem Validation & Container Introduction
 
@@ -151,7 +149,6 @@ Tasks:
 Deliverable: Example delegates validation & computed property updates; manual
 vector removed.
 
----
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
@@ -175,7 +172,6 @@ Tasks:
 Deliverable: Example no longer manually creates a cube per frame; uses scene
 extraction.
 
----
 
 ## Phase 5 – Light Culling Pass (Stub → Minimal Functional)
 
@@ -197,7 +193,6 @@ Stage B – Minimal Functional:
 * [ ] Integrate buffers into RenderContext (future per-item light influence
   deferred [d]).
 
----
 
 ## Phase 6 – DrawPacket Introduction & Opaque Submission Refactor
 
@@ -221,7 +216,6 @@ Tasks:
 * [ ] Docs: render_items.md (finalization), implementation_plan.md references
   updated, performance note (packet build vs direct submission).
 
----
 
 ## Phase 7 – Transparent Pass (Basic Sorting)
 
@@ -238,7 +232,6 @@ Tasks:
 
 Deferred: OIT techniques.
 
----
 
 ## Phase 8 – Post Process Pass (Tone Map Stub)
 
@@ -255,7 +248,6 @@ Tasks:
 
 Deferred: Bloom, HDR exposure, FX chain.
 
----
 
 ## Phase 9 – Resource Lifetime & Memory Optimizations
 
@@ -273,7 +265,6 @@ Tasks:
 
 Deferred: Actual aliasing implementation (Phase 10 if complexity warrants).
 
----
 
 ## Phase 10 – Visibility & Performance Enhancements
 
@@ -292,7 +283,6 @@ Tasks:
 
 Deferred: Occlusion culling (software depth buffer) / GPU queries.
 
----
 
 ## Phase 11 – Advanced Light Culling (GPU Compute)
 
@@ -309,7 +299,6 @@ Tasks:
 
 Deferred: Temporal light list reuse.
 
----
 
 ## Phase 12 – Quality / Hardening
 
@@ -331,7 +320,6 @@ Tasks:
 * [ ] Validation: Assert `UpdateComputedProperties` invoked before render graph
   (debug build).
 
----
 
 ## Deferred / Explicitly Out of Scope (Reassess Later)
 
@@ -341,7 +329,6 @@ Tasks:
   blended, etc.).
 * Ray tracing integration.
 
----
 
 ## Maintenance Checklist (Per Merge)
 
@@ -352,7 +339,6 @@ Tasks:
 * If example migration checkpoint achieved, remove corresponding legacy code
   path in example and update this file.
 
----
 Revision History:
 
 * Reorganized phases for fast example migration (added Phases 1–4 migration
@@ -362,3 +348,6 @@ Revision History:
 * Initial plan (pre-reorg) captured earlier baseline roadmap – 2025-08-13.
 * Marked Phase 1 MaterialConstants task complete; implemented Renderer-managed
   material snapshot & example migration – 2025-08-13.
+* Removed brittle invariant that DrawResourceIndices occupy heap slot 0; slot
+  propagated via `SceneConstants.draw_resource_indices_slot`.
+  path in example and update this file.

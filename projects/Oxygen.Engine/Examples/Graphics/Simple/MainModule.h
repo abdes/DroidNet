@@ -67,18 +67,6 @@ private:
   // Use engine::MaterialConstants through renderer snapshot API (no local
   // buffer management) Legacy local struct removed.
 
-  // === Bindless resource indices tracking ===
-  struct DrawResourceIndices {
-    uint32_t vertex_buffer_index;
-    uint32_t index_buffer_index;
-    uint32_t is_indexed; // 1 for indexed meshes, 0 for non-indexed meshes
-  };
-  DrawResourceIndices last_uploaded_indices_ {};
-  bool indices_dirty_ = true;
-
-  void SetDrawResourceIndices(const DrawResourceIndices& new_indices);
-  void UploadIndicesIfNeeded();
-
   auto SetupCommandQueues() const -> void;
   auto SetupMainWindow() -> void;
   auto SetupSurface() -> void;
@@ -99,7 +87,7 @@ private:
   engine::RenderContext context_ {};
 
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
-  std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
+  // Removed: bindless indices buffer now managed by Renderer.
   // Helper method to translate asset to engine::MaterialConstants
   auto ExtractMaterialConstants(const data::MaterialAsset& material) const
     -> engine::MaterialConstants;
@@ -108,14 +96,14 @@ private:
   std::vector<engine::RenderItem> render_items_;
 
   co::Nursery* nursery_ { nullptr };
-  auto EnsureBindlessIndexingBuffer() -> void;
+  // Removed: EnsureBindlessIndexingBuffer (Renderer now owns indices upload).
   auto EnsureVertexBufferSrv() -> void;
   auto EnsureIndexBufferSrv() -> void;
   auto EnsureMeshDrawResources() -> void;
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
   uint32_t index_srv_shader_visible_index_ { 2 };
-  bool recreate_indices_cbv_ { true };
+  bool recreate_indices_cbv_ { false }; // legacy flag retired
   bool vertex_srv_created_ { false };
   bool index_srv_created_ { false };
 };
