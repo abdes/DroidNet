@@ -36,7 +36,9 @@ m_gtest_program(
   Loaders
   SOURCES
     "AssetHeaderLoader_test.cpp"
-    "AssetLoader_test.cpp"
+    "AssetLoader_basic_test.cpp"
+    "AssetLoader_deps_test.cpp"
+    "AssetLoader_loading_test.cpp"
     "AssetLoader_test.h"
     "BufferLoader_test.cpp"
     "MaterialLoader_test.cpp"

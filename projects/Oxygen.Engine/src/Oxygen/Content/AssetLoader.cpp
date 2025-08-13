@@ -43,14 +43,17 @@ inline auto GetResourceTypeIdByIndex(std::size_t type_index)
 //=== Sanity Checking Helper =================================================//
 
 namespace {
-auto SanityCheckResourceEviction(const uint64_t key_hash, uint64_t& cacche_key,
-  oxygen::TypeId& type_id) -> bool
+// Helper validates eviction callback arguments. Parameter ordering chosen to
+// minimize misuse. expected_key_hash: hash originally computed for resource
+// actual_key_hash: hash received from eviction callback
+// type_id: type id reference for validation
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
+  uint64_t& actual_key_hash, oxygen::TypeId& type_id) -> bool
 {
-  CHECK_EQ_F(key_hash, cacche_key);
-  // Get the resource type index from the key
-  oxygen::content::internal::InternalResourceKey internal_key(cacche_key);
+  CHECK_EQ_F(expected_key_hash, actual_key_hash);
+  oxygen::content::internal::InternalResourceKey internal_key(actual_key_hash);
   const uint16_t resource_type_index = internal_key.GetResourceTypeIndex();
-  // Get the class type id for the resource type
   const auto class_type_id = GetResourceTypeIdByIndex(resource_type_index);
   CHECK_EQ_F(type_id, class_type_id);
   return true;
@@ -64,6 +67,8 @@ AssetLoader::AssetLoader()
   using serio::FileStream;
 
   LOG_SCOPE_FUNCTION(INFO);
+
+  owning_thread_id_ = std::this_thread::get_id();
 
   // Register asset loaders
   RegisterLoader(loaders::LoadGeometryAsset, loaders::UnloadGeometryAsset);
@@ -124,15 +129,25 @@ auto AssetLoader::AddTypeErasedUnloader(const TypeId type_id,
 auto AssetLoader::AddAssetDependency(
   const data::AssetKey& dependent, const data::AssetKey& dependency) -> void
 {
+  AssertOwningThread();
   LOG_SCOPE_F(2, "Add Asset Dependency");
   LOG_F(2, "dependent: {} -> dependency: {}",
     nostd::to_string(dependent).c_str(), nostd::to_string(dependency).c_str());
 
-  // Add forward dependency
-  asset_dependencies_[dependent].insert(dependency);
+  // Cycle detection: adding edge dependent -> dependency must not create a path
+  // dependency -> ... -> dependent (checked via DetectCycle).
+  if (DetectCycle(dependency, dependent)) {
+    LOG_F(ERROR, "Rejecting asset dependency that introduces a cycle: {} -> {}",
+      nostd::to_string(dependent).c_str(),
+      nostd::to_string(dependency).c_str());
+#if !defined(NDEBUG)
+    DCHECK_F(false, "Cycle detected in asset dependency graph");
+#endif
+    return; // Do not insert
+  }
 
-  // Add reverse dependency for reference counting
-  reverse_asset_dependencies_[dependency].insert(dependent);
+  // Add forward dependency only (reference counting handled by cache Touch)
+  asset_dependencies_[dependent].insert(dependency);
 
   // Touch the dependency asset in the cache to increment its reference count
   content_cache_.Touch(HashAssetKey(dependency));
@@ -141,18 +156,17 @@ auto AssetLoader::AddAssetDependency(
 auto AssetLoader::AddResourceDependency(
   const data::AssetKey& dependent, ResourceKey resource_key) -> void
 {
+  AssertOwningThread();
   LOG_SCOPE_F(2, "Add Resource Dependency");
 
   // Decode ResourceKey for logging
+  AssertOwningThread();
   internal::InternalResourceKey internal_key(resource_key);
   LOG_F(2, "dependent: {} -> resource: {}", nostd::to_string(dependent).c_str(),
     nostd::to_string(internal_key).c_str());
 
-  // Add forward dependency
+  // Add forward dependency only (reference counting handled by cache Touch)
   resource_dependencies_[dependent].insert(resource_key);
-
-  // Add reverse dependency for reference counting
-  reverse_resource_dependencies_[resource_key].insert(dependent);
 
   // Touch the dependency resource in the cache to increment its reference count
   content_cache_.Touch(resource_key);
@@ -161,6 +175,7 @@ auto AssetLoader::AddResourceDependency(
 //=== Asset Loading Implementations ==========================================//
 
 // Common template implementation for asset loading
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 auto AssetLoader::InvokeAssetLoaderImpl(
   std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
   AssetLoader& loader, const PakFile& pak,
@@ -206,10 +221,9 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
           // Cache the loaded asset
           content_cache_.Store(hash_key, typed);
           return typed;
-        } else {
-          LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
-            T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
         }
+        LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
+          T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
       }
       return nullptr;
     }
@@ -219,6 +233,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
 
 auto AssetLoader::ReleaseAsset(const data::AssetKey& key, bool offline) -> bool
 {
+  AssertOwningThread();
   // Recursively release (check in) the asset and all its dependencies.
   ReleaseAssetTree(key, offline);
   // Return true if the asset is no longer present in the cache
@@ -228,10 +243,35 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key, bool offline) -> bool
 auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
   -> void
 {
-  auto guard
+  AssertOwningThread();
+
+#if !defined(NDEBUG)
+  static thread_local std::unordered_set<data::AssetKey> release_visit_set;
+  const bool inserted = release_visit_set.emplace(key).second;
+  DCHECK_F(inserted, "Cycle encountered during ReleaseAssetTree recursion");
+  class VisitGuard final {
+  public:
+    VisitGuard(
+      std::unordered_set<data::AssetKey>& set, data::AssetKey k) noexcept
+      : set_(set)
+      , key_(std::move(k))
+    {
+    }
+    ~VisitGuard() { set_.erase(key_); }
+    VisitGuard(const VisitGuard&) = delete;
+    VisitGuard& operator=(const VisitGuard&) = delete;
+
+  private:
+    std::unordered_set<data::AssetKey>& set_;
+    data::AssetKey key_;
+  } visit_guard(release_visit_set, key);
+#endif
+
+  auto eviction_guard
     = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
                                   std::shared_ptr<void> value, TypeId type_id) {
         DCHECK_EQ_F(HashAssetKey(key), cache_key);
+        LOG_F(2, "Evict asset: key_hash={} type_id={}", cache_key, type_id);
         UnloadObject(type_id, value, offline);
       });
 
@@ -260,7 +300,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
 // Common implementation for resource loading
 template <PakResource T>
 auto AssetLoader::InvokeResourceLoaderImpl(
-  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+  const std::function<std::shared_ptr<void>(LoaderContext)>& loader_fn,
   AssetLoader& loader, const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline)
   -> std::shared_ptr<void>
@@ -326,6 +366,7 @@ auto AssetLoader::InvokeTextureResourceLoader(
   return InvokeResourceLoaderImpl<data::TextureResource>(
     loader_fn, loader, pak, resource_index, offline);
 }
+
 template <PakResource T>
 auto AssetLoader::LoadResource(const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
@@ -368,6 +409,7 @@ void oxygen::content::AssetLoader::UnloadObject(
 
 auto AssetLoader::ReleaseResource(const ResourceKey key, bool offline) -> bool
 {
+  AssertOwningThread();
   const auto key_hash = HashResourceKey(key);
 
   // The resource should always be checked in on release. Whether it remains in
@@ -376,10 +418,11 @@ auto AssetLoader::ReleaseResource(const ResourceKey key, bool offline) -> bool
     = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
                                   std::shared_ptr<void> value, TypeId type_id) {
         DCHECK_F(SanityCheckResourceEviction(key_hash, cache_key, type_id));
+        LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
         UnloadObject(type_id, value, offline);
       });
   content_cache_.CheckIn(HashResourceKey(key));
-  return (content_cache_.Contains(key_hash)) ? false : true;
+  return !content_cache_.Contains(key_hash);
 }
 
 auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
@@ -387,15 +430,47 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
   // Normalize the path of the input pak
   const auto& pak_path = std::filesystem::weakly_canonical(pak.FilePath());
 
-  for (uint16_t i = 0U; i < paks_.size(); ++i) {
+  for (size_t i = 0; i < paks_.size(); ++i) {
     // Compare normalized paths
     if (std::filesystem::weakly_canonical(paks_[i]->FilePath()) == pak_path) {
-      return i;
+      return static_cast<uint16_t>(i);
     }
   }
 
   LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
   throw std::runtime_error("PAK file not found in AssetLoader collection");
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+auto AssetLoader::DetectCycle(
+  const data::AssetKey& start, const data::AssetKey& target) -> bool
+{
+#if !defined(NDEBUG)
+  // DFS stack
+  std::vector<data::AssetKey> stack;
+  std::unordered_set<data::AssetKey> visited;
+  stack.push_back(start);
+  while (!stack.empty()) {
+    auto current = stack.back();
+    stack.pop_back();
+    if (current == target) {
+      return true; // path start -> ... -> target exists
+    }
+    if (!visited.insert(current).second) {
+      continue;
+    }
+    auto it = asset_dependencies_.find(current);
+    if (it != asset_dependencies_.end()) {
+      for (const auto& dep : it->second) {
+        stack.push_back(dep);
+      }
+    }
+  }
+#else
+  (void)start;
+  (void)target;
+#endif
+  return false;
 }
 
 //=== Explicit Template Instantiations =======================================//

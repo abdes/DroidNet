@@ -1,203 +1,152 @@
-# Asset Dependency Validation and Caching Design
+# Asset Dependency & Caching Design (Forward-Only Model)
 
-> For canonical feature status see `implementation_plan.md#detailed-feature-matrix`. This document describes the conceptual model (some safeguards are still partial — notably dependent-protection during unload).
+> Canonical feature status: see
+> `implementation_plan.md#detailed-feature-matrix`. This doc captures the
+> forward-only dependency + caching model actually adopted in Phase 1 and the
+> planned evolution toward the async CPU pipeline (Phase 2).
+>
+> GPU upload / residency is explicitly out of scope for Content. Assets reach a
+> terminal Content state of `DecodedCPUReady`; GPU materialization & residency
+> are Renderer responsibilities.
 
 ## Core Philosophy
 
-**Unified Approach**: Dependency tracking and asset caching are the same problem. Reference counting IS the dependency tracking mechanism. One class handles both concerns rather than artificial separation.
+**Unified Approach**: Dependency tracking and asset caching are a single
+concern: reference counting drives safe lifetime. We deliberately removed
+reverse dependency maps to reduce memory usage and complexity. A forward graph
+(each asset stores its direct dependencies) plus per-asset reference counts and
+cycle detection supply required safety.
 
 ## Design Principles
 
-1. **Reference Counting**: Track usage counts for shared assets (extends current dependency registration)
-2. **Automatic Cascading**: Both loading and unloading cascade through dependency graphs automatically
-3. **Safe Unloading**: Target behavior (reference counts exist; full dependent-prevention logic still being completed)
-4. **In-Order Processing**: Dependencies loaded/unloaded in correct topological order
+1. **Reference Counting**: Track usage counts for shared assets (extends current
+   dependency registration)
+2. **Automatic Cascading**: Both loading and unloading cascade through
+   dependency graphs automatically
+3. **Safe Unloading**: Implemented via ref counts + forward dependency ordering
+  (diagnostic ordering tests pending)
+4. **Cycle Rejection**: Cycle detection prevents invalid graphs (introduced in
+  Phase 1)
+5. **Deterministic Ordering**: Load/unload proceed in forward topological order
+  (depth-first) with recursion guard
 
 ## Implementation Overview
 
-**Extends Current AssetLoader**: Add caching and reference counting to existing LoaderContext system.
+High-level flow (synchronous path; async wrapper arrives Phase 2):
 
-```cpp
-class AssetLoader {
-  // NEW: Main cache interface
-  template<typename T> std::shared_ptr<T> Load(AssetKey key);
-  void Release(AssetKey key);
+1. Request comes in via `AssetLoader::LoadAsset<T>(key)`.
+2. Cache lookup: hit → ref_count++ → return handle.
+3. Miss: locate PAK entry & dispatch registered loader (see `AssetLoader.h`).
+4. Loader decodes asset, registering forward dependencies as they are
+   discovered.
+5. Asset inserted with its dependency span and ref_count = 1.
+6. Release path decrements ref_count; on zero triggers unloader then cascades
+   through recorded dependencies.
 
-  // EXISTING: Dependency registration (already implemented via LoaderContext)
-  void AddAssetDependency(AssetKey dependent, AssetKey dependency);      // Asset→Asset
-  void AddResourceDependency(AssetKey dependent, ResourceIndexT dependency); // Asset→Resource
-
-  // NEW: Unloader function registration - specialized cleanup per type
-  template<typename T> void RegisterUnloader(UnLoadFunction<T> unloader_fn);
-
-private:
-  // NEW: Asset cache implementation
-  struct AssetEntry {
-    std::shared_ptr<void> asset;
-    int ref_count = 0;
-  };
-
-  // NEW: Cache state
-  mutable std::mutex cache_mutex_;
-  std::unordered_map<AssetKey, AssetEntry> asset_cache_;
-
-  // NEW: Dependency tracking (extends current registration)
-  std::unordered_map<AssetKey, std::unordered_set<AssetKey>> dependents_of_asset_;
-  std::unordered_map<ResourceIndexT, std::unordered_set<AssetKey>> dependents_of_resource_;
-
-  // EXISTING: Current AssetLoader state
-  std::vector<std::unique_ptr<PakFile>> paks_;
-  std::unordered_map<TypeId, LoaderFnErased> loaders_;
-  // (existing LoaderContext infrastructure already works)
-};
-
-// NEW: Unloader function signatures
-template<typename T>
-using UnLoadFunction = std::function<void(std::shared_ptr<T>, AssetLoader&)>;
-```
+The system is intentionally forward-only (no reverse maps); safety comes from
+ref counts + cycle detection at registration time. GPU materialization is
+explicitly deferred to the Renderer.
 
 ### Dependency Types
 
 **Asset → Asset Dependencies** (`AssetKey → AssetKey`):
 
-- GeometryAsset depends on MaterialAsset
-- **Current**: Registration via `AddAssetDependency()` in LoaderContext ✅
-- **Partial**: Reference counting present; strict unload validation (preventing removal when still depended on) incomplete 🔄
+- Example: GeometryAsset depends on MaterialAsset
+- Registration: `AddAssetDependency()` (forward-only) ✅
+- Unload safety: enforced by child holding a ref (refcounts + cycle detection)
+  🔄 (ordering tests pending)
 
 **Asset → Resource Dependencies** (`AssetKey → ResourceIndexT`):
 
-- MaterialAsset depends on TextureResource; GeometryAsset depends on BufferResource
-- **Current**: Registration via `AddResourceDependency()` in LoaderContext ✅
-- **Partial**: Reverse map & validation on unload WIP 🔄
+- Example: MaterialAsset → TextureResource; GeometryAsset → BufferResource
+- Registration: `AddResourceDependency()` ✅ (forward-only)
+- Release policy: when asset ref_count hits zero and unloader runs, it
+  decrements resource tables / releases indices.
 
-**Note**: Resources never depend on Assets (resources are lower-level primitives)
+**Note**: Resources never depend on Assets. They are lower-level primitives
+referenced by index (bindless-friendly). Reverse dependency maps for resources
+were intentionally omitted; diagnostics rely on asset-level references.
 
 ## Key Scenarios
 
-### Loading with Automatic Caching
+### Loading with Automatic Caching (Synchronous Path)
 
-```cpp
-// User request
-auto geometry = loader.Load<GeometryAsset>(geometry_key);
+Flow summary:
 
-// Proposed implementation (builds on current LoaderContext):
-// 1. Check cache: if cached, increment ref_count and return
-// 2. If not cached: Use existing LoaderContext to load asset
-// 3. Dependencies already registered during loading (current implementation)
-// 4. Store in cache with ref_count = 1
-// 5. Return shared_ptr to asset
-```
+1. Cache hit → increment ref_count → return.
+2. Cache miss → locate PAK entry → decode via registered loader.
+3. Loader registers forward dependencies.
+4. Insert asset with ref_count = 1 + dependency span.
+5. Return shared handle.
 
-### Safe Unloading with Dependency Validation
+### Safe Unloading with Dependency Validation (Forward-Only)
 
-```cpp
-// User releases asset
-loader.Release(geometry_key);
+Flow summary:
 
-// Proposed cascade cleanup:
-// 1. geometry.ref_count-- (may become 0)
-// 2. NEW: Check HasDependents(geometry_key) - validate safe to unload
-// 3. NEW: Call specialized unloader for cleanup
-// 4. NEW: Cascade release dependencies automatically
-// 5. Continue until no more cleanup possible
-```
+1. Decrement ref_count; stop if > 0.
+2. Invoke unloader (releases resource refs first).
+3. Recursively ReleaseAsset on each recorded dependency (recursion guard +
+   cycle-proof ordering).
+4. Erase asset entry.
 
-### Shared Asset Protection (NEW Capability)
+### Shared Asset Protection
 
-```cpp
-// Multiple assets reference same material
-auto geo1 = loader.Load<GeometryAsset>(geo1_key);  // material.ref_count = 1
-auto geo2 = loader.Load<GeometryAsset>(geo2_key);  // material.ref_count = 2
+Example timeline: load geometry A (material M=1), load geometry B (M=2), release
+A (M=1), release B (M=0 → unloader triggers cascade).
 
-loader.Release(geo1_key);  // material.ref_count = 1 (protected!)
-loader.Release(geo2_key);  // material.ref_count = 0 (now safe to cleanup)
-```
+## Critical Implementation Details (Summarized)
 
-## Critical Implementation Details
+StoreAsset: insert-or-increment; attach forward dependency span.
 
-### Core Cache Operations (TO BE IMPLEMENTED)
+ReleaseAsset: decrement; on zero → unloader (type-dispatched) → release forward
+dependencies depth-first → erase entry.
 
-```cpp
-// Store asset with reference counting
-template<typename T>
-void StoreAsset(const AssetKey& key, std::shared_ptr<T> asset) {
-  std::lock_guard lock(cache_mutex_);
-  auto it = asset_cache_.find(key);
-  if (it != asset_cache_.end()) {
-    it->second.ref_count++;  // Already cached - increment
-    return;
-  }
-  asset_cache_[key] = AssetEntry{ .asset = std::static_pointer_cast<void>(asset), .ref_count = 1 };
-}
+### Dependency Validation & Cycle Detection
 
-// Release with cascading cleanup
-void Release(const AssetKey& key) {
-  std::lock_guard lock(cache_mutex_);
-  auto it = asset_cache_.find(key);
-  if (it == asset_cache_.end()) return;
+During dependency registration, a depth-first walk over the forward graph is
+performed; encountering a node already on the active path aborts the load. Error
+reports include the partial path (extended context logging is a backlog item).
+No reverse maps are maintained.
 
-  it->second.ref_count--;
-  if (it->second.ref_count == 0 && !HasDependents(key)) {
-    CallUnloaderFor(key, it->second.asset);  // NEW: Specialized cleanup
-    asset_cache_.erase(it);
-    CascadeReleaseDependencies(key);         // NEW: Automatic cascade
-  }
-}
-```
+## State Model
 
-### Dependency Validation (TO BE IMPLEMENTED)
+Loading State (Content module):
 
-```cpp
-// Check if any assets depend on the given asset key
-bool HasDependents(const AssetKey& key) const {
-  auto it = dependents_of_asset_.find(key);
-  return it != dependents_of_asset_.end() && !it->second.empty();
-}
+1. Loading (IO + decode executing)
+2. DecodedCPUReady (asset in cache; dependencies also ready)
 
-// Check if any assets depend on the given resource
-bool HasResourceDependents(ResourceIndexT resource_id) const {
-  auto it = dependents_of_resource_.find(resource_id);
-  return it != dependents_of_resource_.end() && !it->second.empty();
-}
-```
-
-### Integration with Current LoaderContext
-
-**No Changes Needed**: Current LoaderContext and dependency registration works as-is.
-
-**Extension Point**: AssetLoader methods that currently call loaders directly will be extended to check cache first, then call existing loader functions if needed.
+GPU materialization/residency: external (Renderer). Content does not block on,
+or track, GPU presence.
 
 ## Design Advantages
 
-1. **Builds on Existing Work**: Extends current LoaderContext system without breaking changes
+1. **Builds on Existing Work**: Extends current LoaderContext system without
+   breaking changes
 2. **Safety**: Impossible to unload something still in use (new capability)
-3. **Automatic**: Cascading load/unload reduces manual management (new capability)
-4. **Performance**: Shared assets cached, duplicate loading eliminated (new capability)
+3. **Automatic**: Cascading load/unload reduces manual management (new
+   capability)
+4. **Performance**: Shared assets cached, duplicate loading eliminated (new
+   capability)
 5. **Debugging**: Clear dependency graphs for asset analysis tools
 
 ## Design Limitations
 
-1. **Manual Registration**: Loaders must explicitly register dependencies (already implemented, works well)
-2. **No Circular Detection**: Circular dependencies not detected (should be avoided in asset design)
-3. **No Priority**: No priority-based eviction (LRU, size-based, etc.)
-4. **No Async**: Current design is synchronous (async version needs additional design)
+1. **Manual Registration**: Loaders must explicitly register dependencies
+   (already implemented, works well)
+2. **Cycle Detection Implemented**: Cycles rejected early (diagnostics can be
+  improved with better error context)
+3. **Synchronous Only (Phase 1)**: Async CPU pipeline coming in Phase 2 (see
+  below)
 
-## Implementation Priority
+## Future: Async CPU Pipeline (Phase 2 Preview)
 
-### Phase 1: Basic Asset Caching
+Planned adjustments (see implementation plan Phase 2):
 
-1. Add `asset_cache_` to AssetLoader
-2. Implement `Load<T>()` and `Release()` methods
-3. Add reference counting (without dependency validation)
+- `task<AssetHandle>`-returning `LoadAsync` ending at DecodedCPUReady
+- In-flight deduplication map for concurrent loads
+- Cancellation tokens passed through loader context
+- Non-blocking interface; initial file IO may remain blocking internally until
+  async backend swapped in
+- Bridge descriptor (`GpuMaterializationInfo`) populated but not consumed here
 
-### Phase 2: Safe Unloading
-
-1. Implement `HasDependents()` validation
-2. Add dependency reversal maps (dependents_of_asset_, dependents_of_resource_)
-3. Implement cascading release
-
-### Phase 3: Specialized Unloaders
-
-1. Add unloader function registration
-2. Implement GPU resource cleanup integration
-3. Add memory budget tracking
+Out of scope: GPU upload queues, residency / LRU, GPU memory budgets. design)

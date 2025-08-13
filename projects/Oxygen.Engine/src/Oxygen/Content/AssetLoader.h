@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -346,6 +347,15 @@ public:
       = [unload_fn = std::forward<UF>(unload_fn)](
           std::shared_ptr<void> asset, AssetLoader& loader, bool offline) {
           auto typed = std::static_pointer_cast<T>(asset);
+          // Unloader Contract (Phase 1):
+          // - Invoked only when cache refcount reaches zero (object eviction).
+          // - Ordering: all resource dependencies released, asset dependencies
+          //   recursively released, then this unloader executes.
+          // - Must not trigger new asset/resource loads; doing so risks
+          //   re-entrancy (future debug guard may enforce).
+          // - Should perform minimal CPU work; defer heavy operations to async
+          //   mechanisms in later phases.
+          // - Exceptions must not escape (log and swallow if any occur).
           unload_fn(typed, loader, offline);
         };
     AddTypeErasedUnloader(type_id, type_name, std::move(unloader_erased));
@@ -389,16 +399,6 @@ private:
   // Asset-to-resource dependencies: dependent_asset -> set of resource_keys
   std::unordered_map<data::AssetKey, std::unordered_set<ResourceKey>>
     resource_dependencies_;
-
-  // Reverse mapping: dependency_asset -> set of dependent_assets (for reference
-  // counting)
-  std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>
-    reverse_asset_dependencies_;
-
-  // Reverse mapping: resource_key -> set of dependent_assets (for reference
-  // counting)
-  std::unordered_map<ResourceKey, std::unordered_set<data::AssetKey>>
-    reverse_resource_dependencies_;
 
   //! Helper method for the recursive descent of asset dependencies when
   //! releasing assets.
@@ -479,7 +479,7 @@ private:
 
   template <PakResource T>
   static auto InvokeResourceLoaderImpl(
-    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
+    const std::function<std::shared_ptr<void>(LoaderContext)>& loader_fn,
     AssetLoader& loader, const PakFile& pak,
     data::pak::ResourceIndexT resource_index, bool offline)
     -> std::shared_ptr<void>;
@@ -507,6 +507,41 @@ private:
 
   OXGN_CNTT_API auto AddTypeErasedUnloader(TypeId type_id,
     std::string_view type_name, UnloadFnErased&& unloader) -> void;
+
+  // Thread ownership for single-thread phase 1 policy.
+  std::thread::id owning_thread_id_ {};
+  inline void AssertOwningThread() const
+  {
+#if !defined(NDEBUG)
+    DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
+      "AssetLoader used from non-owning thread in single-threaded Phase 1");
+#endif
+  }
+
+  auto DetectCycle(const data::AssetKey& start, const data::AssetKey& target)
+    -> bool; // returns true if adding edge start->target introduces cycle
+
+  // Debug visited guard for ReleaseAssetTree recursion protection.
+  struct ReleaseVisitGuard;
+
+public:
+  // Debug-only dependent enumeration helper (implemented via forward scan).
+  // Provided as public debug API below when OXYGEN_DEBUG is defined.
+
+#if !defined(NDEBUG)
+  // Enumerate direct dependents (debug only) by scanning forward map.
+  template <typename Fn>
+  auto ForEachDependent(const data::AssetKey& dependency, Fn&& fn) const -> void
+  {
+    for (const auto& [dependent, deps] : asset_dependencies_) {
+      if (deps.contains(dependency)) {
+        fn(dependent);
+      }
+    }
+  }
+#endif
+
+private:
 };
 
 //=== Explicit Template Declarations for DLL Export ==========================//

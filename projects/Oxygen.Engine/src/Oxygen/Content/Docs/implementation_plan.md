@@ -2,7 +2,7 @@
 
 # Content Subsystem Implementation Plan
 
-**Last updated:** August 2025
+**Last updated:** 13 Aug 2025
 
 ## Quick Links
 
@@ -18,11 +18,24 @@
 
 ## Current Status Summary
 
-Synchronous loading, caching, and dependency registration are implemented. Safe unloading is partial (ref counts + dependency registration exist; strict protection for depended-on assets still WIP). Async pipeline, streaming, and advanced eviction/hot-reload remain planned.
+Synchronous loading, caching, and forward-only dependency registration are
+implemented (see `AssetLoader.*`, `ResourceTable.h`, `PakFile.*`). Safe
+unloading protections (cycle rejection + recursion guard + single-thread policy)
+are in place; remaining work is completion of specific ordering diagnostics &
+tests (see missing tests list below). Async pipeline, streaming, residency
+management, and hot-reload are still pending design → implementation transition.
+
+No SceneAsset implementation exists yet; integration with the Scene subsystem
+will depend on establishing a `SceneAsset` descriptor + build tooling. Internal
+key separation (`InternalResourceKey.h`) is present for encapsulation of
+resource indices; future unification/clarification doc is needed.
 
 ---
 
 ## Detailed Feature Matrix
+
+Legend: ✅ Complete | 🔄 Partial/in-progress | ❌ Missing | 🧪 Prototype (code
+present but not production-ready)
 
 ### Core Infrastructure
 
@@ -42,11 +55,11 @@ Synchronous loading, caching, and dependency registration are implemented. Safe 
 | Loader Registration | ✅ Complete | Unified registration API |
 | Resource Caching | ✅ Complete | ResourceTable + ref counting |
 | Dependency Registration | ✅ Complete | Asset→Asset & Asset→Resource inline |
-| Safe Asset Unloading | 🔄 Partial | Need full dependent validation + cascade guarantees |
+| Safe Asset Unloading | 🔄 Partial | Core logic present; ordering tests & docs pending |
 | Asset Caching | ✅ Complete | Asset cache with ref counts |
 | Hot Reload | ❌ Missing | No invalidation or watcher |
 
-### Asynchronous System (Design Stage)
+### Asynchronous System (Design Stage → Early Prototype)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -100,90 +113,136 @@ Synchronous loading, caching, and dependency registration are implemented. Safe 
 
 ## Roadmap Phases
 
-### Phase 1 (Foundation) – Mostly Complete
+### Phase 1 (Foundation) – COMPLETE
 
-Focus: caching, dependency registration, reference counting, baseline loaders.
+Scope: Core caching, dependency registration, reference counting, baseline
+synchronous loaders, safe unloading protections.
 
-Remaining: strict dependent-protection on unload (finalize reverse maps &
-validation), clearer unloader contract docs.
+Outcome Summary:
 
-#### Safe Asset Unloading – Action Plan (Reverse Maps Removed)
+* Forward-only dependency tracking with cycle detection and recursion guard
+  implemented.
+* Reverse dependency maps removed (simpler, memory-stable design validated under
+  soak).
+* Single-thread confinement policy enforced (foundation phase) ahead of async
+  introduction.
+* Verbose eviction diagnostics available (log level gated).
+* All core infrastructure & asset loading matrix items (except Hot Reload) at ✅.
 
-Decision: Remove `reverse_asset_dependencies_` and
-`reverse_resource_dependencies_`. Lifetime safety is already enforced by
-`AnyCache` reference counts. Reverse maps add maintenance & memory cost without
-contributing to correctness.
+### Phase 2 (Async CPU Pipeline & Renderer Boundary)
 
-Rationale:
+Objective: Add asynchronous, non-blocking CPU-side asset acquisition ending at a
+"DecodedCPUReady" state (asset + dependencies decoded & cached) without
+performing any GPU uploads or assuming GPU residency. Establish a narrow,
+explicit boundary for later renderer-driven materialization.
 
-* Correctness: Eviction is already prevented while any checkout (direct or
-  dependency Touch) exists.
-* Simplicity: Fewer structures to mutate/prune; reduces risk of drift.
-* Memory: Avoids unbounded accumulation of never-pruned dependent sets.
-* Diagnostics: Future tooling will perform on-demand forward scans or expose
-  cache checkout counts; no need for constantly-updated reverse indices.
+Scope (Content module only):
 
-Execution Steps (Phase 1 – assumes full C++20 availability, no need to support
-pre-C++20 compilers):
+1. Coroutine task wrappers around current synchronous loaders (file IO +
+   decode).
+2. ThreadPool integration (`co_threadpool`) for decode / transcode / packing
+   work.
+3. Non-blocking async file read abstraction (initially still synchronous under
+  the hood; interface designed for future true async I/O swap-in).
+4. Dual API: `Load(const AssetKey&)` (legacy sync) layered atop `LoadAsync(const
+  AssetKey&, CancellationToken)`.
+5. Minimal cancellation primitive propagated through loader contexts; cancelled
+  operations guarantee no partial cache insertion.
+6. Consolidated deduplication: concurrent `LoadAsync` for same key coalesce to a
+  single in-flight task (winner populates cache; others await result).
+7. Explicit state enum introduced (e.g., `AssetLoadState::{Loading,
+  DecodedCPUReady}`) clarifying that GPU residency is external.
+8. Definition of a lightweight bridge descriptor (e.g.,
+  `GpuMaterializationInfo`) stored with decoded assets but not acted upon by
+  Content.
 
-1. Delete reverse map members from `AssetLoader.h` and their insertion lines in
-   `AddAssetDependency` / `AddResourceDependency`.
-2. Add `ForEachDependent(const AssetKey&, Fn)` (debug-only) that linearly scans
-   `asset_dependencies_` to enumerate direct dependents when needed (tests /
-   diagnostics).
-3. Implement cycle detection in `AddAssetDependency` (DFS over forward edges)
-   rejecting edges that introduce a cycle (log + assert in debug, no insertion).
-4. Add visited guard (debug-only) in `ReleaseAssetTree` asserting no re-entry.
-   Implementation detail: maintain a small `thread_local`
-   `flat_set`/`unordered_set` (cleared on outermost call) of active asset keys.
-   On entry: if key already present -> `DCHECK_F(false)` (cycle) and early
-   return in release builds to avoid infinite recursion. This is defensive;
-   primary prevention is compile-time cycle rejection in step 3. Use RAII helper
-   to insert/erase ensuring exception safety.
-5. Expand header docs to explicitly specify unload ordering: resources first,
-   then asset dependencies, then asset; unloader must not trigger new loads
-   (warn if it does in debug by checking cache checkout delta).
-6. Document and enforce single-threaded use for Phase 1 (store constructing
-   thread id; `DCHECK_F` on public mutating calls). Concurrency redesign
-   deferred to async phase.
-7. Verbose eviction diagnostics using existing logging levels (e.g. `LOG_F(2,
-   ...)`) inside eviction callback—no compile-time flags; rely on runtime log
-   verbosity configuration.
-8. Add tests (Phase 1 closure criteria):
+Out of Scope (moved to Renderer or future phases): GPU upload queue, staging
+buffer management, residency / LRU, GPU memory budgets, eviction policies.
 
-* CycleDetection_PreventsInsertion
-* CascadeRelease_SiblingSharedDependencyNotEvicted
-* ReleaseOrder_ResourcesBeforeAssets (instrument unload order)
-* DebugDependentEnumeration_Works (non-release build)
-* EvictionDiagnostics_CompileTimeGuarded (flag toggles logging)
+Deliverables & Acceptance:
 
-Acceptance (Safe Unloading COMPLETE): reverse maps removed; cycle detection +
-recursion guard active; unloader contract documented & verified; single-thread
-policy enforced; new tests green; no memory growth from stale dependents in
-stress test; verbose diagnostics emitted only when log level >=2.
+* API: `task<AssetHandle> LoadAsync(const AssetKey&, CancellationToken)` returns
+  once asset + dependencies reach DecodedCPUReady (no GPU blocking).
+* Cancellation test: cancel mid-file read → no cache entry, no leaked temp
+  buffers.
+* Deduplication test: N parallel `LoadAsync` for same key results in exactly one
+  decode execution (instrumented counter == 1).
+* Dependency await test: dependent asset `LoadAsync` suspends until all direct
+  dependencies DecodedCPUReady (not GPU resident).
+* Performance sanity: Bulk async load of geometry assets saturates ThreadPool
+  with main thread idle except at `co_await` suspend points.
+* Documentation: Updated glossary & comments to remove any implication that
+  Content ensures GPU residency.
+* Bridge descriptor unit test: verifies `GpuMaterializationInfo` populated with
+  expected format/usage metadata without invoking renderer code.
 
-### Phase 2 (Async Pipeline)
+### Phase 3 (Hot Reload, Streaming Metadata & Analytics)
 
-1. Introduce coroutine task wrappers around current sync loads.
-2. Integrate ThreadPool using `co_threadpool` for decode / packing.
-3. Implement GPU Upload Queue (thread + fence awaitable).
-4. Provide dual API (Sync fallback → Async core) for migration.
-5. Add minimal cancellation primitive (token passed through context).
+Objective: Add dynamic content invalidation, introduce CPU-side streaming /
+chunk metadata & prioritization signals (still independent of GPU residency),
+and provide analytical tooling for dependency & usage insights.
 
-### Phase 3 (Advanced Features)
+Scope:
 
-1. Hot Reload (file hash watch + invalidation queue).
-2. Streaming / Chunked & prioritized loads (distance / importance scoring).
-3. Memory Residency & Budgets (GPU heap usage + soft limits).
-4. Eviction policies (LRU + size + custom callbacks).
-5. Dependency Analyzer Tool (graph export, hotspot report).
+1. Hot Reload: file hash watcher → invalidation queue → safe unload & reload of
+   affected assets; dependency cascade (rebuild dependents to DecodedCPUReady).
+2. Chunk / Streaming Metadata: define per-asset chunk descriptors & partial load
+   table (e.g., mesh LOD segments, texture mip groups) stored in Content cache.
+3. Priority & Prefetch Hints: lightweight API (`SetAssetPriority`,
+   `PrefetchAsync`) that schedules background decode ahead of expected use (no
+   GPU action).
+4. Progressive/Partial Decode Hooks: optional staged decode phases (e.g., header
+   parse first → schedule heavy body decode) enabling fast placeholder data.
+5. Dependency Analyzer Tool: export graph (JSON + Graphviz) with reference
+   counts, shared dependency fan-out statistics.
+6. Observability: instrumentation counters (decode time, IO time, queue wait)
+   exposed via a Content diagnostics API.
 
-### Phase 4 (Quality & Observability)
+Out of Scope: Actual GPU memory budgets, GPU eviction, LRU of GPU resources
+(renderer phase).
 
-1. Performance benchmarks (cold load, warm cache, parallel scenario).
-2. Telemetry integration (per-stage timing, histogram).
-3. Diagnostic validation (assert no dangling dependencies on shutdown).
-4. Documentation automation (generate matrices from code annotations).
+Deliverables & Acceptance:
+
+* Hot reload test: modify underlying file → asset & dependents reach new hash
+  version; old handles safely replaced.
+* Prefetch test: calling `PrefetchAsync` on N assets triggers background decode
+  without blocking main thread.
+* Partial decode test: staged loader produces minimal placeholder then completes
+  full decode later (verified via timing / state).
+* Analyzer CLI produces JSON with nodes = assets, edges = dependencies;
+  validated by a unit/integration test snapshot.
+* Instrumentation: metrics accessible & unit tested for monotonicity / reset
+  behavior.
+
+### Phase 4 (Quality, Benchmarking & Automation)
+
+Objective: Harden the Content subsystem with comprehensive performance / memory
+metrics, diagnostic validation, and automated documentation to reduce drift.
+
+Scope:
+
+1. Performance benchmarks: cold load vs warm cache vs parallel burst; measure IO
+   latency, decode time, scheduling overhead.
+2. Memory diagnostics: peak decoded bytes, per-asset-type footprint,
+   fragmentation or slack (if applicable).
+3. Dependency integrity checks: shutdown assertions for no dangling dependencies
+   / leaked in-flight tasks.
+4. Telemetry & Histograms: expose structured event stream (load start/end,
+   decode phases, cancellation) plus percentile histograms.
+5. Automated documentation generation: scripts extract feature matrix & status
+   from annotated code / registry macros.
+6. Reliability tests: fuzz or randomized cancellation / interleaving to detect
+   race conditions.
+
+Acceptance:
+
+* Benchmark suite produces stable metrics; CI gate can compare against
+  thresholds.
+* Telemetry API consumed in a sample tool printing histogram percentiles.
+* Integrity test simulates random load/cancel sequences → zero leaks &
+  consistent ref counts.
+* Generated docs match manually maintained sections (diff-free) or report
+  discrepancies.
 
 ---
 
@@ -191,23 +250,32 @@ stress test; verbose diagnostics emitted only when log level >=2.
 
 | Item | Category | Notes | Priority |
 |------|----------|-------|----------|
-| Remove reverse maps | Safety | Delete unused reverse_* maps & insertions | High |
-| Cycle detection on add | Safety | Reject edges forming cycles | High |
-| Release recursion guard | Safety | Visited set / assert | High |
 | Unloader contract docs | Lifecycle | Specify ordering & constraints | High |
-| Thread safety policy assert | Concurrency | Enforce single-thread usage (Phase 1) | High |
 | Verbose eviction diagnostics | Observability | Runtime log-level controlled | Medium |
-| Debug dependent scan helper | Tooling | On-demand dependent enumeration (debug) | Medium |
 | Graph snapshot API | Tooling | Structured dependency export (post Phase 1) | Low |
 | Formal unloader function registration | Lifecycle | Per-type cleanup & GPU release | High |
-| UploadQueue prototype | Async | MVP with event completion | High |
 | Coroutine wrapper layer | Async | Transitional API around sync loaders | High |
+| Async file I/O abstraction | Async | Interface + stub impl (future OS async) | High |
+| In-flight deduplication map | Async | Single execution per key guarantee | High |
 | Hot reload invalidation graph | Tooling | Watch + recompute dependents | Medium |
-| Streaming prioritization heuristics | Streaming | Distance, importance, LOD gating | Medium |
-| Memory budget tracking | Memory | Soft & hard budget thresholds | Medium |
+| Streaming prioritization heuristics | Streaming | Priority & prefetch hints (no GPU) | Medium |
+| Chunk metadata schema | Streaming | Per-asset chunk & partial decode descriptors | High |
 | Dependency analyzer CLI | Tooling | Graphviz / JSON output | Medium |
 | Performance benchmark suite | Testing | Measure load stage timings | Medium |
 | Automated doc status extraction | Docs | Avoid manual table drift | Low |
+| SceneAsset descriptor & importer | Asset | Define schema + loader + toolchain | High |
+| Async test harness (fake I/O) | Testing | Deterministic coroutine/unit tests | High |
+| Cancellation token propagation | Async | Uniform cancellation semantics | High |
+| Bridge descriptor (GpuMaterializationInfo) | Interface | Data-only; consumed by Renderer | High |
+| Memory mapping prototype | Performance | Evaluate zero-copy feasibility | Low |
+| PAK diff tool | Tooling | Compare two PAKs (size, hash, delta) | Medium |
+| Partial load recovery (crash safety) | Robustness | Resume or rollback incomplete loads | Low |
+| Content versioning & migration hooks | Lifecycle | Descriptor schema evolution | Medium |
+| Unified key doc (Asset/Resource/Internal) | Docs | Clarify key domains & constraints | Low |
+| Log capture helper for tests | Testing | Assert diagnostics without global state | Medium |
+| Dependency graph visualization (interactive) | Tooling | Build atop analyzer JSON | Low |
+| Instrumentation counters API | Observability | Decode/IO timing, queue wait metrics | High |
+| Progressive decode staging support | Streaming | Header-first fast path | Medium |
 
 ---
 
@@ -237,4 +305,6 @@ stress test; verbose diagnostics emitted only when log level >=2.
 
 ## Update Policy
 
-All future status or roadmap edits must be applied here first; other docs should only link to the relevant anchors. CI (future) can lint for stray status tables elsewhere.
+All future status or roadmap edits must be applied here first; other docs should
+only link to the relevant anchors. CI (future) can lint for stray status tables
+elsewhere.
