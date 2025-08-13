@@ -40,7 +40,8 @@
 - **Component/Handle Patterns**: Scene nodes, resources, and descriptors use handle/view and component-based patterns for safety and extensibility.
 - **Pipeline/Root Signature**: All shaders and pipelines must match the engine's root signature conventions for bindless access. See `BindlessRenderingRootSignature.md` and `PipelineDesign.md` for details.
 
-## When in Doubt
+## When in Doubt or New to a Module
 - Check for a `README.md` in the relevant subsystem directory.
+- Check for a doc file in `Docs` subdirectory of the relevant subsystem directory.
 - Review `.github/instructions/*.md` and `design/*.md` for enforced style, documentation, and architecture rules.
 - Follow the patterns in existing code and tests for consistency.
