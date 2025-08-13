@@ -1,25 +1,10 @@
 # Chunking / Loading
 
----
+> Defines the PAK file format (layout, alignment, classification). For implementation status see `implementation_plan.md#detailed-feature-matrix`.
 
 This document defines a binary `.pak` container format optimized for GPU asset
 streaming, alignment, and fast loading. Inspired by Unreal Engine, Frostbite,
 and modern GPU requirements.
-
-## Current Implementation Status (August 2025)
-
-**Implemented:**
-
-- GeometryAsset, MaterialAsset, SceneAsset
-- TextureResource, BufferResource
-- MeshDesc, SubMeshDesc, MeshViewDesc
-
-**Planned / Not Implemented:**
-
-- PrefabAsset, AnimationAsset, ParticleSystemAsset
-- AudioResource, AnimationDataResource, CollisionMeshResource
-
----
 
 ## 1. Asset Classification Principles
 
@@ -42,33 +27,33 @@ capability.
 
 #### First-Class Assets
 
-| Type | Status | Purpose |
-|------|--------|---------|
-| **GeometryAsset** | ✅ Current | Multi-LOD mesh hierarchies |
-| **MaterialAsset** | ✅ Current | Shader + texture combinations |
-| **SceneAsset** | ✅ Current | Scene composition |
-| **PrefabAsset** | 🔄 Future | Reusable object templates |
-| **AnimationAsset** | 🔄 Future | Animation sequences |
-| **ParticleSystemAsset** | 🔄 Future | Particle behavior definitions |
+| Type | Purpose |
+|------|---------|
+| **GeometryAsset** | Multi-LOD mesh hierarchies |
+| **MaterialAsset** | Shader + texture combinations |
+| **SceneAsset** | Scene composition |
+| **PrefabAsset** | Reusable object templates (future) |
+| **AnimationAsset** | Animation sequences (future) |
+| **ParticleSystemAsset** | Particle behavior definitions (future) |
 
 #### Resources
 
-| Type | Status | Purpose |
-|------|--------|---------|
-| **TextureResource** | ✅ Current | GPU texture data |
-| **BufferResource** | ✅ Current | Vertex/index/constant buffers |
-| **ShaderResource** | ✅ Current | Compiled shader bytecode (stored in separate binary file, not in PAK) |
-| **AudioResource** | 🔄 Future | Compressed audio data |
-| **AnimationDataResource** | 🔄 Future | Bone weights, keyframes |
-| **CollisionMeshResource** | 🔄 Future | Physics collision data |
+| Type | Purpose |
+|------|---------|
+| **TextureResource** | GPU texture data |
+| **BufferResource** | Vertex/index/constant buffers |
+| **ShaderResource** | Compiled shader bytecode (stored separately, not in PAK) |
+| **AudioResource** | Compressed audio data (future) |
+| **AnimationDataResource** | Bone weights, keyframes (future) |
+| **CollisionMeshResource** | Physics collision data (future) |
 
 #### Embedded Descriptors
 
-| Type | Status | Purpose |
-|------|--------|---------|
-| **MeshDesc** | ✅ Current | LOD-specific mesh data |
-| **SubMeshDesc** | ✅ Current | Material-specific submesh data |
-| **MeshViewDesc** | ✅ Current | Draw call specifications |
+| Type | Purpose |
+|------|---------|
+| **MeshDesc** | LOD-specific mesh data |
+| **SubMeshDesc** | Material-specific submesh data |
+| **MeshViewDesc** | Draw call specifications |
 
 ---
 

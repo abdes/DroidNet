@@ -1,47 +1,22 @@
-# Asynchronous Asset Loading and GPU Upload System
+# Asset Loader & Planned Asynchronous Pipeline
 
----
+> For canonical feature status & roadmap see `implementation_plan.md` (sections: Current Status Summary & Roadmap Phases). This document focuses on architecture and the future async design.
 
-## Current Implementation Status (August 2025)
-
-**Implemented:**
-
-- Loader functions for Geometry, Material, and Texture assets
-- Resource loader functions for Buffer and Texture resources
-- Asset and resource dependency registration during asset loading (via LoaderContext)
-- Centralized cache (AnyCache) for assets and resources
-- Reference counting and safe eviction for assets/resources
-- Recursive release of asset/resource dependency trees
-- Loader/unloader registration for all supported types
-- Unload functions for resource cleanup
-
-**Partially Implemented / Planned:**
-
-- Asynchronous coroutine-based pipeline (design present, not implemented)
-- GPU upload queue and thread pool integration (design present, not implemented)
-- Hot-reload and memory budget tracking (design present, not implemented)
-
-**Not Implemented:**
-
-- Full async asset loading and upload pipeline
-- Streaming prioritization and residency management
-
-**Summary:**
-
-The codebase fully implements asset and resource loading for supported types (geometry, material, texture, buffer), including unified cache, reference counting, dependency tracking, and safe unloading. AssetLoader orchestrates loader/unloader registration, dependency management, and recursive release of dependency trees. Asynchronous pipeline, streaming, and GPU upload queue are designed but not yet implemented. The documentation below describes both the current implementation and the intended future direction.
+_Last reviewed: August 2025._
 
 ## Overview
 
-This system provides a modern, efficient, and scalable pipeline for loading, processing, and uploading assets (geometry, textures, etc.) in a C++ game engine. It leverages C++20 coroutines, the [Corral](https://github.com/hudson-trading/corral) coroutine library, and a ThreadPool for CPU-bound work, as well as a dedicated GPU copy engine for asynchronous GPU uploads.
+Current implementation: synchronous loader with dependency registration + caching.
+Planned extension: coroutine-based, staged pipeline (disk I/O → decode → buffer prep → GPU upload).
+This file outlines the target architecture and conceptual awaitables.
 
-## Features
+## Planned Async Feature Set
 
-- **Fully Asynchronous Asset Pipeline**: All stages (disk I/O, decoding, packing, buffer prep, GPU upload) are non-blocking and coroutine-driven.
-- **ThreadPool Integration**: Heavy CPU work (file I/O, decoding, packing) is parallelized using a ThreadPool, maximizing CPU utilization.
-- **Coroutine-based API**: Asset loading and upload are expressed as coroutines, providing a clean, readable async/await style.
-- **GPU Copy Engine**: GPU uploads are batched and submitted via a dedicated copy queue/thread, allowing for efficient, non-blocking resource transfers.
-- **Completion Notification**: Coroutines are resumed only when their work (including GPU upload) is fully complete.
-- **Composable**: The system is modular and can be extended to support new asset types or processing steps.
+* Fully asynchronous stage separation (disk I/O, decode/transform, staging, upload)
+* ThreadPool offload (`co_threadpool`) for CPU-heavy tasks
+* Upload queue with fence/event-backed completion awaitable
+* Back-pressure & prioritization hooks (future streaming)
+* Deterministic task graph for reproducibility
 
 ## Architecture
 
@@ -63,7 +38,7 @@ This system provides a modern, efficient, and scalable pipeline for loading, pro
 - A dedicated thread or coroutine dequeues requests and submits them to the GPU using the copy engine (e.g., Direct3D12/Vulkan copy queue).
 - Uses fences/events to notify coroutines when uploads are complete.
 
-### 4. Asset Pipeline Flow
+### 4. Asset Pipeline Flow (Target)
 
 1. **Disk I/O**: Read asset file asynchronously on the ThreadPool.
 2. **Decoding/Processing**: Decode and process asset data (e.g., decompress, parse, convert) on the ThreadPool.
@@ -71,7 +46,7 @@ This system provides a modern, efficient, and scalable pipeline for loading, pro
 4. **GPU Upload**: Submit buffer to the GPU copy engine; coroutine waits for upload completion.
 5. **Completion**: Coroutine resumes and returns the ready-to-use GPU resource.
 
-## Example Usage
+## Example Usage (Conceptual)
 
 ```cpp
 AssetKey mesh_key{/*guid*/..., /*version*/1, /*type*/AssetType::Mesh, /*variant*/0};
@@ -186,7 +161,7 @@ public:
 };
 ```
 
-### Asset Chunking Example: Loading a gLTF Model
+### Asset Chunking Example: Loading a glTF Model
 
 Suppose a gLTF model contains a large buffer (e.g., vertex data) and several images. The loader can process and upload these in chunks:
 
@@ -206,7 +181,7 @@ corral::task<GpuBuffer> load_gltf_buffer_chunked(ThreadPool& pool, UploadQueue& 
 }
 ```
 
-#### Full AssetLoader Example (gLTF)
+#### Full AssetLoader Example (glTF)
 
 ```cpp
 corral::task<GltfModel> AssetLoader::load_gltf_async(const AssetKey& key) {
