@@ -55,7 +55,7 @@ lifecycle](../render_pass_lifecycle.md).
    renderer:
     * Ensures / uploads DrawResourceIndices structured buffer if dirty.
     * Propagates its descriptor heap slot into
-      `SceneConstants.draw_resource_indices_slot` (or 0xFFFFFFFF if absent).
+      `SceneConstants.bindless_indices_slot` (or 0xFFFFFFFF if absent).
     * Uploads SceneConstants & optional MaterialConstants if dirty.
     * Wires buffer handles into the transient `RenderContext` (cleared in
       `PostExecute`).

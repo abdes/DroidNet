@@ -9,7 +9,7 @@
 // - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
 // - Resources are intermixed in the heap (structured indirection + geometry buffers).
 // - DrawResourceIndices structured buffer occupies a dynamic heap slot; slot
-//   provided in SceneConstants.draw_resource_indices_slot each frame.
+//   provided in SceneConstants.bindless_indices_slot each frame.
 // - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
@@ -39,7 +39,7 @@ cbuffer SceneConstants : register(b1) {
     float3 camera_position;
     float time_seconds;
     uint frame_index;
-    uint draw_resource_indices_slot; // dynamic slot (0xFFFFFFFF when unused)
+    uint bindless_indices_slot; // dynamic slot (0xFFFFFFFF when unused)
     uint _reserved[2];
 }
 
@@ -75,13 +75,13 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     VSOutput output;
 
     // Access indices buffer through dynamic slot; skip if unavailable.
-    if (draw_resource_indices_slot == 0xFFFFFFFFu) {
+    if (bindless_indices_slot == 0xFFFFFFFFu) {
         // Fallback: no geometry; output origin.
         output.position = float4(0,0,0,1);
         output.color = float3(1,0,1); // debug magenta
         return output;
     }
-    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[draw_resource_indices_slot];
+    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[bindless_indices_slot];
     DrawResourceIndices indices = indices_buffer[0];
 
     uint vertex_buffer_index = indices.vertex_buffer_index;

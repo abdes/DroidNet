@@ -58,7 +58,7 @@ struct SceneConstants {
   //! Shader-visible descriptor heap slot of DrawResourceIndices structured
   //! buffer SRV (dynamic; kInvalidDescriptorSlot when unavailable). Shaders
   //! must read and branch rather than assuming slot 0.
-  std::uint32_t draw_resource_indices_slot { kInvalidDescriptorSlot };
+  std::uint32_t bindless_indices_slot { kInvalidDescriptorSlot };
   std::uint32_t _reserved[2] { 0,
     0 }; // maintain 16-byte alignment & future use
 };

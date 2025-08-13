@@ -14,10 +14,10 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
-#include <Oxygen/Renderer/SceneConstants.h>
+#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/SceneConstants.h>
 
 namespace oxygen {
 namespace platform {

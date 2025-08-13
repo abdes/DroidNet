@@ -22,10 +22,10 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/SceneConstants.h>
+#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/SceneConstants.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
@@ -175,10 +175,10 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 
 auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
 {
-  if (!draw_resource_indices_cpu_) {
+  if (!bindless_indices_cpu_) {
     return; // optional feature not used this frame
   }
-  if (bindless_indices_buffer_ && !draw_resource_indices_dirty_) {
+  if (bindless_indices_buffer_ && !bindless_indices_dirty_) {
     return; // up-to-date
   }
   auto rc_ptr = render_controller_.lock();
@@ -221,23 +221,23 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
     } else {
       const auto view
         = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
-      draw_resource_indices_heap_slot_
+      bindless_indices_heap_slot_
         = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
       rc.GetResourceRegistry().RegisterView(
         *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
-      if (!draw_resource_indices_slot_assigned_) {
+      if (!bindless_indices_slot_assigned_) {
         LOG_F(INFO,
           "DrawResourceIndices buffer SRV registered at heap index %u",
-          draw_resource_indices_heap_slot_);
-        draw_resource_indices_slot_assigned_ = true;
+          bindless_indices_heap_slot_);
+        bindless_indices_slot_assigned_ = true;
       }
     }
   }
   // Upload CPU snapshot
   void* mapped = bindless_indices_buffer_->Map();
-  memcpy(mapped, draw_resource_indices_cpu_.get(), size_bytes);
+  memcpy(mapped, bindless_indices_cpu_.get(), size_bytes);
   bindless_indices_buffer_->UnMap();
-  draw_resource_indices_dirty_ = false;
+  bindless_indices_dirty_ = false;
 }
 
 auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
@@ -245,14 +245,13 @@ auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
   if (!scene_constants_cpu_) {
     return; // validated earlier; defensive
   }
-  const uint32_t previous_slot
-    = scene_constants_cpu_->draw_resource_indices_slot;
+  const uint32_t previous_slot = scene_constants_cpu_->bindless_indices_slot;
   uint32_t new_slot = oxygen::engine::kInvalidDescriptorSlot; // sentinel
-  if (draw_resource_indices_cpu_ && draw_resource_indices_slot_assigned_) {
-    new_slot = draw_resource_indices_heap_slot_;
+  if (bindless_indices_cpu_ && bindless_indices_slot_assigned_) {
+    new_slot = bindless_indices_heap_slot_;
   }
   if (new_slot != previous_slot) {
-    scene_constants_cpu_->draw_resource_indices_slot = new_slot;
+    scene_constants_cpu_->bindless_indices_slot = new_slot;
     scene_constants_dirty_ = true;
   }
 }
@@ -346,22 +345,21 @@ auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
   -> void
 {
-  if (!draw_resource_indices_cpu_) {
-    draw_resource_indices_cpu_ = std::make_unique<DrawResourceIndices>(indices);
-    draw_resource_indices_dirty_ = true;
+  if (!bindless_indices_cpu_) {
+    bindless_indices_cpu_ = std::make_unique<DrawResourceIndices>(indices);
+    bindless_indices_dirty_ = true;
     return;
   }
-  if (memcmp(
-        draw_resource_indices_cpu_.get(), &indices, sizeof(DrawResourceIndices))
+  if (memcmp(bindless_indices_cpu_.get(), &indices, sizeof(DrawResourceIndices))
     != 0) {
-    *draw_resource_indices_cpu_ = indices;
-    draw_resource_indices_dirty_ = true;
+    *bindless_indices_cpu_ = indices;
+    bindless_indices_dirty_ = true;
   }
 }
 
 auto Renderer::GetDrawResourceIndices() const -> const DrawResourceIndices&
 {
-  return *draw_resource_indices_cpu_;
+  return *bindless_indices_cpu_;
 }
 
 namespace {

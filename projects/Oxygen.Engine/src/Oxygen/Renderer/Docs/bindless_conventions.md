@@ -43,7 +43,7 @@ struct SceneConstants {
   glm::mat4 projection_matrix;          // camera projection matrix
   glm::vec3 camera_position; float time_seconds;
   uint32_t frame_index;                 // monotonic frame counter
-  uint32_t draw_resource_indices_slot;  // shader-visible SRV heap slot for DrawResourceIndices (0xFFFFFFFFu when unavailable)
+  uint32_t bindless_indices_slot;  // shader-visible SRV heap slot for DrawResourceIndices (0xFFFFFFFFu when unavailable)
   uint32_t _reserved[2];                // alignment / future fields
 };
 static_assert(sizeof(SceneConstants) % 16 == 0);
@@ -75,13 +75,13 @@ scene constants.
 
 | Buffer | Purpose | Upload Frequency | Root Binding / Access |
 |--------|---------|------------------|------------------------|
-| SceneConstants | View & frame state + dynamic draw_resource_indices_slot | Once per frame (dirty) | CBV b1 space0 |
+| SceneConstants | View & frame state + dynamic bindless_indices_slot | Once per frame (dirty) | CBV b1 space0 |
 | MaterialConstants | Current material snapshot (optional) | 0 or 1 per frame (dirty) | CBV b2 space0 |
 | DrawResourceIndices | Vertex/index buffer descriptor indices + indexed flag | 0+ per frame (dirty snapshot) | Structured SRV in bindless table (slot varies) |
 
 Notes:
 
-* `draw_resource_indices_slot` lives inside `SceneConstants`, avoiding a fixed slot assumption.
+* `bindless_indices_slot` lives inside `SceneConstants`, avoiding a fixed slot assumption.
 * A value of `0xFFFFFFFFu` means the structured buffer was not provided; shaders must branch.
 * Dirty tracking: memcmp against prior CPU snapshot; GPU upload deferred until `PreExecute`.
 
@@ -91,7 +91,7 @@ The `DrawResourceIndices` structured buffer holds the mapping from the current
 draw's vertex & index buffers to their shader-visible descriptor heap indices
 plus an `is_indexed` flag. Earlier revisions relied on the descriptor being at
 heap slot 0; that brittle ordering assumption has been removed. The actual SRV
-slot is written each frame into `SceneConstants.draw_resource_indices_slot`.
+slot is written each frame into `SceneConstants.bindless_indices_slot`.
 Shaders must read this slot and index the bindless table dynamically. A value
 of `0xFFFFFFFF` indicates the buffer is not available (no geometry this frame)
 and shaders must branch accordingly.
@@ -114,9 +114,9 @@ Update Protocol:
 * Renderer allocates a structured buffer + SRV on first use, uploads when
   dirty.
 * Renderer writes the SRV's heap slot into
-  `SceneConstants.draw_resource_indices_slot` prior to uploading the scene
+  `SceneConstants.bindless_indices_slot` prior to uploading the scene
   constants buffer for the frame.
-* Shaders fetch the slot: `uint slot = Scene.draw_resource_indices_slot;`
+* Shaders fetch the slot: `uint slot = Scene.bindless_indices_slot;`
   and then conditionally access `g_DrawResourceIndices[0]` via that slot
   indirection (implementation dependent). A slot of `0xFFFFFFFF` means skip.
 

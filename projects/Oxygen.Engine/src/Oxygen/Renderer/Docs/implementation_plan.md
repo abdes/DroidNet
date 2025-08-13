@@ -336,7 +336,7 @@ Revision History:
 * Marked Phase 1 MaterialConstants task complete; implemented Renderer-managed
   material snapshot & example migration – 2025-08-13.
 * Removed brittle invariant that DrawResourceIndices occupy heap slot 0; slot
-  propagated via `SceneConstants.draw_resource_indices_slot`.
+  propagated via `SceneConstants.bindless_indices_slot`.
   path in example and update this file.
 * Marked dirty tracking & just-in-time upload (scene/material/draw indices) implemented via refactored PreExecute helpers – 2025-08-13.
 * Extended bindless_conventions.md with constant/material/draw indices buffer layout & slot propagation details – 2025-08-13.
