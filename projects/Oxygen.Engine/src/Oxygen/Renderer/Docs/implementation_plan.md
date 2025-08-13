@@ -86,8 +86,8 @@ Tasks:
 * [x] Centralize bindless DrawResourceIndices (vertex/index/is_indexed) in
   Renderer; expose read-only accessor (example stops writing its own upload
   code).
-* [ ] Implement internal dirty tracking & upload just before graph execution.
-* [ ] Extend `bindless_conventions.md` with constant buffer & indices buffer
+* [x] Implement internal dirty tracking & upload just before graph execution.
+* [x] Extend `bindless_conventions.md` with constant buffer & indices buffer
   layout section.
 * [ ] Add validation in `Renderer::PreExecute` (assert scene constants provided
   once per frame).
@@ -351,3 +351,5 @@ Revision History:
 * Removed brittle invariant that DrawResourceIndices occupy heap slot 0; slot
   propagated via `SceneConstants.draw_resource_indices_slot`.
   path in example and update this file.
+* Marked dirty tracking & just-in-time upload (scene/material/draw indices) implemented via refactored PreExecute helpers – 2025-08-13.
+* Extended bindless_conventions.md with constant/material/draw indices buffer layout & slot propagation details – 2025-08-13.
