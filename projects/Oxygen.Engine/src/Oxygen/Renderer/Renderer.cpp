@@ -247,7 +247,7 @@ auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
   }
   const uint32_t previous_slot
     = scene_constants_cpu_->draw_resource_indices_slot;
-  uint32_t new_slot = 0xFFFFFFFFu; // sentinel for unavailable
+  uint32_t new_slot = oxygen::engine::kInvalidDescriptorSlot; // sentinel
   if (draw_resource_indices_cpu_ && draw_resource_indices_slot_assigned_) {
     new_slot = draw_resource_indices_heap_slot_;
   }

@@ -7,12 +7,23 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
+
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
+
+//! Sentinel value for an invalid or unassigned shader-visible descriptor slot.
+/*!
+ Used to indicate that a structured buffer SRV (e.g., DrawResourceIndices)
+ is not available this frame. Shaders must check for this value and branch
+ accordingly instead of assuming a valid slot.
+ */
+inline constexpr std::uint32_t kInvalidDescriptorSlot
+  = (std::numeric_limits<std::uint32_t>::max)();
 
 //! Per-frame scene (view) constants snapshot uploaded once each frame.
 /*!
@@ -45,9 +56,9 @@ struct SceneConstants {
   float time_seconds { 0.0f };
   std::uint32_t frame_index { 0 };
   //! Shader-visible descriptor heap slot of DrawResourceIndices structured
-  //! buffer SRV (dynamic; 0xFFFFFFFF when unavailable). Shaders must read and
-  //! branch rather than assuming slot 0.
-  std::uint32_t draw_resource_indices_slot { 0xFFFFFFFFu };
+  //! buffer SRV (dynamic; kInvalidDescriptorSlot when unavailable). Shaders
+  //! must read and branch rather than assuming slot 0.
+  std::uint32_t draw_resource_indices_slot { kInvalidDescriptorSlot };
   std::uint32_t _reserved[2] { 0,
     0 }; // maintain 16-byte alignment & future use
 };
