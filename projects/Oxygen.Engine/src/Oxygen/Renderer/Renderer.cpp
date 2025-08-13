@@ -189,6 +189,10 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
   }
   auto& rc = *rc_ptr;
   auto& graphics = rc.GetGraphics();
+  DCHECK_F(scene_constants_set_count_ == 1,
+    "SceneConstants must be set exactly once per frame before PreExecute; got "
+    "%u",
+    scene_constants_set_count_);
   const auto size_bytes = sizeof(DrawResourceIndices);
   if (!bindless_indices_buffer_) {
     graphics::BufferDesc desc { .size_bytes = size_bytes,
@@ -200,6 +204,7 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
     rc.GetResourceRegistry().Register(bindless_indices_buffer_);
 
     // Descriptor allocation & view registration (only once)
+    scene_constants_set_count_ = 0; // reset for next frame
     auto& descriptor_allocator = rc.GetDescriptorAllocator();
     graphics::BufferViewDescription srv_view_desc {
       .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
@@ -540,10 +545,12 @@ auto Renderer::SetSceneConstants(const SceneConstants& constants) -> void
   if (!scene_constants_cpu_) {
     scene_constants_cpu_ = std::make_unique<SceneConstants>(constants);
     scene_constants_dirty_ = true;
+    ++scene_constants_set_count_;
     return;
   }
   *scene_constants_cpu_ = constants;
   scene_constants_dirty_ = true;
+  ++scene_constants_set_count_;
 }
 
 auto Renderer::GetSceneConstants() const -> const SceneConstants&

@@ -89,7 +89,7 @@ Tasks:
 * [x] Implement internal dirty tracking & upload just before graph execution.
 * [x] Extend `bindless_conventions.md` with constant buffer & indices buffer
   layout section.
-* [ ] Add validation in `Renderer::PreExecute` (assert scene constants provided
+* [x] Add validation in `Renderer::PreExecute` (assert scene constants provided
   once per frame).
 * [ ] Update example: remove local constant buffer creation &
   `UploadIndicesIfNeeded` style logic (checkpoint 1).
@@ -353,3 +353,4 @@ Revision History:
   path in example and update this file.
 * Marked dirty tracking & just-in-time upload (scene/material/draw indices) implemented via refactored PreExecute helpers – 2025-08-13.
 * Extended bindless_conventions.md with constant/material/draw indices buffer layout & slot propagation details – 2025-08-13.
+* Added PreExecute validation assert for single SceneConstants set per frame – 2025-08-13.

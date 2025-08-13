@@ -169,6 +169,10 @@ private:
   bool draw_resource_indices_dirty_ { false };
   uint32_t draw_resource_indices_heap_slot_ { 0 };
   bool draw_resource_indices_slot_assigned_ { false };
+
+  // Validation: track how many times SceneConstants were set in the current
+  // frame. Reset in PostExecute; asserted in PreExecute.
+  uint32_t scene_constants_set_count_ { 0 };
 };
 
 } // namespace oxygen::engine
