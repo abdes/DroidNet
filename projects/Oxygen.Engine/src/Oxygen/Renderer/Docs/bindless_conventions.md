@@ -35,15 +35,18 @@ the `Renderer` in `PreExecute` when marked dirty via
 `Renderer::SetSceneConstants`. Callers no longer inject a GPU buffer into the
 `RenderContext` directly; they only provide CPU data.
 
-Layout (Phase 1):
+Layout (Phase 1 current implementation):
 
 ```c++
 struct SceneConstants {
-  mat4 view_matrix;
-  mat4 projection_matrix;
-  vec3 camera_position; float time_seconds;
-  uint frame_index; uint _reserved[3]; // padding / future expansion
+  glm::mat4 view_matrix;                // camera view matrix
+  glm::mat4 projection_matrix;          // camera projection matrix
+  glm::vec3 camera_position; float time_seconds;
+  uint32_t frame_index;                 // monotonic frame counter
+  uint32_t draw_resource_indices_slot;  // shader-visible SRV heap slot for DrawResourceIndices (0xFFFFFFFFu when unavailable)
+  uint32_t _reserved[2];                // alignment / future fields
 };
+static_assert(sizeof(SceneConstants) % 16 == 0);
 ```
 
 Notes:
@@ -67,6 +70,21 @@ Layout mirrors HLSL cbuffer `MaterialConstants` (see `MaterialConstants.h`).
 Padding uses explicit `uint _pad0`, `_pad1` to maintain 16-byte alignment.
 Renderer clears the injected pointer in `RenderContext::Reset` along with
 scene constants.
+
+## Constant & Indices Buffer Layout Summary
+
+| Buffer | Purpose | Upload Frequency | Root Binding / Access |
+|--------|---------|------------------|------------------------|
+| SceneConstants | View & frame state + dynamic draw_resource_indices_slot | Once per frame (dirty) | CBV b1 space0 |
+| MaterialConstants | Current material snapshot (optional) | 0 or 1 per frame (dirty) | CBV b2 space0 |
+| DrawResourceIndices | Vertex/index buffer descriptor indices + indexed flag | 0+ per frame (dirty snapshot) | Structured SRV in bindless table (slot varies) |
+
+Notes:
+
+* `draw_resource_indices_slot` lives inside `SceneConstants`, avoiding a fixed slot assumption.
+* A value of `0xFFFFFFFFu` means the structured buffer was not provided; shaders must branch.
+* Dirty tracking: memcmp against prior CPU snapshot; GPU upload deferred until `PreExecute`.
+
 
 ## DrawResourceIndices Structured Buffer (Dynamic Bindless Slot)
 
@@ -113,9 +131,7 @@ Future Phases:
 
 Limitations:
 
-* Single global snapshot – if multiple meshes are drawn with different
-  buffers in the same frame, the snapshot must be updated between draws (the
-  example currently draws one mesh only). This is acceptable for Phase 1.
+* Single global snapshot – multiple meshes with distinct buffers require updating the snapshot between draws (Phase 1 acceptable constraint; will be removed in DrawPacket phase).
 
 ## Future Extensions
 
