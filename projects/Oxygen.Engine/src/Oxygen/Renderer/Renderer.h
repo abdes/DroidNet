@@ -26,6 +26,7 @@ class Mesh;
 namespace oxygen::engine {
 
 struct RenderContext;
+struct SceneConstants;
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
@@ -84,23 +85,34 @@ public:
 
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
-  auto ExecuteRenderGraph(RenderGraphCoroutine&& graph_coroutine,
-    const RenderContext& context) -> co::Co<>
+  auto ExecuteRenderGraph(
+    RenderGraphCoroutine&& graph_coroutine, RenderContext& context) -> co::Co<>
   {
     PreExecute(context);
     co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(context);
     PostExecute(context);
   }
 
+  //! Sets the per-frame scene constants snapshot (once per frame before
+  //! execute).
+  OXGN_RNDR_API auto SetSceneConstants(const SceneConstants& constants) -> void;
+  //! Returns the last set scene constants (undefined before first set).
+  OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
+
 private:
-  OXGN_RNDR_API auto PreExecute(const RenderContext& context) -> void;
-  OXGN_RNDR_API auto PostExecute(const RenderContext& context) -> void;
+  OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
+  OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
+
+  // Scene constants management
+  std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
+  std::unique_ptr<SceneConstants> scene_constants_cpu_;
+  bool scene_constants_dirty_ { false };
 };
 
 } // namespace oxygen::engine

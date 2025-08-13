@@ -33,11 +33,12 @@ struct DrawResourceIndices {
 
 // Scene constants buffer (matches C++ struct layout)
 cbuffer SceneConstants : register(b1) {
-    float4x4 world_matrix;
     float4x4 view_matrix;
     float4x4 projection_matrix;
     float3 camera_position;
-    float _pad0; // Padding to match C++ struct alignment
+    float time_seconds;
+    uint frame_index;
+    uint3 _pad;
 }
 
 // Material constants buffer (matches C++ MaterialConstants struct layout)
@@ -93,8 +94,8 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     Vertex vertex = vertex_buffer[actual_vertex_index];
 
     // Apply world, view, and projection transforms
-    float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
-    float4 view_pos = mul(view_matrix, world_pos);
+    // Object space == world space (temporary until per-item transform path).
+    float4 view_pos = mul(view_matrix, float4(vertex.position, 1.0));
     float4 proj_pos = mul(projection_matrix, view_pos);
     output.position = proj_pos;
     output.color = vertex.color.rgb;

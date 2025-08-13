@@ -16,6 +16,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
+#include <Oxygen/Renderer/SceneConstants.h>
 
 namespace oxygen {
 namespace platform {
@@ -58,12 +59,9 @@ public:
   auto Run() -> void;
 
 private:
-  alignas(16) struct SceneConstants {
-    glm::mat4 world_matrix { 1.0f };
-    glm::mat4 view_matrix { 1.0f };
-    glm::mat4 projection_matrix { 1.0f };
-    glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
-  } scene_constants_;
+  // Use engine::SceneConstants (world matrix removed; per-item transform
+  // pending later phase)
+  oxygen::engine::SceneConstants scene_constants_ {};
 
   // Material constants structure matching shader layout
   struct MaterialConstants {
@@ -133,9 +131,6 @@ private:
   auto EnsureVertexBufferSrv() -> void;
   auto EnsureIndexBufferSrv() -> void;
   auto EnsureMeshDrawResources() -> void;
-  auto EnsureSceneConstantsBuffer() -> void;
-  auto UpdateSceneConstantsBuffer(const SceneConstants& constants) const
-    -> void;
 
   uint32_t vertex_srv_shader_visible_index_ { 1 };
   uint32_t index_srv_shader_visible_index_ { 2 };
