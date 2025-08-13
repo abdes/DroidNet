@@ -44,7 +44,12 @@ struct SceneConstants {
   glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
   float time_seconds { 0.0f };
   std::uint32_t frame_index { 0 };
-  std::uint32_t _reserved[3] { 0, 0, 0 }; // padding / future expansion
+  //! Shader-visible descriptor heap slot of DrawResourceIndices structured
+  //! buffer SRV (dynamic; 0xFFFFFFFF when unavailable). Shaders must read and
+  //! branch rather than assuming slot 0.
+  std::uint32_t draw_resource_indices_slot { 0xFFFFFFFFu };
+  std::uint32_t _reserved[2] { 0,
+    0 }; // maintain 16-byte alignment & future use
 };
 static_assert(sizeof(SceneConstants) % 16 == 0,
   "SceneConstants size must be 16-byte aligned");

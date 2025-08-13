@@ -149,64 +149,178 @@ auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
 }
 auto Renderer::PreExecute(RenderContext& context) -> void
 {
-  // Contract: caller must not populate context.scene_constants directly.
+  // Contract checks (kept inline per style preference)
   DCHECK_F(!context.scene_constants,
     "RenderContext.scene_constants must be null; use "
     "Renderer::SetSceneConstants");
   DCHECK_NOTNULL_F(scene_constants_cpu_.get(),
     "Renderer::SetSceneConstants must be called before ExecuteRenderGraph");
 
-  // Upload if dirty or buffer not yet created.
-  if (!scene_constants_buffer_ || scene_constants_dirty_) {
-    auto& rc = *render_controller_.lock();
-    auto& graphics = rc.GetGraphics();
-    const auto size_bytes = sizeof(SceneConstants);
-    if (!scene_constants_buffer_) {
-      graphics::BufferDesc desc { .size_bytes = size_bytes,
-        .usage = graphics::BufferUsage::kConstant,
-        .memory = graphics::BufferMemory::kUpload,
-        .debug_name = std::string("SceneConstants") };
-      scene_constants_buffer_ = graphics.CreateBuffer(desc);
-      scene_constants_buffer_->SetName(desc.debug_name);
-      rc.GetResourceRegistry().Register(scene_constants_buffer_);
-    }
-    void* mapped = scene_constants_buffer_->Map();
-    memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
-    scene_constants_buffer_->UnMap();
-    scene_constants_dirty_ = false;
-  }
-  // Inject buffer into context (const_cast due to interface design expecting
-  // caller fill before).
-  context.scene_constants = scene_constants_buffer_;
-  // Material constants are optional; upload if provided and dirty.
-  if (material_constants_cpu_) {
-    if (!material_constants_buffer_ || material_constants_dirty_) {
-      auto& rc = *render_controller_.lock();
-      auto& graphics = rc.GetGraphics();
-      const auto size_bytes = sizeof(MaterialConstants);
-      if (!material_constants_buffer_) {
-        graphics::BufferDesc desc { .size_bytes = size_bytes,
-          .usage = graphics::BufferUsage::kConstant,
-          .memory = graphics::BufferMemory::kUpload,
-          .debug_name = std::string("MaterialConstants") };
-        material_constants_buffer_ = graphics.CreateBuffer(desc);
-        material_constants_buffer_->SetName(desc.debug_name);
-        rc.GetResourceRegistry().Register(material_constants_buffer_);
-      }
-      void* mapped = material_constants_buffer_->Map();
-      memcpy(mapped, material_constants_cpu_.get(), size_bytes);
-      material_constants_buffer_->UnMap();
-      material_constants_dirty_ = false;
-    }
-    context.material_constants = material_constants_buffer_;
-  }
-  context.SetRenderer(this, render_controller_.lock().get());
+  EnsureAndUploadDrawResourceIndices();
+  UpdateDrawResourceIndicesSlotIfChanged();
+  MaybeUpdateSceneConstants();
+  MaybeUpdateMaterialConstants();
+  WireContext(context);
 }
 auto Renderer::PostExecute(RenderContext& context) -> void
 {
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
   context.Reset();
+}
+
+//===----------------------------------------------------------------------===//
+// PreExecute helper implementations
+//===----------------------------------------------------------------------===//
+
+auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
+{
+  if (!draw_resource_indices_cpu_) {
+    return; // optional feature not used this frame
+  }
+  if (bindless_indices_buffer_ && !draw_resource_indices_dirty_) {
+    return; // up-to-date
+  }
+  auto rc_ptr = render_controller_.lock();
+  if (!rc_ptr) {
+    LOG_F(
+      ERROR, "RenderController expired while ensuring draw resource indices");
+    return;
+  }
+  auto& rc = *rc_ptr;
+  auto& graphics = rc.GetGraphics();
+  const auto size_bytes = sizeof(DrawResourceIndices);
+  if (!bindless_indices_buffer_) {
+    graphics::BufferDesc desc { .size_bytes = size_bytes,
+      .usage = graphics::BufferUsage::kConstant, // structured SRV usage
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = std::string("DrawResourceIndices") };
+    bindless_indices_buffer_ = graphics.CreateBuffer(desc);
+    bindless_indices_buffer_->SetName(desc.debug_name);
+    rc.GetResourceRegistry().Register(bindless_indices_buffer_);
+
+    // Descriptor allocation & view registration (only once)
+    auto& descriptor_allocator = rc.GetDescriptorAllocator();
+    graphics::BufferViewDescription srv_view_desc {
+      .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .format = Format::kUnknown,
+      .stride = sizeof(DrawResourceIndices),
+    };
+    auto srv_handle = descriptor_allocator.Allocate(
+      graphics::ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+    if (!srv_handle.IsValid()) {
+      LOG_F(
+        ERROR, "Failed to allocate descriptor for DrawResourceIndices buffer");
+    } else {
+      const auto view
+        = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
+      draw_resource_indices_heap_slot_
+        = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+      rc.GetResourceRegistry().RegisterView(
+        *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
+      if (!draw_resource_indices_slot_assigned_) {
+        LOG_F(INFO,
+          "DrawResourceIndices buffer SRV registered at heap index %u",
+          draw_resource_indices_heap_slot_);
+        draw_resource_indices_slot_assigned_ = true;
+      }
+    }
+  }
+  // Upload CPU snapshot
+  void* mapped = bindless_indices_buffer_->Map();
+  memcpy(mapped, draw_resource_indices_cpu_.get(), size_bytes);
+  bindless_indices_buffer_->UnMap();
+  draw_resource_indices_dirty_ = false;
+}
+
+auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
+{
+  if (!scene_constants_cpu_) {
+    return; // validated earlier; defensive
+  }
+  const uint32_t previous_slot
+    = scene_constants_cpu_->draw_resource_indices_slot;
+  uint32_t new_slot = 0xFFFFFFFFu; // sentinel for unavailable
+  if (draw_resource_indices_cpu_ && draw_resource_indices_slot_assigned_) {
+    new_slot = draw_resource_indices_heap_slot_;
+  }
+  if (new_slot != previous_slot) {
+    scene_constants_cpu_->draw_resource_indices_slot = new_slot;
+    scene_constants_dirty_ = true;
+  }
+}
+
+auto Renderer::MaybeUpdateSceneConstants() -> void
+{
+  if (!scene_constants_cpu_) {
+    return; // must have been set earlier; defensive
+  }
+  if (scene_constants_buffer_ && !scene_constants_dirty_) {
+    return; // up-to-date
+  }
+  auto rc_ptr = render_controller_.lock();
+  if (!rc_ptr) {
+    LOG_F(ERROR, "RenderController expired while updating scene constants");
+    return;
+  }
+  auto& rc = *rc_ptr;
+  auto& graphics = rc.GetGraphics();
+  const auto size_bytes = sizeof(SceneConstants);
+  if (!scene_constants_buffer_) {
+    graphics::BufferDesc desc { .size_bytes = size_bytes,
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = std::string("SceneConstants") };
+    scene_constants_buffer_ = graphics.CreateBuffer(desc);
+    scene_constants_buffer_->SetName(desc.debug_name);
+    rc.GetResourceRegistry().Register(scene_constants_buffer_);
+  }
+  void* mapped = scene_constants_buffer_->Map();
+  memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
+  scene_constants_buffer_->UnMap();
+  scene_constants_dirty_ = false;
+}
+
+auto Renderer::MaybeUpdateMaterialConstants() -> void
+{
+  if (!material_constants_cpu_) {
+    return; // optional; not set this frame
+  }
+  if (material_constants_buffer_ && !material_constants_dirty_) {
+    return; // up-to-date
+  }
+  auto rc_ptr = render_controller_.lock();
+  if (!rc_ptr) {
+    LOG_F(ERROR, "RenderController expired while updating material constants");
+    return;
+  }
+  auto& rc = *rc_ptr;
+  auto& graphics = rc.GetGraphics();
+  const auto size_bytes = sizeof(MaterialConstants);
+  if (!material_constants_buffer_) {
+    graphics::BufferDesc desc { .size_bytes = size_bytes,
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = std::string("MaterialConstants") };
+    material_constants_buffer_ = graphics.CreateBuffer(desc);
+    material_constants_buffer_->SetName(desc.debug_name);
+    rc.GetResourceRegistry().Register(material_constants_buffer_);
+  }
+  void* mapped = material_constants_buffer_->Map();
+  memcpy(mapped, material_constants_cpu_.get(), size_bytes);
+  material_constants_buffer_->UnMap();
+  material_constants_dirty_ = false;
+}
+
+auto Renderer::WireContext(RenderContext& context) -> void
+{
+  context.scene_constants = scene_constants_buffer_;
+  if (material_constants_cpu_) {
+    context.material_constants = material_constants_buffer_;
+  }
+  context.SetRenderer(this, render_controller_.lock().get());
 }
 
 auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
@@ -227,6 +341,29 @@ auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
 auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 {
   return *material_constants_cpu_;
+}
+
+auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
+  -> void
+{
+  static_assert(sizeof(DrawResourceIndices) == 12,
+    "Unexpected DrawResourceIndices size (packing change?)");
+  if (!draw_resource_indices_cpu_) {
+    draw_resource_indices_cpu_ = std::make_unique<DrawResourceIndices>(indices);
+    draw_resource_indices_dirty_ = true;
+    return;
+  }
+  if (memcmp(
+        draw_resource_indices_cpu_.get(), &indices, sizeof(DrawResourceIndices))
+    != 0) {
+    *draw_resource_indices_cpu_ = indices;
+    draw_resource_indices_dirty_ = true;
+  }
+}
+
+auto Renderer::GetDrawResourceIndices() const -> const DrawResourceIndices&
+{
+  return *draw_resource_indices_cpu_;
 }
 
 namespace {
@@ -359,12 +496,11 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
 auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 {
   MeshId id = GetMeshId(mesh);
-  const auto it = mesh_resources_.find(id);
-  if (it != mesh_resources_.end()) {
+  if (auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
     if (eviction_policy_) {
       eviction_policy_->OnMeshAccess(id);
     }
-    return it->second;
+    return it->second; // cache hit
   }
 
   DLOG_SCOPE_FUNCTION(INFO);
@@ -392,11 +528,11 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   gpu.vertex_buffer = vertex_buffer;
   gpu.index_buffer = index_buffer;
 
-  auto [ins, inserted] = mesh_resources_.emplace(id, std::move(gpu));
+  auto [iter, inserted] = mesh_resources_.emplace(id, std::move(gpu));
   if (eviction_policy_) {
     eviction_policy_->OnMeshAccess(id);
   }
-  return ins->second;
+  return iter->second;
 }
 
 auto Renderer::SetSceneConstants(const SceneConstants& constants) -> void

@@ -7,8 +7,9 @@
 // === Bindless Rendering Contract ===
 // - The engine provides a single shader-visible CBV_SRV_UAV heap.
 // - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
-// - Resources are intermixed in the heap: indices buffer, vertex buffers, index buffers.
-// - The indices buffer at heap index 0 contains actual heap indices (physical locations).
+// - Resources are intermixed in the heap (structured indirection + geometry buffers).
+// - DrawResourceIndices structured buffer occupies a dynamic heap slot; slot
+//   provided in SceneConstants.draw_resource_indices_slot each frame.
 // - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
@@ -38,7 +39,8 @@ cbuffer SceneConstants : register(b1) {
     float3 camera_position;
     float time_seconds;
     uint frame_index;
-    uint _reserved[3];
+    uint draw_resource_indices_slot; // dynamic slot (0xFFFFFFFF when unused)
+    uint _reserved[2];
 }
 
 // Material constants buffer (matches C++ MaterialConstants struct layout)
@@ -72,8 +74,14 @@ struct VSOutput {
 VSOutput VS(uint vertexID : SV_VertexID) {
     VSOutput output;
 
-    // Access the indices buffer at heap index 0 using ResourceDescriptorHeap
-    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[0];
+    // Access indices buffer through dynamic slot; skip if unavailable.
+    if (draw_resource_indices_slot == 0xFFFFFFFFu) {
+        // Fallback: no geometry; output origin.
+        output.position = float4(0,0,0,1);
+        output.color = float3(1,0,1); // debug magenta
+        return output;
+    }
+    StructuredBuffer<DrawResourceIndices> indices_buffer = ResourceDescriptorHeap[draw_resource_indices_slot];
     DrawResourceIndices indices = indices_buffer[0];
 
     uint vertex_buffer_index = indices.vertex_buffer_index;

@@ -259,7 +259,7 @@ void CommandRecorder::SetupDescriptorTables(
   auto set_table = [this, d3d12_command_list, queue_role](const UINT root_index,
                      const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
     if (queue_role == QueueRole::kGraphics) {
-      DLOG_F(0,
+      DLOG_F(3,
         "recorder: SetGraphicsRootDescriptorTable for command list: {}, root "
         "index={}, gpu_handle={}",
         GetConcreteCommandList()->GetName(), root_index, gpu_handle.ptr);

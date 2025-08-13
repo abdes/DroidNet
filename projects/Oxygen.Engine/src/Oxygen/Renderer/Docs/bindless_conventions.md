@@ -68,6 +68,55 @@ Padding uses explicit `uint _pad0`, `_pad1` to maintain 16-byte alignment.
 Renderer clears the injected pointer in `RenderContext::Reset` along with
 scene constants.
 
+## DrawResourceIndices Structured Buffer (Dynamic Bindless Slot)
+
+The `DrawResourceIndices` structured buffer holds the mapping from the current
+draw's vertex & index buffers to their shader-visible descriptor heap indices
+plus an `is_indexed` flag. Earlier revisions relied on the descriptor being at
+heap slot 0; that brittle ordering assumption has been removed. The actual SRV
+slot is written each frame into `SceneConstants.draw_resource_indices_slot`.
+Shaders must read this slot and index the bindless table dynamically. A value
+of `0xFFFFFFFF` indicates the buffer is not available (no geometry this frame)
+and shaders must branch accordingly.
+
+Layout (12 bytes):
+
+```c++
+struct DrawResourceIndices {
+  uint32_t vertex_buffer_index; // heap index of vertex buffer SRV
+  uint32_t index_buffer_index;  // heap index of index buffer SRV
+  uint32_t is_indexed;          // 1 = indexed draw, 0 = non-indexed
+};
+static_assert(sizeof(DrawResourceIndices)==12);
+```
+
+Update Protocol:
+
+* Application (or future internal mesh system) calls
+  `Renderer::SetDrawResourceIndices(indices)` (last-wins).
+* Renderer allocates a structured buffer + SRV on first use, uploads when
+  dirty.
+* Renderer writes the SRV's heap slot into
+  `SceneConstants.draw_resource_indices_slot` prior to uploading the scene
+  constants buffer for the frame.
+* Shaders fetch the slot: `uint slot = Scene.draw_resource_indices_slot;`
+  and then conditionally access `g_DrawResourceIndices[0]` via that slot
+  indirection (implementation dependent). A slot of `0xFFFFFFFF` means skip.
+
+Future Phases:
+
+* A subsequent phase relocates per-mesh SRV allocation & indices derivation to
+  automated packet build removing any need for an external caller to set the
+  snapshot.
+* Later (DrawPacket introduction) the buffer may evolve into a broader geometry
+  indirection table or be superseded entirely.
+
+Limitations:
+
+* Single global snapshot – if multiple meshes are drawn with different
+  buffers in the same frame, the snapshot must be updated between draws (the
+  example currently draws one mesh only). This is acceptable for Phase 1.
+
 ## Future Extensions
 
 * Additional root parameters for per-pass dynamic descriptors (e.g., light

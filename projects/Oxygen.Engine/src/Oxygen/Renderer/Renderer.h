@@ -28,6 +28,13 @@ namespace oxygen::engine {
 struct RenderContext;
 struct SceneConstants;
 struct MaterialConstants;
+//! Provides shader-visible indices for current vertex/index buffers (Phase 1
+//! transitional).
+struct DrawResourceIndices {
+  uint32_t vertex_buffer_index;
+  uint32_t index_buffer_index;
+  uint32_t is_indexed; // 1 if indexed draw, 0 otherwise
+};
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
@@ -107,11 +114,38 @@ public:
   //! Returns last set material constants (undefined before first set).
   OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
 
+  //! Sets the per-frame draw resource indices snapshot (transitional API).
+  /*!\n   Provides the shader-visible descriptor heap indices for the
+   * currently\n   selected vertex & index buffers and whether the draw is
+   * indexed. This is a\n   Phase 1–2 migration aid; later phases (mesh resource
+   * & packet build) will\n   derive per-item indices automatically. Must be
+   * called before the first\n   ExecuteRenderGraph in a frame if geometry is
+   * rendered. Last call wins.\n  */
+  OXGN_RNDR_API auto SetDrawResourceIndices(const DrawResourceIndices& indices)
+    -> void;
+  //! Returns last set draw resource indices snapshot (undefined until set).
+  OXGN_RNDR_API auto GetDrawResourceIndices() const
+    -> const DrawResourceIndices&;
+
 private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
+
+  //! PreExecute helpers broken out to reduce cyclomatic complexity. Kept
+  //! private to avoid API surface changes.
+  //! Ensures the draw resource indices buffer, descriptor & upload if dirty.
+  auto EnsureAndUploadDrawResourceIndices() -> void;
+  //! Updates the scene constants GPU buffer if dirty / uninitialized.
+  auto MaybeUpdateSceneConstants() -> void;
+  //! Updates the material constants GPU buffer if present & dirty.
+  auto MaybeUpdateMaterialConstants() -> void;
+  //! Applies any slot changes for draw resource indices into scene constants
+  //! (sets dirty flag when changed).
+  auto UpdateDrawResourceIndicesSlotIfChanged() -> void;
+  //! Wires updated buffers into the provided render context for the frame.
+  auto WireContext(RenderContext& context) -> void;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
@@ -126,6 +160,15 @@ private:
   std::shared_ptr<graphics::Buffer> material_constants_buffer_;
   std::unique_ptr<MaterialConstants> material_constants_cpu_;
   bool material_constants_dirty_ { false };
+
+  // Draw resource indices management (bindless vertex/index SRV indices). The
+  // structured buffer's descriptor heap slot is dynamic; SceneConstants carries
+  // the slot each frame (draw_resource_indices_slot) instead of assuming 0.
+  std::unique_ptr<DrawResourceIndices> draw_resource_indices_cpu_;
+  std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
+  bool draw_resource_indices_dirty_ { false };
+  uint32_t draw_resource_indices_heap_slot_ { 0 };
+  bool draw_resource_indices_slot_assigned_ { false };
 };
 
 } // namespace oxygen::engine
