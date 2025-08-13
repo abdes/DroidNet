@@ -28,11 +28,9 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
-#include <Oxygen/Renderer/MaterialConstants.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/SceneConstants.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 
 #include "./MainModule.h"

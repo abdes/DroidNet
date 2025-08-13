@@ -51,13 +51,14 @@ set(
   OXYGEN_RENDERER_HEADERS
     "api_export.h"
     "DepthPrePass.h"
-    "MaterialConstants.h"
     "RenderContext.h"
     "Renderer.h"
     "RenderItem.h"
     "RenderPass.h"
-    "SceneConstants.h"
     "ShaderPass.h"
+    "Types/DrawResourceIndices.h"
+    "Types/MaterialConstants.h"
+    "Types/SceneConstants.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES

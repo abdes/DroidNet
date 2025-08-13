@@ -168,12 +168,12 @@ private:
 
   // Draw resource indices management (bindless vertex/index SRV indices). The
   // structured buffer's descriptor heap slot is dynamic; SceneConstants carries
-  // the slot each frame (draw_resource_indices_slot) instead of assuming 0.
-  std::unique_ptr<DrawResourceIndices> draw_resource_indices_cpu_;
+  // the slot each frame (bindless_indices_slot) instead of assuming 0.
+  std::unique_ptr<DrawResourceIndices> bindless_indices_cpu_;
   std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
-  bool draw_resource_indices_dirty_ { false };
-  uint32_t draw_resource_indices_heap_slot_ { 0 };
-  bool draw_resource_indices_slot_assigned_ { false };
+  bool bindless_indices_dirty_ { false };
+  uint32_t bindless_indices_heap_slot_ { 0 };
+  bool bindless_indices_slot_assigned_ { false };
 
   // Validation: track how many times SceneConstants were set in the current
   // frame. Reset in PostExecute; asserted in PreExecute.
