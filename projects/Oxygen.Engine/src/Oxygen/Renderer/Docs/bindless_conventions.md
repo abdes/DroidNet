@@ -85,7 +85,6 @@ Notes:
 * A value of `0xFFFFFFFFu` means the structured buffer was not provided; shaders must branch.
 * Dirty tracking: memcmp against prior CPU snapshot; GPU upload deferred until `PreExecute`.
 
-
 ## DrawResourceIndices Structured Buffer (Dynamic Bindless Slot)
 
 The `DrawResourceIndices` structured buffer holds the mapping from the current

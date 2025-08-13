@@ -378,6 +378,15 @@ Validation Expectations:
 * A stateful render item list enables efficient updates, multi-pass rendering,
   and robust asset tracking.
 
+### Material Override Timing (Phase 1)
+
+* Per-frame material snapshot is provided via
+  `Renderer::SetMaterialConstants(...)` before `ExecuteRenderGraph`.
+* Passes that use material shading (e.g., ShaderPass) will see the last snapshot
+  set that frame.
+* Future phases move toward per-item material resolution at packet build time;
+  the Phase 1 snapshot is a temporary global override.
+
 ## 🗂 Revision History
 
 * 2025-08-13: Added DrawPacket abstraction & cleanup for implementation start.
