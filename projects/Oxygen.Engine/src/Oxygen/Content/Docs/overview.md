@@ -1,5 +1,7 @@
 # Asset Entity Relationships: Summary and Diagram
 
+> For implementation status see `implementation_plan.md#current-status-summary`. This file provides conceptual relationships & intra-PAK rules referenced by `chunking.md` and `deps_and_cache.md`.
+
 ## Fundamental Architecture Principle: Intra-PAK Dependencies
 
 **🏗️ Core Design Rule**: All asset and resource dependencies are contained

@@ -1,11 +1,6 @@
 # Asset Dependency Validation and Caching Design
 
----
-
-## Current Status
-
-**✅ Implemented**: Unified cache for assets and resources with reference counting (`content_cache_`); forward and reverse dependency tracking; safe unloading and cascading release (`ReleaseAssetTree`); loader and unload functions for all supported asset/resource types
-**❌ Not Implemented**: Hot-reload and memory budget tracking; priority-based eviction (LRU, etc.); circular dependency detection; asynchronous loading (all logic is synchronous)
+> For canonical feature status see `implementation_plan.md#detailed-feature-matrix`. This document describes the conceptual model (some safeguards are still partial — notably dependent-protection during unload).
 
 ## Core Philosophy
 
@@ -15,7 +10,7 @@
 
 1. **Reference Counting**: Track usage counts for shared assets (extends current dependency registration)
 2. **Automatic Cascading**: Both loading and unloading cascade through dependency graphs automatically
-3. **Safe Unloading**: Cannot unload an asset/resource if anything still references it
+3. **Safe Unloading**: Target behavior (reference counts exist; full dependent-prevention logic still being completed)
 4. **In-Order Processing**: Dependencies loaded/unloaded in correct topological order
 
 ## Implementation Overview
@@ -66,14 +61,14 @@ using UnLoadFunction = std::function<void(std::shared_ptr<T>, AssetLoader&)>;
 **Asset → Asset Dependencies** (`AssetKey → AssetKey`):
 
 - GeometryAsset depends on MaterialAsset
-- **Current**: Registered via `AddAssetDependency()` in LoaderContext ✅
-- **Missing**: Reference counting and safe unload validation ❌
+- **Current**: Registration via `AddAssetDependency()` in LoaderContext ✅
+- **Partial**: Reference counting present; strict unload validation (preventing removal when still depended on) incomplete 🔄
 
 **Asset → Resource Dependencies** (`AssetKey → ResourceIndexT`):
 
-- MaterialAsset depends on TextureResource, GeometryAsset depends on BufferResource
-- **Current**: Registered via `AddResourceDependency()` in LoaderContext ✅
-- **Missing**: Resource reference tracking and coordination with ResourceTable ❌
+- MaterialAsset depends on TextureResource; GeometryAsset depends on BufferResource
+- **Current**: Registration via `AddResourceDependency()` in LoaderContext ✅
+- **Partial**: Reverse map & validation on unload WIP 🔄
 
 **Note**: Resources never depend on Assets (resources are lower-level primitives)
 

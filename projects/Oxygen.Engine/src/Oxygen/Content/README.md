@@ -1,99 +1,25 @@
-# Oxygen Content System - PAK File Tooling
+# Oxygen Content System
 
-## Asset Management Feature Status
+> Canonical feature status & index for the Content (PAK) subsystem. Individual deep-dive docs are under `Docs/` and intentionally avoid duplicating the status tables below.
 
-### Core Infrastructure
+## Documentation Index
 
-| Feature | Status | Implementation | Notes |
-|---------|--------|----------------|-------|
-| **PAK File Format** | ✅ **Complete** | `PakFile.h/cpp` | Binary container with asset directory, resource tables |
-| **Asset Directory** | ✅ **Complete** | `PakFormat.h` | Asset key → metadata mapping |
-| **Resource Tables** | ✅ **Complete** | `ResourceTable.h` | Type-safe buffer/texture resource access |
-| **Asset Key System** | ✅ **Complete** | `AssetKey.h` | 16-byte GUID-based asset identification |
-| **Asset Type System** | ✅ **Complete** | `AssetType.h` | Extensible asset type enumeration |
+| Topic | File | Focus |
+|-------|------|-------|
+| Entity relationships & intra-PAK rule | `Docs/overview.md` | Conceptual model & dependency boundaries |
+| PAK format, alignment, classification | `Docs/chunking.md` | File layout, alignment, resource tiers |
+| Loader & planned async pipeline | `Docs/asset_loader.md` | Sync loader + future coroutine design |
+| Dependency tracking & caching | `Docs/deps_and_cache.md` | Reference counting, unload design |
 
-### Asset Loading Pipeline
+---
 
-| Feature | Status | Implementation | Notes |
-|---------|--------|----------------|-------|
-| **Synchronous Asset Loader** | ✅ **Complete** | `AssetLoader.h/cpp` | Type-safe LoaderContext system |
-| **Loader Registration** | ✅ **Complete** | `LoaderFunctions.h` | Unified LoaderContext API for all loaders |
-| **Resource Caching** | ✅ **Complete** | `ResourceTable.h`, `AssetLoader.h/cpp` | Resource deduplication with manual eviction and ref counting |
-| **Dependency Registration** | ✅ **Complete** | `LoaderContext`, `AssetLoader.h/cpp` | Inline dependency registration during loading, enforced at runtime |
-| **Safe Asset Unloading** | 🔄 **Partial** | `AssetLoader.h/cpp` | Reference counting and dependency tracking implemented, but full cascading validation not yet enforced |
-| **Asset Caching** | ✅ **Complete** | `AssetLoader.h/cpp` | Assets cached in AssetLoader with ref counting |
-| **Hot Reload** | ❌ **Missing** | *Not implemented* | No file watching or invalidation |
+## Implementation Status & Roadmap
 
-### Asynchronous System (Designed but Not Implemented)
+All status tables and roadmap details have moved to `Docs/implementation_plan.md`. This README stays lightweight for orientation.
 
-| Feature | Status | Implementation | Notes |
-|---------|--------|----------------|-------|
-| **Coroutine-based API** | ❌ **Missing** | *Documented only* | C++20 coroutines + Corral library |
-| **ThreadPool Integration** | 🔄 **Partial** | `OxCo/ThreadPool.h` | ThreadPool exists but not integrated |
-| **Async File I/O** | ❌ **Missing** | *Not implemented* | No async disk operations |
-| **GPU Upload Queue** | ❌ **Missing** | *Not implemented* | No dedicated upload pipeline |
-| **Background Processing** | ❌ **Missing** | *Not implemented* | No CPU-bound work offloading |
+## Roadmap
 
-### Asset Types (Loaders)
-
-| Asset Type | Status | Implementation | Features |
-|------------|--------|----------------|----------|
-| **GeometryAsset** | ✅ **Complete** | `GeometryLoader.h` | Multi-LOD meshes, submeshes, LoaderContext |
-| **BufferResource** | ✅ **Complete** | `BufferLoader.h` | Vertex/index/constant buffers, LoaderContext |
-| **TextureResource** | ✅ **Complete** | `TextureLoader.h` | 2D/3D/cubemap textures, LoaderContext |
-| **MaterialAsset** | ✅ **Complete** | `MaterialLoader.h` | Shader + texture refs, LoaderContext |
-| **SceneAsset** | ❌ **Missing** | *Not implemented* | Scene composition and hierarchy |
-| **AnimationAsset** | ❌ **Missing** | *Not implemented* | Animation sequences |
-| **AudioResource** | ❌ **Missing** | *Not implemented* | Compressed audio data |
-
-### Streaming & Chunking
-
-| Feature | Status | Implementation | Notes |
-|---------|--------|----------------|-------|
-| **Chunked Loading** | ❌ **Missing** | *Documented only* | Large asset streaming |
-| **Memory Mapping** | ❌ **Missing** | *Not implemented* | Direct file-to-memory mapping |
-| **GPU Alignment** | ✅ **Complete** | PAK format | 256-byte alignment for GPU resources |
-| **Progressive Loading** | ❌ **Missing** | *Not implemented* | Priority-based asset streaming |
-| **Residency Management** | ❌ **Missing** | *Not implemented* | GPU memory budget tracking |
-
-### Development Tools
-
-| Tool | Status | Implementation | Purpose |
-|------|--------|----------------|---------|
-| **PAK Generator** | ✅ **Complete** | `generate_pak.py` | YAML → binary PAK conversion |
-| **PAK Dumper** | ✅ **Complete** | `PakFileDumper.cpp` | PAK inspection and debugging |
-| **Performance Profiler** | ❌ **Missing** | *Not implemented* | Loading time and memory analysis |
-| **Dependency Analyzer** | ❌ **Missing** | *Not implemented* | Asset reference graph analysis |
-
-### Testing & Validation
-
-| Area | Status | Coverage | Notes |
-|------|--------|----------|-------|
-| **Unit Tests** | ✅ **Excellent** | Comprehensive coverage | All loaders: basic, error, dependency, and cache/refcount tests |
-| **Integration Tests** | ✅ **Good** | Link + table tests | LoaderContext integration, cache, and dependency logic validated |
-| **Performance Tests** | ❌ **Missing** | *None* | No loading benchmarks |
-| **Memory Tests** | ❌ **Missing** | *None* | No leak or usage validation |
-
-## Priority Implementation Roadmap
-
-### Phase 1: Foundation (High Priority)
-
-1. **Asset Caching System** - **Complete**: Implemented in AssetLoader (resources and assets cached with ref counting)
-2. **Safe Asset Unloading** - **Partial**: Reference counting and dependency tracking implemented, but full cascading validation not yet enforced
-3. **Reference Counting** - **Complete**: Usage counts tracked for shared assets/resources
-4. **Error Handling** - Robust error recovery and reporting
-
-### Phase 2: Async Pipeline (Medium Priority)
-
-1. **Coroutine Integration** - Implement async loading API
-2. **ThreadPool Integration** - Connect existing ThreadPool to asset loading
-3. **GPU Upload Queue** - Dedicated GPU resource upload pipeline
-
-### Phase 3: Advanced Features (Lower Priority)
-
-1. **Hot Reload System** - File watching and asset invalidation
-2. **Streaming System** - Chunked loading for large assets
-3. **Memory Management** - Residency tracking and smart eviction
+See `Docs/implementation_plan.md#roadmap-phases`.
 
 ## LoaderContext Architecture
 
