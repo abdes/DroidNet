@@ -8,6 +8,8 @@
 
 #include <utility>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/Queue.h>

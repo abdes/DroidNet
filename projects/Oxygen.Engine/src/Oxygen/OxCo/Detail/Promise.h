@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoInline.h>
