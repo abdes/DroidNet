@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -16,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/RenderItem.h>
+#include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -30,7 +32,6 @@ class Mesh;
 namespace oxygen::engine {
 
 struct RenderContext;
-struct SceneConstants;
 struct MaterialConstants;
 
 //! Provides shader-visible indices for current vertex/index buffers (Phase 1
@@ -120,9 +121,14 @@ public:
     PostExecute(context);
   }
 
-  //! Sets the per-frame scene constants snapshot (once per frame before
-  //! execute).
-  OXGN_RNDR_API auto SetSceneConstants(const SceneConstants& constants) -> void;
+  //! Modify scene constants in-place via a user-provided mutator.
+  /*!
+    The mutator is invoked with a reference to the internal SceneConstants
+    instance. Use the chainable SceneConstants setters inside the mutator so
+    versioning and lazy snapshotting are preserved.
+  */
+  OXGN_RNDR_API auto ModifySceneConstants(
+    std::function<void(SceneConstants&)> mutator) -> void;
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
@@ -181,8 +187,13 @@ private:
 
   // Scene constants management
   std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
-  std::unique_ptr<SceneConstants> scene_constants_cpu_;
-  bool scene_constants_dirty_ { false };
+  SceneConstants scene_constants_cpu_;
+  // Use SceneConstants' internal versioning to detect changes instead of a
+  // separate dirty flag. `last_uploaded_scene_constants_version_` records
+  // the version that was last uploaded to the GPU. A sentinel max value
+  // forces the first upload.
+  MonotonicVersion last_uploaded_scene_constants_version_ { (
+    std::numeric_limits<uint64_t>::max)() };
 
   // Material constants management
   std::shared_ptr<graphics::Buffer> material_constants_buffer_;

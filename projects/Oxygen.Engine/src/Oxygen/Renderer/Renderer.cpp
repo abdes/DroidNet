@@ -157,8 +157,6 @@ auto Renderer::PreExecute(RenderContext& context) -> void
   DCHECK_F(!context.scene_constants,
     "RenderContext.scene_constants must be null; use "
     "Renderer::SetSceneConstants");
-  DCHECK_NOTNULL_F(scene_constants_cpu_.get(),
-    "Renderer::SetSceneConstants must be called before ExecuteRenderGraph");
 
   EnsureAndUploadDrawResourceIndices();
   UpdateDrawResourceIndicesSlotIfChanged();
@@ -276,27 +274,33 @@ auto Renderer::UploadDrawIndicesCPUToGPU(
 
 auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
 {
-  if (!scene_constants_cpu_) {
-    return; // validated earlier; defensive
-  }
-  const auto previous_slot = scene_constants_cpu_->bindless_indices_slot;
-  auto new_slot = oxygen::engine::kInvalidDescriptorSlot; // sentinel
+  const auto previous_slot = scene_constants_cpu_.GetBindlessIndicesSlot();
+  auto new_slot = BindlessIndicesSlot(kInvalidDescriptorSlot); // sentinel
   if (!bindless_indices_cpu_.empty() && bindless_indices_slot_assigned_) {
-    new_slot = bindless_indices_heap_slot_;
+    new_slot = BindlessIndicesSlot(bindless_indices_heap_slot_);
   }
   if (new_slot != previous_slot) {
-    scene_constants_cpu_->bindless_indices_slot = new_slot;
-    scene_constants_dirty_ = true;
-    LOG_F(INFO, "SceneConstants.bindless_indices_slot = {}", new_slot);
+    scene_constants_cpu_.SetBindlessIndicesSlot(
+      new_slot, SceneConstants::kRenderer);
+    // Version bumped by SceneConstants; no local dirty flag needed.
+    LOG_F(INFO, "SceneConstants.bindless_indices_slot = {}",
+      static_cast<uint32_t>(new_slot));
   }
 }
 
 auto Renderer::MaybeUpdateSceneConstants() -> void
 {
-  if (!scene_constants_cpu_) {
-    return; // must have been set earlier; defensive
+  // Ensure renderer-managed fields are refreshed for this frame prior to
+  // snapshot/upload. This also bumps the version when they change.
+  if (auto rc_ptr_local = render_controller_.lock()) {
+    const auto frame_idx = rc_ptr_local->CurrentFrameIndex();
+    scene_constants_cpu_.SetFrameIndex(oxygen::engine::FrameIndex(frame_idx),
+      oxygen::engine::SceneConstants::kRenderer);
   }
-  if (scene_constants_buffer_ && !scene_constants_dirty_) {
+  const auto current_version = scene_constants_cpu_.GetVersion();
+  if (scene_constants_buffer_
+    && current_version == last_uploaded_scene_constants_version_) {
+    DLOG_F(2, "MaybeUpdateSceneConstants: skipping upload (up-to-date)");
     return; // up-to-date
   }
   auto rc_ptr = render_controller_.lock();
@@ -306,7 +310,7 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
   }
   auto& rc = *rc_ptr;
   auto& graphics = rc.GetGraphics();
-  const auto size_bytes = sizeof(SceneConstants);
+  const auto size_bytes = sizeof(SceneConstants::GpuData);
   if (!scene_constants_buffer_) {
     graphics::BufferDesc desc {
       .size_bytes = size_bytes,
@@ -318,10 +322,11 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
     scene_constants_buffer_->SetName(desc.debug_name);
     rc.GetResourceRegistry().Register(scene_constants_buffer_);
   }
+  const auto& snapshot = scene_constants_cpu_.GetSnapshot();
   void* mapped = scene_constants_buffer_->Map();
-  std::memcpy(mapped, scene_constants_cpu_.get(), size_bytes);
+  std::memcpy(mapped, &snapshot, size_bytes);
   scene_constants_buffer_->UnMap();
-  scene_constants_dirty_ = false;
+  last_uploaded_scene_constants_version_ = current_version;
 }
 
 auto Renderer::MaybeUpdateMaterialConstants() -> void
@@ -673,28 +678,14 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   return iter->second;
 }
 
-auto Renderer::SetSceneConstants(const SceneConstants& constants) -> void
+auto Renderer::ModifySceneConstants(
+  std::function<void(SceneConstants&)> mutator) -> void
 {
-  if (!scene_constants_cpu_) {
-    scene_constants_cpu_ = std::make_unique<SceneConstants>(constants);
-    scene_constants_dirty_ = true;
-    ++scene_constants_set_count_;
-    return;
-  }
-
-  // TODO: properly implement = operator and preserve internally set fields
-
-  // Preserve the bindless_indices_slot that was set by the renderer
-  const auto preserved_slot = scene_constants_cpu_->bindless_indices_slot;
-  *scene_constants_cpu_ = constants;
-  scene_constants_cpu_->bindless_indices_slot = preserved_slot;
-
-  scene_constants_dirty_ = true;
+  mutator(scene_constants_cpu_);
   ++scene_constants_set_count_;
 }
 
 auto Renderer::GetSceneConstants() const -> const SceneConstants&
 {
-  DCHECK_NOTNULL_F(scene_constants_cpu_.get());
-  return *scene_constants_cpu_;
+  return scene_constants_cpu_;
 }
