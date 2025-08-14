@@ -228,8 +228,7 @@ Follow-ups (refined and expanded):
     mutate the container.
 * Example hygiene: Re-verify `Examples/Graphics/Simple/MainModule.cpp` uses the
   container exclusively (no stray local vectors), and logs clearly when items
-  are first added (one-time info level is fine).
-* Docs lint: align list styles in `render_items.md` (low priority).
+  are first added (one-time info level is fine). [x] Done (2025-08-14).
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
@@ -609,3 +608,5 @@ Revision History:
   (opaque items container and span accessor), wired `PreExecute` to publish draw
   list and ensure resources, migrated Simple example; docs updated. Manual
   touch-ups to `RenderItemsList.cpp` and `Renderer.h` incorporated – 2025-08-14.
+* Phase 3 follow-up: Verified Simple example uses container exclusively and
+  added one-time info log when items are first added – 2025-08-14.
