@@ -481,19 +481,19 @@ auto MainModule::RenderScene() -> co::Co<>
     = glm::vec3(1.25F, 0.0F, 0.0F); // Look at center between cubes (0 and 2.5)
   auto up = glm::vec3(0, 1, 0);
 
-  scene_constants_.view_matrix = glm::lookAt(camera_position, target, up);
   const float aspect = static_cast<float>(surface_->Width())
     / static_cast<float>(surface_->Height());
-  scene_constants_.projection_matrix = glm::perspective(
-    glm::radians(45.0F), // Narrower field of view for better framing
-    aspect, // aspect
-    0.1F, // zNear
-    600.0F // zFar
-  );
-  scene_constants_.camera_position = { 0.0F, 0.0F, -3.5F };
-
   if (renderer_) {
-    renderer_->SetSceneConstants(scene_constants_);
+    renderer_->ModifySceneConstants([=](auto& sc) {
+      sc.SetViewMatrix(glm::lookAt(camera_position, target, up))
+        .SetProjectionMatrix(glm::perspective(
+          glm::radians(45.0F), // Narrower field of view for better framing
+          aspect, // aspect
+          0.1F, // zNear
+          600.0F // zFar
+          ))
+        .SetCameraPosition(glm::vec3 { 0.0F, 0.0F, -3.5F });
+    });
   }
 
   // Update material constants from the first render item's material
