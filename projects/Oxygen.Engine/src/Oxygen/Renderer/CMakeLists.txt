@@ -61,6 +61,7 @@ set(
     "Types/Frustum.h"
     "Types/MaterialConstants.h"
     "Types/SceneConstants.h"
+    "Types/View.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
@@ -72,6 +73,7 @@ set(
     "RenderPass.cpp"
     "ShaderPass.cpp"
     "Types/Frustum.cpp"
+    "Types/View.cpp"
 )
 
 target_sources(

@@ -348,9 +348,9 @@ No pass/root-signature changes required; passes already consume matrices from
 
 API and types
 
-* [ ] Add `Types/Frustum` with 6 planes, `FromViewProj(mat4, reverseZ)` and
+* [x] Add `Types/Frustum` with 6 planes, `FromViewProj(mat4, reverseZ)` and
   `IntersectsAABB(min,max)`/`IntersectsSphere(center,radius)`.
-* [ ] Add `Types/View` per spec above; compute cached matrices and frustum.
+* [x] Add `Types/View` per spec above; compute cached matrices and frustum.
 
 Extraction
 
