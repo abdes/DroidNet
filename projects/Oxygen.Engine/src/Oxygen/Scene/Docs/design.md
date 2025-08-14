@@ -26,7 +26,7 @@ for future enhancement.
 | Component Attachment System | ✅ Complete         | Full Composition system                      |
 | Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists                |
 | Camera Component            | ✅ Complete         | Perspective & Orthographic, runtime attach   |
-| Mesh/Renderable Component   | 🚧 In Progress      | **Next priority: implement for rendering**   |
+| Mesh/Renderable Component   | 🚧 In Progress      | Renderable component planned (GeometryAsset/MaterialAsset, LOD/submeshes, renderer bridge). See renderable_component.md |
 | Light Component             | 🚧 In Progress      | **Next priority: implement for rendering**   |
 | Scene Serialization         | ❌ Not Started      | Deferred until after rendering components    |
 | Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                  |
@@ -652,6 +652,9 @@ The component system infrastructure is complete and robust. The most urgent next
 - Integrate with the existing component attachment, dependency, and update systems.
 - Ensure type-safe APIs and support for runtime attachment/detachment.
 - Provide basic test coverage and documentation for new components.
+
+See Renderable implementation plan in `renderable_component.md` for detailed
+API, data mapping, renderer bridge, and trackable tasks.
 
 **Benefits:**
 

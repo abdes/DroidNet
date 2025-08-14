@@ -2,7 +2,10 @@
 
 ## Summary
 
-After comprehensive research across major game engines and systems, **most scene graph implementations do NOT require unique node names**. Names are primarily used for debugging, tooling, and human readability rather than as primary identifiers for the scene system.
+After comprehensive research across major game engines and systems, **most scene
+graph implementations do NOT require unique node names**. Names are primarily
+used for debugging, tooling, and human readability rather than as primary
+identifiers for the scene system.
 
 ## Industry Analysis
 
@@ -19,8 +22,10 @@ After comprehensive research across major game engines and systems, **most scene
 
 ### Key Findings
 
-1. **Handle-Based Identity**: Modern engines use handle/ID-based systems for primary node identity
-2. **Names for Tooling**: Names serve debugging, editor display, and developer convenience
+1. **Handle-Based Identity**: Modern engines use handle/ID-based systems for
+   primary node identity
+2. **Names for Tooling**: Names serve debugging, editor display, and developer
+   convenience
 3. **Non-Unique by Design**: Multiple nodes can share names without issues
 4. **Optional Names**: Many systems allow unnamed nodes entirely
 5. **Search Convenience**: Names enable find-by-name functionality for scripting
@@ -30,6 +35,7 @@ After comprehensive research across major game engines and systems, **most scene
 Based on analysis of the Oxygen Engine codebase:
 
 ### Identity System
+
 ```cpp
 // Primary identity is NodeHandle-based, not name-based
 NodeHandle handle = scene->CreateNode("PlayerCharacter");
@@ -37,6 +43,7 @@ NodeHandle another = scene->CreateNode("PlayerCharacter"); // Same name, differe
 ```
 
 ### Naming Characteristics
+
 - ✅ **Non-unique names allowed**: Multiple nodes can have identical names
 - ✅ **Handle-based identity**: `NodeHandle` provides unique identification
 - ✅ **Names for debugging**: Used in test output and logging
@@ -44,6 +51,7 @@ NodeHandle another = scene->CreateNode("PlayerCharacter"); // Same name, differe
 - ✅ **Cross-scene cloning**: Names preserved during `CreateHierarchyFrom()`
 
 ### Evidence from Tests
+
 ```cpp
 // From Scene_reparent_test.cpp - demonstrates non-unique naming
 auto root1 = scene->CreateNode("Root");
@@ -64,6 +72,7 @@ EXPECT_NE(root1.GetHandle(), root2.GetHandle()); // Different identities
 ### Best Practice Guidelines
 
 #### Naming Conventions
+
 ```cpp
 // Good naming practices
 scene->CreateNode("Player");           // Clear, descriptive
@@ -77,6 +86,7 @@ scene->CreateNode("");                 // Empty name (valid)
 ```
 
 #### Hierarchical Naming
+
 ```cpp
 // Hierarchical context provides clarity
 Root: "GameWorld"
@@ -91,6 +101,7 @@ Root: "GameWorld"
 ### API Design Implications
 
 #### Finding Nodes
+
 ```cpp
 // Primary lookup should be handle-based
 NodeHandle handle = /*...*/ ;
@@ -104,6 +115,7 @@ std::optional<SceneNode> specific = scene->FindNodeByPath("GameWorld/Player");
 ```
 
 #### Cross-Scene Operations
+
 ```cpp
 // Names preserved during cloning
 SceneNode original = scene1->CreateNode("PlayerTemplate");
@@ -114,6 +126,7 @@ SceneNode cloned = scene2->CreateHierarchyFrom(original, "PlayerInstance");
 ## Implementation Recommendations
 
 ### 1. Validation Rules
+
 ```cpp
 class NodeNaming {
 public:
@@ -136,6 +149,7 @@ public:
 ```
 
 ### 2. Search Functionality
+
 ```cpp
 class Scene {
 public:
@@ -153,6 +167,7 @@ public:
 ```
 
 ### 3. Debugging Support
+
 ```cpp
 class SceneDebugger {
 public:
@@ -175,11 +190,13 @@ public:
 ## Cross-Scene Considerations
 
 ### Cloning and Migration
+
 - **Preserve Names**: Original names should be preserved during cloning
 - **Handle Remapping**: New handles assigned in target scene
 - **Logical Equivalence**: Compare by name + hierarchy structure, not handles
 
 ### Serialization
+
 - **Name Storage**: Include names in serialized scene data
 - **Handle Regeneration**: Handles regenerated on load
 - **Name-Based References**: External references by name should be robust
@@ -201,13 +218,19 @@ std::cout << builder_->FormatAsTree(hierarchy) << std::endl;
 
 ## Conclusion
 
-**Scene graphs should NOT require unique node names.** The Oxygen Engine's current handle-based identity system with non-unique names aligns with industry best practices. Names serve as human-readable labels for debugging and tooling, while `NodeHandle` provides the robust identity system needed for scene management.
+**Scene graphs should NOT require unique node names.** The Oxygen Engine's
+current handle-based identity system with non-unique names aligns with industry
+best practices. Names serve as human-readable labels for debugging and tooling,
+while `NodeHandle` provides the robust identity system needed for scene
+management.
 
 This approach provides:
+
 - ✅ **Flexibility**: Developers aren't constrained by naming conflicts
 - ✅ **Performance**: Handle-based operations are efficient
 - ✅ **Robustness**: System doesn't break due to naming issues
 - ✅ **Usability**: Meaningful names aid development and debugging
 - ✅ **Scalability**: Works well with large, complex scene graphs
 
-The current Oxygen Engine implementation already follows these best practices and should be maintained as-is.
+The current Oxygen Engine implementation already follows these best practices
+and should be maintained as-is.
