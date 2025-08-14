@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -128,7 +127,7 @@ public:
     versioning and lazy snapshotting are preserved.
   */
   OXGN_RNDR_API auto ModifySceneConstants(
-    std::function<void(SceneConstants&)> mutator) -> void;
+    const std::function<void(SceneConstants&)>& mutator) -> void;
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
@@ -178,27 +177,26 @@ private:
   auto CreateOrResizeDrawIndicesBuffer(
     std::size_t size_bytes, graphics::RenderController& rc) -> void;
   auto RegisterDrawIndicesSrv(graphics::RenderController& rc) -> void;
-  auto UploadDrawIndicesCPUToGPU(const void* src, std::size_t size_bytes)
-    -> void;
+  auto UploadDrawIndices(const void* src, std::size_t size_bytes) const -> void;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
 
   // Scene constants management
-  std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
-  SceneConstants scene_constants_cpu_;
+  std::shared_ptr<graphics::Buffer> scene_const_buffer_;
+  SceneConstants scene_const_cpu_;
   // Use SceneConstants' internal versioning to detect changes instead of a
-  // separate dirty flag. `last_uploaded_scene_constants_version_` records
+  // separate dirty flag. `last_uploaded_scene_const_version_` records
   // the version that was last uploaded to the GPU. A sentinel max value
   // forces the first upload.
-  MonotonicVersion last_uploaded_scene_constants_version_ { (
+  MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
 
   // Material constants management
-  std::shared_ptr<graphics::Buffer> material_constants_buffer_;
-  std::unique_ptr<MaterialConstants> material_constants_cpu_;
-  bool material_constants_dirty_ { false };
+  std::shared_ptr<graphics::Buffer> material_const_buffer_;
+  std::unique_ptr<MaterialConstants> material_const_cpu_;
+  bool material_const_dirty_ { false };
 
   // Draw resource indices management (bindless vertex/index SRV indices).
   // Structured buffer now holds a per-draw array of DrawResourceIndices.
@@ -209,10 +207,6 @@ private:
   bool bindless_indices_dirty_ { false };
   uint32_t bindless_indices_heap_slot_ { 0 };
   bool bindless_indices_slot_assigned_ { false };
-
-  // Validation: track how many times SceneConstants were set in the current
-  // frame. Reset in PostExecute; asserted in PreExecute.
-  uint32_t scene_constants_set_count_ { 0 };
 
   // Internal ensure that optionally updates the per-frame indices snapshot.
 };

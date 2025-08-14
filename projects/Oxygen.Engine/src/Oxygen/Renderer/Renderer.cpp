@@ -62,17 +62,17 @@ auto GetMeshId(const Mesh& mesh) -> MeshId
 class LruEvictionPolicy : public EvictionPolicy {
 public:
   static constexpr std::size_t kDefaultLruAge = 60; // frames
-  explicit LruEvictionPolicy(std::size_t max_age_frames = kDefaultLruAge)
+  explicit LruEvictionPolicy(const std::size_t max_age_frames = kDefaultLruAge)
     : max_age_(max_age_frames)
   {
   }
-  auto OnMeshAccess(MeshId id) -> void override
+  auto OnMeshAccess(const MeshId id) -> void override
   {
     last_used_[id] = current_frame_;
   }
   auto SelectResourcesToEvict(
     const std::unordered_map<MeshId, MeshGpuResources>& currentResources,
-    std::size_t currentFrame) -> std::vector<MeshId> override
+    const std::size_t currentFrame) -> std::vector<MeshId> override
   {
     current_frame_ = currentFrame;
     std::vector<MeshId> evict;
@@ -84,7 +84,7 @@ public:
     }
     return evict;
   }
-  auto OnMeshRemoved(MeshId id) -> void override { last_used_.erase(id); }
+  auto OnMeshRemoved(const MeshId id) -> void override { last_used_.erase(id); }
 
 private:
   std::size_t current_frame_ = 0;
@@ -139,7 +139,7 @@ auto Renderer::UnregisterMesh(const Mesh& mesh) -> void
   }
 }
 
-auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
+auto Renderer::EvictUnusedMeshResources(const std::size_t current_frame) -> void
 {
   if (!eviction_policy_) {
     return;
@@ -151,6 +151,7 @@ auto Renderer::EvictUnusedMeshResources(std::size_t current_frame) -> void
     eviction_policy_->OnMeshRemoved(id);
   }
 }
+
 auto Renderer::PreExecute(RenderContext& context) -> void
 {
   // Contract checks (kept inline per style preference)
@@ -164,13 +165,13 @@ auto Renderer::PreExecute(RenderContext& context) -> void
   MaybeUpdateMaterialConstants();
   WireContext(context);
 }
+
+// ReSharper disable once CppMemberFunctionMayBeStatic
 auto Renderer::PostExecute(RenderContext& context) -> void
 {
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
   context.Reset();
-  // Reset per-frame metrics after a full Execute.
-  scene_constants_set_count_ = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -185,24 +186,15 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
   if (bindless_indices_buffer_ && !bindless_indices_dirty_) {
     return; // up-to-date
   }
-  auto rc_ptr = render_controller_.lock();
+  const auto rc_ptr = render_controller_.lock();
   if (!rc_ptr) {
     LOG_F(
       ERROR, "RenderController expired while ensuring draw resource indices");
     return;
   }
   auto& rc = *rc_ptr;
-  if (scene_constants_set_count_ != 1) {
-    // Relaxed: warn but continue to avoid crashing interactive examples.
-    // Contract remains that callers should set scene constants exactly once
-    // per frame before ExecuteRenderGraph.
-    LOG_F(WARNING,
-      "SceneConstants should be set exactly once per frame before PreExecute;"
-      " got %u",
-      scene_constants_set_count_);
-  }
-  const auto size_bytes = static_cast<size_t>(bindless_indices_cpu_.size())
-    * sizeof(DrawResourceIndices);
+  const auto size_bytes
+    = bindless_indices_cpu_.size() * sizeof(DrawResourceIndices);
   // Create or resize + (re)register SRV if needed
   const bool need_recreate = !bindless_indices_buffer_
     || bindless_indices_buffer_->GetSize() < size_bytes;
@@ -212,18 +204,18 @@ auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
   }
 
   // Upload CPU snapshot (entire array)
-  UploadDrawIndicesCPUToGPU(bindless_indices_cpu_.data(), size_bytes);
+  UploadDrawIndices(bindless_indices_cpu_.data(), size_bytes);
   bindless_indices_dirty_ = false;
 }
 
 auto Renderer::CreateOrResizeDrawIndicesBuffer(
-  std::size_t size_bytes, RenderController& rc) -> void
+  const std::size_t size_bytes, RenderController& rc) -> void
 {
-  auto& graphics = rc.GetGraphics();
-  graphics::BufferDesc desc {
+  const auto& graphics = rc.GetGraphics();
+  const BufferDesc desc {
     .size_bytes = size_bytes,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
+    .usage = BufferUsage::kConstant,
+    .memory = BufferMemory::kUpload,
     .debug_name = std::string("DrawResourceIndices"),
   };
   bindless_indices_buffer_ = graphics.CreateBuffer(desc);
@@ -237,10 +229,10 @@ auto Renderer::CreateOrResizeDrawIndicesBuffer(
 auto Renderer::RegisterDrawIndicesSrv(RenderController& rc) -> void
 {
   auto& descriptor_allocator = rc.GetDescriptorAllocator();
-  graphics::BufferViewDescription srv_view_desc {
+  constexpr graphics::BufferViewDescription srv_view_desc {
     .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = oxygen::Format::kUnknown,
+    .format = Format::kUnknown,
     .stride = sizeof(DrawResourceIndices),
   };
   auto srv_handle = descriptor_allocator.Allocate(
@@ -264,8 +256,8 @@ auto Renderer::RegisterDrawIndicesSrv(RenderController& rc) -> void
   }
 }
 
-auto Renderer::UploadDrawIndicesCPUToGPU(
-  const void* src, std::size_t size_bytes) -> void
+auto Renderer::UploadDrawIndices(
+  const void* src, const std::size_t size_bytes) const -> void
 {
   void* mapped = bindless_indices_buffer_->Map();
   std::memcpy(mapped, src, size_bytes);
@@ -274,13 +266,13 @@ auto Renderer::UploadDrawIndicesCPUToGPU(
 
 auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
 {
-  const auto previous_slot = scene_constants_cpu_.GetBindlessIndicesSlot();
+  const auto previous_slot = scene_const_cpu_.GetBindlessIndicesSlot();
   auto new_slot = BindlessIndicesSlot(kInvalidDescriptorSlot); // sentinel
   if (!bindless_indices_cpu_.empty() && bindless_indices_slot_assigned_) {
     new_slot = BindlessIndicesSlot(bindless_indices_heap_slot_);
   }
   if (new_slot != previous_slot) {
-    scene_constants_cpu_.SetBindlessIndicesSlot(
+    scene_const_cpu_.SetBindlessIndicesSlot(
       new_slot, SceneConstants::kRenderer);
     // Version bumped by SceneConstants; no local dirty flag needed.
     LOG_F(INFO, "SceneConstants.bindless_indices_slot = {}",
@@ -292,98 +284,98 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
 {
   // Ensure renderer-managed fields are refreshed for this frame prior to
   // snapshot/upload. This also bumps the version when they change.
-  if (auto rc_ptr_local = render_controller_.lock()) {
+  if (const auto rc_ptr_local = render_controller_.lock()) {
     const auto frame_idx = rc_ptr_local->CurrentFrameIndex();
-    scene_constants_cpu_.SetFrameIndex(oxygen::engine::FrameIndex(frame_idx),
-      oxygen::engine::SceneConstants::kRenderer);
+    scene_const_cpu_.SetFrameIndex(
+      FrameIndex(frame_idx), SceneConstants::kRenderer);
   }
-  const auto current_version = scene_constants_cpu_.GetVersion();
-  if (scene_constants_buffer_
-    && current_version == last_uploaded_scene_constants_version_) {
+  const auto current_version = scene_const_cpu_.GetVersion();
+  if (scene_const_buffer_
+    && current_version == last_uploaded_scene_const_version_) {
     DLOG_F(2, "MaybeUpdateSceneConstants: skipping upload (up-to-date)");
     return; // up-to-date
   }
-  auto rc_ptr = render_controller_.lock();
+  const auto rc_ptr = render_controller_.lock();
   if (!rc_ptr) {
     LOG_F(ERROR, "RenderController expired while updating scene constants");
     return;
   }
   auto& rc = *rc_ptr;
-  auto& graphics = rc.GetGraphics();
-  const auto size_bytes = sizeof(SceneConstants::GpuData);
-  if (!scene_constants_buffer_) {
-    graphics::BufferDesc desc {
+  const auto& graphics = rc.GetGraphics();
+  constexpr auto size_bytes = sizeof(SceneConstants::GpuData);
+  if (!scene_const_buffer_) {
+    const BufferDesc desc {
       .size_bytes = size_bytes,
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
+      .usage = BufferUsage::kConstant,
+      .memory = BufferMemory::kUpload,
       .debug_name = std::string("SceneConstants"),
     };
-    scene_constants_buffer_ = graphics.CreateBuffer(desc);
-    scene_constants_buffer_->SetName(desc.debug_name);
-    rc.GetResourceRegistry().Register(scene_constants_buffer_);
+    scene_const_buffer_ = graphics.CreateBuffer(desc);
+    scene_const_buffer_->SetName(desc.debug_name);
+    rc.GetResourceRegistry().Register(scene_const_buffer_);
   }
-  const auto& snapshot = scene_constants_cpu_.GetSnapshot();
-  void* mapped = scene_constants_buffer_->Map();
+  const auto& snapshot = scene_const_cpu_.GetSnapshot();
+  void* mapped = scene_const_buffer_->Map();
   std::memcpy(mapped, &snapshot, size_bytes);
-  scene_constants_buffer_->UnMap();
-  last_uploaded_scene_constants_version_ = current_version;
+  scene_const_buffer_->UnMap();
+  last_uploaded_scene_const_version_ = current_version;
 }
 
 auto Renderer::MaybeUpdateMaterialConstants() -> void
 {
-  if (!material_constants_cpu_) {
+  if (!material_const_cpu_) {
     return; // optional; not set this frame
   }
-  if (material_constants_buffer_ && !material_constants_dirty_) {
+  if (material_const_buffer_ && !material_const_dirty_) {
     return; // up-to-date
   }
-  auto rc_ptr = render_controller_.lock();
+  const auto rc_ptr = render_controller_.lock();
   if (!rc_ptr) {
     LOG_F(ERROR, "RenderController expired while updating material constants");
     return;
   }
   auto& rc = *rc_ptr;
-  auto& graphics = rc.GetGraphics();
-  const auto size_bytes = sizeof(MaterialConstants);
-  if (!material_constants_buffer_) {
-    graphics::BufferDesc desc {
+  const auto& graphics = rc.GetGraphics();
+  constexpr auto size_bytes = sizeof(MaterialConstants);
+  if (!material_const_buffer_) {
+    const BufferDesc desc {
       .size_bytes = size_bytes,
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
+      .usage = BufferUsage::kConstant,
+      .memory = BufferMemory::kUpload,
       .debug_name = std::string("MaterialConstants"),
     };
-    material_constants_buffer_ = graphics.CreateBuffer(desc);
-    material_constants_buffer_->SetName(desc.debug_name);
-    rc.GetResourceRegistry().Register(material_constants_buffer_);
+    material_const_buffer_ = graphics.CreateBuffer(desc);
+    material_const_buffer_->SetName(desc.debug_name);
+    rc.GetResourceRegistry().Register(material_const_buffer_);
   }
-  void* mapped = material_constants_buffer_->Map();
-  std::memcpy(mapped, material_constants_cpu_.get(), size_bytes);
-  material_constants_buffer_->UnMap();
-  material_constants_dirty_ = false;
+  void* mapped = material_const_buffer_->Map();
+  std::memcpy(mapped, material_const_cpu_.get(), size_bytes);
+  material_const_buffer_->UnMap();
+  material_const_dirty_ = false;
 }
 
 auto Renderer::WireContext(RenderContext& context) -> void
 {
-  context.scene_constants = scene_constants_buffer_;
-  if (material_constants_cpu_) {
-    context.material_constants = material_constants_buffer_;
+  context.scene_constants = scene_const_buffer_;
+  if (material_const_cpu_) {
+    context.material_constants = material_const_buffer_;
   }
   context.SetRenderer(this, render_controller_.lock().get());
 }
 
 auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
 {
-  if (!material_constants_cpu_) {
-    material_constants_cpu_ = std::make_unique<MaterialConstants>(constants);
+  if (!material_const_cpu_) {
+    material_const_cpu_ = std::make_unique<MaterialConstants>(constants);
   } else {
-    *material_constants_cpu_ = constants;
+    *material_const_cpu_ = constants;
   }
-  material_constants_dirty_ = true;
+  material_const_dirty_ = true;
 }
 
 auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 {
-  return *material_constants_cpu_;
+  return *material_const_cpu_;
 }
 
 auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
@@ -504,10 +496,10 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
   upload_buffer->SetName(upload_desc.debug_name);
   void* mapped = upload_buffer->Map();
   if (indices_view.type == IndexType::kUInt16) {
-    auto src = indices_view.AsU16();
+    const auto src = indices_view.AsU16();
     std::memcpy(mapped, src.data(), upload_desc.size_bytes);
   } else if (indices_view.type == IndexType::kUInt32) {
-    auto src = indices_view.AsU32();
+    const auto src = indices_view.AsU32();
     std::memcpy(mapped, src.data(), upload_desc.size_bytes);
   }
   upload_buffer->UnMap();
@@ -538,15 +530,15 @@ auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
   auto& descriptor_allocator = rc.GetDescriptorAllocator();
   auto& registry = rc.GetResourceRegistry();
 
-  BufferViewDescription srv_desc {
+  constexpr BufferViewDescription srv_desc {
     .view_type = ResourceViewType::kStructuredBuffer_SRV,
     .visibility = DescriptorVisibility::kShaderVisible,
     .format = Format::kUnknown,
     .stride = sizeof(Vertex),
   };
-  auto handle = descriptor_allocator.Allocate(
-    oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible);
+  auto handle
+    = descriptor_allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+      DescriptorVisibility::kShaderVisible);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate descriptor for vertex buffer SRV");
     return 0U;
@@ -559,8 +551,8 @@ auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
 }
 
 // Create a typed SRV for an index buffer (R16/R32) and register it.
-auto CreateAndRegisterIndexSrv(
-  RenderController& rc, Buffer& index_buffer, IndexType index_type) -> uint32_t
+auto CreateAndRegisterIndexSrv(RenderController& rc, Buffer& index_buffer,
+  const IndexType index_type) -> uint32_t
 {
   using oxygen::Format;
   using oxygen::graphics::BufferViewDescription;
@@ -572,7 +564,7 @@ auto CreateAndRegisterIndexSrv(
 
   const auto typed_format
     = index_type == IndexType::kUInt16 ? Format::kR16UInt : Format::kR32UInt;
-  BufferViewDescription srv_desc {
+  const BufferViewDescription srv_desc {
     .view_type = ResourceViewType::kTypedBuffer_SRV,
     .visibility = DescriptorVisibility::kShaderVisible,
     .format = typed_format,
@@ -593,8 +585,8 @@ auto CreateAndRegisterIndexSrv(
 
 } // namespace
 
-auto Renderer::EnsureResourcesForDrawList(std::span<const RenderItem> draw_list)
-  -> void
+auto Renderer::EnsureResourcesForDrawList(
+  const std::span<const RenderItem> draw_list) -> void
 {
   // Build per-draw array of indices in submission order
   std::vector<DrawResourceIndices> per_draw;
@@ -613,35 +605,21 @@ auto Renderer::EnsureResourcesForDrawList(std::span<const RenderItem> draw_list)
   if (!per_draw.empty()) {
     bindless_indices_cpu_ = std::move(per_draw);
     bindless_indices_dirty_ = true;
-    // Verification logging for multi-draw: size and first few entries
-    LOG_F(3, "Prepared {} DrawResourceIndices entries for this frame",
-      bindless_indices_cpu_.size());
-    for (size_t i = 0; i < bindless_indices_cpu_.size(); ++i) {
-      const auto& e = bindless_indices_cpu_[i];
-      LOG_F(3, "  [{}] vb_idx={}, ib_idx={}, indexed={}", i,
-        e.vertex_buffer_index, e.index_buffer_index, e.is_indexed);
-      if (i >= 3) { // limit verbosity
-        if (bindless_indices_cpu_.size() > 4) {
-          LOG_F(3, "  ... (truncated)");
-        }
-        break;
-      }
-    }
   }
 }
 
 auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 {
+  DLOG_SCOPE_FUNCTION(3);
+  DLOG_F(3, "mesh: {}", mesh.GetName());
+
   MeshId id = GetMeshId(mesh);
-  if (auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
+  if (const auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
     if (eviction_policy_) {
       eviction_policy_->OnMeshAccess(id);
     }
     return it->second; // cache hit
   }
-
-  DLOG_SCOPE_FUNCTION(INFO);
-  DLOG_F(INFO, "mesh: {}", mesh.GetName());
 
   const auto render_controller = render_controller_.lock();
   if (!render_controller) {
@@ -679,13 +657,12 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 }
 
 auto Renderer::ModifySceneConstants(
-  std::function<void(SceneConstants&)> mutator) -> void
+  const std::function<void(SceneConstants&)>& mutator) -> void
 {
-  mutator(scene_constants_cpu_);
-  ++scene_constants_set_count_;
+  mutator(scene_const_cpu_);
 }
 
 auto Renderer::GetSceneConstants() const -> const SceneConstants&
 {
-  return scene_constants_cpu_;
+  return scene_const_cpu_;
 }

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <compare>
 #include <cstdint>
 #include <limits>
 
@@ -14,7 +13,6 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
 
@@ -29,7 +27,7 @@ inline constexpr uint32_t kInvalidDescriptorSlot
 
 struct FrameIndex {
   uint32_t value;
-  explicit constexpr FrameIndex(uint32_t v = 0)
+  explicit constexpr FrameIndex(const uint32_t v = 0)
     : value(v)
   {
   }
@@ -39,7 +37,8 @@ struct FrameIndex {
 
 struct BindlessIndicesSlot {
   uint32_t value;
-  explicit constexpr BindlessIndicesSlot(uint32_t v = kInvalidDescriptorSlot)
+  explicit constexpr BindlessIndicesSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
     : value(v)
   {
   }
@@ -49,7 +48,7 @@ struct BindlessIndicesSlot {
 
 struct MonotonicVersion {
   uint64_t value { 0 };
-  explicit constexpr MonotonicVersion(uint64_t v = 0)
+  explicit constexpr MonotonicVersion(const uint64_t v = 0)
     : value(v)
   {
   }
@@ -57,7 +56,7 @@ struct MonotonicVersion {
   constexpr operator uint64_t() const noexcept { return value; }
 
   //! Only Next() is provided; mutation is done via the owner using Next().
-  constexpr MonotonicVersion Next() const noexcept
+  [[nodiscard]] constexpr auto Next() const noexcept -> MonotonicVersion
   {
     return MonotonicVersion(value + 1);
   }
@@ -74,9 +73,9 @@ struct MonotonicVersion {
     SetProjectionMatrix, SetCameraPosition).
 
   - Renderer responsibilities: set time, frame index and shader-visible
-    descriptor slots via the renderer-only setters that require the
-    explicit RendererTag. The tag is intentionally explicit to make renderer
-    ownership clear at call-sites.
+    descriptor slots via the renderer-only setters that require the explicit
+    RendererTag. The tag is intentionally explicit to make renderer ownership
+    clear at call-sites.
 
  The object is versioned: any setter bumps a monotonic version counter. To
  produce a GPU upload payload call GetSnapshot(); it returns a const reference
@@ -84,10 +83,10 @@ struct MonotonicVersion {
  version differs from the cached_version. This avoids unnecessary CPU->GPU
  uploads when nothing changed.
 
- Multiple mutations per frame are allowed; the implementation is "last-wins"
- for values. Note that world/object transforms are intentionally NOT included
- here: per-item transforms remain part of per-draw data
- (RenderItem.world_transform) and will be bound/consumed downstream.
+ Multiple mutations per frame are allowed; the implementation is "last-wins" for
+ values. Note that world/object transforms are intentionally NOT included here:
+ per-item transforms remain part of per-draw data (RenderItem.world_transform)
+ and will be bound/consumed downstream.
 
  Fields contained in the GPU snapshot include:
    - view_matrix / projection_matrix: Camera basis.
@@ -116,7 +115,7 @@ public:
     float time_seconds { 0.0f };
     uint32_t frame_index { 0 };
     uint32_t bindless_indices_slot { kInvalidDescriptorSlot };
-    uint32_t _reserved[2] { 0, 0 };
+    uint32_t reserved[2] { 0, 0 };
   };
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
@@ -127,21 +126,21 @@ public:
   ~SceneConstants() = default;
 
   // Application setters (chainable) — modern return type
-  auto& SetViewMatrix(const glm::mat4& m) noexcept
+  auto SetViewMatrix(const glm::mat4& m) noexcept -> SceneConstants&
   {
     view_matrix_ = m;
     version_ = version_.Next();
     return *this;
   }
 
-  auto& SetProjectionMatrix(const glm::mat4& m) noexcept
+  auto SetProjectionMatrix(const glm::mat4& m) noexcept -> SceneConstants&
   {
     projection_matrix_ = m;
     version_ = version_.Next();
     return *this;
   }
 
-  auto& SetCameraPosition(const glm::vec3& p) noexcept
+  auto SetCameraPosition(const glm::vec3& p) noexcept -> SceneConstants&
   {
     camera_position_ = p;
     version_ = version_.Next();
@@ -149,21 +148,23 @@ public:
   }
 
   // Renderer-only setters (require the renderer tag)
-  auto& SetTimeSeconds(float t, RendererTag) noexcept
+  auto SetTimeSeconds(const float t, RendererTag) noexcept -> SceneConstants&
   {
     time_seconds_ = t;
     version_ = version_.Next();
     return *this;
   }
 
-  auto& SetFrameIndex(FrameIndex idx, RendererTag) noexcept
+  auto SetFrameIndex(const FrameIndex idx, RendererTag) noexcept
+    -> SceneConstants&
   {
     frame_index_ = idx;
     version_ = version_.Next();
     return *this;
   }
 
-  auto& SetBindlessIndicesSlot(BindlessIndicesSlot slot, RendererTag) noexcept
+  auto SetBindlessIndicesSlot(
+    const BindlessIndicesSlot slot, RendererTag) noexcept -> SceneConstants&
   {
     bindless_indices_slot_ = slot;
     version_ = version_.Next();
@@ -212,7 +213,7 @@ public:
   }
 
 private:
-  void RebuildCache() const noexcept
+  auto RebuildCache() const noexcept -> void
   {
     cached_ = GpuData {
       .view_matrix = view_matrix_,
@@ -221,7 +222,7 @@ private:
       .time_seconds = time_seconds_,
       .frame_index = frame_index_.value,
       .bindless_indices_slot = bindless_indices_slot_.value,
-      ._reserved = { 0u, 0u },
+      .reserved = { 0u, 0u },
     };
   }
 
