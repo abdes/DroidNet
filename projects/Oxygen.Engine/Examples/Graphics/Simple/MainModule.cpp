@@ -421,6 +421,11 @@ auto MainModule::RenderScene() -> co::Co<>
       };
       renderer_->OpaqueItems().Add(std::move(cube2_item));
     }
+
+    // One-time info log: items were just added to the container.
+    const auto item_count = renderer_->GetOpaqueItems().size();
+    LOG_F(
+      INFO, "Initial render items added to container (count: {})", item_count);
   }
 
   auto gfx = gfx_weak_.lock();
