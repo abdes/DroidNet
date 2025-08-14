@@ -51,25 +51,27 @@ set(
   OXYGEN_RENDERER_HEADERS
     "api_export.h"
     "DepthPrePass.h"
-  "RenderItemsList.h"
     "RenderContext.h"
     "Renderer.h"
     "RenderItem.h"
+    "RenderItemsList.h"
     "RenderPass.h"
     "ShaderPass.h"
     "Types/DrawResourceIndices.h"
+    "Types/Frustum.h"
     "Types/MaterialConstants.h"
     "Types/SceneConstants.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
     "DepthPrePass.cpp"
-  "RenderItemsList.cpp"
-    "RenderItem.cpp"
+    "Internal/RenderScope.h"
     "Renderer.cpp"
+    "RenderItem.cpp"
+    "RenderItemsList.cpp"
     "RenderPass.cpp"
     "ShaderPass.cpp"
-    "Internal/RenderScope.h"
+    "Types/Frustum.cpp"
 )
 
 target_sources(
@@ -101,6 +103,7 @@ target_link_libraries(
     oxygen::base
     oxygen::oxco
     oxygen::data
+    oxygen::scene
     oxygen::graphics-common
 )
 
