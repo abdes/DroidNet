@@ -156,12 +156,16 @@ auto Renderer::PreExecute(RenderContext& context) -> void
 {
   // Contract checks (kept inline per style preference)
   DCHECK_F(!context.scene_constants,
-    "RenderContext.scene_constants must be null; use "
-    "Renderer::SetSceneConstants");
+    "RenderContext.scene_constants must be null; renderer sets it via "
+    "ModifySceneConstants/PreExecute");
 
   // Phase 3: Provide opaque draw list from managed container and ensure
   // required GPU resources are resident before binding/upload steps.
   context.opaque_draw_list = opaque_items_.Items();
+  const auto container_span = opaque_items_.Items();
+  DCHECK_F(context.opaque_draw_list.data() == container_span.data()
+      && context.opaque_draw_list.size() == container_span.size(),
+    "RenderContext.opaque_draw_list must alias the renderer's container span");
   if (!context.opaque_draw_list.empty()) {
     EnsureResourcesForDrawList(context.opaque_draw_list);
   }
@@ -595,6 +599,10 @@ auto CreateAndRegisterIndexSrv(RenderController& rc, Buffer& index_buffer,
 auto Renderer::EnsureResourcesForDrawList(
   const std::span<const RenderItem> draw_list) -> void
 {
+  // Tolerate empty spans: nothing to ensure, no uploads, no container mutation.
+  if (draw_list.empty()) {
+    return;
+  }
   // Build per-draw array of indices in submission order
   std::vector<DrawResourceIndices> per_draw;
   per_draw.reserve(draw_list.size());

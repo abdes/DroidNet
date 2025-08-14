@@ -221,14 +221,6 @@ Follow-ups (refined and expanded):
   * Validation: negative sphere radius and AABB min/max ordering throw and log.
   * Recompute: `UpdateComputedProperties()` invoked on Add/Update and reflects
     world transform changes (bounding box/sphere and normal matrix update).
-* Contracts/assertions:
-  * In `Renderer::PreExecute`, assert that `scene_constants` will be set by the
-    renderer and that `opaque_draw_list` is the container’s span.
-  * Ensure `EnsureResourcesForDrawList()` tolerates empty spans and does not
-    mutate the container.
-* Example hygiene: Re-verify `Examples/Graphics/Simple/MainModule.cpp` uses the
-  container exclusively (no stray local vectors), and logs clearly when items
-  are first added (one-time info level is fine). [x] Done (2025-08-14).
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
