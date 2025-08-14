@@ -159,6 +159,13 @@ auto Renderer::PreExecute(RenderContext& context) -> void
     "RenderContext.scene_constants must be null; use "
     "Renderer::SetSceneConstants");
 
+  // Phase 3: Provide opaque draw list from managed container and ensure
+  // required GPU resources are resident before binding/upload steps.
+  context.opaque_draw_list = opaque_items_.Items();
+  if (!context.opaque_draw_list.empty()) {
+    EnsureResourcesForDrawList(context.opaque_draw_list);
+  }
+
   EnsureAndUploadDrawResourceIndices();
   UpdateDrawResourceIndicesSlotIfChanged();
   MaybeUpdateSceneConstants();

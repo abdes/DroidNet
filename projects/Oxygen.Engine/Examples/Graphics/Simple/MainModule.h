@@ -92,8 +92,7 @@ private:
   auto ExtractMaterialConstants(const data::MaterialAsset& material) const
     -> engine::MaterialConstants;
 
-  // === Data-driven RenderItem/scene system members ===
-  std::vector<engine::RenderItem> render_items_;
+  // Render items now managed by engine::Renderer (Phase 3)
 
   co::Nursery* nursery_ { nullptr };
   // Removed: EnsureBindlessIndexingBuffer (Renderer now owns indices upload).

@@ -121,11 +121,11 @@ Tasks:
   creation.
 * [x] Example migration (checkpoint 2): delete `EnsureVertexBufferSrv`,
   `EnsureIndexBufferSrv`, `EnsureBindlessIndexingBuffer`, and
-  `EnsureMeshDrawResources` usage – replaced by a single call per mesh per
-  frame (or per asset load) to `EnsureMeshResources`.
+  `EnsureMeshDrawResources` usage – replaced by a single call per mesh per frame
+  (or per asset load) to `EnsureMeshResources`.
 * [~] Docs: bindless_conventions.md (clarify vertex/index SRV lifecycle),
-  data_flow.md (resource preparation stage). (Update references to show SRVs
-  are created by Renderer on first ensure.)
+  data_flow.md (resource preparation stage). (Update references to show SRVs are
+  created by Renderer on first ensure.)
 
 Deliverable: Example no longer manipulates descriptor handles directly.
 
@@ -151,20 +151,30 @@ Goal: Support multiple draw items (meshes) in a single frame.
 
 Tasks:
 
-* [x] Add `kDrawIndexConstant` root binding for passing per-draw indices via root constants
-* [x] Implement `SetGraphicsRoot32BitConstant()` and `SetComputeRoot32BitConstant()` in CommandRecorder
+* [x] Add `kDrawIndexConstant` root binding for passing per-draw indices via
+  root constants
+* [x] Implement `SetGraphicsRoot32BitConstant()` and
+  `SetComputeRoot32BitConstant()` in CommandRecorder
 * [x] Add `BindDrawIndexConstant()` method to RenderPass base class
 * [x] Update `IssueDrawCalls()` to bind draw index before each draw call
-* [x] Modify shaders to use `g_DrawIndex` root constant instead of `SV_InstanceID`
-* [x] Ensure consistent root signature layout across all passes (DepthPrePass, ShaderPass)
+* [x] Modify shaders to use `g_DrawIndex` root constant instead of
+  `SV_InstanceID`
+* [x] Ensure consistent root signature layout across all passes (DepthPrePass,
+  ShaderPass)
 * [x] Update renderer to build `DrawResourceIndices` array for multiple items
-* [x] Fix D3D12 bindless rendering limitation where `SV_InstanceID` doesn't work without input layout
+* [x] Fix D3D12 bindless rendering limitation where `SV_InstanceID` doesn't work
+  without input layout
 
-**Solution**: Root constants provide the Microsoft-recommended approach for passing per-draw data in bindless scenarios. Each draw call now receives a unique `draw_index` via root constant (b3, space0), allowing shaders to access the correct `DrawResourceIndices[g_DrawIndex]` entry.
+**Solution**: Root constants provide the Microsoft-recommended approach for
+passing per-draw data in bindless scenarios. Each draw call now receives a
+unique `draw_index` via root constant (b3, space0), allowing shaders to access
+the correct `DrawResourceIndices[g_DrawIndex]` entry.
 
-**Result**: Multiple meshes can now be rendered in a single frame with correct per-mesh resource binding.
+**Result**: Multiple meshes can now be rendered in a single frame with correct
+per-mesh resource binding.
 
-Deliverable: Engine supports rendering multiple distinct meshes per frame using proper D3D12 bindless patterns.
+Deliverable: Engine supports rendering multiple distinct meshes per frame using
+proper D3D12 bindless patterns.
 
 ## Phase 3 – RenderItem Validation & Container Introduction
 
@@ -173,20 +183,43 @@ code and preparing for extraction.
 
 Tasks:
 
-* [ ] Implement `RenderItemsList` (add/remove, mark dirty, iteration spans) with
+* [x] Implement `RenderItemsList` (add/remove, mark dirty, iteration spans) with
   internal validation (non-negative radius, AABB min<=max).
-* [ ] Auto-call `UpdateComputedProperties()` on insertion or mutation (debug
+* [x] Auto-call `UpdateComputedProperties()` on insertion or mutation (debug
   assert if user forgets manual path – reduces footguns).
-* [ ] Provide `Renderer::GetOpaqueItems()` returning span for passes (current
-  passes adapt with minimal change).
-* [ ] Example migration (checkpoint 3): Replace `std::vector<RenderItem>` with
+* [x] Provide `Renderer::GetOpaqueItems()` returning span for passes (current
+  passes adapt with minimal change). Wire `PreExecute` to set
+  `context.opaque_draw_list` from the container and ensure resources.
+* [x] Example migration (checkpoint 3): Replace `std::vector<RenderItem>` with
   `RenderItemsList`. Construction path becomes: create mesh & material → build
   RenderItem → add via container API.
-* [ ] Docs: render_items.md updated with container semantics & validation
+* [x] Docs: render_items.md updated with container semantics & validation
   section.
 
 Deliverable: Example delegates validation & computed property updates; manual
 vector removed.
+
+Current status (2025-08-14):
+
+* `RenderItemsList.cpp` implements validation (non-negative sphere radius; AABB
+  min ≤ max) and recomputation via `UpdateComputedProperties()` on
+  insert/update; exposes `Items()`, `Add/RemoveAt/Update/Clear/Reserve`, and
+  `Size()`.
+* `Renderer.h` exposes `OpaqueItems()` for mutation and `GetOpaqueItems()` for
+  read-only spans. `PreExecute` wires `context.opaque_draw_list` from the
+  container and ensures mesh resources for the list before uploads.
+* Example (Simple) migrated to use the container; the local
+  `std::vector<RenderItem>` and explicit `EnsureResourcesForDrawList` path were
+  removed, with draw list publication handled centrally.
+* Docs updated: `render_items.md` includes a Container Semantics section. A
+  minor markdown list-style lint remains optional to address.
+
+Follow-ups:
+
+* Unit tests for `RenderItemsList` (add/remove/update/validation edge cases).
+* Re-verify `Examples/Graphics/Simple/MainModule.cpp` after manual edits to
+  ensure Phase 3 usage remains intact.
+* Optional: align unordered list style in docs with repo linter preferences.
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
@@ -377,12 +410,25 @@ Revision History:
 * Marked Phase 1 MaterialConstants task complete; implemented Renderer-managed
   material snapshot & example migration – 2025-08-13.
 * Removed brittle invariant that DrawResourceIndices occupy heap slot 0; slot
-  propagated via `SceneConstants.bindless_indices_slot`.
-  path in example and update this file.
-* Marked dirty tracking & just-in-time upload (scene/material/draw indices) implemented via refactored PreExecute helpers – 2025-08-13.
-* Extended bindless_conventions.md with constant/material/draw indices buffer layout & slot propagation details – 2025-08-13.
-* Added PreExecute validation assert for single SceneConstants set per frame – 2025-08-13.
-* Phase 1 example migration checkpoint: example now uses Renderer setters for scene/material constants & draw resource indices (removed manual constants upload) – 2025-08-13.
-* Updated data_flow.md (detailed constants population sequence) & render_items.md (material override timing) – 2025-08-13.
-* Phase 2 status analyzed and plan updated; marked caching complete and outlined SRV/indices migration steps – 2025-08-13.
-* Phase 2 implementation: Renderer now owns mesh SRVs and updates DrawResourceIndices automatically; example migrated to EnsureMeshResources – 2025-08-13.
+  propagated via `SceneConstants.bindless_indices_slot`. path in example and
+  update this file.
+* Marked dirty tracking & just-in-time upload (scene/material/draw indices)
+  implemented via refactored PreExecute helpers – 2025-08-13.
+* Extended bindless_conventions.md with constant/material/draw indices buffer
+  layout & slot propagation details – 2025-08-13.
+* Added PreExecute validation assert for single SceneConstants set per frame –
+  2025-08-13.
+* Phase 1 example migration checkpoint: example now uses Renderer setters for
+  scene/material constants & draw resource indices (removed manual constants
+  upload) – 2025-08-13.
+* Updated data_flow.md (detailed constants population sequence) &
+  render_items.md (material override timing) – 2025-08-13.
+* Phase 2 status analyzed and plan updated; marked caching complete and outlined
+  SRV/indices migration steps – 2025-08-13.
+* Phase 2 implementation: Renderer now owns mesh SRVs and updates
+  DrawResourceIndices automatically; example migrated to EnsureMeshResources –
+  2025-08-13.
+* Phase 3 complete: Introduced `RenderItemsList`, integrated into `Renderer`
+  (opaque items container and span accessor), wired `PreExecute` to publish draw
+  list and ensure resources, migrated Simple example; docs updated. Manual
+  touch-ups to `RenderItemsList.cpp` and `Renderer.h` incorporated – 2025-08-14.
