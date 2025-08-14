@@ -393,3 +393,19 @@ Validation Expectations:
 * 2025-08-13: Expanded to align with current `RenderItem` struct, added field
   reference, lifecycle & roadmap, inserted planned migration tasks.
 * 2025-08-13 (initial): Original conceptual high vs low-level description.
+
+---
+
+## 📦 Container Semantics (Phase 3)
+
+Render items are now managed by `RenderItemsList` owned by `Renderer`.
+
+* Insert via `Renderer::OpaqueItems().Add(RenderItem)`; the container validates
+  bounds (sphere radius ≥ 0; AABB min ≤ max) and calls
+  `UpdateComputedProperties()` automatically.
+* Read access for passes is via `RenderContext.opaque_draw_list` (a const
+  span) set by `Renderer::PreExecute()` from the container.
+* Mutation should go through `Update(index, RenderItem)` to ensure validation
+  and recomputation; direct write access is intentionally not exposed.
+* The example no longer wires spans or calls `EnsureResourcesForDrawList`; the
+  renderer ensures GPU resources for the published span during `PreExecute`.

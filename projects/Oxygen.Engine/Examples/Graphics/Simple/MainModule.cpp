@@ -100,13 +100,14 @@ MainModule::~MainModule()
 
   // Un-register the vertex buffer view if it's valid
   // (No need to release descriptor handle, ResourceRegistry manages it)
-  if (render_controller_ && !render_items_.empty()
-    && render_items_.front().mesh) {
+  if (render_controller_ && renderer_) {
     try {
       auto& registry = render_controller_->GetResourceRegistry();
-      auto vertex_buffer
-        = renderer_->GetVertexBuffer(*render_items_.front().mesh);
-      registry.UnRegisterViews(*vertex_buffer);
+      const auto items = renderer_->GetOpaqueItems();
+      if (!items.empty() && items.front().mesh) {
+        auto vertex_buffer = renderer_->GetVertexBuffer(*items.front().mesh);
+        registry.UnRegisterViews(*vertex_buffer);
+      }
     } catch (const std::exception& e) {
       LOG_F(
         ERROR, "Error while un-registering vertex buffer view: {}", e.what());
@@ -339,7 +340,7 @@ auto MainModule::RenderScene() -> co::Co<>
   DLOG_F(1, "Rendering scene in frame index {}",
     render_controller_->CurrentFrameIndex());
 
-  if (render_items_.empty()) {
+  if (renderer_ && renderer_->GetOpaqueItems().empty()) {
     const std::shared_ptr<data::Mesh> cube_mesh
       = data::GenerateMesh("Cube/TestMesh", {});
     // Create a default material for the cube
@@ -354,8 +355,8 @@ auto MainModule::RenderScene() -> co::Co<>
       .render_layer = 0u,
       .render_flags = 0u,
     };
-    cube_item.UpdateComputedProperties();
-    render_items_.push_back(cube_item);
+    // Container validates and recomputes
+    renderer_->OpaqueItems().Add(cube_item);
 
     // Add a second mesh: an offset copy of the cube so they don't overlap.
     // Shaders currently treat object space == world space, so bake translation.
@@ -418,8 +419,7 @@ auto MainModule::RenderScene() -> co::Co<>
         .render_layer = 0u,
         .render_flags = 0u,
       };
-      cube2_item.UpdateComputedProperties();
-      render_items_.push_back(std::move(cube2_item));
+      renderer_->OpaqueItems().Add(std::move(cube2_item));
     }
   }
 
@@ -433,16 +433,6 @@ auto MainModule::RenderScene() -> co::Co<>
   recorder->BindFrameBuffer(*fb);
 
   context_.framebuffer = fb;
-  context_.opaque_draw_list
-    = std::span<const RenderItem> { render_items_.data(),
-        render_items_.size() };
-
-  // Ensure GPU resources (buffers + SRVs) are resident for all meshes in the
-  // draw list BEFORE calling ExecuteRenderGraph, so the renderer can upload
-  // bindless indices with valid SRV slots in PreExecute.
-  if (renderer_) {
-    renderer_->EnsureResourcesForDrawList(context_.opaque_draw_list);
-  }
 
   // --- DepthPrePass integration ---
   static std::shared_ptr<engine::DepthPrePass> depth_pass;
@@ -497,10 +487,13 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   // Update material constants from the first render item's material
-  if (!render_items_.empty() && render_items_.front().material && renderer_) {
-    const auto material_constants
-      = ExtractMaterialConstants(*render_items_.front().material);
-    renderer_->SetMaterialConstants(material_constants);
+  if (renderer_) {
+    const auto items = renderer_->GetOpaqueItems();
+    if (!items.empty() && items.front().material) {
+      const auto material_constants
+        = ExtractMaterialConstants(*items.front().material);
+      renderer_->SetMaterialConstants(material_constants);
+    }
   }
 
   // Assemble and run the render graph

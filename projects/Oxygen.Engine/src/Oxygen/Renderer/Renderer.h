@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/RenderItem.h>
+#include <Oxygen/Renderer/RenderItemsList.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -120,6 +121,14 @@ public:
     PostExecute(context);
   }
 
+  //! Access the opaque items container for construction/mutation.
+  OXGN_RNDR_API auto OpaqueItems() -> RenderItemsList& { return opaque_items_; }
+  //! Read-only span of opaque items for draw submission.
+  OXGN_RNDR_API auto GetOpaqueItems() const -> std::span<const RenderItem>
+  {
+    return opaque_items_.Items();
+  }
+
   //! Modify scene constants in-place via a user-provided mutator.
   /*!
     The mutator is invoked with a reference to the internal SceneConstants
@@ -182,6 +191,9 @@ private:
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
+
+  // Managed draw item container (Phase 3)
+  RenderItemsList opaque_items_;
 
   // Scene constants management
   std::shared_ptr<graphics::Buffer> scene_const_buffer_;

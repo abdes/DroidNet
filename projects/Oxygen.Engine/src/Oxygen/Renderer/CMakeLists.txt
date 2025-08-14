@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
     "api_export.h"
     "DepthPrePass.h"
+  "RenderItemsList.h"
     "RenderContext.h"
     "Renderer.h"
     "RenderItem.h"
@@ -63,6 +64,7 @@ set(
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
     "DepthPrePass.cpp"
+  "RenderItemsList.cpp"
     "RenderItem.cpp"
     "Renderer.cpp"
     "RenderPass.cpp"
