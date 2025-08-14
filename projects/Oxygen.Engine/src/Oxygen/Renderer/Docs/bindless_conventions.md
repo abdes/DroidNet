@@ -73,6 +73,59 @@ managed by backend systems (`RenderController` + descriptor allocator). Passes
 set the pipeline state (establishes root signature), then bind `SceneConstants`
 as a direct root CBV. All other resources are accessed via the bindless table.
 
+## Mesh vertex/index SRV lifecycle
+
+Creation (first ensure)
+
+- The renderer creates vertex/index GPU buffers and registers their SRVs the
+  first time `Renderer::EnsureMeshResources(const data::Mesh&)` is called for a
+  mesh. Example code and passes must not allocate these SRVs directly.
+- The shader-visible SRV indices are cached in `MeshGpuResources` and reused
+  across frames. A one-time debug log summarizes assigned indices.
+
+Reuse
+
+- Subsequent calls to `EnsureMeshResources(mesh)` are cheap reuse checks; no
+  per-frame descriptor creation occurs for resident meshes.
+- Per-draw structured buffers record the current SRV indices each frame; shaders
+  always read indices from those per-frame arrays, preventing stale bindings.
+
+Eviction
+
+- Backend caches may evict mesh resources (LRU). After eviction, the next
+  `EnsureMeshResources(mesh)` recreates buffers and SRVs; indices can change.
+  Because per-draw buffers are rebuilt each frame, new indices propagate
+  automatically to shaders.
+
+Invalid/absent
+
+- `0xFFFFFFFFu` (kInvalidDescriptorSlot) denotes an unavailable descriptor slot;
+  the renderer avoids emitting draw calls with invalid geometry SRVs.
+
+## Eviction status (current)
+
+- Policy: LRU policy exists and `Renderer::EvictUnusedMeshResources(frame)`
+  removes entries from `mesh_resources_` and notifies the policy via
+  `OnMeshRemoved`.
+- Buffers: GPU buffers are owned by `std::shared_ptr`; erasing the cache entry
+  releases buffers when no other references remain.
+- Views/Descriptors: SRV views registered via
+  `ResourceRegistry::RegisterView(...)` are not explicitly unregistered on
+  eviction/unregister yet. This can leave descriptor table entries allocated
+  until process teardown.
+- Integration: A periodic call to `EvictUnusedMeshResources` is not yet wired
+  into the frame loop.
+
+Planned follow‑up (Phase 9):
+
+- On eviction/unregister, call
+  `ResourceRegistry::UnRegisterResource(*vertex_buffer)` and
+  `UnRegisterResource(*index_buffer)` to drop all views and free descriptors.
+- Integrate `EvictUnusedMeshResources(current_frame)` into frame orchestration
+  (e.g., `PostExecute`).
+- Add metrics (evicted meshes, freed descriptors) and unit tests around
+  unregistration.
+
 ## SceneConstants (CBV b1, space0)
 
 `SceneConstants` is a per-frame snapshot (view + timing + dynamic slots) that
