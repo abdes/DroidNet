@@ -124,19 +124,18 @@ protected:
   virtual auto IssueDrawCalls(graphics::CommandRecorder& command_recorder) const
     -> void;
 
-  auto BindMaterialConstantsBuffer(graphics::CommandRecorder& recorder) const
-    -> void;
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
 
   //! This enumeration defines the order of root signature bindings used by
   //! render passes in the bindless rendering model.
   enum class RootBindings : uint8_t {
-    kBindlessTableSrv
-    = 0, // Bindless descriptor table for SRVs (t0 in multiple spaces)
-    kSceneConstantsCbv = 1, // b1,s0 Scene constants (constant buffer)
-    kMaterialConstantsCbv = 2, // b2,s0 Material constants (constant buffer)
-    kDrawIndexConstant = 3, // Root constant for draw index (32-bit value)
+    //! Bindless descriptor table for SRVs (t0 in multiple spaces)
+    kBindlessTableSrv = 0,
+    //! b1,s0 Scene constants (constant buffer)
+    kSceneConstantsCbv = 1,
+    //! Root constant for draw index (32-bit value)
+    kDrawIndexConstant = 2,
   };
 
 private:

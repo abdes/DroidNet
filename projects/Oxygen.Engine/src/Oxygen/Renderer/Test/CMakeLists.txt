@@ -32,14 +32,10 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
-m_gtest_program(
-  RenderItemsList
-  SOURCES
-    "RenderItemsList_test.cpp"
-)
+m_gtest_program(RenderItemsList SOURCES "RenderItemsList_test.cpp")
 
-m_gtest_program(
-  RenderItem
-  SOURCES
-    "RenderItem_test.cpp"
-)
+m_gtest_program(RenderItem SOURCES "RenderItem_test.cpp")
+
+m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
+
+m_gtest_program(SceneExtraction SOURCES "SceneExtraction_test.cpp")

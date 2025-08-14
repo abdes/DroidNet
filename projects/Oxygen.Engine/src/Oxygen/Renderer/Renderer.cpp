@@ -26,14 +26,17 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/Extraction/SceneExtraction.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Scene/Scene.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
 using oxygen::engine::EvictionPolicy;
+using oxygen::engine::MaterialConstants;
 using oxygen::engine::MeshGpuResources;
 using oxygen::engine::MeshId;
 using oxygen::engine::Renderer;
@@ -170,10 +173,17 @@ auto Renderer::PreExecute(RenderContext& context) -> void
     EnsureResourcesForDrawList(context.opaque_draw_list);
   }
 
-  EnsureAndUploadDrawResourceIndices();
-  UpdateDrawResourceIndicesSlotIfChanged();
+  EnsureAndUploadDrawMetaDataBuffer();
+  UpdateDrawMetaDataSlotIfChanged();
+
+  EnsureAndUploadWorldTransforms();
+  UpdateBindlessWorldsSlotIfChanged();
+
+  EnsureAndUploadMaterialConstants();
+  UpdateBindlessMaterialConstantsSlotIfChanged();
+
   MaybeUpdateSceneConstants();
-  MaybeUpdateMaterialConstants();
+
   WireContext(context);
 }
 
@@ -189,106 +199,34 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 // PreExecute helper implementations
 //===----------------------------------------------------------------------===//
 
-auto Renderer::EnsureAndUploadDrawResourceIndices() -> void
+auto Renderer::EnsureAndUploadDrawMetaDataBuffer() -> void
 {
-  if (bindless_indices_cpu_.empty()) {
+  // Delegate lifecycle to bindless structured buffer helper
+  if (!draw_metadata_.HasData()) {
     return; // optional feature not used this frame
-  }
-  if (bindless_indices_buffer_ && !bindless_indices_dirty_) {
-    return; // up-to-date
   }
   const auto rc_ptr = render_controller_.lock();
   if (!rc_ptr) {
     LOG_F(
-      ERROR, "RenderController expired while ensuring draw resource indices");
+      ERROR, "RenderController expired while ensuring draw metadata buffer");
     return;
   }
   auto& rc = *rc_ptr;
-  const auto size_bytes
-    = bindless_indices_cpu_.size() * sizeof(DrawResourceIndices);
-  // Create or resize + (re)register SRV if needed
-  const bool need_recreate = !bindless_indices_buffer_
-    || bindless_indices_buffer_->GetSize() < size_bytes;
-  if (need_recreate) {
-    CreateOrResizeDrawIndicesBuffer(size_bytes, rc);
-    RegisterDrawIndicesSrv(rc);
-  }
-
-  // Upload CPU snapshot (entire array)
-  UploadDrawIndices(bindless_indices_cpu_.data(), size_bytes);
-  bindless_indices_dirty_ = false;
+  // Ensure SRV exists and upload CPU snapshot if dirty; returns true if slot
+  // changed
+  static_cast<void>(draw_metadata_.EnsureAndUpload(rc, "DrawResourceIndices"));
 }
 
-auto Renderer::CreateOrResizeDrawIndicesBuffer(
-  const std::size_t size_bytes, RenderController& rc) -> void
-{
-  const auto& graphics = rc.GetGraphics();
-  const BufferDesc desc {
-    .size_bytes = size_bytes,
-    .usage = BufferUsage::kConstant,
-    .memory = BufferMemory::kUpload,
-    .debug_name = std::string("DrawResourceIndices"),
-  };
-  bindless_indices_buffer_ = graphics.CreateBuffer(desc);
-  bindless_indices_buffer_->SetName(desc.debug_name);
-  rc.GetResourceRegistry().Register(bindless_indices_buffer_);
+// Removed legacy draw-metadata helpers; lifecycle now handled by
+// BindlessStructuredBuffer<DrawMetadata>
 
-  // Reset slot assignment flag since we're creating a new buffer
-  bindless_indices_slot_assigned_ = false;
-}
-
-auto Renderer::RegisterDrawIndicesSrv(RenderController& rc) -> void
+auto Renderer::UpdateDrawMetaDataSlotIfChanged() -> void
 {
-  auto& descriptor_allocator = rc.GetDescriptorAllocator();
-  constexpr graphics::BufferViewDescription srv_view_desc {
-    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = Format::kUnknown,
-    .stride = sizeof(DrawResourceIndices),
-  };
-  auto srv_handle = descriptor_allocator.Allocate(
-    graphics::ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
-  if (!srv_handle.IsValid()) {
-    LOG_F(
-      ERROR, "Failed to allocate descriptor for DrawResourceIndices buffer");
-    return;
-  }
-  const auto view
-    = bindless_indices_buffer_->GetNativeView(srv_handle, srv_view_desc);
-  bindless_indices_heap_slot_
-    = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
-  rc.GetResourceRegistry().RegisterView(
-    *bindless_indices_buffer_, view, std::move(srv_handle), srv_view_desc);
-  if (!bindless_indices_slot_assigned_) {
-    LOG_F(INFO, "DrawResourceIndices buffer SRV registered at heap index {}",
-      bindless_indices_heap_slot_);
-    bindless_indices_slot_assigned_ = true;
-  }
-}
-
-auto Renderer::UploadDrawIndices(
-  const void* src, const std::size_t size_bytes) const -> void
-{
-  void* mapped = bindless_indices_buffer_->Map();
-  std::memcpy(mapped, src, size_bytes);
-  bindless_indices_buffer_->UnMap();
-}
-
-auto Renderer::UpdateDrawResourceIndicesSlotIfChanged() -> void
-{
-  const auto previous_slot = scene_const_cpu_.GetBindlessIndicesSlot();
   auto new_slot = BindlessIndicesSlot(kInvalidDescriptorSlot); // sentinel
-  if (!bindless_indices_cpu_.empty() && bindless_indices_slot_assigned_) {
-    new_slot = BindlessIndicesSlot(bindless_indices_heap_slot_);
+  if (draw_metadata_.HasData() && draw_metadata_.IsSlotAssigned()) {
+    new_slot = BindlessIndicesSlot(draw_metadata_.GetHeapSlot());
   }
-  if (new_slot != previous_slot) {
-    scene_const_cpu_.SetBindlessIndicesSlot(
-      new_slot, SceneConstants::kRenderer);
-    // Version bumped by SceneConstants; no local dirty flag needed.
-    LOG_F(INFO, "SceneConstants.bindless_indices_slot = {}",
-      static_cast<uint32_t>(new_slot));
-  }
+  scene_const_cpu_.SetBindlessIndicesSlot(new_slot, SceneConstants::kRenderer);
 }
 
 auto Renderer::MaybeUpdateSceneConstants() -> void
@@ -332,75 +270,67 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
   last_uploaded_scene_const_version_ = current_version;
 }
 
-auto Renderer::MaybeUpdateMaterialConstants() -> void
-{
-  if (!material_const_cpu_) {
-    return; // optional; not set this frame
-  }
-  if (material_const_buffer_ && !material_const_dirty_) {
-    return; // up-to-date
-  }
-  const auto rc_ptr = render_controller_.lock();
-  if (!rc_ptr) {
-    LOG_F(ERROR, "RenderController expired while updating material constants");
-    return;
-  }
-  auto& rc = *rc_ptr;
-  const auto& graphics = rc.GetGraphics();
-  constexpr auto size_bytes = sizeof(MaterialConstants);
-  if (!material_const_buffer_) {
-    const BufferDesc desc {
-      .size_bytes = size_bytes,
-      .usage = BufferUsage::kConstant,
-      .memory = BufferMemory::kUpload,
-      .debug_name = std::string("MaterialConstants"),
-    };
-    material_const_buffer_ = graphics.CreateBuffer(desc);
-    material_const_buffer_->SetName(desc.debug_name);
-    rc.GetResourceRegistry().Register(material_const_buffer_);
-  }
-  void* mapped = material_const_buffer_->Map();
-  std::memcpy(mapped, material_const_cpu_.get(), size_bytes);
-  material_const_buffer_->UnMap();
-  material_const_dirty_ = false;
-}
-
 auto Renderer::WireContext(RenderContext& context) -> void
 {
   context.scene_constants = scene_const_buffer_;
-  if (material_const_cpu_) {
-    context.material_constants = material_const_buffer_;
-  }
+  // Material constants are now accessed through bindless table, not direct CBV
   context.SetRenderer(this, render_controller_.lock().get());
 }
 
-auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
+auto Renderer::UpdateBindlessWorldsSlotIfChanged() -> void
 {
-  if (!material_const_cpu_) {
-    material_const_cpu_ = std::make_unique<MaterialConstants>(constants);
-  } else {
-    *material_const_cpu_ = constants;
+  auto new_slot = BindlessWorldsSlot(kInvalidDescriptorSlot);
+  if (world_transforms_.HasData() && world_transforms_.IsSlotAssigned()) {
+    new_slot = BindlessWorldsSlot(world_transforms_.GetHeapSlot());
   }
-  material_const_dirty_ = true;
+  scene_const_cpu_.SetBindlessWorldsSlot(new_slot, SceneConstants::kRenderer);
 }
 
-auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
+auto Renderer::UpdateBindlessMaterialConstantsSlotIfChanged() -> void
 {
-  return *material_const_cpu_;
+  auto new_slot = BindlessMaterialConstantsSlot(kInvalidDescriptorSlot);
+  if (material_constants_.HasData() && material_constants_.IsSlotAssigned()) {
+    new_slot = BindlessMaterialConstantsSlot(material_constants_.GetHeapSlot());
+  }
+  scene_const_cpu_.SetBindlessMaterialConstantsSlot(
+    new_slot, SceneConstants::kRenderer);
 }
 
-auto Renderer::SetDrawResourceIndices(const DrawResourceIndices& indices)
-  -> void
+auto Renderer::SetDrawMetaData(const DrawMetadata& indices) -> void
 {
-  // Transitional helper: set single entry array
-  bindless_indices_cpu_.assign(1, indices);
-  bindless_indices_dirty_ = true;
+  // Set single-entry array in the bindless structured buffer and mark dirty
+  auto& cpu = draw_metadata_.GetCpuData();
+  cpu.assign(1, indices);
+  draw_metadata_.MarkDirty();
 }
 
-auto Renderer::GetDrawResourceIndices() const -> const DrawResourceIndices&
+auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
 {
-  DCHECK_F(!bindless_indices_cpu_.empty());
-  return bindless_indices_cpu_.front();
+  const auto& cpu = draw_metadata_.GetCpuData();
+  DCHECK_F(!cpu.empty());
+  return cpu.front();
+}
+
+auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
+  -> std::size_t
+{
+  // Reset draw list for this frame
+  opaque_items_.Clear();
+
+  // Extract items via CPU culling
+  const auto inserted = oxygen::engine::extraction::CollectRenderItems(
+    scene, view, opaque_items_);
+
+  // Update scene constants from the provided view snapshot
+  ModifySceneConstants([&](SceneConstants& sc) {
+    sc.SetViewMatrix(view.ViewMatrix())
+      .SetProjectionMatrix(view.ProjectionMatrix())
+      .SetCameraPosition(view.CameraPosition());
+  });
+
+  DLOG_F(2, "BuildFrame: inserted {} render items", inserted);
+
+  return inserted;
 }
 
 namespace {
@@ -604,23 +534,87 @@ auto Renderer::EnsureResourcesForDrawList(
     return;
   }
   // Build per-draw array of indices in submission order
-  std::vector<DrawResourceIndices> per_draw;
+  std::vector<DrawMetadata> per_draw;
+  std::vector<glm::mat4> per_world;
   per_draw.reserve(draw_list.size());
+  per_world.reserve(draw_list.size());
   for (const auto& item : draw_list) {
-    if (item.mesh) {
+    // Keep predicate in sync with RenderPass draw gating:
+    // we only emit entries for items that will actually be drawn
+    // (mesh present and has vertices). This keeps g_DrawIndex aligned with
+    // both per-draw metadata and world transforms buffers.
+    if (item.mesh && item.mesh->VertexCount() > 0) {
       const auto& ensured = EnsureMeshResources(*item.mesh);
-      per_draw.emplace_back(DrawResourceIndices {
+      const uint32_t transform_offset
+        = static_cast<uint32_t>(per_world.size()); // next index
+      per_draw.emplace_back(DrawMetadata {
         .vertex_buffer_index = ensured.vertex_srv_index,
         .index_buffer_index = ensured.index_srv_index,
         .is_indexed = item.mesh->IsIndexed() ? 1U : 0U,
+        .instance_count = 1U,
+        .transform_offset = transform_offset,
       });
+      per_world.emplace_back(item.world_transform);
     }
   }
   // Upload the full per-draw array once
   if (!per_draw.empty()) {
-    bindless_indices_cpu_ = std::move(per_draw);
-    bindless_indices_dirty_ = true;
+    draw_metadata_.GetCpuData() = std::move(per_draw);
+    draw_metadata_.MarkDirty();
   }
+  if (!per_world.empty()) {
+    world_transforms_.GetCpuData() = std::move(per_world);
+    world_transforms_.MarkDirty();
+  }
+}
+auto Renderer::EnsureAndUploadWorldTransforms() -> void
+{
+  if (!world_transforms_.HasData()) {
+    return;
+  }
+  const auto rc_ptr = render_controller_.lock();
+  if (!rc_ptr) {
+    LOG_F(ERROR, "RenderController expired while ensuring world transforms");
+    return;
+  }
+  auto& rc = *rc_ptr;
+  static_cast<void>(world_transforms_.EnsureAndUpload(rc, "WorldTransforms"));
+}
+
+auto Renderer::EnsureAndUploadMaterialConstants() -> void
+{
+  if (!material_constants_.HasData()) {
+    return; // optional feature not used this frame
+  }
+  const auto rc_ptr = render_controller_.lock();
+  if (!rc_ptr) {
+    LOG_F(ERROR, "RenderController expired while ensuring material constants");
+    return;
+  }
+  auto& rc = *rc_ptr;
+  static_cast<void>(
+    material_constants_.EnsureAndUpload(rc, "MaterialConstants"));
+}
+
+// Removed legacy material constants SRV registration; handled by helper
+
+auto oxygen::engine::Renderer::SetMaterialConstants(
+  const oxygen::engine::MaterialConstants& constants) -> void
+{
+  auto& cpu = material_constants_.GetCpuData();
+  if (cpu.size() != 1) {
+    cpu.resize(1);
+  }
+  cpu[0] = constants;
+  material_constants_.MarkDirty();
+}
+
+auto oxygen::engine::Renderer::GetMaterialConstants() const
+  -> const oxygen::engine::MaterialConstants&
+{
+  const auto& cpu = material_constants_.GetCpuData();
+  DCHECK_F(!cpu.empty());
+  return cpu.front();
 }
 
 auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&

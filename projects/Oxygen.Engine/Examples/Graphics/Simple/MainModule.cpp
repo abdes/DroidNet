@@ -5,10 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <type_traits>
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 // Include first to avoid conflicts between winsock2(asio) and windows.h
 #include <Oxygen/Platform/Platform.h>
@@ -32,9 +35,10 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
+#include <Oxygen/Renderer/Types/View.h>
+#include <Oxygen/Scene/Scene.h>
 
 #include "./MainModule.h"
 
@@ -46,6 +50,11 @@ using oxygen::data::Vertex;
 using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Framebuffer;
+
+namespace {
+constexpr std::uint32_t kWindowWidth = 1600;
+constexpr std::uint32_t kWindowHeight = 900;
+} // namespace
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -171,7 +180,7 @@ auto MainModule::SetupMainWindow() -> void
 {
   // Set up the main window
   WindowProps props("Oxygen Graphics Example");
-  props.extent = { .width = 800, .height = 800 };
+  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
   props.flags = { .hidden = false,
     .always_on_top = false,
     .full_screen = false,
@@ -241,8 +250,8 @@ auto MainModule::SetupFramebuffers() -> void
 
   for (auto i = 0U; i < kFrameBufferCount; ++i) {
     graphics::TextureDesc depth_desc;
-    depth_desc.width = 800;
-    depth_desc.height = 800;
+    depth_desc.width = kWindowWidth;
+    depth_desc.height = kWindowHeight;
     depth_desc.format = Format::kDepth32;
     depth_desc.texture_type = TextureType::kTexture2D;
     depth_desc.is_shader_resource = true;
@@ -282,47 +291,6 @@ auto MainModule::SetupShaders() const -> void
   LOG_F(INFO, "Engine shaders loaded successfully");
 }
 
-// === Bindless Rendering Invariants ===
-// - The engine manages a single shader-visible CBV_SRV_UAV heap per D3D12 type.
-// - The Resource Indices CBV for bindless rendering is always (register b0).
-// - All other resources (SRVs, UAVs) are placed in the heap starting at
-// index 1.
-// Removed: indices buffer creation/upload now handled by Renderer.
-
-auto MainModule::ExtractMaterialConstants(
-  const data::MaterialAsset& material) const -> engine::MaterialConstants
-{
-  engine::MaterialConstants constants;
-
-  // Extract base color (RGBA)
-  const auto base_color_span = material.GetBaseColor();
-  constants.base_color = glm::vec4(base_color_span[0], base_color_span[1],
-    base_color_span[2], base_color_span[3]);
-
-  // Extract PBR scalar values
-  constants.metalness = material.GetMetalness();
-  constants.roughness = material.GetRoughness();
-  constants.normal_scale = material.GetNormalScale();
-  constants.ambient_occlusion = material.GetAmbientOcclusion();
-
-  // Extract texture indices
-  // For now, set all texture indices to invalid since we don't have texture
-  // loading yet In a full implementation, these would be resolved to actual
-  // descriptor heap indices
-  constexpr uint32_t kInvalidTextureIndex
-    = 0; // 0 typically represents an invalid or default texture
-  constants.base_color_texture_index = kInvalidTextureIndex;
-  constants.normal_texture_index = kInvalidTextureIndex;
-  constants.metallic_texture_index = kInvalidTextureIndex;
-  constants.roughness_texture_index = kInvalidTextureIndex;
-  constants.ambient_occlusion_texture_index = kInvalidTextureIndex;
-
-  // Extract material flags
-  constants.flags = material.GetFlags();
-
-  return constants;
-}
-
 // Phase 2: SRVs and indices are ensured in Renderer::EnsureMeshResources.
 
 // === Data-driven RenderItem/scene system integration ===
@@ -340,92 +308,27 @@ auto MainModule::RenderScene() -> co::Co<>
   DLOG_F(1, "Rendering scene in frame index {}",
     render_controller_->CurrentFrameIndex());
 
-  if (renderer_ && renderer_->GetOpaqueItems().empty()) {
+  // Build a scene once and reuse it; populate with two cube nodes
+  static std::shared_ptr<oxygen::scene::Scene> scene;
+  static oxygen::scene::SceneNode node_a_handle; // persists across frames
+  static oxygen::scene::SceneNode node_b_handle; // persists across frames
+  if (!scene) {
+    scene = std::make_shared<oxygen::scene::Scene>("ExampleScene");
     const std::shared_ptr<data::Mesh> cube_mesh
       = data::GenerateMesh("Cube/TestMesh", {});
-    // Create a default material for the cube
-    const auto cube_material = data::MaterialAsset::CreateDebug();
-    RenderItem cube_item {
-      .mesh = cube_mesh,
-      .material = cube_material,
-      .world_transform = glm::mat4(1.0F), // Not used directly in shader
-      .normal_transform = glm::mat4(1.0F),
-      .cast_shadows = false,
-      .receive_shadows = false,
-      .render_layer = 0u,
-      .render_flags = 0u,
-    };
-    // Container validates and recomputes
-    renderer_->OpaqueItems().Add(cube_item);
 
-    // Add a second mesh: an offset copy of the cube so they don't overlap.
-    // Shaders currently treat object space == world space, so bake translation.
-    {
-      using oxygen::data::MeshBuilder;
-      using oxygen::data::detail::IndexType;
-      using oxygen::data::pak::MeshViewDesc;
+    // Node A at origin
+    auto node_a = scene->CreateNode("CubeA");
+    node_a.AttachMesh(cube_mesh);
+    node_a_handle = node_a; // keep a handle for per-frame animation
 
-      const auto vspan = cube_mesh->Vertices();
-      std::vector<Vertex> translated_vertices(vspan.begin(), vspan.end());
-      const glm::vec3 offset
-        = { 2.5F, 0.0F, 0.0F }; // Closer separation for better framing
-      for (auto& v : translated_vertices) {
-        v.position += offset;
-      }
+    // Node B offset on +X
+    auto node_b = scene->CreateNode("CubeB");
+    node_b.AttachMesh(cube_mesh);
+    node_b.GetTransform().SetLocalPosition(glm::vec3(2.5F, 0.0F, 0.0F));
+    node_b_handle = node_b; // keep a handle for per-frame animation
 
-      // Debug: Log a few vertex positions to verify offset
-      DLOG_F(INFO, "Second cube vertex positions:");
-      for (size_t i = 0; i < (std::min)(size_t(4), translated_vertices.size());
-        ++i) {
-        const auto& pos = translated_vertices[i].position;
-        DLOG_F(INFO, "  Vertex[{}]: ({:.2F}, {:.2F}, {:.2F})", i, pos.x, pos.y,
-          pos.z);
-      }
-
-      std::vector<uint32_t> indices32;
-      const auto ib = cube_mesh->IndexBuffer();
-      if (ib.type == IndexType::kUInt16) {
-        auto src = ib.AsU16();
-        indices32.resize(src.size());
-        for (size_t i = 0; i < src.size(); ++i)
-          indices32[i] = src[i];
-      } else if (ib.type == IndexType::kUInt32) {
-        auto src = ib.AsU32();
-        indices32.assign(src.begin(), src.end());
-      }
-
-      auto offset_mesh
-        = MeshBuilder(0, "Cube/OffsetMesh")
-            .WithVertices(std::move(translated_vertices))
-            .WithIndices(std::move(indices32))
-            .BeginSubMesh("default", data::MaterialAsset::CreateDefault())
-            .WithMeshView(MeshViewDesc {
-              .first_index = 0,
-              .index_count = static_cast<uint32_t>(ib.Count()),
-              .first_vertex = 0,
-              .vertex_count = static_cast<uint32_t>(cube_mesh->VertexCount()),
-            })
-            .EndSubMesh()
-            .Build();
-
-      const auto cube2_material = data::MaterialAsset::CreateDebug();
-      RenderItem cube2_item {
-        .mesh = std::move(offset_mesh),
-        .material = cube2_material,
-        .world_transform = glm::mat4(1.0F),
-        .normal_transform = glm::mat4(1.0F),
-        .cast_shadows = false,
-        .receive_shadows = false,
-        .render_layer = 0u,
-        .render_flags = 0u,
-      };
-      renderer_->OpaqueItems().Add(std::move(cube2_item));
-    }
-
-    // One-time info log: items were just added to the container.
-    const auto item_count = renderer_->GetOpaqueItems().size();
-    LOG_F(
-      INFO, "Initial render items added to container (count: {})", item_count);
+    LOG_F(INFO, "Scene created with two cube nodes");
   }
 
   auto gfx = gfx_weak_.lock();
@@ -467,7 +370,18 @@ auto MainModule::RenderScene() -> co::Co<>
   static float rotation_angle = 0.0F; // radians
   rotation_angle += 0.01F; // radians per frame, adjust as needed
 
-  // Rotation removed temporarily (object space == world space in shaders).
+  // Apply per-frame rotation (absolute) so we avoid accumulation drift
+  const auto rot_y
+    = glm::angleAxis(rotation_angle, glm::vec3(0.0F, 1.0F, 0.0F));
+  if (node_a_handle.IsAlive()) {
+    node_a_handle.GetTransform().SetLocalRotation(rot_y);
+  }
+  if (node_b_handle.IsAlive()) {
+    // Give the second cube a slightly different rotation for variety
+    const auto rot = glm::angleAxis(
+      -rotation_angle * 1.2F, glm::normalize(glm::vec3(0.25F, 1.0F, 0.0F)));
+    node_b_handle.GetTransform().SetLocalRotation(rot);
+  }
 
   // Look from an angle to see both cubes clearly with closer positioning
   glm::vec3 camera_position = glm::vec3(
@@ -479,26 +393,14 @@ auto MainModule::RenderScene() -> co::Co<>
   const float aspect = static_cast<float>(surface_->Width())
     / static_cast<float>(surface_->Height());
   if (renderer_) {
-    renderer_->ModifySceneConstants([=](auto& sc) {
-      sc.SetViewMatrix(glm::lookAt(camera_position, target, up))
-        .SetProjectionMatrix(glm::perspective(
-          glm::radians(45.0F), // Narrower field of view for better framing
-          aspect, // aspect
-          0.1F, // zNear
-          600.0F // zFar
-          ))
-        .SetCameraPosition(glm::vec3 { 0.0F, 0.0F, -3.5F });
-    });
-  }
-
-  // Update material constants from the first render item's material
-  if (renderer_) {
-    const auto items = renderer_->GetOpaqueItems();
-    if (!items.empty() && items.front().material) {
-      const auto material_constants
-        = ExtractMaterialConstants(*items.front().material);
-      renderer_->SetMaterialConstants(material_constants);
-    }
+    // Build View from camera, then build frame via extraction
+    oxygen::engine::View::Params vp;
+    vp.view = glm::lookAt(camera_position, target, up);
+    vp.proj = glm::perspective(glm::radians(45.0F), aspect, 0.1F, 600.0F);
+    vp.has_camera_position = true;
+    vp.camera_position = camera_position;
+    const oxygen::engine::View view(vp);
+    renderer_->BuildFrame(*scene, view);
   }
 
   // Assemble and run the render graph

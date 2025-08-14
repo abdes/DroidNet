@@ -104,7 +104,7 @@ auto RenderPass::BindSceneConstantsBuffer(CommandRecorder& recorder) const
 
   // Bind the buffer as a root CBV (direct GPU virtual address)
   recorder.SetGraphicsRootConstantBufferView(
-    root_param.GetRootParameterIndex(), // should be binding 2 (b1, space0)
+    root_param.GetRootParameterIndex(), // should be binding 1 (b1, space0)
     Context().scene_constants->GetGPUVirtualAddress());
 }
 
@@ -115,35 +115,6 @@ auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
   // The shader accesses it via g_DrawResourceIndices[0] in space0.
   // No additional binding is required here.
   (void)recorder; // Suppress unused parameter warning
-}
-
-auto RenderPass::BindMaterialConstantsBuffer(CommandRecorder& recorder) const
-  -> void
-{
-  using graphics::DirectBufferBinding;
-
-  // Material constants buffer is optional, so check if it exists
-  if (!Context().material_constants) {
-    // If no material constants buffer is available, we can skip binding
-    // The shader should handle this case gracefully or use default values
-    return;
-  }
-
-  DCHECK_F(LastBuiltPsoDesc().has_value());
-
-  constexpr auto root_param_index
-    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
-      RootBindings::kMaterialConstantsCbv);
-  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
-
-  DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
-    "Expected root parameter {}'s data to be DirectBufferBinding",
-    root_param_index);
-
-  // Bind the buffer as a root CBV (direct GPU virtual address)
-  recorder.SetGraphicsRootConstantBufferView(
-    root_param.GetRootParameterIndex(), // should be binding 3 (b2, space0)
-    Context().material_constants->GetGPUVirtualAddress());
 }
 
 auto RenderPass::BindDrawIndexConstant(
@@ -164,7 +135,7 @@ auto RenderPass::BindDrawIndexConstant(
 
   // Bind the draw index as a root constant (32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
-    root_param.GetRootParameterIndex(), // should be binding 4 for draw index
+    root_param.GetRootParameterIndex(), // should be binding 2 for draw index
     draw_index,
     0); // offset within the constant (0 for single 32-bit value)
 }

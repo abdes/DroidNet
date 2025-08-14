@@ -86,17 +86,7 @@ private:
     framebuffers_ {};
   engine::RenderContext context_ {};
 
-  std::shared_ptr<graphics::Buffer> scene_constants_buffer_;
-  // Removed: bindless indices buffer now managed by Renderer.
-  // Helper method to translate asset to engine::MaterialConstants
-  auto ExtractMaterialConstants(const data::MaterialAsset& material) const
-    -> engine::MaterialConstants;
-
-  // Render items now managed by engine::Renderer (Phase 3)
-
   co::Nursery* nursery_ { nullptr };
-  // Removed: EnsureBindlessIndexingBuffer (Renderer now owns indices upload).
-  // Phase 2: SRVs and indices handled by Renderer; no per-example SRV state.
 };
 
 } // namespace oxygen::examples

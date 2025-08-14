@@ -25,7 +25,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 
-#include <MainModule.h>
+#include "./MainModule.h"
 
 using oxygen::Graphics;
 using oxygen::GraphicsConfig;
