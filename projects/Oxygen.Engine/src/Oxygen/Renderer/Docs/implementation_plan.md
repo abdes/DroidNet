@@ -214,14 +214,6 @@ Current status (2025-08-14):
 * Docs updated: `render_items.md` includes a Container Semantics section. A
   minor markdown list-style lint remains optional to address.
 
-Follow-ups (refined and expanded):
-
-* Tests (under `Renderer/Test`):
-  * List operations: add/remove/update order preservation and index bounds.
-  * Validation: negative sphere radius and AABB min/max ordering throw and log.
-  * Recompute: `UpdateComputedProperties()` invoked on Add/Update and reflects
-    world transform changes (bounding box/sphere and normal matrix update).
-
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
 Goal: Replace manual item creation with a camera-driven extraction pipeline:

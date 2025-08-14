@@ -30,12 +30,16 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 # -- GTest Test Programs -------------------------------------------------------
 
-# include(GTestHelpers)
+include(GTestHelpers)
 
-# m_gtest_program(
-#   D3D12HeapAllocationStrategy
-#   SOURCES
-#     "HeapAllocationStrategy_test.cpp"
-# )
-# m_gtest_program(DescriptorHeapSegment SOURCES "DescriptorHeapSegment_test.cpp")
-# m_gtest_program(PipelineStateCache SOURCES "PipelineStateCache_test.cpp")
+m_gtest_program(
+  RenderItemsList
+  SOURCES
+    "RenderItemsList_test.cpp"
+)
+
+m_gtest_program(
+  RenderItem
+  SOURCES
+    "RenderItem_test.cpp"
+)
