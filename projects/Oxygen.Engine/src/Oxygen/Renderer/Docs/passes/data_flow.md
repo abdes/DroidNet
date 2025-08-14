@@ -36,7 +36,7 @@ Textures / buffers referenced above are owned via `ResourceRegistry` /
 Related: [bindless conventions](../bindless_conventions.md), [render pass
 lifecycle](../render_pass_lifecycle.md).
 
-## Frame Setup Sequence (Phase 2)
+## Frame Setup Sequence (Phase 2+4)
 
 1. Application prepares camera + timing → fills `SceneConstants` CPU struct
    (must happen exactly once per frame).
@@ -49,14 +49,27 @@ lifecycle](../render_pass_lifecycle.md).
    `renderer->EnsureMeshResources(mesh)` – creates GPU buffers (if needed),
    registers SRVs, caches shader-visible indices, and updates the per-frame
    `DrawResourceIndices` CPU snapshot automatically.
-5. Populate `RenderContext` draw lists (e.g., `opaque_draw_list`). Do NOT set
-   `scene_constants` / `material_constants` pointers directly; renderer injects
-   them.
-6. Invoke `renderer->ExecuteRenderGraph(...)` – during `PreExecute` the
+5. Scene extraction (Phase 4): build draw lists from the scene using the
+    current `View`.
+    * Use `renderer->BuildFrame(scene, view)` to clear and repopulate
+       `opaque_draw_list`, or call
+       `extraction::CollectRenderItems(scene, view, renderer->OpaqueItems())`.
+    * Steps: scene.Update() → traversal with VisibleFilter → build RenderItem
+       per-mesh → `UpdateComputedProperties()` → CPU frustum cull → append.
+6. Optionally populate/adjust any remaining lists. Do NOT set
+    `scene_constants` / `material_constants` pointers directly; renderer
+    injects them.
+7. Invoke `renderer->ExecuteRenderGraph(...)` – during `PreExecute` the
    renderer (PreExecute):
     * Ensures / uploads DrawResourceIndices structured buffer if dirty.
     * Propagates its descriptor heap slot into
       `SceneConstants.bindless_indices_slot` (or 0xFFFFFFFF if absent).
     * Uploads SceneConstants & optional MaterialConstants if dirty.
-    * Wires buffer handles into the transient `RenderContext` (cleared in
-      `PostExecute`).
+      * Wires buffer handles into the transient `RenderContext` (cleared in
+         `PostExecute`).
+
+
+Notes:
+
+* Reverse-Z is supported by `Types/View` and `Types/Frustum::FromViewProj`.
+* Only opaque draw list is produced in Phase 4; transparent path is TBD.

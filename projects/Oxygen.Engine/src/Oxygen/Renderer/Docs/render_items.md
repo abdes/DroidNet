@@ -101,9 +101,14 @@ Legend (for embedded task lists below): [ ] pending, [~] in progress, [x] done,
 
 #### Responsibilities
 
-* Produced post-culling by scene extraction code (future: also before culling
+* Produced by scene extraction code. Current pipeline culls on CPU using the
+  `View` frustum before inserting into the list. A future SoA path may build
+  arrays pre-culling.
   for SoA build).
-* Decoupled from scene graph nodes once constructed (no back pointers).
+* Supplies source data for building low-level `DrawPacket`s every frame.
+* Per-submesh policy: current extraction builds one RenderItem per mesh (first
+  submesh/material) for simplicity. A per-submesh item expansion is planned
+  and documented as a follow-up.
 * Asset hot-reload triggers refresh of dependent RenderItems (recompute bounds /
   materials as needed).
 * Supplies source data for building low-level `DrawPacket`s every frame.

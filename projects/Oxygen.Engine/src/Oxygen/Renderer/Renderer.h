@@ -13,12 +13,22 @@
 #include <unordered_map>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/RenderItemsList.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Renderer/api_export.h>
+// Bindless structured buffer helper for per-draw arrays
+#include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
+
+namespace oxygen::scene {
+class Scene;
+}
 
 namespace oxygen::graphics {
 class Buffer;
@@ -33,18 +43,6 @@ namespace oxygen::engine {
 
 struct RenderContext;
 struct MaterialConstants;
-
-//! Provides shader-visible indices for current vertex/index buffers (Phase 1
-//! transitional).
-struct DrawResourceIndices {
-  uint32_t vertex_buffer_index;
-  uint32_t index_buffer_index;
-  uint32_t is_indexed; // 1 if indexed draw, 0 otherwise
-};
-// Expected packed size of DrawResourceIndices in bytes (3 x uint32_t) as per
-// the shaders.
-static_assert(sizeof(DrawResourceIndices) == 3U * sizeof(std::uint32_t),
-  "Unexpected DrawResourceIndices size (packing change?)");
 
 //! Holds GPU resources for a mesh asset.
 struct MeshGpuResources {
@@ -140,53 +138,36 @@ public:
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
-  //! Sets per-material constants snapshot (optional each frame before execute).
-  //! If never called in a frame, material constants will not be bound.
+  OXGN_RNDR_API auto SetDrawMetaData(const DrawMetadata& indices) -> void;
+  OXGN_RNDR_API auto GetDrawMetaData() const -> const DrawMetadata&;
+
+  // Material constants via bindless structured buffer (single element)
   OXGN_RNDR_API auto SetMaterialConstants(const MaterialConstants& constants)
     -> void;
-  //! Returns last set material constants (undefined before first set).
   OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
 
-  //! Sets the per-frame draw resource indices snapshot (transitional API).
-  /*!\n   Provides the shader-visible descriptor heap indices for the
-   * currently\n   selected vertex & index buffers and whether the draw is
-   * indexed. This is a\n   Phase 1–2 migration aid; later phases (mesh resource
-   * & packet build) will\n   derive per-item indices automatically. Must be
-   * called before the first\n   ExecuteRenderGraph in a frame if geometry is
-   * rendered. Last call wins.\n  */
-  OXGN_RNDR_API auto SetDrawResourceIndices(const DrawResourceIndices& indices)
-    -> void;
-  //! Returns last set draw resource indices snapshot (undefined until set).
-  OXGN_RNDR_API auto GetDrawResourceIndices() const
-    -> const DrawResourceIndices&;
+  //! Build the frame draw list from a scene and a view.
+  /*! Populates opaque items using CPU culling and updates scene constants. */
+  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene, const View& view)
+    -> std::size_t;
 
 private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
-  //! Ensures GPU buffers and SRVs for a mesh are created/uploaded/registered.
-  //! Returns the cached GPU resources and shader-visible SRV indices.
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
-
-  //! PreExecute helpers broken out to reduce cyclomatic complexity. Kept
-  //! private to avoid API surface changes.
-  //! Ensures the draw resource indices buffer, descriptor & upload if dirty.
-  auto EnsureAndUploadDrawResourceIndices() -> void;
-  //! Updates the scene constants GPU buffer if dirty / uninitialized.
   auto MaybeUpdateSceneConstants() -> void;
-  //! Updates the material constants GPU buffer if present & dirty.
-  auto MaybeUpdateMaterialConstants() -> void;
-  //! Applies any slot changes for draw resource indices into scene constants
-  //! (sets dirty flag when changed).
-  auto UpdateDrawResourceIndicesSlotIfChanged() -> void;
+
+  auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
+  auto UpdateBindlessWorldsSlotIfChanged() -> void;
+  auto UpdateDrawMetaDataSlotIfChanged() -> void;
+
+  auto EnsureAndUploadDrawMetaDataBuffer() -> void;
+  auto EnsureAndUploadMaterialConstants() -> void;
+  auto EnsureAndUploadWorldTransforms() -> void;
+
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
-
-  // Internal helpers for DrawResourceIndices buffer lifecycle
-  auto CreateOrResizeDrawIndicesBuffer(
-    std::size_t size_bytes, graphics::RenderController& rc) -> void;
-  auto RegisterDrawIndicesSrv(graphics::RenderController& rc) -> void;
-  auto UploadDrawIndices(const void* src, std::size_t size_bytes) const -> void;
 
   std::weak_ptr<graphics::RenderController> render_controller_;
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
@@ -198,29 +179,18 @@ private:
   // Scene constants management
   std::shared_ptr<graphics::Buffer> scene_const_buffer_;
   SceneConstants scene_const_cpu_;
-  // Use SceneConstants' internal versioning to detect changes instead of a
-  // separate dirty flag. `last_uploaded_scene_const_version_` records
-  // the version that was last uploaded to the GPU. A sentinel max value
-  // forces the first upload.
   MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
 
-  // Material constants management
-  std::shared_ptr<graphics::Buffer> material_const_buffer_;
-  std::unique_ptr<MaterialConstants> material_const_cpu_;
-  bool material_const_dirty_ { false };
+  // Material constants (StructuredBuffer<MaterialConstants>)
+  oxygen::engine::detail::BindlessStructuredBuffer<MaterialConstants>
+    material_constants_;
 
-  // Draw resource indices management (bindless vertex/index SRV indices).
-  // Structured buffer now holds a per-draw array of DrawResourceIndices.
-  // The descriptor heap slot is dynamic; SceneConstants carries the slot each
-  // frame (bindless_indices_slot) instead of assuming 0.
-  std::vector<DrawResourceIndices> bindless_indices_cpu_;
-  std::shared_ptr<graphics::Buffer> bindless_indices_buffer_;
-  bool bindless_indices_dirty_ { false };
-  uint32_t bindless_indices_heap_slot_ { 0 };
-  bool bindless_indices_slot_assigned_ { false };
+  // Per-draw metadata buffer (StructuredBuffer<DrawMetadata>)
+  oxygen::engine::detail::BindlessStructuredBuffer<DrawMetadata> draw_metadata_;
 
-  // Internal ensure that optionally updates the per-frame indices snapshot.
+  // Per-draw world matrices buffer (StructuredBuffer<float4x4>)
+  oxygen::engine::detail::BindlessStructuredBuffer<glm::mat4> world_transforms_;
 };
 
 } // namespace oxygen::engine

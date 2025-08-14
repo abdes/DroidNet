@@ -29,20 +29,22 @@ However, in D3D12 bindless rendering:
 Following Microsoft's D3D12 samples (specifically `D3D12MeshletInstancing`), we
 implemented root constants for passing draw indices:
 
-### 1. Root Signature Extension
+### 1. Root signature update
 
-Added `kDrawIndexConstant = 3` to the root bindings enumeration:
+Root bindings now follow this order (shared across passes):
 
 ```cpp
 enum class RootBindings : uint8_t {
-  kBindlessTableSrv = 0,      // descriptor table (SRVs) t0 space0
-  kSceneConstantsCbv = 1,     // direct CBV b1 space0
-  kMaterialConstantsCbv = 2,  // direct CBV b2 space0
-  kDrawIndexConstant = 3,     // root constant for draw index (b3 space0)
+  kBindlessTableSrv = 0,   // descriptor table (SRVs) t0, space0
+  kSceneConstantsCbv = 1,  // direct CBV b1, space0
+  kDrawIndexConstant = 2,  // 32-bit root constant for draw index (b3, space0)
 };
 ```
 
-### 2. CommandRecorder API Extension
+Note: Material constants are no longer bound as a CBV; they are provided via a
+bindless structured buffer with the slot published in `SceneConstants`.
+
+### 2. CommandRecorder API extension
 
 Added new methods for setting root constants:
 
@@ -55,7 +57,7 @@ void SetComputeRoot32BitConstant(uint32_t root_parameter_index,
                                  uint32_t dest_offset_in_32bit_values);
 ```
 
-### 3. RenderPass Integration
+### 3. RenderPass integration
 
 Added `BindDrawIndexConstant()` method to the base RenderPass class:
 
@@ -64,7 +66,7 @@ auto RenderPass::BindDrawIndexConstant(CommandRecorder& recorder,
                                        uint32_t draw_index) const -> void;
 ```
 
-### 4. Draw Call Flow
+### 4. Draw call flow
 
 Updated `IssueDrawCalls()` to bind the draw index before each draw:
 
@@ -73,9 +75,10 @@ BindDrawIndexConstant(command_recorder, draw_index);
 command_recorder.Draw(vertex_count, 1, 0, 0); // Normal draw call
 ```
 
-### 5. Shader Updates
+### 5. Shader updates
 
-Modified shaders to use root constant instead of `SV_InstanceID`:
+Shaders use a root constant for the draw index and read per-draw metadata via
+dynamic slots in `SceneConstants`:
 
 ```hlsl
 // Root constant declaration:
@@ -84,13 +87,19 @@ cbuffer DrawIndexConstants : register(b3, space0) {
   uint g_DrawIndex;
 }
 
-// Usage:
-DrawResourceIndices drawRes = g_DrawResourceIndices[g_DrawIndex];
+// Usage (illustrative):
+StructuredBuffer<DrawMetadata> draw_meta
+  = ResourceDescriptorHeap[Scene.bindless_indices_slot];
+DrawMetadata dm = draw_meta[g_DrawIndex];
+
+StructuredBuffer<float4x4> worlds
+  = ResourceDescriptorHeap[Scene.bindless_transforms_slot];
+float4x4 world = worlds[dm.transform_offset];
 ```
 
 ## Implementation Files Changed
 
-### Core Implementation
+### Core implementation
 
 - `RenderPass.h/cpp` - Added `BindDrawIndexConstant()` method and updated
   `IssueDrawCalls()`
@@ -100,14 +109,13 @@ DrawResourceIndices drawRes = g_DrawResourceIndices[g_DrawIndex];
 
 ### Pipeline Configuration
 
-- `ShaderPass.cpp` - Added draw index root constant binding to pipeline
-- `DepthPrePass.cpp` - Added MaterialConstants placeholder and draw index
-  binding
+- `ShaderPass.cpp` - Binds SRV table, SceneConstants CBV, and the draw index
+  root constant
 
 ### Shaders
 
-- `FullScreenTriangle.hlsl` - Updated to use `g_DrawIndex` root constant
-- `DepthPrePass.hlsl` - Updated to use `g_DrawIndex` root constant
+- Updated shaders to use the `g_DrawIndex` root constant and read per-draw
+  data via SceneConstants slots where applicable
 
 ### Documentation
 

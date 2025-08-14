@@ -113,7 +113,8 @@ protected:
       auto& impl_ref = scene->GetNodeImplRefUnsafe(handle);
       return &impl_ref;
     } catch (const std::exception&) {
-      DLOG_F(ERROR, "node no longer in scene: {}", to_string_compact(handle));
+      DLOG_F(ERROR, "node no longer in scene: {}",
+        to_string_compact(handle).c_str());
       return ReturnType { nullptr };
     }
   }
@@ -158,7 +159,7 @@ protected:
       // Sanity checks
       DCHECK_NOTNULL_F(child_node,
         "corrupted scene graph, child `{}` of `{}` is no longer in the scene",
-        to_string_compact(child_handle), node->GetName());
+        to_string_compact(child_handle).c_str(), node->GetName());
       DLOG_F(2, " + {}", child_node->GetName());
 
       children_buffer_.push_back(VisitedNode {

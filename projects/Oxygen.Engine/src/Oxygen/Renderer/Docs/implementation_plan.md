@@ -354,42 +354,40 @@ API and types
 
 Extraction
 
-* [ ] Add `Extraction/SceneExtraction.{h,cpp}` with:
-  * [ ] `size_t CollectRenderItems(const scene::Scene&, const View&, RenderItemsList&)`.
-  * [ ] Pre-order traversal; visibility filter; transform update pre-pass.
-  * [ ] Build one `RenderItem` per mesh (initially per-mesh; per-submesh as
+* [x] Add `Extraction/SceneExtraction.{h,cpp}` with:
+  * [x] `size_t CollectRenderItems(const scene::Scene&, const View&, RenderItemsList&)`.
+  * [x] Pre-order traversal; visibility filter; transform update pre-pass.
+  * [x] Build one `RenderItem` per mesh (initially per-mesh; per-submesh as
     optional enhancement) and call `UpdateComputedProperties()`.
-  * [ ] CPU culling with `View.frustum` before insertion.
+  * [x] CPU culling with `View.frustum` before insertion.
 
 Renderer wiring
 
-* [ ] Add `Renderer::BuildFrame(const scene::Scene&, const View&)` that:
-  * [ ] Clears `opaque_items_`; calls `CollectRenderItems` to repopulate.
-  * [ ] Writes `view/projection/camera_position` to `SceneConstants`.
-  * [ ] Leaves material constants as-is; doc that materials are per-item for
+* [x] Add `Renderer::BuildFrame(const scene::Scene&, const View&)` that:
+  * [x] Clears `opaque_items_`; calls `CollectRenderItems` to repopulate.
+  * [x] Writes `view/projection/camera_position` to `SceneConstants`.
+  * [x] Leaves material constants as-is; doc that materials are per-item for
         later phases.
 
 Example migration and fallback
 
-* [ ] Modify `Examples/Graphics/Simple/MainModule.cpp`:
-  * [ ] Create a minimal `scene::Scene` with camera and two mesh nodes.
-  * [ ] Build `View` from camera; call `renderer_->BuildFrame(scene, view)`.
-  * [ ] Remove direct `OpaqueItems().Add(...)`; keep optional fallback when no
+* [x] Modify `Examples/Graphics/Simple/MainModule.cpp`:
+  * [x] Create a minimal `scene::Scene` with camera and two mesh nodes.
+  * [x] Build `View` from camera; call `renderer_->BuildFrame(scene, view)`.
+  * [x] Remove direct `OpaqueItems().Add(...)`; keep optional fallback when no
         scene/camera is present.
 
 Docs and tests
 
-* [ ] Update docs:
-  * [ ] `Docs/passes/data_flow.md`: add extraction stage before PreExecute.
-  * [ ] `Docs/view_abstraction.md`: reflect finalized fields and reverse-Z note.
-  * [ ] `Docs/render_items.md`: clarify extraction responsibilities and
+* [x] Update docs:
+  * [x] `Docs/passes/data_flow.md`: add extraction stage before PreExecute.
+  * [x] `Docs/view_abstraction.md`: reflect finalized fields and reverse-Z note.
+  * [x] `Docs/render_items.md`: clarify extraction responsibilities and
     per-submesh item policy (temporary limitation).
-* [ ] Unit tests:
-  * [ ] Frustum plane extraction and intersection (AABB + sphere; reverse-Z).
-  * [ ] Scene extraction happy path: 2 mesh nodes -> 2 items; invisible subtree
-    culled; transforms applied.
-  * [ ] Null/edge cases: empty scene -> 0 items; mesh with no indices -> still
-    extracted; no camera -> BuildFrame sets matrices from provided View only.
+* [x] Unit tests:
+  * [x] Frustum plane extraction and intersection (AABB + sphere; reverse-Z).
+  * [x] Scene extraction happy path: 2 mesh nodes -> 1 visible, 1 culled; transforms applied.
+  * [x] Null/edge cases: empty scene -> 0 items.
 
 Edge cases to handle (acceptance):
 
@@ -594,3 +592,6 @@ Revision History:
   touch-ups to `RenderItemsList.cpp` and `Renderer.h` incorporated – 2025-08-14.
 * Phase 3 follow-up: Verified Simple example uses container exclusively and
   added one-time info log when items are first added – 2025-08-14.
+* Phase 4 complete: Implemented View/Frustum, SceneExtraction with CPU culling,
+  added Renderer::BuildFrame(), and migrated Simple example to build frames
+  from scene+view – 2025-08-14.

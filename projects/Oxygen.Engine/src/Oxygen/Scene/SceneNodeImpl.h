@@ -203,7 +203,7 @@ protected:
   OXGN_SCN_API auto ClearTransformDirty() noexcept -> void;
 
 private:
-  [[nodiscard]] constexpr auto ShouldIgnoreParentTransform() const
+  [[nodiscard]] auto ShouldIgnoreParentTransform() const
   {
     return GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
   }

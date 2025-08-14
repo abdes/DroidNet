@@ -204,7 +204,6 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
-  BindMaterialConstantsBuffer(recorder);
   IssueDrawCalls(recorder);
   Context().RegisterPass(this);
 
@@ -396,20 +395,10 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .data = DirectBufferBinding {}
   };
 
-  // Root Parameter 4: MaterialConstants CBV (b2, space0)
-  constexpr RootBindingDesc material_constants_cbv_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 2, // b2
-      .register_space = 0, // space0
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DirectBufferBinding {}
-  };
-
-  // Root Parameter 5: DrawIndex constant (32-bit root constant)
+  // Root Parameter 2: DrawIndex constant (32-bit root constant)
   constexpr RootBindingDesc draw_index_constant_desc {
     .binding_slot_desc = BindingSlotDesc {
-      .register_index = 3, // b3
+      .register_index = 2, // b2
       .register_space = 0, // space0
     },
     .visibility = ShaderStageFlags::kAll,
@@ -432,9 +421,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .AddRootBinding(RootBindingItem(indices_srv_table_desc))
     // Root Parameter 1: SceneConstants CBV (b1, space0)
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
-    // Root Parameter 2: MaterialConstants CBV (b2, space0)
-    .AddRootBinding(RootBindingItem(material_constants_cbv_desc))
-    // Root Parameter 3: DrawIndex constant (b3, space0)
+    // Root Parameter 2: DrawIndex constant (b3, space0)
     .AddRootBinding(RootBindingItem(draw_index_constant_desc))
     .Build();
 }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 #include <glm/mat4x4.hpp>
@@ -43,6 +44,40 @@ struct BindlessIndicesSlot {
   {
   }
   constexpr auto operator<=>(const BindlessIndicesSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessDrawMetadataSlot {
+  uint32_t value;
+  explicit constexpr BindlessDrawMetadataSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessDrawMetadataSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessWorldsSlot {
+  uint32_t value;
+  explicit constexpr BindlessWorldsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessWorldsSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessMaterialConstantsSlot {
+  uint32_t value;
+  explicit constexpr BindlessMaterialConstantsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessMaterialConstantsSlot&) const
+    = default;
   constexpr operator uint32_t() const noexcept { return value; }
 };
 
@@ -95,6 +130,9 @@ struct MonotonicVersion {
    - frame_index: Monotonic frame counter wrapped in a strong type (FrameIndex).
    - bindless_indices_slot: Shader-visible descriptor slot wrapped in a strong
      type (BindlessIndicesSlot); use kInvalidDescriptorSlot when unavailable.
+   - bindless_draw_metadata_slot: Shader-visible descriptor slot for
+ DrawMetadata structured buffer (BindlessDrawMetadataSlot); use
+ kInvalidDescriptorSlot when unavailable.
 
  Alignment: Each glm::mat4 occupies 64 bytes (column-major). frame_index is a
  32-bit value that begins a 16-byte register; the remaining 12 bytes of that
@@ -115,7 +153,12 @@ public:
     float time_seconds { 0.0f };
     uint32_t frame_index { 0 };
     uint32_t bindless_indices_slot { kInvalidDescriptorSlot };
-    uint32_t reserved[2] { 0, 0 };
+    uint32_t bindless_draw_metadata_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_transforms_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_material_constants_slot { kInvalidDescriptorSlot };
+    uint32_t _pad0 { 0 };
+    uint32_t _pad1 { 0 };
+    uint32_t _pad2 { 0 };
   };
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
@@ -128,46 +171,90 @@ public:
   // Application setters (chainable) — modern return type
   auto SetViewMatrix(const glm::mat4& m) noexcept -> SceneConstants&
   {
-    view_matrix_ = m;
-    version_ = version_.Next();
+    if (std::memcmp(&view_matrix_, &m, sizeof(glm::mat4)) != 0) {
+      view_matrix_ = m;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
   auto SetProjectionMatrix(const glm::mat4& m) noexcept -> SceneConstants&
   {
-    projection_matrix_ = m;
-    version_ = version_.Next();
+    if (std::memcmp(&projection_matrix_, &m, sizeof(glm::mat4)) != 0) {
+      projection_matrix_ = m;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
   auto SetCameraPosition(const glm::vec3& p) noexcept -> SceneConstants&
   {
-    camera_position_ = p;
-    version_ = version_.Next();
+    if (camera_position_.x != p.x || camera_position_.y != p.y
+      || camera_position_.z != p.z) {
+      camera_position_ = p;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
   // Renderer-only setters (require the renderer tag)
   auto SetTimeSeconds(const float t, RendererTag) noexcept -> SceneConstants&
   {
-    time_seconds_ = t;
-    version_ = version_.Next();
+    if (time_seconds_ != t) {
+      time_seconds_ = t;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
   auto SetFrameIndex(const FrameIndex idx, RendererTag) noexcept
     -> SceneConstants&
   {
-    frame_index_ = idx;
-    version_ = version_.Next();
+    if (frame_index_ != idx) {
+      frame_index_ = idx;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
   auto SetBindlessIndicesSlot(
     const BindlessIndicesSlot slot, RendererTag) noexcept -> SceneConstants&
   {
-    bindless_indices_slot_ = slot;
-    version_ = version_.Next();
+    if (bindless_indices_slot_ != slot) {
+      bindless_indices_slot_ = slot;
+      version_ = version_.Next();
+    }
+    return *this;
+  }
+
+  auto SetBindlessDrawMetadataSlot(const BindlessDrawMetadataSlot slot,
+    RendererTag) noexcept -> SceneConstants&
+  {
+    if (bindless_draw_metadata_slot_ != slot) {
+      bindless_draw_metadata_slot_ = slot;
+      version_ = version_.Next();
+    }
+    return *this;
+  }
+
+  auto SetBindlessWorldsSlot(
+    const BindlessWorldsSlot slot, RendererTag) noexcept -> SceneConstants&
+  {
+    if (bindless_transforms_slot_ != slot) {
+      bindless_transforms_slot_ = slot;
+      version_ = version_.Next();
+    }
+    return *this;
+  }
+
+  auto SetBindlessMaterialConstantsSlot(
+    const BindlessMaterialConstantsSlot slot, RendererTag) noexcept
+    -> SceneConstants&
+  {
+    if (bindless_material_constants_slot_ != slot) {
+      bindless_material_constants_slot_ = slot;
+      version_ = version_.Next();
+    }
     return *this;
   }
 
@@ -198,6 +285,21 @@ public:
     return bindless_indices_slot_;
   }
 
+  [[nodiscard]] constexpr auto GetBindlessDrawMetadataSlot() const noexcept
+  {
+    return bindless_draw_metadata_slot_;
+  }
+
+  [[nodiscard]] constexpr auto GetBindlessWorldsSlot() const noexcept
+  {
+    return bindless_transforms_slot_;
+  }
+
+  [[nodiscard]] constexpr auto GetBindlessMaterialConstantsSlot() const noexcept
+  {
+    return bindless_material_constants_slot_;
+  }
+
   // Monotonic version counter; incremented on any mutation.
   [[nodiscard]] constexpr auto GetVersion() const noexcept { return version_; }
 
@@ -222,7 +324,10 @@ private:
       .time_seconds = time_seconds_,
       .frame_index = frame_index_.value,
       .bindless_indices_slot = bindless_indices_slot_.value,
-      .reserved = { 0u, 0u },
+      .bindless_draw_metadata_slot = bindless_draw_metadata_slot_.value,
+      .bindless_transforms_slot = bindless_transforms_slot_.value,
+      .bindless_material_constants_slot
+      = bindless_material_constants_slot_.value,
     };
   }
 
@@ -235,6 +340,9 @@ private:
   float time_seconds_ { 0.0f };
   FrameIndex frame_index_ {};
   BindlessIndicesSlot bindless_indices_slot_ {};
+  BindlessDrawMetadataSlot bindless_draw_metadata_slot_ {};
+  BindlessWorldsSlot bindless_transforms_slot_ {};
+  BindlessMaterialConstantsSlot bindless_material_constants_slot_ {};
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };

@@ -35,58 +35,64 @@ namespace {
 auto Frustum::FromViewProj(const glm::mat4& vp, bool reverse_z) -> Frustum
 {
   Frustum f {};
-  // Gribb & Hartmann plane extraction from row-major glm::mat4 (column-major
-  // storage, but indices refer to elements as m[col][row]). We'll write in
-  // terms of matrix elements for clarity.
-  const float m00 = vp[0][0];
-  const float m01 = vp[1][0];
-  const float m02 = vp[2][0];
-  const float m03 = vp[3][0];
-  const float m10 = vp[0][1];
-  const float m11 = vp[1][1];
-  const float m12 = vp[2][1];
-  const float m13 = vp[3][1];
-  const float m20 = vp[0][2];
-  const float m21 = vp[1][2];
-  const float m22 = vp[2][2];
-  const float m23 = vp[3][2];
-  const float m30 = vp[0][3];
-  const float m31 = vp[1][3];
-  const float m32 = vp[2][3];
-  const float m33 = vp[3][3];
+  // Gribb & Hartmann plane extraction. GLM stores matrices column-major and
+  // uses indexing m[col][row]. Build explicit row vectors first, then form
+  // planes as r3 +/- r{0,1,2}.
+  const glm::vec4 r0 { vp[0][0], vp[1][0], vp[2][0], vp[3][0] };
+  const glm::vec4 r1 { vp[0][1], vp[1][1], vp[2][1], vp[3][1] };
+  const glm::vec4 r2 { vp[0][2], vp[1][2], vp[2][2], vp[3][2] };
+  const glm::vec4 r3 { vp[0][3], vp[1][3], vp[2][3], vp[3][3] };
 
-  // Left:  m3 + m0
-  f.planes[kLeft].normal = { m03 + m00, m13 + m10, m23 + m20 };
-  f.planes[kLeft].d = m33 + m30;
-
-  // Right: m3 - m0
-  f.planes[kRight].normal = { m03 - m00, m13 - m10, m23 - m20 };
-  f.planes[kRight].d = m33 - m30;
-
-  // Bottom: m3 + m1
-  f.planes[kBottom].normal = { m03 + m01, m13 + m11, m23 + m21 };
-  f.planes[kBottom].d = m33 + m31;
-
-  // Top: m3 - m1
-  f.planes[kTop].normal = { m03 - m01, m13 - m11, m23 - m21 };
-  f.planes[kTop].d = m33 - m31;
-
+  // Left:  r3 + r0
+  {
+    const glm::vec4 p = r3 + r0;
+    f.planes[kLeft].normal = glm::vec3(p);
+    f.planes[kLeft].d = p.w;
+  }
+  // Right: r3 - r0
+  {
+    const glm::vec4 p = r3 - r0;
+    f.planes[kRight].normal = glm::vec3(p);
+    f.planes[kRight].d = p.w;
+  }
+  // Bottom: r3 + r1
+  {
+    const glm::vec4 p = r3 + r1;
+    f.planes[kBottom].normal = glm::vec3(p);
+    f.planes[kBottom].d = p.w;
+  }
+  // Top: r3 - r1
+  {
+    const glm::vec4 p = r3 - r1;
+    f.planes[kTop].normal = glm::vec3(p);
+    f.planes[kTop].d = p.w;
+  }
   // Near/Far: handle reverse-Z swap
   if (!reverse_z) {
-    // Near: m3 + m2
-    f.planes[kNear].normal = { m03 + m02, m13 + m12, m23 + m22 };
-    f.planes[kNear].d = m33 + m32;
-
-    // Far: m3 - m2
-    f.planes[kFar].normal = { m03 - m02, m13 - m12, m23 - m22 };
-    f.planes[kFar].d = m33 - m32;
+    // Near: r3 + r2
+    {
+      const glm::vec4 p = r3 + r2;
+      f.planes[kNear].normal = glm::vec3(p);
+      f.planes[kNear].d = p.w;
+    }
+    // Far: r3 - r2
+    {
+      const glm::vec4 p = r3 - r2;
+      f.planes[kFar].normal = glm::vec3(p);
+      f.planes[kFar].d = p.w;
+    }
   } else {
     // Reverse-Z: swap meaning
-    f.planes[kNear].normal = { m03 - m02, m13 - m12, m23 - m22 };
-    f.planes[kNear].d = m33 - m32;
-
-    f.planes[kFar].normal = { m03 + m02, m13 + m12, m23 + m22 };
-    f.planes[kFar].d = m33 + m32;
+    {
+      const glm::vec4 p = r3 - r2; // near
+      f.planes[kNear].normal = glm::vec3(p);
+      f.planes[kNear].d = p.w;
+    }
+    {
+      const glm::vec4 p = r3 + r2; // far
+      f.planes[kFar].normal = glm::vec3(p);
+      f.planes[kFar].d = p.w;
+    }
   }
 
   for (auto& p : f.planes) {
@@ -98,15 +104,16 @@ auto Frustum::FromViewProj(const glm::mat4& vp, bool reverse_z) -> Frustum
 auto Frustum::IntersectsAABB(const glm::vec3& bmin, const glm::vec3& bmax) const
   -> bool
 {
-  // For each plane, compute the most negative vertex (n-vertex). If outside,
-  // the AABB is fully outside.
+  // For each plane, compute the most positive vertex (p-vertex) in the
+  // direction of the plane normal. If that vertex is behind the plane, the
+  // AABB is fully outside.
   for (const auto& p : planes) {
     glm::vec3 v;
-    v.x = p.normal.x >= 0.0F ? bmin.x : bmax.x;
-    v.y = p.normal.y >= 0.0F ? bmin.y : bmax.y;
-    v.z = p.normal.z >= 0.0F ? bmin.z : bmax.z;
+    v.x = p.normal.x >= 0.0F ? bmax.x : bmin.x;
+    v.y = p.normal.y >= 0.0F ? bmax.y : bmin.y;
+    v.z = p.normal.z >= 0.0F ? bmax.z : bmin.z;
     const float dist = glm::dot(p.normal, v) + p.d;
-    if (dist > 0.0F) {
+    if (dist < 0.0F) {
       return false; // outside
     }
   }
@@ -116,9 +123,10 @@ auto Frustum::IntersectsAABB(const glm::vec3& bmin, const glm::vec3& bmax) const
 auto Frustum::IntersectsSphere(const glm::vec3& center, float radius) const
   -> bool
 {
+  // Sphere intersects frustum if it's not completely behind any plane.
   return std::ranges::all_of(planes, [&](const Plane& p) {
     const float dist = glm::dot(p.normal, center) + p.d;
-    return dist <= radius;
+    return dist >= -radius;
   });
 }
 

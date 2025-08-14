@@ -140,7 +140,7 @@
     "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true
   },
-  "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+  "C_Cpp.codeAnalysis.clangTidy.enabled": false,
   "C_Cpp.codeAnalysis.clangTidy.args": [
     "--config-file=${workspaceFolder}/.clang-tidy"
   ],
