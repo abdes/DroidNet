@@ -214,34 +214,211 @@ Current status (2025-08-14):
 * Docs updated: `render_items.md` includes a Container Semantics section. A
   minor markdown list-style lint remains optional to address.
 
-Follow-ups:
+Follow-ups (refined and expanded):
 
-* Unit tests for `RenderItemsList` (add/remove/update/validation edge cases).
-* Re-verify `Examples/Graphics/Simple/MainModule.cpp` after manual edits to
-  ensure Phase 3 usage remains intact.
-* Optional: align unordered list style in docs with repo linter preferences.
+* Tests (under `Renderer/Test`):
+  * List operations: add/remove/update order preservation and index bounds.
+  * Validation: negative sphere radius and AABB min/max ordering throw and log.
+  * Recompute: `UpdateComputedProperties()` invoked on Add/Update and reflects
+    world transform changes (bounding box/sphere and normal matrix update).
+* Contracts/assertions:
+  * In `Renderer::PreExecute`, assert that `scene_constants` will be set by the
+    renderer and that `opaque_draw_list` is the container’s span.
+  * Ensure `EnsureResourcesForDrawList()` tolerates empty spans and does not
+    mutate the container.
+* Example hygiene: Re-verify `Examples/Graphics/Simple/MainModule.cpp` uses the
+  container exclusively (no stray local vectors), and logs clearly when items
+  are first added (one-time info level is fine).
+* Docs lint: align list styles in `render_items.md` (low priority).
 
 ## Phase 4 – Scene Extraction Integration (Deferred from Old Phase 1)
 
-Goal: Switch from manual item creation in the example to scene-driven extraction
-while retaining a fallback during development.
+Goal: Replace manual item creation with a camera-driven extraction pipeline:
+scene traversal → culling → `RenderItem` population → renderer-managed list. The
+example constructs a View from a camera and submits via a single call. Keep a
+configurable fallback during development.
 
-Tasks:
+Scope and contracts:
 
-* [ ] Implement minimal `View` struct (camera matrices & frustum planes cached).
-* [ ] Implement `CollectRenderItems(view)` (scene graph traversal) returning
-  opaque + (placeholder) transparent lists.
-* [ ] Integrate basic frustum culling (AABB vs frustum planes) – CPU.
-* [ ] Populate opaque list; transparent list TODO placeholder.
-* [ ] Example migration (checkpoint 4): Example constructs `View` (from camera
-  params) and calls `renderer_->BuildFrame(view)`; manual cube creation path
-  guarded behind `#if OXYGEN_RENDERER_EXAMPLE_FALLBACK` until stable, then
-  removed.
-* [ ] Docs: data_flow.md (extraction stage), view_abstraction.md (initial
-  version), render_items.md (extraction responsibilities).
+### View abstraction (immutable per-frame snapshot)
 
-Deliverable: Example no longer manually creates a cube per frame; uses scene
-extraction.
+* Inputs: camera matrices and render state (from scene camera or app).
+* Derived: cached inverses, view-projection, frustum planes.
+* Used to: populate `SceneConstants` and perform CPU culling.
+* Mapping to `SceneConstants`: `view_matrix`, `projection_matrix`,
+  `camera_position` are always set from View.
+
+### Extraction
+
+* Traverse a `scene::Scene` (read-only) and collect renderable nodes.
+* Build `RenderItem`s with world transform and computed bounds.
+* CPU cull against View frustum before inserting into `opaque_items_`.
+* Transparent pipeline is a placeholder; opaque-only for this phase.
+
+### Integration and migration
+
+* New renderer entrypoint consumes a `View` and optionally a `Scene`.
+* Example switches to this API and removes manual geometry population.
+
+—
+
+### View: concrete spec (minimal, future-proof)
+
+Contract (inputs/outputs):
+
+* Inputs: `glm::mat4 view`, `glm::mat4 proj`, optional `glm::ivec4 viewport`,
+  optional `glm::ivec4 scissor`, `glm::vec2 pixel_jitter` (default 0),
+  `bool reverse_z` (default false), `bool mirrored` (default false),
+  `glm::vec3 camera_position` (optional; infer from `inverse(view)` if missing).
+* Derived (cached at construction): `inv_view`, `inv_proj`, `view_proj`,
+  `inv_view_proj`, `Frustum frustum` (6 planes; normals point outward; swap
+  near/far for reverse-Z).
+* Methods: getters only; immutable snapshot (no setters).
+
+Notes:
+
+* Aligned with typical engines (UE/Frostbite/idTech): render-time snapshot with
+  cached matrices and frustum.
+* View is the source of truth for values written to `SceneConstants`.
+
+Planned placement: `Oxygen/Renderer/Types/View.h(.cpp)` and
+`Oxygen/Renderer/Types/Frustum.h(.cpp)` with helpers `IntersectsAABB(min,max)`
+and `IntersectsSphere(center,radius)`.
+
+—
+
+### Scene traversal and extraction: key points and plan
+
+Key points from Scene module (for later implementation reference):
+
+* Traversal API: `scene::SceneTraversal<const Scene>` supports orders
+  (BreadthFirst, PreOrder, PostOrder) with visitor returning `VisitResult`
+  (`kContinue`, `kSkipSubtree`, `kStop`), and filtering via `SceneFilterT`.
+* Non-recursive, cache-friendly traversal over `SceneNodeImpl` pointers.
+* Transform system: update via `SceneTraversal.UpdateTransforms()` before
+  extraction so world matrices are current.
+* Mesh access: `SceneNode::HasMesh()`/`GetMesh()` returns
+  `shared_ptr<const data::Mesh>`.
+* Visibility: use `SceneNodeImpl::Flags` effective values; reject invisible
+  subtrees early.
+* Mutation: do not modify the graph during traversal; extraction is read-only.
+
+Minimal extraction algorithm:
+
+1. Ensure transforms are up to date (`SceneTraversal.UpdateTransforms()`).
+2. Traverse PreOrder from roots; filter out invisible subtrees early.
+3. For nodes with a mesh component:
+   * Build a `RenderItem`:
+     * `mesh` = node mesh; `material` = first submesh material (limitation: if
+       mesh has multiple submeshes, initial version may pick the first only;
+       optional enhancement is per-submesh items).
+     * `world_transform` from TransformComponent world matrix; call
+       `UpdateComputedProperties()` to compute bounds and normal matrix.
+     * Snapshot flags (cast/receive shadows) from node flags effective values.
+   * Culling: test world AABB (sphere optional pre-test) against `View.frustum`.
+   * If visible, insert into `Renderer::OpaqueItems()` container.
+
+—
+
+### Renderer integration and public API changes
+
+New public methods (names tentative):
+
+* `Renderer::BuildFrame(const scene::Scene& scene, const View& view) -> void`
+  * Clears and repopulates `opaque_items_` via extraction + culling.
+  * Calls `ModifySceneConstants` to set `view/projection/camera_position` from
+    View.
+  * Leaves material constants untouched; example may still set them per frame.
+
+Optional convenience:
+
+* `Renderer::CollectRenderItems(const scene::Scene&, const View&) -> size_t`
+  * Performs extraction and returns items count; `BuildFrame` uses it.
+
+Internals to add:
+
+* `Types/View.{h,cpp}`, `Types/Frustum.{h,cpp}` with plane extraction (Gribb &
+  Hartmann) and AABB/sphere tests.
+* `Extraction/SceneExtraction.{h,cpp}` implementing traversal + item build.
+
+No pass/root-signature changes required; passes already consume matrices from
+`SceneConstants`.
+
+—
+
+### Example migration (checkpoint 4)
+
+* Replace manual cube insertion with a small `scene::Scene` setup:
+  * Create a camera node with `scene::PerspectiveCamera` (D3D12 convention),
+    set FOV/aspect/near/far; compute View from the camera node’s transform and
+    `ProjectionMatrix()`.
+  * Create two mesh nodes; attach meshes (reuse debug cube and offset copy);
+    set transforms via `SceneNode::GetTransform()` helpers.
+* Build the View (no jitter, reverse-Z=false initially) and call
+  `renderer_->BuildFrame(scene, view)` before submitting the graph.
+* Keep a dev fallback behind a flag: if the scene is empty or no camera, use
+  the old procedural path to populate one cube for debugging.
+
+—
+
+### Tasks (precise, testable)
+
+API and types
+
+* [ ] Add `Types/Frustum` with 6 planes, `FromViewProj(mat4, reverseZ)` and
+  `IntersectsAABB(min,max)`/`IntersectsSphere(center,radius)`.
+* [ ] Add `Types/View` per spec above; compute cached matrices and frustum.
+
+Extraction
+
+* [ ] Add `Extraction/SceneExtraction.{h,cpp}` with:
+  * [ ] `size_t CollectRenderItems(const scene::Scene&, const View&, RenderItemsList&)`.
+  * [ ] Pre-order traversal; visibility filter; transform update pre-pass.
+  * [ ] Build one `RenderItem` per mesh (initially per-mesh; per-submesh as
+    optional enhancement) and call `UpdateComputedProperties()`.
+  * [ ] CPU culling with `View.frustum` before insertion.
+
+Renderer wiring
+
+* [ ] Add `Renderer::BuildFrame(const scene::Scene&, const View&)` that:
+  * [ ] Clears `opaque_items_`; calls `CollectRenderItems` to repopulate.
+  * [ ] Writes `view/projection/camera_position` to `SceneConstants`.
+  * [ ] Leaves material constants as-is; doc that materials are per-item for
+        later phases.
+
+Example migration and fallback
+
+* [ ] Modify `Examples/Graphics/Simple/MainModule.cpp`:
+  * [ ] Create a minimal `scene::Scene` with camera and two mesh nodes.
+  * [ ] Build `View` from camera; call `renderer_->BuildFrame(scene, view)`.
+  * [ ] Remove direct `OpaqueItems().Add(...)`; keep optional fallback when no
+        scene/camera is present.
+
+Docs and tests
+
+* [ ] Update docs:
+  * [ ] `Docs/passes/data_flow.md`: add extraction stage before PreExecute.
+  * [ ] `Docs/view_abstraction.md`: reflect finalized fields and reverse-Z note.
+  * [ ] `Docs/render_items.md`: clarify extraction responsibilities and
+    per-submesh item policy (temporary limitation).
+* [ ] Unit tests:
+  * [ ] Frustum plane extraction and intersection (AABB + sphere; reverse-Z).
+  * [ ] Scene extraction happy path: 2 mesh nodes -> 2 items; invisible subtree
+    culled; transforms applied.
+  * [ ] Null/edge cases: empty scene -> 0 items; mesh with no indices -> still
+    extracted; no camera -> BuildFrame sets matrices from provided View only.
+
+Edge cases to handle (acceptance):
+
+* Empty scene or no meshes -> zero items; no crash.
+* No camera node: View is provided by the example; `BuildFrame` must not depend
+  on scene camera discovery yet.
+* Reverse-Z: frustum near/far plane extraction swaps accordingly.
+* Multiple submeshes: document current behavior; optionally emit per-submesh
+  items in an incremental commit.
+
+Deliverable: Example uses `BuildFrame(scene, view)` to populate items; manual
+cube creation removed; opaque-only pipeline renders with culling.
 
 ## Phase 5 – Light Culling Pass (Stub → Minimal Functional)
 
