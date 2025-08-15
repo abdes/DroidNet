@@ -6,6 +6,23 @@ current MeshData usage, update hooks, culling/LOD behavior, and submission.
 
 ---
 
+## Implementation Status (as of Aug 2025)
+
+This section summarizes what is implemented today versus the target design below:
+
+- Implemented now
+  - Renderable component that holds a `std::shared_ptr<const data::GeometryAsset>`.
+  - LOD policy enumeration and control: `LODPolicy { kFixed, kDistance, kScreenSpaceError }`.
+  - `SetLODFixed`, `SetLODPolicy`, and `GetActiveMesh()` returning an `std::optional<ActiveMesh>`.
+  - SceneNode geometry helpers: `AttachGeometry`, `DetachRenderable`, `ReplaceGeometry`, `GetGeometry`, `GetActiveMesh`, `HasGeometry`.
+  - Transform hook exists: `OnWorldTransformUpdated(const glm::mat4&)` (currently a placeholder).
+
+- Not yet implemented (planned; covered by design below)
+  - Per-submesh visibility and material overrides.
+  - Bounds caching, world bounds propagation, and per-submesh AABB.
+  - Dynamic LOD evaluation and hysteresis (distance/SSE) and renderer submission façade.
+  - Submission builder with bindless handle resolution and stable instance IDs.
+
 ## 1) Goals & Scope
 
 Goals
@@ -139,6 +156,13 @@ Evaluation
 - Evaluate after transform/bounds updates and camera movement; cache current LOD
   to avoid churn.
 
+Practical note (current behavior)
+
+- `GetActiveMesh()` returns empty when:
+  - No GeometryAsset is set or it has zero LODs, or
+  - Policy is Distance/SSE and no evaluation has yet set the current LOD for the frame.
+- For Fixed policy, the requested LOD index is clamped to the available range.
+
 ---
 
 ## 7) Submesh Controls
@@ -187,8 +211,10 @@ Why snapshot/finalize
 
 Current state
 
-- Scene exposes a Mesh component API on SceneNode that operates on
-  `std::shared_ptr<const data::Mesh>` implemented via detail::MeshData.
+- Scene exposes geometry helpers on SceneNode for the Renderable component that
+  operates on `std::shared_ptr<const data::GeometryAsset>`. A legacy Mesh API
+  may still exist during transition but the preferred path is GeometryAsset via
+  Renderable.
 
 Migration plan
 
@@ -248,6 +274,29 @@ public:
 };
 ```
 
+Implemented subset today (reference)
+
+```cpp
+class Renderable final : public Component {
+  OXYGEN_COMPONENT(Renderable)
+public:
+  enum class LODPolicy { kFixed, kDistance, kScreenSpaceError };
+
+  explicit Renderable(std::shared_ptr<const data::GeometryAsset> geometry);
+  ~Renderable() override = default;
+
+  void SetGeometry(std::shared_ptr<const data::GeometryAsset> geometry) noexcept;
+  const std::shared_ptr<const data::GeometryAsset>& GetGeometry() const noexcept;
+
+  void SetLODFixed(size_t index) noexcept;   // sets policy to kFixed
+  void SetLODPolicy(LODPolicy policy) noexcept;
+
+  std::optional<ActiveMesh> GetActiveMesh() const noexcept; // empty until evaluated for dynamic policies
+
+  void OnWorldTransformUpdated(const glm::mat4& world); // placeholder
+};
+```
+
 SetGeometry behavior (summary)
 
 - If new pointer equals current → no-op.
@@ -297,7 +346,7 @@ Examples
 
 Scene – Component & Hooks
 
-- [ ] Define Renderable component interface and data members.
+- [x] Define Renderable component interface and data members.
 - [ ] Implement SetGeometry and per-LOD/per-submesh local-bounds cache.
 - [ ] Implement aggregated world-sphere bounds and optional per-submesh AABB
   on-demand.
@@ -306,8 +355,7 @@ Scene – Component & Hooks
   resolution.
 - [ ] Option A: Add Component::OnWorldTransformUpdated(world) and call from
   SceneNodeImpl::UpdateTransforms.
-- [ ] Option B (if chosen): Lazy world-bounds recompute during RenderSync.
-- [ ] Add Scene helpers to attach/get Renderable (minimal API consistent with
+- [x] Add Scene helpers to attach/get Renderable (minimal API consistent with
   Camera).
 
 Scene – Render Sync & Enumeration
@@ -336,7 +384,7 @@ Renderer Interop
 Migration & Compatibility
 
 - [ ] Keep MeshData and SceneNode mesh API intact initially.
-- [ ] Introduce Renderable without breaking tests; plan deprecation of MeshData
+- [x] Introduce Renderable without breaking tests; plan deprecation of MeshData
   later.
 - [ ] Optional: Implement 1-LOD shim to adapt AttachMesh → Renderable
   (deferred).

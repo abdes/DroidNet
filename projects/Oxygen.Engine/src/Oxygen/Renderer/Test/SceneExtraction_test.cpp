@@ -28,7 +28,7 @@ using oxygen::engine::extraction::CollectRenderItems;
 namespace {
 
 // Build a tiny mesh (triangle)
-static auto MakeUnitTriangleMesh() -> std::shared_ptr<const oxygen::data::Mesh>
+static auto MakeUnitTriangleMesh() -> std::shared_ptr<oxygen::data::Mesh>
 {
   std::vector<oxygen::data::Vertex> vertices = {
     {
@@ -73,6 +73,21 @@ static auto MakeUnitTriangleMesh() -> std::shared_ptr<const oxygen::data::Mesh>
   return mesh;
 }
 
+// Wrap a single Mesh into a one-LOD GeometryAsset for scene attachment
+static auto MakeSingleLodGeometry(std::shared_ptr<oxygen::data::Mesh> mesh)
+  -> std::shared_ptr<const oxygen::data::GeometryAsset>
+{
+  using oxygen::data::GeometryAsset;
+  using oxygen::data::pak::GeometryAssetDesc;
+
+  GeometryAssetDesc desc {};
+  desc.lod_count = 1;
+
+  std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
+  lods.push_back(std::move(mesh));
+  return std::make_shared<GeometryAsset>(std::move(desc), std::move(lods));
+}
+
 static auto MakeDefaultView() -> View
 {
   View::Params p;
@@ -91,8 +106,9 @@ NOLINT_TEST(SceneExtraction_BasicTest, TwoMeshes_OneInvisible_Culled)
   auto b = scene->CreateNode("B");
 
   const auto mesh = MakeUnitTriangleMesh();
-  ASSERT_TRUE(a.AttachMesh(mesh));
-  ASSERT_TRUE(b.AttachMesh(mesh));
+  const auto geometry = MakeSingleLodGeometry(mesh);
+  ASSERT_TRUE(a.AttachGeometry(geometry));
+  ASSERT_TRUE(b.AttachGeometry(geometry));
 
   // Move A in front of the camera (into the frustum)
   auto at = a.GetTransform();
@@ -105,6 +121,9 @@ NOLINT_TEST(SceneExtraction_BasicTest, TwoMeshes_OneInvisible_Culled)
   // Build a view and output list
   const View view = MakeDefaultView();
   RenderItemsList out;
+
+  // Ensure transforms are up to date before extraction
+  scene->Update(false);
 
   // Act
   const auto count = CollectRenderItems(*scene, view, out);
