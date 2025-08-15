@@ -9,6 +9,7 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Detail/NodeData.h>
+#include <Oxygen/Scene/Detail/Renderable.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -16,6 +17,7 @@
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
 using oxygen::scene::detail::NodeData;
+using oxygen::scene::detail::Renderable;
 using oxygen::scene::detail::TransformComponent;
 using GraphNode = SceneNodeImpl::GraphNode;
 
@@ -183,6 +185,7 @@ void SceneNodeImpl::UpdateTransforms(const Scene& scene)
     return;
   }
 
+  // Update the transform component
   auto& transform = GetComponent<TransformComponent>();
   if (const auto& parent = GetComponent<GraphData>().GetParent();
     parent.IsValid() && !ShouldIgnoreParentTransform()) {
@@ -193,6 +196,13 @@ void SceneNodeImpl::UpdateTransforms(const Scene& scene)
   } else {
     transform.UpdateWorldTransformAsRoot();
   }
+
+  // Update the Renderable component
+  if (HasComponent<Renderable>()) {
+    auto& renderable = GetComponent<Renderable>();
+    renderable.OnWorldTransformUpdated(transform.GetWorldMatrix());
+  }
+
   ClearTransformDirty();
 }
 
