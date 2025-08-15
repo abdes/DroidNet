@@ -18,6 +18,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 
 namespace oxygen::engine::extraction {
@@ -47,12 +48,15 @@ auto CollectRenderItems(
     const auto scene_wp = std::weak_ptr<const scn::Scene>(
       std::const_pointer_cast<const scn::Scene>(scene_sp));
     scn::SceneNode node_handle(scene_wp, visited.handle);
-    if (!node_handle.HasMesh()) {
+    if (!node_handle.HasGeometry()) {
       return VisitResult::kContinue;
     }
 
+    auto active_mesh = node_handle.GetActiveMesh();
+    DCHECK_F(active_mesh.has_value(), "Expected active mesh to be present");
+
     RenderItem item {};
-    item.mesh = node_handle.GetMesh();
+    item.mesh = active_mesh->mesh;
     // Temporary: assign a default debug material until material binding flows
     // from scene/assets. This keeps examples working.
     item.material = oxygen::data::MaterialAsset::CreateDebug();

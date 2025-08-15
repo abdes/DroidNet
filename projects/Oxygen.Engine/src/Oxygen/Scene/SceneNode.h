@@ -25,10 +25,12 @@
 
 namespace oxygen::data {
 class Mesh;
+class GeometryAsset;
 } // namespace oxygen::data
 
 namespace oxygen::scene {
 
+struct ActiveMesh;
 class SceneNode;
 class SceneNodeImpl;
 
@@ -197,24 +199,29 @@ public:
 
   //=== Mesh Attachment ===---------------------------------------------------//
 
-  //! Attaches a mesh component to this SceneNode. If a mesh component
-  //! already exists, this will fail.
-  OXGN_SCN_API auto AttachMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
-    -> bool;
+  //! Attaches a geometry as a Renderable component to this SceneNode. If the
+  //! node already has a Renderable component, this will fail.
+  OXGN_SCN_API auto AttachGeometry(
+    std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool;
 
-  //! Detaches the camera component from this SceneNode, if present.
-  OXGN_SCN_API auto DetachMesh() noexcept -> bool;
+  //! Detaches the Renderable component from this SceneNode, if present.
+  OXGN_SCN_API auto DetachRenderable() noexcept -> bool;
 
-  //! Replaces the current mesh component with a new one. If no mesh component
-  //! exists, this acts as attach.
-  OXGN_SCN_API auto ReplaceMesh(std::shared_ptr<const data::Mesh> mesh) noexcept
-    -> bool;
+  //! Replaces the current geometry in this node's Renderable component with a
+  //! new one. If the node does not have a Renderable component, this acts as
+  //! attach.
+  OXGN_SCN_API auto ReplaceGeometry(
+    std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool;
 
-  //! Gets the attached mesh if present.
-  OXGN_SCN_NDAPI auto GetMesh() noexcept -> std::shared_ptr<const data::Mesh>;
+  //! Gets the attached Geometry if present.
+  OXGN_SCN_NDAPI auto GetGeometry() noexcept
+    -> std::shared_ptr<const data::GeometryAsset>;
 
-  //! Checks if this SceneNode has an attached mesh component.
-  OXGN_SCN_NDAPI auto HasMesh() noexcept -> bool;
+  OXGN_SCN_NDAPI auto GetActiveMesh() noexcept -> std::optional<ActiveMesh>;
+
+  //! Checks if this SceneNode has an attached geometry as a Renderable
+  //! component.
+  OXGN_SCN_NDAPI auto HasGeometry() noexcept -> bool;
 
   //=== Name Access ===-------------------------------------------------------//
 

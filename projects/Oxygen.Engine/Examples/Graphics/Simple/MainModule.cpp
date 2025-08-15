@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -76,18 +77,37 @@ auto EnsureExampleScene() -> void
     return;
   }
 
-  g_state.scene = std::make_shared<oxygen::scene::Scene>("ExampleScene");
-  const std::shared_ptr<oxygen::data::Mesh> cube_mesh
-    = oxygen::data::GenerateMesh("Cube/TestMesh", {});
+  using oxygen::data::GenerateMesh;
+  using oxygen::data::GeometryAsset;
+  using oxygen::data::Mesh;
+  using oxygen::data::pak::GeometryAssetDesc;
+  using oxygen::scene::Scene;
+
+  g_state.scene = std::make_shared<Scene>("ExampleScene");
+  const std::shared_ptr<Mesh> cube_mesh = GenerateMesh("Cube/TestMesh", {});
+
+  // Wrap the Mesh into a 1-LOD GeometryAsset for SceneNode::AttachGeometry
+  GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 1;
+  const glm::vec3 bb_min = cube_mesh->BoundingBoxMin();
+  const glm::vec3 bb_max = cube_mesh->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+  auto geometry_asset = std::make_shared<GeometryAsset>(
+    geo_desc, std::vector<std::shared_ptr<Mesh>> { cube_mesh });
 
   // Node A at origin
   auto node_a = g_state.scene->CreateNode("CubeA");
-  node_a.AttachMesh(cube_mesh);
+  node_a.AttachGeometry(geometry_asset);
   g_state.node_a = node_a;
 
   // Node B offset on +X
   auto node_b = g_state.scene->CreateNode("CubeB");
-  node_b.AttachMesh(cube_mesh);
+  node_b.AttachGeometry(geometry_asset);
   node_b.GetTransform().SetLocalPosition(glm::vec3(2.5F, 0.0F, 0.0F));
   g_state.node_b = node_b;
 
