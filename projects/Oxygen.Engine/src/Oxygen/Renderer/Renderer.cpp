@@ -333,6 +333,18 @@ auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
   return inserted;
 }
 
+auto Renderer::BuildFrame(
+  oxygen::scene::Scene& scene, const CameraView& camera_view) -> std::size_t
+{
+  // Ensure transforms are up-to-date for this frame. SceneExtraction also
+  // calls scene.Update(), but doing it here makes the sequencing explicit
+  // before resolving the camera pose.
+  scene.Update();
+
+  const auto view = camera_view.Resolve();
+  return BuildFrame(scene, view);
+}
+
 namespace {
 auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
   -> std::shared_ptr<Buffer>

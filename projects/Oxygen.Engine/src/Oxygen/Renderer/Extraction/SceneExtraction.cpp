@@ -31,8 +31,8 @@ namespace scn = oxygen::scene;
 auto CollectRenderItems(
   scn::Scene& scene, const View& view, RenderItemsList& out) -> std::size_t
 {
-  // 1) Ensure transforms are up to date
-  scene.Update();
+  // 1) Expects transforms are up to date, which should be done by the Renderer
+  //    before calling CollectRenderItems
 
   // 2) Pre-order traversal with visibility filter
   std::size_t count = 0;

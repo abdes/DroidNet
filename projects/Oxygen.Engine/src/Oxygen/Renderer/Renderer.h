@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/RenderItemsList.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
@@ -150,6 +151,12 @@ public:
   /*! Populates opaque items using CPU culling and updates scene constants. */
   OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene, const View& view)
     -> std::size_t;
+
+  //! Build the frame draw list from a scene and a camera view descriptor.
+  /*! Ensures transforms are updated, resolves a per-frame View snapshot from
+      the camera, then populates opaque items and updates scene constants. */
+  OXGN_RNDR_API auto BuildFrame(
+    oxygen::scene::Scene& scene, const CameraView& camera_view) -> std::size_t;
 
 private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
