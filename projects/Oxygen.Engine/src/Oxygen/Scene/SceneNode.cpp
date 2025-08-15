@@ -9,7 +9,7 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
-#include <Oxygen/Scene/Detail/Renderable.h>
+#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -367,6 +367,20 @@ auto SceneNode::GetTransform() const noexcept -> Transform
     const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
 }
 
+/*! The Renderable interface provides safe access to geometry/submesh/LOD APIs
+    without exposing component types. */
+auto SceneNode::GetRenderable() noexcept -> Renderable
+{
+  return Renderable(*this);
+}
+
+/*! @copydoc SceneNode::GetRenderable() */
+auto SceneNode::GetRenderable() const noexcept -> Renderable
+{
+  return Renderable(
+    const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
+}
+
 /*! Gets the name of this SceneNode, or an empty string if invalid. */
 auto SceneNode::GetName() const noexcept -> std::string
 {
@@ -627,119 +641,3 @@ auto SceneNode::HasCamera() noexcept -> bool
 }
 
 //=== Renderable Component ===------------------------------------------------//
-
-auto SceneNode::AttachGeometry(
-  std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool
-{
-  if (!geometry) {
-    LOG_F(ERROR, "Cannot attach a null geometry. SceneNode: {}",
-      nostd::to_string(*this));
-    return false;
-  }
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      if (state.node_impl->HasComponent<detail::Renderable>()) {
-        LOG_F(ERROR,
-          "SceneNode {} already has a Renderable component. Cannot attach "
-          "another.",
-          nostd::to_string(*this));
-        return false;
-      }
-      state.node_impl->AddComponent<detail::Renderable>(std::move(geometry));
-      return true;
-    });
-}
-
-/*!
- Detaches the mesh component from this SceneNode, if present.
-
- @return True if a mesh component was detached; false if no mesh was attached or
- the node is invalid.
-*/
-auto SceneNode::DetachRenderable() noexcept -> bool
-{
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      if (state.node_impl->HasComponent<detail::Renderable>()) {
-        state.node_impl->RemoveComponent<detail::Renderable>();
-        return true;
-      }
-      return false;
-    });
-}
-
-auto SceneNode::ReplaceGeometry(
-  std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool
-{
-  if (!geometry) {
-    LOG_F(ERROR, "Cannot attach a null geometry. SceneNode: {}",
-      nostd::to_string(*this));
-    return false;
-  }
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-      if (state.node_impl->HasComponent<detail::Renderable>()) {
-        state.node_impl->ReplaceComponent<detail::Renderable>(
-          std::move(geometry));
-        return true;
-      }
-      state.node_impl->AddComponent<detail::Renderable>(std::move(geometry));
-      return true;
-    });
-}
-
-auto SceneNode::GetGeometry() noexcept
-  -> std::shared_ptr<const data::GeometryAsset>
-{
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      if (state.node_impl->HasComponent<detail::Renderable>()) {
-        return state.node_impl->GetComponent<detail::Renderable>()
-          .GetGeometry();
-      }
-      return std::shared_ptr<const data::GeometryAsset> {};
-    });
-}
-
-auto SceneNode::GetActiveMesh() noexcept -> std::optional<ActiveMesh>
-{
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      if (state.node_impl->HasComponent<detail::Renderable>()) {
-        return state.node_impl->GetComponent<detail::Renderable>()
-          .GetActiveMesh();
-      }
-      return std::optional<ActiveMesh> {};
-    });
-}
-
-auto SceneNode::HasGeometry() noexcept -> bool
-{
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      return state.node_impl->HasComponent<detail::Renderable>();
-    });
-}

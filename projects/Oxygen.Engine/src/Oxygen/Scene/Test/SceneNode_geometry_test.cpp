@@ -60,18 +60,18 @@ NOLINT_TEST_F(SceneNodeGeometryTest, AttachGeometry_AttachesGeometryAsset)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  EXPECT_FALSE(node.HasGeometry());
+  EXPECT_FALSE(r.HasGeometry());
 
   // Act
-  const bool attached = node.AttachGeometry(geometry);
+  r.SetGeometry(geometry);
 
   // Assert
-  EXPECT_TRUE(attached);
-  EXPECT_TRUE(node.HasGeometry());
-  auto mesh_ref = node.GetGeometry();
+  EXPECT_TRUE(r.HasGeometry());
+  auto mesh_ref = r.GetGeometry();
   ASSERT_TRUE(mesh_ref);
   EXPECT_EQ(mesh_ref, geometry);
 }
@@ -85,21 +85,21 @@ NOLINT_TEST_F(
 
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<Mesh> mesh1 = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   std::shared_ptr<Mesh> mesh2 = oxygen::data::GenerateMesh("Plane/Mesh1", {});
   auto geometry1 = MakeSingleLodGeometry(mesh1);
   auto geometry2 = MakeSingleLodGeometry(mesh2);
-  EXPECT_TRUE(node.AttachGeometry(geometry1));
-  EXPECT_TRUE(node.HasGeometry());
+  r.SetGeometry(geometry1);
+  EXPECT_TRUE(r.HasGeometry());
 
   // Act
-  const bool attached = node.AttachGeometry(geometry2);
+  r.SetGeometry(geometry2);
 
   // Assert
-  EXPECT_FALSE(attached);
-  auto mesh_ref = node.GetGeometry();
+  auto mesh_ref = r.GetGeometry();
   ASSERT_TRUE(mesh_ref);
-  EXPECT_EQ(mesh_ref, geometry1);
+  EXPECT_EQ(mesh_ref, geometry2);
 }
 
 /*! Test detaching geometry from a SceneNode.
@@ -108,19 +108,20 @@ NOLINT_TEST_F(SceneNodeGeometryTest, DetachGeometry_RemovesRenderableComponent)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  EXPECT_TRUE(node.AttachGeometry(geometry));
-  EXPECT_TRUE(node.HasGeometry());
+  r.SetGeometry(geometry);
+  EXPECT_TRUE(r.HasGeometry());
 
   // Act
-  const bool detached = node.DetachRenderable();
+  const bool detached = r.Detach();
 
   // Assert
   EXPECT_TRUE(detached);
-  EXPECT_FALSE(node.HasGeometry());
-  EXPECT_FALSE(node.GetGeometry());
+  EXPECT_FALSE(r.HasGeometry());
+  EXPECT_FALSE(r.GetGeometry());
 }
 
 /*! Test that detaching geometry when none is attached returns false.
@@ -129,10 +130,11 @@ NOLINT_TEST_F(SceneNodeGeometryTest, DetachGeometry_NoGeometry_ReturnsFalse)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  EXPECT_FALSE(node.HasGeometry());
+  auto r = node.GetRenderable();
+  EXPECT_FALSE(r.HasGeometry());
 
   // Act
-  const bool detached = node.DetachRenderable();
+  const bool detached = r.Detach();
 
   // Assert
   EXPECT_FALSE(detached);
@@ -144,22 +146,22 @@ NOLINT_TEST_F(SceneNodeGeometryTest, ReplaceGeometry_ReplacesExistingGeometry)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh1
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   std::shared_ptr<oxygen::data::Mesh> mesh2
     = oxygen::data::GenerateMesh("Plane/Mesh1", {});
   auto geometry1 = MakeSingleLodGeometry(mesh1);
   auto geometry2 = MakeSingleLodGeometry(mesh2);
-  EXPECT_TRUE(node.AttachGeometry(geometry1));
-  EXPECT_TRUE(node.HasGeometry());
+  r.SetGeometry(geometry1);
+  EXPECT_TRUE(r.HasGeometry());
 
   // Act
-  const bool replaced = node.ReplaceGeometry(geometry2);
+  r.SetGeometry(geometry2);
 
   // Assert
-  EXPECT_TRUE(replaced);
-  EXPECT_TRUE(node.HasGeometry());
-  auto mesh_ref = node.GetGeometry();
+  EXPECT_TRUE(r.HasGeometry());
+  auto mesh_ref = r.GetGeometry();
   ASSERT_TRUE(mesh_ref);
   EXPECT_EQ(mesh_ref, geometry2);
 }
@@ -170,18 +172,18 @@ NOLINT_TEST_F(SceneNodeGeometryTest, ReplaceGeometry_NoGeometry_ActsLikeAttach)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  EXPECT_FALSE(node.HasGeometry());
+  EXPECT_FALSE(r.HasGeometry());
 
   // Act
-  const bool replaced = node.ReplaceGeometry(geometry);
+  r.SetGeometry(geometry);
 
   // Assert
-  EXPECT_TRUE(replaced);
-  EXPECT_TRUE(node.HasGeometry());
-  auto mesh_ref = node.GetGeometry();
+  EXPECT_TRUE(r.HasGeometry());
+  auto mesh_ref = r.GetGeometry();
   ASSERT_TRUE(mesh_ref);
   EXPECT_EQ(mesh_ref, geometry);
 }
@@ -191,10 +193,11 @@ NOLINT_TEST_F(SceneNodeGeometryTest, GetGeometry_ReturnsNullIfNoGeometry)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
-  EXPECT_FALSE(node.HasGeometry());
+  auto r = node.GetRenderable();
+  EXPECT_FALSE(r.HasGeometry());
 
   // Act & Assert
-  EXPECT_FALSE(node.GetGeometry());
+  EXPECT_FALSE(r.GetGeometry());
 }
 
 //! Test that HasGeometry returns true if a geometry asset is attached.
@@ -202,16 +205,17 @@ NOLINT_TEST_F(SceneNodeGeometryTest, HasGeometry_ReturnsTrueIfGeometryAttached)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  EXPECT_FALSE(node.HasGeometry());
+  EXPECT_FALSE(r.HasGeometry());
 
   // Act
-  node.AttachGeometry(geometry);
+  r.SetGeometry(geometry);
 
   // Assert
-  EXPECT_TRUE(node.HasGeometry());
+  EXPECT_TRUE(r.HasGeometry());
 }
 
 //! Test that attaching a nullptr geometry asset returns false.
@@ -219,10 +223,12 @@ NOLINT_TEST_F(SceneNodeGeometryTest, AttachGeometry_Nullptr_ReturnsFalse)
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<const oxygen::data::GeometryAsset> null_geometry;
 
-  // Act & Assert
-  EXPECT_FALSE(node.AttachGeometry(null_geometry));
+  // Act: SetGeometry should no-op on null; assert component remains absent
+  r.SetGeometry(null_geometry);
+  EXPECT_FALSE(r.HasGeometry());
 }
 
 //! Test that replacing with nullptr returns false and keeps existing geometry.
@@ -231,27 +237,28 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto node = scene_->CreateNode("MeshNode");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  ASSERT_TRUE(node.AttachGeometry(geometry));
+  r.SetGeometry(geometry);
 
   // Act
   std::shared_ptr<const oxygen::data::GeometryAsset> null_geometry;
-  const bool replaced = node.ReplaceGeometry(null_geometry);
+  r.SetGeometry(null_geometry);
 
   // Assert
-  EXPECT_FALSE(replaced);
-  EXPECT_TRUE(node.HasGeometry());
-  EXPECT_EQ(node.GetGeometry(), geometry);
+  EXPECT_TRUE(r.HasGeometry());
+  EXPECT_EQ(r.GetGeometry(), geometry);
 }
 
 //! Test that GetActiveMesh returns empty when no geometry is attached.
 NOLINT_TEST_F(SceneNodeGeometryTest, GetActiveMesh_NoGeometry_ReturnsEmpty)
 {
   auto node = scene_->CreateNode("Node");
-  EXPECT_FALSE(node.HasGeometry());
-  EXPECT_FALSE(node.GetActiveMesh());
+  auto r = node.GetRenderable();
+  EXPECT_FALSE(r.HasGeometry());
+  EXPECT_FALSE(r.GetActiveMesh());
 }
 
 //! Test that GetActiveMesh returns LOD 0 mesh for single-LOD geometry.
@@ -260,13 +267,14 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto node = scene_->CreateNode("Node");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> mesh
     = oxygen::data::GenerateMesh("Cube/Mesh1", {});
   auto geometry = MakeSingleLodGeometry(mesh);
-  ASSERT_TRUE(node.AttachGeometry(geometry));
+  r.SetGeometry(geometry);
 
   // Act
-  auto active_opt = node.GetActiveMesh();
+  auto active_opt = r.GetActiveMesh();
 
   // Assert
   ASSERT_TRUE(active_opt.has_value());
@@ -279,15 +287,16 @@ NOLINT_TEST_F(SceneNodeGeometryTest, GetActiveMesh_TwoLods_DefaultsToLod0)
 {
   // Arrange
   auto node = scene_->CreateNode("Node");
+  auto r = node.GetRenderable();
   std::shared_ptr<oxygen::data::Mesh> lod0
     = oxygen::data::GenerateMesh("Cube/LOD0", {});
   std::shared_ptr<oxygen::data::Mesh> lod1
     = oxygen::data::GenerateMesh("Cube/LOD1", {});
   auto geometry = MakeTwoLodGeometry(lod0, lod1);
-  ASSERT_TRUE(node.AttachGeometry(geometry));
+  r.SetGeometry(geometry);
 
   // Act
-  auto active_opt = node.GetActiveMesh();
+  auto active_opt = r.GetActiveMesh();
 
   // Assert
   ASSERT_TRUE(active_opt.has_value());

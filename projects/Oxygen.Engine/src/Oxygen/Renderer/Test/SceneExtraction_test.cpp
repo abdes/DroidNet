@@ -107,8 +107,8 @@ NOLINT_TEST(SceneExtraction_BasicTest, TwoMeshes_OneInvisible_Culled)
 
   const auto mesh = MakeUnitTriangleMesh();
   const auto geometry = MakeSingleLodGeometry(mesh);
-  ASSERT_TRUE(a.AttachGeometry(geometry));
-  ASSERT_TRUE(b.AttachGeometry(geometry));
+  a.GetRenderable().SetGeometry(geometry);
+  b.GetRenderable().SetGeometry(geometry);
 
   // Move A in front of the camera (into the frustum)
   auto at = a.GetTransform();

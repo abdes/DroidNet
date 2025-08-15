@@ -42,6 +42,10 @@
 #include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
+
+// Detail component used for example controls (LOD/visibility/overrides)
+#include <Oxygen/Scene/Detail/RenderableComponent.h>
 
 #include "./MainModule.h"
 
@@ -53,6 +57,7 @@ using oxygen::data::Vertex;
 using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Framebuffer;
+using oxygen::scene::DistancePolicy;
 
 namespace {
 constexpr std::uint32_t kWindowWidth = 1600;
@@ -63,12 +68,183 @@ namespace {
 // Centralize example scene state across frames.
 struct ExampleState {
   std::shared_ptr<oxygen::scene::Scene> scene;
-  oxygen::scene::SceneNode node_a; // Cube A
-  oxygen::scene::SceneNode node_b; // Cube B
+  // Nodes demonstrating features
+  oxygen::scene::SceneNode sphere_distance; // LOD policy: Distance
+  oxygen::scene::SceneNode multisubmesh; // Per-submesh visibility/overrides
   oxygen::scene::SceneNode main_camera; // "MainCamera"
 };
 
 static ExampleState g_state;
+
+// Build a 2-LOD sphere GeometryAsset (high and low tessellation)
+static auto BuildSphereLodAsset()
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::pak::GeometryAssetDesc;
+  using oxygen::data::pak::MeshViewDesc;
+
+  // LOD 0: higher tessellation
+  auto lod0_data = oxygen::data::MakeSphereMeshAsset(32, 64);
+  CHECK_F(lod0_data.has_value());
+  auto mesh0
+    = MeshBuilder(0, "SphereLOD0")
+        .WithVertices(lod0_data->first)
+        .WithIndices(lod0_data->second)
+        .BeginSubMesh("full", MaterialAsset::CreateDefault())
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = static_cast<uint32_t>(lod0_data->second.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(lod0_data->first.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  // LOD 1: lower tessellation
+  auto lod1_data = oxygen::data::MakeSphereMeshAsset(12, 24);
+  CHECK_F(lod1_data.has_value());
+  auto mesh1
+    = MeshBuilder(1, "SphereLOD1")
+        .WithVertices(lod1_data->first)
+        .WithIndices(lod1_data->second)
+        .BeginSubMesh("full", MaterialAsset::CreateDefault())
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = static_cast<uint32_t>(lod1_data->second.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(lod1_data->first.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  // Use LOD0 bounds for asset bounds
+  oxygen::data::pak::GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 2;
+  const glm::vec3 bb_min = mesh0->BoundingBoxMin();
+  const glm::vec3 bb_max = mesh0->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+
+  return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
+    std::vector<std::shared_ptr<oxygen::data::Mesh>> {
+      std::move(mesh0), std::move(mesh1) });
+}
+
+// Build a 1-LOD mesh with two submeshes (two triangles of a quad)
+static auto BuildTwoSubmeshQuadAsset()
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::pak::GeometryAssetDesc;
+  using oxygen::data::pak::MeshViewDesc;
+
+  // Helper: make a solid-color material asset snapshot
+  auto MakeSolidColorMaterial = [](const char* name, const glm::vec4& rgba)
+    -> std::shared_ptr<const oxygen::data::MaterialAsset> {
+    oxygen::data::pak::MaterialAssetDesc desc {};
+    desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
+    // Safe copy name
+    const std::size_t maxn = sizeof(desc.header.name) - 1;
+    const std::size_t n = (std::min)(maxn, std::strlen(name));
+    std::memcpy(desc.header.name, name, n);
+    desc.header.name[n] = '\0';
+    desc.header.version = 1;
+    desc.header.streaming_priority = 255;
+    desc.material_domain
+      = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+    desc.flags = 0;
+    desc.shader_stages = 0;
+    desc.base_color[0] = rgba.r;
+    desc.base_color[1] = rgba.g;
+    desc.base_color[2] = rgba.b;
+    desc.base_color[3] = rgba.a;
+    desc.normal_scale = 1.0f;
+    desc.metalness = 0.0f;
+    desc.roughness = 0.9f;
+    desc.ambient_occlusion = 1.0f;
+    // Leave texture indices at default invalid (no textures)
+    return std::make_shared<const oxygen::data::MaterialAsset>(
+      desc, std::vector<oxygen::data::ShaderReference> {});
+  };
+
+  // Simple quad (XY plane), two triangles
+  std::vector<oxygen::data::Vertex> vertices;
+  vertices.reserve(4);
+  vertices.push_back(oxygen::data::Vertex { .position = { -1, -1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 0, 1 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(oxygen::data::Vertex { .position = { -1, 1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 0, 0 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(oxygen::data::Vertex { .position = { 1, -1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 1, 1 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(oxygen::data::Vertex { .position = { 1, 1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 1, 0 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  std::vector<uint32_t> indices { 0, 1, 2, 2, 1, 3 };
+
+  // Create two distinct solid-color materials
+  const auto red = MakeSolidColorMaterial("Red", { 1.0f, 0.1f, 0.1f, 1.0f });
+  const auto green
+    = MakeSolidColorMaterial("Green", { 0.1f, 1.0f, 0.1f, 1.0f });
+
+  auto mesh = MeshBuilder(0, "Quad2SM")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                // Submesh 0: first triangle
+                .BeginSubMesh("tri0", red)
+                .WithMeshView(MeshViewDesc {
+                  .first_index = 0,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
+                .EndSubMesh()
+                // Submesh 1: second triangle
+                .BeginSubMesh("tri1", green)
+                .WithMeshView(MeshViewDesc {
+                  .first_index = 3,
+                  .index_count = 3,
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
+                .EndSubMesh()
+                .Build();
+
+  // Geometry asset with 1 LOD
+  GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 1;
+  const auto bb_min = mesh->BoundingBoxMin();
+  const auto bb_max = mesh->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+  return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
+    std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
+}
 
 // Ensure the example scene and two cubes exist; store persistent handles.
 auto EnsureExampleScene() -> void
@@ -84,34 +260,34 @@ auto EnsureExampleScene() -> void
   using oxygen::scene::Scene;
 
   g_state.scene = std::make_shared<Scene>("ExampleScene");
-  const std::shared_ptr<Mesh> cube_mesh = GenerateMesh("Cube/TestMesh", {});
+  // Create a LOD sphere and a multi-submesh quad
+  auto sphere_geo = BuildSphereLodAsset();
+  auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
 
-  // Wrap the Mesh into a 1-LOD GeometryAsset for SceneNode::AttachGeometry
-  GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = 1;
-  const glm::vec3 bb_min = cube_mesh->BoundingBoxMin();
-  const glm::vec3 bb_max = cube_mesh->BoundingBoxMax();
-  geo_desc.bounding_box_min[0] = bb_min.x;
-  geo_desc.bounding_box_min[1] = bb_min.y;
-  geo_desc.bounding_box_min[2] = bb_min.z;
-  geo_desc.bounding_box_max[0] = bb_max.x;
-  geo_desc.bounding_box_max[1] = bb_max.y;
-  geo_desc.bounding_box_max[2] = bb_max.z;
-  auto geometry_asset = std::make_shared<GeometryAsset>(
-    geo_desc, std::vector<std::shared_ptr<Mesh>> { cube_mesh });
+  // Sphere with distance-based LOD at origin
+  g_state.sphere_distance = g_state.scene->CreateNode("SphereDistance");
+  g_state.sphere_distance.GetRenderable().SetGeometry(sphere_geo);
+  // Configure LOD policy via component access
+  if (auto obj = g_state.sphere_distance.GetObject()) {
+    auto& r
+      = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+    DistancePolicy pol;
+    // With the current camera orbit (radius ~5–7), set the distance
+    // threshold near the orbit so we can observe LOD flips in wireframe.
+    // For 2 LODs, only the first threshold is used.
+    pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
+    pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
+    r.SetLodPolicy(std::move(pol));
+  }
 
-  // Node A at origin
-  auto node_a = g_state.scene->CreateNode("CubeA");
-  node_a.AttachGeometry(geometry_asset);
-  g_state.node_a = node_a;
+  // Multi-submesh quad offset on +X
+  g_state.multisubmesh = g_state.scene->CreateNode("MultiSubmesh");
+  g_state.multisubmesh.GetRenderable().SetGeometry(quad2sm_geo);
+  g_state.multisubmesh.GetTransform().SetLocalPosition(
+    glm::vec3(3.0F, 0.0F, 0.0F));
 
-  // Node B offset on +X
-  auto node_b = g_state.scene->CreateNode("CubeB");
-  node_b.AttachGeometry(geometry_asset);
-  node_b.GetTransform().SetLocalPosition(glm::vec3(2.5F, 0.0F, 0.0F));
-  g_state.node_b = node_b;
-
-  LOG_F(INFO, "Scene created with two cube nodes");
+  LOG_F(
+    INFO, "Scene created: SphereDistance (LOD) and MultiSubmesh (per-submesh)");
 }
 
 // Find or create the "MainCamera" node with a PerspectiveCamera; keep aspect in
@@ -460,21 +636,18 @@ auto MainModule::RenderScene() -> co::Co<>
     shader_pass = std::make_shared<engine::ShaderPass>(shader_pass_config);
   }
 
-  // Animate rotation angle
+  // Animate rotation angle (for a bit of motion)
   static float rotation_angle = 0.0F; // radians
-  rotation_angle += 0.01F; // radians per frame, adjust as needed
-
-  // Apply per-frame rotation (absolute) so we avoid accumulation drift
+  rotation_angle += 0.01F; // radians per frame
   const auto rot_y
     = glm::angleAxis(rotation_angle, glm::vec3(0.0F, 1.0F, 0.0F));
-  if (g_state.node_a.IsAlive()) {
-    g_state.node_a.GetTransform().SetLocalRotation(rot_y);
+  if (g_state.sphere_distance.IsAlive()) {
+    g_state.sphere_distance.GetTransform().SetLocalRotation(rot_y);
   }
-  if (g_state.node_b.IsAlive()) {
-    // Give the second cube a slightly different rotation for variety
+  if (g_state.multisubmesh.IsAlive()) {
     const auto rot = glm::angleAxis(
-      -rotation_angle * 1.2F, glm::normalize(glm::vec3(0.25F, 1.0F, 0.0F)));
-    g_state.node_b.GetTransform().SetLocalRotation(rot);
+      -rotation_angle * 0.8F, glm::normalize(glm::vec3(0.0F, 1.0F, 0.25F)));
+    g_state.multisubmesh.GetTransform().SetLocalRotation(rot);
   }
 
   // Animate camera using wall-clock elapsed time for smooth motion
@@ -482,6 +655,55 @@ auto MainModule::RenderScene() -> co::Co<>
   static const auto t0 = clock::now();
   const float t = std::chrono::duration<float>(clock::now() - t0).count();
   AnimateMainCamera(t);
+
+  // Toggle per-submesh visibility and material override over time
+  if (g_state.multisubmesh.IsAlive()) {
+    // Access RenderableComponent component
+    if (auto obj = g_state.multisubmesh.GetObject()) {
+      auto& r
+        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+      constexpr std::size_t lod = 0;
+      // Every 2 seconds, toggle submesh 0 visibility
+      static int last_vis_toggle = -1;
+      int vis_phase = static_cast<int>(t) / 2;
+      if (vis_phase != last_vis_toggle) {
+        last_vis_toggle = vis_phase;
+        const bool visible = (vis_phase % 2) == 0;
+        r.SetSubmeshVisible(lod, 0, visible);
+        LOG_F(INFO, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
+      }
+      // Every 3 seconds, toggle an override on submesh 1 (use blue instead of
+      // debug)
+      static int last_ovr_toggle = -1;
+      int ovr_phase = static_cast<int>(t) / 3;
+      if (ovr_phase != last_ovr_toggle) {
+        last_ovr_toggle = ovr_phase;
+        const bool apply_override = (ovr_phase % 2) == 1;
+        if (apply_override) {
+          oxygen::data::pak::MaterialAssetDesc desc {};
+          desc.header.asset_type = 7;
+          const char* name = "BlueOverride";
+          const std::size_t maxn = sizeof(desc.header.name) - 1;
+          const std::size_t n = (std::min)(maxn, std::strlen(name));
+          std::memcpy(desc.header.name, name, n);
+          desc.header.name[n] = '\0';
+          desc.material_domain
+            = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+          desc.base_color[0] = 0.1f;
+          desc.base_color[1] = 0.1f;
+          desc.base_color[2] = 1.0f;
+          desc.base_color[3] = 1.0f;
+          auto blue = std::make_shared<const oxygen::data::MaterialAsset>(
+            desc, std::vector<oxygen::data::ShaderReference> {});
+          r.SetMaterialOverride(lod, 1, blue);
+        } else {
+          r.ClearMaterialOverride(lod, 1);
+        }
+        LOG_F(INFO, "[MultiSubmesh] Submesh 1 override -> {}",
+          apply_override ? "blue" : "clear");
+      }
+    }
+  }
 
   if (renderer_) {
     oxygen::engine::CameraView::Params cv {

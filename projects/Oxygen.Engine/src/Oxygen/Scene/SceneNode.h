@@ -11,6 +11,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -21,11 +22,14 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Scene/Types/Strong.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::data {
 class Mesh;
 class GeometryAsset;
+class MaterialAsset; // forward declaration for material override APIs
 } // namespace oxygen::data
 
 namespace oxygen::scene {
@@ -36,6 +40,7 @@ class SceneNodeImpl;
 
 namespace detail {
   class TransformComponent;
+  class RenderableComponent;
 } // namespace detail
 
 class Scene;
@@ -82,6 +87,9 @@ public:
   //! Forward declaration for Transform interface.
   //! @see SceneNode::Transform for full documentation.
   class Transform;
+  //! Forward declaration for Renderable interface.
+  //! @see SceneNode::Renderable for full documentation.
+  class Renderable;
 
   // We make the Scene a friend, so it can invalidate a SceneNode when its
   // data is erased.
@@ -144,6 +152,13 @@ public:
   OXGN_SCN_NDAPI auto GetTransform() noexcept -> Transform;
   OXGN_SCN_NDAPI auto GetTransform() const noexcept -> Transform;
 
+  //=== Renderable Access ===-------------------------------------------------//
+
+  //! Gets a Renderable interface for safe renderable operations (geometry,
+  //! LOD, submeshes, overrides, bounds).
+  OXGN_SCN_NDAPI auto GetRenderable() noexcept -> Renderable;
+  OXGN_SCN_NDAPI auto GetRenderable() const noexcept -> Renderable;
+
   //=== Camera Attachment ===-------------------------------------------------//
 
   //! Attaches a camera component to this SceneNode. If a camera already exists,
@@ -197,32 +212,6 @@ public:
       : std::nullopt;
   }
 
-  //=== Mesh Attachment ===---------------------------------------------------//
-
-  //! Attaches a geometry as a Renderable component to this SceneNode. If the
-  //! node already has a Renderable component, this will fail.
-  OXGN_SCN_API auto AttachGeometry(
-    std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool;
-
-  //! Detaches the Renderable component from this SceneNode, if present.
-  OXGN_SCN_API auto DetachRenderable() noexcept -> bool;
-
-  //! Replaces the current geometry in this node's Renderable component with a
-  //! new one. If the node does not have a Renderable component, this acts as
-  //! attach.
-  OXGN_SCN_API auto ReplaceGeometry(
-    std::shared_ptr<const data::GeometryAsset> geometry) noexcept -> bool;
-
-  //! Gets the attached Geometry if present.
-  OXGN_SCN_NDAPI auto GetGeometry() noexcept
-    -> std::shared_ptr<const data::GeometryAsset>;
-
-  OXGN_SCN_NDAPI auto GetActiveMesh() noexcept -> std::optional<ActiveMesh>;
-
-  //! Checks if this SceneNode has an attached geometry as a Renderable
-  //! component.
-  OXGN_SCN_NDAPI auto HasGeometry() noexcept -> bool;
-
   //=== Name Access ===-------------------------------------------------------//
 
   //! Gets the name of this SceneNode, or an empty string if invalid.
@@ -259,10 +248,31 @@ private:
     SceneNodeImpl* node_impl = nullptr;
   };
 
+  // Void-return overload
   template <typename Self, typename Validator, typename Func>
+    requires std::is_void_v<std::invoke_result_t<Func, SafeCallState&>>
   auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept
+    -> void
   {
-    SafeCallState state;
+    SafeCallState state {};
+    (void)oxygen::SafeCall(
+      *self,
+      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
+        return validator(state);
+      },
+      [func = std::forward<Func>(func), &state](
+        auto&& /*self_ref*/) mutable noexcept { func(state); });
+    return;
+  }
+
+  // Non-void-return overload
+  template <typename Self, typename Validator, typename Func>
+    requires(!std::is_void_v<std::invoke_result_t<Func, SafeCallState&>>)
+  auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept
+    -> std::invoke_result_t<Func, SafeCallState&>
+  {
+    using ReturnT = std::invoke_result_t<Func, SafeCallState&>;
+    SafeCallState state {};
     auto result = oxygen::SafeCall(
       *self,
       [&](auto&& /*self_ref*/) -> std::optional<std::string> {
@@ -271,13 +281,10 @@ private:
       [func = std::forward<Func>(func), &state](
         auto&& /*self_ref*/) mutable noexcept { return func(state); });
 
-    // Extract the actual value from the oxygen::SafeCall result. This would
-    // work with operations that return std::options<T> or bool or a default
-    // constructible type where the default constructed value indicates failure.
     if (result.has_value()) {
       return result.value();
     }
-    return decltype(func(state)) {}; // Return default-constructed type
+    return ReturnT {};
   }
 
   template <typename Validator, typename Func>
@@ -304,7 +311,84 @@ private:
   [[nodiscard]] auto NodeIsValidAndInScene() -> NodeIsValidAndInSceneValidator;
 };
 
-auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
+auto OXGN_SCN_NDAPI to_string(const SceneNode& node) noexcept -> std::string;
+
+//==============================================================================
+// Base class for SceneNode sub-interfaces
+//==============================================================================
+
+template <typename Derived> class SubInterfaceBase {
+protected:
+  explicit SubInterfaceBase(SceneNode& node) noexcept
+    : node_(&node)
+  {
+  }
+
+  // Access to owning node for derived classes
+  SceneNode* node_ { nullptr };
+
+  // Void-return overload
+  template <typename Self, typename Validator, typename Func>
+    requires std::is_void_v<std::invoke_result_t<Func,
+      typename std::remove_pointer_t<Self>::SafeCallState&>>
+  auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept
+    -> void
+  {
+    using DerivedT = std::remove_pointer_t<Self>;
+    using State = typename DerivedT::SafeCallState;
+    State state {};
+
+    (void)oxygen::SafeCall(
+      *(self->node_),
+      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
+        return validator(state);
+      },
+      [func = std::forward<Func>(func), &state](
+        auto&& /*self_ref*/) mutable noexcept { func(state); });
+    return;
+  }
+
+  // Non-void-return overload
+  template <typename Self, typename Validator, typename Func>
+    requires(!std::is_void_v<std::invoke_result_t<Func,
+        typename std::remove_pointer_t<Self>::SafeCallState&>>)
+  auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept
+    -> std::invoke_result_t<Func,
+      typename std::remove_pointer_t<Self>::SafeCallState&>
+  {
+    using DerivedT = std::remove_pointer_t<Self>;
+    using State = typename DerivedT::SafeCallState;
+    using ReturnT = std::invoke_result_t<Func, State&>;
+    State state {};
+
+    auto result = oxygen::SafeCall(
+      *(self->node_),
+      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
+        return validator(state);
+      },
+      [func = std::forward<Func>(func), &state](
+        auto&& /*self_ref*/) mutable noexcept { return func(state); });
+
+    if (result.has_value()) {
+      return result.value();
+    }
+    return ReturnT {};
+  }
+
+  template <typename Validator, typename Func>
+  auto SafeCall(Validator validator, Func&& func) const noexcept
+  {
+    return SafeCall(
+      static_cast<const Derived*>(this), validator, std::forward<Func>(func));
+  }
+
+  template <typename Validator, typename Func>
+  auto SafeCall(Validator validator, Func&& func) noexcept
+  {
+    return SafeCall(
+      static_cast<Derived*>(this), validator, std::forward<Func>(func));
+  }
+};
 
 //==============================================================================
 // SceneNode::Transform Implementation
@@ -360,8 +444,10 @@ auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
  @note This class is designed as a nested class of SceneNode to provide strong
  encapsulation while maintaining clean public APIs.
 */
-class SceneNode::Transform {
+class SceneNode::Transform : public SubInterfaceBase<SceneNode::Transform> {
 public:
+  // Bring SafeCall from base into scope
+  using SubInterfaceBase<SceneNode::Transform>::SafeCall;
   using Vec3 = glm::vec3;
   using Quat = glm::quat;
   using Mat4 = glm::mat4;
@@ -378,7 +464,7 @@ public:
    Transform.
   */
   explicit Transform(SceneNode& node) noexcept
-    : node_(&node)
+    : SubInterfaceBase(node)
   {
   }
 
@@ -445,13 +531,11 @@ public:
     const Vec3& up_direction = Vec3(0, 1, 0)) noexcept -> bool;
 
 private:
-  //! Pointer to the SceneNode this Transform operates on.
-  SceneNode* node_;
-
   //=== Validation Helpers ===------------------------------------------------//
 
   // SafeCallState struct to hold validated pointers and eliminate redundant
   // lookups
+public:
   struct SafeCallState {
     SceneNode* node = nullptr;
     SceneNodeImpl* node_impl = nullptr;
@@ -469,39 +553,125 @@ private:
   // Factory methods for different validators
   [[nodiscard]] auto BasicValidator() const -> BasicTransformValidator;
   [[nodiscard]] auto CleanValidator() const -> CleanTransformValidator;
+};
 
-  template <typename Self, typename Validator, typename Func>
-  auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept
+//==============================================================================
+// SceneNode::Renderable Declaration
+//==============================================================================
+
+/*!
+ Scene-aware Renderable interface providing safe access to geometry, LOD,
+ submesh visibility and material overrides, and derived bounds.
+
+ SceneNode::Renderable is a lightweight wrapper that gives convenient,
+ type-safe access to a node's RenderableComponent, mirroring the Transform
+ pattern. All operations validate node/component state using SafeCall and
+ never throw; failures return false or empty optionals.
+
+ ### Highlights
+
+ - Encapsulated: keeps SceneNode API small; no component types leak.
+ - Safe: resilient to invalid nodes or missing components.
+ - Cohesive: groups geometry/LOD/submesh/bounds utilities in one place.
+
+ Thread-safety: same as SceneNode; not thread-safe by default.
+*/
+class SceneNode::Renderable : public SubInterfaceBase<SceneNode::Renderable> {
+public:
+  // Bring SafeCall from base into scope
+  using SubInterfaceBase<SceneNode::Renderable>::SafeCall;
+  using GeometryAssetPtr = std::shared_ptr<const data::GeometryAsset>;
+  using MaterialAssetPtr = std::shared_ptr<const data::MaterialAsset>;
+  using Vec3 = glm::vec3;
+  using Mat4 = glm::mat4;
+
+  //! Constructs a Renderable interface for the given SceneNode.
+  explicit Renderable(SceneNode& node) noexcept
+    : SubInterfaceBase(node)
   {
-    SafeCallState state;
-    auto result = oxygen::SafeCall(
-      *(self->node_),
-      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
-        return validator(state);
-      },
-      [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { return func(state); });
-
-    // Extract the actual value from the oxygen::SafeCall result. This would
-    // work with operations that return std::options<T> or bool or a default
-    // constructible type where the default constructed value indicates failure.
-    if (result.has_value()) {
-      return result.value();
-    }
-    return decltype(func(state)) {}; // Return default-constructed type
   }
 
-  template <typename Validator, typename Func>
-  auto SafeCall(Validator validator, Func&& func) const noexcept
-  {
-    return SafeCall(this, validator, std::forward<Func>(func));
-  }
+  //=== Geometry API ===-----------------------------------------------------//
+  //! Detaches the RenderableComponent if present.
+  OXGN_SCN_API auto Detach() noexcept -> bool;
 
-  template <typename Validator, typename Func>
-  auto SafeCall(Validator validator, Func&& func) noexcept
-  {
-    return SafeCall(this, validator, std::forward<Func>(func));
-  }
+  //! Sets/attaches geometry to the node's Renderable component.
+  OXGN_SCN_API void SetGeometry(GeometryAssetPtr geometry);
+
+  //! Gets attached geometry; returns empty shared_ptr if none.
+  OXGN_SCN_NDAPI auto GetGeometry() const noexcept
+    -> std::shared_ptr<const data::GeometryAsset>;
+
+  //! Returns true if the node has a RenderableComponent.
+  OXGN_SCN_NDAPI auto HasGeometry() const noexcept -> bool;
+
+  //=== LOD policy and selection ============================================//
+
+  OXGN_SCN_NDAPI auto UsesFixedPolicy() const noexcept -> bool;
+  OXGN_SCN_NDAPI auto UsesDistancePolicy() const noexcept -> bool;
+  OXGN_SCN_NDAPI auto UsesScreenSpaceErrorPolicy() const noexcept -> bool;
+
+  // LOD policy setters (mirror RenderableComponent)
+  OXGN_SCN_API void SetLodPolicy(FixedPolicy p);
+  OXGN_SCN_API void SetLodPolicy(DistancePolicy p);
+  OXGN_SCN_API void SetLodPolicy(ScreenSpaceErrorPolicy p);
+
+  // Select active LOD using strong types (mirror RenderableComponent)
+  OXGN_SCN_API void SelectActiveMesh(NormalizedDistance d) const noexcept;
+  OXGN_SCN_API void SelectActiveMesh(ScreenSpaceError e) const noexcept;
+
+  OXGN_SCN_NDAPI auto GetActiveMesh() const noexcept
+    -> std::optional<ActiveMesh>;
+  OXGN_SCN_NDAPI auto GetActiveLodIndex() const noexcept
+    -> std::optional<std::size_t>;
+  OXGN_SCN_NDAPI auto EffectiveLodCount() const noexcept -> std::size_t;
+
+  //=== Bounds ===============================================================//
+
+  //! Aggregated world bounding sphere (center.xyz, radius.w).
+  OXGN_SCN_NDAPI auto GetWorldBoundingSphere() const noexcept -> glm::vec4;
+
+  //! Hook to notify the component that world transform changed.
+  OXGN_SCN_API void OnWorldTransformUpdated(const Mat4& world);
+  //! On-demand per-submesh world AABB for current LOD.
+  OXGN_SCN_NDAPI auto GetWorldSubMeshBoundingBox(
+    std::size_t submesh_index) const noexcept
+    -> std::optional<std::pair<Vec3, Vec3>>;
+
+  //=== Submesh visibility and materials ====================================//
+
+  OXGN_SCN_NDAPI bool IsSubmeshVisible(
+    std::size_t lod, std::size_t submesh_index) const noexcept;
+  OXGN_SCN_API void SetSubmeshVisible(
+    std::size_t lod, std::size_t submesh_index, bool visible) noexcept;
+  OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
+
+  OXGN_SCN_API void SetMaterialOverride(std::size_t lod,
+    std::size_t submesh_index, MaterialAssetPtr material) noexcept;
+  OXGN_SCN_API void ClearMaterialOverride(
+    std::size_t lod, std::size_t submesh_index) noexcept;
+  OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(std::size_t lod,
+    std::size_t submesh_index) const noexcept -> MaterialAssetPtr;
+
+public:
+  struct SafeCallState {
+    SceneNode* node = nullptr;
+    SceneNodeImpl* node_impl = nullptr;
+    detail::RenderableComponent* renderable = nullptr;
+  };
+
+  // Logging for SafeCall errors
+  OXGN_SCN_API auto LogSafeCallError(const char* reason) const noexcept -> void;
+
+  // Validators for SafeCall operations
+  class BaseRenderableValidator;
+  class NodeInSceneValidator;
+  class RequiresRenderableValidator;
+
+  [[nodiscard]] auto NodeInScene() const -> NodeInSceneValidator;
+  [[nodiscard]] auto RequiresRenderable() const -> RequiresRenderableValidator;
+
+private:
 };
 
 } // namespace oxygen::scene

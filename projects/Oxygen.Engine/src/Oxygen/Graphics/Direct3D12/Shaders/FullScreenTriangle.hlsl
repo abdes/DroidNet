@@ -87,22 +87,8 @@ cbuffer DrawIndexConstant : register(b2) {
 // Modern SM 6.6+ approach using ResourceDescriptorHeap for direct heap indexing
 // No resource declarations needed - ResourceDescriptorHeap provides direct access
 
-// Helper function to generate a color based on draw index (temporary fix)
-float3 GetDrawIndexColor() {
-    // Generate a simple color based on draw index for testing
-    float3 colors[8] = {
-        float3(1.0, 0.0, 0.0), // Red
-        float3(0.0, 1.0, 0.0), // Green
-        float3(0.0, 0.0, 1.0), // Blue
-        float3(1.0, 1.0, 0.0), // Yellow
-        float3(1.0, 0.0, 1.0), // Magenta
-        float3(0.0, 1.0, 1.0), // Cyan
-        float3(1.0, 0.5, 0.0), // Orange
-        float3(0.5, 0.0, 1.0)  // Purple
-    };
-
-    return colors[g_DrawIndex % 8];
-}
+// Note: Materials are provided via a bindless StructuredBuffer<MaterialConstants>.
+// We'll fetch the material for this draw using DrawMetadata.material_index in PS.
 
 struct VSOutput {
     float4 position : SV_POSITION;
@@ -164,11 +150,24 @@ VSOutput VS(uint vertexID : SV_VertexID) {
 
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
-    // Use draw index based color instead of materials (temporary fix)
-    float3 draw_color = GetDrawIndexColor();
+    // Default: just vertex color if materials buffer is not available
+    float4 result = float4(input.color, 1.0);
 
-    // Combine vertex color with draw index color
-    float3 combined_color = input.color * draw_color;
+    // Access per-draw metadata to find the material index for this draw
+    if (bindless_indices_slot != 0xFFFFFFFFu &&
+        bindless_material_constants_slot != 0xFFFFFFFFu) {
+        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_indices_slot];
+        DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
-    return float4(combined_color, 1.0);
+        // Read material constants for this draw
+        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
+        MaterialConstants mat = materials[meta.material_index];
+
+        // Simple unlit shading: vertex color modulated by material base color
+        float3 base_rgb = mat.base_color.rgb;
+        float  base_a   = mat.base_color.a;
+        result = float4(input.color * base_rgb, base_a);
+    }
+
+    return result;
 }
