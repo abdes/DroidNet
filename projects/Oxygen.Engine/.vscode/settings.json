@@ -185,5 +185,7 @@
   "black-formatter.args": [
     "--line-length",
     "80"
-  ]
+  ],
+  "C_Cpp.default.intelliSenseMode": "",
+  "C_Cpp.errorSquiggles": "disabled"
 }

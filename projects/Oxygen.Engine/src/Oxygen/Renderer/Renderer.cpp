@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
@@ -56,6 +57,30 @@ namespace {
 auto GetMeshId(const Mesh& mesh) -> MeshId
 {
   return std::bit_cast<MeshId>(&mesh);
+}
+
+// Convert a data::MaterialAsset snapshot into engine::MaterialConstants
+static auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
+  -> MaterialConstants
+{
+  MaterialConstants mc;
+  const auto base = mat.GetBaseColor();
+  mc.base_color = { base[0], base[1], base[2], base[3] };
+  mc.metalness = mat.GetMetalness();
+  mc.roughness = mat.GetRoughness();
+  mc.normal_scale = mat.GetNormalScale();
+  mc.ambient_occlusion = mat.GetAmbientOcclusion();
+  // Texture indices (bindless). If not wired yet, keep zero which shaders can
+  // treat as "no texture".
+  mc.base_color_texture_index
+    = static_cast<uint32_t>(mat.GetBaseColorTexture());
+  mc.normal_texture_index = static_cast<uint32_t>(mat.GetNormalTexture());
+  mc.metallic_texture_index = static_cast<uint32_t>(mat.GetMetallicTexture());
+  mc.roughness_texture_index = static_cast<uint32_t>(mat.GetRoughnessTexture());
+  mc.ambient_occlusion_texture_index
+    = static_cast<uint32_t>(mat.GetAmbientOcclusionTexture());
+  // Flags reserved for future use; leave zero for now.
+  return mc;
 }
 
 //===----------------------------------------------------------------------===//
@@ -548,8 +573,10 @@ auto Renderer::EnsureResourcesForDrawList(
   // Build per-draw array of indices in submission order
   std::vector<DrawMetadata> per_draw;
   std::vector<glm::mat4> per_world;
+  std::vector<MaterialConstants> per_materials;
   per_draw.reserve(draw_list.size());
   per_world.reserve(draw_list.size());
+  per_materials.reserve(draw_list.size());
   for (const auto& item : draw_list) {
     // Keep predicate in sync with RenderPass draw gating:
     // we only emit entries for items that will actually be drawn
@@ -559,12 +586,24 @@ auto Renderer::EnsureResourcesForDrawList(
       const auto& ensured = EnsureMeshResources(*item.mesh);
       const uint32_t transform_offset
         = static_cast<uint32_t>(per_world.size()); // next index
+      // Material snapshot and index
+      uint32_t material_index = 0U;
+      if (item.material) {
+        per_materials.emplace_back(MakeMaterialConstants(*item.material));
+        material_index = static_cast<uint32_t>(per_materials.size() - 1U);
+      } else {
+        const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
+        per_materials.emplace_back(MakeMaterialConstants(*fallback));
+        material_index = static_cast<uint32_t>(per_materials.size() - 1U);
+      }
+
       per_draw.emplace_back(DrawMetadata {
         .vertex_buffer_index = ensured.vertex_srv_index,
         .index_buffer_index = ensured.index_srv_index,
         .is_indexed = item.mesh->IsIndexed() ? 1U : 0U,
         .instance_count = 1U,
         .transform_offset = transform_offset,
+        .material_index = material_index,
       });
       per_world.emplace_back(item.world_transform);
     }
@@ -577,6 +616,10 @@ auto Renderer::EnsureResourcesForDrawList(
   if (!per_world.empty()) {
     world_transforms_.GetCpuData() = std::move(per_world);
     world_transforms_.MarkDirty();
+  }
+  if (!per_materials.empty()) {
+    material_constants_.GetCpuData() = std::move(per_materials);
+    material_constants_.MarkDirty();
   }
 }
 auto Renderer::EnsureAndUploadWorldTransforms() -> void
