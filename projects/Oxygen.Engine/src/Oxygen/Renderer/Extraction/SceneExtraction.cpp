@@ -38,6 +38,16 @@ namespace scn = oxygen::scene;
 
 namespace {
 
+  struct SubmeshAggregation {
+    bool visibility_determined { false };
+    bool any_visible { false };
+    bool mixed_materials { false };
+    bool have_material { false };
+    std::shared_ptr<const oxygen::data::MaterialAsset> selected_material;
+    glm::vec3 agg_min { std::numeric_limits<float>::infinity() };
+    glm::vec3 agg_max { -std::numeric_limits<float>::infinity() };
+  };
+
   // Evaluates LOD based on the renderable's active policy. For distance policy,
   // uses normalized distance to world sphere. For SSE policy, uses a simple
   // screen-space error estimate from projected sphere size.
@@ -45,9 +55,6 @@ namespace {
     scn::SceneNode::Renderable renderable, const View& view) noexcept
   {
     const auto sphere = renderable.GetWorldBoundingSphere();
-    // If no bounds (radius == 0), skip evaluation.
-    if (sphere.w <= 0.0f)
-      return;
 
     if (renderable.UsesDistancePolicy()) {
       const auto cam_pos = view.CameraPosition();
@@ -71,6 +78,47 @@ namespace {
     } else {
       // Fixed policy: nothing to evaluate.
     }
+  }
+
+  // Aggregate Phase-1 data across visible submeshes for the active LOD.
+  // Picks material from the first visible submesh and flags mixed materials.
+  // Aggregates per-submesh world AABBs for tighter node-level culling.
+  [[nodiscard]] SubmeshAggregation AggregateVisibleSubmeshes(
+    const scn::SceneNode::Renderable& renderable,
+    const std::shared_ptr<const oxygen::data::Mesh>& mesh,
+    std::optional<std::size_t> lod_opt) noexcept
+  {
+    SubmeshAggregation agg {};
+    if (!mesh || !lod_opt.has_value()) {
+      return agg; // nothing to aggregate
+    }
+
+    const auto lod = *lod_opt;
+    agg.visibility_determined = true;
+    const auto submeshes = mesh->SubMeshes();
+    for (std::size_t i = 0; i < submeshes.size(); ++i) {
+      if (!renderable.IsSubmeshVisible(lod, i)) {
+        continue;
+      }
+      agg.any_visible = true;
+
+      // Resolve material for this submesh
+      auto mat = renderable.ResolveSubmeshMaterial(lod, i);
+      if (!agg.have_material) {
+        agg.selected_material = mat;
+        agg.have_material = (mat != nullptr);
+      } else if (mat.get() != agg.selected_material.get()) {
+        agg.mixed_materials = true;
+      }
+
+      // Aggregate world AABB, prefer per-submesh world AABB if available
+      if (auto waabb = renderable.GetWorldSubMeshBoundingBox(i)) {
+        agg.agg_min = glm::min(agg.agg_min, waabb->first);
+        agg.agg_max = glm::max(agg.agg_max, waabb->second);
+      }
+    }
+
+    return agg;
   }
 
 } // namespace
@@ -139,54 +187,12 @@ auto CollectRenderItems(
     // Phase 1 bridge: honor per-submesh visibility and material overrides.
     // Aggregate per-submesh world AABB for tighter culling and pick material
     // from the first visible submesh; warn on mixed materials.
-    std::shared_ptr<const oxygen::data::MaterialAsset> selected_material;
-    bool have_material = false;
-    glm::vec3 agg_min { std::numeric_limits<float>::infinity() };
-    glm::vec3 agg_max { -std::numeric_limits<float>::infinity() };
-    bool any_visible = false;
-    bool mixed_materials = false;
-    bool visibility_determined = false;
-    {
-      const auto lod_opt = renderable.GetActiveLodIndex();
-      const auto& mesh = active_mesh->mesh;
-      if (lod_opt && mesh) {
-        visibility_determined = true;
-        const auto lod = *lod_opt;
-        const auto submeshes = mesh->SubMeshes();
-        for (std::size_t i = 0; i < submeshes.size(); ++i) {
-          if (!renderable.IsSubmeshVisible(lod, i)) {
-            continue;
-          }
-          any_visible = true;
-          // Material resolution
-          auto mat = renderable.ResolveSubmeshMaterial(lod, i);
-          if (!have_material) {
-            selected_material = mat;
-            have_material = true;
-          } else if (mat.get() != selected_material.get()) {
-            mixed_materials = true;
-          }
-          // Per-submesh world AABB aggregation (use submesh world AABB when
-          // available)
-          if (auto waabb = renderable.GetWorldSubMeshBoundingBox(i)) {
-            agg_min = glm::min(agg_min, waabb->first);
-            agg_max = glm::max(agg_max, waabb->second);
-          } else {
-            // Fallback to mesh-level AABB transformed via item helper
-            // Ensure item bounds are computed so min/max exist as fallback
-            if (item.bounding_box_min == glm::vec3(0.0f)
-              && item.bounding_box_max == glm::vec3(0.0f)) {
-              item.UpdatedTransformedProperties();
-            }
-            agg_min = glm::min(agg_min, item.bounding_box_min);
-            agg_max = glm::max(agg_max, item.bounding_box_max);
-          }
-        }
-      }
-    }
+    const auto lod_opt = renderable.GetActiveLodIndex();
+    const auto& mesh_ref = active_mesh->mesh;
+    auto agg = AggregateVisibleSubmeshes(renderable, mesh_ref, lod_opt);
 
     // If visibility was determined (LOD known) and none were visible, skip.
-    if (!any_visible && visibility_determined) {
+    if (!agg.any_visible && agg.visibility_determined) {
       DLOG_F(2, "SceneExtraction: node='{}' culled (all submeshes invisible)",
         node_name);
       ++culled; // treat as culled due to visibility mask
@@ -195,34 +201,38 @@ auto CollectRenderItems(
 
     // If visibility wasn’t determined (no Renderable or no active LOD yet),
     // fall back to treating the mesh as visible with mesh-level material.
-    if (!any_visible && !visibility_determined) {
-      const auto& mesh = active_mesh->mesh;
-      if (mesh) {
-        const auto submeshes = mesh->SubMeshes();
+    if (!agg.any_visible && !agg.visibility_determined) {
+      if (mesh_ref) {
+        const auto submeshes = mesh_ref->SubMeshes();
         if (!submeshes.empty()) {
-          selected_material = submeshes[0].Material();
-          have_material = (selected_material != nullptr);
+          agg.selected_material = submeshes[0].Material();
+          agg.have_material = (agg.selected_material != nullptr);
         }
       }
-      item.material = have_material
-        ? selected_material
+      item.material = agg.have_material
+        ? agg.selected_material
         : oxygen::data::MaterialAsset::CreateDefault();
       // Compute default world-space properties (mesh-level bounds)
       item.UpdatedTransformedProperties();
     } else {
       // At least one submesh is visible: resolve material and aggregate bounds.
       // Prefer default material over debug fallback when none resolved.
-      item.material = have_material
-        ? selected_material
+      item.material = agg.have_material
+        ? agg.selected_material
         : oxygen::data::MaterialAsset::CreateDefault();
-      // First compute sphere/normal from mesh and world
+      // Bounds policy: we always derive world-space AABB from the full mesh
+      // bounds via UpdatedTransformedProperties(). We honor per-submesh
+      // visibility for material selection and skip when all submeshes are
+      // invisible, but we do NOT preserve an aggregated submesh AABB.
+      // This is conservative (never misses visible geometry) but may reduce
+      // CPU/occlusion culling efficiency for large modular assets. If that
+      // becomes a problem, consider: (1) preserving an aggregated AABB at
+      // extraction time, (2) emitting per-submesh items, or (3) switching to
+      // cluster/meshlet-level bounds and GPU-driven culling.
       item.UpdatedTransformedProperties();
-      // Then override AABB with aggregated submesh AABB for tighter culling
-      item.bounding_box_min = agg_min;
-      item.bounding_box_max = agg_max;
     }
 
-    if (mixed_materials) {
+    if (agg.mixed_materials) {
       DLOG_F(2,
         "SceneExtraction: visible submeshes have mixed materials; using first "
         "visible submesh material for mesh-level item");

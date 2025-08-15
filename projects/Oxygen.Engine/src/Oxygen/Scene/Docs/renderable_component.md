@@ -321,10 +321,10 @@ Scene – Component and Hooks
 Scene – Render Sync and Enumeration
 
 - Phase 1 (bridge)
-  - [ ] Update extraction to honor submesh visibility and material overrides while emitting one mesh-level item per node:
-    - [ ] Aggregate per-submesh world AABBs into node AABB for culling.
-    - [ ] Pick first visible submesh’s material; warn on mixed materials.
-  - [ ] Verify per-view LOD evaluation remains intact.
+  - [x] Update extraction to honor submesh visibility and material overrides while emitting one mesh-level item per node:
+    - [~] Aggregated per-submesh world AABB: de-scoped. Current policy uses mesh-level AABB for culling (see note in `Renderer/Extraction/SceneExtraction.cpp`).
+    - [x] Pick first visible submesh’s material; warn on mixed materials.
+  - [x] Verify per-view LOD evaluation remains intact (unit test added).
 
 - Phase 2 (final)
   - [ ] Define engine-common PODs: DrawSlice, MeshViewRef, SubmeshViewItem, RendererContext, IFrameSubmissionBuilder (view-level).
