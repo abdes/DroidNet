@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <type_traits>
 
@@ -38,6 +39,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 #include <Oxygen/Renderer/Types/View.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "./MainModule.h"
@@ -56,36 +58,126 @@ constexpr std::uint32_t kWindowWidth = 1600;
 constexpr std::uint32_t kWindowHeight = 900;
 } // namespace
 
-// ===================== DEBUGGING HISTORY & CONTRACTS =====================
-//
-// D3D12 Bindless Rendering Triangle: Lessons Learned (NEVER AGAIN!)
-//
-// 1. Culling & Winding Order:
-//    - D3D12's default: counter-clockwise (CCW) triangles are front-facing.
-//    - If your triangle is defined in clockwise (CW) order, it will be culled
-//      (invisible) with default culling.
-//    - Solution: Use CCW order for vertices, or set the rasterizer state to
-//      match your winding.
-//
-// 2. Descriptor Table Offset vs. Heap Index:
-//    - The SRV index written to the constant buffer (used by the shader) MUST
-//      match the offset within the descriptor table bound for this draw, NOT
-//      the global heap index. Index 0 is the first position in the bound table;
-//      that is, the first descriptor after the CBV.
-//    - If you use the global heap index, the shader will access the wrong
-//      resource or nothing at all.
-//    - Solution: Always write the offset within the currently bound descriptor
-//      table to the constant buffer.
-//
-// CONTRACTS (DO NOT BREAK!):
-// - Triangle vertices must be defined in CCW order for D3D12 default culling,
-//   or the rasterizer state must be set to match.
-// - The SRV index in the constant buffer must be the offset within the
-//   descriptor table bound at draw time.
-// - Do not confuse global heap indices with descriptor table offsets!
-//
-// If you see a blank screen or missing geometry, check these invariants first!
-// ===========================================================================
+namespace {
+// Centralize example scene state across frames.
+struct ExampleState {
+  std::shared_ptr<oxygen::scene::Scene> scene;
+  oxygen::scene::SceneNode node_a; // Cube A
+  oxygen::scene::SceneNode node_b; // Cube B
+  oxygen::scene::SceneNode main_camera; // "MainCamera"
+};
+
+static ExampleState g_state;
+
+// Ensure the example scene and two cubes exist; store persistent handles.
+auto EnsureExampleScene() -> void
+{
+  if (g_state.scene) {
+    return;
+  }
+
+  g_state.scene = std::make_shared<oxygen::scene::Scene>("ExampleScene");
+  const std::shared_ptr<oxygen::data::Mesh> cube_mesh
+    = oxygen::data::GenerateMesh("Cube/TestMesh", {});
+
+  // Node A at origin
+  auto node_a = g_state.scene->CreateNode("CubeA");
+  node_a.AttachMesh(cube_mesh);
+  g_state.node_a = node_a;
+
+  // Node B offset on +X
+  auto node_b = g_state.scene->CreateNode("CubeB");
+  node_b.AttachMesh(cube_mesh);
+  node_b.GetTransform().SetLocalPosition(glm::vec3(2.5F, 0.0F, 0.0F));
+  g_state.node_b = node_b;
+
+  LOG_F(INFO, "Scene created with two cube nodes");
+}
+
+// Find or create the "MainCamera" node with a PerspectiveCamera; keep aspect in
+// sync.
+auto EnsureMainCamera(const int width, const int height) -> void
+{
+  using oxygen::scene::PerspectiveCamera;
+  using oxygen::scene::camera::ProjectionConvention;
+
+  if (!g_state.scene) {
+    return;
+  }
+
+  if (!g_state.main_camera.IsAlive()) {
+    g_state.main_camera = g_state.scene->CreateNode("MainCamera");
+  }
+
+  if (!g_state.main_camera.HasCamera()) {
+    auto camera
+      = std::make_unique<PerspectiveCamera>(ProjectionConvention::kD3D12);
+    const bool attached = g_state.main_camera.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  }
+
+  // Configure camera params (aspect from current surface size)
+  const auto cam_ref = g_state.main_camera.GetCameraAs<PerspectiveCamera>();
+  if (cam_ref) {
+    const float aspect = height > 0
+      ? (static_cast<float>(width) / static_cast<float>(height))
+      : 1.0F;
+    auto& cam = cam_ref->get();
+    cam.SetFieldOfView(glm::radians(45.0F));
+    cam.SetAspectRatio(aspect);
+    cam.SetNearPlane(0.1F);
+    cam.SetFarPlane(600.0F);
+    cam.SetViewport(glm::ivec4 { 0, 0, width, height });
+  }
+}
+
+// Update the MainCamera transform to look from position toward target with up.
+auto UpdateMainCameraPose(const glm::vec3& position, const glm::vec3& target,
+  const glm::vec3& up) -> void
+{
+  if (!g_state.main_camera.IsAlive()) {
+    return;
+  }
+
+  auto t = g_state.main_camera.GetTransform();
+  t.SetLocalPosition(position);
+
+  // Build a rotation that looks at target. Use RH variant to match glm::lookAt.
+  const glm::vec3 dir = glm::normalize(target - position);
+  const glm::quat rot = glm::quatLookAtRH(dir, up);
+  t.SetLocalRotation(rot);
+}
+
+// Animate the main camera along a smooth orbit/dolly path around the scene
+// center with subtle height and radius modulation for a cinematic feel.
+auto AnimateMainCamera(const float time_seconds) -> void
+{
+  // Scene center between the two cubes (kept consistent with setup)
+  const glm::vec3 center(1.25F, 0.0F, 0.0F);
+
+  // Base parameters
+  const float base_radius = 6.0F;
+  const float base_height = 1.6F;
+
+  // Modulations for a more cinematic motion
+  const float radius
+    = base_radius + 1.25F * std::sin(0.35F * time_seconds); // slow dolly
+  const float height
+    = base_height + 0.45F * std::sin(0.8F * time_seconds + 0.7F); // bob
+  const float angular_speed = 0.35F; // radians/sec (slow orbit)
+  const float angle = angular_speed * time_seconds;
+
+  // Orbit around center; keep negative Z bias to face the scene as in setup
+  const glm::vec3 offset(
+    radius * std::cos(angle), height, -radius * std::sin(angle));
+  const glm::vec3 position = center + offset;
+  const glm::vec3 target = center;
+  const glm::vec3 up(0.0F, 1.0F, 0.0F);
+
+  UpdateMainCameraPose(position, target, up);
+}
+
+} // namespace
 
 MainModule::MainModule(
   std::shared_ptr<Platform> platform, std::weak_ptr<Graphics> gfx_weak)
@@ -308,28 +400,10 @@ auto MainModule::RenderScene() -> co::Co<>
   DLOG_F(1, "Rendering scene in frame index {}",
     render_controller_->CurrentFrameIndex());
 
-  // Build a scene once and reuse it; populate with two cube nodes
-  static std::shared_ptr<oxygen::scene::Scene> scene;
-  static oxygen::scene::SceneNode node_a_handle; // persists across frames
-  static oxygen::scene::SceneNode node_b_handle; // persists across frames
-  if (!scene) {
-    scene = std::make_shared<oxygen::scene::Scene>("ExampleScene");
-    const std::shared_ptr<data::Mesh> cube_mesh
-      = data::GenerateMesh("Cube/TestMesh", {});
-
-    // Node A at origin
-    auto node_a = scene->CreateNode("CubeA");
-    node_a.AttachMesh(cube_mesh);
-    node_a_handle = node_a; // keep a handle for per-frame animation
-
-    // Node B offset on +X
-    auto node_b = scene->CreateNode("CubeB");
-    node_b.AttachMesh(cube_mesh);
-    node_b.GetTransform().SetLocalPosition(glm::vec3(2.5F, 0.0F, 0.0F));
-    node_b_handle = node_b; // keep a handle for per-frame animation
-
-    LOG_F(INFO, "Scene created with two cube nodes");
-  }
+  // Ensure example scene content and camera exist
+  EnsureExampleScene();
+  EnsureMainCamera(
+    static_cast<int>(surface_->Width()), static_cast<int>(surface_->Height()));
 
   auto gfx = gfx_weak_.lock();
   const auto recorder = render_controller_->AcquireCommandRecorder(
@@ -373,34 +447,34 @@ auto MainModule::RenderScene() -> co::Co<>
   // Apply per-frame rotation (absolute) so we avoid accumulation drift
   const auto rot_y
     = glm::angleAxis(rotation_angle, glm::vec3(0.0F, 1.0F, 0.0F));
-  if (node_a_handle.IsAlive()) {
-    node_a_handle.GetTransform().SetLocalRotation(rot_y);
+  if (g_state.node_a.IsAlive()) {
+    g_state.node_a.GetTransform().SetLocalRotation(rot_y);
   }
-  if (node_b_handle.IsAlive()) {
+  if (g_state.node_b.IsAlive()) {
     // Give the second cube a slightly different rotation for variety
     const auto rot = glm::angleAxis(
       -rotation_angle * 1.2F, glm::normalize(glm::vec3(0.25F, 1.0F, 0.0F)));
-    node_b_handle.GetTransform().SetLocalRotation(rot);
+    g_state.node_b.GetTransform().SetLocalRotation(rot);
   }
 
-  // Look from an angle to see both cubes clearly with closer positioning
-  glm::vec3 camera_position = glm::vec3(
-    1.25F, 1.5F, -5.0F); // Much closer to the cubes, centered between them
-  glm::vec3 target
-    = glm::vec3(1.25F, 0.0F, 0.0F); // Look at center between cubes (0 and 2.5)
-  auto up = glm::vec3(0, 1, 0);
+  // Animate camera using wall-clock elapsed time for smooth motion
+  using clock = std::chrono::steady_clock;
+  static const auto t0 = clock::now();
+  const float t = std::chrono::duration<float>(clock::now() - t0).count();
+  AnimateMainCamera(t);
 
-  const float aspect = static_cast<float>(surface_->Width())
-    / static_cast<float>(surface_->Height());
   if (renderer_) {
-    // Build View from camera, then build frame via extraction
-    oxygen::engine::View::Params vp;
-    vp.view = glm::lookAt(camera_position, target, up);
-    vp.proj = glm::perspective(glm::radians(45.0F), aspect, 0.1F, 600.0F);
-    vp.has_camera_position = true;
-    vp.camera_position = camera_position;
-    const oxygen::engine::View view(vp);
-    renderer_->BuildFrame(*scene, view);
+    oxygen::engine::CameraView::Params cv {
+      .camera_node = g_state.main_camera,
+      // Let camera ActiveViewport drive; we already keep camera viewport in
+      // sync
+      .viewport = std::nullopt,
+      .scissor = std::nullopt,
+      .pixel_jitter = glm::vec2(0.0F, 0.0F),
+      .reverse_z = false,
+      .mirrored = false,
+    };
+    renderer_->BuildFrame(*g_state.scene, oxygen::engine::CameraView(cv));
   }
 
   // Assemble and run the render graph

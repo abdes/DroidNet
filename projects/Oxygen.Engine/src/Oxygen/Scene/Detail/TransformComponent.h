@@ -8,12 +8,20 @@
 
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::detail {
+
+// Padding will be expected here as we align all glm types to 16 bytes for
+// SIMD optimizations to be possible
+OXYGEN_DIAGNOSTIC_PUSH
+#if defined(OXYGEN_MSVC_VERSION)
+OXYGEN_DIAGNOSTIC_DISABLE(4324)
+#endif
 
 //! Component managing 3D spatial transformations with hierarchical support and
 //! performance optimization.
@@ -189,10 +197,12 @@ private:
   //! access).
   mutable alignas(16) Mat4 world_matrix_ { 1.0f };
 
+  ObjectMetaData* meta_data_ { nullptr };
+
   //! Dirty flag indicating world matrix cache needs re-computation.
   bool is_dirty_ = true;
-
-  ObjectMetaData* meta_data_ { nullptr };
 };
+
+OXYGEN_DIAGNOSTIC_POP
 
 } // namespace oxygen::scene::detail

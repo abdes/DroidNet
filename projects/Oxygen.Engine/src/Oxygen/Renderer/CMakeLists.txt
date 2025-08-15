@@ -50,6 +50,7 @@ set_target_properties(
 set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
+  "CameraView.h"
   "DepthPrePass.h"
   "Detail/BindlessStructuredBuffer.h"
   "Extraction/SceneExtraction.h"
@@ -67,6 +68,7 @@ set(
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
+  "CameraView.cpp"
   "DepthPrePass.cpp"
   "Detail/BindlessStructuredBuffer.cpp"
   "Extraction/SceneExtraction.cpp"
