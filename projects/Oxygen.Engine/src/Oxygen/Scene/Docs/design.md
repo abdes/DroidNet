@@ -26,7 +26,7 @@ for future enhancement.
 | Component Attachment System | ✅ Complete         | Full Composition system                      |
 | Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists                |
 | Camera Component            | ✅ Complete         | Perspective & Orthographic, runtime attach   |
-| Mesh/Renderable Component   | 🚧 In Progress      | Renderable component planned (GeometryAsset/MaterialAsset, LOD/submeshes, renderer bridge). See renderable_component.md |
+| Mesh/Renderable Component   | ✅ Phase 1 Complete | See renderable_component.md |
 | Light Component             | 🚧 In Progress      | **Next priority: implement for rendering**   |
 | Scene Serialization         | ❌ Not Started      | Deferred until after rendering components    |
 | Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                  |
