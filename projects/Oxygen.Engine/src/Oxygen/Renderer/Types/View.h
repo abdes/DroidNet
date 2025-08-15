@@ -90,6 +90,11 @@ public:
   {
     return camera_position_;
   }
+  //! Vertical focal length in pixels derived from projection and viewport.
+  [[nodiscard]] auto FocalLengthPixels() const noexcept -> float
+  {
+    return focal_length_pixels_;
+  }
 
 private:
   glm::mat4 view_ { 1.0f };
@@ -105,6 +110,10 @@ private:
   bool reverse_z_ = false;
   bool mirrored_ = false;
   glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
+
+  // Cached vertical focal length in pixels (or pixels-per-world-unit for
+  // orthographic projections). Computed from proj_[1][1] and viewport height.
+  float focal_length_pixels_ { 0.0f };
 
   Frustum frustum_ {};
 };
