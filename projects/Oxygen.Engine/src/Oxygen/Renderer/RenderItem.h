@@ -39,6 +39,8 @@ namespace oxygen::engine {
 struct RenderItem {
   // === Geometry Data ===
   std::shared_ptr<const data::Mesh> mesh;
+  // Selected submesh index within the mesh (Option A: per-submesh draw)
+  uint32_t submesh_index = 0;
 
   // === Material and Shading ===
   std::shared_ptr<const data::MaterialAsset> material;

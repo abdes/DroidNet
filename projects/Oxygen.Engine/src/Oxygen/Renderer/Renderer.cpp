@@ -27,7 +27,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/Extraction/SceneExtraction.h>
+#include <Oxygen/Renderer/Extraction/RenderListBuilder.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
@@ -342,9 +342,18 @@ auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
   // Reset draw list for this frame
   opaque_items_.Clear();
 
-  // Extract items via CPU culling
-  const auto inserted = oxygen::engine::extraction::CollectRenderItems(
-    scene, view, opaque_items_);
+  // Extract items via the new two-phase builder (Collect -> Finalize)
+  using oxygen::engine::extraction::RenderListBuilder;
+  RenderListBuilder builder;
+  std::uint64_t frame_id = 0;
+  if (const auto rc_ptr = render_controller_.lock()) {
+    frame_id = rc_ptr->CurrentFrameIndex();
+  }
+  const auto collected = builder.Collect(scene, view, frame_id);
+  // Finalize directly into the renderer-managed output list.
+  // RenderContext is not required by Finalize currently; pass a local.
+  RenderContext dummy_context;
+  builder.Finalize(collected, dummy_context, opaque_items_);
 
   // Update scene constants from the provided view snapshot
   ModifySceneConstants([&](SceneConstants& sc) {
@@ -353,9 +362,10 @@ auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
       .SetCameraPosition(view.CameraPosition());
   });
 
-  DLOG_F(2, "BuildFrame: inserted {} render items", inserted);
+  const auto inserted_count = opaque_items_.Items().size();
+  DLOG_F(2, "BuildFrame: inserted {} render items", inserted_count);
 
-  return inserted;
+  return inserted_count;
 }
 
 auto Renderer::BuildFrame(
@@ -578,15 +588,28 @@ auto Renderer::EnsureResourcesForDrawList(
   per_world.reserve(draw_list.size());
   per_materials.reserve(draw_list.size());
   for (const auto& item : draw_list) {
-    // Keep predicate in sync with RenderPass draw gating:
-    // we only emit entries for items that will actually be drawn
-    // (mesh present and has vertices). This keeps g_DrawIndex aligned with
-    // both per-draw metadata and world transforms buffers.
-    if (item.mesh && item.mesh->VertexCount() > 0) {
-      const auto& ensured = EnsureMeshResources(*item.mesh);
+    // Only consider items with a valid mesh and non-zero vertices
+    if (!item.mesh || item.mesh->VertexCount() == 0) {
+      continue;
+    }
+    const auto& ensured = EnsureMeshResources(*item.mesh);
+
+    // Resolve selected submesh and iterate its MeshViews
+    const auto submeshes = item.mesh->SubMeshes();
+    const auto sm_idx = static_cast<std::size_t>(item.submesh_index);
+    if (sm_idx >= submeshes.size()) {
+      continue;
+    }
+    const auto views = submeshes[sm_idx].MeshViews();
+    if (views.empty()) {
+      continue;
+    }
+
+    for (size_t v = 0; v < views.size(); ++v) {
+      const auto& view = views[v];
       const uint32_t transform_offset
         = static_cast<uint32_t>(per_world.size()); // next index
-      // Material snapshot and index
+      // Material snapshot per view (simple duplication for now)
       uint32_t material_index = 0U;
       if (item.material) {
         per_materials.emplace_back(MakeMaterialConstants(*item.material));
@@ -604,6 +627,12 @@ auto Renderer::EnsureResourcesForDrawList(
         .instance_count = 1U,
         .transform_offset = transform_offset,
         .material_index = material_index,
+        .instance_metadata_buffer_index = 0u,
+        .instance_metadata_offset = 0u,
+        .flags = 0u,
+        .first_index = view.FirstIndex(),
+        .base_vertex = static_cast<int32_t>(view.FirstVertex()),
+        .padding = 0u,
       });
       per_world.emplace_back(item.world_transform);
     }

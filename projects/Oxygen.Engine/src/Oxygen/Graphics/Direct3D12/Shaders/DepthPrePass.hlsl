@@ -39,9 +39,10 @@ struct DrawMetadata {
     uint instance_metadata_offset;       // Offset into instance metadata buffer
     uint flags;                          // Bitfield: visibility, pass ID, etc.
 
+    // Per-view geometry slice
+    uint first_index;
+    int  base_vertex;
     uint _pad0; // Padding for alignment
-    uint _pad1; // Padding for alignment
-    uint _pad2; // Padding for alignment
 };
 
 
@@ -101,10 +102,10 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     if (meta.is_indexed) {
         // For indexed rendering, get the index buffer and read the actual vertex index
         Buffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
-        actual_vertex_index = index_buffer[vertexID];
+        actual_vertex_index = index_buffer[meta.first_index + vertexID] + (uint)meta.base_vertex;
     } else {
         // For non-indexed rendering, use the vertex ID directly
-        actual_vertex_index = vertexID;
+        actual_vertex_index = vertexID + (uint)meta.base_vertex;
     }
 
     // Access vertex data using ResourceDescriptorHeap

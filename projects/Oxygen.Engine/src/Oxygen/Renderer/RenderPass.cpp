@@ -176,31 +176,43 @@ auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
       continue;
     }
 
-    // For separate meshes, bind the draw index as a root constant
-    // This allows each draw call to access the correct entry in
-    // DrawResourceIndices array
-    BindDrawIndexConstant(command_recorder, draw_index);
-
-    if (item.mesh->IsIndexed()) {
-      // For indexed meshes in bindless rendering, use Draw with index count
-      // The shader will perform index lookup through ResourceDescriptorHeap
-      const auto index_count = static_cast<uint32_t>(item.mesh->IndexCount());
-      LOG_F(3,
-        "Draw call {} (indexed): indices={}, instances=1, firstVertex=0, "
-        "drawIndex={}",
-        draw_index, index_count, draw_index);
-      // Use normal Draw call since draw index is now passed via root constant
-      command_recorder.Draw(index_count, 1, 0, 0);
-    } else {
-      // For non-indexed meshes, use Draw with vertex count
-      const auto vertex_count = static_cast<uint32_t>(item.mesh->VertexCount());
-      LOG_F(3,
-        "Draw call {} (non-indexed): vertices={}, instances=1, firstVertex=0, "
-        "drawIndex={}",
-        draw_index, vertex_count, draw_index);
-      // Use normal Draw call since draw index is now passed via root constant
-      command_recorder.Draw(vertex_count, 1, 0, 0);
+    // Per-submesh per-view draws: iterate the selected submesh's MeshViews
+    const auto& submeshes = item.mesh->SubMeshes();
+    const auto sm_idx = static_cast<std::size_t>(item.submesh_index);
+    if (sm_idx >= submeshes.size()) {
+      LOG_F(WARNING, "RenderItem submesh_index {} out of range ({}). Skipping.",
+        sm_idx, submeshes.size());
+      continue;
     }
-    ++draw_index;
+    const auto& submesh = submeshes[sm_idx];
+    const auto views = submesh.MeshViews();
+    if (views.empty()) {
+      LOG_F(WARNING, "Submesh {} has no MeshViews. Skipping.", sm_idx);
+      continue;
+    }
+
+    for (const auto& view : views) {
+      // Bind the draw index for this specific view draw
+      BindDrawIndexConstant(command_recorder, draw_index);
+
+      // Decide indexed vs non-indexed per underlying mesh
+      if (item.mesh->IsIndexed()) {
+        // Use Draw with the number of indices; VS fetches actual indices via
+        // bindless
+        const uint32_t index_count = view.IndexCount();
+        LOG_F(3, "Draw {} (indexed view): indices={}, drawIndex={}", draw_index,
+          index_count, draw_index);
+        command_recorder.Draw(index_count, 1, 0, 0);
+      } else {
+        // Non-indexed: Draw with vertex_count; VS uses SV_VertexID +
+        // base_vertex
+        const uint32_t vertex_count = view.VertexCount();
+        LOG_F(3, "Draw {} (non-indexed view): vertices={}, drawIndex={}",
+          draw_index, vertex_count, draw_index);
+        command_recorder.Draw(vertex_count, 1, 0, 0);
+      }
+
+      ++draw_index;
+    }
   }
 }

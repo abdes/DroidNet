@@ -12,24 +12,24 @@ GPU submission.
 | Component/Task     | Status  | Notes                                              |
 | ------------------ | ------- | -------------------------------------------------- |
 | Design             | ✅      | Architecture and contracts                         |
-| Types              | ✅      | `RenderItemData.h` added (Internal header)         |
-| Builder            | ❌      | Collect/Finalize/Evict API                         |
-| Extractors         | ❌      | LOD, visibility, material, bounds (pure)           |
+| Types              | ✅      | `RenderItemData.h` added (internal); DrawMetadata extended (first_index/base_vertex) |
+| Builder            | ✅      | Collect/Finalize/Evict implemented; Finalize is monolithic (no pluggable finalizers yet) |
+| Extractors         | ✅      | ShouldRenderPreFilter, Transform, NodeFlags, MeshResolver(LOD), Visibility, Material(no-op), EmitPerVisibleSubmesh |
 | Finalizers API     | ❌      | Transform, material, geometry, draw interfaces     |
 | Finalizers         | ❌      | Default impls + No-GPU variants                    |
 | Transforms         | ❌      | Dirty detect, slots, LRU, growth                   |
 | Uploads            | ❌      | Coalescing, double/triple buffer, 3x4 layout       |
-| Finalize           | ❌      | Finalizer-driven, CPU-only deterministic           |
+| Finalize           | ✅      | CPU-only deterministic finalize inside Builder; finalizers API TBD |
 | Sorting            | ❌      | Domain buckets + batching keys                     |
 | Residency          | ❌      | Touch stamps, keep window, eviction                |
 | Metrics            | ❌      | Counts, bytes, ranges, hits/misses                 |
 | Multi-view         | ❌      | Per-view runs, cache reuse                         |
 | Errors             | ❌      | Fallbacks + rate-limited logs                      |
-| Tests: Collect     | ❌      | LOD/visibility/material cases                      |
+| Tests: Collect     | ✅      | Smoke + LOD distance-policy per-view               |
 | Tests: Finalize    | ❌      | No-GPU path, sorting assertions                    |
 | Tests: Transforms  | ❌      | Dirty/coalescing/threshold paths                   |
-| Integration        | ❌      | Wire passes + A/B flag                             |
-| Docs               | ❌      | README + examples + config                         |
+| Integration        | ✅      | Renderer uses Builder; RenderPass per-submesh views; shaders match metadata |
+| Docs               | ✅      | This doc updated; keep future phases intact         |
 
 ---
 
@@ -345,68 +345,104 @@ builder.EvictStaleResources(render_context, frame_id);
 
 ## Implementation Guide
 
-### Pipeline configuration (pseudo)
+### Current implementation path (as of August 2025)
+
+This subsection reflects the code that exists today. The older, more ambitious
+plan (finalizers API, transform manager, configurable strategies) is kept below
+under Deferred design for future phases.
+
+#### Collect: extractor pipeline
+
+Files: `Extraction/Extractors.h`, `Extraction/Extractors_impl.h`,
+`Extraction/Pipeline.h`, `Extraction/RenderListBuilder.cpp`
+
+Pipeline composition used today:
 
 ```text
-cfg.extractors = {
-    lod:        LodResolver(),
-    visibility: VisibilityFilter(),
-    material:   MaterialResolver(fallback = DefaultMaterial),
-    bounds:     BoundsResolver(enableSubmeshAabb = false)
-}
-
-cfg.finalizers = {
-    transform: PersistentSlotsStrategy() | CompactPerFrameStrategy(),
-    material:  DefaultMaterialStrategy(),
-    geometry:  DefaultGeometryStrategy(),
-    draw:      DefaultDrawStrategy()
-}
+ShouldRenderPreFilter -> TransformExtractor -> MeshResolver
+-> VisibilityFilter -> NodeFlagsExtractor -> MaterialResolver -> EmitPerVisibleSubmesh
 ```
 
-### Collect pipeline (pseudo)
+Sketch:
 
 ```text
-function Collect(scene, view, cfg) -> list<RenderItemData>
-    items = []
-    participating_nodes = set()
+function Collect(scene, view, frame_id) -> vector<RenderItemData>
+  out = []
+  pipeline = Pipeline(
+    ShouldRenderPreFilter,
+    TransformExtractor,
+    MeshResolver,
+    VisibilityFilter,
+    NodeFlagsExtractor,
+    MaterialResolver,
+    EmitPerVisibleSubmesh)
 
-    for each (handle, node_impl) in scene.nodes:
-        if not node_impl.hasRenderable: continue
+  // Iterate dense node table for locality
+  for node_impl in scene.GetNodes().Items():
+    wi  = WorkItem(node_impl)
+    ctx = { view, scene, frame_id }
+    pipeline(wi, ctx, out)
 
-        renderable = SceneNode(handle, scene).Renderable()
-
-        // 1) LOD
-        if not cfg.extractors.lod.resolve(renderable, view): continue
-        active = renderable.activeMesh()
-        if active is null: continue
-
-        // 2) Bounds
-        worldSphere = cfg.extractors.bounds.worldSphere(renderable)
-
-        // 3) Visibility + material per submesh
-        mesh = active.mesh
-        for si in 0..mesh.submeshCount-1:
-            if not cfg.extractors.visibility.isVisible(renderable, active.lodIndex, si): continue
-            material = cfg.extractors.material.resolve(renderable, active.lodIndex, si)
-            if material is null: material = cfg.extractors.material.fallback()
-
-            items.append(RenderItemData{
-                node_handle: handle,
-                lod_index: active.lodIndex,
-                submesh_index: si,
-                geometry: active.geometryAsset,
-                material: material,
-                domain: material.domain(),
-                world_bounding_sphere: worldSphere,
-                cast_shadows: renderable.castsShadows(),
-                receive_shadows: renderable.receivesShadows(),
-                render_layer: renderable.renderLayer()
-            })
-
-            participating_nodes.add(handle)
-
-    return items, participating_nodes
+  return out
 ```
+
+Notes:
+
+- `RenderItemData` includes `lod_index`, `submesh_index`, asset refs,
+  `world_transform`, flags, and `world_bounding_sphere`.
+- No `NodeHandle` is stored; transforms are cached into `RenderItemData` during
+  Collect.
+
+#### Finalize: monolithic conversion
+
+Files: `Extraction/RenderListBuilder.cpp`, `RenderItem.h`
+
+Sketch:
+
+```text
+function Finalize(collected, render_context, output)
+  output.Clear()
+  output.Reserve(collected.size())
+  for d in collected:
+    item = RenderItem{}
+    item.mesh = d.geometry ? d.geometry->MeshAt(d.lod_index) : nullptr
+    item.material = d.material
+    item.submesh_index = d.submesh_index
+    item.world_transform = d.world_transform
+    item.UpdatedTransformedProperties()
+    item.cast_shadows = d.cast_shadows
+    item.receive_shadows = d.receive_shadows
+    item.render_layer = d.render_layer
+    output.Add(item)
+```
+
+Notes:
+
+- Finalizers API is not yet introduced; this is a single, CPU-only conversion
+  step.
+- GPU resource ensuring/upload is handled by the renderer outside the builder.
+
+#### Renderer and draw path alignment
+
+Files: `Renderer.cpp`, `RenderPass.cpp`, `Types/DrawMetadata.h`,
+`Graphics/Direct3D12/Shaders/*.hlsl`
+
+- `Renderer::EnsureResourcesForDrawList`:
+  - Iterates each `RenderItem`'s selected submesh and its `MeshViews()` and
+    appends one `DrawMetadata` per view.
+  - Populates `first_index` and `base_vertex` in `DrawMetadata` so shaders can
+    fetch indices/vertices via bindless.
+  - Duplicates world transform and material constants per view (simple and
+    correct for now).
+- `RenderPass::IssueDrawCalls`:
+  - Iterates `MeshViews()` per item and issues one `Draw` per view.
+  - Increments the draw index root constant per issued draw to match metadata
+    order.
+- Shaders (`DepthPrePass.hlsl`, `FullScreenTriangle.hlsl`) read
+  `DrawMetadata.first_index`/`base_vertex` and compute the actual vertex index
+  through the bindless index buffer.
+
+---
 
 ### Finalization
 
@@ -729,6 +765,231 @@ Leverages existing immutable asset design:
 - Implement temporal filtering capabilities
 - Add strategy pattern for extensibility
 - **Success Criteria**: Support for deferred shading and advanced effects
+
+### Per-submesh draw execution: Option A vs Option B
+
+This project evaluated two approaches to achieve true per-submesh draw calls
+while keeping the new two-phase Collect/Finalize pipeline.
+
+- Option A (Chosen): Extend RenderItem with submesh_index
+  - What: Add a single field to the final RenderItem snapshot carrying the
+    selected submesh index. The pass-level draw loop uses this to issue draws
+    per MeshView of that submesh.
+  - How: Collect already emits per-submesh records. Finalize copies
+    d.submesh_index into RenderItem. RenderPass iterates SubMesh.MeshViews() and
+    issues one draw per view using the exact index/vertex ranges. No additional
+    GPU-side structures are introduced.
+  - Pros: Minimal changes, immediate correctness, works with existing bindless
+    DrawMetadata (no extra fields). Keeps CPU emission simple.
+  - Cons: Multiple draw calls per RenderItem (one per MeshView). Material
+    constants may be duplicated per view in the current path.
+
+- Option B: Introduce a dedicated draw-command builder
+  - What: Keep RenderItem mesh-level, then build a separate list of low-level
+    draw commands (one per MeshView) with explicit ranges
+    (first_index/index_count or first_vertex/vertex_count) and/or embed those
+    ranges into DrawMetadata.
+  - Pros: Tighter, explicit low-level contract; avoids per-view duplication of
+    material constants by reusing indices. Paves the way for GPU-driven
+    submission.
+  - Cons: Larger refactor now (new types, more plumbing). Requires pass/codegen
+    changes and updated shaders if new metadata is consumed.
+
+Decision: Implement Option A first for fast, low-risk enablement of per-submesh
+draws. We can layer Option B later if profiling indicates benefits or when
+moving to a full DrawPacket path.
+
+Implementation notes for Option A (current):
+
+- RenderItem gains: uint32 submesh_index.
+- Finalize: copies submesh_index from collected data.
+- RenderPass: For each item, iterate the selected SubMesh.MeshViews(); issue one
+  draw per view.
+  - Indexed meshes: Draw(index_count, 1, first_index, 0) and let the VS read the
+    index buffer via SV_VertexID + bindless indirection.
+  - Non-indexed meshes: Draw(vertex_count, 1, first_vertex, 0).
+- Renderer::EnsureResourcesForDrawList: Append one DrawMetadata entry per issued
+  draw so g_DrawIndex matches draw submission order; world transforms and
+  material constants are duplicated per view for now (simple and correct).
+
+---
+
+## Implementation snapshot (August 2025)
+
+This section captures what’s implemented now so the design stays consistent with
+code. Future sections remain valid and are not removed.
+
+- Builder API and scope
+  - Class: `oxygen::engine::extraction::RenderListBuilder` in
+    `Extraction/RenderListBuilder.{h,cpp}`
+  - Methods: `Collect(scene, view, frame_id) -> std::vector<RenderItemData>`,
+    `Finalize(span<RenderItemData>, RenderContext&, RenderItemsList&)`,
+    `EvictStaleResources(...)`
+  - Status: Collect + monolithic Finalize are implemented. Finalizers API is
+    deferred to a later phase.
+
+- Extractors and pipeline
+  - Header-only extractors in `Extraction/Extractors_impl.h` with APIs in
+    `Extraction/Extractors.h`:
+    - `ShouldRenderPreFilter`, `TransformExtractor`, `NodeFlagsExtractor`,
+      `MeshResolver` (LOD selection via scene policy), `VisibilityFilter`,
+      `MaterialResolver` (no-op), `EmitPerVisibleSubmesh`.
+  - Functional composition via `Extraction/Pipeline.h` which accepts a tuple of
+    filter/updater/producer functions.
+  - Collect pipeline used in code:
+    - `ShouldRenderPreFilter -> TransformExtractor -> MeshResolver ->
+      VisibilityFilter -> NodeFlagsExtractor -> MaterialResolver ->
+      EmitPerVisibleSubmesh`
+
+- Data types
+  - `Extraction/RenderItemData.h` added for collect-phase snapshots (lod_index,
+    submesh_index, geometry/material refs, world transform, flags).
+  - `Renderer/Types/DrawMetadata.h` extended with per-view geometry slice
+    fields: `first_index` and `base_vertex` (plus padding). Shaders updated
+    accordingly.
+  - `data::MeshView` now exposes `FirstIndex/IndexCount/FirstVertex/VertexCount`
+    accessors used by the renderer.
+
+- Renderer integration and draw behavior
+  - Renderer uses `RenderListBuilder` inside `Renderer::BuildFrame(scene,
+    view)`; it no longer calls legacy `SceneExtraction::CollectRenderItems`.
+  - `RenderItem` extended with `submesh_index`, enabling per-submesh drawing
+    (Option A).
+  - `RenderPass::IssueDrawCalls` iterates the selected submesh’s `MeshViews()`
+    and issues one draw per view. The draw index root constant is incremented
+    per issued draw to match metadata order.
+  - `Renderer::EnsureResourcesForDrawList` appends one DrawMetadata entry per
+    view draw and duplicates material constants and world transform per view for
+    correctness.
+
+- Shaders alignment
+  - HLSL files `DepthPrePass.hlsl` and `FullScreenTriangle.hlsl` updated to read
+    `first_index` and `base_vertex` from `DrawMetadata` and compute the actual
+    vertex index via bindless index buffer access.
+
+- Tests
+  - `RenderListBuilder_basic_test.cpp` covers smoke and distance-policy LOD
+    selection per-view. CI artifact `renderlistbuilder_results.xml` shows
+    passing tests.
+
+Notes and limits right now
+
+- Finalization is centralized in `RenderListBuilder::Finalize` (no pluggable
+  finalizers yet).
+- No transform residency/slots manager; transforms are copied directly from
+  collected data into GPU buffers during ensure/upload.
+- Sorting, batching keys, and residency/eviction policies are not yet integrated
+  with the builder (renderer still performs mesh resource residency on demand).
+
+---
+
+## Extractors and Collect Pipeline Design
+
+This section defines the extractor model, supporting types, default pipeline,
+and contracts used during the Collect phase. It reflects the current implemented
+path and remains compatible with future finalizers.
+
+### Concepts and contracts
+
+- ExtractorContext
+  - Fields: `const View& view`, `scene::Scene& scene`, `uint64_t frame_id`.
+  - Purpose: provide per-collect invocation data (camera/frustum, scene access,
+    frame id).
+
+- WorkItem
+  - Lifecycle: constructed per `SceneNodeImpl` and flows through extractors.
+  - Fields (collect-phase snapshot and transient state):
+    - `RenderItemData proto` (seeded with geometry/material refs, world
+      transform, bounds, flags)
+    - `std::shared_ptr<const data::Mesh> mesh` (resolved active LOD mesh)
+    - `std::optional<uint32_t> pending_lod` (selected LOD from policy)
+    - `std::optional<uint32_t> selected_submesh` (unused in current default;
+      per-submesh emission via mask)
+    - `std::vector<char> submesh_mask` (per-submesh visibility)
+    - `bool dropped` (early out marker)
+  - Helpers: accessors to `Renderable()` and `Transform()` facades and `Node()`.
+
+- Facades
+  - RenderableFacade: forwards a minimal surface from `RenderableComponent` used
+    by extractors
+    - `UsesDistancePolicy/UsesScreenSpaceErrorPolicy`
+    - `SelectActiveMesh(...)`, `GetActiveLodIndex()`
+    - `IsSubmeshVisible(lod, submesh)`, `ResolveSubmeshMaterial(lod, submesh)`
+    - `GetGeometry()`, `GetWorldBoundingSphere()`,
+      `GetWorldSubMeshBoundingBox(i)`
+  - TransformFacade: forwards `GetWorldMatrix()` from `TransformComponent`.
+
+- Extractor function concepts
+  - FilterFn: `bool f(WorkItem&, const ExtractorContext&)` — returns false to
+    drop item and stop.
+  - UpdaterFn: `void f(WorkItem&, const ExtractorContext&)` — mutate state,
+    continue.
+  - ProducerFn: `void f(WorkItem&, const ExtractorContext&, Collector)` — append
+    one or more `RenderItemData` results; pipeline continues unless item is
+    marked dropped.
+
+### Pipeline composition
+
+The compile-time `Pipeline<...>` accepts a sequence of extractor callables. Each
+step is dispatched according to its concept (Filter/Updater/Producer). On first
+drop, processing stops for that WorkItem. Producers can emit multiple items.
+
+Default pipeline (implemented):
+
+1) ShouldRenderPreFilter — requires visible node, Renderable + Transform
+   present, and valid geometry; seeds `proto.geometry`.
+2) TransformExtractor — copies world transform and world-space bounding sphere
+   into `proto`.
+3) MeshResolver — selects active LOD using the node’s policy (distance or SSE)
+   and resolves `mesh` from `proto.geometry` and `lod`.
+4) VisibilityFilter — builds `submesh_mask` for the resolved mesh, returns false
+   if none visible.
+5) NodeFlagsExtractor — copies effective flags (casts/receives shadows) into
+   `proto`.
+6) MaterialResolver — placeholder (no-op) kept for future preprocessing.
+7) EmitPerVisibleSubmesh — for each mask-visible submesh, performs frustum
+   culling and appends a `RenderItemData` with `lod_index`, `submesh_index`,
+   `material`, `domain`, and cached transforms.
+
+Extension points:
+
+- The pipeline tuple is customizable per pass. Additional filters (e.g., layer
+  masks), domain routing, or custom emitters can be composed without changing
+  types.
+
+### Data contracts and invariants
+
+- RenderItemData (collect output)
+  - Identity: `(lod_index, submesh_index[, view])` with asset refs
+    (geometry/material) and cached transform/bounds/flags.
+  - No GPU handles: strictly CPU-side references and values.
+
+- LOD selection
+  - Policy lives in `RenderableComponent`. Extractors call
+    `SelectActiveMesh(...)` and read `GetActiveLodIndex()` to avoid duplicating
+    hysteresis state outside the scene.
+
+- Submesh emission
+  - Current default emits per visible submesh. Multi-view slicing is handled
+    later by iterating `MeshView`s at draw time.
+
+### End-to-end collect flow
+
+For each dense `SceneNodeImpl`:
+
+- Construct `WorkItem` (caches component pointers in facades)
+- Run the pipeline; if not dropped, producers append `RenderItemData` items to
+  the output vector
+- Return the vector to `RenderListBuilder::Finalize`
+
+### Alignment with Finalize and Renderer
+
+- Finalize (current): converts `RenderItemData` to immutable `RenderItem`,
+  resolving the mesh pointer from `geometry->MeshAt(lod_index)` and copying
+  `submesh_index` and flags.
+- Renderer: iterates `RenderItem.mesh->SubMeshes()[submesh_index].MeshViews()`
+  and issues one draw per view, with per-view `DrawMetadata` including
+  `first_index` and `base_vertex` used in shaders.
 
 ### Migration Strategy
 
