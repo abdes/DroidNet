@@ -11,8 +11,8 @@ remaining multi-pass friendly.
 
 | Status | Task | Description | Dependencies |
 |--------|------|-------------|--------------|
-| ⏳ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`ScenePrepFilter`, `ScenePrepUploader`, etc.) | - |
-| ⏳ | **2. Copy and Refactor Extraction Classes** | Copy existing `WorkItem`, `RenderItemData`, `Pipeline.h` classes from Extraction module and adapt to ScenePrep design | Task 1 |
+| ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`ScenePrepFilter`, `ScenePrepUploader`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
+| ⏳ | **2. Copy and Refactor Extraction Classes** | Copy existing `WorkItem`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
 | ⏳ | **3. Copy and Refactor Extractors** | Copy existing extractors (`TransformExtractor`, `MeshResolver`, `MaterialExtractor`, etc.) from Extraction and adapt to new concept-based design | Task 2 |
 | ⏳ | **4. Implement Helper State Classes** | Create `TransformManager`, `TransformBatchCache`, `MaterialRegistry`, `GeometryRegistry` and related cache classes | Task 1 |
 | ⏳ | **5. Create Configuration System** | Implement template-based `CollectionConfig`, `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
@@ -97,7 +97,7 @@ in `EmitPerVisibleSubmesh`, so finalization operates on pre-culled items.
 ```cpp
 // Example configuration for a basic forward renderer
 struct BasicScenePrepConfig {
-  auto filter = [](const RenderItemData& item, const ScenePrepContext& ctx, ScenePrepState& state) -> PassMask {
+  auto filter = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item) -> PassMask {
     PassMask mask = 0;
     if (item.domain == MaterialDomain::kOpaque) mask |= kOpaquePass;
     if (item.domain == MaterialDomain::kTransparent) mask |= kTransparentPass;
@@ -115,9 +115,13 @@ struct BasicScenePrepConfig {
       state.transform_cache.SetHandle(idx, handle);
     }
   };
-
-  // ... other finalizers
-};
+    struct RenderItemData; struct RenderItem; struct MeshView; struct DrawMetadata;
+    struct ScenePrepContext; struct ScenePrepState; using PassMask = uint32_t;
+    // Core types are implemented in the ScenePrep module. See:
+    // `src/Oxygen/Renderer/ScenePrep/Types.h` (core types: `ScenePrepContext`, `PassMask`, `DrawMetadata`, handles)
+    // `src/Oxygen/Renderer/ScenePrep/RenderItemData.h` (collection-phase `RenderItemData`)
+    // `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h` (pipeline state and helpers)
+    // `src/Oxygen/Renderer/ScenePrep/Concepts.h` (C++20 concepts for filters/uploaders/assemblers)
 
 auto result = ScenePrep(collected_items, ctx, state, config.filter,
                         config.transform_uploader, /*...*/);
@@ -274,58 +278,6 @@ providing multiple functions. The orchestrator wires them by concept.
 GPU work principle: Only Uploader roles perform GPU uploads (batch-only).
 Filter, Updater, and Assembler roles are CPU-only.
 
-Canonical interfaces (C++20 concepts; functions/callables):
-
-```cpp
-// Forward declarations for doc purposes
-struct RenderItemData; struct RenderItem; struct MeshView; struct DrawMetadata;
-struct ScenePrepContext; struct ScenePrepState; using PassMask = uint32_t;
-
-#include <span>
-#include <concepts>
-
-template <class F>
-concept ScenePrepFilter = requires(F f, const RenderItemData& d,
-                                   const ScenePrepContext& ctx, ScenePrepState& st) {
-  { f(d, ctx, st) } -> std::same_as<PassMask>; // e.g., compute_pass_mask(d, ctx, st)
-};
-
-template <class U>
-concept ScenePrepUploader = requires(U u, std::span<const RenderItemData> all_items,
-                                     std::span<const std::size_t> indices,
-                                     const ScenePrepContext& ctx, ScenePrepState& st) {
-  { u(all_items, indices, ctx, st) } -> std::same_as<void>; // e.g., upload_*_batch(all_items, indices, ctx, st)
-};
-
-template <class B>
-concept ScenePrepBatchUpdater = requires(B b, std::span<const RenderItemData> all_items,
-                                         std::span<const std::size_t> indices,
-                                         const ScenePrepContext& ctx, ScenePrepState& st) {
-  { b(all_items, indices, ctx, st) } -> std::same_as<void>; // e.g., compute_order(all_items, indices, ctx, st)
-};
-
-template <class I>
-concept ScenePrepItemUpdater = requires(I i, const RenderItemData& d,
-                                        const ScenePrepContext& ctx, ScenePrepState& st,
-                                        RenderItem& out) {
-  { i(d, ctx, st, out) } -> std::same_as<void>; // e.g., update_flags(d, ctx, st, out)
-};
-
-template <class A>
-concept ScenePrepAssembler = requires(A a, const RenderItemData& d,
-                                      const ScenePrepContext& ctx, ScenePrepState& st,
-                                      RenderItem& out) {
-  { a(d, ctx, st, out) } -> std::same_as<void>; // e.g., assemble_geometry(d, ctx, st, out)
-};
-
-template <class M>
-concept ScenePrepDrawMetadataMaker = requires(M m, const MeshView& view,
-                                              const ScenePrepContext& ctx,
-                                              const ScenePrepState& st) {
-  { m(view, ctx, st) } -> std::same_as<DrawMetadata>; // e.g., make_draw_metadata(view, ctx, st)
-};
-```
-
 Role mapping of the built-in ScenePrep algorithms (single-responsibility algorithms):
 
 - Item filter / routing: Filter
@@ -354,7 +306,7 @@ Here are minimal working examples of each ScenePrep algorithm type to guide impl
 ```cpp
 // Example Filter: Basic pass assignment
 struct BasicPassFilter {
-  auto operator()(const RenderItemData& item, const ScenePrepContext& ctx, ScenePrepState& state) -> PassMask {
+  auto operator()(const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item) -> PassMask {
     PassMask mask = 0;
     switch (item.domain) {
       case MaterialDomain::kOpaque: mask |= (1u << 0); break;      // Opaque pass
@@ -384,7 +336,7 @@ struct BasicTransformUploader {
 
 // Example Assembler: Build final RenderItem
 struct BasicGeometryAssembler {
-  auto operator()(const RenderItemData& item, const ScenePrepContext& ctx,
+  auto operator()(const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item,
                   const ScenePrepState& state, RenderItem& out) -> void {
     // Resolve mesh pointer from geometry asset
     if (item.geometry) {
@@ -683,7 +635,7 @@ TEST(ScenePrepTest, FlexibleConfigurationSkipsStages) {
 
 TEST(ScenePrepTest, PartialConfigurationWorks) {
   // Create config with only some stages to test graceful degradation
-  auto partial_filter = [](const RenderItemData& item, const ScenePrepContext& ctx, ScenePrepState& state) -> PassMask {
+  auto partial_filter = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item) -> PassMask {
     return 1u; // Single pass
   };
 
@@ -908,7 +860,7 @@ void ParallelUpload(std::span<const RenderItemData> all_items,
   static constexpr std::size_t kMinItemsForThreading = 1000;
 
   if (indices.size() < kMinItemsForThreading) {
-    uploader(all_items, indices, ctx, state); // Single-threaded
+  uploader(ctx, state, all_items, indices); // Single-threaded
   } else {
     // Split indices into batches and process in parallel
     auto batches = SplitIndicesIntoBatches(indices, std::thread::hardware_concurrency());
@@ -1117,7 +1069,7 @@ auto CreateBasicCollectionConfig() {
 }
 
 auto CreateBasicScenePrepConfig() {
-  auto filter = [](const RenderItemData& item, const ScenePrepContext& ctx, ScenePrepState& state) -> PassMask {
+  auto filter = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item) -> PassMask {
     PassMask mask = 0;
     switch (item.domain) {
       case MaterialDomain::kOpaque: mask |= (1u << 0); break;
@@ -1139,7 +1091,7 @@ auto CreateBasicScenePrepConfig() {
     state.transform_mgr.FlushPendingUploads();
   };
 
-  auto geometry_assembler = [](const RenderItemData& item, const ScenePrepContext& ctx,
+  auto geometry_assembler = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item,
                                const ScenePrepState& state, RenderItem& out) -> void {
     if (item.geometry) {
       out.mesh = item.geometry->MeshAt(item.lod_index);
@@ -1184,11 +1136,11 @@ auto CreateMockCollectionConfig() {
 
 auto CreateMockScenePrepConfig() {
   // For testing - no GPU operations
-  auto mock_filter = [](const RenderItemData& item, const ScenePrepContext& ctx, ScenePrepState& state) -> PassMask {
+  auto mock_filter = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item) -> PassMask {
     return 1u; // Single pass for testing
   };
 
-  auto mock_assembler = [](const RenderItemData& item, const ScenePrepContext& ctx,
+  auto mock_assembler = [](const ScenePrepContext& ctx, ScenePrepState& state, const RenderItemData& item,
                            const ScenePrepState& state, RenderItem& out) -> void {
     out.mesh = nullptr; // Mock mesh
     out.submesh_index = item.submesh_index;
