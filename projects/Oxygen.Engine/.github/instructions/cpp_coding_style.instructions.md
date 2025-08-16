@@ -8,7 +8,7 @@ applyTo: '**/*.cpp;**/*.h'
 - Follow the Google C++ Style Guide: https://google.github.io/styleguide/cppguide.html
 - Use C++20 features and standard library only (no compatibility with older standards).
 - Use `#pragma once` for include guards in all headers.
-- Prefix all standard library types and functions with `std::`.
+- Prefix all standard library types and functions with `std::`, except for <cstdint> types.
 - Use `#include <...>` syntax for all includes.
 - Use designated initializers for struct initialization whenever possible.
 - Use trailing commas in aggregate initializations (e.g., structs, arrays, enums) when applicable.
