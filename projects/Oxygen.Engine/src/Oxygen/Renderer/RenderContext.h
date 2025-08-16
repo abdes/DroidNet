@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <span>
 #include <unordered_map>
 
 namespace oxygen::graphics {
