@@ -48,15 +48,20 @@ set_target_properties(
 
 set(
   OXYGEN_BASE_HEADERS
-  "AlwaysFalse.h"
   "api_export.h"
-  "Concepts.h"
+  "AlwaysFalse.h"
   "Compilers.h"
+  "Concepts.h"
+  "Crtp.h"
+  "Detail/NamedType_impl.h"
+  "Detail/NamedType_skills.h"
+  "Detail/signal.hpp"
   "Endian.h"
   "Finally.h"
   "Hash.h"
   "Logging.h"
   "Macros.h"
+  "NamedType.h"
   "NoInline.h"
   "NoStd.h"
   "Platforms.h"
@@ -83,7 +88,6 @@ set(
 set(
   OXYGEN_BASE_PRIVATE_SOURCES
   "Detail/loguru.cpp"
-  "Detail/signal.hpp"
   "Windows/ComError.cpp"
   "Windows/Exceptions.cpp"
 )
