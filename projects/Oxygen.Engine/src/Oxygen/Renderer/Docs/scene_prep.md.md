@@ -12,7 +12,7 @@ remaining multi-pass friendly.
 | Status | Task | Description | Dependencies |
 |--------|------|-------------|--------------|
 | ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`ScenePrepFilter`, `ScenePrepUploader`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
-| ⏳ | **2. Copy and Refactor Extraction Classes** | Copy existing `WorkItem`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
+| ✅ | **2. Copy and Refactor Extraction Classes** | Copy existing `RenderItemProto`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
 | ⏳ | **3. Copy and Refactor Extractors** | Copy existing extractors (`TransformExtractor`, `MeshResolver`, `MaterialExtractor`, etc.) from Extraction and adapt to new concept-based design | Task 2 |
 | ⏳ | **4. Implement Helper State Classes** | Create `TransformManager`, `TransformBatchCache`, `MaterialRegistry`, `GeometryRegistry` and related cache classes | Task 1 |
 | ⏳ | **5. Create Configuration System** | Implement template-based `CollectionConfig`, `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
@@ -954,17 +954,17 @@ namespace oxygen::engine::renderer::sceneprep {
 
 // Collection-specific concepts using same pattern as finalization
 template<typename F>
-concept CollectionFilter = requires(F f, const WorkItem& item, const ScenePrepContext& ctx) {
+concept CollectionFilter = requires(F f, const RenderItemProto& item, const ScenePrepContext& ctx) {
   { f(item, ctx) } -> std::same_as<bool>; // Return true to continue processing
 };
 
 template<typename E>
-concept CollectionExtractor = requires(E e, WorkItem& item, const ScenePrepContext& ctx) {
-  { e(item, ctx) } -> std::same_as<void>; // Extract data into WorkItem
+concept CollectionExtractor = requires(E e, RenderItemProto& item, const ScenePrepContext& ctx) {
+  { e(item, ctx) } -> std::same_as<void>; // Extract data into RenderItemProto
 };
 
 template<typename P>
-concept CollectionProducer = requires(P p, const WorkItem& item, const ScenePrepContext& ctx,
+concept CollectionProducer = requires(P p, const RenderItemProto& item, const ScenePrepContext& ctx,
                                       std::vector<RenderItemData>& output) {
   { p(item, ctx, output) } -> std::same_as<void>; // Emit RenderItemData
 };
@@ -1025,37 +1025,31 @@ struct FinalizationConfig {
 
 // Factory functions for common configurations
 auto CreateBasicCollectionConfig() {
-  auto pre_filter = [](const WorkItem& item, const ScenePrepContext& ctx) -> bool {
-    return item.HasRenderable() && item.HasTransform() && item.Renderable().GetGeometry();
+  auto pre_filter = [](const RenderItemProto& item, const ScenePrepContext& ctx) -> bool {
+    // Ensure node has both components and geometry available
+    return item.Renderable().GetGeometry();
   };
 
-  auto transform_extractor = [](WorkItem& item, const ScenePrepContext& ctx) -> void {
-    item.proto.world_transform = item.Transform().GetWorldMatrix();
-    item.proto.world_bounding_sphere = item.Renderable().GetWorldBoundingSphere();
+  auto transform_extractor = [](RenderItemProto& item, const ScenePrepContext& ctx) -> void {
+    // Populate proto fields from facades; exact fields live on the RenderItemProto
+    // For example: item.proto.world_transform = item.Transform().GetWorldMatrix();
   };
 
-  auto mesh_resolver = [](WorkItem& item, const ScenePrepContext& ctx) -> void {
-    // LOD selection and mesh resolution logic
-    const auto distance = glm::distance(ctx.view.CameraPosition(),
-                                        glm::vec3(item.proto.world_bounding_sphere));
-    item.proto.lod_index = SelectLOD(distance, item.Renderable().GetGeometry());
+  auto mesh_resolver = [](RenderItemProto& item, const ScenePrepContext& ctx) -> void {
+    // LOD selection and mesh resolution logic using Renderable facade
+    // e.g. item.ResolveMesh(item.Renderable().GetGeometry() ? item.Renderable().GetGeometry()->MeshAt(0) : nullptr, 0);
   };
 
-  auto producer = [](const WorkItem& item, const ScenePrepContext& ctx,
+  auto producer = [](const RenderItemProto& item, const ScenePrepContext& ctx,
                      std::vector<RenderItemData>& output) -> void {
-    // Frustum culling and RenderItemData emission (equivalent to EmitPerVisibleSubmesh)
-    const auto& geometry = item.Renderable().GetGeometry();
-    const auto mesh = geometry->MeshAt(item.proto.lod_index);
-
-    for (std::size_t submesh_idx = 0; submesh_idx < mesh->GetSubmeshCount(); ++submesh_idx) {
-      if (ctx.view.GetFrustum().Intersects(item.proto.world_bounding_sphere)) {
-        auto& render_item = output.emplace_back();
-        render_item.world_transform = item.proto.world_transform;
-        render_item.geometry = geometry;
-        render_item.submesh_index = submesh_idx;
-        render_item.lod_index = item.proto.lod_index;
-        // ... populate other fields
-      }
+    // Emit RenderItemData entries based on the resolved proto state (equivalent to EmitPerVisibleSubmesh)
+    if (auto geom = item.Renderable().GetGeometry()) {
+      // Example: iterate submeshes of resolved mesh if available
+      // auto mesh = geom->MeshAt(item.ResolvedMeshIndex());
+      // for (std::size_t submesh_idx = 0; submesh_idx < mesh->GetSubmeshCount(); ++submesh_idx) { ... }
+      RenderItemData d;
+      // fill d from item
+      output.push_back(std::move(d));
     }
   };
 
@@ -1113,13 +1107,13 @@ auto CreateBasicScenePrepConfig() {
 }
 
 // Test-friendly configurations (GPU-independent)
-auto CreateMockCollectionConfig() {
+  auto CreateMockCollectionConfig() {
   // For testing - no real work, just data flow validation
-  auto mock_filter = [](const WorkItem& item, const ScenePrepContext& ctx) -> bool {
+  auto mock_filter = [](const RenderItemProto& item, const ScenePrepContext& ctx) -> bool {
     return true; // Accept all items for testing
   };
 
-  auto mock_producer = [](const WorkItem& item, const ScenePrepContext& ctx,
+  auto mock_producer = [](const RenderItemProto& item, const ScenePrepContext& ctx,
                           std::vector<RenderItemData>& output) -> void {
     auto& render_item = output.emplace_back();
     render_item.world_transform = glm::mat4(1.0f); // Identity for testing
@@ -1203,7 +1197,7 @@ private:
     const auto span = node_table.Items();
 
     for (const auto& node_impl : span) {
-      WorkItem wi{node_impl};
+      RenderItemProto wi{node_impl};
 
       // Apply configurable collection pipeline with graceful stage skipping
       if constexpr (Config::CollectionConfig::has_pre_filter) {

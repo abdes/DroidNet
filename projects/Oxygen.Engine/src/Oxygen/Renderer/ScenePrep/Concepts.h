@@ -11,10 +11,6 @@
 
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 
-namespace oxygen::engine::extraction {
-struct RenderItemData;
-} // namespace oxygen::engine::extraction
-
 namespace oxygen::engine {
 struct RenderItem;
 struct DrawMetadata;
@@ -25,6 +21,8 @@ class MeshView;
 } // namespace oxygen::data
 
 namespace oxygen::engine::sceneprep {
+
+struct RenderItemData;
 
 //! Concept for algorithms that filter items and compute pass masks.
 /*!

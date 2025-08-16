@@ -22,15 +22,6 @@ class MaterialAsset;
 
 namespace oxygen::engine::sceneprep {
 
-//! Lightweight render item data collected during scene traversal.
-/*!
- Contains minimal references to scene and asset data. No GPU resources
- or expensive computations are stored here - only what's needed to make
- rendering decisions during the Finalize phase.
-
- @note Identity is (node_handle, lod_index, submesh_index[, view]) by default.
- @see RenderItem (final GPU-ready snapshot)
-*/
 struct RenderItemData {
   std::uint32_t lod_index = 0;
   std::uint32_t submesh_index = 0;

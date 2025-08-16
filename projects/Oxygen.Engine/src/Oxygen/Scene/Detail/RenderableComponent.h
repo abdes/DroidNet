@@ -37,7 +37,7 @@ public:
     = std::variant<FixedPolicy, DistancePolicy, ScreenSpaceErrorPolicy>;
 
   // Preferred: full geometry asset with LODs and submeshes
-  explicit RenderableComponent(
+  OXGN_SCN_API explicit RenderableComponent(
     std::shared_ptr<const data::GeometryAsset> geometry);
 
   ~RenderableComponent() override = default;
