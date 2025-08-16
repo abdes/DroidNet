@@ -20,6 +20,7 @@
 
 namespace oxygen::data {
 class Mesh;
+class MaterialAsset;
 } // namespace oxygen::data
 
 namespace oxygen::engine::sceneprep {
@@ -199,6 +200,8 @@ public:
     return transform_facade_;
   }
 
+  auto& Flags() const noexcept { return node_->GetFlags(); }
+
   void SetVisibleSubmeshes(std::vector<uint32_t> indices) noexcept
   {
     visible_submeshes_ = std::move(indices);
@@ -207,6 +210,44 @@ public:
     -> std::span<const uint32_t>
   {
     return visible_submeshes_;
+  }
+  void SetVisible() noexcept { visibility_flag_ = true; }
+  [[nodiscard]] auto IsVisible() const noexcept -> bool
+  {
+    return visibility_flag_;
+  }
+  [[nodiscard]] auto IsCulled() const noexcept -> bool
+  {
+    return !visibility_flag_ || visible_submeshes_.empty();
+  }
+
+  void SetCastShadows(bool cast) noexcept { cast_shadows = cast; }
+  [[nodiscard]] auto CastsShadows() const noexcept { return cast_shadows; }
+  void SetReceiveShadows(bool receive) noexcept { receive_shadows = receive; }
+  [[nodiscard]] auto ReceivesShadows() const noexcept
+  {
+    return receive_shadows;
+  }
+
+  // Allow tests and extractors to seed geometry during collection.
+  void SetGeometry(
+    std::shared_ptr<const oxygen::data::GeometryAsset> g) noexcept
+  {
+    // Only allow setting geometry if mesh is not resolved
+    DCHECK_EQ_F(mesh_, nullptr);
+    DCHECK_EQ_F(mesh_lod_, 0U);
+
+    geometry_ = std::move(g);
+  }
+  [[nodiscard]] auto& Geometry() const noexcept { return geometry_; }
+
+  void SetWorldTransform(const glm::mat4& transform) noexcept
+  {
+    world_transform = transform;
+  }
+  [[nodiscard]] auto& GetWorldTransform() const noexcept
+  {
+    return world_transform;
   }
 
   void ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> mesh, uint32_t lod)
@@ -231,15 +272,34 @@ private:
   // Drop flag set by filters
   bool dropped_ = false;
 
-  // Resolved mesh pointer (single canonical resolved LOD). Null until resolved.
-  std::shared_ptr<const oxygen::data::Mesh> mesh_;
+  // Node data
+
+  // Visibility flag of the entire node
+  bool visibility_flag_ { false };
+
+  // Rendering flags
+  bool cast_shadows = true;
+  bool receive_shadows = true;
+
+  // Geometry asset seeded during collection phase
+  std::shared_ptr<const oxygen::data::GeometryAsset> geometry_ {};
+
+  // -- Mesh data (resolved LOD)
+
   // Resolved mesh LOD (index into the geometry meshes). Defaults to the first
   // LOD (index 0) until resolved.
   uint32_t mesh_lod_ { 0 };
 
+  // Resolved mesh pointer (single canonical resolved LOD). Null until resolved.
+  std::shared_ptr<const oxygen::data::Mesh> mesh_;
+
+  // Transform and bounds
+  glm::mat4 world_transform { 1.0f };
+
   // Dense list of indices of visible submeshes in the resolved parent mesh.
   std::vector<uint32_t> visible_submeshes_;
 
+  // Internal stuff
   const scn::SceneNodeImpl* node_ { nullptr };
   RenderableFacade renderable_facade_;
   TransformFacade transform_facade_;
