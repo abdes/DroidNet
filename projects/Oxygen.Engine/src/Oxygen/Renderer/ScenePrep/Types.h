@@ -34,9 +34,11 @@ class Scene;
 } // namespace oxygen::scene
 
 namespace oxygen::engine {
-
 struct RenderContext;
 class View;
+} // namespace oxygen::engine
+
+namespace oxygen::engine::sceneprep {
 
 //! Bitset representing which render passes an item participates in.
 /*!

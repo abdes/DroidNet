@@ -82,6 +82,7 @@ set(
   "RenderItemsList.cpp"
   "RenderPass.cpp"
   "ScenePrep/Concepts.h"
+  "ScenePrep/Extractors.h"
   "ScenePrep/RenderItemProto.h"
   "ScenePrep/ScenePrepState.cpp"
   "ScenePrep/State/GeometryRegistry.h"

@@ -11,9 +11,9 @@ remaining multi-pass friendly.
 
 | Status | Task | Description | Dependencies |
 |--------|------|-------------|--------------|
-| ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`ScenePrepFilter`, `ScenePrepUploader`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
+| ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`FinalizationItemFilter`, `ScenePrepUploader`, `RenderItemDataExtractor`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
 | ✅ | **2. Copy and Refactor Extraction Classes** | Copy existing `RenderItemProto`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
-| ⏳ | **3. Copy and Refactor Extractors** | Copy existing extractors (`TransformExtractor`, `MeshResolver`, `MaterialExtractor`, etc.) from Extraction and adapt to new concept-based design | Task 2 |
+| ✅ | **3. Copy and Refactor Extractors** | Implement collection extractors: `ExtractionPreFilter`, `MeshResolver`, `SubMeshVisibilityFilter` (with per-submesh frustum culling), and `EmitPerVisibleSubmesh`, adapted to the new concept-based ScenePrep design | Task 2 |
 | ⏳ | **4. Implement Helper State Classes** | Create `TransformManager`, `TransformBatchCache`, `MaterialRegistry`, `GeometryRegistry` and related cache classes | Task 1 |
 | ⏳ | **5. Create Configuration System** | Implement template-based `CollectionConfig`, `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
 | ⏳ | **6. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4, 5 |
@@ -75,8 +75,17 @@ It is designed as a single finalize run per frame/view to feed multiple passes
 (e.g., depth-prepass, forward, shadows). To support this, filtering/routing is
 explicit and the resulting artifacts are structured for reuse.
 
-**Note**: Frustum culling has already been performed during the Collection phase
-in `EmitPerVisibleSubmesh`, so finalization operates on pre-culled items.
+**Note**: Frustum culling is performed during the Collection phase in
+`SubMeshVisibilityFilter`, so finalization operates on pre-culled items.
+
+---
+
+## Implemented collection extractors (current)
+
+- ExtractionPreFilter: Seeds visibility/shadow flags, world transform, and geometry; drops invisible nodes.
+- MeshResolver: Selects active LOD (distance/SSE policies) and resolves the mesh.
+- SubMeshVisibilityFilter: Computes visible submesh indices using node visibility masks and per-submesh frustum culling (AABB preferred, world-sphere fallback).
+- EmitPerVisibleSubmesh: Emits one `RenderItemData` per visible submesh, resolving material per submesh (override → mesh submesh → default).
 
 ---
 

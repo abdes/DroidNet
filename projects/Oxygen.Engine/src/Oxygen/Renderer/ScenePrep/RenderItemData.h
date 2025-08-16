@@ -31,17 +31,16 @@ struct RenderItemData {
   std::shared_ptr<const oxygen::data::MaterialAsset> material;
 
   // Cached scene state
-  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque;
   glm::vec4 world_bounding_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
   glm::mat4 world_transform { 1.0f };
 
   // Rendering flags
   bool cast_shadows = true;
   bool receive_shadows = true;
-  std::uint32_t render_layer = 0;
 
-  // Optional future extension for temporal tracking
-  // std::uint64_t instance_id = 0;
+  // Optional future extensions
+  // std::uint32_t render_layer = 0;
+  // std::uint64_t instance_id = 0; // temporal tracking
 };
 
 } // namespace oxygen::engine::sceneprep

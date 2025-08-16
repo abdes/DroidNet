@@ -38,5 +38,14 @@ m_gtest_program(RenderItem SOURCES "RenderItem_test.cpp")
 
 m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 
-m_gtest_program(ScenePrep SOURCES "RenderItemProto_test.cpp")
 m_gtest_program(RenderListBuilder SOURCES "RenderListBuilder_basic_test.cpp")
+
+m_gtest_program(
+  ScenePrep
+  SOURCES
+    "ScenePrep/EmitPerVisibleSubmesh_test.cpp"
+    "ScenePrep/ExtractionPreFilter_test.cpp"
+    "ScenePrep/MeshResolver_test.cpp"
+    "ScenePrep/RenderItemProto_test.cpp"
+    "ScenePrep/SubMeshVisibilityFilter_test.cpp"
+)

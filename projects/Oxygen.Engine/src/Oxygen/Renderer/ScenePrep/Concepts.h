@@ -9,6 +9,8 @@
 #include <concepts>
 #include <span>
 
+#include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 
 namespace oxygen::engine {
@@ -22,7 +24,27 @@ class MeshView;
 
 namespace oxygen::engine::sceneprep {
 
-struct RenderItemData;
+//! Concept for algorithms that act on items, during collection.
+/*!
+ RenderItemDataExtractor represents callable algorithms invoked per-item during
+ the collection stage which perform CPU-side processing and may update the
+ provided `RenderItemProto` and `ScenePrepState` as needed. These functions are
+ intended for non-querying side-effectful operations (for example seeding
+ transforms or preparing temporary metadata) and must not perform GPU
+ operations.
+
+ Such algorithm may also mark items as dropped if they do not meet certain
+ criteria or if an error occurs that would prevent their rendering.
+
+ Stage: Collection
+
+ @param F The filter algorithm type
+ */
+template <typename F>
+concept RenderItemDataExtractor = requires(
+  F f, ScenePrepContext& ctx, ScenePrepState& state, RenderItemProto& item) {
+  { f(ctx, state, item) } -> std::same_as<void>;
+};
 
 //! Concept for algorithms that filter items and compute pass masks.
 /*!
@@ -39,8 +61,8 @@ struct RenderItemData;
  @param F The filter algorithm type
  */
 template <typename F>
-concept ScenePrepFilter = requires(F f, const ScenePrepContext& ctx,
-  ScenePrepState& state, const extraction::RenderItemData& data) {
+concept FinalizationItemFilter = requires(F f, const ScenePrepContext& ctx,
+  ScenePrepState& state, const RenderItemData& data) {
   { f(ctx, state, data) } -> std::same_as<PassMask>;
 };
 
@@ -61,7 +83,7 @@ concept ScenePrepFilter = requires(F f, const ScenePrepContext& ctx,
  */
 template <typename U>
 concept ScenePrepUploader = requires(U u, const ScenePrepContext& ctx,
-  ScenePrepState& state, std::span<const extraction::RenderItemData> all_items,
+  ScenePrepState& state, std::span<const RenderItemData> all_items,
   std::span<const std::size_t> indices) {
   { u(ctx, state, all_items, indices) } -> std::same_as<void>;
 };
@@ -83,7 +105,7 @@ concept ScenePrepUploader = requires(U u, const ScenePrepContext& ctx,
  */
 template <typename B>
 concept ScenePrepBatchUpdater = requires(B b, const ScenePrepContext& ctx,
-  ScenePrepState& state, std::span<const extraction::RenderItemData> all_items,
+  ScenePrepState& state, std::span<const RenderItemData> all_items,
   std::span<const std::size_t> indices) {
   { b(ctx, state, all_items, indices) } -> std::same_as<void>;
 };
@@ -104,11 +126,10 @@ concept ScenePrepBatchUpdater = requires(B b, const ScenePrepContext& ctx,
  @param I The item updater algorithm type
  */
 template <typename I>
-concept ScenePrepItemUpdater
-  = requires(I i, const ScenePrepContext& ctx, ScenePrepState& state,
-    const extraction::RenderItemData& data, RenderItem& output) {
-      { i(ctx, state, data, output) } -> std::same_as<void>;
-    };
+concept ScenePrepItemUpdater = requires(I i, const ScenePrepContext& ctx,
+  ScenePrepState& state, const RenderItemData& data, RenderItem& output) {
+  { i(ctx, state, data, output) } -> std::same_as<void>;
+};
 
 //! Concept for algorithms that assemble final RenderItem data.
 /*!
@@ -127,11 +148,10 @@ concept ScenePrepItemUpdater
  @param A The assembler algorithm type
  */
 template <typename A>
-concept ScenePrepAssembler
-  = requires(A a, const ScenePrepContext& ctx, ScenePrepState& state,
-    const extraction::RenderItemData& data, RenderItem& output) {
-      { a(ctx, state, data, output) } -> std::same_as<void>;
-    };
+concept ScenePrepAssembler = requires(A a, const ScenePrepContext& ctx,
+  ScenePrepState& state, const RenderItemData& data, RenderItem& output) {
+  { a(ctx, state, data, output) } -> std::same_as<void>;
+};
 
 //! Concept for algorithms that create draw metadata.
 /*!
