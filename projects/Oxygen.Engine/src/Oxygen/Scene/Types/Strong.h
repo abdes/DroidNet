@@ -6,26 +6,27 @@
 
 #pragma once
 
+#include <Oxygen/Base/NamedType.h>
+
 namespace oxygen::scene {
 
-struct NormalizedDistance {
-  float value;
-  explicit constexpr NormalizedDistance(const float v = 0.0f)
-    : value(v)
-  {
-  }
-  constexpr auto operator<=>(const NormalizedDistance&) const = default;
-  constexpr explicit operator float() const noexcept { return value; }
-};
+//! Normalized distance in [0,1] used for LOD and geometric metrics.
+/*!
+ Strong type wrapping a float. Default-initialized to 0.0f. Supports
+ arithmetic and comparison operations and implicit function-callable style
+ access to the underlying float where convenient.
+*/
+using NormalizedDistance
+  = oxygen::NamedType<float, struct NormalizedDistanceTag, oxygen::Arithmetic,
+    oxygen::FunctionCallable, oxygen::DefaultInitialized>;
 
-struct ScreenSpaceError {
-  float value;
-  explicit constexpr ScreenSpaceError(const float v = 0.0f)
-    : value(v)
-  {
-  }
-  constexpr auto operator<=>(const ScreenSpaceError&) const = default;
-  constexpr explicit operator float() const noexcept { return value; }
-};
+//! Screen-space error metric for LOD decisions (pixels).
+/*!
+ Strong type wrapping a float. Default-initialized to 0.0f. Supports
+ arithmetic and comparison operations and implicit function-callable style
+ access to the underlying float where convenient.
+*/
+using ScreenSpaceError = oxygen::NamedType<float, struct ScreenSpaceErrorTag,
+  oxygen::Arithmetic, oxygen::FunctionCallable, oxygen::DefaultInitialized>;
 
 } // namespace oxygen::scene
