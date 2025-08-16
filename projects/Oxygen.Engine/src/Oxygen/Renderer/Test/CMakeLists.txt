@@ -38,6 +38,4 @@ m_gtest_program(RenderItem SOURCES "RenderItem_test.cpp")
 
 m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 
-m_gtest_program(SceneExtraction SOURCES "SceneExtraction_test.cpp")
-
 m_gtest_program(RenderListBuilder SOURCES "RenderListBuilder_basic_test.cpp")

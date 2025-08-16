@@ -15,20 +15,28 @@ GPU submission.
 | Types              | ✅      | `RenderItemData.h` added (internal); DrawMetadata extended (first_index/base_vertex) |
 | Builder            | ✅      | Collect/Finalize/Evict implemented; Finalize is monolithic (no pluggable finalizers yet) |
 | Extractors         | ✅      | ShouldRenderPreFilter, Transform, NodeFlags, MeshResolver(LOD), Visibility, Material(no-op), EmitPerVisibleSubmesh |
-| Finalizers API     | ❌      | Transform, material, geometry, draw interfaces     |
-| Finalizers         | ❌      | Default impls + No-GPU variants                    |
+| Finalizers API     | ❌      | Define C++20 concepts + function-based finalizers; FinalizeContext/State |
+| Finalizers: Builder wiring | ❌ | RenderListBuilder uses configured finalizer function pipeline in Finalize |
+| Finalizer: Transform (DefaultLinear) | ❌ | Free functions: build per-draw world matrices; upload/stage; mapping indices |
+| Finalizer: Material (Default) | ❌ | Free functions: build MaterialConstants array; dedupe; upload/stage; mapping indices |
+| Finalizer: Geometry (Default) | ❌ | Free functions: ensure mesh GPU resources; resolve bindless indices; per-view slice wiring |
+| Finalizer: Draw assembly (Default) | ❌ | Free function: assemble DrawMetadata per issued draw; stable ordering; optional simple sort |
+| Renderer handoff to finalizers | ❌ | Move EnsureResourcesForDrawList responsibilities into finalizers; adapt Renderer |
 | Transforms         | ❌      | Dirty detect, slots, LRU, growth                   |
 | Uploads            | ❌      | Coalescing, double/triple buffer, 3x4 layout       |
-| Finalize           | ✅      | CPU-only deterministic finalize inside Builder; finalizers API TBD |
+| Finalize (monolithic) | ✅   | Current path; to be replaced by finalizers-driven Finalize |
+| Finalize (finalizers-driven) | ❌ | Orchestrate Transform/Material/Geometry/Draw finalizers |
 | Sorting            | ❌      | Domain buckets + batching keys                     |
 | Residency          | ❌      | Touch stamps, keep window, eviction                |
 | Metrics            | ❌      | Counts, bytes, ranges, hits/misses                 |
 | Multi-view         | ❌      | Per-view runs, cache reuse                         |
 | Errors             | ❌      | Fallbacks + rate-limited logs                      |
 | Tests: Collect     | ✅      | Smoke + LOD distance-policy per-view               |
-| Tests: Finalize    | ❌      | No-GPU path, sorting assertions                    |
+| Tests: Finalize (monolithic) | ✅ | Covered indirectly via renderer equivalence; basic smoke |
+| Tests: Finalizers  | ❌      | Equivalence vs current renderer path; material dedupe; counts |
 | Tests: Transforms  | ❌      | Dirty/coalescing/threshold paths                   |
 | Integration        | ✅      | Renderer uses Builder; RenderPass per-submesh views; shaders match metadata |
+| Integration (finalizers) | ❌ | Wire produced buffers/slots into RenderContext; update passes if needed |
 | Docs               | ✅      | This doc updated; keep future phases intact         |
 
 ---
@@ -49,69 +57,30 @@ GPU submission.
 
 ## Introduction
 
-The render items extraction system is responsible for transforming scene data
-into GPU-ready render commands. This involves traversing the scene graph,
-applying LOD selection and culling, resolving materials and geometry, and
-organizing the results for efficient GPU submission.
-
-### Why Two-Phase Extraction?
-
-Current extraction (in `SceneExtraction.cpp`) performs all work during scene
-traversal, mixing scene queries with GPU resource management. This creates
-several problems:
-
-1. **Performance**: GPU resource operations during traversal create cache misses
-   and stalls
-2. **Complexity**: LOD hysteresis and residency tracking scattered throughout
-   traversal code
-3. **Maintainability**: Difficult to extend with new features like multi-pass
-   rendering or temporal filtering
-
-The two-phase approach separates these concerns:
-
-- **Collect Phase**: Fast scene traversal producing lightweight references
-- **Finalize Phase**: Off-scene GPU resource resolution, sorting, and
-  optimization
-
-### Current State vs Target
-
-| Aspect | Current (`SceneExtraction.cpp`) | Target (This Design) |
-|--------|-------------------------------|---------------------|
-| Granularity | One `RenderItem` per mesh | Configurable: mesh or submesh level |
-| GPU Work | Mixed with scene traversal | Isolated to Finalize phase |
-| Caching | Ad-hoc per-frame | Stateful builder with cross-frame caches |
-| Extensibility | Monolithic function | Pluggable strategies |
-
----
+This section introduces the motivation and high-level goals of the extraction
+system.
 
 ## Key Concepts
 
-### Core Types from Existing Modules
+### From `oxygen::data`
 
-Understanding these existing types is essential before implementing the
-extraction system:
+- `GeometryAsset`: Container for LODs and submeshes
+- `Mesh`: Single LOD level with vertex/index buffers
+- `SubMesh`: Material group within a mesh; holds `MeshView`s
+- `MeshView`: Slice/range over vertex/index buffers (draw granularity)
+- `MaterialAsset`: Shader/texture parameters
 
-#### From `oxygen::data`
+### From `oxygen::scene`
 
-- **`GeometryAsset`**: Container for all LOD levels of a mesh
-- **`Mesh`**: Single LOD level containing vertex/index data and submeshes
-- **`SubMesh`**: Material group within a mesh, containing one or more MeshViews
-- **`MeshView`**: Non-owning slice of vertex/index data (actual draw call
-  granularity)
-- **`MaterialAsset`**: Shader and texture parameters for rendering
+- `SceneNode`: Node in the scene graph with optional Renderable/Transform
+- `RenderableComponent`: LOD policy, visibility, material overrides
+- `ActiveMesh`: Result of LOD selection
 
-#### From `oxygen::scene`
+### From `oxygen::engine`
 
-- **`SceneNode`**: Scene graph node with optional renderable component
-- **`RenderableComponent`**: Per-node rendering state (LOD policies, visibility,
-  material overrides)
-- **`ActiveMesh`**: Result of LOD selection for a node
-
-#### From `oxygen::engine`
-
-- **`RenderItem`**: Immutable GPU-ready snapshot for a single draw call
-- **`RenderItemsList`**: Container for a frame's render items
-- **`View`**: Camera and frustum information for culling
+- `RenderItem`: GPU-ready snapshot for a draw call
+- `RenderItemsList`: Container for a frame’s render items
+- `View`: Camera and frustum information for culling
 
 ### Phase Responsibilities
 
@@ -302,16 +271,29 @@ private:
 
 ### Finalizers (extensibility at Finalize)
 
-The builder uses pluggable Finalizers that run only during Finalize:
+Finalization favors C++20 concepts and free functions over inheritance. The
+builder composes a small pipeline of functions that operate on explicit state
+passed by reference. This mirrors the extractor model.
 
-- Transform finalizer: allocation policy for transform handles/slots and upload
-  scheduling
-- Material finalizer: material constants/textures packaging and residency
-- Geometry finalizer: geometry handle resolution and residency
-- Draw finalizer: batching keys and final item assembly
+Core ideas:
 
-Collect remains extractor-only and GPU-free. Default finalizers are provided to
-match the behavior described in this document.
+- No virtual interfaces. Behavior is selected by passing different functions
+  conforming to concepts.
+- State is external and explicit: a `FinalizeContext` (per-frame/per-view) and
+  a `FinalizeState` (persistent caches across frames).
+- Batch phases prepare shared GPU data once; a final per-item assembler builds
+  `RenderItem` and append-only draw metadata.
+
+Concepts (sketch):
+
+- BatchPreparer: `void f(std::span<const RenderItemData> items, FinalizeContext&, FinalizeState&)`
+- ItemFilter: `bool f(const RenderItemData& d, const FinalizeContext&, const FinalizeState&)`
+- ItemUpdater: `void f(const RenderItemData& d, FinalizeContext&, FinalizeState&)`
+- ItemAssembler: `void f(const RenderItemData& d, const FinalizeContext&, FinalizeState&, RenderItem&)`
+- PostSorter: `void f(RenderItemsList& list, FinalizeContext&, FinalizeState&)`
+
+Default finalizers are plain functions satisfying these concepts and are
+composed in order during Finalize.
 
 ### CollectContext vs GPU SceneConstants
 
@@ -348,7 +330,7 @@ builder.EvictStaleResources(render_context, frame_id);
 ### Current implementation path (as of August 2025)
 
 This subsection reflects the code that exists today. The older, more ambitious
-plan (finalizers API, transform manager, configurable strategies) is kept below
+plan (finalizers API, transform state, configurable function pipeline) is kept below
 under Deferred design for future phases.
 
 #### Collect: extractor pipeline
@@ -446,76 +428,76 @@ Files: `Renderer.cpp`, `RenderPass.cpp`, `Types/DrawMetadata.h`,
 
 ### Finalization
 
-The Finalize phase converts collected data into GPU-ready render items:
+The Finalize phase converts collected data into GPU-ready render items using a
+function-based pipeline with explicit state. No inheritance or virtual calls.
+
+Sketch (pseudocode):
 
 ```text
-function Finalize(scene, view, frame_id, collected_items, participating_nodes, cfg, ctx, output)
-    // 1) Transforms (strategy): returns mapping collect-identity -> gpuIndex (or stable index in No-GPU mode)
-    transform_map = cfg.finalizers.transform.finalize(scene, participating_nodes, ctx, frame_id)
+function Finalize(collected_items, render_context, output, fns, ctx, state)
+  // Batch prepare (run once)
+  fns.prepare_transforms(collected_items, ctx, state)
+  fns.prepare_materials(collected_items, ctx, state)
+  fns.ensure_geometry(collected_items, ctx, state)
 
-    // 2) Materials/Geometry (strategies): ensure residency/build handles; no-ops in No-GPU mode
-    cfg.finalizers.material.prepare(collected_items, ctx, frame_id)
-    cfg.finalizers.geometry.prepare(collected_items, ctx, frame_id)
+  // Build final items
+  output.Clear()
+  output.Reserve(collected_items.size())
+  for d in collected_items:
+    if fns.item_filter(d, ctx, state) == false:
+      continue
+    fns.item_update(d, ctx, state)
 
-    // 3) Build final items (CPU only)
-    final_items = []
-    for each d in collected_items:
-        world = scene.worldTransform(d.node_handle)
-        normal = computeNormalTransform(world)
-        mesh = d.geometry.meshFor(d.lod_index)
+    item = RenderItem{}
+    // Assemble fields using free functions
+    fns.assemble_geometry(d, ctx, state, item)   // mesh, submesh_index
+    fns.assemble_material(d, ctx, state, item)   // material refs/handles
+    fns.assemble_transform(d, ctx, state, item)  // world, normal
+    fns.assemble_flags(d, ctx, state, item)      // shadows, layer
 
-        matHandle = cfg.finalizers.material.handle(d.material)
-        geoHandle = cfg.finalizers.geometry.handle(d.geometry, d.lod_index, d.submesh_index)
-        xformIdx  = cfg.finalizers.transform.index(d.node_handle, transform_map)
+    output.Add(item)
 
-        item = cfg.finalizers.draw.assemble(d, mesh, matHandle, geoHandle, xformIdx, world, normal, ctx)
-        final_items.append(item)
-
-    // 4) Sort/partition for efficient submission
-    cfg.finalizers.draw.sortAndPartition(final_items)
-
-    // 5) Populate output snapshot
-    output.replaceWith(final_items)
+  // Optional global sort/partition
+  fns.sort_and_partition(output, ctx, state)
 ```
 
 ### Transform Management
 
-Transform handling requires efficient dirty detection and GPU upload strategies:
+Transform handling uses external state and free functions for dirty detection
+and GPU uploads. No owning class is required.
 
 ```cpp
-class TransformManager {
-public:
-    //! Upload dirty transforms for the current frame using scene dirty list
-    auto UploadDirtyTransforms(
-        const scene::Scene& scene,
-        std::span<const scene::NodeHandle> participating_nodes,
-        RenderContext& context,
-        std::uint64_t frame_id
-    ) -> void;
-
-    //! Get GPU buffer index for a node's transform
-    [[nodiscard]] auto GetTransformIndex(scene::NodeHandle node) const -> std::uint32_t;
-
-    //! Evict unused transform slots (called periodically)
-    auto EvictUnusedSlots(std::uint64_t current_frame_id, std::uint32_t keep_frames) -> void;
-
-private:
-    struct TransformSlot {
-        scene::NodeHandle node_handle;
-        std::uint32_t gpu_index;
-        std::uint64_t last_used_frame;
-        glm::mat4 cached_transform;  // For change detection if no scene dirty list
-    };
-
-    // Transform slot management
-    std::unordered_map<scene::NodeHandle, std::uint32_t> node_to_slot_;
-    std::vector<TransformSlot> transform_slots_;
-    std::vector<std::uint32_t> free_slots_;
-
-    // GPU buffer management
-    std::uint32_t buffer_capacity_ = 0;
-    std::uint32_t next_slot_id_ = 0;
+struct TransformSlot {
+  scene::NodeHandle node_handle{};
+  std::uint32_t gpu_index = 0;
+  std::uint64_t last_used_frame = 0;
+  glm::mat4 cached_transform{1.0f}; // For change detection if no scene dirty list
 };
+
+struct TransformState {
+  std::unordered_map<scene::NodeHandle, std::uint32_t> node_to_slot; // node -> slot index
+  std::vector<TransformSlot> slots;                                   // slot index -> slot
+  std::vector<std::uint32_t> free_slots;                              // freelist of slot indices
+  std::uint32_t buffer_capacity = 0;                                  // backing GPU buffer capacity (in elements)
+};
+
+// Assign or reuse a transform slot for a node; grows state if needed
+auto get_or_assign_slot(TransformState& s, scene::NodeHandle node, std::uint64_t frame_id) -> std::uint32_t;
+
+// Upload dirty transforms for participating nodes; coalesce by gpu_index
+auto upload_dirty_transforms(
+  TransformState& s,
+  const scene::Scene& scene,
+  std::span<const scene::NodeHandle> participating_nodes,
+  RenderContext& context,
+  std::uint64_t frame_id
+) -> void;
+
+// Lookup stable GPU index for a node's transform (after prepare/upload)
+auto transform_index(const TransformState& s, scene::NodeHandle node) -> std::uint32_t;
+
+// Evict slots not used recently
+auto evict_unused_slots(TransformState& s, std::uint64_t current_frame_id, std::uint32_t keep_frames) -> void;
 ```
 
 #### Dirty Detection Strategy
@@ -527,7 +509,7 @@ The implementation supports multiple dirty detection approaches:
 ```cpp
 // Scene provides list of nodes with dirty transforms
 auto dirty_nodes = scene.GetDirtyTransformNodes();
-UploadDirtyTransforms(scene, dirty_nodes, context, frame_id);
+upload_dirty_transforms(state, scene, dirty_nodes, context, frame_id);
 ```
 
 ##### Option B (Fallback): Transform Hash Comparison
@@ -536,51 +518,44 @@ UploadDirtyTransforms(scene, dirty_nodes, context, frame_id);
 // Compare cached transform hash against current
 auto current_transform = scene.GetWorldTransform(node_handle);
 if (Hash(current_transform) != cached_hash) {
-    // Transform changed, add to upload list
+  // Transform changed, capture for upload
 }
 ```
 
 #### GPU Upload Strategy
 
 ```cpp
-auto TransformManager::UploadDirtyTransforms(
-    const scene::Scene& scene,
-    std::span<const scene::NodeHandle> participating_nodes,
-    RenderContext& context,
-    std::uint64_t frame_id
+struct UploadRecord { std::uint32_t gpu_index; glm::mat4 transform; };
+
+auto upload_dirty_transforms(
+  TransformState& s,
+  const scene::Scene& scene,
+  std::span<const scene::NodeHandle> participating_nodes,
+  RenderContext& context,
+  std::uint64_t frame_id
 ) -> void {
+  // Step 1: Collect dirty transforms and assign/reuse GPU indices
+  std::vector<UploadRecord> records;
+  records.reserve(participating_nodes.size());
 
-    // Step 1: Collect dirty transforms and assign/reuse GPU indices
-    auto upload_records = std::vector<UploadRecord>{};
-
-    for (auto node_handle : participating_nodes) {
-        auto gpu_index = GetOrAssignSlot(node_handle, frame_id);
-        auto world_transform = scene.GetWorldTransform(node_handle);
-
-        // Check if transform actually changed (if no scene dirty list)
-        if (HasTransformChanged(node_handle, world_transform)) {
-            upload_records.emplace_back(UploadRecord{
-                .gpu_index = gpu_index,
-                .transform = world_transform
-            });
-
-            // Cache for next frame comparison
-            transform_slots_[gpu_index].cached_transform = world_transform;
-            transform_slots_[gpu_index].last_used_frame = frame_id;
-        }
+  for (auto node_handle : participating_nodes) {
+    auto idx = get_or_assign_slot(s, node_handle, frame_id);
+    auto world = scene.GetWorldTransform(node_handle);
+    // If no scene-provided dirty list, compare against cached
+    if (/* changed */ true) {
+      records.push_back({idx, world});
+      s.slots[idx].cached_transform = world;
+      s.slots[idx].last_used_frame = frame_id;
     }
+  }
 
-    // Step 2: Sort by GPU index for range coalescing
-    std::sort(upload_records.begin(), upload_records.end(),
-        [](const auto& a, const auto& b) { return a.gpu_index < b.gpu_index; });
+  // Step 2: Sort for range coalescing
+  std::sort(records.begin(), records.end(), [](auto& a, auto& b){ return a.gpu_index < b.gpu_index; });
 
-    // Step 3: Coalesce consecutive indices into ranges
-    auto upload_ranges = CoalesceUploadRanges(upload_records);
-
-    // Step 4: Upload each range efficiently
-    for (const auto& range : upload_ranges) {
-        context.UploadTransformRange(range.start_index, range.transforms);
-    }
+  // Step 3: Coalesce and upload
+  for (auto range : coalesce_upload_ranges(records)) {
+    context.UploadTransformRange(range.start_index, range.transforms);
+  }
 }
 ```
 
@@ -694,6 +669,66 @@ extraction paths.
 
 ---
 
+## Finalizers concepts and function pipeline
+
+This section defines the inheritance-free, concept-based finalizers model that
+mirrors the extractor approach. Finalizers operate only in Finalize and are
+plain functions composed into a pipeline over explicit state.
+
+### Core context and state
+
+```cpp
+struct FinalizeContext {
+    const View& view;                 // per-view data (frustum, jitter, etc.)
+    RenderContext& render_context;    // GPU device/allocator access
+    std::uint64_t frame_id = 0;       // current frame
+};
+
+struct FinalizeState {
+    TransformState transforms;        // persistent transform slots
+    // Add material/geometry caches as needed (bindless indices, residency)
+};
+```
+
+### Concept signatures (informal)
+
+- BatchPreparer:
+  - `void prepare_transforms(span<const RenderItemData>, FinalizeContext&, FinalizeState&)`
+  - `void prepare_materials(span<const RenderItemData>, FinalizeContext&, FinalizeState&)`
+  - `void ensure_geometry(span<const RenderItemData>, FinalizeContext&, FinalizeState&)`
+
+- Item stage:
+  - Filter: `bool item_filter(const RenderItemData&, const FinalizeContext&, const FinalizeState&)`
+  - Update: `void item_update(const RenderItemData&, FinalizeContext&, FinalizeState&)`
+  - Assemble:
+    - `void assemble_geometry(const RenderItemData&, const FinalizeContext&, FinalizeState&, RenderItem&)`
+    - `void assemble_material(const RenderItemData&, const FinalizeContext&, FinalizeState&, RenderItem&)`
+    - `void assemble_transform(const RenderItemData&, const FinalizeContext&, FinalizeState&, RenderItem&)`
+    - `void assemble_flags(const RenderItemData&, const FinalizeContext&, FinalizeState&, RenderItem&)`
+
+- Post:
+  - `void sort_and_partition(RenderItemsList&, FinalizeContext&, FinalizeState&)`
+
+### Default implementations (sketch)
+
+- prepare_transforms: uses `upload_dirty_transforms` with participating nodes
+  derived from `collected_items`.
+- prepare_materials: builds/updates a dense array of material constants and
+  keeps a map from `MaterialAsset*` to index; uploads to GPU.
+- ensure_geometry: requests bindless handles for vertex/index buffers as
+  needed; ensures residency of meshes referenced by `collected_items`.
+- assemble_geometry: resolves `mesh = d.geometry->MeshAt(d.lod_index)` and
+  copies `submesh_index`.
+- assemble_transform: writes `world_transform` and `normal_transform` from
+  either collected data or transform index indirection, depending on mode.
+- assemble_material/flags: assigns material pointer/handle and copies flags.
+- sort_and_partition: stable sort by material/mesh to improve locality.
+
+All of the above are free functions and can be swapped per pass without class
+inheritance.
+
+---
+
 ## Integration Points
 
 ### With Existing Renderer
@@ -763,7 +798,7 @@ Leverages existing immutable asset design:
 - Support submesh-level render items (when backend ready)
 - Add pass mask system for multi-pass rendering
 - Implement temporal filtering capabilities
-- Add strategy pattern for extensibility
+- Add function-composition hooks for extensibility
 - **Success Criteria**: Support for deferred shading and advanced effects
 
 ### Per-submesh draw execution: Option A vs Option B
