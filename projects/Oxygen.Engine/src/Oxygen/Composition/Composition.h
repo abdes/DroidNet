@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ComponentPool.h>
 #include <Oxygen/Composition/ComponentPoolRegistry.h>
@@ -166,22 +167,12 @@ public:
   OXGN_COM_API auto LogComponents() const -> void;
 
 protected:
-  struct LocalTag { };
-  struct PooledTag { };
-
-  template <typename Tag> struct Capacity {
-    std::size_t value;
-    explicit Capacity(std::size_t v)
-      : value(v)
-    {
-    }
-    operator std::size_t() const { return value; }
-  };
-
   //! Named strong type for local component capacity.
-  using LocalCapacity = Capacity<LocalTag>;
+  using LocalCapacity = oxygen::NamedType<std::size_t, struct LocalCapacityTag,
+    oxygen::Arithmetic, oxygen::FunctionCallable>;
   //! Named strong type for pooled component capacity.
-  using PooledCapacity = Capacity<PooledTag>;
+  using PooledCapacity = oxygen::NamedType<std::size_t,
+    struct PooledCapacityTag, oxygen::Arithmetic, oxygen::FunctionCallable>;
 
   //! Constructs a new empty composition.
   /*!
