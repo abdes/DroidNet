@@ -9,27 +9,27 @@ GPU submission.
 
 ## Implementation Tasks Summary
 
-| Component/Task     | Status         | Notes                                              |
-| ------------------ | -------------- | -------------------------------------------------- |
-| Design             | ✅ Complete    | Architecture and contracts                         |
-| Types              | ❌ Not Started | Add RenderItemData header + docs                   |
-| Builder            | ❌ Not Started | Collect/Finalize/Evict API + PIMPL                 |
-| Extractors         | ❌ Not Started | LOD, visibility, material, bounds (pure)           |
-| Finalizers API     | ❌ Not Started | Transform, material, geometry, draw interfaces     |
-| Finalizers         | ❌ Not Started | Default impls + No-GPU variants                    |
-| Transforms         | ❌ Not Started | Dirty detect, slots, LRU, growth                   |
-| Uploads            | ❌ Not Started | Coalescing, double/triple buffer, 3x4 layout       |
-| Finalize           | ❌ Not Started | Finalizer-driven, CPU-only deterministic           |
-| Sorting            | ❌ Not Started | Domain buckets + batching keys                     |
-| Residency          | ❌ Not Started | Touch stamps, keep window, eviction                |
-| Metrics            | ❌ Not Started | Counts, bytes, ranges, hits/misses                 |
-| Multi-view         | ❌ Not Started | Per-view runs, cache reuse                         |
-| Errors             | ❌ Not Started | Fallbacks + rate-limited logs                      |
-| Tests: Collect     | ❌ Not Started | LOD/visibility/material cases                      |
-| Tests: Finalize    | ❌ Not Started | No-GPU path, sorting assertions                    |
-| Tests: Transforms  | ❌ Not Started | Dirty/coalescing/threshold paths                   |
-| Integration        | ❌ Not Started | Wire passes + A/B flag                             |
-| Docs               | ❌ Not Started | README + examples + config                         |
+| Component/Task     | Status  | Notes                                              |
+| ------------------ | ------- | -------------------------------------------------- |
+| Design             | ✅      | Architecture and contracts                         |
+| Types              | ✅      | `RenderItemData.h` added (Internal header)         |
+| Builder            | ❌      | Collect/Finalize/Evict API                         |
+| Extractors         | ❌      | LOD, visibility, material, bounds (pure)           |
+| Finalizers API     | ❌      | Transform, material, geometry, draw interfaces     |
+| Finalizers         | ❌      | Default impls + No-GPU variants                    |
+| Transforms         | ❌      | Dirty detect, slots, LRU, growth                   |
+| Uploads            | ❌      | Coalescing, double/triple buffer, 3x4 layout       |
+| Finalize           | ❌      | Finalizer-driven, CPU-only deterministic           |
+| Sorting            | ❌      | Domain buckets + batching keys                     |
+| Residency          | ❌      | Touch stamps, keep window, eviction                |
+| Metrics            | ❌      | Counts, bytes, ranges, hits/misses                 |
+| Multi-view         | ❌      | Per-view runs, cache reuse                         |
+| Errors             | ❌      | Fallbacks + rate-limited logs                      |
+| Tests: Collect     | ❌      | LOD/visibility/material cases                      |
+| Tests: Finalize    | ❌      | No-GPU path, sorting assertions                    |
+| Tests: Transforms  | ❌      | Dirty/coalescing/threshold paths                   |
+| Integration        | ❌      | Wire passes + A/B flag                             |
+| Docs               | ❌      | README + examples + config                         |
 
 ---
 
