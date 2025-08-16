@@ -72,6 +72,7 @@ set(
   "DepthPrePass.cpp"
   "Detail/BindlessStructuredBuffer.cpp"
   "Extraction/SceneExtraction.cpp"
+  "Internal/RenderItemData.h"
   "Internal/RenderScope.h"
   "Renderer.cpp"
   "RenderItem.cpp"
