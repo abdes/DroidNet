@@ -505,8 +505,8 @@ void RenderableComponent::SelectActiveMesh(NormalizedDistance d) const noexcept
     return;
   }
 
-  const auto base = dp->SelectBase(d.value, lod_count);
-  current_lod_ = dp->ApplyHysteresis(current_lod_, base, d.value, lod_count);
+  const auto base = dp->SelectBase(d, lod_count);
+  current_lod_ = dp->ApplyHysteresis(current_lod_, base, d, lod_count);
   InvalidateWorldAabbCache();
   RecomputeWorldBoundingSphere();
 }
@@ -525,8 +525,8 @@ void RenderableComponent::SelectActiveMesh(ScreenSpaceError e) const noexcept
     return;
   }
 
-  const auto base = sp->SelectBase(e.value, lod_count);
-  current_lod_ = sp->ApplyHysteresis(current_lod_, base, e.value, lod_count);
+  const auto base = sp->SelectBase(e, lod_count);
+  current_lod_ = sp->ApplyHysteresis(current_lod_, base, e, lod_count);
   InvalidateWorldAabbCache();
   RecomputeWorldBoundingSphere();
 }
