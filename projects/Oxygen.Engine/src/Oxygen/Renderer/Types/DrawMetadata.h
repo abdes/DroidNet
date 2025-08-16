@@ -41,7 +41,10 @@ struct alignas(16) DrawMetadata {
   uint32_t instance_metadata_offset; // Offset into instance metadata buffer
   uint32_t flags; // Bitfield: visibility, pass ID, etc.
 
-  uint32_t padding[3]; // Reserved for alignment
+  // Per-view geometry slice (used by shaders to index correct ranges)
+  uint32_t first_index; // Start index within the mesh index buffer (indexed)
+  int32_t base_vertex; // Base vertex offset to add to indices / SV_VertexID
+  uint32_t padding; // Reserved for alignment
 };
 
 // Expected packed size in bytes (12 x uint32_t) as required by shaders.

@@ -9,18 +9,18 @@
 #include <cstdint>
 #include <memory>
 
+#include <glm/glm.hpp>
 #include <glm/vec4.hpp>
 
-namespace oxygen::scene {
-struct NodeHandle;
-}
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+
 namespace oxygen::data {
-struct GeometryAsset;
-struct MaterialAsset;
-enum class MaterialDomain : uint8_t;
+class GeometryAsset;
+class MaterialAsset;
 }
 
-namespace oxygen::engine::internal {
+namespace oxygen::engine::extraction {
 
 //! Lightweight render item data collected during scene traversal.
 /*!
@@ -32,8 +32,6 @@ namespace oxygen::engine::internal {
  @see RenderItem (final GPU-ready snapshot)
 */
 struct RenderItemData {
-  // Scene identity
-  oxygen::scene::NodeHandle node_handle {};
   std::uint32_t lod_index = 0;
   std::uint32_t submesh_index = 0;
 
@@ -42,8 +40,9 @@ struct RenderItemData {
   std::shared_ptr<const oxygen::data::MaterialAsset> material;
 
   // Cached scene state
-  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::Opaque;
+  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque;
   glm::vec4 world_bounding_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
+  glm::mat4 world_transform { 1.0f };
 
   // Rendering flags
   bool cast_shadows = true;
@@ -54,4 +53,4 @@ struct RenderItemData {
   // std::uint64_t instance_id = 0;
 };
 
-} // namespace oxygen::engine::internal
+} // namespace oxygen::engine::extraction

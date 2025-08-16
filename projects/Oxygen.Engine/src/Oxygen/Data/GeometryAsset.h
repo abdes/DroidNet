@@ -87,6 +87,24 @@ public:
   */
   OXGN_DATA_NDAPI auto IndexBuffer() const noexcept -> detail::IndexBufferView;
 
+  // Accessors for draw slicing parameters
+  [[nodiscard]] constexpr auto FirstIndex() const noexcept -> uint32_t
+  {
+    return desc_.first_index;
+  }
+  [[nodiscard]] constexpr auto IndexCount() const noexcept -> uint32_t
+  {
+    return desc_.index_count;
+  }
+  [[nodiscard]] constexpr auto FirstVertex() const noexcept -> uint32_t
+  {
+    return desc_.first_vertex;
+  }
+  [[nodiscard]] constexpr auto VertexCount() const noexcept -> uint32_t
+  {
+    return desc_.vertex_count;
+  }
+
 private:
   std::reference_wrapper<const Mesh> mesh_;
 
