@@ -14,21 +14,24 @@ remaining multi-pass friendly.
 | ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`FinalizationItemFilter`, `ScenePrepUploader`, `RenderItemDataExtractor`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
 | ✅ | **2. Copy and Refactor Extraction Classes** | Copy existing `RenderItemProto`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
 | ✅ | **3. Copy and Refactor Extractors** | Implement collection extractors: `ExtractionPreFilter`, `MeshResolver`, `SubMeshVisibilityFilter` (with per-submesh frustum culling), and `EmitPerVisibleSubmesh`, adapted to the new concept-based ScenePrep design | Task 2 |
-| ⏳ | **4. Implement Helper State Classes** | Create `TransformManager`, `TransformBatchCache`, `MaterialRegistry`, `GeometryRegistry` and related cache classes | Task 1 |
+| ✅ | **4a. Implement Transform Helper State** | Create `TransformManager` (persistent) and `TransformBatchCache` (per-frame) classes | Task 1 |
+| ⏳ | **4b. Implement Material Helper State** | Create `MaterialRegistry` (persistent) and `MaterialUploadCache` (per-frame) classes | Task 1 |
+| ⏳ | **4c. Implement Geometry Helper State** | Create `GeometryRegistry` (persistent) and `GeometryResidencyCache` (per-frame) classes | Task 1 |
 | ✅ | **5. Create Collection Configuration System** | Implement template-based `CollectionConfig` with `if constexpr` stage detection and factory functions | Task 1 |
-| ⏳ | **6. Create Finalization Configuration System** | Implement template-based `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
-| ⏳ | **7. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4, 5, 6 |
-| 🔄 | **8. Implement ScenePrepPipeline** | Create main `ScenePrepPipeline` class with Collection and Finalization orchestration using `if constexpr` (Collection phase implemented) | Task 5, 6, 7 |
-| ⏳ | **9. Copy and Refactor RenderListBuilder** | Copy existing `RenderListBuilder` to ScenePrep module and refactor to use new `ScenePrepPipeline` internally | Task 8 |
-| ⏳ | **10. Add Unit Tests** | Create comprehensive test suite for individual algorithms and configuration flexibility | Task 7, 8 |
-| ⏳ | **11. Implement Mock Configurations** | Create GPU-independent test configurations and integration test examples | Task 8, 10 |
-| ⏳ | **12. Add Performance Optimizations** | Implement batching, deduplication, and memory pool allocators for production performance | Task 9 |
-| ⏳ | **13. Implement Draw Metadata System** | Add mesh-view draw command generation and metadata creation | Task 12 |
-| ⏳ | **14. Add Sorting and Partitioning** | Implement depth sorting, material grouping, and render pass partitioning algorithms | Task 13 |
-| ⏳ | **15. Integration Testing** | Create end-to-end tests with real scenes and validate performance vs existing system | Task 14 |
-| ⏳ | **16. Documentation and Examples** | Update API documentation, add usage examples, and create migration guide | Task 15 |
-| ⏳ | **17. Wire ScenePrep to Renderer** | Update Renderer to use new ScenePrep module instead of old Extraction module | Task 16 |
-| ⏳ | **18. Remove Legacy Extraction Code** | Delete old `Extraction` module files after successful migration and testing | Task 17 |
+| ⏳ | **6. Implement Unified GPU Buffer Manager** | Design and implement a shared GPU buffer upload/residency system used by all helpers (staging, incremental vs full re-upload, growth/compaction, synchronization) | Task 1, 4a–4c |
+| ⏳ | **7. Create Finalization Configuration System** | Implement template-based `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
+| ⏳ | **8. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4a–4c, 5, 6, 7 |
+| 🔄 | **9. Implement ScenePrepPipeline** | Create main `ScenePrepPipeline` class with Collection and Finalization orchestration using `if constexpr` (Collection phase implemented) | Task 5, 6, 7, 8 |
+| ⏳ | **10. Copy and Refactor RenderListBuilder** | Copy existing `RenderListBuilder` to ScenePrep module and refactor to use new `ScenePrepPipeline` internally | Task 9 |
+| ⏳ | **11. Add Unit Tests** | Create comprehensive test suite for individual algorithms and configuration flexibility | Task 8, 9 |
+| ⏳ | **12. Implement Mock Configurations** | Create GPU-independent test configurations and integration test examples | Task 9, 11 |
+| ⏳ | **13. Add Performance Optimizations** | Implement batching, deduplication, and memory pool allocators for production performance | Task 10 |
+| ⏳ | **14. Implement Draw Metadata System** | Add mesh-view draw command generation and metadata creation | Task 13 |
+| ⏳ | **15. Add Sorting and Partitioning** | Implement depth sorting, material grouping, and render pass partitioning algorithms | Task 14 |
+| ⏳ | **16. Integration Testing** | Create end-to-end tests with real scenes and validate performance vs existing system | Task 15 |
+| ⏳ | **17. Documentation and Examples** | Update API documentation, add usage examples, and create migration guide | Task 16 |
+| ⏳ | **18. Wire ScenePrep to Renderer** | Update Renderer to use new ScenePrep module instead of old Extraction module | Task 17 |
+| ⏳ | **19. Remove Legacy Extraction Code** | Delete old `Extraction` module files after successful migration and testing | Task 18 |
 
 ### Status Legend
 

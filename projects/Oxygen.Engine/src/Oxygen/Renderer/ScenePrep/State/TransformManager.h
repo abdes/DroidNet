@@ -53,20 +53,17 @@ public:
   OXGN_RNDR_API auto FlushPendingUploads() -> void;
 
   //! Get the total number of unique transforms currently managed.
-  [[nodiscard]] OXGN_RNDR_API auto GetUniqueTransformCount() const
-    -> std::size_t;
+  OXGN_RNDR_NDAPI auto GetUniqueTransformCount() const -> std::size_t;
 
   //! Get the transform matrix for a given handle.
   /*!
    @param handle The transform handle
    @return The transform matrix, or identity if handle is invalid
    */
-  [[nodiscard]] OXGN_RNDR_API auto GetTransform(TransformHandle handle) const
-    -> glm::mat4;
+  OXGN_RNDR_NDAPI auto GetTransform(TransformHandle handle) const -> glm::mat4;
 
   //! Check if a handle is valid.
-  [[nodiscard]] OXGN_RNDR_API auto IsValidHandle(TransformHandle handle) const
-    -> bool;
+  OXGN_RNDR_NDAPI auto IsValidHandle(TransformHandle handle) const -> bool;
 
 private:
   // We avoid using std::hash<glm::mat4> because GLM doesn't provide a
