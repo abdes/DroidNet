@@ -115,3 +115,95 @@ root_signature:
     p.write_text(yaml)
     with pytest.raises(ValueError, match="cbv_array_size .* exceeds domain"):
         generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+
+
+def test_heap_ranges_overlap_detection(tmp_path):
+    yaml = """
+meta:
+  version: "1.0.0"
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: tex
+    name: Tex
+    kind: SRV
+    register: t0
+    space: space0
+    root_table: T
+    domain_base: 0
+    capacity: 1
+root_signature:
+  - type: descriptor_table
+    name: T
+    index: 0
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: [tex]
+        base_shader_register: t0
+        register_space: space0
+        num_descriptors: 1
+heaps:
+  - id: "CBV_SRV_UAV:gpu"
+    type: CBV_SRV_UAV
+    shader_visible: true
+    capacity: 100
+    base_index: 1000
+    allow_growth: false
+  - id: "SAMPLER:gpu"
+    type: SAMPLER
+    shader_visible: true
+    capacity: 64
+    base_index: 1050  # Overlaps with previous range [1000,1100)
+    allow_growth: false
+"""
+    p = tmp_path / "overlap.yaml"
+    p.write_text(yaml)
+    with pytest.raises(ValueError, match="overlap"):
+        generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+
+
+def test_heap_ranges_with_gaps_ok(tmp_path):
+    yaml = """
+meta:
+  version: "1.0.0"
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: tex
+    name: Tex
+    kind: SRV
+    register: t0
+    space: space0
+    root_table: T
+    domain_base: 0
+    capacity: 1
+root_signature:
+  - type: descriptor_table
+    name: T
+    index: 0
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: [tex]
+        base_shader_register: t0
+        register_space: space0
+        num_descriptors: 1
+heaps:
+  - id: "CBV_SRV_UAV:gpu"
+    type: CBV_SRV_UAV
+    shader_visible: true
+    capacity: 100
+    base_index: 1000
+    allow_growth: false
+  - id: "SAMPLER:gpu"
+    type: SAMPLER
+    shader_visible: true
+    capacity: 64
+    base_index: 1200  # Gap after previous range [1000,1100)
+    allow_growth: false
+"""
+    p = tmp_path / "gaps.yaml"
+    p.write_text(yaml)
+    # Should not raise (gaps allowed)
+    generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)

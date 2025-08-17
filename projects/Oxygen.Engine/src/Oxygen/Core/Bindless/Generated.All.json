@@ -2,7 +2,7 @@
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
   "source_version": "1.0.0",
   "tool_version": "1.0.0",
-  "generated": "2025-08-17 21:04:06",
+  "generated": "2025-08-17 22:53:25",
   "schema_version": "1.0.0",
   "defaults": {
     "invalid_index": 4294967295
@@ -62,63 +62,51 @@
     }
   ],
   "heaps": {
-    "heap_cbv_srv_uav_cpu": {
-      "id": "heap_cbv_srv_uav_cpu",
-      "index": 0,
+    "CBV_SRV_UAV:cpu": {
+      "id": "CBV_SRV_UAV:cpu",
       "type": "CBV_SRV_UAV",
       "shader_visible": false,
-      "cpu_visible_capacity": 1000000,
-      "shader_visible_capacity": 0,
+      "capacity": 1000000,
       "base_index": 0,
       "allow_growth": false
     },
-    "heap_cbv_srv_uav_gpu": {
-      "id": "heap_cbv_srv_uav_gpu",
-      "index": 1,
+    "CBV_SRV_UAV:gpu": {
+      "id": "CBV_SRV_UAV:gpu",
       "type": "CBV_SRV_UAV",
       "shader_visible": true,
-      "cpu_visible_capacity": 0,
-      "shader_visible_capacity": 1000000,
+      "capacity": 1000000,
       "base_index": 1000000,
       "allow_growth": false
     },
-    "heap_sampler_cpu": {
-      "id": "heap_sampler_cpu",
-      "index": 2,
+    "SAMPLER:cpu": {
+      "id": "SAMPLER:cpu",
       "type": "SAMPLER",
       "shader_visible": false,
-      "cpu_visible_capacity": 2048,
-      "shader_visible_capacity": 0,
+      "capacity": 2048,
       "base_index": 2000000,
       "allow_growth": false
     },
-    "heap_sampler_gpu": {
-      "id": "heap_sampler_gpu",
-      "index": 3,
+    "SAMPLER:gpu": {
+      "id": "SAMPLER:gpu",
       "type": "SAMPLER",
       "shader_visible": true,
-      "cpu_visible_capacity": 0,
-      "shader_visible_capacity": 2048,
+      "capacity": 2048,
       "base_index": 2002048,
       "allow_growth": false
     },
-    "heap_rtv_cpu": {
-      "id": "heap_rtv_cpu",
-      "index": 4,
+    "RTV:cpu": {
+      "id": "RTV:cpu",
       "type": "RTV",
       "shader_visible": false,
-      "cpu_visible_capacity": 1024,
-      "shader_visible_capacity": 0,
+      "capacity": 1024,
       "base_index": 2004096,
       "allow_growth": false
     },
-    "heap_dsv_cpu": {
-      "id": "heap_dsv_cpu",
-      "index": 5,
+    "DSV:cpu": {
+      "id": "DSV:cpu",
       "type": "DSV",
       "shader_visible": false,
-      "cpu_visible_capacity": 1024,
-      "shader_visible_capacity": 0,
+      "capacity": 1024,
       "base_index": 2005120,
       "allow_growth": false
     }
@@ -126,27 +114,27 @@
   "mappings": {
     "scene": {
       "domain": "scene",
-      "heap": "heap_cbv_srv_uav_cpu",
+      "heap": "CBV_SRV_UAV:cpu",
       "local_base": 0
     },
     "srv_global": {
       "domain": "srv_global",
-      "heap": "heap_cbv_srv_uav_gpu",
+      "heap": "CBV_SRV_UAV:gpu",
       "local_base": 1
     },
     "materials": {
       "domain": "materials",
-      "heap": "heap_cbv_srv_uav_gpu",
+      "heap": "CBV_SRV_UAV:gpu",
       "local_base": 2049
     },
     "textures": {
       "domain": "textures",
-      "heap": "heap_cbv_srv_uav_gpu",
+      "heap": "CBV_SRV_UAV:gpu",
       "local_base": 5096
     },
     "samplers": {
       "domain": "samplers",
-      "heap": "heap_sampler_gpu",
+      "heap": "SAMPLER:gpu",
       "local_base": 0
     }
   },

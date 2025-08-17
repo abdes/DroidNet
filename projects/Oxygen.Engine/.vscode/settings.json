@@ -190,7 +190,7 @@
   "C_Cpp.errorSquiggles": "disabled",
   "yaml.schemas": {
     "src/Oxygen/Core/Bindless/Spec.schema.json": [
-      "**/BindingSlots.yaml"
+      "**/Spec.yaml"
     ]
   },
   "yaml.validate": true

@@ -54,9 +54,31 @@ def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
         # required fields assumed present by JSON Schema; validate cross-field rules
         htype = h.get("type")
         shader_visible = h.get("shader_visible")
-        cpu_cap = int(h.get("cpu_visible_capacity"))
-        shader_cap = int(h.get("shader_visible_capacity"))
+        capacity = int(h.get("capacity", 0))
         base = int(h.get("base_index"))
+
+        # If heap id looks like "TYPE:vis", validate it matches type and visibility
+        if isinstance(name, str) and ":" in name:
+            try:
+                id_type, id_vis = name.split(":", 1)
+            except ValueError:
+                id_type, id_vis = name, ""
+            # Normalize
+            id_type = id_type.strip()
+            id_vis = id_vis.strip().lower()
+            expected_vis = "gpu" if bool(shader_visible) else "cpu"
+            if id_type != str(htype):
+                raise ValueError(
+                    f"Heap id '{name}' type prefix '{id_type}' does not match declared type '{htype}'"
+                )
+            if id_vis not in ("gpu", "cpu"):
+                raise ValueError(
+                    f"Heap id '{name}' visibility suffix '{id_vis}' must be 'gpu' or 'cpu'"
+                )
+            if id_vis != expected_vis:
+                raise ValueError(
+                    f"Heap id '{name}' visibility suffix '{id_vis}' conflicts with shader_visible={bool(shader_visible)}"
+                )
 
         # RTV/DSV must be CPU-only
         if htype in ("RTV", "DSV") and shader_visible:
@@ -70,22 +92,14 @@ def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
                 f"Heap '{name}' is shader_visible but type '{htype}' does not allow shader visibility"
             )
 
-        # For shader-visible heaps the important capacity is shader_visible_capacity;
-        # cpu_visible_capacity may be zero when a heap is exclusively shader-visible.
-        if shader_visible:
-            if shader_cap <= 0:
-                raise ValueError(
-                    f"Heap '{name}' shader_visible_capacity must be > 0 for shader-visible heaps"
-                )
-        else:
-            if cpu_cap <= 0:
-                raise ValueError(
-                    f"Heap '{name}' cpu_visible_capacity must be > 0"
-                )
+        # Capacity must be positive regardless of visibility
+        eff_cap = capacity
+        if eff_cap <= 0:
+            raise ValueError(f"Heap '{name}' capacity must be > 0")
 
-        # Compute interval [base, base+cpu_cap)
+        # Compute global index interval [base, base + eff_cap)
         start = base
-        end = base + cpu_cap
+        end = base + eff_cap
         ranges.append((start, end, name))
 
     # Check for range overlaps anywhere in the global index space
@@ -143,10 +157,7 @@ def render_cpp_heaps(heaps: Dict[str, Any]) -> str:
             f"static constexpr uint32_t k{name}HeapBase = {int(h_dict['base_index'])}u;"
         )
         lines.append(
-            f"static constexpr uint32_t k{name}HeapCpuCapacity = {int(h_dict['cpu_visible_capacity'])}u;"
-        )
-        lines.append(
-            f"static constexpr uint32_t k{name}HeapShaderCapacity = {int(h_dict['shader_visible_capacity'])}u;"
+            f"static constexpr uint32_t k{name}HeapCapacity = {int(h_dict['capacity'])}u;"
         )
         lines.append(
             f"static constexpr bool k{name}HeapShaderVisible = {str(bool(h_dict['shader_visible'])).lower()};"
@@ -185,7 +196,7 @@ def render_hlsl_heaps(heaps: Dict[str, Any]) -> str:
             f"static const uint K_{up}_HEAP_BASE = {int(h_dict['base_index'])};"
         )
         lines.append(
-            f"static const uint K_{up}_HEAP_CPU_CAPACITY = {int(h_dict['cpu_visible_capacity'])};"
+            f"static const uint K_{up}_HEAP_CAPACITY = {int(h_dict['capacity'])};"
         )
         lines.append("")
     return "\n".join(lines)
@@ -204,7 +215,7 @@ def build_d3d12_strategy_json(heaps: Dict[str, Any]) -> Dict[str, Any]:
     """Compose a D3D12 heap strategy JSON fragment wrapped under top-level 'heaps'.
 
     Input `heaps` may be a dict keyed by heap id or a list of heap objects.
-    Output structure is: { "heaps": { key -> { desc fields..., base_index } } }
+    Output structure is: { "heaps": { key -> { capacity, base_index, policy... } } }
     where key looks like "CBV_SRV_UAV:gpu" or "SAMPLER:cpu".
     """
     # Normalize
@@ -220,9 +231,10 @@ def build_d3d12_strategy_json(heaps: Dict[str, Any]) -> Dict[str, Any]:
         htype = str(h.get("type"))
         shader_vis = bool(h.get("shader_visible"))
         key = _build_heap_key(htype, shader_vis)
+        cap = int(h.get("capacity", 0))
         entry = {
-            "cpu_visible_capacity": int(h.get("cpu_visible_capacity", 0)),
-            "shader_visible_capacity": int(h.get("shader_visible_capacity", 0)),
+            "capacity": cap,
+            "shader_visible": shader_vis,
             "allow_growth": bool(h.get("allow_growth", False)),
             # Conservative defaults; engine currently sets fixed, non-growing heaps
             "growth_factor": float(h.get("growth_factor", 0.0)),

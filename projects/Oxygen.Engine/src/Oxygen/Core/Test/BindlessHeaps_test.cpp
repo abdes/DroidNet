@@ -52,42 +52,35 @@ NOLINT_TEST(BindlessHeapsTest, ParseEmbeddedJson_VerifyMetaAndHeaps)
     ASSERT_TRUE(v.is_object()) << "Entry '" << key << "' must be an object";
 
     // Mandatory fields
-    for (const char* field :
-      { "cpu_visible_capacity", "shader_visible_capacity", "allow_growth",
-        "growth_factor", "max_growth_iterations", "base_index" }) {
+    for (const char* field : { "capacity", "allow_growth", "growth_factor",
+           "max_growth_iterations", "base_index" }) {
       EXPECT_TRUE(v.contains(field))
         << "Entry '" << key << "' missing field '" << field << "'";
     }
 
-    if (!v.contains("cpu_visible_capacity")
-      || !v.contains("shader_visible_capacity") || !v.contains("allow_growth")
+    if (!v.contains("capacity") || !v.contains("allow_growth")
       || !v.contains("growth_factor") || !v.contains("max_growth_iterations")
       || !v.contains("base_index")) {
       continue; // Avoid cascading failures
     }
 
     // Basic type/range checks
-    EXPECT_GE(v["cpu_visible_capacity"].get<int64_t>(), 0) << key;
-    EXPECT_GE(v["shader_visible_capacity"].get<int64_t>(), 0) << key;
+    EXPECT_GT(v["capacity"].get<int64_t>(), 0) << key;
     EXPECT_GE(v["base_index"].get<int64_t>(), 0) << key;
     EXPECT_GE(v["max_growth_iterations"].get<int64_t>(), 0) << key;
     EXPECT_TRUE(v["allow_growth"].is_boolean()) << key;
     EXPECT_TRUE(v["growth_factor"].is_number()) << key;
+    ASSERT_TRUE(v.contains("shader_visible"))
+      << "Missing shader_visible for '" << key << "'";
+    EXPECT_TRUE(v["shader_visible"].is_boolean()) << key;
 
-    // Visibility-specific capacity constraints
+    // Key still encodes visibility, but capacity is unified; no per-visibility
+    // split
     const auto colon = key.find(':');
     ASSERT_NE(colon, std::string::npos)
       << "Entry key must include visibility: '" << key << "'";
-    const std::string visibility = key.substr(colon + 1);
-    if (visibility == "cpu") {
-      EXPECT_GT(v["cpu_visible_capacity"].get<int64_t>(), 0) << key;
-      EXPECT_EQ(v["shader_visible_capacity"].get<int64_t>(), 0) << key;
-    } else if (visibility == "gpu") {
-      EXPECT_EQ(v["cpu_visible_capacity"].get<int64_t>(), 0) << key;
-      EXPECT_GT(v["shader_visible_capacity"].get<int64_t>(), 0) << key;
-    } else {
-      ADD_FAILURE() << "Unknown visibility for entry '" << key << "'";
-    }
+    const bool key_gpu = key.substr(colon + 1) == std::string("gpu");
+    EXPECT_EQ(v["shader_visible"].get<bool>(), key_gpu) << key;
   }
 }
 

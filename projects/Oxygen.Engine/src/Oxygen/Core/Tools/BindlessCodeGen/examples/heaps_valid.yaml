@@ -50,31 +50,27 @@ root_signature:
 
 # D3D12 heap strategy inputs. These feed the runtime JSON too.
 heaps:
-  - id: heap_cbv_srv_uav_gpu
-    index: 0
+  - id: "CBV_SRV_UAV:gpu"
     type: CBV_SRV_UAV
     shader_visible: true
-    cpu_visible_capacity: 0
-    shader_visible_capacity: 65536
+    capacity: 65536
     base_index: 0
     allow_growth: false
     debug_name: "CBV_SRV_UAV shader-visible"
 
-  - id: heap_sampler_gpu
-    index: 1
+  - id: "SAMPLER:gpu"
     type: SAMPLER
     shader_visible: true
-    cpu_visible_capacity: 0
-    shader_visible_capacity: 2048
+    capacity: 2048
     base_index: 100000
     allow_growth: false
     debug_name: "SAMPLER shader-visible"
 
 mappings:
   - domain: textures
-    heap: heap_cbv_srv_uav_gpu
+    heap: "CBV_SRV_UAV:gpu"
     local_base: 0
 
   - domain: samplers
-    heap: heap_sampler_gpu
+    heap: "SAMPLER:gpu"
     local_base: 0

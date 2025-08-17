@@ -313,28 +313,24 @@
                 ]
             }
         },
-        "heaps": {
-            "type": "array",
-            "description": "Optional heap allocation strategy SSoT. Defines named heaps and their capacities, base indices and policies.",
+    "heaps": {
+        "type": "array",
+        "description": "Optional heap allocation strategy SSoT. Defines named heaps and their capacities, base indices and policies. Global bindless indices are derived per-heap from [base_index, base_index + capacity). These ranges MUST NOT overlap across any heaps. Gaps are allowed (no requirement for adjacency). The runtime JSON uses a unified 'capacity' per heap; visibility is implied by the heap key suffix (:cpu or :gpu).",
             "items": {
                 "type": "object",
                 "required": [
                     "id",
-                    "index",
                     "type",
                     "shader_visible",
-                    "cpu_visible_capacity",
-                    "shader_visible_capacity",
+            "capacity",
                     "base_index",
                     "allow_growth"
                 ],
                 "properties": {
                     "id": { "type": "string" },
-                    "index": { "type": "integer", "minimum": 0 },
                     "type": { "type": "string", "enum": ["CBV_SRV_UAV","SAMPLER","RTV","DSV","Other"] },
                     "shader_visible": { "type": "boolean" },
-                    "cpu_visible_capacity": { "type": "integer", "minimum": 0 },
-                    "shader_visible_capacity": { "type": "integer", "minimum": 0 },
+            "capacity": { "type": "integer", "minimum": 1 },
                     "base_index": { "type": "integer", "minimum": 0 },
                     "allow_growth": { "type": "boolean" },
                     "growth_factor": { "type": "number", "exclusiveMinimum": 1.0 },
