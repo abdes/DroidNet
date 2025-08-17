@@ -9,7 +9,7 @@
 // Source-Version: 1.0.0
 // Schema-Version: 1.0.0
 // Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 22:53:25
+// Generated: 2025-08-17 23:51:04
 
 #pragma once
 
@@ -20,6 +20,6 @@ static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/
 static constexpr const char kBindlessSourceVersion[] = "1.0.0";
 static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
 static constexpr const char kBindlessToolVersion[] = "1.0.0";
-static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 22:53:25";
+static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 23:51:04";
 
 } // namespace oxygen::engine::binding

@@ -8,7 +8,7 @@
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
 // Source-Version: 1.0.0
 // Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 22:53:25
+// Generated: 2025-08-17 23:51:04
 
 #pragma once
 
@@ -22,7 +22,7 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
     "source_version": "1.0.0",
     "tool_version": "1.0.0",
-    "generated": "2025-08-17 22:53:25",
+    "generated": "2025-08-17 23:51:04",
     "format": "D3D12HeapStrategy/2",
     "schema_version": "1.0.0"
   },
