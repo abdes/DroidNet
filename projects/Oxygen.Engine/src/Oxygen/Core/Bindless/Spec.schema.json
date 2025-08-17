@@ -1,31 +1,30 @@
 {
-    "$id": "https://example.org/bindless/BindingSlots.schema.json",
+    "$id": "https://example.org/bindless/Spec.schema.json",
     "x-oxygen-schema-version": "1.0.0",
     "title": "BindingSlots",
     "description": "JSON Schema for the BindingSlots YAML used by BindlessCodeGen",
     "type": "object",
     "required": [
-        "binding_slots_version",
+        "meta",
         "defaults",
         "domains",
         "root_signature"
     ],
     "properties": {
-        "binding_slots_version": {
-            "type": "integer",
-            "description": "Format version of the binding slots specification."
-        },
         "meta": {
             "type": "object",
-            "description": "Optional metadata about the source and description of the spec.",
+            "description": "Metadata for this spec.",
             "properties": {
-                "description": {
-                    "type": "string"
+                "version": {
+                    "type": "string",
+                    "pattern": "^\\d+\\.\\d+\\.\\d+$",
+                    "description": "Semantic version (major.minor.patch) of the binding slots specification."
                 },
-                "source": {
+                "description": {
                     "type": "string"
                 }
             },
+            "required": ["version"],
             "additionalProperties": true
         },
         "defaults": {
@@ -363,10 +362,10 @@
     "additionalProperties": false,
     "examples": [
         {
-            "binding_slots_version": 1,
             "meta": {
+                "version": "1.0.0",
                 "description": "Authoritative bindless slot/register mapping for Oxygen.",
-                "source": "src/Oxygen/Core/Bindless/BindingSlots.yaml"
+                "source": "src/Oxygen/Core/Bindless/Spec.yaml"
             },
             "defaults": {
                 "invalid_index": 4294967295

@@ -13,15 +13,30 @@ def test_generate_tmp(tmp_path):
     yaml.write_text(
         textwrap.dedent(
             """\
-        binding_slots_version: 1
+        meta:
+          version: "1.0.0"
         defaults:
           invalid_index: 4294967295
         domains:
           - id: test
-            name: Test
-            kind: srv
+            name: TestDomain
+            kind: SRV
+            register: t0
+            space: space0
+            root_table: Table0
             domain_base: 1
             capacity: 10
+        root_signature:
+          - type: descriptor_table
+            name: Table0
+            index: 0
+            visibility: ALL
+            ranges:
+              - range_type: SRV
+                domain: [test]
+                base_shader_register: t0
+                register_space: space0
+                num_descriptors: 10
     """
         )
     )

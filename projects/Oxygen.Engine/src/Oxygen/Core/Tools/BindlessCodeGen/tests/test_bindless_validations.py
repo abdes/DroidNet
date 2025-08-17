@@ -6,7 +6,7 @@ import pytest
 from bindless_codegen import generator
 
 
-def write_yaml(tmpdir, content, name="BindingSlots.yaml"):
+def write_yaml(tmpdir, content, name="Spec.yaml"):
     path = tmpdir.join(name)
     path.write(content)
     return str(path)
@@ -14,7 +14,8 @@ def write_yaml(tmpdir, content, name="BindingSlots.yaml"):
 
 def test_domain_overlap_detection(tmp_path):
     yaml = """
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:
@@ -54,7 +55,8 @@ root_signature:
 
 def test_uav_counter_and_unbounded_forbidden(tmp_path):
     yaml = """
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:
@@ -74,7 +76,7 @@ root_signature:
     visibility: ALL
     ranges:
       - range_type: UAV
-        domain: u
+        domain: [u]
         base_shader_register: u0
         register_space: space0
         num_descriptors: unbounded
@@ -87,7 +89,8 @@ root_signature:
 
 def test_cbv_array_size_exceeds_domain(tmp_path):
     yaml = """
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:

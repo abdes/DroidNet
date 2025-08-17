@@ -1,5 +1,6 @@
 # UAV example: domain with uav_counter_register and bounded range
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:

@@ -1,5 +1,6 @@
 # Sampler table example: dedicated sampler descriptor_table at s0
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:

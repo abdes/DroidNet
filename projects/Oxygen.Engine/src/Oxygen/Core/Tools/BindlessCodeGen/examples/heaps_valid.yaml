@@ -1,34 +1,80 @@
-allocator:
-  version: "1.0"
-  platform: "d3d12"
+## Full BindingSlots example with heaps and mappings
+meta:
+  version: "1.0.0"
+  description: "Example showing SRV and SAMPLER domains mapped to D3D12 heaps"
 
+defaults:
+  invalid_index: 4294967295
+
+domains:
+  - id: textures
+    name: Textures
+    kind: SRV
+    register: t0
+    space: space0
+    root_table: BindlessSRV
+    domain_base: 0
+    capacity: 1024
+
+  - id: samplers
+    name: Samplers
+    kind: SAMPLER
+    register: s0
+    space: space0
+    root_table: SamplerTable
+    domain_base: 0
+    capacity: 64
+
+root_signature:
+  - type: descriptor_table
+    name: BindlessSRV
+    index: 0
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: textures
+        base_shader_register: t0
+        register_space: space0
+        num_descriptors: unbounded
+
+  - type: descriptor_table
+    name: SamplerTable
+    index: 1
+    visibility: ALL
+    ranges:
+      - range_type: SAMPLER
+        domain: samplers
+        base_shader_register: s0
+        register_space: space0
+        num_descriptors: 64
+
+# D3D12 heap strategy inputs. These feed the runtime JSON too.
 heaps:
-  CbvSrvUav_Main:
-    type: "CBV_SRV_UAV"
+  - id: heap_cbv_srv_uav_gpu
+    index: 0
+    type: CBV_SRV_UAV
     shader_visible: true
-    cpu_visible_capacity: 100000
-    shader_visible_capacity: 50000
+    cpu_visible_capacity: 0
+    shader_visible_capacity: 65536
     base_index: 0
     allow_growth: false
-    growth_factor: 2.0
-    max_growth_iterations: 0
-    debug_name: "CBV_SRV_UAV_Main"
+    debug_name: "CBV_SRV_UAV shader-visible"
 
-  Sampler_Main:
-    type: "SAMPLER"
+  - id: heap_sampler_gpu
+    index: 1
+    type: SAMPLER
     shader_visible: true
-    cpu_visible_capacity: 2048
+    cpu_visible_capacity: 0
     shader_visible_capacity: 2048
-    base_index: 200000
+    base_index: 100000
     allow_growth: false
-    growth_factor: 2.0
-    max_growth_iterations: 0
-    debug_name: "Sampler_Main"
+    debug_name: "SAMPLER shader-visible"
 
 mappings:
-  Texture_SRV:
-    heap: "CbvSrvUav_Main"
-    visibility: "shader"
-  Sampler:
-    heap: "Sampler_Main"
-    visibility: "shader"
+  - domain: textures
+    heap: heap_cbv_srv_uav_gpu
+    local_base: 0
+
+  - domain: samplers
+    heap: heap_sampler_gpu
+    local_base: 0

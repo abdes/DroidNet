@@ -144,10 +144,10 @@ aliasing between active and freed slots.
 - The allocator ensures efficient resource management and stable indexing
   without requiring physically separate tables.
 
-### SSoT: `BindingSlots.yaml` (authoritative)
+### SSoT: `Spec.yaml` (authoritative)
 
 The single source-of-truth for bindless slot/register mapping is
-`src/Oxygen/Core/Bindless/BindingSlots.yaml`. Key facts taken from that file:
+`src/Oxygen/Core/Bindless/Spec.yaml`. Key facts taken from that file:
 
 - Domains and domain bases:
   - `scene` (CBV) : register `b1`, heap index 0, domain_base=0, capacity=1
@@ -167,7 +167,6 @@ The single source-of-truth for bindless slot/register mapping is
 - Mappings tie domains → heaps and provide local base indices. The generator
   consumes this file and emits `BindingSlots.h`, `BindingSlots.hlsl` and a
   runtime JSON descriptor used by the engine/tooling.
-
 
 ### 3.2 Index Lifetime, Reuse, and Aliasing Prevention
 
@@ -268,7 +267,7 @@ lifetime/generation, validation, and type safety.
 
 - [x] Single shader-visible heap + descriptor table binding discipline
   - Status: Partial. Command recorder binds descriptor heaps and a single
-    unbounded SRV descriptor table (t0, space0). The `BindingSlots.yaml` SSoT
+    unbounded SRV descriptor table (t0, space0). The `Spec.yaml` SSoT
     now defines domain bases and mappings; generator emits headers that make
     it possible to validate bindings at startup. Further work: enforce at
     `RenderPass` level and add explicit sampler-table checks.
@@ -680,7 +679,6 @@ for a practical implementation sequence; stretch/automation items are last.
     - `UpdateViewInPlace` / `ReplaceView` to keep descriptor slot stable on
       hot-reload
   - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h`.
-
 
 - [ ] CPU-only generation validation for handles
   - Status: Missing in headers and validation.
