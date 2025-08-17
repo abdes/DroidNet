@@ -12,21 +12,11 @@ feature of the schema and the generator's semantic checks.
 
 ## Examples included
 
-- `basic_minimal.yaml` — Minimal CBV example with a single CBV root parameter.
-- `bindless_basic.yaml` — Unbounded SRV descriptor table mapped from one domain.
-- `cbv_array_example_small.yaml` — CBV array mapped to a domain (capacity
   check).
-- `multi_domain_range.yaml` — Descriptor table range backed by multiple domains.
-- `uav_with_counter.yaml` — UAV domain with `uav_counter_register` and bounded
   range.
-- `uav_example.yaml` — UAV example without an unbounded range (counter present).
-- `cbv_array_example.yaml` — Larger CBV array example.
-- `multi_space_srvs.yaml` — SRV domains placed in different register spaces.
-- `root_constants_and_tables.yaml` — CBV root constants with SRV descriptor
   table.
-- `sampler_table.yaml` — Dedicated sampler descriptor table example.
-- `heaps_valid.yaml` — Valid heaps + mappings SSoT; generates D3D12 strategy
   JSON and header.
+ heaps_valid.yaml shows a simple two-heap setup using a unified capacity per heap; the runtime JSON also uses a single 'capacity' per heap (visibility is implied by the :cpu/:gpu suffix in the key).
 
 ## Validation (local)
 

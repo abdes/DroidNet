@@ -303,8 +303,8 @@ root_signature:
     "format": "D3D12HeapStrategy/2"
   },
   "heaps": {
-    "CBV_SRV_UAV:cpu": { "cpu_visible_capacity": 1000000, ... },
-    "CBV_SRV_UAV:gpu": { "shader_visible_capacity": 1000000, ... },
+  "CBV_SRV_UAV:cpu": { "capacity": 1000000, ... },
+  "CBV_SRV_UAV:gpu": { "capacity": 1000000, ... },
     "SAMPLER:cpu": { ... },
     "SAMPLER:gpu": { ... },
     "RTV:cpu": { ... },

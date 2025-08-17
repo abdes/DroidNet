@@ -9,7 +9,7 @@
 // Source-Version: 1.0.0
 // Schema-Version: 1.0.0
 // Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 21:04:06
+// Generated: 2025-08-17 22:53:25
 
 #ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
 #define OXYGEN_BINDLESS_LAYOUT_HLSL

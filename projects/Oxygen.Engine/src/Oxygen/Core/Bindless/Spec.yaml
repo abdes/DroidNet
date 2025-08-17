@@ -98,58 +98,50 @@ symbols:
 # Heap id/key format (must match runtime BuildHeapKey):
 #   "<TYPE>:<vis>" where TYPE in {CBV_SRV_UAV, SAMPLER, RTV, DSV}
 #   and <vis> is "gpu" for shader-visible or "cpu" otherwise.
+#
+# Global index ranges per heap are [base_index, base_index + capacity).
+# These ranges MUST NOT overlap across any heaps.
+# Gaps are allowed; adjacency is not required.
 heaps:
   - id: "CBV_SRV_UAV:cpu"
-    index: 0
     type: CBV_SRV_UAV
     shader_visible: false
-    cpu_visible_capacity: 1000000
-    shader_visible_capacity: 0
+    capacity: 1000000
     base_index: 0
     allow_growth: false
 
   - id: "CBV_SRV_UAV:gpu"
-    index: 1
     type: CBV_SRV_UAV
     shader_visible: true
-    cpu_visible_capacity: 0
-    shader_visible_capacity: 1000000
+    capacity: 1000000
     base_index: 1000000
     allow_growth: false
 
   - id: "SAMPLER:cpu"
-    index: 2
     type: SAMPLER
     shader_visible: false
-    cpu_visible_capacity: 2048
-    shader_visible_capacity: 0
+    capacity: 2048
     base_index: 2000000
     allow_growth: false
 
   - id: "SAMPLER:gpu"
-    index: 3
     type: SAMPLER
     shader_visible: true
-    cpu_visible_capacity: 0
-    shader_visible_capacity: 2048
+    capacity: 2048
     base_index: 2002048
     allow_growth: false
 
   - id: "RTV:cpu"
-    index: 4
     type: RTV
     shader_visible: false
-    cpu_visible_capacity: 1024
-    shader_visible_capacity: 0
+    capacity: 1024
     base_index: 2004096
     allow_growth: false
 
   - id: "DSV:cpu"
-    index: 5
     type: DSV
     shader_visible: false
-    cpu_visible_capacity: 1024
-    shader_visible_capacity: 0
+    capacity: 1024
     base_index: 2005120
     allow_growth: false
 

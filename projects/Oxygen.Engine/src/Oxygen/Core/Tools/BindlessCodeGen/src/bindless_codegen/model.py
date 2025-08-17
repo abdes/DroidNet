@@ -65,11 +65,9 @@ class RootParameter:
 @dataclass
 class Heap:
     id: str
-    index: int
     type: str
     shader_visible: bool
-    cpu_visible_capacity: int
-    shader_visible_capacity: int
+    capacity: int
     base_index: int
     allow_growth: bool = False
     debug_name: Optional[str] = None
@@ -157,11 +155,9 @@ def build_model(doc: Dict[str, Any]) -> Model:
         heaps.append(
             Heap(
                 id=h.get("id"),
-                index=int(h.get("index")),
                 type=h.get("type"),
                 shader_visible=bool(h.get("shader_visible")),
-                cpu_visible_capacity=int(h.get("cpu_visible_capacity")),
-                shader_visible_capacity=int(h.get("shader_visible_capacity")),
+                capacity=int(h.get("capacity")),
                 base_index=int(h.get("base_index")),
                 allow_growth=bool(h.get("allow_growth", False)),
                 debug_name=h.get("debug_name"),

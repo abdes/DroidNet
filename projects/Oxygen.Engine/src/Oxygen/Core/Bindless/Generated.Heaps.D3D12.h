@@ -8,7 +8,7 @@
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
 // Source-Version: 1.0.0
 // Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 21:04:06
+// Generated: 2025-08-17 22:53:25
 
 #pragma once
 
@@ -22,54 +22,54 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
     "source_version": "1.0.0",
     "tool_version": "1.0.0",
-    "generated": "2025-08-17 21:04:06",
+    "generated": "2025-08-17 22:53:25",
     "format": "D3D12HeapStrategy/2",
     "schema_version": "1.0.0"
   },
   "heaps": {
     "CBV_SRV_UAV:cpu": {
-      "cpu_visible_capacity": 1000000,
-      "shader_visible_capacity": 0,
+      "capacity": 1000000,
+      "shader_visible": false,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
       "base_index": 0
     },
     "CBV_SRV_UAV:gpu": {
-      "cpu_visible_capacity": 0,
-      "shader_visible_capacity": 1000000,
+      "capacity": 1000000,
+      "shader_visible": true,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
       "base_index": 1000000
     },
     "SAMPLER:cpu": {
-      "cpu_visible_capacity": 2048,
-      "shader_visible_capacity": 0,
+      "capacity": 2048,
+      "shader_visible": false,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
       "base_index": 2000000
     },
     "SAMPLER:gpu": {
-      "cpu_visible_capacity": 0,
-      "shader_visible_capacity": 2048,
+      "capacity": 2048,
+      "shader_visible": true,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
       "base_index": 2002048
     },
     "RTV:cpu": {
-      "cpu_visible_capacity": 1024,
-      "shader_visible_capacity": 0,
+      "capacity": 1024,
+      "shader_visible": false,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
       "base_index": 2004096
     },
     "DSV:cpu": {
-      "cpu_visible_capacity": 1024,
-      "shader_visible_capacity": 0,
+      "capacity": 1024,
+      "shader_visible": false,
       "allow_growth": false,
       "growth_factor": 0.0,
       "max_growth_iterations": 0,
