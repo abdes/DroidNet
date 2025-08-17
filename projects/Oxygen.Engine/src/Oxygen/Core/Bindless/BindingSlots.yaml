@@ -1,0 +1,214 @@
+# ------------------------------------------------------------------------------
+# Source of truth for the Oxygen Engine Bindless bindings
+# ------------------------------------------------------------------------------
+# cmake --build --preset=windows-debug --target generate_bindless_headers
+#
+# To get validation in vscode:
+#   - Install the YAML extension
+#   - Add the following config if you don't have already:
+#       "yaml.schemas": {
+#         "src/Oxygen/Core/Tools/BindlessCodeGen/BindingSlots.schema.json": [
+#           "**/BindingSlots.yaml"
+#         ]
+#       },
+#       "yaml.validate": true
+# ------------------------------------------------------------------------------
+binding_slots_version: 1
+meta:
+  description: >
+    Authoritative bindless slot/register mapping for Oxygen.
+    Generated headers used by C++ and HLSL.
+  source: "src/Oxygen/Core/Bindless/BindingSlots.yaml"
+defaults:
+  invalid_index: 4294967295
+
+domains:
+  - id: scene
+    name: "Scene"
+    kind: CBV
+    register: b1
+    heap_index: 0
+    root_table: BindlessSRVTable
+    domain_base: 0
+    capacity: 1
+    comment: >
+      Scene constants CBV (b1), heap index 0;
+      holds bindless indices table
+
+  - id: srv_global
+    name: "GlobalSRV"
+    kind: SRV
+    register: t0
+    space: space0
+    root_table: BindlessSRVTable
+    domain_base: 1
+    capacity: 2048
+    comment: "Unified SRV table base"
+
+  - id: materials
+    name: "Materials"
+    kind: SRV
+    # Place materials after srv_global (which occupies 1..2049) and before
+    # textures (which start at 5096). Use domain_base 2049 and capacity 3047
+    # to end at 5096 (exclusive): [2049, 5096)
+    domain_base: 2049
+    capacity: 3047
+    register: t1
+    space: space0
+    root_table: BindlessSRVTable
+
+  - id: textures
+    name: "Textures"
+    kind: SRV
+    domain_base: 5096
+    capacity: 65536
+    register: t2
+    space: space0
+    root_table: BindlessSRVTable
+
+  - id: samplers
+    name: "Samplers"
+    kind: SAMPLER
+    register: s0
+    space: space0
+    root_table: SamplerTable
+    domain_base: 0
+    capacity: 256
+
+symbols:
+  SceneConstantsSlot:
+    domain: scene
+    comment: "CBV scene slot (b1)"
+  kInvalidBindlessIndex:
+    value: invalid_index
+    comment: "invalid sentinel (0xFFFFFFFF)"
+
+# Descriptor heap allocator specification for D3D12
+# This section mirrors the C++ `D3D12HeapAllocationStrategy` defaults and
+# creation order. The C++ strategy creates the following heaps (in order):
+# 0: CBV_SRV_UAV cpu-only
+# 1: CBV_SRV_UAV shader-visible
+# 2: SAMPLER cpu-only
+# 3: SAMPLER shader-visible
+# 4: RTV cpu-only
+# 5: DSV cpu-only
+# Capacities and base indices below match the conservative defaults used in
+# `D3D12HeapAllocationStrategy.cpp` when no device overrides are present.
+heaps:
+  - id: heap_cbv_srv_uav_cpu
+    index: 0
+    type: CBV_SRV_UAV
+    shader_visible: false
+    cpu_visible_capacity: 1000000
+    shader_visible_capacity: 0
+    base_index: 0
+    allow_growth: false
+
+  - id: heap_cbv_srv_uav_gpu
+    index: 1
+    type: CBV_SRV_UAV
+    shader_visible: true
+    cpu_visible_capacity: 0
+    shader_visible_capacity: 1000000
+    base_index: 1000000
+    allow_growth: false
+
+  - id: heap_sampler_cpu
+    index: 2
+    type: SAMPLER
+    shader_visible: false
+    cpu_visible_capacity: 2048
+    shader_visible_capacity: 0
+    base_index: 2000000
+    allow_growth: false
+
+  - id: heap_sampler_gpu
+    index: 3
+    type: SAMPLER
+    shader_visible: true
+    cpu_visible_capacity: 0
+    shader_visible_capacity: 2048
+    base_index: 2002048
+    allow_growth: false
+
+  - id: heap_rtv_cpu
+    index: 4
+    type: RTV
+    shader_visible: false
+    cpu_visible_capacity: 1024
+    shader_visible_capacity: 0
+    base_index: 2004096
+    allow_growth: false
+
+  - id: heap_dsv_cpu
+    index: 5
+    type: DSV
+    shader_visible: false
+    cpu_visible_capacity: 1024
+    shader_visible_capacity: 0
+    base_index: 2005120
+    allow_growth: false
+
+# Mappings tie logical domains to the authoritative C++ heaps.
+# Domains that back descriptor tables and are visible to shaders map to the
+# shader-visible heaps; other domains (or root CBVs) map to cpu-only heaps.
+mappings:
+  - domain: scene
+    heap: heap_cbv_srv_uav_cpu
+    local_base: 0
+
+  - domain: srv_global
+    heap: heap_cbv_srv_uav_gpu
+    local_base: 1
+
+  - domain: materials
+    heap: heap_cbv_srv_uav_gpu
+    local_base: 2049
+
+  - domain: textures
+    heap: heap_cbv_srv_uav_gpu
+    local_base: 5096
+
+  - domain: samplers
+    heap: heap_sampler_gpu
+    local_base: 0
+
+# Root signature description (ordered parameters). This is an optional,
+# machine-friendly description that the generator can emit for the runtime.
+root_signature:
+  - type: descriptor_table
+    name: "BindlessSRVTable"
+    index: 0
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: [srv_global, materials, textures]
+        base_shader_register: t0
+        register_space: space0
+        num_descriptors: unbounded
+
+  - type: descriptor_table
+    name: "SamplerTable"
+    index: 1
+    visibility: ALL
+    ranges:
+      - range_type: SAMPLER
+        domain: samplers
+        base_shader_register: s0
+        register_space: space0
+        num_descriptors: 256
+
+  - type: cbv
+    name: "SceneConstants"
+    index: 2
+    visibility: ALL
+    shader_register: b1
+    register_space: space0
+
+  - type: root_constants
+    name: "DrawIndex"
+    index: 3
+    visibility: ALL
+    shader_register: b2
+    register_space: space0
+    num_32bit_values: 1

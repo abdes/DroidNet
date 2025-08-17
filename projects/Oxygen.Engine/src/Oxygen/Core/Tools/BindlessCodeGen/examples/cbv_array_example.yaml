@@ -1,0 +1,23 @@
+# Example: CBV array parameter mapped to a domain
+binding_slots_version: 1
+meta:
+  description: "CBV array example for BindlessCodeGen"
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: cbv_dom
+    name: CBVDomain
+    kind: CBV
+    register: b1
+    space: space0
+    root_table: CBVTable
+    domain_base: 0
+    capacity: 8
+root_signature:
+  - type: cbv
+    name: CBVTable
+    index: 2
+    visibility: ALL
+    shader_register: b1
+    register_space: space0
+    cbv_array_size: 4

@@ -187,5 +187,11 @@
     "80"
   ],
   "C_Cpp.default.intelliSenseMode": "",
-  "C_Cpp.errorSquiggles": "disabled"
+  "C_Cpp.errorSquiggles": "disabled",
+  "yaml.schemas": {
+    "src/Oxygen/Core/Bindless/BindingSlots.schema.json": [
+      "**/BindingSlots.yaml"
+    ]
+  },
+  "yaml.validate": true
 }

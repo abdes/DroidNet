@@ -1,0 +1,34 @@
+allocator:
+  version: "1.0"
+  platform: "d3d12"
+
+heaps:
+  CbvSrvUav_Main:
+    type: "CBV_SRV_UAV"
+    shader_visible: true
+    cpu_visible_capacity: 100000
+    shader_visible_capacity: 50000
+    base_index: 0
+    allow_growth: false
+    growth_factor: 2.0
+    max_growth_iterations: 0
+    debug_name: "CBV_SRV_UAV_Main"
+
+  Sampler_Main:
+    type: "SAMPLER"
+    shader_visible: true
+    cpu_visible_capacity: 2048
+    shader_visible_capacity: 2048
+    base_index: 200000
+    allow_growth: false
+    growth_factor: 2.0
+    max_growth_iterations: 0
+    debug_name: "Sampler_Main"
+
+mappings:
+  Texture_SRV:
+    heap: "CbvSrvUav_Main"
+    visibility: "shader"
+  Sampler:
+    heap: "Sampler_Main"
+    visibility: "shader"

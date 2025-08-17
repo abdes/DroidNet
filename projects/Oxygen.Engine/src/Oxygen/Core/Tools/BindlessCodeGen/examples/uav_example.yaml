@@ -1,0 +1,27 @@
+# Example: UAV domain with uav_counter_register
+binding_slots_version: 1
+meta:
+  description: "UAV example for BindlessCodeGen"
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: uavs
+    name: UAVs
+    kind: UAV
+    register: u0
+    space: space0
+    root_table: UAVTable
+    uav_counter_register: u1
+    domain_base: 0
+    capacity: 16
+root_signature:
+  - type: descriptor_table
+    name: UAVTable
+    index: 5
+    visibility: ALL
+    ranges:
+      - range_type: UAV
+        domain: uavs
+        base_shader_register: u0
+        register_space: space0
+        num_descriptors: 16

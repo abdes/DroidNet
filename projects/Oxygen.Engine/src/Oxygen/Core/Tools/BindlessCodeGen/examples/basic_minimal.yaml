@@ -1,0 +1,19 @@
+# Minimal valid BindingSlots example: single CBV root parameter for scene constants
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: scene
+    name: Scene
+    kind: CBV
+    register: b1
+    space: space0
+    domain_base: 0
+    capacity: 1
+root_signature:
+  - type: cbv
+    name: SceneCBV
+    index: 0
+    visibility: ALL
+    shader_register: b1
+    register_space: space0
