@@ -15,19 +15,20 @@ remaining multi-pass friendly.
 | ✅ | **2. Copy and Refactor Extraction Classes** | Copy existing `RenderItemProto`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
 | ✅ | **3. Copy and Refactor Extractors** | Implement collection extractors: `ExtractionPreFilter`, `MeshResolver`, `SubMeshVisibilityFilter` (with per-submesh frustum culling), and `EmitPerVisibleSubmesh`, adapted to the new concept-based ScenePrep design | Task 2 |
 | ⏳ | **4. Implement Helper State Classes** | Create `TransformManager`, `TransformBatchCache`, `MaterialRegistry`, `GeometryRegistry` and related cache classes | Task 1 |
-| ⏳ | **5. Create Configuration System** | Implement template-based `CollectionConfig`, `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
-| ⏳ | **6. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4, 5 |
-| ⏳ | **7. Implement ScenePrepPipeline** | Create main `ScenePrepPipeline` class with Collection and Finalization orchestration using `if constexpr` | Task 5, 6 |
-| ⏳ | **8. Copy and Refactor RenderListBuilder** | Copy existing `RenderListBuilder` to ScenePrep module and refactor to use new `ScenePrepPipeline` internally | Task 7 |
-| ⏳ | **9. Add Unit Tests** | Create comprehensive test suite for individual algorithms and configuration flexibility | Task 6, 7 |
-| ⏳ | **10. Implement Mock Configurations** | Create GPU-independent test configurations and integration test examples | Task 7, 9 |
-| ⏳ | **11. Add Performance Optimizations** | Implement batching, deduplication, and memory pool allocators for production performance | Task 8 |
-| ⏳ | **12. Implement Draw Metadata System** | Add mesh-view draw command generation and metadata creation | Task 11 |
-| ⏳ | **13. Add Sorting and Partitioning** | Implement depth sorting, material grouping, and render pass partitioning algorithms | Task 12 |
-| ⏳ | **14. Integration Testing** | Create end-to-end tests with real scenes and validate performance vs existing system | Task 13 |
-| ⏳ | **15. Documentation and Examples** | Update API documentation, add usage examples, and create migration guide | Task 14 |
-| ⏳ | **16. Wire ScenePrep to Renderer** | Update Renderer to use new ScenePrep module instead of old Extraction module | Task 15 |
-| ⏳ | **17. Remove Legacy Extraction Code** | Delete old `Extraction` module files after successful migration and testing | Task 16 |
+| ✅ | **5. Create Collection Configuration System** | Implement template-based `CollectionConfig` with `if constexpr` stage detection and factory functions | Task 1 |
+| ⏳ | **6. Create Finalization Configuration System** | Implement template-based `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
+| ⏳ | **7. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4, 5, 6 |
+| 🔄 | **8. Implement ScenePrepPipeline** | Create main `ScenePrepPipeline` class with Collection and Finalization orchestration using `if constexpr` (Collection phase implemented) | Task 5, 6, 7 |
+| ⏳ | **9. Copy and Refactor RenderListBuilder** | Copy existing `RenderListBuilder` to ScenePrep module and refactor to use new `ScenePrepPipeline` internally | Task 8 |
+| ⏳ | **10. Add Unit Tests** | Create comprehensive test suite for individual algorithms and configuration flexibility | Task 7, 8 |
+| ⏳ | **11. Implement Mock Configurations** | Create GPU-independent test configurations and integration test examples | Task 8, 10 |
+| ⏳ | **12. Add Performance Optimizations** | Implement batching, deduplication, and memory pool allocators for production performance | Task 9 |
+| ⏳ | **13. Implement Draw Metadata System** | Add mesh-view draw command generation and metadata creation | Task 12 |
+| ⏳ | **14. Add Sorting and Partitioning** | Implement depth sorting, material grouping, and render pass partitioning algorithms | Task 13 |
+| ⏳ | **15. Integration Testing** | Create end-to-end tests with real scenes and validate performance vs existing system | Task 14 |
+| ⏳ | **16. Documentation and Examples** | Update API documentation, add usage examples, and create migration guide | Task 15 |
+| ⏳ | **17. Wire ScenePrep to Renderer** | Update Renderer to use new ScenePrep module instead of old Extraction module | Task 16 |
+| ⏳ | **18. Remove Legacy Extraction Code** | Delete old `Extraction` module files after successful migration and testing | Task 17 |
 
 ### Status Legend
 
@@ -38,9 +39,9 @@ remaining multi-pass friendly.
 
 ### Estimated Timeline
 
-- **Phase 1** (Tasks 1-7): Core Infrastructure - ~2-3 weeks
-- **Phase 2** (Tasks 8-13): Implementation and Optimization - ~2-3 weeks
-- **Phase 3** (Tasks 14-17): Testing, Integration, and Cleanup - ~1-2 weeks
+- **Phase 1** (Tasks 1-8): Core Infrastructure - ~2-3 weeks
+- **Phase 2** (Tasks 9-14): Implementation and Optimization - ~2-3 weeks
+- **Phase 3** (Tasks 15-18): Testing, Integration, and Cleanup - ~1-2 weeks
 
 ---
 
