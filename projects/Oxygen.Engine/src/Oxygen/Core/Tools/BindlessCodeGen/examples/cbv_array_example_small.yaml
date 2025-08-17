@@ -1,0 +1,21 @@
+# CBV array example: cbv root parameter mapping to domain with capacity
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: per_draw_cbvs
+    name: PerDrawCBVs
+    kind: CBV
+    register: b2
+    space: space0
+    root_table: PerDrawCBVTable
+    domain_base: 0
+    capacity: 16
+root_signature:
+  - type: cbv
+    name: PerDrawCBVTable
+    index: 4
+    visibility: ALL
+    shader_register: b2
+    register_space: space0
+    cbv_array_size: 8

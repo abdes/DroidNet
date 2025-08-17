@@ -1,0 +1,32 @@
+# Multi-domain range example: descriptor_table range backed by materials+textures
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: materials
+    name: Materials
+    kind: SRV
+    register: t1
+    space: space0
+    root_table: BindlessSRV
+    domain_base: 0
+    capacity: 1024
+  - id: textures
+    name: Textures
+    kind: SRV
+    register: t2
+    space: space0
+    root_table: BindlessSRV
+    domain_base: 1024
+    capacity: 4096
+root_signature:
+  - type: descriptor_table
+    name: BindlessSRV
+    index: 1
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: [materials, textures]
+        base_shader_register: t1
+        register_space: space0
+        num_descriptors: unbounded

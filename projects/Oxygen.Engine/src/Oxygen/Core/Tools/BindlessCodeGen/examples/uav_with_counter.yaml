@@ -1,0 +1,25 @@
+# UAV example: domain with uav_counter_register and bounded range
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: particles_uav
+    name: ParticlesUAV
+    kind: UAV
+    register: u0
+    space: space0
+    root_table: ParticleTable
+    uav_counter_register: u1
+    domain_base: 0
+    capacity: 64
+root_signature:
+  - type: descriptor_table
+    name: ParticleTable
+    index: 3
+    visibility: ALL
+    ranges:
+      - range_type: UAV
+        domain: particles_uav
+        base_shader_register: u0
+        register_space: space0
+        num_descriptors: 64

@@ -1,0 +1,32 @@
+# Root constants + descriptor tables example: CBV root constant + SRV descriptor_table
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+meta:
+  description: "Root constants and descriptor tables example"
+domains:
+  - id: materials
+    name: Materials
+    kind: SRV
+    register: t1
+    space: space0
+    root_table: BindlessSRV
+    domain_base: 1000
+    capacity: 2048
+root_signature:
+  - type: cbv
+    name: FrameConstants
+    index: 0
+    visibility: ALL
+    shader_register: b1
+    register_space: space0
+  - type: descriptor_table
+    name: BindlessSRV
+    index: 1
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: materials
+        base_shader_register: t1
+        register_space: space0
+        num_descriptors: unbounded

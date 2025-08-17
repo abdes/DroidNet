@@ -98,6 +98,18 @@ target_link_libraries(
 )
 
 # ------------------------------------------------------------------------------
+# Tools subdirectory (contains BindlessCodeGen) — provides generate_bindless_headers
+# ------------------------------------------------------------------------------
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools/CMakeLists.txt")
+  add_subdirectory("Tools")
+  # If the Tools subdir defines the generate target, make core depend on it.
+  if(TARGET generate_bindless_headers)
+    add_dependencies(${META_MODULE_TARGET} generate_bindless_headers)
+  endif()
+endif()
+
+
+# ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 

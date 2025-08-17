@@ -4,7 +4,7 @@
 
 **Optimized version crashes on Mutex machinery in the STL.**
 
-https://developercommunity.visualstudio.com/t/Visual-Studio-17100-Update-leads-to-Pr/10669759?sort=newest
+<https://developercommunity.visualstudio.com/t/Visual-Studio-17100-Update-leads-to-Pr/10669759?sort=newest>
 I’m resolving it as By Design, as explained in our release notes:
 
 Fixed mutex’s constructor to be constexpr.
@@ -21,7 +21,7 @@ Download the latest Microsoft Visual C++ Redistributables and install them on
 the machine that gives the problem.
 
 On this Microsoft site you find the downloads.
-https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+<https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170>
 
 ## Shader Compilation Setup
 
@@ -71,7 +71,7 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\
 cd dev/projects
 
 pip install conan
-git clone https://github.com/abdes/conan-center-index.git
+git clone <https://github.com/abdes/conan-center-index.git>
 
 ```shell
 $ conan remote remove conancenter
@@ -94,3 +94,16 @@ $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Wher
 ```powershell
 $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Where-Object { $_ -match '(CMakeLists\.txt|\.cmake)$' } | ForEach-Object { $abs=Join-Path $repoRoot $_; gersemi -i $abs; Write-Output "Formatted: $abs" }
 ```
+
+## Developer notes: running the BindlessCodeGen CLI
+
+The bindless codegen tool is provided as a small library and a CLI entrypoint. To avoid a Python runtime warning when running the CLI directly, prefer invoking it as a module from a clean interpreter process:
+
+```powershell
+& F:/projects/.venv/Scripts/python.exe -m bindless_codegen.cli --input <path-to-BindingSlots.yaml> --out-cpp out.h --out-hlsl out.hlsl
+```
+
+Notes:
+
+- The package uses lazy imports for submodules (no import-time side-effects), so `python -m bindless_codegen.cli` is the recommended invocation for development. Installing a console_scripts entrypoint (via setup/pyproject) is also a convenient option for CI and developer workflows.
+- If you see a RuntimeWarning from runpy about modules found in sys.modules, it means the interpreter already had the package imported; running the CLI in a fresh process will avoid that.

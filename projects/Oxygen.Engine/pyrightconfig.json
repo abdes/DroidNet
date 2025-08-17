@@ -1,0 +1,7 @@
+{
+  "typeCheckingMode": "basic",
+  "extraPaths": [
+    "src/Oxygen/Core/Tools/BindlessCodeGen/src",
+    "src/Oxygen/Content/Tools/PakGen/src",
+  ]
+}

@@ -1,0 +1,42 @@
+# Multi-space SRV example: SRV domains split across register spaces
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: textures_space0
+    name: Textures_s0
+    kind: SRV
+    register: t0
+    space: space0
+    root_table: BindlessSRV
+    domain_base: 0
+    capacity: 1024
+  - id: textures_space1
+    name: Textures_s1
+    kind: SRV
+    register: t0
+    space: space1
+    root_table: BindlessSRVSpace1
+    domain_base: 0
+    capacity: 512
+root_signature:
+  - type: descriptor_table
+    name: BindlessSRV
+    index: 0
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: textures_space0
+        base_shader_register: t0
+        register_space: space0
+        num_descriptors: unbounded
+  - type: descriptor_table
+    name: BindlessSRVSpace1
+    index: 1
+    visibility: ALL
+    ranges:
+      - range_type: SRV
+        domain: textures_space1
+        base_shader_register: t0
+        register_space: space1
+        num_descriptors: unbounded

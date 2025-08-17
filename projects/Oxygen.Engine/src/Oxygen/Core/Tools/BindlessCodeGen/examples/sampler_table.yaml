@@ -1,0 +1,24 @@
+# Sampler table example: dedicated sampler descriptor_table at s0
+binding_slots_version: 1
+defaults:
+  invalid_index: 4294967295
+domains:
+  - id: samplers
+    name: Samplers
+    kind: SAMPLER
+    register: s0
+    space: space0
+    root_table: SamplerTable
+    domain_base: 0
+    capacity: 16
+root_signature:
+  - type: descriptor_table
+    name: SamplerTable
+    index: 6
+    visibility: ALL
+    ranges:
+      - range_type: SAMPLER
+        domain: samplers
+        base_shader_register: s0
+        register_space: space0
+        num_descriptors: 16
