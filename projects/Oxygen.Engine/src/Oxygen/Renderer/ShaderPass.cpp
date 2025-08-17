@@ -421,7 +421,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .AddRootBinding(RootBindingItem(indices_srv_table_desc))
     // Root Parameter 1: SceneConstants CBV (b1, space0)
     .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
-    // Root Parameter 2: DrawIndex constant (b3, space0)
+    // Root Parameter 2: DrawIndex constant (b2, space0)
     .AddRootBinding(RootBindingItem(draw_index_constant_desc))
     .Build();
 }
