@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="2" failures="0" disabled="0" errors="0" time="0.015" timestamp="2025-08-16T14:23:05.591" name="AllTests">
-  <testsuite name="RenderListBuilder_Basic" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0.002" timestamp="2025-08-16T14:23:05.592">
-    <testcase name="Smoke" file="F:\projects\DroidNet\projects\Oxygen.Engine\src\Oxygen\Renderer\Test\RenderListBuilder_basic_test.cpp" line="105" status="run" result="completed" time="0.002" timestamp="2025-08-16T14:23:05.592" classname="RenderListBuilder_Basic" />
-  </testsuite>
-  <testsuite name="RenderListBuilder_LOD" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0.011" timestamp="2025-08-16T14:23:05.595">
-    <testcase name="DistancePolicy_PerView_SelectsDifferentLods" file="F:\projects\DroidNet\projects\Oxygen.Engine\src\Oxygen\Renderer\Test\RenderListBuilder_basic_test.cpp" line="125" status="run" result="completed" time="0.011" timestamp="2025-08-16T14:23:05.595" classname="RenderListBuilder_LOD" />
-  </testsuite>
-</testsuites>
