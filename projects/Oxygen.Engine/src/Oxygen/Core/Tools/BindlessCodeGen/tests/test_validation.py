@@ -18,15 +18,35 @@ def write_schema(path, schema_obj):
 def create_minimal_valid_document():
     """Create a minimal valid BindingSlots document."""
     return {
-        "binding_slots_version": 1,
+        "meta": {"version": "1.0.0"},
         "defaults": {"invalid_index": 4294967295},
         "domains": [
             {
                 "id": "test_domain",
                 "name": "TestDomain",
-                "kind": "srv",
+                "kind": "SRV",
+                "register": "t0",
+                "space": "space0",
+                "root_table": "Table0",
                 "domain_base": 0,
                 "capacity": 100,
+            }
+        ],
+        "root_signature": [
+            {
+                "type": "descriptor_table",
+                "name": "Table0",
+                "index": 0,
+                "visibility": "ALL",
+                "ranges": [
+                    {
+                        "range_type": "SRV",
+                        "domain": ["test_domain"],
+                        "base_shader_register": "t0",
+                        "register_space": "space0",
+                        "num_descriptors": 100,
+                    }
+                ],
             }
         ],
     }
@@ -35,19 +55,19 @@ def create_minimal_valid_document():
 def create_full_example_document():
     """Create a full example document with all optional fields."""
     return {
-        "binding_slots_version": 1,
         "meta": {
+            "version": "1.0.0",
             "description": "Test bindless slot mapping",
-            "source": "test.yaml",
         },
         "defaults": {"invalid_index": 4294967295},
         "domains": [
             {
                 "id": "textures",
                 "name": "Textures",
-                "kind": "srv",
+                "kind": "SRV",
                 "register": "t0",
-                "space": 0,
+                "space": "space0",
+                "root_table": "GfxTable",
                 "heap_index": 1,
                 "domain_base": 1000,
                 "capacity": 4096,
@@ -56,9 +76,10 @@ def create_full_example_document():
             {
                 "id": "samplers",
                 "name": "Samplers",
-                "kind": "sampler",
+                "kind": "SAMPLER",
                 "register": "s0",
-                "space": 0,
+                "space": "space0",
+                "root_table": "GfxTable",
                 "domain_base": 0,
                 "capacity": 256,
                 "comment": "Sampler array",
@@ -74,16 +95,45 @@ def create_full_example_document():
                 "comment": "Base texture slot",
             },
         },
+        "root_signature": [
+            {
+                "type": "descriptor_table",
+                "name": "GfxTable",
+                "index": 0,
+                "visibility": ["ALL"],
+                "ranges": [
+                    {
+                        "range_type": "SRV",
+                        "domain": ["textures"],
+                        "base_shader_register": "t0",
+                        "register_space": "space0",
+                        "num_descriptors": 4096,
+                    },
+                    {
+                        "range_type": "SAMPLER",
+                        "domain": ["samplers"],
+                        "base_shader_register": "s0",
+                        "register_space": "space0",
+                        "num_descriptors": 256,
+                    },
+                ],
+            }
+        ],
     }
 
 
 class TestValidationWithActualSchema:
-    """Test validation using the actual BindingSlots.schema.json file."""
+    """Test validation using the actual Spec.schema.json file."""
 
     @pytest.fixture
     def actual_schema_path(self):
         """Get path to the actual schema file."""
-        return Path(__file__).resolve().parents[1] / "BindingSlots.schema.json"
+        # Schema is located at src/Oxygen/Core/Bindless/Spec.schema.json
+        return (
+            Path(__file__).resolve().parents[3]
+            / "Bindless"
+            / "Spec.schema.json"
+        )
 
     def test_validate_with_actual_schema_success(self, actual_schema_path):
         """Test validation success with actual schema and minimal valid document."""
@@ -106,24 +156,41 @@ class TestValidationWithActualSchema:
         if not actual_schema_path.exists():
             pytest.skip("Actual schema file not found")
 
-        # Missing binding_slots_version
-        doc = {"defaults": {"invalid_index": 4294967295}, "domains": []}
-        with pytest.raises(
-            ValueError, match="validation failed.*binding_slots_version"
-        ):
+        # Missing meta
+        doc = {
+            "defaults": {"invalid_index": 4294967295},
+            "domains": [],
+            "root_signature": [],
+        }
+        with pytest.raises(ValueError, match="validation failed.*meta"):
             generator.validate_input(doc, actual_schema_path)
 
         # Missing defaults
-        doc = {"binding_slots_version": 1, "domains": []}
+        doc = {
+            "meta": {"version": "1.0.0"},
+            "domains": [],
+            "root_signature": [],
+        }
         with pytest.raises(ValueError, match="validation failed.*defaults"):
             generator.validate_input(doc, actual_schema_path)
 
         # Missing domains
         doc = {
-            "binding_slots_version": 1,
+            "meta": {"version": "1.0.0"},
             "defaults": {"invalid_index": 4294967295},
+            "root_signature": [],
         }
         with pytest.raises(ValueError, match="validation failed.*domains"):
+            generator.validate_input(doc, actual_schema_path)
+        # Missing root_signature
+        doc = {
+            "meta": {"version": "1.0.0"},
+            "defaults": {"invalid_index": 4294967295},
+            "domains": [],
+        }
+        with pytest.raises(
+            ValueError, match="validation failed.*root_signature"
+        ):
             generator.validate_input(doc, actual_schema_path)
 
     def test_validate_invalid_domain_fields(self, actual_schema_path):
@@ -191,8 +258,8 @@ class TestValidationEdgeCases:
         mock_generator_file = src_dir / "generator.py"
         mock_generator_file.write_text("# mock file")
 
-        # Create schema at the expected location (2 levels up from generator.py)
-        schema_path = tmp_path / "BindingSlots.schema.json"
+        # Create schema at one of the expected locations relative to generator.py (parent of src)
+        schema_path = tmp_path / "src" / "Spec.schema.json"
         schema = {
             "type": "object",
             "required": ["test_field"],
@@ -220,8 +287,8 @@ class TestValidationEdgeCases:
 
     def test_validate_missing_jsonschema_module(self, monkeypatch, tmp_path):
         """Test validation when jsonschema module is not available."""
-        # Mock jsonschema as None
-        monkeypatch.setattr(generator, "jsonschema", None)
+        # Mock jsonschema as None in the schema module used by generator
+        monkeypatch.setattr(generator.schema_mod, "jsonschema", None)
 
         schema_path = tmp_path / "test.json"
         write_schema(schema_path, {"type": "object"})

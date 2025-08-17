@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -37,6 +38,12 @@ include(GTestHelpers)
 
 m_gtest_program(Version SOURCES "Version_test.cpp")
 m_gtest_program(SafeCall SOURCES "SafeCall_test.cpp")
+m_gtest_program(BindlessHeaps SOURCES "BindlessHeaps_test.cpp")
+target_link_libraries(
+  "${META_MODULE_NAME}.BindlessHeaps.Tests"
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
 m_gtest_program(
   AnyCache
   SOURCES

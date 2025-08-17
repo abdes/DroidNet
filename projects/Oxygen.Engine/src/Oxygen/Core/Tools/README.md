@@ -13,25 +13,6 @@ The Tools directory provides:
 - **CMake Integration**: Build system targets for seamless code generation
   during development
 
-## Directory Structure
-
-```text
-Tools/
-├── CMakeLists.txt              # CMake configuration for tools
-├── README.md                   # This file
-└── BindlessCodeGen/            # Bindless constants generator
-    ├── CMakeLists.txt
-    ├── pyproject.toml          # Python package configuration
-    ├── requirements.txt        # Python dependencies
-    ├── src/bindless_codegen/   # Generator source code
-    │   ├── __init__.py
-    │   ├── _version.py
-    │   ├── cli.py              # Command-line interface
-    │   └── generator.py        # Core generation logic
-    └── tests/                  # Unit tests
-        └── test_generator_basic.py
-```
-
 ## BindlessCodeGen Tool
 
 The BindlessCodeGen tool generates C++ and HLSL header files that define
@@ -52,11 +33,22 @@ consistency between CPU and GPU code when accessing bindless resources.
 cmake --build --preset=windows-debug --target generate_bindless_headers
 
 # Or run directly (requires manual setup):
-python -m bindless_codegen.cli \
-  --input src/Oxygen/Core/Bindless/BindingSlots.yaml \
-  --out-cpp src/Oxygen/Core/Bindless/BindingSlots.h \
-  --out-hlsl src/Oxygen/Core/Bindless/BindingSlots.hlsl
+python -m bindless_codegen.cli `
+  --input src/Oxygen/Core/Bindless/Spec.yaml `
+  --out-base src/Oxygen/Core/Bindless/Generated.
 ```
+
+This produces (next to the Spec.yaml):
+
+- Generated.Constants.h (C++ constants)
+- Generated.BindlessLayout.hlsl (HLSL layout/macros)
+- Generated.RootSignature.h (C++ root signature helpers)
+- Generated.Meta.h (compile-time metadata)
+- Generated.All.json (normalized runtime descriptor)
+- Generated.Heaps.D3D12.json (if heaps are defined)
+- Generated.Heaps.D3D12.h (constexpr JSON embed, if heaps are defined)
+
+Schema location: the generator auto-discovers `Spec.schema.json` next to the input, or uses the repository default at `src/Oxygen/Core/Bindless/Spec.schema.json`.
 
 **📖 Full Documentation:** See
 [`BindlessCodeGen/README.md`](BindlessCodeGen/README.md) for detailed usage,

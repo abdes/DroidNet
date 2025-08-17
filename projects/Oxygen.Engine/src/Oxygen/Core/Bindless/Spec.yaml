@@ -7,18 +7,18 @@
 #   - Install the YAML extension
 #   - Add the following config if you don't have already:
 #       "yaml.schemas": {
-#         "src/Oxygen/Core/Tools/BindlessCodeGen/BindingSlots.schema.json": [
-#           "**/BindingSlots.yaml"
+#         "src/Oxygen/Core/Bindless/Spec.schema.json": [
+#           "**/Spec.yaml"
 #         ]
 #       },
 #       "yaml.validate": true
 # ------------------------------------------------------------------------------
-binding_slots_version: 1
 meta:
+  version: "1.0.0"
   description: >
     Authoritative bindless slot/register mapping for Oxygen.
     Generated headers used by C++ and HLSL.
-  source: "src/Oxygen/Core/Bindless/BindingSlots.yaml"
+
 defaults:
   invalid_index: 4294967295
 

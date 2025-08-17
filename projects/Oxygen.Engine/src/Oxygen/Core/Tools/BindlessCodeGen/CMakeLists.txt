@@ -27,13 +27,21 @@ set(_pyproject "${_tool_dir}/pyproject.toml")
 # ------------------------------------------------------------------------------
 
 add_custom_command(
-  OUTPUT "${_stamp}"
-  COMMAND ${CMAKE_COMMAND} -E echo "[BindlessCodeGen] Editable install starting"
-  COMMAND ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1 ${Python3_EXECUTABLE} -m pip install -r requirements.txt
-  COMMAND ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1 ${Python3_EXECUTABLE} -m pip install -e .
-  COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
+  OUTPUT
+    "${_stamp}"
+  COMMAND
+    ${CMAKE_COMMAND} -E echo "[BindlessCodeGen] Editable install starting"
+  COMMAND
+    ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
+    ${Python3_EXECUTABLE} -m pip install -r requirements.txt
+  COMMAND
+    ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
+    ${Python3_EXECUTABLE} -m pip install -e .
+  COMMAND
+    ${CMAKE_COMMAND} -E touch "${_stamp}"
   WORKING_DIRECTORY "${_tool_dir}"
-  DEPENDS "${_pyproject}"
+  DEPENDS
+    "${_pyproject}"
   COMMENT "Installing BindlessCodeGen (editable)"
   VERBATIM
 )
@@ -42,34 +50,10 @@ add_custom_target(bindless_codegen_editable_install ALL DEPENDS "${_stamp}")
 set_target_properties(
   bindless_codegen_editable_install
   PROPERTIES
-    FOLDER "Tools"
-    OUTPUT_NAME "Editable Install of BindlessCodeGen"
-)
-
-# ------------------------------------------------------------------------------
-# Header Generation Target
-# ------------------------------------------------------------------------------
-
-# Generator invocation produce headers from the SOT
-set(_sot "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Bindless/BindingSlots.yaml")
-set(_out_cpp "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Bindless/BindingSlots.h")
-set(_out_hlsl "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Bindless/BindingSlots.hlsl")
-
-add_custom_command(
-  OUTPUT ${_out_cpp} ${_out_hlsl}
-  COMMAND ${CMAKE_COMMAND} -E echo "[BindlessCodeGen] Generating BindingSlots headers"
-  COMMAND ${Python3_EXECUTABLE} -m bindless_codegen.cli --input ${_sot} --out-cpp ${_out_cpp} --out-hlsl ${_out_hlsl}
-  DEPENDS bindless_codegen_editable_install ${_sot}
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  VERBATIM
-)
-
-add_custom_target(generate_bindless_headers DEPENDS ${_out_cpp} ${_out_hlsl})
-set_target_properties(
-  generate_bindless_headers
-  PROPERTIES
-    FOLDER "Tools"
-    OUTPUT_NAME "Generate Bindless BindingSlots"
+    FOLDER
+      "Tools"
+    OUTPUT_NAME
+      "Editable Install of BindlessCodeGen"
 )
 
 # ------------------------------------------------------------------------------
@@ -80,7 +64,8 @@ set_target_properties(
 if(BUILD_TESTING)
   add_test(
     NAME BindlessCodeGen_UnitTests
-    COMMAND ${Python3_EXECUTABLE} -m pytest tests/ -v
+    COMMAND
+      ${Python3_EXECUTABLE} -m pytest tests/ -v
     WORKING_DIRECTORY "${_tool_dir}"
   )
 
@@ -88,8 +73,10 @@ if(BUILD_TESTING)
   set_tests_properties(
     BindlessCodeGen_UnitTests
     PROPERTIES
-      DEPENDS bindless_codegen_editable_install
-      LABELS "Tools;BindlessCodeGen;Python"
+      DEPENDS
+        bindless_codegen_editable_install
+      LABELS
+        "Tools;BindlessCodeGen;Python"
   )
 endif()
 

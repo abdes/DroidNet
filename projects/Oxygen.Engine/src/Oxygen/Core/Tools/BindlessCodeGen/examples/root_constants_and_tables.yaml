@@ -1,9 +1,9 @@
 # Root constants + descriptor tables example: CBV root constant + SRV descriptor_table
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
+  description: "Root constants and descriptor tables example"
 defaults:
   invalid_index: 4294967295
-meta:
-  description: "Root constants and descriptor tables example"
 domains:
   - id: materials
     name: Materials

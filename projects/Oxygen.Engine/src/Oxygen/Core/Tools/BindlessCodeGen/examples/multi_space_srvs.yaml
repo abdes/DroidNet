@@ -1,5 +1,6 @@
 # Multi-space SRV example: SRV domains split across register spaces
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:

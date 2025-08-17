@@ -16,7 +16,7 @@ feature of the schema and the generator's semantic checks.
 - `bindless_basic.yaml` — Unbounded SRV descriptor table mapped from one domain.
 - `cbv_array_example_small.yaml` — CBV array mapped to a domain (capacity
   check).
-- `multi_domain_range.yaml` — Descriptor_table range backed by multiple domains.
+- `multi_domain_range.yaml` — Descriptor table range backed by multiple domains.
 - `uav_with_counter.yaml` — UAV domain with `uav_counter_register` and bounded
   range.
 - `uav_example.yaml` — UAV example without an unbounded range (counter present).
@@ -25,6 +25,8 @@ feature of the schema and the generator's semantic checks.
 - `root_constants_and_tables.yaml` — CBV root constants with SRV descriptor
   table.
 - `sampler_table.yaml` — Dedicated sampler descriptor table example.
+- `heaps_valid.yaml` — Valid heaps + mappings SSoT; generates D3D12 strategy
+  JSON and header.
 
 ## Validation (local)
 
@@ -34,16 +36,27 @@ feature of the schema and the generator's semantic checks.
 2. From the `BindlessCodeGen` directory run the examples validator script:
 
 ```powershell
-cd 'f:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Core/Tools/BindlessCodeGen'
+# From the repository root
+cd 'src/Oxygen/Core/Tools/BindlessCodeGen'
 python -m examples.run_validate_examples
+```
+
+Use `-v` to show generator progress/logs (quiet by default):
+
+```powershell
+python -m examples.run_validate_examples -v
 ```
 
 Or run the helper directly from the examples folder:
 
 ```powershell
-cd 'f:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Core/Tools/BindlessCodeGen/examples'
+# From the repository root
+cd 'src/Oxygen/Core/Tools/BindlessCodeGen/examples'
 python run_validate_examples.py
 ```
+
+Tip: Output uses colors when the terminal supports it. Set `NO_COLOR=1` to
+disable colors.
 
 This performs a `dry_run` for each YAML file and reports the first failing
 example (non-zero exit). A successful run prints `All examples validated
@@ -59,7 +72,7 @@ To run from your build tree:
 
 ```powershell
 # From your build directory (after configure)
-ctest -R BindlessExamplesValidate -V
+ctest --preset=test-windows -C Debug -R BindlessExamplesValidate -V
 ```
 
 ## Contributing
@@ -69,9 +82,3 @@ ctest -R BindlessExamplesValidate -V
   rationale in the YAML `meta.description` field.
 - If an example intentionally demonstrates invalid input for tests, prefix the
   filename with `invalid_` and ensure tests expect failure.
-
-## Questions or additions
-
-If you'd like additional examples (e.g., multi-root-signature layouts,
-platform-specific register tokens, or migration examples showing old vs new SSoT
-styles), tell me which scenario to add and I'll create them.

@@ -138,17 +138,18 @@ def render_cpp_heaps(heaps: Dict[str, Any]) -> str:
         dbg = h_dict.get("debug_name")
         if dbg:
             lines.append(f"// {dbg}")
+        # C++ constants: kUpperCamelCase
         lines.append(
-            f"static constexpr uint32_t kHeapBase_{name} = {int(h_dict['base_index'])}u;"
+            f"static constexpr uint32_t k{name}HeapBase = {int(h_dict['base_index'])}u;"
         )
         lines.append(
-            f"static constexpr uint32_t kHeapCpuCapacity_{name} = {int(h_dict['cpu_visible_capacity'])}u;"
+            f"static constexpr uint32_t k{name}HeapCpuCapacity = {int(h_dict['cpu_visible_capacity'])}u;"
         )
         lines.append(
-            f"static constexpr uint32_t kHeapShaderCapacity_{name} = {int(h_dict['shader_visible_capacity'])}u;"
+            f"static constexpr uint32_t k{name}HeapShaderCapacity = {int(h_dict['shader_visible_capacity'])}u;"
         )
         lines.append(
-            f"static constexpr bool kHeapShaderVisible_{name} = {str(bool(h_dict['shader_visible'])).lower()};"
+            f"static constexpr bool k{name}HeapShaderVisible = {str(bool(h_dict['shader_visible'])).lower()};"
         )
         lines.append("")
     return "\n".join(lines)
@@ -179,11 +180,57 @@ def render_hlsl_heaps(heaps: Dict[str, Any]) -> str:
         dbg = h_dict.get("debug_name")
         if dbg:
             lines.append(f"// {dbg}")
+        # HLSL constants: K_UPPER_SNAKE_CASE
         lines.append(
-            f"static const uint {up}_HEAP_BASE = {int(h_dict['base_index'])};"
+            f"static const uint K_{up}_HEAP_BASE = {int(h_dict['base_index'])};"
         )
         lines.append(
-            f"static const uint {up}_HEAP_CPU_CAPACITY = {int(h_dict['cpu_visible_capacity'])};"
+            f"static const uint K_{up}_HEAP_CPU_CAPACITY = {int(h_dict['cpu_visible_capacity'])};"
         )
         lines.append("")
     return "\n".join(lines)
+
+
+def _build_heap_key(htype: str, shader_visible: bool) -> str:
+    """Mimic D3D12HeapAllocationStrategy::BuildHeapKey format.
+
+    Keys look like: "CBV_SRV_UAV:gpu" or "SAMPLER:cpu".
+    """
+    vis = "gpu" if shader_visible else "cpu"
+    return f"{htype}:{vis}"
+
+
+def build_d3d12_strategy_json(heaps: Dict[str, Any]) -> Dict[str, Any]:
+    """Compose a D3D12 heap strategy JSON fragment wrapped under top-level 'heaps'.
+
+    Input `heaps` may be a dict keyed by heap id or a list of heap objects.
+    Output structure is: { "heaps": { key -> { desc fields..., base_index } } }
+    where key looks like "CBV_SRV_UAV:gpu" or "SAMPLER:cpu".
+    """
+    # Normalize
+    if isinstance(heaps, list):
+        _heaps = {
+            h.get("id"): h for h in heaps if isinstance(h, dict) and h.get("id")
+        }
+    else:
+        _heaps = heaps or {}
+
+    flat: Dict[str, Any] = {}
+    for _, h in _heaps.items():
+        htype = str(h.get("type"))
+        shader_vis = bool(h.get("shader_visible"))
+        key = _build_heap_key(htype, shader_vis)
+        entry = {
+            "cpu_visible_capacity": int(h.get("cpu_visible_capacity", 0)),
+            "shader_visible_capacity": int(h.get("shader_visible_capacity", 0)),
+            "allow_growth": bool(h.get("allow_growth", False)),
+            # Conservative defaults; engine currently sets fixed, non-growing heaps
+            "growth_factor": float(h.get("growth_factor", 0.0)),
+            "max_growth_iterations": int(h.get("max_growth_iterations", 0)),
+            "base_index": int(h.get("base_index", 0)),
+        }
+        dbg = h.get("debug_name")
+        if dbg:
+            entry["debug_name"] = dbg
+        flat[key] = entry
+    return {"heaps": flat}

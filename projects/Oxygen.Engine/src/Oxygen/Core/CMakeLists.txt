@@ -52,22 +52,27 @@ set_target_properties(
 
 set(
   OXYGEN_CORE_HEADERS
-    "AnyCache.h"
-    "api_export.h"
-    "Detail/FormatUtils.h"
-    "Resources.h"
-    "SafeCall.h"
-    "Types/Format.h"
-    "Types/ShaderType.h"
-    "Types/TextureType.h"
-    "version-info.h"
-    "Version.h"
+  "AnyCache.h"
+  "api_export.h"
+  "Detail/FormatUtils.h"
+  "Resources.h"
+  "SafeCall.h"
+  "Types/Format.h"
+  "Types/ShaderType.h"
+  "Types/TextureType.h"
+  "version-info.h"
+  "Version.h"
+  # Generated headers (Bindless)
+  "Bindless/Generated.Constants.h"
+  "Bindless/Generated.Heaps.D3D12.h"
+  "Bindless/Generated.Meta.h"
+  "Bindless/Generated.RootSignature.h"
 )
 set(
   OXYGEN_CORE_PRIVATE_SOURCES
-    "Detail/FormatUtils.cpp"
-    "Detail/ToStringConverters.cpp"
-    "Version.cpp"
+  "Detail/FormatUtils.cpp"
+  "Detail/ToStringConverters.cpp"
+  "Version.cpp"
 )
 
 target_sources(
@@ -98,16 +103,17 @@ target_link_libraries(
 )
 
 # ------------------------------------------------------------------------------
-# Tools subdirectory (contains BindlessCodeGen) — provides generate_bindless_headers
+# Bindless generation and Tools integration
 # ------------------------------------------------------------------------------
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools/CMakeLists.txt")
-  add_subdirectory("Tools")
-  # If the Tools subdir defines the generate target, make core depend on it.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Bindless/CMakeLists.txt")
+  add_subdirectory("Bindless")
   if(TARGET generate_bindless_headers)
     add_dependencies(${META_MODULE_TARGET} generate_bindless_headers)
   endif()
 endif()
-
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools/CMakeLists.txt")
+  add_subdirectory("Tools")
+endif()
 
 # ------------------------------------------------------------------------------
 # Tests

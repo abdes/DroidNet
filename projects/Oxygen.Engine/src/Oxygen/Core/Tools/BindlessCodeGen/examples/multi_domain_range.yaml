@@ -1,5 +1,6 @@
 # Multi-domain range example: descriptor_table range backed by materials+textures
-binding_slots_version: 1
+meta:
+  version: "1.0.0"
 defaults:
   invalid_index: 4294967295
 domains:
