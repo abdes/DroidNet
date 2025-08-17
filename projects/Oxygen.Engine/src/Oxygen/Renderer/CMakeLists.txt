@@ -86,6 +86,8 @@ set(
   "ScenePrep/Extractors.h"
   "ScenePrep/ScenePrepPipeline.h"
   "ScenePrep/RenderItemProto.h"
+  "ScenePrep/RenderItemData.h"
+  "ScenePrep/ScenePrepState.h"
   "ScenePrep/ScenePrepState.cpp"
   "ScenePrep/State/GeometryRegistry.h"
   "ScenePrep/State/GeometryRegistry.cpp"
