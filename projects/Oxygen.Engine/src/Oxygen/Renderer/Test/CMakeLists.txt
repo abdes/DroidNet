@@ -43,6 +43,8 @@ m_gtest_program(RenderListBuilder SOURCES "RenderListBuilder_basic_test.cpp")
 m_gtest_program(
   ScenePrep
   SOURCES
+    "ScenePrep/CollectionConfig_basic_test.cpp"
+    "ScenePrep/ScenePrepPipeline_collection_test.cpp"
     "ScenePrep/EmitPerVisibleSubmesh_test.cpp"
     "ScenePrep/ExtractionPreFilter_test.cpp"
     "ScenePrep/MeshResolver_test.cpp"
