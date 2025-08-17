@@ -50,4 +50,5 @@ m_gtest_program(
     "ScenePrep/MeshResolver_test.cpp"
     "ScenePrep/RenderItemProto_test.cpp"
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
+    "ScenePrep/TransformHelpers_test.cpp"
 )
