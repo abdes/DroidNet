@@ -36,76 +36,97 @@ namespace oxygen::graphics::d3d12 {
 */
 class D3D12HeapAllocationStrategy final : public DescriptorAllocationStrategy {
 public:
-    //! Constructor that initializes the strategy with a D3D12 device.
-    /*!
-     \param device The D3D12 device to query for capabilities.
+  //! Pluggable provider for heap strategy JSON configuration.
+  struct ConfigProvider {
+    virtual ~ConfigProvider() = default;
+    [[nodiscard]] virtual auto GetJson() const noexcept -> std::string_view = 0;
+  };
 
-     Determines appropriate heap sizes based on device capabilities. If device
-     is nullptr, uses conservative defaults.
-    */
-    OXYGEN_D3D12_API explicit D3D12HeapAllocationStrategy(dx::IDevice* device = nullptr);
+  //! Default provider that returns the embedded generated JSON.
+  class EmbeddedConfigProvider final : public ConfigProvider {
+  public:
+    static auto Instance() noexcept -> const EmbeddedConfigProvider&;
+    [[nodiscard]] auto GetJson() const noexcept -> std::string_view override;
+  };
 
-    OXYGEN_D3D12_API ~D3D12HeapAllocationStrategy() override = default;
+  //! Constructor that initializes the strategy with a D3D12 device.
+  /*!
+   \param device The D3D12 device to query for capabilities.
 
-    OXYGEN_DEFAULT_COPYABLE(D3D12HeapAllocationStrategy)
-    OXYGEN_DEFAULT_MOVABLE(D3D12HeapAllocationStrategy)
+   Determines appropriate heap sizes based on device capabilities. If device
+   is nullptr, uses conservative defaults.
+  */
+  OXYGEN_D3D12_API explicit D3D12HeapAllocationStrategy(
+    dx::IDevice* device = nullptr);
 
-    //! Returns a unique key based on the D3D12 heap type and visibility.
-    /*!
-     Maps the abstract ResourceViewType to the corresponding D3D12 descriptor
-     heap type, then combines with visibility to create a unique string key.
+  //! Constructor that initializes the strategy from a custom JSON provider.
+  /*! Useful for tests or alternate configuration sources. */
+  OXYGEN_D3D12_API D3D12HeapAllocationStrategy(
+    dx::IDevice* device, const ConfigProvider& provider);
 
-     \throws std::runtime_error if the view_type or visibility are invalid, or
-             their combination is illegal.
-    */
-    OXYGEN_D3D12_API auto GetHeapKey(
-        ResourceViewType view_type, DescriptorVisibility visibility) const
-        -> std::string override;
+  OXYGEN_D3D12_API ~D3D12HeapAllocationStrategy() override = default;
 
-    //! Returns the heap description for a given heap key.
-    /*!
-     \throws std::runtime_error if the key is invalid.
-    */
-    OXYGEN_D3D12_API auto GetHeapDescription(const std::string& heap_key) const
-        -> const HeapDescription& override;
+  OXYGEN_DEFAULT_COPYABLE(D3D12HeapAllocationStrategy)
+  OXYGEN_DEFAULT_MOVABLE(D3D12HeapAllocationStrategy)
 
-    //! Returns the base index for descriptors in the heap.
-    /*!
-     \throws std::runtime_error if the view_type or visibility are invalid, or
-             their combination is illegal.
-    */
-    OXYGEN_D3D12_API auto GetHeapBaseIndex(
-        ResourceViewType view_type, DescriptorVisibility visibility) const
-        -> DescriptorHandle::IndexT override;
+  //! Returns a unique key based on the D3D12 heap type and visibility.
+  /*!
+   Maps the abstract ResourceViewType to the corresponding D3D12 descriptor
+   heap type, then combines with visibility to create a unique string key.
 
-    //! Returns the D3D12 descriptor heap type for a given view type.
-    /*!
-     This method is used internally to map the abstract ResourceViewType to the
-     corresponding D3D12 descriptor heap type. Caller must ensure that the
-     view_type is valid and supported. The method will abort if not.
-     */
-    static OXYGEN_D3D12_API auto GetHeapType(ResourceViewType view_type) noexcept
-        -> D3D12_DESCRIPTOR_HEAP_TYPE;
+   \throws std::runtime_error if the view_type or visibility are invalid, or
+           their combination is illegal.
+  */
+  OXYGEN_D3D12_API auto GetHeapKey(ResourceViewType view_type,
+    DescriptorVisibility visibility) const -> std::string override;
 
-    //! Returns descriptor heap flags for a given visibility.
-    static constexpr auto GetHeapFlags(const DescriptorVisibility visibility) noexcept
-        -> D3D12_DESCRIPTOR_HEAP_FLAGS
-    {
-        return visibility == DescriptorVisibility::kShaderVisible
-            ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-            : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    }
+  //! Returns the heap description for a given heap key.
+  /*!
+   \throws std::runtime_error if the key is invalid.
+  */
+  OXYGEN_D3D12_API auto GetHeapDescription(const std::string& heap_key) const
+    -> const HeapDescription& override;
+
+  //! Returns the base index for descriptors in the heap.
+  /*!
+   \throws std::runtime_error if the view_type or visibility are invalid, or
+           their combination is illegal.
+  */
+  OXYGEN_D3D12_API auto GetHeapBaseIndex(ResourceViewType view_type,
+    DescriptorVisibility visibility) const -> DescriptorHandle::IndexT override;
+
+  //! Returns the D3D12 descriptor heap type for a given view type.
+  /*!
+   This method is used internally to map the abstract ResourceViewType to the
+   corresponding D3D12 descriptor heap type. Caller must ensure that the
+   view_type is valid and supported. The method will abort if not.
+   */
+  static OXYGEN_D3D12_API auto GetHeapType(ResourceViewType view_type) noexcept
+    -> D3D12_DESCRIPTOR_HEAP_TYPE;
+
+  //! Returns descriptor heap flags for a given visibility.
+  static constexpr auto GetHeapFlags(
+    const DescriptorVisibility visibility) noexcept
+    -> D3D12_DESCRIPTOR_HEAP_FLAGS
+  {
+    return visibility == DescriptorVisibility::kShaderVisible
+      ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+      : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+  }
 
 private:
-    //! Builds a heap key string from type and visibility
-    static auto BuildHeapKey(D3D12_DESCRIPTOR_HEAP_TYPE type, bool shader_visible)
-        -> std::string;
+  //! Builds a heap key string from type and visibility
+  static auto BuildHeapKey(D3D12_DESCRIPTOR_HEAP_TYPE type, bool shader_visible)
+    -> std::string;
 
-    //! Maps heap keys to their descriptions
-    std::unordered_map<std::string, HeapDescription> heap_descriptions_;
+  //! Initialize strategy from a JSON string (throws on invalid data)
+  void InitFromJson(std::string_view json);
 
-    //! Maps (view_type, visibility) pairs to their base indices
-    std::unordered_map<std::string, DescriptorHandle::IndexT> heap_base_indices_;
+  //! Maps heap keys to their descriptions
+  std::unordered_map<std::string, HeapDescription> heap_descriptions_;
+
+  //! Maps (view_type, visibility) pairs to their base indices
+  std::unordered_map<std::string, DescriptorHandle::IndexT> heap_base_indices_;
 };
 
 } // namespace oxygen::graphics::d3d12

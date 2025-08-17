@@ -149,6 +149,7 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::platform
+    oxygen::core
     oxygen::graphics-common
     oxygen::imgui
     glm::glm

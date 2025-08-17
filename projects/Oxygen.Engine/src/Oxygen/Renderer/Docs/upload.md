@@ -163,10 +163,17 @@ The single source-of-truth for bindless slot/register mapping is
   - `heap_sampler_gpu` (index 3, shader-visible)
   - `heap_rtv_cpu` (index 4, cpu-only)
   - `heap_dsv_cpu` (index 5, cpu-only)
+  - Note: These heaps are configured at runtime from a generated JSON spec
+    embedded in `Generated.Heaps.D3D12.h` and loaded by
+    `D3D12HeapAllocationStrategy` (see Section 3.7). The generator derives this
+    JSON from `Spec.yaml` to keep CPU, tooling, and shaders in sync.
 
 - Mappings tie domains → heaps and provide local base indices. The generator
   consumes this file and emits `BindingSlots.h`, `BindingSlots.hlsl` and a
-  runtime JSON descriptor used by the engine/tooling.
+  runtime JSON descriptor used by the engine/tooling. The JSON is embedded in
+  `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h` as
+  `kD3D12HeapStrategyJson` and consumed by
+  `D3D12HeapAllocationStrategy::InitFromJson(...)`.
 
 ### 3.2 Index Lifetime, Reuse, and Aliasing Prevention
 
@@ -726,7 +733,9 @@ To ensure correctness, the following validation steps are performed:
 
 1. **Descriptor Range Validation**:
    - Ensure that all resources fit within their designated ranges.
-   - Validate that heap indices are stable and do not overlap.
+   - Validate that heap indices are stable and do not overlap. The
+     `D3D12HeapAllocationStrategy` enforces non‑overlapping ranges and throws on
+     invalid JSON or overlaps at startup.
 
 2. **Shader Compatibility Checks**:
    - Verify that shaders reference the correct registers and spaces.
@@ -953,7 +962,9 @@ Validation (debug‑only):
   against slot.generation in a CPU shadow map; mismatch triggers a warning and
   forces a default.
 - Root signature/heap checks at startup: verify descriptor heap sizes and root
-  parameter layout match Section 4; fail fast if not.
+  parameter layout match Section 4; fail fast if not. Heap sizes/capacities are
+  sourced from the generated JSON (Section 3.7); parse/validation failures throw
+  exceptions for graceful shutdown.
 
 Invalid/sentinel handling:
 
