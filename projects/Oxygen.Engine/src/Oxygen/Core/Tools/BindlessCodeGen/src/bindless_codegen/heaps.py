@@ -9,61 +9,61 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
 
-def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate `heaps` and `mappings` sections and return a runtime
-    descriptor fragment to be merged into the main runtime JSON.
-
-    Raises ValueError on semantic problems.
-    """
-    raw_heaps = doc.get("heaps", {}) or {}
-    raw_mappings = doc.get("mappings", {}) or {}
-
-    # Normalize heaps: support either an array of heap objects or a mapping
-    heaps: Dict[str, Any] = {}
-    if isinstance(raw_heaps, list):
-        for h in raw_heaps:
+def _normalize_heaps(raw_heaps: Any) -> Dict[str, Any]:
+    """Normalize `heaps` section to a dict keyed by heap id."""
+    raw = raw_heaps or {}
+    if isinstance(raw, list):
+        heaps: Dict[str, Any] = {}
+        for h in raw:
+            if not isinstance(h, dict):
+                continue
             hid = h.get("id")
             if not hid:
                 raise ValueError(
                     "Heap entry in 'heaps' array missing required 'id' field"
                 )
             heaps[hid] = h
-    elif isinstance(raw_heaps, dict):
-        heaps = raw_heaps
-    else:
-        raise ValueError("'heaps' must be an array or object")
+        return heaps
+    if isinstance(raw, dict):
+        return raw
+    raise ValueError("'heaps' must be an array or object")
 
-    # Normalize mappings: support either array of mapping objects or a mapping
-    mappings: Dict[str, Any] = {}
-    if isinstance(raw_mappings, list):
-        for m in raw_mappings:
+
+def _normalize_mappings(raw_mappings: Any) -> Dict[str, Any]:
+    """Normalize `mappings` to a dict keyed by domain id."""
+    raw = raw_mappings or {}
+    if isinstance(raw, list):
+        mappings: Dict[str, Any] = {}
+        for m in raw:
+            if not isinstance(m, dict):
+                continue
             domain = m.get("domain")
             if not domain:
                 raise ValueError(
                     "Mapping entry missing required 'domain' field"
                 )
             mappings[domain] = m
-    elif isinstance(raw_mappings, dict):
-        mappings = raw_mappings
-    else:
-        raise ValueError("'mappings' must be an array or object")
+        return mappings
+    if isinstance(raw, dict):
+        return raw
+    raise ValueError("'mappings' must be an array or object")
 
-    # Ensure heap names are unique (they are keys, so implicit) and collect ranges
+
+def _validate_heap_entries(heaps: Dict[str, Any]) -> List[Tuple[int, int, str]]:
+    """Validate individual heap entries and return their global index ranges."""
     ranges: List[Tuple[int, int, str]] = []
     for name, h in heaps.items():
-        # required fields assumed present by JSON Schema; validate cross-field rules
         htype = h.get("type")
         shader_visible = h.get("shader_visible")
         capacity = int(h.get("capacity", 0))
         base = int(h.get("base_index"))
 
-        # If heap id looks like "TYPE:vis", validate it matches type and visibility
+        # Validate heap id consistency if it encodes type:visibility
         if isinstance(name, str) and ":" in name:
             try:
                 id_type, id_vis = name.split(":", 1)
             except ValueError:
                 id_type, id_vis = name, ""
-            # Normalize
             id_type = id_type.strip()
             id_vis = id_vis.strip().lower()
             expected_vis = "gpu" if bool(shader_visible) else "cpu"
@@ -80,29 +80,26 @@ def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
                     f"Heap id '{name}' visibility suffix '{id_vis}' conflicts with shader_visible={bool(shader_visible)}"
                 )
 
-        # RTV/DSV must be CPU-only
+        # Type/visibility constraints
         if htype in ("RTV", "DSV") and shader_visible:
             raise ValueError(
                 f"Heap '{name}' type '{htype}' cannot be shader_visible"
             )
-
-        # shader_visible only allowed for CBV_SRV_UAV and SAMPLER
         if shader_visible and htype not in ("CBV_SRV_UAV", "SAMPLER"):
             raise ValueError(
                 f"Heap '{name}' is shader_visible but type '{htype}' does not allow shader visibility"
             )
 
-        # Capacity must be positive regardless of visibility
-        eff_cap = capacity
-        if eff_cap <= 0:
+        # Capacity must be positive
+        if capacity <= 0:
             raise ValueError(f"Heap '{name}' capacity must be > 0")
 
-        # Compute global index interval [base, base + eff_cap)
-        start = base
-        end = base + eff_cap
-        ranges.append((start, end, name))
+        ranges.append((base, base + capacity, name))
+    return ranges
 
-    # Check for range overlaps anywhere in the global index space
+
+def _check_global_heap_overlaps(ranges: List[Tuple[int, int, str]]) -> None:
+    """Ensure no two heaps overlap in global index space."""
     ranges.sort(key=lambda t: t[0])
     for i in range(1, len(ranges)):
         prev = ranges[i - 1]
@@ -112,8 +109,11 @@ def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
                 f"Heap address ranges overlap: '{prev[2]}' [{prev[0]},{prev[1]}) overlaps '{cur[2]}' [{cur[0]},{cur[1]})"
             )
 
-    # Validate mappings reference existing heaps. Mappings no longer include an
-    # explicit 'visibility' token; the mapping simply ties a domain to a heap id.
+
+def _validate_mapping_heap_names(
+    mappings: Dict[str, Any], heaps: Dict[str, Any]
+) -> None:
+    """Validate that every mapping references an existing heap."""
     for rv, m in mappings.items():
         heap_name = m.get("heap")
         if heap_name not in heaps:
@@ -121,9 +121,98 @@ def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
                 f"Mapping for '{rv}' references unknown heap '{heap_name}'"
             )
 
-    # Compose runtime fragment
-    runtime = {"heaps": heaps, "mappings": mappings}
-    return runtime
+
+def _validate_per_heap_domain_capacity(
+    doc: Dict[str, Any],
+    heaps: Dict[str, Any],
+    mappings: Dict[str, Any],
+) -> None:
+    """Ensure domains mapped into a heap fit and do not exceed heap capacity.
+
+    Checks each heap's local ranges for containment, total capacity, and overlaps.
+    """
+    domains_list = doc.get("domains", []) or []
+    domains_by_id = {
+        d.get("id"): d for d in domains_list if isinstance(d, dict)
+    }
+
+    # Group mappings by heap id
+    mappings_by_heap: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+    for dom_id, m in mappings.items():
+        heap_name = m.get("heap")
+        mappings_by_heap.setdefault(heap_name, []).append((dom_id, m))
+
+    for heap_name, entries in mappings_by_heap.items():
+        h = heaps.get(heap_name)
+        if not h:
+            raise ValueError(f"Mapping references unknown heap '{heap_name}'")
+        heap_cap = int(h.get("capacity", 0))
+        if heap_cap <= 0:
+            raise ValueError(f"Heap '{heap_name}' capacity must be > 0")
+
+        total_caps = 0
+        intervals_local: List[Tuple[int, int, str]] = []
+        for dom_id, m in entries:
+            d = domains_by_id.get(dom_id)
+            if not d:
+                raise ValueError(
+                    f"Mapping for domain '{dom_id}' has no corresponding domain entry"
+                )
+            dom_cap = d.get("capacity")
+            if dom_cap is None:
+                raise ValueError(
+                    f"Domain '{dom_id}' used in heap mapping must define 'capacity'"
+                )
+            dom_cap_i = int(dom_cap)
+            if dom_cap_i < 0:
+                raise ValueError(
+                    f"Domain '{dom_id}' capacity must be non-negative"
+                )
+            local_base = int(m.get("local_base", 0))
+            if local_base < 0:
+                raise ValueError(
+                    f"Mapping for domain '{dom_id}' has negative local_base {local_base}"
+                )
+            local_end = local_base + dom_cap_i
+            if local_end > heap_cap:
+                raise ValueError(
+                    f"Mapping for domain '{dom_id}' exceeds heap '{heap_name}' capacity: "
+                    f"[{local_base},{local_end}) with capacity {dom_cap_i} > heap capacity {heap_cap}"
+                )
+            total_caps += dom_cap_i
+            intervals_local.append((local_base, local_end, dom_id))
+
+        if total_caps > heap_cap:
+            raise ValueError(
+                f"Sum of capacities for domains mapped to heap '{heap_name}' ({total_caps}) exceeds heap capacity ({heap_cap})"
+            )
+
+        intervals_local.sort(key=lambda t: t[0])
+        for i in range(1, len(intervals_local)):
+            prev = intervals_local[i - 1]
+            cur = intervals_local[i]
+            if cur[0] < prev[1]:
+                raise ValueError(
+                    f"Heap-local mapping overlap in heap '{heap_name}': "
+                    f"domain '{prev[2]}' [{prev[0]},{prev[1]}) overlaps domain '{cur[2]}' [{cur[0]},{cur[1]})"
+                )
+
+
+def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate `heaps` and `mappings` and return runtime fragment.
+
+    Keeps this function small by delegating to helpers for normalization and
+    validations to maintain low cyclomatic complexity.
+    """
+    heaps = _normalize_heaps(doc.get("heaps"))
+    mappings = _normalize_mappings(doc.get("mappings"))
+
+    ranges = _validate_heap_entries(heaps)
+    _check_global_heap_overlaps(ranges)
+    _validate_mapping_heap_names(mappings, heaps)
+    _validate_per_heap_domain_capacity(doc, heaps, mappings)
+
+    return {"heaps": heaps, "mappings": mappings}
 
 
 def render_cpp_heaps(heaps: Dict[str, Any]) -> str:
