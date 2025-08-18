@@ -125,7 +125,7 @@ auto oxygen::to_string(oxygen::BindlessHandle h) -> std::string
   size_t pos = 0;
 
   append_literal(buf, pos, "Bindless(i:", sizeof("Bindless(i:") - 1);
-  append_uint(buf, pos, sizeof(buf), static_cast<uint32_t>(h.get()));
+  append_uint(buf, pos, sizeof(buf), h.get());
   append_literal(buf, pos, ")", 1);
 
   return std::string(buf, pos);
@@ -137,14 +137,28 @@ auto oxygen::to_string(oxygen::VersionedBindlessHandle const& h) -> std::string
   size_t pos = 0;
 
   append_literal(buf, pos, "Bindless(i:", sizeof("Bindless(i:") - 1);
-  append_uint(
-    buf, pos, sizeof(buf), static_cast<uint32_t>(h.ToBindlessHandle().get()));
+  append_uint(buf, pos, sizeof(buf), h.ToBindlessHandle().get());
   append_literal(buf, pos, ", g:", sizeof(", g:") - 1);
-  append_uint(
-    buf, pos, sizeof(buf), static_cast<uint32_t>(h.GenerationValue().get()));
+  append_uint(buf, pos, sizeof(buf), h.GenerationValue().get());
   append_literal(buf, pos, ")", 1);
 
   return std::string(buf, pos);
+}
+
+auto oxygen::to_string(oxygen::BindlessHandleCount count) -> std::string
+{
+  return std::to_string(count.get());
+}
+
+auto oxygen::to_string(oxygen::BindlessHandleCapacity capacity) -> std::string
+{
+  return std::to_string(capacity.get());
+}
+
+auto oxygen::to_string(oxygen::VersionedBindlessHandle::Generation gen)
+  -> std::string
+{
+  return std::to_string(gen.get());
 }
 
 auto oxygen::to_string(const oxygen::ShaderType value) -> const char*
