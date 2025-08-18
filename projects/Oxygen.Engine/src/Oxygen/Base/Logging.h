@@ -200,6 +200,7 @@ https://github.com/nothings/stb.
 #  if LOGURU_USE_FMTLIB
 #    include <fmt/format.h>
 #    define LOGURU_FMT(x) "{:" #x "}"
+#    include "Detail/LogWithAdapters.h"
 #  else
 #    define LOGURU_FMT(x) "%" #x
 #  endif
@@ -255,7 +256,11 @@ Text vtextprintf(const char* format, fmt::format_args args);
 template <typename... Args>
 Text textprintf(LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
 {
-  return vtextprintf(format, fmt::make_format_args(args...));
+  // Use adapter pipeline that converts objects with a free to_string(T)
+  // into std::string before calling fmt, avoiding heavy fmt glue in core
+  // headers.
+  auto s = format_with_adapters(format, args...);
+  return Text(STRDUP(s.c_str()));
 }
 #  else
 LOGURU_EXPORT
@@ -599,7 +604,16 @@ void log(const Verbosity verbosity, const char* file, const unsigned line,
     return;
   }
   try {
-    vlog(verbosity, file, line, format, fmt::make_format_args(args...));
+    // Important: fmt::make_format_args requires lvalue references to argument
+    // objects that remain alive when the args are created. We materialize
+    // mapped arguments via `with_mapped_args` and invoke fmt::make_format_args
+    // from inside the lambda so the temporary storage (e.g. std::string results
+    // from ADL `to_string`) stays alive for the duration of the call.
+    with_mapped_args(
+      [&](auto&... ms) {
+        vlog(verbosity, file, line, format, fmt::make_format_args(ms...));
+      },
+      args...);
   } catch (const std::exception& ex) {
     // Catch all exceptions and log them as a fatal error.
     fprintf(stderr, "Exception caught at %s:%u: %s\n", file, line, ex.what());
@@ -615,7 +629,14 @@ template <typename... Args>
 void raw_log(const Verbosity verbosity, const char* file, const unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
 {
-  raw_vlog(verbosity, file, line, format, fmt::make_format_args(args...));
+  // See note above: ensure mapped temporaries live while fmt::make_format_args
+  // is called by materializing them here and invoking the formatter inside
+  // the lambda.
+  with_mapped_args(
+    [&](auto&... ms) {
+      raw_vlog(verbosity, file, line, format, fmt::make_format_args(ms...));
+    },
+    args...);
 }
 #  else // LOGURU_USE_FMTLIB?
 // Actual logging function. Use the LOG macro instead of calling this
@@ -703,8 +724,15 @@ LOGURU_NORETURN void log_and_abort(const int stack_trace_skip, const char* expr,
   const char* file, const unsigned line, LOGURU_FORMAT_STRING_TYPE format,
   const Args&... args)
 {
-  vlog_and_abort(
-    stack_trace_skip, expr, file, line, format, fmt::make_format_args(args...));
+  // See note above: keep mapped temporaries alive while calling
+  // `vlog_and_abort(..., fmt::make_format_args(...))` to satisfy fmt's
+  // lifetime requirements.
+  with_mapped_args(
+    [&](auto&... ms) {
+      vlog_and_abort(stack_trace_skip, expr, file, line, format,
+        fmt::make_format_args(ms...));
+    },
+    args...);
 }
 #  else
 LOGURU_EXPORT

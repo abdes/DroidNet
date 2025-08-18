@@ -193,5 +193,8 @@
       "**/Spec.yaml"
     ]
   },
-  "yaml.validate": true
+  "yaml.validate": true,
+  "C_Cpp.default.defines": [
+    "LOGURU_USE_FMTLIB=1"
+  ]
 }
