@@ -6,9 +6,13 @@
 
 #pragma once
 
-//! \file StringUtils.h \brief Contains utilities for string manipulation.
-//! Windows-specific functions are fenced with `OXYGEN_WINDOWS` and are only
-//! available on the Windows platform.
+/*!
+ @file StringUtils.h
+ @brief Contains utilities for string manipulation.
+
+ Windows-specific functions are fenced with `OXYGEN_WINDOWS` and are only
+ available on the Windows platform.
+*/
 
 #include <string>
 
