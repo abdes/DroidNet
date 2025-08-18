@@ -187,7 +187,7 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
         if p.get("type") == "root_constants":
             n = int(p.get("num_32bit_values", 0))
             counts_lines.append(
-                f"static constexpr uint32_t k{cname}ConstantsCount = {n}u;"
+                f"static constexpr uint32_t k{cname}ConstantsCount = {n}U;"
             )
 
         # register/space shortcuts
@@ -225,16 +225,16 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
                     nd_v = "std::numeric_limits<uint32_t>::max()"
                 else:
                     try:
-                        nd_v = f"{int(nd)}u"
+                        nd_v = f"{int(nd)}U"
                     except Exception:
                         nd_v = "std::numeric_limits<uint32_t>::max()"
                 range_lines.append(
-                    f"    RootParamRange{{ {rt_v}, {base}u, {space_n}u, {nd_v} }},"
+                    f"    RootParamRange{{ {rt_v}, {base}U, {space_n}U, {nd_v} }},"
                 )
             if not range_lines:
                 # Emit a sentinel empty range
                 range_lines.append(
-                    "    RootParamRange{ RangeType::SRV, 0u, 0u, 0u },"
+                    "    RootParamRange{ RangeType::SRV, 0U, 0U, 0U },"
                 )
             # Emit std::array with double-brace init for aggregate
             arr = (
@@ -246,25 +246,25 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
             structs_lines.append(arr)
             # Use std::span constructed from data() and size()
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0u, 0u, std::span<const RootParamRange>{{ {ranges_name}.data(), {ranges_name}.size() }}, static_cast<uint32_t>({ranges_name}.size()), 0u }},"
+                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{{ {ranges_name}.data(), {ranges_name}.size() }}, static_cast<uint32_t>({ranges_name}.size()), 0U }},"
             )
         elif p.get("type") == "cbv":
             reg_n = _num(p.get("shader_register"))
             space_n = _num(p.get("register_space"))
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::CBV, {reg_n}u, {space_n}u, std::span<const RootParamRange>{{}}, 0u, 0u }},"
+                f"  RootParamDesc{{ RootParamKind::CBV, {reg_n}U, {space_n}U, std::span<const RootParamRange>{{}}, 0U, 0U }},"
             )
         elif p.get("type") == "root_constants":
             reg_n = _num(p.get("shader_register"))
             space_n = _num(p.get("register_space"))
             n32 = int(p.get("num_32bit_values", 0))
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::RootConstants, {reg_n}u, {space_n}u, std::span<const RootParamRange>{{}}, 0u, {n32}u }},"
+                f"  RootParamDesc{{ RootParamKind::RootConstants, {reg_n}U, {space_n}U, std::span<const RootParamRange>{{}}, 0U, {n32}U }},"
             )
         else:
             # Unknown type: emit placeholder as empty span
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0u, 0u, std::span<const RootParamRange>{{}}, 0u, 0u }},"
+                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{{}}, 0U, 0U }},"
             )
 
     enum_lines.append(f"  kCount = {len(root_sig or [])},")

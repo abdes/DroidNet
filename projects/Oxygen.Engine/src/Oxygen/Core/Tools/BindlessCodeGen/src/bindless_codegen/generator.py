@@ -77,7 +77,7 @@ def _render_root_sig_cpp(root_sig: list[dict]) -> tuple[str, str, str]:
         if p.get("type") == "root_constants":
             n = int(p.get("num_32bit_values", 0))
             counts_lines.append(
-                f"static constexpr uint32_t k{_norm(str(name))}ConstantsCount = {n}u;"
+                f"static constexpr uint32_t k{_norm(str(name))}ConstantsCount = {n}U;"
             )
         # Record register/space bindings when available for convenience
         reg = p.get("shader_register") or p.get("base_shader_register")
@@ -90,13 +90,13 @@ def _render_root_sig_cpp(root_sig: list[dict]) -> tuple[str, str, str]:
             )
             digits = "".join([c for c in sreg if c.isdigit()]) or "0"
             regs_lines.append(
-                f"static constexpr uint32_t k{_norm(str(name))}Register = {int(digits)}u; // '{sreg}'"
+                f"static constexpr uint32_t k{_norm(str(name))}Register = {int(digits)}U; // '{sreg}'"
             )
         if space is not None:
             sspace = str(space)
             digits = "".join([c for c in sspace if c.isdigit()]) or "0"
             regs_lines.append(
-                f"static constexpr uint32_t k{_norm(str(name))}Space = {int(digits)}u; // '{sspace}'"
+                f"static constexpr uint32_t k{_norm(str(name))}Space = {int(digits)}U; // '{sspace}'"
             )
 
     # Add Count enumerator
@@ -556,7 +556,7 @@ def generate(
         rep.info("Validation successful, templates processed")
         return False
     # Serialize content strings first (no side effects yet)
-    js = json.dumps(runtime_desc, indent=2)
+    js = json.dumps(runtime_desc, indent=2) + "\n"
     files: dict[str, str] = {
         out_json: js,
         out_cpp_path: content_cpp,
@@ -573,7 +573,7 @@ def generate(
     )
     files[out_meta_h] = content_meta_h
     if strategy_json:
-        sj = json.dumps(strategy_json, indent=2)
+        sj = json.dumps(strategy_json, indent=2) + "\n"
         files[out_strategy] = sj
         # Embedded C++ header with constexpr JSON body
         content_strategy_hpp = TEMPLATE_HEAPS_D3D12_CPP.format(

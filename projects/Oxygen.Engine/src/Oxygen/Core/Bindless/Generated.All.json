@@ -1,8 +1,8 @@
 {
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
-  "source_version": "1.0.0",
-  "tool_version": "1.1.0",
-  "generated": "2025-08-18 09:46:48",
+  "source_version": "1.0.1",
+  "tool_version": "1.2.0",
+  "generated": "2025-08-18 13:09:42",
   "schema_version": "1.0.0",
   "defaults": {
     "invalid_index": 4294967295
@@ -17,7 +17,7 @@
       "root_table": "BindlessSRVTable",
       "domain_base": 0,
       "capacity": 1,
-      "comment": "Scene constants CBV (b1), heap index 0; holds bindless indices table\n"
+      "comment": "Scene constants CBV"
     },
     {
       "id": "srv_global",
@@ -28,7 +28,7 @@
       "root_table": "BindlessSRVTable",
       "domain_base": 1,
       "capacity": 2048,
-      "comment": "Unified SRV table base"
+      "comment": "Unified global bindless table"
     },
     {
       "id": "materials",
@@ -38,7 +38,8 @@
       "capacity": 3047,
       "register": "t1",
       "space": "space0",
-      "root_table": "BindlessSRVTable"
+      "root_table": "BindlessSRVTable",
+      "comment": "Unified bindless table domains"
     },
     {
       "id": "textures",

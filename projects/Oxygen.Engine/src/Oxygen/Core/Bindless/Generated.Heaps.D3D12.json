@@ -1,9 +1,9 @@
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
-    "source_version": "1.0.0",
-    "tool_version": "1.1.0",
-    "generated": "2025-08-18 09:46:48",
+    "source_version": "1.0.1",
+    "tool_version": "1.2.0",
+    "generated": "2025-08-18 12:58:51",
     "format": "D3D12HeapStrategy/2",
     "schema_version": "1.0.0"
   },

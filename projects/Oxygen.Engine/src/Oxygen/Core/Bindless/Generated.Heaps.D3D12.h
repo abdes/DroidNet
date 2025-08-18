@@ -7,9 +7,9 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
-// Source-Version: 1.0.0
-// Tool: BindlessCodeGen 1.1.0
-// Generated: 2025-08-18 09:46:48
+// Source-Version: 1.0.1
+// Tool: BindlessCodeGen 1.2.0
+// Generated: 2025-08-18 13:07:26
 
 #pragma once
 
@@ -21,9 +21,9 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
-    "source_version": "1.0.0",
-    "tool_version": "1.1.0",
-    "generated": "2025-08-18 09:46:48",
+    "source_version": "1.0.1",
+    "tool_version": "1.2.0",
+    "generated": "2025-08-18 13:07:26",
     "format": "D3D12HeapStrategy/2",
     "schema_version": "1.0.0"
   },
@@ -78,6 +78,7 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
     }
   }
 }
+
 )OXJ";
 
 } // namespace oxygen::engine::binding
