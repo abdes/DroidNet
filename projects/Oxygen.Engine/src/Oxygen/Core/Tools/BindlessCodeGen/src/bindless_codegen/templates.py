@@ -23,14 +23,15 @@ TEMPLATE_CPP = """//===---------------------------------------------------------
 
 #include <cstdint>
 
-namespace oxygen::engine::binding {{
+namespace oxygen {{
 
-// Invalid sentinel
-static constexpr uint32_t kInvalidBindlessIndex = {invalid:#010x}u;
+//! Invalid sentinel.
+static constexpr uint32_t kInvalidBindlessIndex = {invalid:#010X}U;
 
+namespace engine::binding {{
 {domain_consts}
-
-}} // namespace oxygen::engine::binding
+}} // namespace engine::binding
+}} // namespace oxygen
 """
 
 TEMPLATE_HLSL = """//===----------------------------------------------------------------------===//
@@ -49,7 +50,7 @@ TEMPLATE_HLSL = """//===--------------------------------------------------------
 #ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
 #define OXYGEN_BINDLESS_LAYOUT_HLSL
 
-static const uint K_INVALID_BINDLESS_INDEX = {invalid:#010x};
+static const uint K_INVALID_BINDLESS_INDEX = {invalid:#010X};
 
 // Debug-friendly domain guards helpers (generated)
 static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
@@ -60,7 +61,7 @@ static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capacity)
 {{
 #ifdef BINDLESS_VALIDATE
-	return BX_IsInDomain(idx, base, capacity) ? idx : {invalid:#010x};
+	return BX_IsInDomain(idx, base, capacity) ? idx : {invalid:#010X};
 #else
 	return idx;
 #endif

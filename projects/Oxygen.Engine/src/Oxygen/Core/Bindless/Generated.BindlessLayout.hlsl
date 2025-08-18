@@ -6,15 +6,15 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
-// Source-Version: 1.0.0
+// Source-Version: 1.0.1
 // Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.1.0
-// Generated: 2025-08-18 09:46:48
+// Tool: BindlessCodeGen 1.2.0
+// Generated: 2025-08-18 13:12:33
 
 #ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
 #define OXYGEN_BINDLESS_LAYOUT_HLSL
 
-static const uint K_INVALID_BINDLESS_INDEX = 0xffffffff;
+static const uint K_INVALID_BINDLESS_INDEX = 0XFFFFFFFF;
 
 // Debug-friendly domain guards helpers (generated)
 static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
@@ -25,20 +25,23 @@ static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capacity)
 {
 #ifdef BINDLESS_VALIDATE
-	return BX_IsInDomain(idx, base, capacity) ? idx : 0xffffffff;
+	return BX_IsInDomain(idx, base, capacity) ? idx : 0XFFFFFFFF;
 #else
 	return idx;
 #endif
 }
 
-// Scene constants CBV (b1), heap index 0; holds bindless indices table
+// Scene constants CBV
 
 static const uint K_SCENE_DOMAIN_BASE = 0;
 static const uint K_SCENE_CAPACITY = 1;
 
-// Unified SRV table base
+// Unified global bindless table
+
 static const uint K_GLOBAL_SRV_DOMAIN_BASE = 1;
 static const uint K_GLOBAL_SRV_CAPACITY = 2048;
+
+// Unified bindless table domains
 
 static const uint K_MATERIALS_DOMAIN_BASE = 2049;
 static const uint K_MATERIALS_CAPACITY = 3047;
@@ -50,6 +53,7 @@ static const uint K_SAMPLERS_DOMAIN_BASE = 0;
 static const uint K_SAMPLERS_CAPACITY = 256;
 
 // Domain guard macros (generated)
+
 #define BX_DOMAIN_BASE(TAG)   K_##TAG##_DOMAIN_BASE
 #define BX_DOMAIN_CAP(TAG)    K_##TAG##_CAPACITY
 #define BX_IN(TAG, IDX)       BX_IsInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))

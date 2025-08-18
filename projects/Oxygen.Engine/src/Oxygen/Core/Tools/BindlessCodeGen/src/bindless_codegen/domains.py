@@ -30,15 +30,16 @@ def render_cpp_domains(domains: List[Dict[str, Any]]) -> str:
         comment = d.get("comment", "")
         if base is not None:
             if comment:
-                lines.append(f"// {comment}")
+                lines.append(f"  // {comment}")
+                lines.append(f"")
             # C++ constants use kUpperCamelCase
             cpp_name = _normalize_acronyms(str(name)) if name else ""
             lines.append(
-                f"static constexpr uint32_t k{ cpp_name }DomainBase = {int(base)}u;"
+                f"  static constexpr uint32_t k{ cpp_name }DomainBase = {int(base)}U;"
             )
             if cap is not None:
                 lines.append(
-                    f"static constexpr uint32_t k{ cpp_name }Capacity = {int(cap)}u;"
+                    f"  static constexpr uint32_t k{ cpp_name }Capacity = {int(cap)}U;"
                 )
             lines.append("")
     return "\n".join(lines)

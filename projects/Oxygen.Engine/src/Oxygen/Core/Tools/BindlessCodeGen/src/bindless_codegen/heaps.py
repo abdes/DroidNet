@@ -243,10 +243,10 @@ def render_cpp_heaps(heaps: Dict[str, Any]) -> str:
             lines.append(f"// {dbg}")
         # C++ constants: kUpperCamelCase
         lines.append(
-            f"static constexpr uint32_t k{name}HeapBase = {int(h_dict['base_index'])}u;"
+            f"static constexpr uint32_t k{name}HeapBase = {int(h_dict['base_index'])}U;"
         )
         lines.append(
-            f"static constexpr uint32_t k{name}HeapCapacity = {int(h_dict['capacity'])}u;"
+            f"static constexpr uint32_t k{name}HeapCapacity = {int(h_dict['capacity'])}U;"
         )
         lines.append(
             f"static constexpr bool k{name}HeapShaderVisible = {str(bool(h_dict['shader_visible'])).lower()};"

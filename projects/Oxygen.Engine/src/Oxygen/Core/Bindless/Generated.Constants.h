@@ -6,37 +6,41 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
-// Source-Version: 1.0.0
+// Source-Version: 1.0.1
 // Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.1.0
-// Generated: 2025-08-18 09:46:48
+// Tool: BindlessCodeGen 1.2.0
+// Generated: 2025-08-18 13:09:42
 
 #pragma once
 
 #include <cstdint>
 
-namespace oxygen::engine::binding {
+namespace oxygen {
 
-// Invalid sentinel
-static constexpr uint32_t kInvalidBindlessIndex = 0xffffffffu;
+//! Invalid sentinel.
+static constexpr uint32_t kInvalidBindlessIndex = 0XFFFFFFFFU;
 
-// Scene constants CBV (b1), heap index 0; holds bindless indices table
+namespace engine::binding {
+  // Scene constants CBV
 
-static constexpr uint32_t kSceneDomainBase = 0u;
-static constexpr uint32_t kSceneCapacity = 1u;
+  static constexpr uint32_t kSceneDomainBase = 0U;
+  static constexpr uint32_t kSceneCapacity = 1U;
 
-// Unified SRV table base
-static constexpr uint32_t kGlobalSrvDomainBase = 1u;
-static constexpr uint32_t kGlobalSrvCapacity = 2048u;
+  // Unified global bindless table
 
-static constexpr uint32_t kMaterialsDomainBase = 2049u;
-static constexpr uint32_t kMaterialsCapacity = 3047u;
+  static constexpr uint32_t kGlobalSrvDomainBase = 1U;
+  static constexpr uint32_t kGlobalSrvCapacity = 2048U;
 
-static constexpr uint32_t kTexturesDomainBase = 5096u;
-static constexpr uint32_t kTexturesCapacity = 65536u;
+  // Unified bindless table domains
 
-static constexpr uint32_t kSamplersDomainBase = 0u;
-static constexpr uint32_t kSamplersCapacity = 256u;
+  static constexpr uint32_t kMaterialsDomainBase = 2049U;
+  static constexpr uint32_t kMaterialsCapacity = 3047U;
 
+  static constexpr uint32_t kTexturesDomainBase = 5096U;
+  static constexpr uint32_t kTexturesCapacity = 65536U;
 
-} // namespace oxygen::engine::binding
+  static constexpr uint32_t kSamplersDomainBase = 0U;
+  static constexpr uint32_t kSamplersCapacity = 256U;
+
+} // namespace engine::binding
+} // namespace oxygen

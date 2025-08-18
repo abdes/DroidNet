@@ -14,10 +14,11 @@
 #       "yaml.validate": true
 # ------------------------------------------------------------------------------
 meta:
-  version: "1.0.0"
+  version: "1.0.1"
   description: >
-    Authoritative bindless slot/register mapping for Oxygen.
-    Generated headers used by C++ and HLSL.
+    Authoritative bindless system specification for Oxygen.
+    Generated headers files should be used by C++ and HLSL.
+    Additional metadata is also provided as JSON files.
 
 defaults:
   invalid_index: 4294967295
@@ -31,9 +32,7 @@ domains:
     root_table: BindlessSRVTable
     domain_base: 0
     capacity: 1
-    comment: >
-      Scene constants CBV (b1), heap index 0;
-      holds bindless indices table
+    comment: "Scene constants CBV"
 
   - id: srv_global
     name: "GlobalSRV"
@@ -43,7 +42,7 @@ domains:
     root_table: BindlessSRVTable
     domain_base: 1
     capacity: 2048
-    comment: "Unified SRV table base"
+    comment: "Unified global bindless table"
 
   - id: materials
     name: "Materials"
@@ -56,6 +55,7 @@ domains:
     register: t1
     space: space0
     root_table: BindlessSRVTable
+    comment: "Unified bindless table domains"
 
   - id: textures
     name: "Textures"
