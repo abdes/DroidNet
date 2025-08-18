@@ -22,10 +22,60 @@ namespace oxygen {
 using BindlessHandle = oxygen::NamedType<uint32_t, struct BindlessHandleTag,
   // clang-format off
   oxygen::Hashable,
-  oxygen::Comparable>; // clang-format on
+  oxygen::Comparable,
+  oxygen::Printable>; // clang-format on
+
+//! Strong type representing a count of bindless handles.
+/*!
+ Tied to `BindlessHandle` by name to make intent and scope obvious. Its
+ underlying type is the same as `BindlessHandle` to guarantee consistent bounds
+ and semantics.
+*/
+using BindlessHandleCount = oxygen::NamedType<uint32_t,
+  struct BindlessHandleCountTag,
+  // clang-format off
+  oxygen::DefaultInitialized,
+  oxygen::PreIncrementable,
+  oxygen::PostIncrementable,
+  oxygen::Addable,
+  oxygen::Subtractable,
+  oxygen::Comparable,
+  oxygen::Printable,
+  oxygen::Hashable>; // clang-format on
+
+//! Strong type representing the capacity of an allocator or a container of
+//! bindless handles.
+/*!
+ Tied to `BindlessHandle` by name to make intent and scope obvious. Its
+ underlying type is the same as `BindlessHandle` to guarantee consistent bounds
+ and semantics.
+*/
+using BindlessHandleCapacity
+  = oxygen::NamedType<uint32_t, struct BindlessHandleCapacityTag,
+    // clang-format off
+  oxygen::DefaultInitialized,
+  oxygen::Addable,
+  oxygen::Subtractable,
+  oxygen::Comparable,
+  oxygen::Printable,
+  oxygen::Hashable>; // clang-format on
+
+//! Explicit namespace with concise aliases for the bindless numeric types to
+//! improve ergonomic at use sites.
+namespace bindless {
+  using Handle = BindlessHandle;
+  using Count = BindlessHandleCount;
+  using Capacity = BindlessHandleCapacity;
+} // namespace bindless
 
 //! Convert a BindlessHandle to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandle h) -> std::string;
+
+//! Convert a BindlessHandleCount to a human-readable string representation.
+OXGN_CORE_NDAPI auto to_string(BindlessHandleCount count) -> std::string;
+
+//! Convert a BindlessHandleCapacity to a human-readable string representation.
+OXGN_CORE_NDAPI auto to_string(BindlessHandleCapacity capacity) -> std::string;
 
 //! Sentinel value representing an invalid bindless handle.
 static constexpr BindlessHandle kInvalidBindlessHandle {
@@ -79,7 +129,8 @@ public:
     oxygen::PreIncrementable,
     oxygen::PostIncrementable,
     oxygen::Addable,
-    oxygen::Comparable>; // clang-format on
+    oxygen::Comparable,
+    oxygen::Printable>; // clang-format on
 
   //! Hasher alias to improve discoverability, and ergonomics when using the
   //! class in a generic context.
@@ -188,6 +239,10 @@ private:
 
 //! Convert a VersionedBindlessHandle to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle const& h) -> std::string;
+
+//! Convert a VersionedBindlessHandle::Generation to a human-readable string.
+OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle::Generation gen)
+  -> std::string;
 
 //! Explicit hasher for VersionedBindlessHandle.
 /*!
