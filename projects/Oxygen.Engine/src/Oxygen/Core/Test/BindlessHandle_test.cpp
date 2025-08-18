@@ -39,14 +39,18 @@ NOLINT_TEST(BindlessHandle, ToString_ContainsNumericValue)
 //! Pack/unpack keeps index and generation and IsValid reports correctly.
 NOLINT_TEST(VersionedBindlessHandle, PackUnpack_RetainsIndexAndGeneration)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::VersionedBindlessHandle::Generation gen { 3u };
-  oxygen::BindlessHandle idx { 7u };
-  oxygen::VersionedBindlessHandle v { idx, gen };
+  Generation gen { 3u };
+  BindlessHandle idx { 7u };
+  VersionedBindlessHandle v { idx, gen };
 
   // Act
   auto packed = v.ToPacked();
-  auto unpacked = oxygen::VersionedBindlessHandle::FromPacked(packed);
+  auto unpacked = VersionedBindlessHandle::FromPacked(packed);
 
   // Assert
   EXPECT_TRUE(v.IsValid());
@@ -59,13 +63,18 @@ NOLINT_TEST(VersionedBindlessHandle, PackUnpack_RetainsIndexAndGeneration)
 //! Explicit hasher should produce identical hashes for equal handles.
 NOLINT_TEST(VersionedBindlessHandle, Hash_EqualForEqualValues)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = VersionedBindlessHandle::Generation;
+  using Hasher = VersionedBindlessHandle::Hasher;
+
   // Arrange
-  oxygen::VersionedBindlessHandle::Generation gen { 1u };
-  oxygen::VersionedBindlessHandle a { oxygen::BindlessHandle { 5u }, gen };
-  oxygen::VersionedBindlessHandle b { oxygen::BindlessHandle { 5u }, gen };
+  Generation gen { 1u };
+  VersionedBindlessHandle a { BindlessHandle { 5u }, gen };
+  VersionedBindlessHandle b { BindlessHandle { 5u }, gen };
 
   // Act
-  oxygen::VersionedBindlessHandleHash hasher;
+  Hasher hasher;
 
   // Assert
   EXPECT_EQ(hasher(a), hasher(b));
@@ -91,15 +100,18 @@ NOLINT_TEST(
 NOLINT_TEST(
   VersionedBindlessHandle, Hash_DifferentGenerationsProduceDifferentHashes)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = VersionedBindlessHandle::Generation;
+  using Hasher = VersionedBindlessHandle::Hasher;
+
   // Arrange
-  oxygen::BindlessHandle idx { 10u };
-  oxygen::VersionedBindlessHandle a { idx,
-    oxygen::VersionedBindlessHandle::Generation { 1u } };
-  oxygen::VersionedBindlessHandle b { idx,
-    oxygen::VersionedBindlessHandle::Generation { 2u } };
+  BindlessHandle idx { 10u };
+  VersionedBindlessHandle a { idx, Generation { 1u } };
+  VersionedBindlessHandle b { idx, Generation { 2u } };
 
   // Act
-  oxygen::VersionedBindlessHandleHash hasher;
+  Hasher hasher;
 
   // Assert
   EXPECT_NE(hasher(a), hasher(b));
@@ -127,9 +139,12 @@ NOLINT_TEST(BindlessHandle, ToString_ZeroAndMaxFormatting)
 //! generation using the exact format "Bindless(i:<index>, g:<generation>)".
 NOLINT_TEST(VersionedBindlessHandle, ToString_IncludesIndexAndGenerationExact)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::VersionedBindlessHandle v { oxygen::BindlessHandle { 7u },
-    oxygen::VersionedBindlessHandle::Generation { 3u } };
+  VersionedBindlessHandle v { BindlessHandle { 7u }, Generation { 3u } };
 
   // Act
   auto s = to_string(v);
@@ -154,10 +169,13 @@ NOLINT_TEST(BindlessHandle, ToString_InvalidSentinelProducesInvalidIndex)
 //! Verify max-value formatting for VersionedBindlessHandle prints full uint32_t
 NOLINT_TEST(VersionedBindlessHandle, ToString_MaxValuesFormatting)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = VersionedBindlessHandle::Generation;
+
   // Arrange
   const uint32_t max = std::numeric_limits<uint32_t>::max();
-  oxygen::VersionedBindlessHandle v { oxygen::BindlessHandle { max },
-    oxygen::VersionedBindlessHandle::Generation { max } };
+  VersionedBindlessHandle v { BindlessHandle { max }, Generation { max } };
 
   // Act
   auto s = to_string(v);
@@ -171,21 +189,24 @@ NOLINT_TEST(VersionedBindlessHandle, ToString_MaxValuesFormatting)
 //! Near-max generation packing and wrap-around behavior.
 NOLINT_TEST(VersionedBindlessHandle, WrapAround_NearMaxGenerationPacking)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = oxygen::VersionedBindlessHandle::Generation;
+
   // Arrange
   const uint32_t near_max = std::numeric_limits<uint32_t>::max() - 1u;
-  oxygen::BindlessHandle idx { 123u };
-  oxygen::VersionedBindlessHandle::Generation g1 { near_max };
-  oxygen::VersionedBindlessHandle v1 { idx, g1 };
+  BindlessHandle idx { 123u };
+  Generation g1 { near_max };
+  VersionedBindlessHandle v1 { idx, g1 };
 
   // Act: increment generation (simulate allocator overflow)
-  auto g2 = oxygen::VersionedBindlessHandle::Generation { static_cast<uint32_t>(
-    g1.get() + 1u) };
-  oxygen::VersionedBindlessHandle v2 { idx, g2 };
+  auto g2 = Generation { static_cast<uint32_t>(g1.get() + 1u) };
+  VersionedBindlessHandle v2 { idx, g2 };
 
   auto packed1 = v1.ToPacked();
   auto packed2 = v2.ToPacked();
-  auto unpack1 = oxygen::VersionedBindlessHandle::FromPacked(packed1);
-  auto unpack2 = oxygen::VersionedBindlessHandle::FromPacked(packed2);
+  auto unpack1 = VersionedBindlessHandle::FromPacked(packed1);
+  auto unpack2 = VersionedBindlessHandle::FromPacked(packed2);
 
   // Assert: packed values differ and generation fields preserved modulo 2^32
   // Compare the raw underlying packed numeric values explicitly.
@@ -197,12 +218,14 @@ NOLINT_TEST(VersionedBindlessHandle, WrapAround_NearMaxGenerationPacking)
 //! Ordering: when indices equal, ordering follows generation.
 NOLINT_TEST(VersionedBindlessHandle, Order_OrdersByGenerationWhenIndexEqual)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = oxygen::VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::BindlessHandle idx { 50u };
-  oxygen::VersionedBindlessHandle low { idx,
-    oxygen::VersionedBindlessHandle::Generation { 1u } };
-  oxygen::VersionedBindlessHandle high { idx,
-    oxygen::VersionedBindlessHandle::Generation { 2u } };
+  BindlessHandle idx { 50u };
+  VersionedBindlessHandle low { idx, Generation { 1u } };
+  VersionedBindlessHandle high { idx, Generation { 2u } };
 
   // Act / Assert: direct comparison uses VersionedBindlessHandle's operator<=>
   EXPECT_LT(low, high);
@@ -213,11 +236,13 @@ NOLINT_TEST(VersionedBindlessHandle, Order_OrdersByGenerationWhenIndexEqual)
 //! Different indices should order by index regardless of generation.
 NOLINT_TEST(VersionedBindlessHandle, Order_OrdersByIndexFirst)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = oxygen::VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::VersionedBindlessHandle a { oxygen::BindlessHandle { 10 },
-    oxygen::VersionedBindlessHandle::Generation { 5 } };
-  oxygen::VersionedBindlessHandle b { oxygen::BindlessHandle { 11 },
-    oxygen::VersionedBindlessHandle::Generation { 0 } };
+  VersionedBindlessHandle a { BindlessHandle { 10 }, Generation { 5 } };
+  VersionedBindlessHandle b { BindlessHandle { 11 }, Generation { 0 } };
 
   // Assert
   EXPECT_LT(a, b);
@@ -227,13 +252,14 @@ NOLINT_TEST(VersionedBindlessHandle, Order_OrdersByIndexFirst)
 //! Verify transitivity: if a < b and b < c then a < c
 NOLINT_TEST(VersionedBindlessHandle, Order_TransitiveOrdering)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = oxygen::VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::VersionedBindlessHandle a { oxygen::BindlessHandle { 1 },
-    oxygen::VersionedBindlessHandle::Generation { 1 } };
-  oxygen::VersionedBindlessHandle b { oxygen::BindlessHandle { 1 },
-    oxygen::VersionedBindlessHandle::Generation { 2 } };
-  oxygen::VersionedBindlessHandle c { oxygen::BindlessHandle { 2 },
-    oxygen::VersionedBindlessHandle::Generation { 0 } };
+  VersionedBindlessHandle a { BindlessHandle { 1 }, Generation { 1 } };
+  VersionedBindlessHandle b { BindlessHandle { 1 }, Generation { 2 } };
+  VersionedBindlessHandle c { BindlessHandle { 2 }, Generation { 0 } };
 
   // Assert
   EXPECT_LT(a, b);
@@ -244,11 +270,13 @@ NOLINT_TEST(VersionedBindlessHandle, Order_TransitiveOrdering)
 //! Equal when both index and generation match exactly.
 NOLINT_TEST(VersionedBindlessHandle, Order_EqualityWhenBothMatch)
 {
+  using oxygen::BindlessHandle;
+  using oxygen::VersionedBindlessHandle;
+  using Generation = oxygen::VersionedBindlessHandle::Generation;
+
   // Arrange
-  oxygen::VersionedBindlessHandle x { oxygen::BindlessHandle { 42 },
-    oxygen::VersionedBindlessHandle::Generation { 7 } };
-  oxygen::VersionedBindlessHandle y { oxygen::BindlessHandle { 42 },
-    oxygen::VersionedBindlessHandle::Generation { 7 } };
+  VersionedBindlessHandle x { BindlessHandle { 42 }, Generation { 7 } };
+  VersionedBindlessHandle y { BindlessHandle { 42 }, Generation { 7 } };
 
   // Assert
   EXPECT_EQ(x, y);
