@@ -69,6 +69,15 @@ add_library(
   tests/compile_check/compile_check.cpp
 )
 
+# Do not build the compile-check target as part of the default 'ALL'. It will
+# be built explicitly via ctest and from the bindless generation POST_BUILD
+# hook under Core/Bindless.
+set_target_properties(
+  BindlessCodeGen_CompileCheck
+  PROPERTIES
+    EXCLUDE_FROM_ALL TRUE
+)
+
 # Ensure the editable install runs before trying to compile the check (so
 # generation and local imports are available when running tests that depend
 # on generator outputs).
