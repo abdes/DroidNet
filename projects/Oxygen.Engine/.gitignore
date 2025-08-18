@@ -11,6 +11,7 @@ vcpkg_installed/
 vs2022
 ConanPresets.json
 /Testing
+.pytest_cache/
 
 .clwb
 .vs
