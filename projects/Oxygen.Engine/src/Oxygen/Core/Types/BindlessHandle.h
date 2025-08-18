@@ -32,6 +32,10 @@ static constexpr BindlessHandle kInvalidBindlessHandle {
   kInvalidBindlessIndex
 };
 
+// Forward declaration for the hasher, so that we can use it for the Hasher type
+// alias
+struct VersionedBindlessHandleHash;
+
 //! CPU-side versioned handle pairing index with generation counter.
 /*!
  Combines a shader-visible bindless index with a CPU-side generation counter to
@@ -76,6 +80,19 @@ public:
     oxygen::PostIncrementable,
     oxygen::Addable,
     oxygen::Comparable>; // clang-format on
+
+  //! Hasher alias to improve discoverability, and ergonomics when using the
+  //! class in a generic context.
+  /*!
+   ### Usage Example
+   ```cpp
+   // Simple
+   std::unordered_set<VersionedBindlessHandle, VersionedBindlessHandle::Hasher>
+   // Or generic also works across many types
+   std::unordered_set<T, typename T::Hasher>
+   ```
+  */
+  using Hasher = VersionedBindlessHandleHash;
 
   constexpr VersionedBindlessHandle() noexcept = default;
 
@@ -174,17 +191,12 @@ OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle const& h) -> std::string;
 
 //! Explicit hasher for VersionedBindlessHandle.
 /*!
- Use this hasher when storing versioned handles in unordered containers.
- Hashing is kept opt-in and explicit rather than enabling it globally.
-
- ### Usage Examples
-
- ```cpp
- std::unordered_set<VersionedBindlessHandle, VersionedBindlessHandleHash>
- handles; std::unordered_map<VersionedBindlessHandle, Data,
- VersionedBindlessHandleHash> map;
- ```
-*/
+ The packed 64-bit representation of this type is an implementation detail and
+ may change; to avoid silently coupling callers to that representation, creating
+ ODR/ABI surprises, or enabling implicit global behavior via a `std::hash`
+ specialization, hashing is kept explicit and opt-in — use this functor when you
+ need a version-aware hash (index and generation) for unordered containers.
+ */
 struct VersionedBindlessHandleHash {
   //! Hash a versioned handle using its packed representation.
   [[nodiscard]] auto operator()(VersionedBindlessHandle const& h) const noexcept
