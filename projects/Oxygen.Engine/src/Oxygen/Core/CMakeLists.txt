@@ -106,6 +106,7 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 # Bindless generation and Tools integration
 # ------------------------------------------------------------------------------
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Bindless/CMakeLists.txt")
   add_subdirectory("Bindless")
   if(TARGET generate_bindless_headers)

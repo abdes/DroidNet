@@ -33,21 +33,34 @@ set(
   "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Tools/BindlessCodeGen/requirements.txt"
 )
 
+# ------------------------------------------------------------------------------
+# Generation model (Option 2):
+# - We intentionally write generated files into the SOURCE tree (under this
+#   folder) so they are versioned in git.
+# - To prevent CMake/VS "Clean" from deleting these versioned files, we DO NOT
+#   list the generated headers/JSON as OUTPUT or BYPRODUCTS of the custom
+#   command. Instead, we use a stamp file in the BINARY tree as the only
+#   declared OUTPUT. Clean will remove the stamp only, leaving source files
+#   untouched.
+# - Rebuilds are still correct because the stamp depends on the SSoT (Spec.yaml)
+#   and the generator scripts; when inputs change, the stamp is re-generated,
+#   and the generator runs again to refresh the versioned files.
+# ------------------------------------------------------------------------------
+
+# Stamp file that represents completion of generation; lives in the build tree
+set(_gen_stamp "${CMAKE_CURRENT_BINARY_DIR}/bindless_gen.stamp")
+
 add_custom_command(
   OUTPUT
-    ${_out_cpp}
-    ${_out_hlsl}
-    ${_out_json}
-    ${_out_heaps}
-    ${_out_heaps_hpp}
-    ${_out_rs}
-    ${_out_meta}
+    ${_gen_stamp}
   COMMAND
     ${CMAKE_COMMAND} -E echo
-    "[BindlessCodeGen] Generating bindless headers and JSON"
+    "[BindlessCodeGen] Generating bindless headers and JSON (source tree)"
   COMMAND
     ${Python3_EXECUTABLE} -m bindless_codegen.cli --input ${_sot} --out-base
     ${_out_base}
+  COMMAND
+    ${CMAKE_COMMAND} -E touch ${_gen_stamp}
   DEPENDS
     bindless_codegen_editable_install
     ${_sot}
@@ -59,13 +72,7 @@ add_custom_command(
 add_custom_target(
   generate_bindless_headers
   DEPENDS
-    ${_out_cpp}
-    ${_out_hlsl}
-    ${_out_json}
-    ${_out_heaps}
-    ${_out_heaps_hpp}
-    ${_out_rs}
-    ${_out_meta}
+  ${_gen_stamp}
 )
 set_target_properties(
   generate_bindless_headers
@@ -75,10 +82,6 @@ set_target_properties(
     OUTPUT_NAME
       "Generate Bindless BindingSlots"
 )
-
-# The compile-check target is invoked as a POST_BUILD step below. Do NOT make
-# the compile-check a pre-requisite of generation; generation must run first
-# so the generated headers exist when the compile-check runs.
 
 # Run the compile-check after generation. This will fail the generation step if
 # the compile-check fails, enforcing that generated headers remain compilable.
