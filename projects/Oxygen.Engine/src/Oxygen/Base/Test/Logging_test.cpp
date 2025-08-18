@@ -404,6 +404,23 @@ NOLINT_TEST_F(LogWithAdapterTests, RvalueHandling_FormatsADLRvalueTemporaries)
   EXPECT_THAT(output, HasSubstr("R:11"));
 }
 
+//! Verify that dynamic precision formatting works with numeric passthrough
+NOLINT_TEST_F(
+  LogWithAdapterTests, NumericFormatting_HandlesDynamicPrecisionAndName)
+{
+  // Arrange
+  const double duration_sec = 1.23456;
+  const int precision = 3;
+  const char* name = "unit";
+
+  // Act
+  auto output = CaptureStderr(
+    [&] { LOG_F(INFO, "{:.{}f} s: {:s}", duration_sec, precision, name); });
+
+  // Assert (rounded to 3 decimals)
+  EXPECT_THAT(output, HasSubstr("1.235 s: unit"));
+}
+
 } // namespace
 
 #else // LOGURU_USE_FMTLIB

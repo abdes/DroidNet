@@ -48,6 +48,7 @@
 #if LOGURU_USE_FMTLIB
 
 #  include <concepts>
+#  include <fmt/format.h>
 #  include <string>
 #  include <string_view>
 #  include <tuple>
@@ -56,6 +57,8 @@
 
 #  include <Oxygen/Base/NoStd.h>
 
+namespace oxgn_lg_detail {
+
 //! Detect string-like types
 /*!
  A type is considered "string-like" if it is convertible to `std::string_view`.
@@ -63,7 +66,12 @@
  stable, owning buffer for fmt calls.
 */
 template <typename T>
-constexpr bool is_string_like_v = std::is_convertible_v<T, std::string_view>;
+concept StringLike = std::convertible_to<T, std::string_view>;
+
+//! Detect whether fmt has a formatter for T
+template <typename T>
+concept Formattable
+  = fmt::is_formattable<std::remove_reference_t<T>, fmt::format_context>::value;
 
 //! Convert argument via ADL `to_string` when available
 /*!
@@ -79,14 +87,14 @@ constexpr bool is_string_like_v = std::is_convertible_v<T, std::string_view>;
  captured.
 */
 template <typename T>
-  requires nostd::has_tostring<std::remove_reference_t<T>>
-auto map_arg(T&& x) -> std::string
+  requires(nostd::HasToString<std::remove_reference_t<T>> && !Formattable<T>)
+auto MapArg(T&& x) -> std::string
 {
   using Decayed = std::remove_reference_t<T>;
-  if constexpr (nostd::has_tostring_returns_string<Decayed>) {
+  if constexpr (nostd::HasToStringReturnsString<Decayed>) {
     // to_string returns std::string (or convertible): just return it.
     return nostd::to_string(std::forward<T>(x));
-  } else if constexpr (nostd::has_tostring_returns_string_view<Decayed>) {
+  } else if constexpr (nostd::HasToStringReturnsStringView<Decayed>) {
     // to_string returns string_view: materialize a local copy/moved value so
     // any returned view points into storage we control. We intentionally
     // materialize unconditionally to avoid lifetime pitfalls stemming from
@@ -106,8 +114,8 @@ auto map_arg(T&& x) -> std::string
  subsequent formatting operations have stable storage.
 */
 template <typename T>
-  requires(!nostd::has_tostring<T> && is_string_like_v<T>)
-auto map_arg(T const& x) -> std::string
+  requires(!nostd::HasToString<T> && StringLike<T> && !Formattable<T>)
+auto MapArg(T const& x) -> std::string
 {
   return std::string(x);
 }
@@ -118,11 +126,21 @@ auto map_arg(T const& x) -> std::string
  Converts `nullptr` to the string "(null)" and otherwise copies the pointed-to
  characters into an owning `std::string`.
 */
-inline std::string map_arg(const char* x)
+inline std::string MapArg(const char* x)
 {
   if (x == nullptr)
     return std::string("(null)");
   return std::string(x);
+}
+
+//! Prefer fmt if it knows how to format the type. Return by value so
+//! temporaries are owned by the tuple created in WithMappedArgs and don't
+//! dangle.
+template <typename T>
+  requires(Formattable<T>)
+auto MapArg(T&& x) -> std::remove_reference_t<T>
+{
+  return std::forward<T>(x);
 }
 
 //! Fallback: passthrough for types fmt can format directly
@@ -130,13 +148,13 @@ inline std::string map_arg(const char* x)
  For types that neither provide ADL `to_string` nor are string-like, we forward
  the reference unchanged. This allows fmt to format scalars and user types that
  have registered formatters. Note: this overload returns a reference; callers
- should use the mapping helpers (for example `with_mapped_args`) which
+ should use the mapping helpers (for example `WithMappedArgs`) which
  materialize/copy mapped values into a tuple so that references do not dangle
  when creating `fmt::format_args`.
 */
 template <typename T>
-  requires(!nostd::has_tostring<T> && !is_string_like_v<T>)
-auto map_arg(T const& x) -> T const&
+  requires(!nostd::HasToString<T> && !StringLike<T> && !Formattable<T>)
+auto MapArg(T const& x) -> T const&
 {
   return x;
 }
@@ -153,10 +171,10 @@ auto map_arg(T const& x) -> T const&
  This helper centralizes the delicate lifetime rules required when using
  `fmt::make_format_args`. `fmt::make_format_args` needs lvalue references to
  argument objects that remain valid when the `format_args` are created.
- `with_mapped_args` materializes mapped values (for example, `std::string`
- results from ADL `to_string`) into a tuple that lives for the duration of the
- call. It then invokes the provided callable inside a `std::apply` with lvalue
- references to those mapped objects.
+ `WithMappedArgs` materializes mapped values (for example, `std::string` results
+ from ADL `to_string`) into a tuple that lives for the duration of the call. It
+ then invokes the provided callable inside a `std::apply` with lvalue references
+ to those mapped objects.
 
  Use this function at the logging boundary to ensure temporaries produced by
  mapping live long enough for `fmt::make_format_args` to safely reference them.
@@ -165,7 +183,7 @@ auto map_arg(T const& x) -> T const&
 
   ```cpp
   // Materialize mapped args and call fmt safely from the callable.
-  with_mapped_args(
+  WithMappedArgs(
     [&](auto&... ms) {
       vlog(verbosity, file, line, fmt::make_format_args(ms...));
     },
@@ -173,13 +191,15 @@ auto map_arg(T const& x) -> T const&
   ```
 */
 template <typename F, typename... Args>
-decltype(auto) with_mapped_args(F&& f, Args&&... args)
+decltype(auto) WithMappedArgs(F&& f, Args&&... args)
 {
-  auto mapped = std::make_tuple(map_arg(std::forward<Args>(args))...);
+  auto m = std::make_tuple(oxgn_lg_detail::MapArg(std::forward<Args>(args))...);
   return std::apply(
     [&](auto&... ms) -> decltype(auto) { return std::forward<F>(f)(ms...); },
-    mapped);
+    m);
 }
+
+} // namespace oxgn_lg_detail
 
 //! Format a string using the mapping adapters
 /*!
@@ -188,21 +208,21 @@ decltype(auto) with_mapped_args(F&& f, Args&&... args)
  @param args Arguments to be mapped then forwarded to `fmt::format`.
  @return A `std::string` containing the formatted result.
 
- This convenience wraps `with_mapped_args` and calls `fmt::format` from inside
- the callable. It's the safe, owning-path used by `textprintf` where a concrete
+ This convenience wraps `WithMappedArgs` and calls `fmt::format` from inside the
+ callable. It's the safe, owning-path used by `textprintf` where a concrete
  `std::string` must be returned.
 
   ### Usage Example
 
   ```cpp
   // Format into an owning string using the adapters. Safe for temporaries.
-  auto s = format_with_adapters("{} - {}", some_named_type(), "ok");
+  auto s = FormatWithAdapters("{} - {}", some_named_type(), "ok");
   ```
 */
 template <typename... Args>
-auto format_with_adapters(const char* fmt_str, Args&&... args)
+auto FormatWithAdapters(const char* fmt_str, Args&&... args)
 {
-  return with_mapped_args(
+  return oxgn_lg_detail::WithMappedArgs(
     [&](auto&... ms) { return fmt::format(fmt::runtime(fmt_str), ms...); },
     std::forward<Args>(args)...);
 }

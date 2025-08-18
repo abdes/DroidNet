@@ -75,14 +75,14 @@ auto to_string(T&& value)
 //! Concept: does nostd::to_string(T) return something convertible to
 //! std::string
 template <typename T>
-concept has_tostring_returns_string = requires(T&& t) {
+concept HasToStringReturnsString = requires(T&& t) {
   { nostd::to_string(std::forward<T>(t)) } -> std::convertible_to<std::string>;
 };
 
 //! Concept: does nostd::to_string(T) return something convertible to
 //! std::string_view
 template <typename T>
-concept has_tostring_returns_string_view = requires(T&& t) {
+concept HasToStringReturnsStringView = requires(T&& t) {
   {
     nostd::to_string(std::forward<T>(t))
   } -> std::convertible_to<std::string_view>;
@@ -91,7 +91,7 @@ concept has_tostring_returns_string_view = requires(T&& t) {
 //! Concept: whether `nostd::to_string(t)` is available and returns something
 //! convertible to `std::string` or `std::string_view`.
 template <typename T>
-concept has_tostring
-  = has_tostring_returns_string<T> || has_tostring_returns_string_view<T>;
+concept HasToString
+  = HasToStringReturnsString<T> || HasToStringReturnsStringView<T>;
 
 } // namespace nostd
