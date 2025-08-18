@@ -260,17 +260,15 @@ lifetime/generation, validation, and type safety.
     `src/Oxygen/Core/Bindless/BindingSlots.h`,
     `src/Oxygen/Core/Bindless/BindingSlots.hlsl`, small build/tooling glue.
 
-- [ ] Unified direct indexing flags (CBV/SRV/UAV + Sampler)
-  - Status: Partial. CBV/SRV/UAV direct indexing flag is set in D3D12 paths;
-    sampler direct indexing appears supported in utilities but isn’t
-    consistently propagated across all created root signatures.
-  - Action: Ensure all graphics/compute root signatures set both flags:
-    D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED and
-    D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED. Add a debug-time
-    assertion at pipeline creation that verifies flags match Section 3.
+- [x] Unified direct indexing flags (CBV/SRV/UAV + Sampler)
+  - Status: Done. All D3D12 root signatures now set both direct-indexing flags
+    (CBV/SRV/UAV and Sampler). A debug-time assertion validates the presence of
+    these flags at pipeline creation.
+  - Action: Enforced flags in central RS creation and added DCHECK in debug
+    builds. Future passes must use the centralized creation helpers or mirror
+    this invariant.
   - Files: `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`,
-    `src/Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.cpp`, any
-    pass-specific root signature builders under `src/Oxygen/Renderer/*Pass.cpp`.
+    `src/Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.cpp`.
 
 - [x] Single shader-visible heap + descriptor table binding discipline
   - Status: Partial. Command recorder binds descriptor heaps and a single
