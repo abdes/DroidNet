@@ -282,17 +282,19 @@ lifetime/generation, validation, and type safety.
   - Files: `src/Oxygen/Renderer/RenderPass.cpp`,
     `src/Oxygen/Graphics/Common/CommandRecorder.*`.
 
-- [ ] Stable global indices: domain bases and capacity budgeting
-  - Status: Missing. Need explicit domain base indices
-    (geometry/materials/textures/samplers) and capacity accounting to compute
-    shader-visible index = base + slot.
-  - Action: Add allocator APIs to query/define per-domain base indices and
-    reserve capacities:
-    - `GetDomainBaseIndex(ResourceViewType, DescriptorVisibility)`
-    - `Reserve(ResourceViewType, DescriptorVisibility, uint32_t count)`
-    - Ensure `GetRemainingDescriptorsCount(...)` is public for budgeting.
-  - Files: `src/Oxygen/Graphics/Common/DescriptorAllocator.h`,
-    `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.cpp`.
+- [x] Stable global indices: domain bases and capacity budgeting
+  - Status: Implemented. Allocator APIs expose stable per-domain base indices
+    and reservation-based capacity budgeting; Reserve(...) returns
+    `std::nullopt` for unsupported or over-capacity requests.
+  - Action: Use the allocator APIs for domain budgeting and to compute
+    shader-visible indices as `base + slot`.
+  - Files (implementation & tests):
+    - `src/Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h`
+    - `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Domain_test.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Test/HeapAllocationStrategy_domain_test.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h` (provider wiring)
+  - Notes: The D3D12 provider test demonstrates honoring `base_index` from
+    embedded JSON; tests assert Reserve-exceeding-capacity returns no value.
 
 - [ ] BindlessHandle type and invalid sentinel
   - Status: Missing. Code uses `DescriptorHandle` for heap slots; no

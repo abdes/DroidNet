@@ -293,6 +293,57 @@ public:
     return (*segment)->GetShaderVisibleIndex(handle);
   }
 
+  [[nodiscard]] auto GetDomainBaseIndex(const ResourceViewType view_type,
+    const DescriptorVisibility visibility) const -> IndexT override
+  {
+    return AbortOnFailed(__func__, [&]() {
+      std::lock_guard lock(mutex_);
+      return heap_strategy_->GetHeapBaseIndex(view_type, visibility);
+    });
+  }
+
+  [[nodiscard]] auto Reserve(const ResourceViewType view_type,
+    const DescriptorVisibility visibility, const IndexT count)
+    -> std::optional<IndexT> override
+  {
+    return AbortOnFailed(__func__, [&]() -> std::optional<IndexT> {
+      std::lock_guard lock(mutex_);
+      // Some (type, visibility) pairs may be unsupported by the strategy.
+      // If the precomputed key is empty, treat it as unsupported.
+      const auto& key = keys_.at(HeapIndex(view_type, visibility));
+      if (key.empty()) {
+        return std::nullopt;
+      }
+      const auto& desc = heap_strategy_->GetHeapDescription(key);
+
+      const auto capacity = visibility == DescriptorVisibility::kShaderVisible
+        ? desc.shader_visible_capacity
+        : desc.cpu_visible_capacity;
+
+      if (capacity == 0 || count > capacity) {
+        return std::nullopt;
+      }
+
+      // Optionally instantiate the initial segment to lock the domain in.
+      auto& segments = heaps_[key];
+      if (segments.empty()) {
+        const auto base_index
+          = heap_strategy_->GetHeapBaseIndex(view_type, visibility);
+        auto segment
+          = CreateHeapSegment(capacity, base_index, view_type, visibility);
+        if (segment) {
+          segments.push_back(std::move(segment));
+        } else {
+          // If we cannot create the backing segment now, still treat as a
+          // successful reservation if capacity allows; implementations may
+          // defer creation to first Allocate().
+        }
+      }
+
+      return heap_strategy_->GetHeapBaseIndex(view_type, visibility);
+    });
+  }
+
 protected:
   //! Creates a new heap segment for the specified view type and visibility.
   /*!

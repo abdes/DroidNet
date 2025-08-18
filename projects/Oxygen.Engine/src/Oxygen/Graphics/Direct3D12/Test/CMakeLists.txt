@@ -46,6 +46,7 @@ include(GTestHelpers)
 m_gtest_program(
   D3D12HeapAllocationStrategy
   SOURCES
+    "HeapAllocationStrategy_domain_test.cpp"
     "HeapAllocationStrategy_test.cpp"
 )
 m_gtest_program(DescriptorHeapSegment SOURCES "DescriptorHeapSegment_test.cpp")
