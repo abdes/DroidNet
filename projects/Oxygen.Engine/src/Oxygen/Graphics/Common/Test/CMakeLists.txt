@@ -58,12 +58,13 @@ m_gtest_program(
 m_gtest_program(
   BaseDescriptorAllocator
   SOURCES
-    "Bindless/BaseDescriptorAllocatorTest.h"
     "Bindless/BaseDescriptorAllocator_Basic_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Concurrency_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Domain_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Error_test.cpp"
     "Bindless/BaseDescriptorAllocator_Growth_test.cpp"
     "Bindless/BaseDescriptorAllocator_Init_test.cpp"
-    "Bindless/BaseDescriptorAllocator_Error_test.cpp"
-    "Bindless/BaseDescriptorAllocator_Concurrency_test.cpp"
+    "Bindless/BaseDescriptorAllocatorTest.h"
 )
 m_gtest_program(ResourceRegistry SOURCES "ResourceRegistry_test.cpp")
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
