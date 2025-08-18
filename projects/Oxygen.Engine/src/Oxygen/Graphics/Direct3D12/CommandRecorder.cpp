@@ -8,7 +8,7 @@
 
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
-#include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
+#include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
@@ -396,110 +396,6 @@ void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
 
   command_list->GetCommandList()->Dispatch(
     thread_group_count_x, thread_group_count_y, thread_group_count_z);
-}
-
-/**
- * @brief Describes the root signature requirements for descriptor heaps in
- * D3D12.
- *
- * In Direct3D 12, root signatures define how resources are bound to the GPU
- * pipeline. When using descriptor heaps, especially in bindless rendering
- * scenarios, the following requirements apply:
- *
- * - Each root signature should contain **only one descriptor table per
- *   descriptor heap type**. This includes:
- *   - One descriptor table for `D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV`
- *   - One descriptor table for `D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER`
- *
- * - This restriction exists because only one descriptor heap of each type can
- *   be bound at a time using `ID3D12GraphicsCommandList::SetDescriptorHeaps`.
- *   Having multiple descriptor tables for the same heap type in a root
- *   signature is not allowed, as it would create ambiguity in shader resource
- *   binding.
- *
- * - RTV (Render Target View) and DSV (Depth Stencil View) heaps are not
- *   shader-visible and are not included in the root signature.
- */
-
-//! Create a bindless root signature for graphics or compute pipelines
-// Modern bindless root signature layout:
-//   - Root Parameter 0: Single unbounded SRV descriptor table (t0, space0)
-//   - Root Parameter 1: Direct CBV for SceneConstants (b1, space0)
-//   - Root Parameter 2: Direct CBV for MaterialConstants (b2, space0) -
-//   graphics only
-// The flag D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED is set
-// for true bindless access. This layout must match the expectations of both the
-// engine and the shaders (see DepthPrePass.hlsl and FullScreenTriangle.hlsl).
-auto CommandRecorder::CreateBindlessRootSignature(const bool is_graphics) const
-  -> dx::IRootSignature*
-{
-  const size_t num_cbv_params
-    = is_graphics ? 2 : 1; // SceneConstants + MaterialConstants (graphics only)
-  const size_t num_root_params = 1 + num_cbv_params; // 1 SRV table + CBV(s)
-
-  std::vector<D3D12_ROOT_PARAMETER> root_params(num_root_params);
-  D3D12_DESCRIPTOR_RANGE srv_range {};
-
-  // Single unbounded SRV range for all resources (t0, space0)
-  srv_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-  srv_range.NumDescriptors = UINT_MAX; // Unbounded
-  srv_range.BaseShaderRegister = 0; // t0
-  srv_range.RegisterSpace = 0; // space0
-  srv_range.OffsetInDescriptorsFromTableStart = 0;
-
-  // Root Parameter 0: Single unbounded SRV descriptor table (t0, space0)
-  root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-  root_params[0].DescriptorTable.NumDescriptorRanges = 1;
-  root_params[0].DescriptorTable.pDescriptorRanges = &srv_range;
-  root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-  // Root Parameter 1: Direct CBV for SceneConstants (b1, space0)
-  root_params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-  root_params[1].Descriptor.ShaderRegister = 1; // b1
-  root_params[1].Descriptor.RegisterSpace = 0; // space0
-  root_params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-  // Root Parameter 2: Direct CBV for MaterialConstants (b2, space0) - graphics
-  // only
-  if (is_graphics) {
-    root_params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    root_params[2].Descriptor.ShaderRegister = 2; // b2
-    root_params[2].Descriptor.RegisterSpace = 0; // space0
-    root_params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-  }
-
-  const D3D12_ROOT_SIGNATURE_DESC root_sig_desc {
-    .NumParameters = static_cast<UINT>(root_params.size()),
-    .pParameters = root_params.data(),
-    .NumStaticSamplers = 0,
-    .pStaticSamplers = nullptr,
-    .Flags = (is_graphics
-                 ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
-                 : D3D12_ROOT_SIGNATURE_FLAG_NONE)
-      | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
-      | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED,
-  };
-
-  Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
-  HRESULT hr = D3D12SerializeRootSignature(
-    &root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &sig_blob, &err_blob);
-  if (FAILED(hr)) {
-    std::string error_msg = "Failed to serialize root signature: ";
-    if (err_blob) {
-      error_msg += static_cast<const char*>(err_blob->GetBufferPointer());
-    }
-    throw std::runtime_error(error_msg);
-  }
-
-  dx::IRootSignature* root_sig = nullptr;
-  auto* device = renderer_->GetGraphics().GetCurrentDevice();
-  hr = device->CreateRootSignature(0, sig_blob->GetBufferPointer(),
-    sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig));
-  if (FAILED(hr)) {
-    throw std::runtime_error("Failed to create root signature");
-  }
-
-  return root_sig;
 }
 
 void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
