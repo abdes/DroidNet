@@ -259,7 +259,7 @@ Text textprintf(LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
   // Use adapter pipeline that converts objects with a free to_string(T)
   // into std::string before calling fmt, avoiding heavy fmt glue in core
   // headers.
-  auto s = format_with_adapters(format, args...);
+  auto s = FormatWithAdapters(format, args...);
   return Text(STRDUP(s.c_str()));
 }
 #  else
@@ -606,10 +606,10 @@ void log(const Verbosity verbosity, const char* file, const unsigned line,
   try {
     // Important: fmt::make_format_args requires lvalue references to argument
     // objects that remain alive when the args are created. We materialize
-    // mapped arguments via `with_mapped_args` and invoke fmt::make_format_args
+    // mapped arguments via `WithMappedArgs` and invoke fmt::make_format_args
     // from inside the lambda so the temporary storage (e.g. std::string results
     // from ADL `to_string`) stays alive for the duration of the call.
-    with_mapped_args(
+    oxgn_lg_detail::WithMappedArgs(
       [&](auto&... ms) {
         vlog(verbosity, file, line, format, fmt::make_format_args(ms...));
       },
@@ -632,7 +632,7 @@ void raw_log(const Verbosity verbosity, const char* file, const unsigned line,
   // See note above: ensure mapped temporaries live while fmt::make_format_args
   // is called by materializing them here and invoking the formatter inside
   // the lambda.
-  with_mapped_args(
+  oxgn_lg_detail::WithMappedArgs(
     [&](auto&... ms) {
       raw_vlog(verbosity, file, line, format, fmt::make_format_args(ms...));
     },
@@ -727,7 +727,7 @@ LOGURU_NORETURN void log_and_abort(const int stack_trace_skip, const char* expr,
   // See note above: keep mapped temporaries alive while calling
   // `vlog_and_abort(..., fmt::make_format_args(...))` to satisfy fmt's
   // lifetime requirements.
-  with_mapped_args(
+  oxgn_lg_detail::WithMappedArgs(
     [&](auto&... ms) {
       vlog_and_abort(stack_trace_skip, expr, file, line, format,
         fmt::make_format_args(ms...));
