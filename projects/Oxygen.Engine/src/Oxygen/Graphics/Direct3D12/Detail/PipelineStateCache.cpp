@@ -563,7 +563,8 @@ auto CreateRootSignature(const PipelineDesc& desc, const Graphics* gfx)
     .pParameters = final_params_for_desc.data(),
     .NumStaticSamplers = 0,
     .pStaticSamplers = nullptr,
-    .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED,
+    .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+      | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED,
   };
   if constexpr (IsGraphicPipelineDesc<PipelineDesc>) {
     // For graphics pipelines, allow input assembler input layout
@@ -572,6 +573,16 @@ auto CreateRootSignature(const PipelineDesc& desc, const Graphics* gfx)
   }
 
 #if !defined(NDEBUG)
+  // Verify both direct indexing flags are enabled per Section 3 contract
+  const D3D12_ROOT_SIGNATURE_FLAGS kRequiredDirectIndexingFlags
+    = static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(
+      D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+      | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED);
+  DCHECK_F((root_sig_desc.Flags & kRequiredDirectIndexingFlags)
+      == kRequiredDirectIndexingFlags,
+    "Root signature missing required direct-indexing flags (CBV/SRV/UAV and "
+    "Sampler). Flags: 0x{:X}",
+    static_cast<unsigned>(root_sig_desc.Flags));
   // Debugging helper: dump the root signature descriptor
   LOG_F(2, "{}", DumpRootSignatureDesc(root_sig_desc));
 #endif

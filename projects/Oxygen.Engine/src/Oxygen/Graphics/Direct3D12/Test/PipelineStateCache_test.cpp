@@ -151,6 +151,7 @@ namespace reference_blobs {
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
     return SerializeRootSignature(desc);
   }
@@ -182,6 +183,7 @@ namespace reference_blobs {
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
     return SerializeRootSignature(desc);
   }
@@ -198,6 +200,7 @@ namespace reference_blobs {
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
     return SerializeRootSignature(desc);
   }
@@ -220,6 +223,7 @@ namespace reference_blobs {
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
     return SerializeRootSignature(desc);
   }
@@ -249,7 +253,8 @@ namespace reference_blobs {
       .pParameters = &root_param,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
-      .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED };
+      .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED };
     return SerializeRootSignature(desc);
   }
 
