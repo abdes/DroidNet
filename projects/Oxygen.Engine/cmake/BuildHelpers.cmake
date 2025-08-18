@@ -246,7 +246,8 @@ function(arrange_target_files_for_ide target)
   # Print files not in _all_files, excluding Test, Benchmarks, Examples
   set(_missing_files "")
   foreach(existing_file IN LISTS _all_existing_files)
-    # Exclude if path contains Test, Benchmarks, or Examples (case-insensitive)
+    # Exclude if path contains Test, Benchmarks, Tools or Examples
+    # (case-insensitive)
     string(TOLOWER "${existing_file}" _lower_file)
     if(
       _lower_file
@@ -260,6 +261,10 @@ function(arrange_target_files_for_ide target)
         _lower_file
           MATCHES
           "examples/"
+      OR
+        _lower_file
+          MATCHES
+          "tools/"
     )
       continue()
     endif()
