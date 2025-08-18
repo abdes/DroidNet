@@ -75,3 +75,18 @@ set_target_properties(
     OUTPUT_NAME
       "Generate Bindless BindingSlots"
 )
+
+# The compile-check target is invoked as a POST_BUILD step below. Do NOT make
+# the compile-check a pre-requisite of generation; generation must run first
+# so the generated headers exist when the compile-check runs.
+
+# Run the compile-check after generation. This will fail the generation step if
+# the compile-check fails, enforcing that generated headers remain compilable.
+add_custom_command(
+  TARGET generate_bindless_headers
+  POST_BUILD
+  COMMAND
+    ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target
+    BindlessCodeGen_CompileCheck --config $<CONFIG>
+  COMMENT "[Bindless] Running BindlessCodeGen compile-check"
+)

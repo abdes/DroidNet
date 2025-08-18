@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -19,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -346,67 +348,10 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .sample_count = sample_count,
   };
 
-  // Root Parameter 0: SRV table for space0 (indices buffer)
-  constexpr RootBindingDesc indices_srv_table_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 0, // t0
-      .register_space = 0, // space0
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DescriptorTableBinding {
-      .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .base_index = 0,
-    },
-  };
+  // Build root bindings from generated table
+  auto generated_bindings
+    = oxygen::graphics::BuildRootBindingItemsFromGenerated();
 
-  // Root Parameter 1: SRV table for space1 (vertex buffers)
-  constexpr RootBindingDesc vertex_srv_table_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 0, // t0
-      .register_space = 1, // space1
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DescriptorTableBinding {
-      .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .base_index = 0,
-    },
-  };
-
-  // Root Parameter 2: SRV table for space2 (index buffers)
-  constexpr RootBindingDesc index_srv_table_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 0, // t0
-      .register_space = 2, // space2
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DescriptorTableBinding {
-      .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .base_index = 0,
-    },
-  };
-
-  // Root Parameter 3: SceneConstants CBV (b1, space0)
-  constexpr RootBindingDesc scene_constants_cbv_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 1, // b1
-      .register_space = 0, // space0
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = DirectBufferBinding {}
-  };
-
-  // Root Parameter 2: DrawIndex constant (32-bit root constant)
-  constexpr RootBindingDesc draw_index_constant_desc {
-    .binding_slot_desc = BindingSlotDesc {
-      .register_index = 2, // b2
-      .register_space = 0, // space0
-    },
-    .visibility = ShaderStageFlags::kAll,
-    .data = PushConstantsBinding { .size = 1 } // 1 32-bit value
-  };
-
-  // Modern bindless root signature: one unbounded SRV table (t0, space0),
-  // direct CBVs for scene and material constants.
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
@@ -417,12 +362,8 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .SetDepthStencilState(ds_desc)
     .SetBlendState({})
     .SetFramebufferLayout(fb_layout_desc)
-    // Root Parameter 0: Single unbounded SRV table (t0, space0)
-    .AddRootBinding(RootBindingItem(indices_srv_table_desc))
-    // Root Parameter 1: SceneConstants CBV (b1, space0)
-    .AddRootBinding(RootBindingItem(scene_constants_cbv_desc))
-    // Root Parameter 2: DrawIndex constant (b2, space0)
-    .AddRootBinding(RootBindingItem(draw_index_constant_desc))
+    .SetRootBindings(std::span<const graphics::RootBindingItem>(
+      generated_bindings.data(), generated_bindings.size()))
     .Build();
 }
 

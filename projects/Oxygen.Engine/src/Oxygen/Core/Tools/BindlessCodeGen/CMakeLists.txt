@@ -60,8 +60,48 @@ set_target_properties(
 # Tests
 # ------------------------------------------------------------------------------
 
+# Compile-only check: ensure Generated.RootSignature.h compiles when included
+# in a tiny TU. This target is kept under the tool so generator artifacts and
+# checks remain local to the BindlessCodeGen package.
+add_library(
+  BindlessCodeGen_CompileCheck
+  OBJECT
+  tests/compile_check/compile_check.cpp
+)
+
+# Ensure the editable install runs before trying to compile the check (so
+# generation and local imports are available when running tests that depend
+# on generator outputs).
+add_dependencies(BindlessCodeGen_CompileCheck bindless_codegen_editable_install)
+
+# Add include path to the Bindless output directory so the generated headers
+# can be found when this TU is compiled. The generator writes headers into
+# src/Oxygen/Core/Bindless.
+target_include_directories(
+  BindlessCodeGen_CompileCheck
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Bindless
+)
+
 # Add CTest integration for running the Python unit tests
 if(BUILD_TESTING)
+  # Expose a ctest that merely builds the compile-check object. It will fail
+  # if the generated header is invalid.
+  add_test(
+    NAME BindlessCodeGen_CompileCheck
+    COMMAND
+      ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target
+      BindlessCodeGen_CompileCheck --config $<CONFIG>
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+
+  set_tests_properties(
+    BindlessCodeGen_CompileCheck
+    PROPERTIES
+      LABELS
+        "Tools;BindlessCodeGen;CompileCheck"
+  )
+
   add_test(
     NAME BindlessCodeGen_UnitTests
     COMMAND

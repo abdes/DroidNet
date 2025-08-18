@@ -255,6 +255,7 @@ def generate(
     schema_path: str | None = None,
     out_base: str | None = None,
     reporter=None,
+    ts_strategy: str = "preserve",
 ):
     rep = reporter
     if rep is None:
@@ -374,7 +375,27 @@ def generate(
     # removed: handled in root_signature module
 
     # removed: handled in root_signature module
-    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    # Determine timestamp string according to strategy
+    if ts_strategy == "omit":
+        ts = ""
+    elif ts_strategy == "git-sha":
+        try:
+            import subprocess
+
+            sha = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    cwd=os.path.dirname(os.path.abspath(input_yaml)),
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+                or "<nogit>"
+            )
+            ts = sha
+        except Exception:
+            ts = "<nogit>"
+    else:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
     rep.progress("Preparing templates (timestamp %s)", ts)
 
     # Try to compute repo-relative source path using git, fallback to absolute
@@ -420,18 +441,32 @@ def generate(
         domain_defs=domain_defs,
     )
 
-    # RootSignature C++ header content
+    # RootSignature C++ header content (rich metadata)
     rep.progress("Rendering C++ RootSignature header")
-    rs_enum, rs_counts, rs_regs = _render_root_sig_cpp(root_sig)
+    try:
+        rich = rs_mod.render_cpp_root_signature(root_sig or [])
+    except Exception:
+        # Fallback to basic rendering
+        rs_enum, rs_counts, rs_regs = _render_root_sig_cpp(root_sig)
+        rich = {
+            "root_param_enums": rs_enum,
+            "root_constants_counts": rs_counts,
+            "register_space_consts": rs_regs,
+            "root_param_structs": "// none",
+            "root_param_table": "// none",
+        }
+
     content_rs = TEMPLATE_RS_CPP.format(
         src=src_rel,
         src_ver=src_ver,
         schema_ver=schema_version or "",
         tool_ver=TOOL_VERSION,
         ts=ts,
-        root_param_enums=rs_enum,
-        root_constants_counts=rs_counts,
-        register_space_consts=rs_regs,
+        root_param_enums=rich.get("root_param_enums"),
+        root_constants_counts=rich.get("root_constants_counts"),
+        register_space_consts=rich.get("register_space_consts"),
+        root_param_structs=rich.get("root_param_structs"),
+        root_param_table=rich.get("root_param_table"),
     )
 
     # Prepare runtime JSON descriptor (machine-friendly)
@@ -552,6 +587,80 @@ def generate(
 
     # Transactional write for all outputs
     rep.progress("Writing outputs transactionally")
+
+    # Avoid spurious diffs when only the timestamp comment changes.
+    # If the existing file differs only by the Generated timestamp line,
+    # preserve the old file content (including its timestamp) so git won't
+    # treat it as modified.
+    def _normalize_generated_ts(text: str) -> str:
+        # Replace the Generated timestamp line with a stable marker for
+        # comparison. Handles different comment styles that our templates
+        # emit (C++/HLSL comment formats).
+        try:
+            return re.sub(
+                r"(^[ \t]*// Generated: ).*$",
+                r"\1<TS>",
+                text,
+                flags=re.MULTILINE,
+            )
+        except Exception:
+            return text
+
+    # Extend normalization to also hide timestamps embedded in JSON and
+    # in the Meta C++ header string variable used by some templates. This
+    # keeps comparisons stable when only the generated-at timestamp differs.
+    def _normalize_generated_ts_extended(text: str) -> str:
+        try:
+            # First normalize C++/HLSL comment timestamps (existing behavior)
+            out = re.sub(
+                r"(^[ \t]*// Generated: ).*$",
+                r"\1<TS>",
+                text,
+                flags=re.MULTILINE,
+            )
+            # Normalize JSON fields like "generated": "2025-08-18 12:34:56"
+            out = re.sub(
+                r'("generated"\s*:\s*")([^"\n]*)(")',
+                r"\1<TS>\3",
+                out,
+                flags=re.MULTILINE,
+            )
+            # Normalize Meta.h style C++ string constants, e.g.
+            # static constexpr char kBindlessGeneratedAt[] = "2025-...";
+            out = re.sub(
+                r'(kBindlessGeneratedAt\s*\[\s*]\s*=\s*")([^"\n]*)(";)',
+                r"\1<TS>\3",
+                out,
+                flags=re.MULTILINE,
+            )
+            return out
+        except Exception:
+            return text
+
+    for path, content in list(files.items()):
+        try:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as of:
+                    old = of.read()
+                # Only attempt preservation when using the 'preserve'
+                # timestamp strategy. For 'omit' we always write fresh
+                # outputs (so timestamps are removed), and for 'git-sha'
+                # we embed the commit sha as the timestamp and treat it
+                # like a normal timestamp -- preservation is still useful
+                # to avoid spurious diffs when the content other than the
+                # timestamp is identical.
+                if ts_strategy == "preserve":
+                    if _normalize_generated_ts_extended(
+                        old
+                    ) == _normalize_generated_ts_extended(content):
+                        rep.debug(
+                            "Preserving existing timestamp for %s", _short(path)
+                        )
+                        files[path] = old
+        except Exception:
+            # If anything goes wrong, skip preservation for this file
+            rep.debug("Timestamp preservation skipped for %s", _short(path))
+
     changed = transactional_write_files(files)
     if changed:
         rep.info("Outputs updated")

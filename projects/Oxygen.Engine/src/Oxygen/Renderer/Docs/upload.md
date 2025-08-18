@@ -244,21 +244,24 @@ are missing to fully meet Section 3’s contract around stable indices,
 lifetime/generation, validation, and type safety.
 
 - [x] Bindless mapping specification and single source-of-truth
-  - Action: Specify the bindless slot/register mapping once and generate headers
-    for both C++ and HLSL:
-    - Align authoritative slot mapping to `b1` for `SceneConstants` across code
-      and shaders (remove lingering `b0`).
-    - Add/update a single source-of-truth header for symbolic slots and domain
-      base indices; consume it from renderer and shaders.
-    - Implement a small generator that emits
-      `src/Oxygen/Core/Bindless/BindingSlots.h` (C++) and
-      `src/Oxygen/Core/Bindless/BindingSlots.hlsl` (HLSL) from one definition;
-      include invalid sentinel and optional domain bases.
+  - Action: Specify the bindless slot/register mapping once and generate
+    headers for both C++ and HLSL. The generator now emits the canonical
+    artifacts consumed by engine and shaders.
+    - Align authoritative slot mapping to `b1` for `SceneConstants` across
+      code and shaders (remove lingering `b0`).
+    - Emit generated artifacts used at runtime: `Generated.Constants.h`,
+      `Generated.RootSignature.h`, `Generated.Meta.h`, `Generated.Heaps.D3D12.h`
+      and `Generated.All.json` (embedded JSON). These are the authoritative
+      outputs of the BindlessCodeGen tool.
+    - Tool: BindlessCodeGen v1.1.0 — adds rich root-signature metadata and
+      timestamp strategies (preserve/omit/git-sha).
   - Files: `src/Oxygen/Renderer/RenderPass.h/.cpp`,
     `src/Oxygen/Renderer/Renderer.cpp`,
     `src/Oxygen/Graphics/Direct3D12/Shaders/FullScreenTriangle.hlsl`,
-    `src/Oxygen/Core/Bindless/BindingSlots.h`,
-    `src/Oxygen/Core/Bindless/BindingSlots.hlsl`, small build/tooling glue.
+    `src/Oxygen/Core/Bindless/Generated.Constants.h`,
+    `src/Oxygen/Core/Bindless/Generated.RootSignature.h`,
+    `src/Oxygen/Core/Bindless/Generated.Meta.h`,
+    `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h`.
 
 - [x] Unified direct indexing flags (CBV/SRV/UAV + Sampler)
   - Status: Done. All D3D12 root signatures now set both direct-indexing flags
@@ -272,15 +275,18 @@ lifetime/generation, validation, and type safety.
 
 - [x] Single shader-visible heap + descriptor table binding discipline
   - Status: Partial. Command recorder binds descriptor heaps and a single
-    unbounded SRV descriptor table (t0, space0). The `Spec.yaml` SSoT
-    now defines domain bases and mappings; generator emits headers that make
-    it possible to validate bindings at startup. Further work: enforce at
-    `RenderPass` level and add explicit sampler-table checks.
+    unbounded SRV descriptor table (`t0`, space0). The generator now emits
+    machine-readable JSON and modern C++ headers so passes can validate and
+    consume the canonical layout. Renderer passes have been updated to build
+    root bindings from the generated `kRootParamTable` (via
+    `Detail/RootParamToBindings`), but explicit descriptor-heap SetDescriptorHeaps
+    and per-pass sampler-table binding remain to be completed in some paths.
   - Action: In `RenderPass::Execute`, bind the CBV/SRV/UAV heap and the sampler
     heap exactly once per pass begin (bind-on-change later). Validate that the
-    SRV table (t0, space0) and sampler table are set before any draw/dispatch.
+    SRV table (`t0`, space0) and sampler table are set before any draw/dispatch.
   - Files: `src/Oxygen/Renderer/RenderPass.cpp`,
-    `src/Oxygen/Graphics/Common/CommandRecorder.*`.
+    `src/Oxygen/Graphics/Common/CommandRecorder.*`,
+    `src/Oxygen/Renderer/Detail/RootParamToBindings.{h,cpp}`.
 
 - [x] Stable global indices: domain bases and capacity budgeting
   - Status: Implemented. Allocator APIs expose stable per-domain base indices
@@ -297,15 +303,14 @@ lifetime/generation, validation, and type safety.
     embedded JSON; tests assert Reserve-exceeding-capacity returns no value.
 
 - [ ] BindlessHandle type and invalid sentinel
-  - Status: Missing. Code uses `DescriptorHandle` for heap slots; no
-    strongly-typed 32-bit shader-visible `BindlessHandle` or engine-level
-    `kInvalidBindlessIndex` sentinel.
+  - Status: Partial. The generated headers already provide the invalid sentinel
+    `oxygen::engine::kInvalidBindlessIndex` in `Generated.Constants.h`. A
+    strongly-typed `BindlessHandle` alias/wrapper is still missing and should
+    be introduced to improve type-safety across renderer and ScenePrep.
   - Action: Introduce `using BindlessHandle = oxygen::NamedType<uint32_t, struct
-    _BindlessHandleTag>;` and define `oxygen::engine::kInvalidBindlessIndex =
-    std::numeric_limits<uint32_t>::max()`; ensure 0 is a valid index. Use this
-    handle across renderer/scene-prep draw metadata and shader-facing bindings.
-  - Files: new header (e.g., `src/Oxygen/Renderer/Binding/BindlessHandle.h`),
-    usages in `src/Oxygen/Renderer/ScenePrep/*`, `src/Oxygen/Renderer/*`.
+    _BindlessHandleTag>;` and adopt it in new APIs. Files: new header (e.g.,
+    `src/Oxygen/Renderer/Binding/BindlessHandle.h`) and updates in ScenePrep and
+    renderer code.
 
 - [ ] Generation tracking and shadow map (aliasing prevention)
   - Status: Missing. No per-slot generation counters or CPU-side shadow map to

@@ -95,7 +95,7 @@ auto RenderPass::BindSceneConstantsBuffer(CommandRecorder& recorder) const
 
   constexpr auto root_param_index
     = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
-      RootBindings::kSceneConstantsCbv);
+      binding::RootParam::kSceneConstants);
   const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
 
   DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
@@ -104,7 +104,7 @@ auto RenderPass::BindSceneConstantsBuffer(CommandRecorder& recorder) const
 
   // Bind the buffer as a root CBV (direct GPU virtual address)
   recorder.SetGraphicsRootConstantBufferView(
-    root_param.GetRootParameterIndex(), // should be binding 1 (b1, space0)
+    root_param.GetRootParameterIndex(), // should be binding 2 (b1, space0)
     Context().scene_constants->GetGPUVirtualAddress());
 }
 
@@ -126,7 +126,7 @@ auto RenderPass::BindDrawIndexConstant(
 
   constexpr auto root_param_index
     = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
-      RootBindings::kDrawIndexConstant);
+      binding::RootParam::kDrawIndex);
   const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
 
   DCHECK_F(std::holds_alternative<PushConstantsBinding>(root_param.data),
@@ -135,7 +135,7 @@ auto RenderPass::BindDrawIndexConstant(
 
   // Bind the draw index as a root constant (32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
-    root_param.GetRootParameterIndex(), // should be binding 2 for draw index
+    root_param.GetRootParameterIndex(), // should be binding 3 for draw index
     draw_index,
     0); // offset within the constant (0 for single 32-bit value)
 }

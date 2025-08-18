@@ -76,6 +76,7 @@ TEMPLATE_RS_CPP = """//===------------------------------------------------------
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -87,6 +88,10 @@ TEMPLATE_RS_CPP = """//===------------------------------------------------------
 #pragma once
 
 #include <cstdint>
+#include <array>
+#include <span>
+#include <cstddef>
+#include <limits>
 
 namespace oxygen::engine::binding {{
 
@@ -101,14 +106,22 @@ enum class RootParam : uint32_t {{
 // Register/space bindings (for validation or RS construction)
 {register_space_consts}
 
+// Rich runtime descriptors and table
+{root_param_structs}
+
+{root_param_table}
+
 }} // namespace oxygen::engine::binding
+// clang-format on
 """
+
 
 TEMPLATE_HEAPS_D3D12_CPP = """//===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -127,6 +140,7 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
 )OXJ";
 
 }} // namespace oxygen::engine::binding
+// clang-format on
 """
 
 TEMPLATE_META_CPP = """//===----------------------------------------------------------------------===//
@@ -134,6 +148,7 @@ TEMPLATE_META_CPP = """//===----------------------------------------------------
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -154,4 +169,5 @@ static constexpr const char kBindlessToolVersion[] = "{tool_ver}";
 static constexpr const char kBindlessGeneratedAt[] = "{ts}";
 
 }} // namespace oxygen::engine::binding
+// clang-format on
 """

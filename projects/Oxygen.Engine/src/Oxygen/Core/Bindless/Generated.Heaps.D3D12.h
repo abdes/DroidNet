@@ -3,12 +3,13 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// clang-format off
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
 // Source-Version: 1.0.0
-// Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 23:51:04
+// Tool: BindlessCodeGen 1.1.0
+// Generated: 2025-08-18 09:46:48
 
 #pragma once
 
@@ -21,8 +22,8 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
     "source_version": "1.0.0",
-    "tool_version": "1.0.0",
-    "generated": "2025-08-17 23:51:04",
+    "tool_version": "1.1.0",
+    "generated": "2025-08-18 09:46:48",
     "format": "D3D12HeapStrategy/2",
     "schema_version": "1.0.0"
   },
@@ -80,3 +81,4 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
 )OXJ";
 
 } // namespace oxygen::engine::binding
+// clang-format on
