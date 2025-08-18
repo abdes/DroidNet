@@ -53,6 +53,7 @@ set(
   "Compilers.h"
   "Concepts.h"
   "Crtp.h"
+  "Detail/LogWithAdapters.h"
   "Detail/NamedType_impl.h"
   "Detail/NamedType_skills.h"
   "Detail/signal.hpp"
