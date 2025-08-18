@@ -171,31 +171,61 @@ The single source-of-truth for bindless slot/register mapping is
 - Mappings tie domains → heaps and provide local base indices. The generator
   consumes this file and emits `BindingSlots.h`, `BindingSlots.hlsl` and a
   runtime JSON descriptor used by the engine/tooling. The JSON is embedded in
-  `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h` as
-  `kD3D12HeapStrategyJson` and consumed by
-  `D3D12HeapAllocationStrategy::InitFromJson(...)`.
+  `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h` as `kD3D12HeapStrategyJson`
+  and consumed by `D3D12HeapAllocationStrategy::InitFromJson(...)`.
 
 ### 3.2 Index Lifetime, Reuse, and Aliasing Prevention
 
-- Use a **32‑bit packed handle**:
-  `{ index (low bits), generation (high bits) }`
-- **Shader‑visible index** = lower bits (`index`), stored in draw/dispatch data.
-- **Generation tracking**:
-  - A CPU‑side debug shadow map records the generation for each slot.
-  - At validation time, compares current generation with handle’s generation.
+- Use a clear separation of concerns between the shader-visible index and a
+  CPU-only generation counter:
+  - `BindlessHandle` (shader-visible) is a strongly-typed 32-bit index exposed
+    to shaders and stored in draw/dispatch data.
+  - `VersionedBindlessHandle` (CPU-side) pairs the `BindlessHandle` with a
+    CPU-only `generation` value. The runtime increments the generation when a
+    slot is actually recycled.
+- Shader code sees only the 32-bit `BindlessHandle` (no packing of generation
+  into shader-visible bits). CPU-side validation compares the handle's stored
+  generation against a shadow per-slot generation to detect stale references.
+- Generation-based safety is the primary mechanism to prevent aliasing:
+  - On Release, the allocator/registry may return the descriptor index to a free
+    pool (implementation dependent). The runtime must increment the slot's
+    generation only when the slot becomes safe to reuse (for example, after a
+    fence or when the renderer confirms no in-flight references). Reused slots
+    carry a new generation. Any `VersionedBindlessHandle` with an older
+    generation is treated as stale and rejected in debug validation.
 - **Sentinel values**:
   - Reserve only `oxygen::engine::kInvalidBindlessIndex` (equal to
     `std::numeric_limits<uint32_t>::max()`) for invalid handles. `0` is a valid
     index.
   - Shaders must safely handle invalid indices by branching to default
-    resources.
-- **Deferred slot reuse**:
-  - Slots freed mid‑frame are recycled only after GPU fences confirm no
-    in‑flight references.
+    resources. **Deferred slot reuse (generation-based policy)**:
+- Slots freed mid‑frame may be returned to allocator free lists by low-level
+  segments (see `FixedDescriptorHeapSegment::Release`). Relying on immediate
+  free-list recycling alone risks aliasing; therefore the canonical safety
+  mechanism is a CPU-only generation counter per slot.
+- On release, the runtime must ensure a slot's `generation` is incremented only
+  when it is safe to reuse (typically when a pending fence/frame completes).
+  Implementations may either delay free-list insertion until that point or
+  record the freed index in a pending queue and apply the generation bump
+  atomically when safe. In either case, the generation transition is the
+  authoritative event that enables reuse.
+- `PerFrameResourceManager` / `DeferredObjectRelease.h` complements generation
+  tracking by deferring object destruction; use it to ensure native resources
+  remain valid until GPU work that references them has completed.
 
 ```cpp
 // Strongly typed 32‑bit shader‑visible handle
 using BindlessHandle = oxygen::NamedType<uint32_t, struct _BindlessHandleTag>;
+
+// CPU-side versioned handle for validation and safe reuse tracking.
+struct VersionedBindlessHandle {
+  BindlessHandle index;     // shader-visible 32-bit index
+  uint32_t       generation; // CPU-only generation counter
+
+  VersionedBindlessHandle() noexcept : index(BindlessHandle{0u}), generation(0u) {}
+  VersionedBindlessHandle(BindlessHandle idx, uint32_t gen) noexcept
+    : index(idx), generation(gen) {}
+};
 ```
 
 ### 3.3 Shader Contract Integration and Validation
@@ -244,11 +274,11 @@ are missing to fully meet Section 3’s contract around stable indices,
 lifetime/generation, validation, and type safety.
 
 - [x] Bindless mapping specification and single source-of-truth
-  - Action: Specify the bindless slot/register mapping once and generate
-    headers for both C++ and HLSL. The generator now emits the canonical
-    artifacts consumed by engine and shaders.
-    - Align authoritative slot mapping to `b1` for `SceneConstants` across
-      code and shaders (remove lingering `b0`).
+  - Action: Specify the bindless slot/register mapping once and generate headers
+    for both C++ and HLSL. The generator now emits the canonical artifacts
+    consumed by engine and shaders.
+    - Align authoritative slot mapping to `b1` for `SceneConstants` across code
+      and shaders (remove lingering `b0`).
     - Emit generated artifacts used at runtime: `Generated.Constants.h`,
       `Generated.RootSignature.h`, `Generated.Meta.h`, `Generated.Heaps.D3D12.h`
       and `Generated.All.json` (embedded JSON). These are the authoritative
@@ -279,8 +309,9 @@ lifetime/generation, validation, and type safety.
     machine-readable JSON and modern C++ headers so passes can validate and
     consume the canonical layout. Renderer passes have been updated to build
     root bindings from the generated `kRootParamTable` (via
-    `Detail/RootParamToBindings`), but explicit descriptor-heap SetDescriptorHeaps
-    and per-pass sampler-table binding remain to be completed in some paths.
+    `Detail/RootParamToBindings`), but explicit descriptor-heap
+    SetDescriptorHeaps and per-pass sampler-table binding remain to be completed
+    in some paths.
   - Action: In `RenderPass::Execute`, bind the CBV/SRV/UAV heap and the sampler
     heap exactly once per pass begin (bind-on-change later). Validate that the
     SRV table (`t0`, space0) and sampler table are set before any draw/dispatch.
@@ -298,51 +329,84 @@ lifetime/generation, validation, and type safety.
     - `src/Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h`
     - `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Domain_test.cpp`
     - `src/Oxygen/Graphics/Direct3D12/Test/HeapAllocationStrategy_domain_test.cpp`
-    - `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h` (provider wiring)
+    - `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h`
+      (provider wiring)
   - Notes: The D3D12 provider test demonstrates honoring `base_index` from
     embedded JSON; tests assert Reserve-exceeding-capacity returns no value.
 
 - [ ] BindlessHandle type and invalid sentinel
   - Status: Partial. The generated headers already provide the invalid sentinel
     `oxygen::engine::kInvalidBindlessIndex` in `Generated.Constants.h`. A
-    strongly-typed `BindlessHandle` alias/wrapper is still missing and should
-    be introduced to improve type-safety across renderer and ScenePrep.
+    strongly-typed `BindlessHandle` alias/wrapper is still missing and should be
+    introduced to improve type-safety across renderer and ScenePrep.
   - Action: Introduce `using BindlessHandle = oxygen::NamedType<uint32_t, struct
     _BindlessHandleTag>;` and adopt it in new APIs. Files: new header (e.g.,
     `src/Oxygen/Renderer/Binding/BindlessHandle.h`) and updates in ScenePrep and
     renderer code.
 
-- [ ] Generation tracking and shadow map (aliasing prevention)
-  - Status: Missing. No per-slot generation counters or CPU-side shadow map to
-    detect stale handles.
-  - Action: Add `VersionedBindlessHandle { BindlessIndex index; Generation
-    generation; }` on CPU. Maintain a shadow map in the registry from slot →
-    current generation. On handle use (draw submission), compare generations in
-    debug; on mismatch, skip/downgrade draw and log. Increment generation when a
-    slot is recycled.
-  - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h/.cpp`, renderer
-    submission code under `src/Oxygen/Renderer/*`.
+- [ ] Deferred slot reuse and generation increment policy
+  - Status: Partial. The design requires that recycled slots carry a new
+    generation so CPU-side handles can detect staleness. The codebase provides
+    `PerFrameResourceManager` to defer object destruction; allocator segments
+    currently recycle indices immediately (see `FixedDescriptorHeapSegment`).
+  - Action: Define the authoritative transition point where a slot's generation
+    is incremented (for example, on fence/frame completion). Then either delay
+    insertion of freed indices into the segment free list until that transition,
+    or atomically record a generation bump at reuse and ensure CPU-side
+    `VersionedBindlessHandle` validation will reject older generations.
+  - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h/.cpp`,
+    `src/Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h`,
+    `src/Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.*`,
+    renderer/frame sync in `src/Oxygen/Renderer/Renderer.cpp` (or
+    coordinator/maestro).
 
-- [ ] Deferred slot reuse with GPU fences
-  - Status: Missing. Freed slots can alias in-flight references without
-    fence-aware recycling.
-  - Action: Implement `ReleaseSlot(handle)` that marks the slot PendingEvict and
-    recycles only after the associated fence has completed. Store
-    `pending_fence` in slot metadata. Integrate with renderer frame fences.
-  - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h/.cpp`, renderer/frame
-    sync in `src/Oxygen/Renderer/Renderer.cpp` (or coordinator/maestro).
+    Option A — Fence-gated delayed recycle (design) Description:
+    - Freed slots are not immediately visible for reuse. Instead, ReleaseSlot
+      records the freed index along with the current completed fence/frame value
+      (a `pending_fence` / `pending_frame_index`) and places the entry into a
+      per-domain pending-recycle queue. When the renderer observes that the
+      associated fence/frame has completed, it performs a generation increment
+      for the slot and moves the index into the allocator's free list.
 
-- [ ] Startup validation: heap sizes, ranges, and out-of-bounds protection
-  - Status: Missing. No automatic check that configured descriptor capacities
-    and root signature ranges match Section 3 layout; no bounds check before
-    publishing indices.
-  - Action: Add debug-time startup validation that: (a) heap capacities cover
-    configured domains, (b) root signature ranges are present, and (c) any
-    shader-visible index falls within [base, base+capacity). Fail fast with
-    clear logs.
-  - Files: `src/Oxygen/Renderer/RenderPass.*`,
-    `src/Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.cpp` (during root
-    signature creation), small validator under `src/Oxygen/Renderer/`.
+    Data shape (per-slot metadata):
+    - index: uint32_t (shader-visible index)
+    - generation: uint32_t (CPU-only generation)
+    - state: enum {Invalid, Staged, Resident, PendingEvict, Evicted, Free}
+    - pending_fence_or_frame: optional<uint64_t> (fence or completed-frame id)
+    - last_used_frame, size_bytes, resident_mip_mask, resource_key
+
+    API sketches (minimal):
+    - ResourceRegistry::ReleaseSlot(VersionedBindlessHandle h, uint64_t
+      pending_fence)
+      - Marks slot PendingEvict, records pending_fence_or_frame :=
+        pending_fence, and appends (index, pending_fence) to a per-domain
+        pending queue. Does not immediately push to segment free list.
+    - Renderer::OnFenceCompleted(uint64_t completed_fence) /
+      PerFrameResourceManager::OnBeginFrame(frame_index)
+      - Iterate pending queues and for each entry where pending_fence_or_frame
+        <= completed_fence, atomically increment slot.generation, clear
+        pending_fence_or_frame, and insert index into allocator/segment free
+        list.
+
+    Concurrency & correctness notes:
+    - All modifications to slot metadata and pending queues should be protected
+      by a fine-grained lock per-domain or done on the renderer thread during
+      OnBeginFrame to avoid contention.
+    - Incrementing generation must be atomic with respect to making the slot
+      available; publish the new generation before any consumer may allocate the
+      index and create a new VersionedBindlessHandle with that generation.
+    - Pair with `PerFrameResourceManager` to defer actual object destruction
+      until the same completed_fence/frame has been observed; this prevents the
+      native resource from being destroyed while GPU may still reference it.
+
+    Tests to add:
+    - Unit: Allocate → ReleaseSlot(pending_fence=F) → before fence completion,
+      Allocate must not return the same index. After simulated fence completion
+      and OnFenceCompleted(F), allocation should be able to return the index
+      with incremented generation.
+    - Integration: Submit a command that references a slot, ReleaseSlot in the
+      same frame, ensure slot is not reused until frame/fence observed and that
+      CPU-side validation detects stale handles when generation mismatches.
 
 - [ ] Shader invalid-sentinel handling and fallbacks
   - Status: Mixed. Shaders use bindless tables; explicit invalid-sentinel branch
@@ -628,90 +692,87 @@ with the logical ranges described above. The list below marks the current status
 and actionable changes required to fully implement Section 4. Items are ordered
 for a practical implementation sequence; stretch/automation items are last.
 
-- [ ] Descriptor-table binding in render passes
-  - Status: Missing. `RenderPass::Execute` sets pipeline state but does not bind
-    the unified descriptor heap / descriptor tables. `BindIndicesBuffer` is
-    currently a no-op and there is no explicit call to set descriptor
-    tables/heaps on the command recorder.
-  - Action: Bind descriptor heaps and descriptor tables in `RenderPass::Execute`
-    (short-term). Use the command recorder to call SetDescriptorHeaps and
-    SetRootDescriptorTable for the single unified SRV/CBV/UAV table (`t0`,
-    space0) and the SAMPLER table (`s0`) before draws. Optimize later to
-    bind-on-change in `PrepareResources`.
+- [x] Descriptor-table binding in render passes
+  - Status: Implemented. `RenderPass::Execute` calls the command recorder to set
+    the pipeline state; the D3D12 `CommandRecorder::SetPipelineState(...)`
+    implementation binds the shader-visible descriptor heaps and sets the root
+    descriptor table(s) (via `SetupDescriptorTables`) as part of pipeline setup.
+    `BindIndicesBuffer` remains a no-op because the indices buffer is accessed
+    through the bound descriptor table.
+  - Note (samplers): The command recorder will log a warning if a shader-visible
+    sampler heap is present but the pipeline's root signature does not include a
+    sampler table. If you need per-pass sampler-table binding, ensure the
+    generated root signature includes an `s0` sampler table parameter so the
+    recorder will bind it during `SetPipelineState`.
   - Files: `src/Oxygen/Renderer/RenderPass.cpp`,
-    `src/Oxygen/Graphics/Common/CommandRecorder.*`.
+    `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`,
+    `src/Oxygen/Renderer/Detail/RootParamToBindings.{h,cpp}`.
 
-- [ ] Populate root signature / pipeline description with bindless ranges
-  - Status: Partial / placeholder. Per-pass `CreatePipelineStateDesc()`
-    implementations (e.g., `ShaderPass::CreatePipelineStateDesc`,
-    `DepthPrePass::CreatePipelineStateDesc`) must emit root-binding entries
-    describing a single unified SRV descriptor table (t0, space0), a sampler
-    table (s0), and any direct CBVs/push constants used by the pass.
-  - Action: Ensure every `GraphicsPipelineDesc` created by passes includes a
-    `RootBindings` layout that contains DescriptorTableBinding entries for:
-    - unified bindless SRV table (Range 1..3 domains under `t0`, space0)
-    - samplers table (Range 4, `s0`) Also include a direct CBV entry for
-    `SceneConstants` (`b1`) and a push-constant/root-constant entry for the draw
-    index.
+- [x] Populate root signature / pipeline description with bindless ranges
+  - Status: Implemented for current passes.
+     `ShaderPass::CreatePipelineStateDesc()` and
+     `DepthPrePass::CreatePipelineStateDesc()` build their `RootBindings`
+     directly from the generator's authoritative `kRootParamTable` (via
+     `Detail::BuildRootBindingItemsFromGenerated()`), so pipelines carry a
+     descriptor-table entry for the unified SRV table (`t0`, space0), a direct
+     CBV for `SceneConstants` (`b1`) and a root-constant for the draw index.
+  - Action: For new or custom passes, continue using
+     `BuildRootBindingItemsFromGenerated()` when constructing
+     `GraphicsPipelineDesc::Builder().SetRootBindings(...)` so the canonical
+     layout is preserved.
   - Files: `src/Oxygen/Renderer/ShaderPass.cpp`,
-    `src/Oxygen/Renderer/DepthPrePass.cpp`, `src/Oxygen/Renderer/*Pass.cpp`.
+     `src/Oxygen/Renderer/DepthPrePass.cpp`, `src/Oxygen/Renderer/*Pass.cpp`.
 
-- [ ] Sampler table handling
-  - Status: Not wired. The doc proposes samplers in a dedicated range; the pass
-    root bindings/comments reference `s0` but code does not explicitly bind a
-    sampler table.
-  - Action: Implement a sampler descriptor table (Range 4, `s0`), populate
-    sampler descriptors at init, add a sampler-table root parameter to pipeline
-    descriptions, and bind it in `RenderPass::Execute`.
+- [x] Sampler table handling (binding-stage only)
+  - Status: Completed. The generated `kRootParamTable` includes a sampler table
+     descriptor (see `Generated.RootSignature.h`) and
+     `BuildRootBindingItemsFromGenerated()` makes it available to pipeline
+     descriptions. However, the engine must ensure the pipeline root signature
+     includes the sampler-table root parameter so the command recorder can bind
+     the sampler heap at pipeline setup.
+  - Action: Ensure pipeline/root-signature creation uses the generated root
+     signature entries so the sampler root parameter (`s0`) is present. The
+     command recorder will perform the actual binding during
+     `SetPipelineState(...)`. Sampler descriptor population (the table contents)
+     is a separate follow-up task and is intentionally out of scope for this
+     item.
   - Files: `src/Oxygen/Renderer/ShaderPass.cpp`,
-    `src/Oxygen/Renderer/DepthPrePass.cpp`,
-    `src/Oxygen/Renderer/RenderPass.cpp`.
+     `src/Oxygen/Renderer/DepthPrePass.cpp`,
+     `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`.
+  - Note: PSO and root-signature creation in this project is driven from the
+     authoritative `Spec.yaml` and produced by the BindlessCodeGen generator. Do
+     not hardcode layout expectations in runtime code. Instead, ensure the
+     generator emits the correct sampler-table root parameter (`s0`) when the
+     spec requests a shader-visible sampler heap, and validate the generated
+     artifacts during generator/unit tests (generator-driven validation). The
+     command recorder will bind heaps/tables according to the generated layout
+     during `SetPipelineState(...)`.
 
-- [ ] DescriptorAllocator API additions (per-range base indices) and validation
-  - Status: Likely partial. Separate logical ranges for geometry/materials/
-    textures require explicit base indices and capacity accounting.
-  - Action: Add APIs:
+- [x] DescriptorAllocator API additions (per-range base indices) and validation
+  - Status: Implemented. The allocator exposes per-domain base queries,
+    reservation, and remaining-descriptor reporting used by budgeting and
+    higher-level code. Unit tests exercise these APIs.
+  - Action: Use the existing APIs when computing shader-visible indices and
+    during admission/budgeting. The public APIs include:
     - `GetDomainBaseIndex(ResourceViewType, DescriptorVisibility)` → base index
     - `Reserve(ResourceViewType, DescriptorVisibility, uint32_t count)` → base
       index or failure
-    - Ensure `GetRemainingDescriptorsCount(view_type, visibility)` is public and
-      reliable for budgeting
-  - Files: `src/Oxygen/Graphics/Common/DescriptorAllocator.h`,
-    `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.cpp`.
-
-- [ ] ResourceRegistry slot/generation APIs
-  - Status: Missing. Needed to guarantee stable bindless indices with
-    generation-based aliasing protection and hot-reload semantics.
-  - Action: Add APIs:
-    - `AllocateView/AllocateSlot(...)` → returns shader-visible slot index and
-      generation
-    - `ReleaseSlot(handle)` → marks for deferred reuse and returns pending fence
-    - `GetSlotMetadata(handle)` → { index, generation, resource_key,
-      pending_fence, size_bytes }
-    - `UpdateViewInPlace` / `ReplaceView` to keep descriptor slot stable on
-      hot-reload
-  - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h`.
+    - `GetRemainingDescriptorsCount(view_type, visibility)` → available slots
+  - Files / Tests: `src/Oxygen/Graphics/Common/DescriptorAllocator.h`,
+    `src/Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h`,
+    `src/Oxygen/Graphics/Direct3D12/Test/HeapAllocationStrategy_domain_test.cpp`,
+    `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Domain_test.cpp`.
 
 - [ ] CPU-only generation validation for handles
   - Status: Missing in headers and validation.
   - Action: Keep `BindlessHandle` as a strongly-typed 32-bit shader-visible
     index with no bit packing. Do not emit index/generation bit masks to
-  shaders. Add debug-only validation comparing CPU-side handle.generation vs
-  slot.generation on submit. Use a single invalid sentinel:
-  `NEXUS_HANDLE_INVALID = oxygen::engine::kInvalidBindlessIndex =
-  std::numeric_limits<uint32_t>::max()`.
+    shaders. Add debug-only validation comparing CPU-side handle.generation vs
+    slot.generation on submit. Use a single invalid sentinel:
+    `NEXUS_HANDLE_INVALID = oxygen::engine::kInvalidBindlessIndex =
+    std::numeric_limits<uint32_t>::max()`.
   - Files: generated BindingSlots headers (sentinels only), `ResourceRegistry`,
     renderer code.
-
-- [ ] Runtime validation and CI tests for root-signature vs doc
-  - Status: Not implemented. There is no automatic validation ensuring shaders
-    and `GraphicsPipelineDesc` agree with the Nexus binding model.
-  - Action: Add a startup validation that compares pipeline root-binding layout
-    against the documented mapping (fail fast in debug/CI). Add a small unit
-    test that verifies the per-pass `GraphicsPipelineDesc.RootBindings()`
-    contains expected descriptor table entries.
-  - Files: tests under `Testing/` or `src/Oxygen/Renderer/tests`, plus
-    `src/Oxygen/Renderer/RenderPass.*` for runtime checks.
 
 - [ ] Tests & CI hooks
   - Status: Missing.
@@ -720,17 +781,9 @@ for a practical implementation sequence; stretch/automation items are last.
       ResourceRegistry)
     - Reserve contiguous indices for multi-slot geometry
     - Shader-visible index bounds validation (startup check) Add a CI startup
-    check (debug-only) verifying that `GraphicsPipelineDesc.RootBindings()`
-    agrees with the produced `BindingSlots` header.
+      check (debug-only) verifying that `GraphicsPipelineDesc.RootBindings()`
+      agrees with the produced `BindingSlots` header.
   - Files: tests under `Testing/` and/or `src/Oxygen/Renderer/tests`.
-
-- [ ] Backend capability gating (Phase 1: D3D12-first)
-  - Status: Required for portability.
-  - Action: Target D3D12 direct-indexing behavior
-    (`D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED`) and the
-    D3D12 descriptor heap model. Add per-backend capability checks; treat Vulkan
-    as Phase 2.
-  - Files: platform backends and initialization paths.
 
 ### 4.4 Validation and Debugging
 
@@ -840,8 +893,8 @@ struct VersionedBindlessHandle {
 ```
 
 - Slot metadata (per allocation): { handle, state, shader_index, generation,
-  last_used_frame, size_bytes, resident_mip_mask (textures), pending_fence,
-  resource_key }.
+  last_used_frame, size_bytes, resident_mip_mask (textures), optional
+  pending_fence_or_frame, resource_key }.
 - Descriptor index: computed once by the DescriptorAllocator as shader_index =
   domain_base + slot_index; shaders must not add base again.
 
@@ -894,8 +947,13 @@ Queues and synchronization:
   copy queue; make the graphics queue Wait on that fence before the first use of
   the resource. If using a single direct queue in Phase A, the same fence still
   gates slot visibility.
-- N‑frames‑in‑flight fences protect ring reuse and slot recycling. A slot is not
-  recycled until its pending_fence ≤ completed value.
+- N‑frames‑in‑flight fences are commonly used to determine when it is safe to
+  increment a slot's generation and therefore allow reuse. The authoritative
+  decision is the generation increment: a slot is considered safe to reuse only
+  after its generation has been advanced (for example, when a pending fence or
+  frame completes and the renderer performs the generation transition). CPU-
+  side `VersionedBindlessHandle` comparisons detect stale handles by comparing
+  stored generation vs the slot's current generation.
 
 ### 5.4 Upload Pipeline and Synchronization
 
@@ -936,9 +994,15 @@ Budgets:
 Residency and reuse:
 
 - A slot becomes Resident once its upload fence has completed and the descriptor
-  points at the final view. Slots freed mid‑frame enter PendingEvict and are
-  recycled only after their fence completes. Generation is incremented on
-  recycle.
+  points at the final view. When a slot is freed, the authoritative signal that
+  allows reuse is a generation increment for that slot: the renderer must
+  advance the slot's CPU-side `generation` only once it considers the slot safe
+  to reuse (commonly when a pending fence/frame completes). Any
+  `VersionedBindlessHandle` carrying an older generation is considered stale and
+  must not be used for draws (debug validation will catch mismatches and fall
+  back to defaults). Practically, implementations may either delay placing freed
+  indices into a free queue until fence/frame completion or record a
+  pending-generation bump and apply it atomically at the same safe point.
 
 Eviction policy:
 
@@ -947,9 +1011,12 @@ Eviction policy:
   Textures prefer whole‑resource eviction in Phase A; per‑mip eviction is
   introduced with tiled resources in Phase B (maintain a minimum mip floor to
   avoid shimmering).
-- Eviction sequence: select candidate → mark PendingEvict → ensure not in‑flight
-  (fence) → replace descriptor with fallback → free GPU bytes → increment
-  generation → return slot to free list.
+- Eviction sequence (generation-driven): select candidate → mark PendingEvict →
+  ensure not in‑flight (fence/frame completion) → replace descriptor with
+  fallback → free GPU bytes → advance slot generation → make slot available for
+  reuse (either by inserting into free list or atomically updating the allocator
+  state). The generation advance is the authoritative event that protects
+  against aliasing; fences/frames are commonly used to gate that advance.
 
 ### 5.6 Bindless Indices and Validation
 
@@ -1022,95 +1089,83 @@ Notes on scope
 
 ### Phase 1: Basic Upload Pipeline
 
-- Single-threaded staging and submission
-  One staging ring per queue; coalesce via `StageBufferUploads`, group by
-  destination to minimize copy calls.
+- Single-threaded staging and submission One staging ring per queue; coalesce
+  via `StageBufferUploads`, group by destination to minimize copy calls.
 - Deterministic upload order (e.g. transforms → materials → geometry → textures)
   ScenePrep calls domain uploaders in fixed order; results are cached in
   per-frame state.
-- Explicit synchronization points between subsystems
-  Per-domain fences; N=3 frames in flight by default. CPU never recycles a
-  suballoc until signaled.
-- Integration with ScenePrep finalization (sequential orchestration)
-  Uploaders: TransformUploader, MaterialUploader, GeometryUploader,
-  TextureUploader. Assemblers consume handles and build the final draw lists.
-- Logging and validation hooks for resource readiness
-  On failure, bind default handles and queue retry; emit structured logs with
-  resource keys and budgets.
+- Explicit synchronization points between subsystems Per-domain fences; N=3
+  frames in flight by default. CPU never recycles a suballoc until signaled.
+- Integration with ScenePrep finalization (sequential orchestration) Uploaders:
+  TransformUploader, MaterialUploader, GeometryUploader, TextureUploader.
+  Assemblers consume handles and build the final draw lists.
+- Logging and validation hooks for resource readiness On failure, bind default
+  handles and queue retry; emit structured logs with resource keys and budgets.
 
 ### Phase 2: Parallel Upload Evolution
 
-- Multi-threaded staging across resource domains
-  Per-domain job queues; lock-free SPSC rings for producer → Nexus staging.
-- Dependency graph for upload ordering and conflict resolution
-  DAG ties materials → textures, geometry → buffers; scheduler respects edges
-  while maximizing parallelism.
-- Thread-safe residency map updates and dirty region tracking
-  Sharded maps per category with epoch-based reclamation; range merges performed
-  on worker threads.
-- GPU submission batching with minimal stalls
-  Batch copy/compute submissions by resource and state; compact barriers.
-- Integration with render graph or submission queue abstraction
-  Optional backend plug that records uploads into a render graph stage or a
-  submission queue object.
-- Debugging tools for upload race detection and profiling
-  Timeline events for staging/submit/fence; race-detection mode asserts if two
-  writers touch the same range in a frame.
+- Multi-threaded staging across resource domains Per-domain job queues;
+  lock-free SPSC rings for producer → Nexus staging.
+- Dependency graph for upload ordering and conflict resolution DAG ties
+  materials → textures, geometry → buffers; scheduler respects edges while
+  maximizing parallelism.
+- Thread-safe residency map updates and dirty region tracking Sharded maps per
+  category with epoch-based reclamation; range merges performed on worker
+  threads.
+- GPU submission batching with minimal stalls Batch copy/compute submissions by
+  resource and state; compact barriers.
+- Integration with render graph or submission queue abstraction Optional backend
+  plug that records uploads into a render graph stage or a submission queue
+  object.
+- Debugging tools for upload race detection and profiling Timeline events for
+  staging/submit/fence; race-detection mode asserts if two writers touch the
+  same range in a frame.
 
 ## 7. Eviction Strategy
 
-- Residency tracking and scoring heuristics
-  LRU with score boosts for proximity/importance; textures honor a minimum
-  resident mip floor.
-- Dirty flag propagation and eviction triggers
-  Evict only clean ranges; dirty uploads keep items pinned until committed.
-- Streaming policies and asset lifetime management
-  On-demand, ahead-of-time, and pinned policies; per-asset residency budgets.
-- Open questions: eviction granularity, predictive models
-  Geometry eviction at submesh vs whole-mesh; per-mip eviction vs atlas; explore
-  ML/heuristic predictors under pressure.
+- Residency tracking and scoring heuristics LRU with score boosts for
+  proximity/importance; textures honor a minimum resident mip floor.
+- Dirty flag propagation and eviction triggers Evict only clean ranges; dirty
+  uploads keep items pinned until committed.
+- Streaming policies and asset lifetime management On-demand, ahead-of-time, and
+  pinned policies; per-asset residency budgets.
+- Open questions: eviction granularity, predictive models Geometry eviction at
+  submesh vs whole-mesh; per-mip eviction vs atlas; explore ML/heuristic
+  predictors under pressure.
 
 ## 8. ScenePrep Finalization
 
-- Finalization boundaries and orchestration scope
-  Filter → Uploaders → Sort/Partition → Assemblers → Outputs (RenderItemsList,
-  DrawMetadata, partitions).
-- Resource readiness and upload completion guarantees
-  Assemblers read only from per-frame caches validated by Nexus fences; defaults
-  applied on miss.
-- Integration with render graph or submission pipeline
-  Finalization can emit resource barriers and late uploads into a graph/queue
-  stage.
-- Testability and validation hooks
-  CPU-only mode bypasses GPU work; deterministic outputs validated by unit tests
-  and property tests.
+- Finalization boundaries and orchestration scope Filter → Uploaders →
+  Sort/Partition → Assemblers → Outputs (RenderItemsList, DrawMetadata,
+  partitions).
+- Resource readiness and upload completion guarantees Assemblers read only from
+  per-frame caches validated by Nexus fences; defaults applied on miss.
+- Integration with render graph or submission pipeline Finalization can emit
+  resource barriers and late uploads into a graph/queue stage.
+- Testability and validation hooks CPU-only mode bypasses GPU work;
+  deterministic outputs validated by unit tests and property tests.
 
 ## 9. Tooling and Workflow Integration
 
-- VSCode/IntelliSense hygiene in multi-target workspaces
-  Use per-config compile_commands and conditional includes; keep headers
-  shader-friendly.
-- Automated analysis for naming and layout correctness
-  CI checks naming rules and struct/shader layout hashes.
-- Debug overlays and GPU buffer inspection
-  Optional overlays visualize bindless indices, residency heatmaps, and eviction
-  events.
-- Wishlist: context-aware code navigation
-  Jump-to-definition between shader defines and C++ structs; hover showing
-  layout/hash.
+- VSCode/IntelliSense hygiene in multi-target workspaces Use per-config
+  compile_commands and conditional includes; keep headers shader-friendly.
+- Automated analysis for naming and layout correctness CI checks naming rules
+  and struct/shader layout hashes.
+- Debug overlays and GPU buffer inspection Optional overlays visualize bindless
+  indices, residency heatmaps, and eviction events.
+- Wishlist: context-aware code navigation Jump-to-definition between shader
+  defines and C++ structs; hover showing layout/hash.
 
 ## 10. Testing and Simulation Modes
 
-- CPU-only mode for deterministic validation
-  Heap-backed buffers/images; integer handles; no GPU calls.
-- GPU-backed mode for performance profiling
-  D3D12/Vulkan backends with identical contracts; timings exposed for profiling.
-- Unit test scaffolding and mock resource injection
-  Scenario-based tests for each uploader/assembler; mocks for residency and
-  bindless tables.
-- Notes on reproducibility and test coverage
-  Fixed seeds for generators; stable sort keys; property tests for idempotent
-  batches.
+- CPU-only mode for deterministic validation Heap-backed buffers/images; integer
+  handles; no GPU calls.
+- GPU-backed mode for performance profiling D3D12/Vulkan backends with identical
+  contracts; timings exposed for profiling.
+- Unit test scaffolding and mock resource injection Scenario-based tests for
+  each uploader/assembler; mocks for residency and bindless tables.
+- Notes on reproducibility and test coverage Fixed seeds for generators; stable
+  sort keys; property tests for idempotent batches.
 
 ## 11. Extensibility and Future Considerations
 
