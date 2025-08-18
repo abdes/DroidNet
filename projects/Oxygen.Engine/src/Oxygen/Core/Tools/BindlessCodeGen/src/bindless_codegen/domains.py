@@ -71,6 +71,7 @@ def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
         if base is not None:
             if comment:
                 lines.append(f"// {comment}")
+                lines.append(f"")
             # HLSL constants use K_UPPER_SNAKE_CASE
             lines.append(f"static const uint K_{up}_DOMAIN_BASE = {int(base)};")
             if cap is not None:
@@ -82,6 +83,7 @@ def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
     # Emit generic macros for domain validation using generated constants
     if tags:
         lines.append("// Domain guard macros (generated)")
+        lines.append(f"")
         lines.append("#define BX_DOMAIN_BASE(TAG)   K_##TAG##_DOMAIN_BASE")
         lines.append("#define BX_DOMAIN_CAP(TAG)    K_##TAG##_CAPACITY")
         lines.append(

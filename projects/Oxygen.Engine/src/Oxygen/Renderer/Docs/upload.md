@@ -179,10 +179,16 @@ The single source-of-truth for bindless slot/register mapping is
 - Use a clear separation of concerns between the shader-visible index and a
   CPU-only generation counter:
   - `BindlessHandle` (shader-visible) is a strongly-typed 32-bit index exposed
-    to shaders and stored in draw/dispatch data.
-  - `VersionedBindlessHandle` (CPU-side) pairs the `BindlessHandle` with a
-    CPU-only `generation` value. The runtime increments the generation when a
-    slot is actually recycled.
+    to shaders and stored in draw/dispatch data. This type is now implemented
+    in `src/Oxygen/Core/Types/BindlessHandle.h` as a NamedType alias and
+    provides a sentinel `kInvalidBindlessHandle` constructed from the
+    generator-provided `kInvalidBindlessIndex`.
+  - `VersionedBindlessHandle` (CPU-side) is implemented in the same header as
+    a small value type that pairs a `BindlessHandle` index with a CPU-only
+    generation counter and convenience helpers for packing/unpacking to a
+    64-bit `Packed` value. The runtime increments the generation when a slot
+    is actually recycled; older generations are treated as stale in debug
+    validation.
 - Shader code sees only the 32-bit `BindlessHandle` (no packing of generation
   into shader-visible bits). CPU-side validation compares the handle's stored
   generation against a shadow per-slot generation to detect stale references.
@@ -212,21 +218,6 @@ The single source-of-truth for bindless slot/register mapping is
 - `PerFrameResourceManager` / `DeferredObjectRelease.h` complements generation
   tracking by deferring object destruction; use it to ensure native resources
   remain valid until GPU work that references them has completed.
-
-```cpp
-// Strongly typed 32‑bit shader‑visible handle
-using BindlessHandle = oxygen::NamedType<uint32_t, struct _BindlessHandleTag>;
-
-// CPU-side versioned handle for validation and safe reuse tracking.
-struct VersionedBindlessHandle {
-  BindlessHandle index;     // shader-visible 32-bit index
-  uint32_t       generation; // CPU-only generation counter
-
-  VersionedBindlessHandle() noexcept : index(BindlessHandle{0u}), generation(0u) {}
-  VersionedBindlessHandle(BindlessHandle idx, uint32_t gen) noexcept
-    : index(idx), generation(gen) {}
-};
-```
 
 ### 3.3 Shader Contract Integration and Validation
 
@@ -334,15 +325,15 @@ lifetime/generation, validation, and type safety.
   - Notes: The D3D12 provider test demonstrates honoring `base_index` from
     embedded JSON; tests assert Reserve-exceeding-capacity returns no value.
 
-- [ ] BindlessHandle type and invalid sentinel
-  - Status: Partial. The generated headers already provide the invalid sentinel
-    `oxygen::engine::kInvalidBindlessIndex` in `Generated.Constants.h`. A
-    strongly-typed `BindlessHandle` alias/wrapper is still missing and should be
-    introduced to improve type-safety across renderer and ScenePrep.
+- [x] BindlessHandle type and invalid sentinel
+  - Status: Done. A strongly-typed `BindlessHandle` implementation exists at
+    `src/Oxygen/Core/Types/BindlessHandle.h` and the generated sentinel
+    `oxygen::engine::kInvalidBindlessIndex` remains authoritative in
+    `Generated.Constants.h`.
   - Action: Introduce `using BindlessHandle = oxygen::NamedType<uint32_t, struct
     _BindlessHandleTag>;` and adopt it in new APIs. Files: new header (e.g.,
-    `src/Oxygen/Renderer/Binding/BindlessHandle.h`) and updates in ScenePrep and
-    renderer code.
+    `src/Oxygen/Core/Types/BindlessHandle.h` and update ScenePrep and renderer
+    code to adopt it.
 
 - [ ] Deferred slot reuse and generation increment policy
   - Status: Partial. The design requires that recycled slots carry a new

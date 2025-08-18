@@ -50,3 +50,4 @@ m_gtest_program(
     "AnyCache_test.cpp"
     "AnyCache_concurrency_test.cpp"
 )
+m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")

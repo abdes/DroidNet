@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <charconv>
+#include <cstring>
 #include <string>
 
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -86,6 +89,62 @@ auto oxygen::to_string(oxygen::Format format) -> const char*
   }
 
   return "__NotSupported__";
+}
+
+// Helpers used by BindlessHandle to_string implementations
+namespace {
+inline void append_literal(
+  char* dst, size_t& pos, char const* lit, size_t lit_sz)
+{
+  std::memcpy(dst + pos, lit, lit_sz);
+  pos += lit_sz;
+}
+
+inline void append_uint(char* dst, size_t& pos, size_t buf_sz, uint32_t v)
+{
+  auto [p, ec] = std::to_chars(dst + pos, dst + buf_sz, v);
+  if (ec == std::errc()) {
+    pos = p - dst;
+    return;
+  }
+
+  // Defensive fallback: if conversion failed (value too large or other
+  // reason), write a single '?' and clamp position to avoid overflow.
+  if (pos < buf_sz) {
+    dst[pos++] = '?';
+  }
+  if (pos > buf_sz) {
+    pos = buf_sz;
+  }
+}
+} // namespace
+
+auto oxygen::to_string(oxygen::BindlessHandle h) -> std::string
+{
+  char buf[32];
+  size_t pos = 0;
+
+  append_literal(buf, pos, "Bindless(i:", sizeof("Bindless(i:") - 1);
+  append_uint(buf, pos, sizeof(buf), static_cast<uint32_t>(h.get()));
+  append_literal(buf, pos, ")", 1);
+
+  return std::string(buf, pos);
+}
+
+auto oxygen::to_string(oxygen::VersionedBindlessHandle const& h) -> std::string
+{
+  char buf[64];
+  size_t pos = 0;
+
+  append_literal(buf, pos, "Bindless(i:", sizeof("Bindless(i:") - 1);
+  append_uint(
+    buf, pos, sizeof(buf), static_cast<uint32_t>(h.ToBindlessHandle().get()));
+  append_literal(buf, pos, ", g:", sizeof(", g:") - 1);
+  append_uint(
+    buf, pos, sizeof(buf), static_cast<uint32_t>(h.GenerationValue().get()));
+  append_literal(buf, pos, ")", 1);
+
+  return std::string(buf, pos);
 }
 
 auto oxygen::to_string(const oxygen::ShaderType value) -> const char*
