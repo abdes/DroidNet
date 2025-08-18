@@ -3,13 +3,14 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// clang-format off
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
 // Source-Version: 1.0.0
 // Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.0.0
-// Generated: 2025-08-17 23:51:04
+// Tool: BindlessCodeGen 1.1.0
+// Generated: 2025-08-18 09:46:48
 
 #pragma once
 
@@ -19,7 +20,8 @@ namespace oxygen::engine::binding {
 static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml";
 static constexpr const char kBindlessSourceVersion[] = "1.0.0";
 static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
-static constexpr const char kBindlessToolVersion[] = "1.0.0";
-static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 23:51:04";
+static constexpr const char kBindlessToolVersion[] = "1.1.0";
+static constexpr const char kBindlessGeneratedAt[] = "2025-08-18 09:46:48";
 
 } // namespace oxygen::engine::binding
+// clang-format on

@@ -12,6 +12,8 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/api_export.h>
+// Generated root signature indices and metadata
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -126,17 +128,6 @@ protected:
 
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
-
-  //! This enumeration defines the order of root signature bindings used by
-  //! render passes in the bindless rendering model.
-  enum class RootBindings : uint8_t {
-    //! Bindless descriptor table for SRVs (t0 in multiple spaces)
-    kBindlessTableSrv = 0,
-    //! b1,s0 Scene constants (constant buffer)
-    kSceneConstantsCbv = 1,
-    //! Root constant for draw index (32-bit value)
-    kDrawIndexConstant = 2,
-  };
 
 private:
   auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const

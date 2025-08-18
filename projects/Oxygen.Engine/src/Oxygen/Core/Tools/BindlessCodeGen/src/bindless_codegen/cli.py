@@ -79,6 +79,12 @@ def main(argv=None):
         help="Color output mode",
     )
     p.add_argument(
+        "--ts-strategy",
+        choices=["preserve", "omit", "git-sha"],
+        default="preserve",
+        help="Timestamp strategy for generated files: preserve (keep existing), omit (no timestamps), or git-sha (embed git short sha)",
+    )
+    p.add_argument(
         "--version",
         action="store_true",
         help="Print version and exit",
@@ -110,6 +116,7 @@ def main(argv=None):
             dry_run=args.dry_run,
             schema_path=args.schema,
             out_base=args.out_base,
+            ts_strategy=args.ts_strategy,
             reporter=rep,
         )
     else:
@@ -119,6 +126,7 @@ def main(argv=None):
             args.out_hlsl,
             dry_run=args.dry_run,
             schema_path=args.schema,
+            ts_strategy=args.ts_strategy,
             reporter=rep,
         )
 

@@ -133,6 +133,27 @@ This target:
 - Generates the full output set (C++/HLSL/JSON), including `Generated.Meta.h`
 - Integrates with the build dependency graph
 
+### Compile-check (header validation)
+
+When you build the `generate_bindless_headers` target, the tool also runs a
+small compile-only check that includes the generated headers (kept under the
+tool). This ensures the generated C++ headers remain syntactically and
+semantically valid for the engine build. The compile-check is implemented as
+an OBJECT target (`BindlessCodeGen_CompileCheck`) under the BindlessCodeGen
+tool and will fail the generation step if compilation of the generated
+headers fails.
+
+If you prefer to run generation without running the compile-check (for a
+one-off quick generation), build only the `generate_bindless_headers` files by
+invoking the Python CLI directly rather than the CMake target, or adjust CMake
+configuration in environments where the check should be skipped.
+
+Example (build generation and compile-check via CMake):
+
+```powershell
+cmake --build --preset=windows-debug --target generate_bindless_headers
+```
+
 ## Requirements
 
 - **Python**: 3.8 or newer
