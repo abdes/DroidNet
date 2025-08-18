@@ -119,10 +119,6 @@ protected:
 private:
   [[nodiscard]] auto GetConcreteCommandList() const -> CommandList*;
 
-  // Root signature creation helpers
-  [[nodiscard]] auto CreateBindlessRootSignature(bool is_graphics) const
-    -> dx::IRootSignature*;
-
   RenderController* renderer_;
 
   size_t graphics_pipeline_hash_ = 0;
