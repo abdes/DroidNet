@@ -109,8 +109,8 @@ the pipeline.
 
 - **Forward/Backward Compatibility**
   - Use version tags for structs that may evolve.
-  - Retain deprecated fields until all dependent shaders are updated. Delete
-    them as soon as the shaders are migrated.
+  - Retain older fields only while dependent shaders remain; remove them once
+    all consumers have migrated.
 - **Cache Behavior**
   - Cluster hot fields for coherent access; move cold fields to the end.
 - **Serialization**
@@ -176,48 +176,31 @@ The single source-of-truth for bindless slot/register mapping is
 
 ### 3.2 Index Lifetime, Reuse, and Aliasing Prevention
 
-- Use a clear separation of concerns between the shader-visible index and a
-  CPU-only generation counter:
-  - `BindlessHandle` (shader-visible) is a strongly-typed 32-bit index exposed
-    to shaders and stored in draw/dispatch data. This type is now implemented
-    in `src/Oxygen/Core/Types/BindlessHandle.h` as a NamedType alias and
-    provides a sentinel `kInvalidBindlessHandle` constructed from the
-    generator-provided `kInvalidBindlessIndex`.
-  - `VersionedBindlessHandle` (CPU-side) is implemented in the same header as
-    a small value type that pairs a `BindlessHandle` index with a CPU-only
-    generation counter and convenience helpers for packing/unpacking to a
-    64-bit `Packed` value. The runtime increments the generation when a slot
-    is actually recycled; older generations are treated as stale in debug
-    validation.
-- Shader code sees only the 32-bit `BindlessHandle` (no packing of generation
-  into shader-visible bits). CPU-side validation compares the handle's stored
-  generation against a shadow per-slot generation to detect stale references.
-- Generation-based safety is the primary mechanism to prevent aliasing:
-  - On Release, the allocator/registry may return the descriptor index to a free
-    pool (implementation dependent). The runtime must increment the slot's
-    generation only when the slot becomes safe to reuse (for example, after a
-    fence or when the renderer confirms no in-flight references). Reused slots
-    carry a new generation. Any `VersionedBindlessHandle` with an older
-    generation is treated as stale and rejected in debug validation.
-- **Sentinel values**:
-  - Reserve only `oxygen::engine::kInvalidBindlessIndex` (equal to
-    `std::numeric_limits<uint32_t>::max()`) for invalid handles. `0` is a valid
-    index.
-  - Shaders must safely handle invalid indices by branching to default
-    resources. **Deferred slot reuse (generation-based policy)**:
-- Slots freed mid‑frame may be returned to allocator free lists by low-level
-  segments (see `FixedDescriptorHeapSegment::Release`). Relying on immediate
-  free-list recycling alone risks aliasing; therefore the canonical safety
-  mechanism is a CPU-only generation counter per slot.
-- On release, the runtime must ensure a slot's `generation` is incremented only
-  when it is safe to reuse (typically when a pending fence/frame completes).
-  Implementations may either delay free-list insertion until that point or
-  record the freed index in a pending queue and apply the generation bump
-  atomically when safe. In either case, the generation transition is the
-  authoritative event that enables reuse.
-- `PerFrameResourceManager` / `DeferredObjectRelease.h` complements generation
-  tracking by deferring object destruction; use it to ensure native resources
-  remain valid until GPU work that references them has completed.
+All shader-visible indices and their CPU-side counterparts are represented by
+the project's strong types defined in `src/Oxygen/Core/Types/BindlessHandle.h`.
+Use these types everywhere to ensure clarity, type-safety, and correct lifetime
+semantics:
+
+- `BindlessHandle` — strongly-typed 32-bit shader-visible index.
+- `VersionedBindlessHandle` — pairs an index with a CPU-only generation counter
+  to detect stale or recycled indices safely.
+- `BindlessHandleCount`, `BindlessHandleCapacity` — strong counts/capacities for
+  allocator APIs.
+
+Generation-based safety remains the mechanism to prevent aliasing and
+stale-usage: on release, a slot's generation is incremented only after it is
+safe to reuse (for example, after the associated GPU fence/frame completes). Use
+`VersionedBindlessHandle` for CPU-side validation and compare generations
+against allocator shadow state when binding or issuing draws.
+
+Sentinel handling is provided by the strong types: `kInvalidBindlessIndex` is
+the designated invalid index and `BindlessHandle`/`VersionedBindlessHandle`
+expose IsValid() helpers for concise checks. Shaders should branch to default
+resources on invalid sentinels.
+
+Slot metadata remains the same conceptually: { handle, state, shader_index,
+generation, last_used_frame, size_bytes, resident_mip_mask (textures), optional
+pending_fence_or_frame, resource_key }.
 
 ### 3.3 Shader Contract Integration and Validation
 
@@ -466,11 +449,11 @@ engine development:
   - **Register**: `b1`
   - **Heap Index**: 0
   - **Usage**: Stores per-frame constants, such as scene-wide parameters, or
-    fallback constants for legacy systems. Additionally, it holds the **bindless
-    indices table**, which is critical for accessing all other resources in the
-    unified descriptor heap. The `SceneConstants` buffer is updated dynamically
-    in Oxygen, ensuring that renderer-managed fields are refreshed every frame
-    and uploaded to the GPU only when changes occur.
+    fallback constants. Additionally, it holds the **bindless indices table**,
+    which is critical for accessing all other resources in the unified
+    descriptor heap. The `SceneConstants` buffer is updated dynamically in
+    Oxygen, ensuring that renderer-managed fields are refreshed every frame and
+    uploaded to the GPU only when changes occur.
   - **Example**: In Oxygen, this range holds the `SceneConstants` buffer, which
     includes the view matrix, projection matrix, and camera position. The
     **bindless indices table** is used by Oxygen's shaders to dynamically fetch
@@ -844,44 +827,12 @@ Domains: Transforms, Materials, Geometry, Textures. Each domain has an
 allocation policy, budget, and descriptor range (see Section 4 for binding
 slots).
 
-- Handle shape (CPU): a versioned handle carries both the shader‑visible index
-  and a CPU‑only generation counter. Default invalid is
-  `oxygen::engine::kInvalidBindlessIndex`.
-  - Index: full 32‑bit, strongly‑typed BindlessHandle used directly by shaders.
-  - Generation: maintained only on the CPU (not encoded in the 32‑bit index),
-    used for validation and safe reuse.
-  - Shaders only see the 32‑bit index; there are no bit masks or packing in
-    shader code.
-
-CPU‑side types (sketch):
-
-```cpp
-using BindlessIndex  = oxy::NamedType<uint32_t, struct _BindlessIndexTag>;
-using Generation     = oxy::NamedType<uint32_t, struct _GenerationTag>;
-
-struct VersionedBindlessHandle {
-  BindlessIndex index;     // shader‑visible 32‑bit index
-  Generation    generation; // CPU‑only generation counter
-
-  VersionedBindlessHandle() noexcept
-    : index(BindlessIndex{0u}), generation(Generation{0u}) {}
-  VersionedBindlessHandle(BindlessIndex idx, Generation gen) noexcept
-    : index(idx), generation(gen) {}
-
-  // Optional CPU‑side packing for maps/keys; shaders never see this
-  static VersionedBindlessHandle FromPacked(uint64_t p) noexcept {
-    return { BindlessIndex{static_cast<uint32_t>(p & 0xFFFFFFFFu)},
-             Generation{static_cast<uint32_t>(p >> 32)} };
-  }
-  uint64_t ToPacked() const noexcept {
-    return (static_cast<uint64_t>(static_cast<uint32_t>(generation)) << 32) |
-            static_cast<uint32_t>(index);
-  }
-  BindlessHandle ToBindlessHandle() const noexcept {
-    return BindlessHandle{static_cast<uint32_t>(index)};
-  }
-};
-```
+Handle shape (CPU): the project uses the strong types defined in
+`src/Oxygen/Core/Types/BindlessHandle.h`. Prefer `BindlessHandle` for
+shader-visible indices and `VersionedBindlessHandle` for CPU-side handles that
+include a generation counter; use the provided accessors for packing,
+validation, and debugging. Shaders must not rely on any bit-packed index format
+— generation is a CPU-side concept only.
 
 - Slot metadata (per allocation): { handle, state, shader_index, generation,
   last_used_frame, size_bytes, resident_mip_mask (textures), optional
