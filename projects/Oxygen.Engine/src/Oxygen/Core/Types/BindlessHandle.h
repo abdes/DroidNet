@@ -66,6 +66,26 @@ namespace bindless {
   using Handle = BindlessHandle;
   using Count = BindlessHandleCount;
   using Capacity = BindlessHandleCapacity;
+
+  //! Maximum exclusive bindless handle value. This sentinel marks the upper
+  //! bound (exclusive) for shader-visible bindless indices and is chosen to
+  //! match the underlying 32-bit storage.
+  inline constexpr auto kMaxHandle = Handle {
+    (std::numeric_limits<uint32_t>::max)(),
+  };
+
+  //! Maximum exclusive count of bindless handles. Valid counts are in the
+  //! range [0, kMaxCount). Matches the underlying 32-bit storage.
+  inline constexpr auto kMaxCount = Count {
+    (std::numeric_limits<uint32_t>::max)(),
+  };
+
+  //! Maximum exclusive capacity for bindless handle containers/allocators.
+  //! Valid capacities are in the range [0, kMaxCapacity). Matches the
+  //! underlying 32-bit storage.
+  inline constexpr auto kMaxCapacity = Capacity {
+    (std::numeric_limits<uint32_t>::max)(),
+  };
 } // namespace bindless
 
 //! Convert a BindlessHandle to a human-readable string representation.
