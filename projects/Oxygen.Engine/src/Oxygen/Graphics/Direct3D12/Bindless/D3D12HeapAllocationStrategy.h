@@ -93,7 +93,7 @@ public:
            their combination is illegal.
   */
   OXYGEN_D3D12_API auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> DescriptorHandle::IndexT override;
+    DescriptorVisibility visibility) const -> oxygen::bindless::Handle override;
 
   //! Returns the D3D12 descriptor heap type for a given view type.
   /*!
@@ -126,7 +126,7 @@ private:
   std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 
   //! Maps (view_type, visibility) pairs to their base indices
-  std::unordered_map<std::string, DescriptorHandle::IndexT> heap_base_indices_;
+  std::unordered_map<std::string, oxygen::bindless::Handle> heap_base_indices_;
 };
 
 } // namespace oxygen::graphics::d3d12

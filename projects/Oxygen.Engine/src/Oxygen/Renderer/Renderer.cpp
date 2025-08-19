@@ -60,7 +60,7 @@ auto GetMeshId(const Mesh& mesh) -> MeshId
 }
 
 // Convert a data::MaterialAsset snapshot into engine::MaterialConstants
-static auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
+auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
   -> MaterialConstants
 {
   MaterialConstants mc;
@@ -72,13 +72,11 @@ static auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
   mc.ambient_occlusion = mat.GetAmbientOcclusion();
   // Texture indices (bindless). If not wired yet, keep zero which shaders can
   // treat as "no texture".
-  mc.base_color_texture_index
-    = static_cast<uint32_t>(mat.GetBaseColorTexture());
-  mc.normal_texture_index = static_cast<uint32_t>(mat.GetNormalTexture());
-  mc.metallic_texture_index = static_cast<uint32_t>(mat.GetMetallicTexture());
-  mc.roughness_texture_index = static_cast<uint32_t>(mat.GetRoughnessTexture());
-  mc.ambient_occlusion_texture_index
-    = static_cast<uint32_t>(mat.GetAmbientOcclusionTexture());
+  mc.base_color_texture_index = mat.GetBaseColorTexture();
+  mc.normal_texture_index = mat.GetNormalTexture();
+  mc.metallic_texture_index = mat.GetMetallicTexture();
+  mc.roughness_texture_index = mat.GetRoughnessTexture();
+  mc.ambient_occlusion_texture_index = mat.GetAmbientOcclusionTexture();
   // Flags reserved for future use; leave zero for now.
   return mc;
 }
@@ -336,14 +334,13 @@ auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
   return cpu.front();
 }
 
-auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
-  -> std::size_t
+auto Renderer::BuildFrame(scene::Scene& scene, const View& view) -> std::size_t
 {
   // Reset draw list for this frame
   opaque_items_.Clear();
 
   // Extract items via the new two-phase builder (Collect -> Finalize)
-  using oxygen::engine::extraction::RenderListBuilder;
+  using extraction::RenderListBuilder;
   RenderListBuilder builder;
   std::uint64_t frame_id = 0;
   if (const auto rc_ptr = render_controller_.lock()) {
@@ -368,8 +365,8 @@ auto Renderer::BuildFrame(oxygen::scene::Scene& scene, const View& view)
   return inserted_count;
 }
 
-auto Renderer::BuildFrame(
-  oxygen::scene::Scene& scene, const CameraView& camera_view) -> std::size_t
+auto Renderer::BuildFrame(scene::Scene& scene, const CameraView& camera_view)
+  -> std::size_t
 {
   // Ensure transforms are up-to-date for this frame. SceneExtraction also
   // calls scene.Update(), but doing it here makes the sequencing explicit
@@ -535,7 +532,7 @@ auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
   const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
   registry.RegisterView(vertex_buffer, view, std::move(handle), srv_desc);
   LOG_F(INFO, "Vertex buffer SRV registered at heap index {}", index);
-  return index;
+  return index.get();
 }
 
 // Create a typed SRV for an index buffer (R16/R32) and register it.
@@ -568,7 +565,7 @@ auto CreateAndRegisterIndexSrv(RenderController& rc, Buffer& index_buffer,
   const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
   registry.RegisterView(index_buffer, view, std::move(handle), srv_desc);
   LOG_F(INFO, "Index buffer SRV registered at heap index {}", index);
-  return index;
+  return index.get();
 }
 
 } // namespace
@@ -615,7 +612,7 @@ auto Renderer::EnsureResourcesForDrawList(
         per_materials.emplace_back(MakeMaterialConstants(*item.material));
         material_index = static_cast<uint32_t>(per_materials.size() - 1U);
       } else {
-        const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
+        const auto fallback = data::MaterialAsset::CreateDefault();
         per_materials.emplace_back(MakeMaterialConstants(*fallback));
         material_index = static_cast<uint32_t>(per_materials.size() - 1U);
       }
@@ -682,8 +679,7 @@ auto Renderer::EnsureAndUploadMaterialConstants() -> void
 
 // Removed legacy material constants SRV registration; handled by helper
 
-auto oxygen::engine::Renderer::SetMaterialConstants(
-  const oxygen::engine::MaterialConstants& constants) -> void
+auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
 {
   auto& cpu = material_constants_.GetCpuData();
   if (cpu.size() != 1) {
@@ -693,8 +689,7 @@ auto oxygen::engine::Renderer::SetMaterialConstants(
   material_constants_.MarkDirty();
 }
 
-auto oxygen::engine::Renderer::GetMaterialConstants() const
-  -> const oxygen::engine::MaterialConstants&
+auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
 {
   const auto& cpu = material_constants_.GetCpuData();
   DCHECK_F(!cpu.empty());

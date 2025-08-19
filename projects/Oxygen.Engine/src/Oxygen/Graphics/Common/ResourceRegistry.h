@@ -21,251 +21,250 @@
 
 namespace oxygen::graphics {
 
-//! Registry for graphics resources and their views, supporting bindless rendering.
+//! Registry for graphics resources and their views, supporting bindless
+//! rendering.
 class ResourceRegistry {
 public:
-    OXYGEN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
+  OXYGEN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
 
-    OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
+  OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
 
-    OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
-    OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
+  OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
+  OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
 
-    // TODO: provide API to update a view registration with a new native object, keeping the same descriptor handle.
+  // TODO: provide API to update a view registration with a new native object,
+  // keeping the same descriptor handle.
 
-    //! Register a graphics resource, such as textures, buffers, and samplers.
-    /*!
-     The registry will keep a strong reference to the resource until it is
-     unregistered. For resources with views (textures, buffers), views can be
-     registered and managed for bindless rendering. For simple resources like
-     samplers, only the resource itself is registered and tracked.
+  //! Register a graphics resource, such as textures, buffers, and samplers.
+  /*!
+   The registry will keep a strong reference to the resource until it is
+   unregistered. For resources with views (textures, buffers), views can be
+   registered and managed for bindless rendering. For simple resources like
+   samplers, only the resource itself is registered and tracked.
 
-     \throws std::runtime_error if the resource is already registered.
-    */
-    template <SupportedResource Resource>
-    void Register(const std::shared_ptr<Resource>& resource)
-    {
-        Register(
-            std::static_pointer_cast<void>(resource),
-            Resource::ClassTypeId());
-    }
+   \throws std::runtime_error if the resource is already registered.
+  */
+  template <SupportedResource Resource>
+  void Register(const std::shared_ptr<Resource>& resource)
+  {
+    Register(std::static_pointer_cast<void>(resource), Resource::ClassTypeId());
+  }
 
-    //! Register a view for a graphics resource, such as textures and buffers.
-    /*!
-     Registers a view for a graphics resource (e.g., texture or buffer) and
-     returns a handle to the native view object (check GetNativeView of the
-     corresponding resource class for the native view object type). This method
-     is only enabled for resources that satisfy ResourceWithViews. For simple
-     resources like samplers, view registration is not supported or required.
+  //! Register a view for a graphics resource, such as textures and buffers.
+  /*!
+   Registers a view for a graphics resource (e.g., texture or buffer) and
+   returns a handle to the native view object (check GetNativeView of the
+   corresponding resource class for the native view object type). This method
+   is only enabled for resources that satisfy ResourceWithViews. For simple
+   resources like samplers, view registration is not supported or required.
 
-     The registry will create the native view using the resource's GetNativeView
-     method, and then attempt to register it for view caching. The descriptor
-     handle must be valid and allocated from a compatible DescriptorAllocator.
-     The view description must be hashable and comparable.
+   The registry will create the native view using the resource's GetNativeView
+   method, and then attempt to register it for view caching. The descriptor
+   handle must be valid and allocated from a compatible DescriptorAllocator.
+   The view description must be hashable and comparable.
 
-     \param resource The resource to register the view for. Must already be
-            registered in the registry.
-     \param view_handle The descriptor handle for the view. Must be valid and
-            compatible with the resource type.
-     \param desc The view description. Must be hashable and comparable.
+   \param resource The resource to register the view for. Must already be
+          registered in the registry.
+   \param view_handle The descriptor handle for the view. Must be valid and
+          compatible with the resource type.
+   \param desc The view description. Must be hashable and comparable.
 
-     \return A handle to the native view, newly created or from the cache.
-             Returns an invalid NativeObject if the view is invalid.
+   \return A handle to the native view, newly created or from the cache.
+           Returns an invalid NativeObject if the view is invalid.
 
-     \throws std::runtime_error if the resource is not registered, or a view
-             with a compatible descriptor exists in the cache.
-    */
-    template <ResourceWithViews Resource>
-    auto RegisterView(
-        Resource& resource,
-        DescriptorHandle view_handle,
-        const typename Resource::ViewDescriptionT& desc)
-        -> NativeObject // TODO: document exceptions
-    {
-        auto view = resource.GetNativeView(view_handle, desc);
-        auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-        return RegisterView(
-            NativeObject { &resource, Resource::ClassTypeId() },
-            std::move(view),
-            std::move(view_handle),
-            std::any(desc),
-            key,
-            desc.view_type,
-            desc.visibility);
-    }
+   \throws std::runtime_error if the resource is not registered, or a view
+           with a compatible descriptor exists in the cache.
+  */
+  template <ResourceWithViews Resource>
+  auto RegisterView(Resource& resource, DescriptorHandle view_handle,
+    const typename Resource::ViewDescriptionT& desc)
+    -> NativeObject // TODO: document exceptions
+  {
+    auto view = resource.GetNativeView(view_handle, desc);
+    auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    return RegisterView(NativeObject { &resource, Resource::ClassTypeId() },
+      std::move(view), std::move(view_handle), std::any(desc), key,
+      desc.view_type, desc.visibility);
+  }
 
-    //! Register an already created view for a graphics resource, such as
-    //! textures and buffers, making it available for for cached lookups.
-    /*!
-     Registers an already created native view for a graphics resource (e.g.,
-     texture or buffer), making it available for bindless rendering and view
-     caching. This method is only enabled for resources that satisfy
-     ResourceWithViews.
+  //! Register an already created view for a graphics resource, such as
+  //! textures and buffers, making it available for for cached lookups.
+  /*!
+   Registers an already created native view for a graphics resource (e.g.,
+   texture or buffer), making it available for bindless rendering and view
+   caching. This method is only enabled for resources that satisfy
+   ResourceWithViews.
 
-     Use this method when you need complete control over view creation. The view
-     description must be unique and not conflict with any cached views. If a
-     view with a compatible descriptor is already registered for the resource,
-     this method will throw a std::runtime_error. If the resource is not
-     registered, or the view is invalid, the method will return false. If the
-     descriptor handle is invalid, the view description is empty, or the key
-     hash is zero, the method will abort.
+   Use this method when you need complete control over view creation. The view
+   description must be unique and not conflict with any cached views. If a
+   view with a compatible descriptor is already registered for the resource,
+   this method will throw a std::runtime_error. If the resource is not
+   registered, or the view is invalid, the method will return false. If the
+   descriptor handle is invalid, the view description is empty, or the key
+   hash is zero, the method will abort.
 
-     \param resource The resource to register the view for. Must already be
-            registered in the registry.
-     \param view The native view object to register. Must be valid.
-     \param view_handle The descriptor handle for the view. Must be valid and
-            compatible with the resource type.
-     \param desc The view description. Must be hashable and comparable.
+   \param resource The resource to register the view for. Must already be
+          registered in the registry.
+   \param view The native view object to register. Must be valid.
+   \param view_handle The descriptor handle for the view. Must be valid and
+          compatible with the resource type.
+   \param desc The view description. Must be hashable and comparable.
 
-     \return true if the view was registered successfully, false if the resource
-             or view is invalid.
+   \return true if the view was registered successfully, false if the resource
+           or view is invalid.
 
-     \throws std::runtime_error if the resource is not registered, or a view
-             with a compatible descriptor exists in the cache.
-    */
-    template <ResourceWithViews Resource>
-    auto RegisterView(Resource& resource, NativeObject view, DescriptorHandle view_handle,
-        const typename Resource::ViewDescriptionT& desc) -> bool
-    {
-        auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-        return RegisterView(
-            NativeObject { &resource, Resource::ClassTypeId() },
-            std::move(view),
-            std::move(view_handle),
-            std::any(desc),
-            key,
-            desc.view_type,
-            desc.visibility)
-            .IsValid();
-    }
+   \throws std::runtime_error if the resource is not registered, or a view
+           with a compatible descriptor exists in the cache.
+  */
+  template <ResourceWithViews Resource>
+  auto RegisterView(Resource& resource, NativeObject view,
+    DescriptorHandle view_handle,
+    const typename Resource::ViewDescriptionT& desc) -> bool
+  {
+    auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    return RegisterView(NativeObject { &resource, Resource::ClassTypeId() },
+      std::move(view), std::move(view_handle), std::any(desc), key,
+      desc.view_type, desc.visibility)
+      .IsValid();
+  }
 
-    template <ResourceWithViews Resource>
-    [[nodiscard]] auto Contains(const Resource& resource) const -> bool
-    {
-        return Contains(NativeObject(&resource, Resource::ClassTypeId()));
-    }
+  template <ResourceWithViews Resource>
+  [[nodiscard]] auto Contains(const Resource& resource) const -> bool
+  {
+    return Contains(NativeObject(&resource, Resource::ClassTypeId()));
+  }
 
-    template <ResourceWithViews Resource>
-    [[nodiscard]] auto Contains(
-        const Resource& resource,
-        const typename Resource::ViewDescriptionT& desc) const -> bool
-    {
-        auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-        return Contains(NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()), key);
-    }
+  template <ResourceWithViews Resource>
+  [[nodiscard]] auto Contains(const Resource& resource,
+    const typename Resource::ViewDescriptionT& desc) const -> bool
+  {
+    auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    return Contains(
+      NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()),
+      key);
+  }
 
-    template <ResourceWithViews Resource>
-    [[nodiscard]] auto Find(
-        const Resource& resource,
-        const typename Resource::ViewDescriptionT& desc) const
-        -> NativeObject
-    {
-        auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-        return Find(NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()), key);
-    }
+  template <ResourceWithViews Resource>
+  [[nodiscard]] auto Find(const Resource& resource,
+    const typename Resource::ViewDescriptionT& desc) const -> NativeObject
+  {
+    auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    return Find(
+      NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()),
+      key);
+  }
 
-    template <SupportedResource Resource>
-    void UnRegisterView(const Resource& resource, const NativeObject& view)
-    {
-        UnRegisterView(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() }, view);
-    }
+  template <SupportedResource Resource>
+  void UnRegisterView(const Resource& resource, const NativeObject& view)
+  {
+    UnRegisterView(NativeObject { const_cast<Resource*>(&resource),
+                     Resource::ClassTypeId() },
+      view);
+  }
 
-    template <SupportedResource Resource>
-    void UnRegisterResource(const Resource& resource)
-    {
-        UnRegisterResource(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
-    }
+  template <SupportedResource Resource>
+  void UnRegisterResource(const Resource& resource)
+  {
+    UnRegisterResource(NativeObject {
+      const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+  }
 
-    //! Release all views for a resource
-    template <SupportedResource Resource>
-    void UnRegisterViews(const Resource& resource)
-    {
-        UnRegisterResourceViews(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
-    }
+  //! Release all views for a resource
+  template <SupportedResource Resource>
+  void UnRegisterViews(const Resource& resource)
+  {
+    UnRegisterResourceViews(NativeObject {
+      const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+  }
 
 private:
-    OXYGEN_GFX_API void Register(std::shared_ptr<void> resource, TypeId type_id);
+  OXYGEN_GFX_API void Register(std::shared_ptr<void> resource, TypeId type_id);
 
-    OXYGEN_GFX_API auto RegisterView(
-        NativeObject resource, NativeObject view, DescriptorHandle view_handle,
-        std::any view_description_for_cache,
-        size_t key,
-        ResourceViewType view_type, DescriptorVisibility visibility)
-        -> NativeObject;
+  OXYGEN_GFX_API auto RegisterView(NativeObject resource, NativeObject view,
+    DescriptorHandle view_handle, std::any view_description_for_cache,
+    size_t key, ResourceViewType view_type, DescriptorVisibility visibility)
+    -> NativeObject;
 
-    OXYGEN_GFX_API void UnRegisterView(const NativeObject& resource, const NativeObject& view);
+  OXYGEN_GFX_API void UnRegisterView(
+    const NativeObject& resource, const NativeObject& view);
 
-    OXYGEN_GFX_API void UnRegisterResource(const NativeObject& resource);
-    OXYGEN_GFX_API void UnRegisterResourceViews(const NativeObject& resource);
+  OXYGEN_GFX_API void UnRegisterResource(const NativeObject& resource);
+  OXYGEN_GFX_API void UnRegisterResourceViews(const NativeObject& resource);
 
-    void UnRegisterViewNoLock(const NativeObject& resource, const NativeObject& view);
-    void UnRegisterResourceViewsNoLock(const NativeObject& resource);
+  void UnRegisterViewNoLock(
+    const NativeObject& resource, const NativeObject& view);
+  void UnRegisterResourceViewsNoLock(const NativeObject& resource);
 
-    [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource) const -> bool;
-    [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource, size_t key_hash) const -> bool;
+  [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource) const
+    -> bool;
+  [[nodiscard]] OXYGEN_GFX_API auto Contains(
+    const NativeObject& resource, size_t key_hash) const -> bool;
 
-    [[nodiscard]] OXYGEN_GFX_API auto Find(const NativeObject& resource, size_t key_hash) const -> NativeObject;
+  [[nodiscard]] OXYGEN_GFX_API auto Find(
+    const NativeObject& resource, size_t key_hash) const -> NativeObject;
 
-    // TODO: consider deleting these methods as I cannot find a use case
-    [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
-    [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
+  // TODO: consider deleting these methods as I cannot find a use case
+  [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const
+    -> NativeObject;
+  [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const
+    -> NativeObject;
 
-    // Thread safety
-    mutable std::mutex registry_mutex_;
+  // Thread safety
+  mutable std::mutex registry_mutex_;
 
-    // Resource tracking
-    struct ResourceEntry {
-        // Erase the type information, but hold a strong reference to the
-        // resource while it is registered.
-        std::shared_ptr<void> resource;
+  // Resource tracking
+  struct ResourceEntry {
+    // Erase the type information, but hold a strong reference to the
+    // resource while it is registered.
+    std::shared_ptr<void> resource;
 
-        // Descriptors associated with this resource
-        struct ViewEntry {
-            NativeObject view_object; // Native view object
-            DescriptorHandle descriptor; // Handle to descriptor heap entry
-        };
-
-        // Map from descriptor index to view entry
-        std::unordered_map<uint32_t, ViewEntry> descriptors;
+    // Descriptors associated with this resource
+    struct ViewEntry {
+      NativeObject view_object; // Native view object
+      DescriptorHandle descriptor; // Handle to descriptor heap entry
     };
 
-    // Primary storage - Resource NativeObject to resource entry
-    std::unordered_map<NativeObject, ResourceEntry> resources_;
+    // Map from descriptor index to view entry
+    std::unordered_map<bindless::Handle, ViewEntry> descriptors;
+  };
 
-    // Map from descriptor index to owning resource
-    std::unordered_map<uint32_t, NativeObject> descriptor_to_resource_;
+  // Primary storage - Resource NativeObject to resource entry
+  std::unordered_map<NativeObject, ResourceEntry> resources_;
 
-    // Unified view cache
-    struct CacheKey {
-        NativeObject resource; // The resource object
-        std::size_t hash; // Hash of the view description
+  // Map from descriptor index to owning resource
+  std::unordered_map<bindless::Handle, NativeObject> descriptor_to_resource_;
 
-        auto operator==(const CacheKey& other) const -> bool
-        {
-            return hash == other.hash && resource == other.resource;
-        }
-    };
+  // Unified view cache
+  struct CacheKey {
+    NativeObject resource; // The resource object
+    std::size_t hash; // Hash of the view description
 
-    //! A custom hash functor for CacheKey.
-    struct CacheKeyHasher {
-        auto operator()(const CacheKey& k) const noexcept -> std::size_t
-        {
-            std::size_t result = std::hash<NativeObject> {}(k.resource);
-            oxygen::HashCombine(result, k.hash);
-            return result;
-        }
-    };
+    auto operator==(const CacheKey& other) const -> bool
+    {
+      return hash == other.hash && resource == other.resource;
+    }
+  };
 
-    //! View cache entry that stores both the view and its description.
-    struct ViewCacheEntry {
-        NativeObject view_object; //!< The native object holding the view.
-        std::any view_description; //!< The original view description.
-    };
+  //! A custom hash functor for CacheKey.
+  struct CacheKeyHasher {
+    auto operator()(const CacheKey& k) const noexcept -> std::size_t
+    {
+      std::size_t result = std::hash<NativeObject> {}(k.resource);
+      oxygen::HashCombine(result, k.hash);
+      return result;
+    }
+  };
 
-    //! A unified view cache for all resources and view types.
-    std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
+  //! View cache entry that stores both the view and its description.
+  struct ViewCacheEntry {
+    NativeObject view_object; //!< The native object holding the view.
+    std::any view_description; //!< The original view description.
+  };
 
-    std::string debug_name_; //!< Debug name for the registry.
+  //! A unified view cache for all resources and view types.
+  std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
+
+  std::string debug_name_; //!< Debug name for the registry.
 };
 
 } // namespace oxygen::graphics

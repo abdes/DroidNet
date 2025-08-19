@@ -53,7 +53,6 @@ m_gtest_program(
   DescriptorHeapSegment
   SOURCES
     "Bindless/FixedDescriptorHeapSegment_test.cpp"
-    "Bindless/StaticDescriptorHeapSegment_test.cpp"
 )
 m_gtest_program(
   BaseDescriptorAllocator

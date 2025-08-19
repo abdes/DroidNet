@@ -16,16 +16,23 @@ namespace oxygen::graphics::bindless::testing {
 // ReSharper disable CppClangTidyModernizeUseTrailingReturnType
 class MockDescriptorHeapSegment : public detail::DescriptorHeapSegment {
 public:
-    // Updated to match DescriptorHeapSegment interface: [[nodiscard]] and noexcept
-    MOCK_METHOD(IndexT, Allocate, (), (override, noexcept));
-    MOCK_METHOD(bool, Release, (IndexT), (override, noexcept));
-    MOCK_METHOD(IndexT, GetAvailableCount, (), (const, override, noexcept));
-    MOCK_METHOD(ResourceViewType, GetViewType, (), (const, override, noexcept));
-    MOCK_METHOD(DescriptorVisibility, GetVisibility, (), (const, override, noexcept));
-    MOCK_METHOD(IndexT, GetBaseIndex, (), (const, override, noexcept));
-    MOCK_METHOD(IndexT, GetCapacity, (), (const, override, noexcept));
-    MOCK_METHOD(IndexT, GetAllocatedCount, (), (const, override, noexcept));
-    MOCK_METHOD(IndexT, GetShaderVisibleIndex, (const DescriptorHandle&), (const, override, noexcept));
+  // Updated to match DescriptorHeapSegment interface: [[nodiscard]] and
+  // noexcept
+  MOCK_METHOD(oxygen::bindless::Handle, Allocate, (), (override, noexcept));
+  MOCK_METHOD(bool, Release, (oxygen::bindless::Handle), (override, noexcept));
+  MOCK_METHOD(oxygen::bindless::Count, GetAvailableCount, (),
+    (const, override, noexcept));
+  MOCK_METHOD(ResourceViewType, GetViewType, (), (const, override, noexcept));
+  MOCK_METHOD(
+    DescriptorVisibility, GetVisibility, (), (const, override, noexcept));
+  MOCK_METHOD(
+    oxygen::bindless::Handle, GetBaseIndex, (), (const, override, noexcept));
+  MOCK_METHOD(
+    oxygen::bindless::Capacity, GetCapacity, (), (const, override, noexcept));
+  MOCK_METHOD(oxygen::bindless::Count, GetAllocatedCount, (),
+    (const, override, noexcept));
+  MOCK_METHOD(oxygen::bindless::Handle, GetShaderVisibleIndex,
+    (const DescriptorHandle&), (const, override, noexcept));
 };
 
 } // namespace oxygen::graphics::bindless::testing
