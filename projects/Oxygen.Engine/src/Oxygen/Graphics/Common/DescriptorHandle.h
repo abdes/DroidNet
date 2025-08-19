@@ -11,6 +11,7 @@
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -51,117 +52,110 @@ class DescriptorAllocator;
  - Release explicitly when no longer needed, or let RAII handle cleanup
 */
 class DescriptorHandle {
-    friend class DescriptorAllocator;
+  friend class DescriptorAllocator;
 
 public:
-    //! The underlying type for the descriptor index.
-    using IndexT = uint32_t;
+  //! Default constructor creates an invalid handle.
+  DescriptorHandle() noexcept = default;
 
-    //! Represents an invalid descriptor index.
-    static constexpr IndexT kInvalidIndex = ~0U;
+  //! Destructor that automatically releases the descriptor if still valid.
+  OXYGEN_GFX_API ~DescriptorHandle();
 
-    //! Default constructor creates an invalid handle.
-    DescriptorHandle() noexcept = default;
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle)
 
-    //! Destructor that automatically releases the descriptor if still valid.
-    OXYGEN_GFX_API ~DescriptorHandle();
+  //! Move constructor transfers ownership of the descriptor.
+  OXYGEN_GFX_API DescriptorHandle(DescriptorHandle&& other) noexcept;
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle)
+  //! Move assignment transfers ownership of the descriptor.
+  OXYGEN_GFX_API auto operator=(DescriptorHandle&& other) noexcept
+    -> DescriptorHandle&;
 
-    //! Move constructor transfers ownership of the descriptor.
-    OXYGEN_GFX_API DescriptorHandle(DescriptorHandle&& other) noexcept;
+  [[nodiscard]] constexpr auto operator==(
+    const DescriptorHandle& other) const noexcept
+  {
+    return allocator_ == other.allocator_ && handle_ == other.handle_
+      && view_type_ == other.view_type_ && visibility_ == other.visibility_;
+  }
 
-    //! Move assignment transfers ownership of the descriptor.
-    OXYGEN_GFX_API auto operator=(DescriptorHandle&& other) noexcept -> DescriptorHandle&;
+  [[nodiscard]] constexpr auto operator!=(
+    const DescriptorHandle& other) const noexcept
+  {
+    return !(*this == other);
+  }
 
-    [[nodiscard]] constexpr auto operator==(const DescriptorHandle& other) const noexcept
-    {
-        return allocator_ == other.allocator_
-            && index_ == other.index_
-            && view_type_ == other.view_type_
-            && visibility_ == other.visibility_;
-    }
+  [[nodiscard]] constexpr auto IsValid() const noexcept
+  {
+    const auto properly_allocated
+      = allocator_ != nullptr && handle_ != kInvalidBindlessHandle;
+    // When properly allocated, the view type and visibility should also be
+    // valid.
+    assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
+    assert(!properly_allocated || oxygen::graphics::IsValid(visibility_));
+    return properly_allocated;
+  }
 
-    [[nodiscard]] constexpr auto operator!=(const DescriptorHandle& other) const noexcept
-    {
-        return !(*this == other);
-    }
+  [[nodiscard]] constexpr auto GetIndex() const noexcept { return handle_; }
 
-    [[nodiscard]] constexpr auto IsValid() const noexcept
-    {
-        const auto properly_allocated = allocator_ != nullptr && index_ != kInvalidIndex;
-        // When properly allocated, the view type and visibility should also be
-        // valid.
-        assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
-        assert(!properly_allocated || oxygen::graphics::IsValid(visibility_));
-        return properly_allocated;
-    }
+  //! Gets the resource view type (SRV, UAV, CBV, Sampler, etc.) of this
+  //! descriptor.
+  [[nodiscard]] constexpr auto GetViewType() const noexcept
+  {
+    return view_type_;
+  }
 
-    [[nodiscard]] constexpr auto GetIndex() const noexcept
-    {
-        return index_;
-    }
+  //! Gets the visibility of this descriptor (CPU-only, Shaders, etc.).
+  [[nodiscard]] constexpr auto GetVisibility() const noexcept
+  {
+    return visibility_;
+  }
 
-    //! Gets the resource view type (SRV, UAV, CBV, Sampler, etc.) of this
-    //! descriptor.
-    [[nodiscard]] constexpr auto GetViewType() const noexcept
-    {
-        return view_type_;
-    }
+  //! Gets the allocator that created this descriptor.
+  [[nodiscard]] constexpr auto GetAllocator() const noexcept
+  {
+    return allocator_;
+  }
 
-    //! Gets the visibility of this descriptor (CPU-only, Shaders, etc.).
-    [[nodiscard]] constexpr auto GetVisibility() const noexcept
-    {
-        return visibility_;
-    }
+  //! Explicitly releases the descriptor back to its allocator, and
+  //! invalidates the handle.
+  OXYGEN_GFX_API void Release() noexcept;
 
-    //! Gets the allocator that created this descriptor.
-    [[nodiscard]] constexpr auto GetAllocator() const noexcept
-    {
-        return allocator_;
-    }
-
-    //! Explicitly releases the descriptor back to its allocator, and
-    //! invalidates the handle.
-    OXYGEN_GFX_API void Release() noexcept;
-
-    //! Invalidates this handle without releasing the descriptor.
-    OXYGEN_GFX_API void Invalidate() noexcept;
+  //! Invalidates this handle without releasing the descriptor.
+  OXYGEN_GFX_API void Invalidate() noexcept;
 
 protected:
-    //! No allocator constructor creates an invalid handle. Primarily useful for
-    //! unit tests.
-    OXYGEN_GFX_API DescriptorHandle(IndexT index,
-        ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
+  //! No allocator constructor creates an invalid handle. Primarily useful for
+  //! unit tests.
+  OXYGEN_GFX_API DescriptorHandle(bindless::Handle index,
+    ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
-    //! Constructor that takes an allocator and index.
-    /*!
-     Creating a valid handle can only be done by the entity that allocated
-     descriptors. In the current design, this is the DescriptorAllocator
-     class.
+  //! Constructor that takes an allocator and index.
+  /*!
+   Creating a valid handle can only be done by the entity that allocated
+   descriptors. In the current design, this is the DescriptorAllocator
+   class.
 
-     This constructor is protected to prevent misuse outside the allocator
-     context, while still allowing unit tests to create handles for testing
-     purposes via derivation.
-    */
-    OXYGEN_GFX_API DescriptorHandle(
-        DescriptorAllocator* allocator, IndexT index,
-        ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
+   This constructor is protected to prevent misuse outside the allocator
+   context, while still allowing unit tests to create handles for testing
+   purposes via derivation.
+  */
+  OXYGEN_GFX_API DescriptorHandle(DescriptorAllocator* allocator,
+    bindless::Handle index, ResourceViewType view_type,
+    DescriptorVisibility visibility) noexcept;
 
 private:
-    OXYGEN_GFX_API void InvalidateInternal(bool moved) noexcept;
+  OXYGEN_GFX_API void InvalidateInternal(bool moved) noexcept;
 
-    //! Back-reference to allocator for lifetime management.
-    DescriptorAllocator* allocator_ { nullptr };
+  //! Back-reference to allocator for lifetime management.
+  DescriptorAllocator* allocator_ { nullptr };
 
-    //! Stable index for shader reference.
-    IndexT index_ { kInvalidIndex };
+  //! Stable index for shader reference.
+  bindless::Handle handle_ { kInvalidBindlessHandle };
 
-    //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
-    ResourceViewType view_type_ { ResourceViewType::kNone };
+  //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
+  ResourceViewType view_type_ { ResourceViewType::kNone };
 
-    //! Visibility of the memory space where this descriptor resides.
-    DescriptorVisibility visibility_ { DescriptorVisibility::kNone };
+  //! Visibility of the memory space where this descriptor resides.
+  DescriptorVisibility visibility_ { DescriptorVisibility::kNone };
 };
 
 //! Converts a `DescriptorHandle` to a string representation.

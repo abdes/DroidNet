@@ -26,8 +26,8 @@ namespace {
   // Descriptor index range for overlap validation.
   struct RangeInfo {
     std::string key;
-    DescriptorHandle::IndexT begin;
-    DescriptorHandle::IndexT end; // exclusive
+    bindless::Handle::UnderlyingType begin;
+    bindless::Handle::UnderlyingType end; // exclusive
   };
 
   // Local helper to build a normalized heap key string.
@@ -118,7 +118,7 @@ namespace {
   // Returns the HeapDescription and its base_index.
   static auto ParseEntryOrThrow(const nlohmann::json& cfg,
     const std::string& heap_key, const bool key_shader_visible)
-    -> std::pair<HeapDescription, DescriptorHandle::IndexT>
+    -> std::pair<HeapDescription, bindless::Handle>
   {
     if (!cfg.is_object()) {
       throw std::runtime_error(
@@ -145,29 +145,36 @@ namespace {
         "Heap entry 'capacity' must be an integer: '" + heap_key + "'");
     }
     const auto capacity_value = cfg["capacity"].get<long long>();
-    if (capacity_value < 0) {
-      throw std::runtime_error(
-        "Heap entry 'capacity' must be non-negative: '" + heap_key + "'");
+    constexpr auto kMaxValue = bindless::kMaxCapacity.get();
+    if (capacity_value < 0 || capacity_value > kMaxValue) {
+      throw std::runtime_error("Heap entry 'capacity' must be > 0 and < {} '"
+        + heap_key + "'" + std::to_string(kMaxValue));
     }
-    const auto capacity = static_cast<DescriptorHandle::IndexT>(capacity_value);
+
+    const auto capacity = bindless::Capacity {
+      static_cast<bindless::Capacity::UnderlyingType>(capacity_value),
+    };
 
     const bool allow_growth = cfg.value("allow_growth", false);
     const float growth_factor = cfg.value("growth_factor", 0.0f);
     const uint32_t max_growth_iterations
       = cfg.value("max_growth_iterations", 0u);
 
-    DescriptorHandle::IndexT base_index = 0;
+    bindless::Handle base_index { 0 };
     if (cfg.contains("base_index")) {
       if (!cfg["base_index"].is_number_integer()) {
         throw std::runtime_error(
           "Heap entry 'base_index' must be an integer: '" + heap_key + "'");
       }
       const auto base_value = cfg["base_index"].get<long long>();
-      if (base_value < 0) {
+      if (base_value < 0 || base_value > kMaxValue) {
         throw std::runtime_error(
-          "Heap entry 'base_index' must be non-negative: '" + heap_key + "'");
+          "Heap entry 'base_index' must be > 0 and < {} '" + heap_key + "'"
+          + std::to_string(kMaxValue));
       }
-      base_index = static_cast<DescriptorHandle::IndexT>(base_value);
+      base_index = bindless::Handle {
+        static_cast<bindless::Handle::UnderlyingType>(base_value),
+      };
     }
 
     HeapDescription desc {};
@@ -265,13 +272,13 @@ auto D3D12HeapAllocationStrategy::GetHeapDescription(
 
 auto D3D12HeapAllocationStrategy::GetHeapBaseIndex(
   const ResourceViewType view_type, const DescriptorVisibility visibility) const
-  -> DescriptorHandle::IndexT
+  -> bindless::Handle
 {
   const auto key = GetHeapKey(view_type, visibility);
   const auto it = heap_base_indices_.find(key);
   if (it == heap_base_indices_.end()) {
     DLOG_F(WARNING, "No base index found for heap key: {}, using 0", key);
-    return 0;
+    return bindless::Handle { 0 };
   }
   return it->second;
 }
@@ -349,12 +356,13 @@ void D3D12HeapAllocationStrategy::InitFromJson(std::string_view json_text)
     heap_base_indices_[heap_key] = base_index;
 
     // Record range for overlap check (ignore zero-length ranges)
-    const auto capacity = parsed.shader_visible ? desc.shader_visible_capacity
-                                                : desc.cpu_visible_capacity;
-    const auto end_index
-      = static_cast<DescriptorHandle::IndexT>(base_index + capacity);
-    if (capacity > 0) {
-      ranges.push_back(RangeInfo { heap_key, base_index, end_index });
+    const auto u_capacity = parsed.shader_visible
+      ? desc.shader_visible_capacity.get()
+      : desc.cpu_visible_capacity.get();
+    const auto end_index = bindless::Handle { base_index.get() + u_capacity };
+    if (u_capacity > 0) {
+      ranges.push_back(
+        RangeInfo { heap_key, base_index.get(), end_index.get() });
     }
   }
 

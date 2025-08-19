@@ -114,7 +114,7 @@ public:
       const auto capacity = visibility == DescriptorVisibility::kShaderVisible
         ? desc.shader_visible_capacity
         : desc.cpu_visible_capacity;
-      if (capacity == 0) {
+      if (capacity == bindless::Capacity { 0 }) {
         throw std::runtime_error(
           "Failed to allocate descriptor: zero capacity");
       }
@@ -134,8 +134,8 @@ public:
       if (segment->IsFull()) {
         continue;
       }
-      if (const uint32_t index = segment->Allocate();
-        index != DescriptorHandle::kInvalidIndex) {
+      if (const auto index = segment->Allocate();
+        index != kInvalidBindlessHandle) {
         return CreateDescriptorHandle(index, view_type, visibility);
       }
     }
@@ -146,14 +146,15 @@ public:
     if (auto& desc = strategy.GetHeapDescription(key);
       desc.allow_growth && segments.size() < (1 + desc.max_growth_iterations)) {
       const auto& last = segments.back();
-      const auto base_index = last->GetBaseIndex() + last->GetCapacity();
+      const auto base_index
+        = last->GetBaseIndex().get() + last->GetCapacity().get();
       const auto capacity
         = CalculateGrowthCapacity(desc.growth_factor, last->GetCapacity());
-      if (auto segment
-        = CreateHeapSegment(capacity, base_index, view_type, visibility)) {
+      if (auto segment = CreateHeapSegment(
+            capacity, bindless::Handle { base_index }, view_type, visibility)) {
         segments.push_back(std::move(segment));
         if (const auto index = segments.back()->Allocate();
-          index != DescriptorHandle::kInvalidIndex) {
+          index != kInvalidBindlessHandle) {
           return CreateDescriptorHandle(index, view_type, visibility);
         }
       }
@@ -183,12 +184,13 @@ public:
     const auto view_type = handle.GetViewType();
     const auto visibility = handle.GetVisibility();
     const auto index = handle.GetIndex();
+    const auto u_index = handle.GetIndex().get();
     const auto& key = keys_.at(HeapIndex(view_type, visibility));
     for (const auto& segments = heaps_.at(key);
       const auto& segment : segments) {
-      const auto base = segment->GetBaseIndex();
-      if (const auto capacity = segment->GetCapacity();
-        index >= base && index < base + capacity) {
+      const auto u_base = segment->GetBaseIndex().get();
+      if (const auto u_capacity = segment->GetCapacity().get();
+        u_index >= u_base && u_index < u_base + u_capacity) {
         if (segment->Release(index)) {
           handle.Invalidate();
           return;
@@ -208,25 +210,26 @@ public:
    \return The number of descriptors still available.
   */
   auto GetRemainingDescriptorsCount(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const noexcept -> uint32_t override
+    const DescriptorVisibility visibility) const noexcept
+    -> bindless::Count override
   {
     return AbortOnFailed(__func__, [&]() {
       std::lock_guard lock(mutex_);
-      uint32_t total = 0;
+      bindless::Count::UnderlyingType total = 0;
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       if (const auto it = heaps_.find(key); it != heaps_.end()) {
         for (const auto& segments = it->second;
           const auto& segment : segments) {
-          total += segment->GetAvailableCount();
+          total += segment->GetAvailableCount().get();
         }
       }
       const auto& desc = heap_strategy_->GetHeapDescription(key);
       DCHECK_NOTNULL_F(
         &desc, "Heap description in the heaps_ table should never be null");
       if (total == 0 && desc.allow_growth) {
-        return GetInitialCapacity(view_type, visibility);
+        total = GetInitialCapacity(view_type, visibility).get();
       }
-      return total;
+      return bindless::Count { total };
     });
   }
 
@@ -246,14 +249,14 @@ public:
       std::lock_guard lock(mutex_);
       const auto view_type = handle.GetViewType();
       const auto visibility = handle.GetVisibility();
-      const auto index = handle.GetIndex();
+      const auto u_index = handle.GetIndex().get();
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       const auto& segments = heaps_.at(key);
 
       return std::ranges::any_of(segments, [&](const auto& segment) {
-        const uint32_t base_index = segment->GetBaseIndex();
-        const uint32_t capacity = segment->GetCapacity();
-        return index >= base_index && index < (base_index + capacity);
+        const auto u_base = segment->GetBaseIndex().get();
+        const auto u_capacity = segment->GetCapacity().get();
+        return u_index >= u_base && u_index < (u_base + u_capacity);
       });
     });
   }
@@ -267,13 +270,13 @@ public:
   */
   [[nodiscard]] auto GetAllocatedDescriptorsCount(
     const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> uint32_t override
+    const DescriptorVisibility visibility) const -> bindless::Count override
   {
     return AbortOnFailed(__func__, [&]() {
       std::lock_guard lock(mutex_);
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       const auto& segments = heaps_.at(key);
-      uint32_t total = 0;
+      bindless::Count total { 0 };
       for (const auto& segment : segments) {
         total += segment->GetAllocatedCount();
       }
@@ -283,18 +286,18 @@ public:
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> IndexT override
+    const DescriptorHandle& handle) const noexcept -> bindless::Handle override
   {
     std::lock_guard lock(mutex_);
     const auto segment = GetSegmentForHandleNoLock(handle);
     if (!segment) {
-      return DescriptorHandle::kInvalidIndex;
+      return kInvalidBindlessHandle;
     }
     return (*segment)->GetShaderVisibleIndex(handle);
   }
 
   [[nodiscard]] auto GetDomainBaseIndex(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> IndexT override
+    const DescriptorVisibility visibility) const -> bindless::Handle override
   {
     return AbortOnFailed(__func__, [&]() {
       std::lock_guard lock(mutex_);
@@ -303,10 +306,10 @@ public:
   }
 
   [[nodiscard]] auto Reserve(const ResourceViewType view_type,
-    const DescriptorVisibility visibility, const IndexT count)
-    -> std::optional<IndexT> override
+    const DescriptorVisibility visibility, const bindless::Count count)
+    -> std::optional<bindless::Handle> override
   {
-    return AbortOnFailed(__func__, [&]() -> std::optional<IndexT> {
+    return AbortOnFailed(__func__, [&]() -> std::optional<bindless::Handle> {
       std::lock_guard lock(mutex_);
       // Some (type, visibility) pairs may be unsupported by the strategy.
       // If the precomputed key is empty, treat it as unsupported.
@@ -320,7 +323,7 @@ public:
         ? desc.shader_visible_capacity
         : desc.cpu_visible_capacity;
 
-      if (capacity == 0 || count > capacity) {
+      if (capacity.get() == 0 || count.get() > capacity.get()) {
         return std::nullopt;
       }
 
@@ -360,9 +363,9 @@ protected:
 
    This function is called with the mutex already locked.
   */
-  virtual auto CreateHeapSegment(uint32_t capacity, uint32_t base_index,
-    ResourceViewType view_type, DescriptorVisibility visibility)
-    -> std::unique_ptr<DescriptorHeapSegment>
+  virtual auto CreateHeapSegment(bindless::Capacity capacity,
+    bindless::Handle base_index, ResourceViewType view_type,
+    DescriptorVisibility visibility) -> std::unique_ptr<DescriptorHeapSegment>
     = 0;
 
   //! Gets the initial capacity for a specific view type and visibility.
@@ -372,7 +375,7 @@ protected:
    \return The initial capacity for new segments.
   */
   auto GetInitialCapacity(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> uint32_t
+    const DescriptorVisibility visibility) const -> bindless::Capacity
   {
     const std::string& heap_key = keys_.at(HeapIndex(view_type, visibility));
     DCHECK_F(
@@ -389,7 +392,7 @@ protected:
       // This should never happen as the keys are pre-computed from the
       // heap allocation strategy, but if it does, return a value that
       // will not allow allocation.
-      return 0;
+      return bindless::Capacity { 0 };
     }
   }
 
@@ -449,13 +452,14 @@ private:
 
     const auto view_type = handle.GetViewType();
     const auto visibility = handle.GetVisibility();
-    const auto index = handle.GetIndex();
+
+    // Unwrap to do the index math
+    const auto index = handle.GetIndex().get();
     const auto& key = keys_.at(HeapIndex(view_type, visibility));
 
-    for (const auto& segments = heaps_.at(key);
-      const auto& segment : segments) {
-      const auto base = segment->GetBaseIndex();
-      if (const auto capacity = segment->GetCapacity();
+    for (const auto& segment : heaps_.at(key)) {
+      const auto base = segment->GetBaseIndex().get();
+      if (const auto capacity = segment->GetCapacity().get();
         index >= base && index < base + capacity) {
         return segment.get();
       }
@@ -466,29 +470,30 @@ private:
 
   /**
    * Calculates the next capacity for heap growth, rounding to the nearest
-   * integer and clamping to IndexT max if needed. Logs a warning if the result
-   * would overflow IndexT.
+   * integer and clamping to bindless::kMaxCapacity if needed. Logs a warning if
+   * the result would overflow.
    */
-  static auto CalculateGrowthCapacity(
-    const float growth_factor, const uint32_t prev_capacity) -> IndexT
+  static auto CalculateGrowthCapacity(const float growth_factor,
+    const bindless::Capacity prev_capacity) -> bindless::Capacity
   {
     DCHECK_GT_F(growth_factor, 0.0F, "growth factor must be > 0");
-    DCHECK_NE_F(prev_capacity, 0U, "previous capacity must be > 0");
+    DCHECK_NE_F(prev_capacity, bindless::Capacity { 0U },
+      "previous capacity must be > 0");
 
-    // The new capacity cannot be greater than the max value of IndexT.
-    constexpr auto kMax = (std::numeric_limits<IndexT>::max)();
-
-    const auto result
-      = static_cast<double>(prev_capacity) * static_cast<double>(growth_factor);
+    const auto result = static_cast<double>(prev_capacity.get())
+      * static_cast<double>(growth_factor);
     const auto rounded = std::llround(result);
 
-    if (std::cmp_greater(rounded, kMax)) {
+    constexpr auto kMaxValue = bindless::kMaxCapacity.get();
+    if (std::cmp_greater(rounded, kMaxValue)) {
       LOG_F(WARNING,
         "Growth calculation overflow: requested {}, clamping to max {}",
-        rounded, kMax);
-      return kMax;
+        rounded, kMaxValue);
+      return bindless::Capacity { kMaxValue };
     }
-    return static_cast<IndexT>(rounded);
+    return bindless::Capacity {
+      static_cast<bindless::Capacity::UnderlyingType>(rounded),
+    };
   }
 
   /**

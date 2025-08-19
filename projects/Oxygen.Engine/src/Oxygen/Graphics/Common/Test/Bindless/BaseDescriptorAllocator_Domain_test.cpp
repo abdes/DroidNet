@@ -20,13 +20,14 @@ using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::detail::DescriptorHeapSegment;
-using IndexT = DescriptorHandle::IndexT;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
 using oxygen::graphics::bindless::testing::
   OneCapacityDescriptorAllocationStrategy;
+
+namespace b = oxygen::bindless;
 
 // -------------------- Test Fixture -------------------------------------------
 class BaseDescriptorAllocatorDomainTest : public BaseDescriptorAllocatorTest {
@@ -76,7 +77,7 @@ NOLINT_TEST_F(
   const auto expected_base = heap_strategy_->GetHeapBaseIndex(kType, kVis);
 
   // Act
-  const auto reserved = allocator_->Reserve(kType, kVis, /*count=*/1);
+  const auto reserved = allocator_->Reserve(kType, kVis, b::Count { 1 });
 
   // Assert
   ASSERT_TRUE(reserved.has_value());
@@ -98,28 +99,28 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
 
   // Create segment during Reserve() and verify base index and capacity are
   // honored.
-  allocator_->ext_segment_factory_ = [](const IndexT capacity,
-                                       const IndexT base_index,
-                                       const ResourceViewType vt,
-                                       const DescriptorVisibility vis) {
-    auto seg
-      = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-    EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(::testing::Return(vt));
-    EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(::testing::Return(vis));
-    EXPECT_CALL(*seg, GetBaseIndex())
-      .WillRepeatedly(::testing::Return(base_index));
-    EXPECT_CALL(*seg, GetCapacity())
-      .WillRepeatedly(::testing::Return(capacity));
-    EXPECT_CALL(*seg, GetAllocatedCount()).WillRepeatedly(::testing::Return(0));
-    EXPECT_CALL(*seg, GetAvailableCount())
-      .WillRepeatedly(::testing::Return(capacity));
-    EXPECT_CALL(*seg, Allocate()).WillOnce(::testing::Return(base_index));
-    EXPECT_CALL(*seg, Release(base_index)).WillOnce(::testing::Return(true));
-    return seg;
-  };
+  allocator_->ext_segment_factory_ =
+    [](const b::Capacity capacity, const b::Handle base_index,
+      const ResourceViewType vt, const DescriptorVisibility vis) {
+      auto seg
+        = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+      EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(::testing::Return(vt));
+      EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(::testing::Return(vis));
+      EXPECT_CALL(*seg, GetBaseIndex())
+        .WillRepeatedly(::testing::Return(base_index));
+      EXPECT_CALL(*seg, GetCapacity())
+        .WillRepeatedly(::testing::Return(capacity));
+      EXPECT_CALL(*seg, GetAllocatedCount())
+        .WillRepeatedly(::testing::Return(b::Count { 0 }));
+      EXPECT_CALL(*seg, GetAvailableCount())
+        .WillRepeatedly(::testing::Return(b::Count { capacity.get() }));
+      EXPECT_CALL(*seg, Allocate()).WillOnce(::testing::Return(base_index));
+      EXPECT_CALL(*seg, Release(base_index)).WillOnce(::testing::Return(true));
+      return seg;
+    };
 
   // Act: Reserve then Allocate one descriptor
-  const auto reserved = allocator_->Reserve(kType, kVis, /*count=*/1);
+  const auto reserved = allocator_->Reserve(kType, kVis, b::Count { 1 });
   ASSERT_TRUE(reserved.has_value());
   auto handle = allocator_->Allocate(kType, kVis);
 
@@ -141,9 +142,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest, ReserveExceedingCapacityFails)
 
   // Act
   const auto reserved_gpu = allocator_->Reserve(ResourceViewType::kTexture_SRV,
-    DescriptorVisibility::kShaderVisible, /*count=*/2);
+    DescriptorVisibility::kShaderVisible, b::Count { 2 });
   const auto reserved_cpu = allocator_->Reserve(ResourceViewType::kTexture_SRV,
-    DescriptorVisibility::kCpuOnly, /*count=*/2);
+    DescriptorVisibility::kCpuOnly, b::Count { 2 });
 
   // Assert
   EXPECT_FALSE(reserved_gpu.has_value());

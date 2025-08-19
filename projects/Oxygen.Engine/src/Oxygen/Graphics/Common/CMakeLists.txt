@@ -111,7 +111,6 @@ target_sources(
       "Detail/FixedDescriptorHeapSegment.h"
       "Detail/PerFrameResourceManager.h"
       "Detail/ResourceStateTracker.h"
-      "Detail/StaticDescriptorHeapSegment.h"
       "Types/Color.h"
       "Types/DescriptorVisibility.h"
       "Types/EngineResources.h"

@@ -88,7 +88,7 @@ auto BindlessStructuredBuffer<DataType>::RegisterStructuredBufferSrv(
   const BufferViewDescription srv_view_desc {
     .view_type = ResourceViewType::kStructuredBuffer_SRV,
     .visibility = DescriptorVisibility::kShaderVisible,
-    .format = oxygen::Format::kUnknown,
+    .format = Format::kUnknown,
     .stride = sizeof(DataType),
   };
 
@@ -103,7 +103,7 @@ auto BindlessStructuredBuffer<DataType>::RegisterStructuredBufferSrv(
   }
 
   const auto view = buffer_->GetNativeView(srv_handle, srv_view_desc);
-  heap_slot_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+  heap_slot_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle).get();
 
   rc.GetResourceRegistry().RegisterView(
     *buffer_, view, std::move(srv_handle), srv_view_desc);

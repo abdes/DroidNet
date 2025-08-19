@@ -25,10 +25,10 @@ class CommandRecorder;
 //! Describes the properties of a descriptor heap or pool.
 struct HeapDescription {
   //! Initial capacity for CPU-visible descriptors.
-  DescriptorHandle::IndexT cpu_visible_capacity { 0 };
+  bindless::Capacity cpu_visible_capacity { 0 };
 
   //! Initial capacity for shader-visible descriptors.
-  DescriptorHandle::IndexT shader_visible_capacity { 0 };
+  bindless::Capacity shader_visible_capacity { 0 };
 
   //! Flag indicating if dynamic growth is allowed when heaps are full.
   bool allow_growth { true };
@@ -38,6 +38,15 @@ struct HeapDescription {
 
   //! Maximum number of growth iterations before failing allocations.
   uint32_t max_growth_iterations { 3 };
+
+  static constexpr auto WithCapacity(bindless::Capacity::UnderlyingType cpu,
+    bindless::Capacity::UnderlyingType gpu)
+  {
+    return HeapDescription {
+      .cpu_visible_capacity = bindless::Capacity { cpu },
+      .shader_visible_capacity = bindless::Capacity { gpu },
+    };
+  }
 };
 
 //! Interface for heap mapping strategy used by descriptor allocators.
@@ -66,7 +75,7 @@ public:
 
   //! Returns the base index for a heap (default 0 for backward compatibility).
   [[nodiscard]] virtual auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> DescriptorHandle::IndexT
+    DescriptorVisibility visibility) const -> bindless::Handle
     = 0;
 };
 
@@ -77,20 +86,21 @@ class DefaultDescriptorAllocationStrategy
 public:
   DefaultDescriptorAllocationStrategy()
   {
-    DescriptorHandle::IndexT current_base = 0;
+    bindless::Handle::UnderlyingType current_base = 0;
     for (const auto& [view_type_str, desc] : heaps_) {
       for (const DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly,
              DescriptorVisibility::kShaderVisible }) {
         std::string heap_key = view_type_str + ":"
           + (vis == DescriptorVisibility::kCpuOnly ? "cpu" : "gpu");
-        const DescriptorHandle::IndexT capacity
-          = (vis == DescriptorVisibility::kShaderVisible)
+        const bindless::Capacity capacity
+          = vis == DescriptorVisibility::kShaderVisible
           ? desc.shader_visible_capacity
           : desc.cpu_visible_capacity;
-        if (capacity == 0)
+        if (capacity == bindless::Capacity { 0 }) {
           continue;
-        heap_base_indices_[heap_key] = current_base;
-        current_base += capacity;
+        }
+        heap_base_indices_[heap_key] = bindless::Handle { current_base };
+        current_base += capacity.get();
       }
     }
   }
@@ -182,40 +192,37 @@ public:
 
   //! Allow specifying base indices for heaps (default 0, but can be extended).
   [[nodiscard]] auto GetHeapBaseIndex(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const
-    -> DescriptorHandle::IndexT override
+    const DescriptorVisibility visibility) const -> bindless::Handle override
   {
     if (const auto it
       = heap_base_indices_.find(GetHeapKey(view_type, visibility));
-      it != heap_base_indices_.end())
+      it != heap_base_indices_.end()) {
       return it->second;
-    return 0;
+    }
+    return bindless::Handle { 0 };
   }
 
 private:
   //! Initial capacities for different resource view types.
   std::unordered_map<std::string, HeapDescription> heaps_ = {
-    // clang-format off
-        { "Texture_SRV", HeapDescription { .cpu_visible_capacity = 10000, .shader_visible_capacity = 5000 } },
-        { "Texture_UAV", HeapDescription { .cpu_visible_capacity = 5000, .shader_visible_capacity = 2500 } },
-        { "TypedBuffer_SRV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "TypedBuffer_UAV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "StructuredBuffer_SRV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "StructuredBuffer_UAV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "RawBuffer_SRV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "RawBuffer_UAV", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "ConstantBuffer", HeapDescription { .cpu_visible_capacity = 2000, .shader_visible_capacity = 1000 } },
-        { "Sampler", HeapDescription { .cpu_visible_capacity = 2048, .shader_visible_capacity = 2048 } },
-        { "SamplerFeedbackTexture_UAV", HeapDescription { .cpu_visible_capacity = 100, .shader_visible_capacity = 100 } },
-        { "RayTracingAccelStructure", HeapDescription { .cpu_visible_capacity = 100, .shader_visible_capacity = 100 } },
-        { "Texture_DSV", HeapDescription { .cpu_visible_capacity = 1024, .shader_visible_capacity = 0 } },
-        { "Texture_RTV", HeapDescription { .cpu_visible_capacity = 1024, .shader_visible_capacity = 0 } },
-    // clang-format on
+    { "Texture_SRV", HeapDescription::WithCapacity(10000, 5000) },
+    { "Texture_UAV", HeapDescription::WithCapacity(5000, 2500) },
+    { "TypedBuffer_SRV", HeapDescription::WithCapacity(2000, 1000) },
+    { "TypedBuffer_UAV", HeapDescription::WithCapacity(2000, 1000) },
+    { "StructuredBuffer_SRV", HeapDescription::WithCapacity(2000, 1000) },
+    { "StructuredBuffer_UAV", HeapDescription::WithCapacity(2000, 1000) },
+    { "RawBuffer_SRV", HeapDescription::WithCapacity(2000, 1000) },
+    { "RawBuffer_UAV", HeapDescription::WithCapacity(2000, 1000) },
+    { "ConstantBuffer", HeapDescription::WithCapacity(2000, 1000) },
+    { "Sampler", HeapDescription::WithCapacity(2048, 2048) },
+    { "SamplerFeedbackTexture_UAV", HeapDescription::WithCapacity(100, 100) },
+    { "RayTracingAccelStructure", HeapDescription::WithCapacity(100, 100) },
+    { "Texture_DSV", HeapDescription::WithCapacity(1024, 0) },
+    { "Texture_RTV", HeapDescription::WithCapacity(1024, 0) },
   };
 
   //! Base indices for different heaps.
-  std::unordered_map<std::string, DescriptorHandle::IndexT>
-    heap_base_indices_ {};
+  std::unordered_map<std::string, bindless::Handle> heap_base_indices_ {};
 };
 
 //! Abstract interface for descriptor allocation from heaps.
@@ -238,9 +245,6 @@ private:
 */
 class OXYGEN_GFX_API DescriptorAllocator {
 public:
-  //! Alias the descriptor handle index type for convenience.
-  using IndexT = DescriptorHandle::IndexT;
-
   DescriptorAllocator() = default;
   virtual ~DescriptorAllocator() = default;
 
@@ -288,7 +292,8 @@ public:
    \return The number of descriptors remaining.
   */
   [[nodiscard]] virtual auto GetRemainingDescriptorsCount(
-    ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
+    ResourceViewType view_type, DescriptorVisibility visibility) const
+    -> bindless::Count
     = 0;
 
   //! Returns the global base index for a (view_type, visibility) domain.
@@ -301,8 +306,8 @@ public:
    \param visibility The memory visibility.
    \return The domain's global base index.
   */
-  [[nodiscard]] virtual auto GetDomainBaseIndex(
-    ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
+  [[nodiscard]] virtual auto GetDomainBaseIndex(ResourceViewType view_type,
+    DescriptorVisibility visibility) const -> bindless::Handle
     = 0;
 
   //! Attempts to reserve capacity in a domain and returns its base index.
@@ -318,7 +323,8 @@ public:
    \return Domain base index on success, std::nullopt otherwise.
   */
   [[nodiscard]] virtual auto Reserve(ResourceViewType view_type,
-    DescriptorVisibility visibility, IndexT count) -> std::optional<IndexT>
+    DescriptorVisibility visibility, bindless::Count count)
+    -> std::optional<bindless::Handle>
     = 0;
 
   //! Checks if this allocator owns the given descriptor handle.
@@ -338,7 +344,8 @@ public:
    \return The number of allocated descriptors.
   */
   [[nodiscard]] virtual auto GetAllocatedDescriptorsCount(
-    ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
+    ResourceViewType view_type, DescriptorVisibility visibility) const
+    -> bindless::Count
     = 0;
 
   //! Returns the shader-visible (local) index for a descriptor handle within
@@ -366,14 +373,14 @@ public:
            otherwise returns `DescriptorHandle::kInvalidIndex`.
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> IndexT
+    const DescriptorHandle& handle) const noexcept -> bindless::Handle
     = 0;
 
 protected:
   //! Protected method to create a descriptor handle instance. Provided for
   //! classes implementing this interface, which is the only one declared as
   //! a friend in DescriptorHandle.
-  auto CreateDescriptorHandle(const IndexT index,
+  auto CreateDescriptorHandle(const bindless::Handle index,
     const ResourceViewType view_type, const DescriptorVisibility visibility)
   {
     return DescriptorHandle { this, index, view_type, visibility };
