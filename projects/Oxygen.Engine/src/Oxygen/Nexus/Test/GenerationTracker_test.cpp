@@ -43,9 +43,9 @@ NOLINT_TEST_F(
   EXPECT_EQ(gen_after, gen_before + 1u);
 }
 
-//! Ensure Resize preserves existing generations and expands size.
-//! Ensure Resize preserves initialized generations and lazily initializes new
-//! slots when expanding the tracker capacity.
+//! Ensure Resize preserves existing generations and expands size. Ensure Resize
+//! preserves initialized generations and lazily initializes new slots when
+//! expanding the tracker capacity.
 NOLINT_TEST_F(GenerationTrackerTest,
   Resize_ExpandCapacity_PreservesExistingAndInitializesNew)
 {
@@ -85,8 +85,7 @@ NOLINT_TEST_F(
   GenTracker t(b::Capacity { 2u });
   const auto out = b::Handle { 10u };
 
-  // Act
-  // Out-of-range load returns 0 and bump is a no-op
+  // Act Out-of-range load returns 0 and bump is a no-op
   const auto before = t.Load(out);
   t.Bump(out);
 
@@ -120,9 +119,9 @@ NOLINT_TEST_F(
   EXPECT_EQ(t.Load(idx3), 0u);
 }
 
-//! Verify that generations are never reset on reuse, only incremented.
-//! This tests the core contract that generations monotonically increase,
-//! including multiple consecutive bumps on the same slot.
+//! Verify that generations are never reset on reuse, only incremented. This
+//! tests the core contract that generations monotonically increase, including
+//! multiple consecutive bumps on the same slot.
 NOLINT_TEST_F(GenerationTrackerTest, Bump_GenerationsNeverReset_OnlyIncrement)
 {
   // Arrange
@@ -162,8 +161,8 @@ NOLINT_TEST_F(GenerationTrackerTest, Bump_GenerationsNeverReset_OnlyIncrement)
   EXPECT_EQ(gen3, gen1 + 2u);
 }
 
-//! Verify that resizing to the same capacity is a no-op and preserves
-//! all existing generation values.
+//! Verify that resizing to the same capacity is a no-op and preserves all
+//! existing generation values.
 NOLINT_TEST_F(
   GenerationTrackerTest, Resize_SameCapacity_PreservesAllGenerations)
 {
@@ -196,8 +195,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(t.Load(idx2), gen2_before);
 }
 
-//! Verify that resizing to zero capacity results in all accesses
-//! returning zero (no valid slots).
+//! Verify that resizing to zero capacity results in all accesses returning zero
+//! (no valid slots).
 NOLINT_TEST_F(GenerationTrackerTest, Resize_ZeroCapacity_AllAccessesReturnZero)
 {
   // Arrange
@@ -224,8 +223,8 @@ NOLINT_TEST_F(GenerationTrackerTest, Resize_ZeroCapacity_AllAccessesReturnZero)
   EXPECT_EQ(t.Load(idx), 0u);
 }
 
-//! Verify generation persistence across multiple resize operations
-//! (expand, shrink, expand again).
+//! Verify generation persistence across multiple resize operations (expand,
+//! shrink, expand again).
 NOLINT_TEST_F(GenerationTrackerTest,
   Resize_MultipleOperations_MaintainsGenerationConsistency)
 {
@@ -261,8 +260,8 @@ NOLINT_TEST_F(GenerationTrackerTest,
   EXPECT_EQ(gen1_after_expand, gen1_initial);
 }
 
-//! Verify behavior with maximum representable generation values
-//! to ensure no overflow issues in practical scenarios.
+//! Verify behavior with maximum representable generation values to ensure no
+//! overflow issues in practical scenarios.
 NOLINT_TEST_F(
   GenerationTrackerTest, Bump_HighGenerationValues_HandlesLargeNumbers)
 {
@@ -286,8 +285,8 @@ NOLINT_TEST_F(
 
   const auto final_gen = t.Load(idx);
 
-  // Assert: should handle large generation values correctly
-  // Started at 1, bumped num_bumps times, so should be 1 + num_bumps
+  // Assert: should handle large generation values correctly Started at 1,
+  // bumped num_bumps times, so should be 1 + num_bumps
   EXPECT_EQ(final_gen, initial_gen + num_bumps);
 
   // One more bump should still work
@@ -341,8 +340,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(t.Load(idx2), 1u);
 }
 
-//! Verify that Bump on completely uninitialized slots works correctly.
-//! This test discovers the actual behavior of Bump on uninitialized slots.
+//! Verify that Bump on completely uninitialized slots works correctly. This
+//! test discovers the actual behavior of Bump on uninitialized slots.
 NOLINT_TEST_F(
   GenerationTrackerTest, Bump_UninitializedSlot_LazyInitializesAndIncrements)
 {
@@ -378,11 +377,7 @@ NOLINT_TEST_F(
 //===----------------------------------------------------------------------===//
 
 //! Test fixture for GenerationTracker thread safety scenarios.
-class GenerationTrackerThreadSafetyTest : public ::testing::Test {
-protected:
-  void SetUp() override { }
-  void TearDown() override { }
-};
+class GenerationTrackerThreadSafetyTest : public ::testing::Test { };
 
 //! Verify concurrent Load operations on the same slot are thread-safe and
 //! produce consistent lazy initialization behavior.
@@ -464,8 +459,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(final_gen, initial_gen + expected_total_bumps);
 }
 
-//! Verify mixed concurrent Load and Bump operations maintain consistency
-//! and proper ordering guarantees.
+//! Verify mixed concurrent Load and Bump operations maintain consistency and
+//! proper ordering guarantees.
 NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   LoadAndBump_ConcurrentMixedAccess_MaintainsConsistency)
 {
@@ -547,8 +542,8 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   EXPECT_EQ(final_gen, 1u + expected_bumps); // 1 from lazy init + all bumps
 }
 
-//! Verify concurrent access to different slots is independent and
-//! doesn't interfere with each other.
+//! Verify concurrent access to different slots is independent and doesn't
+//! interfere with each other.
 NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   LoadAndBump_DifferentSlots_IndependentThreadSafety)
 {
@@ -599,8 +594,8 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 }
 
 //! Verify that the Resize operation requires external synchronization and
-//! should not be called concurrently with other operations. This documents
-//! the design decision to keep Load/Bump operations lock-free for performance.
+//! should not be called concurrently with other operations. This documents the
+//! design decision to keep Load/Bump operations lock-free for performance.
 NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   Resize_RequiresExternalSynchronization_DocumentedDesign)
 {
@@ -620,8 +615,8 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   tracker.Bump(idx);
   const auto initial_gen = tracker.Load(idx);
 
-  // Act: Resize while ensuring no concurrent access
-  // (This is the CORRECT way to use Resize - no concurrent access)
+  // Act: Resize while ensuring no concurrent access (This is the CORRECT way to
+  // use Resize - no concurrent access)
   tracker.Resize(b::Capacity { 100u });
 
   // Assert: Generation should be preserved after resize
@@ -630,6 +625,68 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // Assert: Can access new slots
   const auto new_slot = b::Handle { 75u };
   EXPECT_EQ(tracker.Load(new_slot), 1u); // Lazy init
+}
+
+//! Tests GenerationTracker monotonicity under concurrent reader/writer access.
+/*!
+ Verifies that the GenerationTracker maintains monotonic generation values per
+ reader thread even under heavy concurrent bump operations, ensuring memory
+ ordering correctness for stale handle detection.
+*/
+NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
+  Load_ConcurrentReaderWriterAccess_MaintainsMonotonicity)
+{
+  using namespace oxygen::nexus;
+
+  // Arrange
+  GenerationTracker tracker(oxygen::bindless::Capacity { 1 });
+  constexpr int kWriterThreads = 4;
+  constexpr int kReaderThreads = 4;
+  constexpr int kIters = 10000;
+
+  std::atomic<bool> start { false };
+  std::atomic<uint32_t> max_seen { 0 };
+
+  // Act - Create writer threads that bump generation
+  std::vector<std::thread> writers;
+  for (int t = 0; t < kWriterThreads; ++t) {
+    writers.emplace_back([&tracker, &start]() {
+      while (!start.load(std::memory_order_acquire)) { }
+      for (int i = 0; i < kIters; ++i) {
+        tracker.Bump(oxygen::bindless::Handle { 0 });
+      }
+    });
+  }
+
+  // Act - Create reader threads that verify monotonicity
+  std::vector<std::thread> readers;
+  for (int t = 0; t < kReaderThreads; ++t) {
+    readers.emplace_back([&tracker, &start, &max_seen]() {
+      while (!start.load(std::memory_order_acquire)) { }
+      uint32_t last = 0;
+      for (int i = 0; i < kIters; ++i) {
+        const uint32_t v = tracker.Load(oxygen::bindless::Handle { 0 });
+
+        // Assert - Must be non-decreasing per reader
+        EXPECT_GE(v, last);
+        last = v;
+
+        // Update global max
+        uint32_t prev = max_seen.load(std::memory_order_relaxed);
+        while (v > prev && !max_seen.compare_exchange_weak(prev, v)) { }
+      }
+    });
+  }
+
+  // Act - Start all threads simultaneously
+  start.store(true, std::memory_order_release);
+  for (auto& w : writers)
+    w.join();
+  for (auto& r : readers)
+    r.join();
+
+  // Assert - Final value should reflect some bumps occurred
+  EXPECT_GT(max_seen.load(), 0u);
 }
 
 } // namespace

@@ -157,6 +157,7 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
   - ✅ API: GetDomainRange(DomainKey) and ResolveDomain(Handle)
   - ✅ PIMPL pattern for ABI stability
   - ✅ Immutable design for thread-safety
+  - ✅ Comprehensive unit tests with mock allocator
 
 ### 2. Per‑frame infrastructure
 
@@ -175,17 +176,23 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
     drains and executes registered deferred actions for the corresponding
     frame slot
 
-### 3. Strategy A — FrameIndexedSlotReuse
+### 3. Strategy A — FrameDrivenSlotReuse
 
-- ⬜ Implement class skeleton (ctor takes AllocateFn, FreeFn,
+- ✅ Implement class skeleton (ctor takes AllocateFn, FreeFn,
   DescriptorAllocator&, PerFrameResourceManager&)
-- ⬜ Hook Release() to per‑frame deferred actions; reclaim on
+- ✅ Hook Release() to per‑frame deferred actions; reclaim on
   OnBeginFrame(frameSlot): bump generation then free
-- ⬜ IsHandleCurrent() using GenerationTracker for stale handle detection
-- ⬜ Unit tests
-  - ⬜ No reuse before same-slot cycle; reuse after cycle with generation+1
-  - ⬜ Stale handle detection; double release ignored
-  - ⬜ Multi-threaded frame resource allocation patterns
+- ✅ IsHandleCurrent() using GenerationTracker for stale handle detection
+- ✅ Thread-safe double-release protection using atomic CAS operations
+- ✅ EnsureCapacity() with lazy buffer growth and concurrent resize protection
+- ✅ Unit tests
+  - ✅ No reuse before same-slot cycle; reuse after cycle with generation+1
+  - ✅ Stale handle detection after reclamation
+  - ✅ Safe double-release behavior (ignored, no side effects)
+  - ✅ Multi-threaded frame resource allocation patterns
+  - ✅ High-volume concurrent allocation/release stress testing
+  - ✅ Buffer growth for large indices
+  - ✅ Edge cases: invalid handles, concurrent double-release protection
 
 ### 4. Strategy B — TimelineGatedSlotReuse
 
@@ -257,23 +264,39 @@ the headers for full APIs, invariants, and usage examples.
 - **oxygen::nexus::DomainIndexMapper** — Immutable mapper between DomainKey and
   absolute heap ranges with reverse lookup from handle→domain; constructed from
   DescriptorAllocator state. See src/Oxygen/Nexus/DomainIndexMapper.h
+- **oxygen::nexus::FrameDrivenSlotReuse** — Frame-driven deferred reuse strategy
+  with generation tracking and thread-safe operations. See
+  src/Oxygen/Nexus/FrameDrivenSlotReuse.h
 
-## Strategy A — Frame lifecycle driven (default)
+## Strategy A — Frame lifecycle driven (implemented)
 
 API (Renderer-layer wrapper around injected allocate/free):
 
 ```cpp
-class FrameIndexedSlotReuse {
+class FrameDrivenSlotReuse {
 public:
-  explicit FrameIndexedSlotReuse(AllocateFn allocate,
-                                 FreeFn free,
-                                 oxygen::graphics::DescriptorAllocator& allocator,
-                                 PerFrameResourceManager& perFrame);
+  //! Type-erased backend allocate function: returns absolute handle index.
+  using AllocateFn = std::function<oxygen::bindless::Handle(DomainKey)>;
 
-  VersionedBindlessHandle Allocate(DomainKey domain, ResourceKey key /*view descs*/);
-  void Release(DomainKey domain, VersionedBindlessHandle h); // deferred to next safe cycle of this frame index
-  bool IsHandleCurrent(VersionedBindlessHandle h) const noexcept; // debug/help
-  void OnBeginFrame(frame::FrameSlotIndex fi); // forwards to per-frame buckets execution
+  //! Type-erased backend free function.
+  using FreeFn = std::function<void(DomainKey, oxygen::bindless::Handle)>;
+
+  //! Construct the strategy with backend hooks and per-frame infrastructure.
+  explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
+    oxygen::graphics::DescriptorAllocator& allocator,
+    oxygen::graphics::detail::PerFrameResourceManager& per_frame);
+
+  //! Allocate a bindless slot in the specified domain.
+  auto Allocate(DomainKey domain) -> oxygen::VersionedBindlessHandle;
+
+  //! Release a previously allocated handle; reclamation is deferred.
+  void Release(DomainKey domain, oxygen::VersionedBindlessHandle h);
+
+  //! Returns true if the handle's generation matches the current slot state.
+  auto IsHandleCurrent(oxygen::VersionedBindlessHandle h) const noexcept -> bool;
+
+  //! Forward the frame-begin event to the per-frame buckets.
+  void OnBeginFrame(oxygen::frame::Slot fi);
 };
 ```
 
@@ -578,8 +601,8 @@ globalTimelineReuse.Process(); // Called periodically by Graphics device
 | Types/DescriptorVisibility.h | src/Oxygen/Graphics/Common/Types/ | No change; part of Domain key | Low |
 | BindlessHandle.h | src/Oxygen/Core/Types/ | No change; handle and versioned handle types | Low |
 | PerFrameResourceManager.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | `RegisterDeferredAction(std::function<void()>)` added and thread-safe; OnBeginFrame already public | Low |
-| FrameIndexedSlotReuse (new) | src/Oxygen/Renderer/ | Frame-driven strategy implementing deferred frees and generation stamping via per-frame buckets | Medium |
-| TimelineGatedSlotReuse (new) | src/Oxygen/Renderer/ | Fence-driven strategy implementing deferred frees gated by explicit timelines | Medium |
+| FrameDrivenSlotReuse (new) | src/Oxygen/Nexus/ | Frame-driven strategy implementing deferred frees and generation stamping via per-frame buckets | Medium |
+| TimelineGatedSlotReuse (new) | src/Oxygen/Nexus/ | Fence-driven strategy implementing deferred frees gated by explicit timelines | Medium |
 | GenerationTracker | src/Oxygen/Nexus/ | Utility to load/bump per-slot generation with proper memory order | Low |
 | DomainIndexMapper | src/Oxygen/Nexus/ | Utility to resolve BindlessHandle to its domain and expose domain ranges | Low |
 | Renderer.{h,cpp} | src/Oxygen/Renderer/ | Integrate strategy at admission/release sites (migration step) | Medium |

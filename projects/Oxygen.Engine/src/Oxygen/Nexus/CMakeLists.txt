@@ -56,10 +56,12 @@ set(
   "api_export.h"
   "GenerationTracker.h"
   "DomainIndexMapper.h"
+  "FrameDrivenSlotReuse.h"
 )
 set(
   OXYGEN_NEXUS_PRIVATE_SOURCES
   "DomainIndexMapper.cpp"
+  "FrameDrivenSlotReuse.cpp"
 )
 
 target_sources(

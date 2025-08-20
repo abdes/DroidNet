@@ -32,8 +32,10 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
-m_gtest_program(BindlessDeferredReuse
+m_gtest_program(
+  BindlessDeferredReuse
   SOURCES
     "GenerationTracker_test.cpp"
     "DomainIndexMapper_test.cpp"
+    "FrameDrivenSlotReuse_test.cpp"
 )
