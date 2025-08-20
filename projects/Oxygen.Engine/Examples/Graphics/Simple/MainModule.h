@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
@@ -82,7 +83,8 @@ private:
   std::shared_ptr<graphics::Surface> surface_;
   std::shared_ptr<graphics::RenderController> render_controller_;
   std::shared_ptr<engine::Renderer> renderer_;
-  StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount>
+  StaticVector<std::shared_ptr<graphics::Framebuffer>,
+    frame::kFramesInFlight.get()>
     framebuffers_ {};
   engine::RenderContext context_ {};
 

@@ -59,6 +59,7 @@ set(
   "SafeCall.h"
   "Types/BindlessHandle.h"
   "Types/Format.h"
+  "Types/Frame.h"
   "Types/ShaderType.h"
   "Types/TextureType.h"
   "version-info.h"

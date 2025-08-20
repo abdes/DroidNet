@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/RenderController.h>
@@ -90,7 +91,7 @@ protected:
     -> std::shared_ptr<graphics::CommandQueue> override;
 
   [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(std::string_view name,
-    std::weak_ptr<Surface> surface, uint32_t frames_in_flight)
+    std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<graphics::RenderController> override;
 
   [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandListImpl(

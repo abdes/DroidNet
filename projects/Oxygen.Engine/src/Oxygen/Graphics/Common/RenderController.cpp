@@ -35,11 +35,11 @@ using oxygen::graphics::detail::RenderThread;
 //! Default constructor, sets the object name.
 RenderController::RenderController(std::string_view name,
   std::weak_ptr<Graphics> gfx_weak, std::weak_ptr<Surface> surface_weak,
-  uint32_t frames_in_flight)
+  frame::SlotCount frames_in_flight)
   : gfx_weak_(std::move(gfx_weak))
   , surface_weak_(std::move(surface_weak))
-  , frame_count_(frames_in_flight + 1)
-  , frames_(std::make_unique<Frame[]>(frame_count_))
+  , frame_count_(frames_in_flight)
+  , frames_(std::make_unique<Frame[]>(frame_count_.get()))
 {
   CHECK_F(!surface_weak_.expired(),
     "RenderController cannot be created with a null Surface");
@@ -48,7 +48,7 @@ RenderController::RenderController(std::string_view name,
     "pointer");
 
   // Initialize all frame values to 0
-  for (uint32_t i = 0; i < frame_count_; ++i) {
+  for (uint32_t i = 0; i < frame_count_.get(); ++i) {
     frames_[i] = Frame {};
   }
 
@@ -158,7 +158,7 @@ auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
             target_queue->Submit(*completed_cmd);
             rec->OnSubmitted();
             const uint64_t timeline_value = target_queue->Signal();
-            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+            const uint32_t frame_idx = renderer->CurrentFrameIndex().get();
             auto& [timeline_values, pending_command_lists]
               = renderer->frames_[frame_idx];
             timeline_values[queue] = timeline_value;
@@ -168,7 +168,7 @@ auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
           // Deferred: just end, don't submit. Add to pending_command_lists for
           // later flush.
           if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+            const uint32_t frame_idx = renderer->CurrentFrameIndex().get();
             auto& [timeline_values, pending_command_lists]
               = renderer->frames_[frame_idx];
             pending_command_lists.emplace_back(cmd_list, queue);
@@ -183,7 +183,8 @@ auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
 
 auto RenderController::FlushPendingCommandLists() -> void
 {
-  auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+  auto& [timeline_values, pending_command_lists]
+    = frames_[CurrentFrameIndex().get()];
   if (pending_command_lists.empty())
     return;
   if (!gfx_weak_.expired()) {
@@ -224,7 +225,8 @@ auto RenderController::BeginFrame() -> void
     throw std::runtime_error("Cannot BeginFrame when surface is not valid");
   }
 
-  auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+  auto& [timeline_values, pending_command_lists]
+    = frames_[CurrentFrameIndex().get()];
 
   LOG_SCOPE_FUNCTION(1);
   DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
@@ -250,7 +252,7 @@ auto RenderController::BeginFrame() -> void
     }
 
     // Process all deferred releases for the current frame
-    per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex());
+    per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex().get());
   }
 
   // Release all completed command lists and call OnExecuted
@@ -280,7 +282,8 @@ auto RenderController::EndFrame() -> void
       surface->GetName(), e.what());
   }
 
-  current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
+  current_frame_slot_
+    = frame::Slot { (current_frame_slot_.get() + 1) % frame_count_.get() };
 }
 
 auto RenderController::HandleSurfaceResize(Surface& surface) -> void
@@ -293,8 +296,9 @@ auto RenderController::HandleSurfaceResize(Surface& surface) -> void
   std::unordered_set<CommandQueue*> active_queues;
 
   // Check all frames for pending work
-  for (uint32_t i = 0; i < frame_count_; ++i) {
-    if (i != CurrentFrameIndex()) { // Already processed current frame above
+  for (uint32_t i = 0; i < frame_count_.get(); ++i) {
+    if (i != CurrentFrameIndex().get()) {
+      // Already processed current frame above
       for (const auto& queue : frames_[i].timeline_values | std::views::keys) {
         active_queues.insert(queue);
       }
@@ -317,5 +321,5 @@ auto RenderController::HandleSurfaceResize(Surface& surface) -> void
   per_frame_resource_manager_.ProcessAllDeferredReleases();
 
   surface.Resize();
-  current_frame_index_ = surface.GetCurrentBackBufferIndex();
+  current_frame_slot_ = frame::Slot { surface.GetCurrentBackBufferIndex() };
 }

@@ -8,8 +8,11 @@
 #include <cstring>
 #include <string>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
 
@@ -131,6 +134,28 @@ auto oxygen::to_string(oxygen::BindlessHandle h) -> std::string
   return std::string(buf, pos);
 }
 
+auto oxygen::to_string(oxygen::FrameSlotNumber s) -> std::string
+{
+  using namespace oxygen::frame;
+
+  // Validate slot range: valid slots are [0, kFramesInFlight)
+  if (s.get() >= kFramesInFlight.get()) {
+    return fmt::format("Frame(slot:__Invalid__)");
+  }
+  return fmt::format("Frame(slot:{})", s.get());
+}
+
+auto oxygen::to_string(oxygen::FrameSequenceNumber seq) -> std::string
+{
+  using namespace oxygen::frame;
+
+  // Validate sequence number: valid sequences are [0, kMaxSequenceNumber)
+  if (seq.get() >= kMaxSequenceNumber.get()) {
+    return fmt::format("Frame(seq:__Invalid__)");
+  }
+  return fmt::format("Frame(seq:{})", seq.get());
+}
+
 auto oxygen::to_string(oxygen::VersionedBindlessHandle const& h) -> std::string
 {
   char buf[64];
@@ -148,6 +173,11 @@ auto oxygen::to_string(oxygen::VersionedBindlessHandle const& h) -> std::string
 auto oxygen::to_string(oxygen::BindlessHandleCount count) -> std::string
 {
   return std::to_string(count.get());
+}
+
+auto oxygen::to_string(oxygen::FrameSlotCount sc) -> std::string
+{
+  return std::to_string(sc.get());
 }
 
 auto oxygen::to_string(oxygen::BindlessHandleCapacity capacity) -> std::string

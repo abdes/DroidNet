@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
@@ -95,7 +96,7 @@ namespace detail {
     IDXGISwapChain4* swap_chain_ { nullptr };
 
     mutable uint32_t current_back_buffer_index_ { 0 };
-    StaticVector<std::shared_ptr<Texture>, kFrameBufferCount>
+    StaticVector<std::shared_ptr<Texture>, frame::kFramesInFlight.get()>
       render_targets_ {};
 
     graphics::detail::WindowComponent* window_ { nullptr };

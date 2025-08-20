@@ -122,7 +122,8 @@ auto Graphics::GetCommandQueue(const std::string_view name) const
 }
 
 auto Graphics::CreateRenderController(const std::string_view name,
-  std::weak_ptr<graphics::Surface> surface, const uint32_t frames_in_flight)
+  std::weak_ptr<graphics::Surface> surface,
+  const frame::SlotCount frames_in_flight)
   -> std::shared_ptr<graphics::RenderController>
 {
   // Create the RenderController object

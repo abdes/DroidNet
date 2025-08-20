@@ -70,7 +70,7 @@ void SwapChain::CreateSwapChain()
     .Stereo = FALSE,
     .SampleDesc = { 1, 0 }, // Always like this for D3D12
     .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER,
-    .BufferCount = kFrameBufferCount,
+    .BufferCount = frame::kFramesInFlight.get(),
     .Scaling = DXGI_SCALING_STRETCH,
     .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
@@ -140,10 +140,11 @@ void SwapChain::Resize()
 
   const auto [width, height] = window_->FrameBufferSize();
   try {
-    ThrowOnFailed(swap_chain_->ResizeBuffers(kFrameBufferCount, width, height,
-      format_, // ToNonSrgb(format_),
-      DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
-        | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+    ThrowOnFailed(
+      swap_chain_->ResizeBuffers(frame::kFramesInFlight.get(), width, height,
+        format_, // ToNonSrgb(format_),
+        DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
+          | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
   }
@@ -159,8 +160,8 @@ void SwapChain::CreateRenderTargets()
   DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {};
   ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
 
-  render_targets_.resize(kFrameBufferCount);
-  for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
+  render_targets_.resize(frame::kFramesInFlight.get());
+  for (uint32_t i = 0; i < frame::kFramesInFlight.get(); ++i) {
     ID3D12Resource* back_buffer { nullptr };
     ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
     render_targets_[i] = std::make_shared<Texture>(

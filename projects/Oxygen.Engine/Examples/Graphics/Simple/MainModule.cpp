@@ -525,7 +525,7 @@ auto MainModule::SetupRenderer() -> void
 
   const auto gfx = gfx_weak_.lock();
   render_controller_ = gfx->CreateRenderController(
-    "Main Window Renderer", surface_, kFrameBufferCount - 1);
+    "Main Window Renderer", surface_, frame::kFramesInFlight);
   CHECK_NOTNULL_F(
     render_controller_, "Failed to create renderer for main window");
   renderer_ = std::make_shared<engine::Renderer>(render_controller_);
@@ -536,7 +536,7 @@ auto MainModule::SetupFramebuffers() -> void
   CHECK_F(!gfx_weak_.expired());
   auto gfx = gfx_weak_.lock();
 
-  for (auto i = 0U; i < kFrameBufferCount; ++i) {
+  for (auto i = 0U; i < frame::kFramesInFlight.get(); ++i) {
     graphics::TextureDesc depth_desc;
     depth_desc.width = kWindowWidth;
     depth_desc.height = kWindowHeight;
@@ -606,7 +606,7 @@ auto MainModule::RenderScene() -> co::Co<>
     graphics::SingleQueueStrategy().GraphicsQueueName(),
     "Main Window Command List");
 
-  const auto fb = framebuffers_[render_controller_->CurrentFrameIndex()];
+  const auto fb = framebuffers_[render_controller_->CurrentFrameIndex().get()];
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 

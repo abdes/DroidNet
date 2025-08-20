@@ -63,20 +63,24 @@ struct MaterialConstants {
     uint _pad1;                             // Padding for alignment
 };
 
-// Scene constants buffer (matches C++ struct layout)
+// Constant buffer for scene-wide data. This is typically bound directly as a
+// root CBV (not indexed from the descriptor heap), allowing fast and efficient
+// updates for per-frame or per-draw constants.
 cbuffer SceneConstants : register(b1) {
     float4x4 view_matrix;
     float4x4 projection_matrix;
     float3 camera_position;
     float time_seconds;
-    uint frame_index;
-    uint bindless_indices_slot; // dynamic slot (0xFFFFFFFF when unused)
+    uint frame_slot;
+    uint64_t frame_seq_num;
+    uint bindless_indices_slot; // dynamic slot (0xFFFFFFFF when absent)
     uint bindless_draw_meta_data_slot; // dynamic slot for per-draw metadata
     uint bindless_transforms_slot; // dynamic slot for per-draw world matrices
     uint bindless_material_constants_slot; // dynamic slot for material constants
     uint _pad0; // Padding for alignment
     uint _pad1; // Padding for alignment
     uint _pad2; // Padding for alignment
+    uint _pad3; // Padding for alignment
 }
 
 // Draw index passed as a root constant (32-bit value at register b2)

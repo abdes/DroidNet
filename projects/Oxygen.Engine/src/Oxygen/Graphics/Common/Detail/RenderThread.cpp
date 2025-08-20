@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/OxCo/Co.h>
@@ -30,11 +31,12 @@ using oxygen::graphics::detail::RenderThread;
 namespace {
 class RenderTaskDispatcher {
 public:
-  explicit RenderTaskDispatcher(const uint32_t frames_in_flight)
-    : frames_in_flight_(frames_in_flight)
+  explicit RenderTaskDispatcher(const oxygen::frame::SlotCount frames_in_flight)
+    : frames_in_flight_(frames_in_flight.get())
   {
-    DCHECK_GT_F(
-      frames_in_flight_, 0UL, "The number of frames in flight must be > 0");
+    using oxygen::FrameSlotCount;
+    DCHECK_GT_F(frames_in_flight_, FrameSlotCount { 0UL },
+      "The number of frames in flight must be > 0");
   }
 
   ~RenderTaskDispatcher() { Stop(); }
@@ -60,10 +62,13 @@ public:
   // ReSharper disable once CppMemberFunctionMayBeConst
   void Submit(FrameRenderTask task)
   {
+    using oxygen::FrameSlotCount;
     std::unique_lock<std::mutex> lock(mutex_work_queue_);
     // Wait if the queue is full (frame lag)
     cv_ready_.wait(lock, [&] {
-      return work_queue_.size() < static_cast<size_t>(frames_in_flight_)
+      const auto work_queue_size
+        = static_cast<FrameSlotCount::UnderlyingType>(work_queue_.size());
+      return FrameSlotCount { work_queue_size } < frames_in_flight_
         || !running_;
     });
     work_queue_.emplace(std::move(task));
@@ -103,7 +108,7 @@ private:
     }
   }
 
-  uint32_t frames_in_flight_;
+  oxygen::frame::SlotCount frames_in_flight_;
   std::atomic<bool> running_ { false };
   mutable std::mutex mutex_work_queue_;
   mutable std::condition_variable cv_ready_;
@@ -134,14 +139,16 @@ struct RenderThread::Impl {
   BeginFrameFn begin_frame_fn;
   EndFrameFn end_frame_fn;
 
-  Impl(const uint32_t frames_in_flight, BeginFrameFn begin_frame,
+  Impl(const frame::SlotCount frames_in_flight, BeginFrameFn begin_frame,
     EndFrameFn end_frame)
     : dispatcher(frames_in_flight)
     , begin_frame_fn(std::move(begin_frame))
     , end_frame_fn(std::move(end_frame))
   {
-    DCHECK_LT_F(frames_in_flight, kFrameBufferCount,
-      "The number of frames in flight must be < {}", kFrameBufferCount);
+    DCHECK_GT_F(frames_in_flight.get(), 0UL,
+      "The number of frames in flight must be > 0");
+    DCHECK_LE_F(frames_in_flight, frame::kFramesInFlight,
+      "The number of frames in flight must be < {}", frame::kFramesInFlight);
     DCHECK_F(begin_frame_fn.operator bool());
     DCHECK_F(end_frame_fn.operator bool());
   }
@@ -206,13 +213,11 @@ struct RenderThread::Impl {
   }
 };
 
-RenderThread::RenderThread(
-  uint32_t frames_in_flight, BeginFrameFn begin_frame, EndFrameFn end_frame)
+RenderThread::RenderThread(frame::SlotCount frames_in_flight,
+  BeginFrameFn begin_frame, EndFrameFn end_frame)
   : impl_(std::make_unique<Impl>(
       frames_in_flight, std::move(begin_frame), std::move(end_frame)))
 {
-  DCHECK_GT_F(
-    frames_in_flight, 0UL, "The number of frames in flight must be > 0");
   Start();
 }
 
