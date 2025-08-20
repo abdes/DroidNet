@@ -192,17 +192,20 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
 
 ### 2. Per‑frame infrastructure
 
-- 🟡 PerFrameResourceManager augmentation
+- ✅ PerFrameResourceManager augmentation
   - ✅ OnBeginFrame(FrameSlotIndex) already exists and executes frame-specific
     deferred actions
   - ✅ Underlying deferred action infrastructure exists via std::function<void()>
     vectors
-  - ⬜ **MISSING**: Expose RegisterDeferredAction(std::function<void()>) API for
-    arbitrary callbacks
-  - ⬜ Thread-safety analysis for registration from worker threads (only resource
-    registration currently supported)
-  - 🟡 Partial integration with RenderController frame lifecycle (OnBeginFrame
-    exists, but generic action registration missing)
+  - ✅ Exposed `RegisterDeferredAction(std::function<void()>)` API for
+    arbitrary callbacks (thread-safe)
+  - ✅ Thread-safety analysis and implementation for registration from worker
+    threads completed; registration uses a lock-free SPSC queue for common
+    producer patterns and falls back to a small mutex for rare multi-producer
+    cases
+  - ✅ Integrated with RenderController frame lifecycle: `OnBeginFrame` now
+    drains and executes registered deferred actions for the corresponding
+    frame slot
 
 ### 3. Strategy A — FrameIndexedSlotReuse
 
@@ -329,7 +332,7 @@ public:
 
 ### PerFrameResourceManager requirements
 
-- void RegisterDeferredAction(std::function<void()> action); // thread-safe
+- void RegisterDeferredAction(std::function<void()> action); // thread-safe (implemented)
 - void OnBeginFrame(frame::FrameSlotIndex frame_slot); // executes bucket from
   previous render of this slot
 
@@ -588,7 +591,7 @@ globalTimelineReuse.Process(); // Called periodically by Graphics device
 | Types/ResourceViewType.h | src/Oxygen/Graphics/Common/Types/ | No change; part of Domain key | Low |
 | Types/DescriptorVisibility.h | src/Oxygen/Graphics/Common/Types/ | No change; part of Domain key | Low |
 | BindlessHandle.h | src/Oxygen/Core/Types/ | No change; handle and versioned handle types | Low |
-| PerFrameResourceManager.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | Add RegisterDeferredAction(std::function<void()>) overload; OnBeginFrame is already public | Low |
+| PerFrameResourceManager.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | `RegisterDeferredAction(std::function<void()>)` added and thread-safe; OnBeginFrame already public | Low |
 | FrameIndexedSlotReuse (new) | src/Oxygen/Renderer/ | Frame-driven strategy implementing deferred frees and generation stamping via per-frame buckets | Medium |
 | TimelineGatedSlotReuse (new) | src/Oxygen/Renderer/ | Fence-driven strategy implementing deferred frees gated by explicit timelines | Medium |
 | GenerationTracker | src/Oxygen/Nexus/ | Utility to load/bump per-slot generation with proper memory order | Low |

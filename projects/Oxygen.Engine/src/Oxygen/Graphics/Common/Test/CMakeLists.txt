@@ -67,3 +67,8 @@ m_gtest_program(
 )
 m_gtest_program(ResourceRegistry SOURCES "ResourceRegistry_test.cpp")
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
+m_gtest_program(
+  PerFrameResourceManager
+  SOURCES
+    "PerFrameResourceManager_test.cpp"
+)

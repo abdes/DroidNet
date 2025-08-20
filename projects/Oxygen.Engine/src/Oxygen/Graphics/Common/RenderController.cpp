@@ -252,7 +252,7 @@ auto RenderController::BeginFrame() -> void
     }
 
     // Process all deferred releases for the current frame
-    per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex().get());
+    per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex());
   }
 
   // Release all completed command lists and call OnExecuted

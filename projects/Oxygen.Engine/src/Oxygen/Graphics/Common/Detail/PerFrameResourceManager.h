@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <functional>
+#include <mutex>
 #include <string_view>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics::detail {
 
@@ -47,7 +50,7 @@ public:
   //! Registers a resource managed through a `std::shared_ptr` for deferred
   //! release.
   /*!
-   \note This method can be used for resources that are released via their
+   @note This method can be used for resources that are released via their
    destructor, or can be used with a custom deleter. The custom deleter can
    help release the resource to an allocator, a shared pool, etc.
   */
@@ -55,29 +58,37 @@ public:
   void RegisterDeferredRelease(std::shared_ptr<T> resource)
     requires HasReleaseMethod<T>
   {
-    auto& frame_resources = deferred_releases_[current_frame_slot_];
-    frame_resources.emplace_back([resource = std::move(resource)]() mutable {
-      LogRelease(resource.get());
-      resource->Release();
-      resource.reset();
-    });
+    auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
+    auto& frame_resources = deferred_releases_[frame_idx];
+    {
+      std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
+      frame_resources.emplace_back([resource = std::move(resource)]() mutable {
+        LogRelease(resource.get());
+        resource->Release();
+        resource.reset();
+      });
+    }
   }
 
   //! Registers a resource managed through a `std::shared_ptr` for deferred
   //! release.
   /*!
-   \note This method can be used for resources that are released via their
+   @note This method can be used for resources that are released via their
    destructor, or can be used with a custom deleter. The custom deleter can
    help release the resource to an allocator, a shared pool, etc.
   */
   template <typename T>
   void RegisterDeferredRelease(std::shared_ptr<T> resource)
   {
-    auto& frame_resources = deferred_releases_[current_frame_slot_];
-    frame_resources.emplace_back([resource = std::move(resource)]() mutable {
-      LogRelease(resource.get());
-      resource.reset();
-    });
+    auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
+    auto& frame_resources = deferred_releases_[frame_idx];
+    {
+      std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
+      frame_resources.emplace_back([resource = std::move(resource)]() mutable {
+        LogRelease(resource.get());
+        resource.reset();
+      });
+    }
   }
 
   //! Registers a resource  that has a `Release()` method for deferred
@@ -87,28 +98,35 @@ public:
   void RegisterDeferredRelease(T* const resource) noexcept
     requires HasReleaseMethod<T>
   {
-    auto& frame_resources = deferred_releases_[current_frame_slot_];
-    frame_resources.emplace_back([resource]() mutable {
-      if (resource) {
-        LogRelease(resource);
-        resource->Release();
-      }
-    });
+    auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
+    auto& frame_resources = deferred_releases_[frame_idx];
+    {
+      std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
+      frame_resources.emplace_back([resource]() mutable {
+        if (resource) {
+          LogRelease(resource);
+          resource->Release();
+        }
+      });
+    }
   }
 
+  //! Enqueue an arbitrary action to run when the observed frame slot cycles.
+  OXYGEN_GFX_API void RegisterDeferredAction(std::function<void()> action);
+
   //! Called at the beginning of a new frame to release resources from the
-  //! last render of that same frame index.
-  void OnBeginFrame(uint32_t frame_index);
+  //! last render of that same frame slot.
+  OXYGEN_GFX_API void OnBeginFrame(frame::Slot frame_slot);
 
   //! Releases all deferred resources from all frames.
-  void OnRendererShutdown();
+  OXYGEN_GFX_API void OnRendererShutdown();
 
   //! Process all deferred releases for all frames.
-  void ProcessAllDeferredReleases();
+  OXYGEN_GFX_API void ProcessAllDeferredReleases();
 
 private:
   //! Releases all deferred resources from the previous render of the frame.
-  void ReleaseDeferredResources(uint32_t frame_index);
+  void ReleaseDeferredResources(frame::Slot frame_slot);
 
   //! Logs the release of a resource.
   template <typename T> static void LogRelease(const T* resource)
@@ -132,11 +150,14 @@ private:
   }
 
   //! The current frame index.
-  uint32_t current_frame_slot_ { 0 };
+  std::atomic<frame::Slot::UnderlyingType> current_frame_slot_ { 0 };
 
   //! The set of lambda functions that release the pending resources.
   std::vector<std::function<void()>>
     deferred_releases_[frame::kFramesInFlight.get()] {};
+
+  //! Mutex per frame bucket to allow thread-safe registration from workers.
+  std::mutex deferred_mutexes_[frame::kFramesInFlight.get()] {};
 };
 
 } // namespace oxygen::graphics::detail
