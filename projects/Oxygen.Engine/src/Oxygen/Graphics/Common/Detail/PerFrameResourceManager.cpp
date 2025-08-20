@@ -11,6 +11,7 @@ using oxygen::graphics::detail::PerFrameResourceManager;
 
 void PerFrameResourceManager::OnBeginFrame(const frame::Slot frame_slot)
 {
+  CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   current_frame_slot_.store(frame_slot.get(), std::memory_order_release);
   ReleaseDeferredResources(frame_slot);
 }
@@ -31,6 +32,7 @@ void PerFrameResourceManager::OnRendererShutdown()
 void PerFrameResourceManager::ReleaseDeferredResources(
   const frame::Slot frame_slot)
 {
+  CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   const auto u_frame_slot = frame_slot.get();
 
   // Acquire lock, swap vector with a local one and release lock so that the

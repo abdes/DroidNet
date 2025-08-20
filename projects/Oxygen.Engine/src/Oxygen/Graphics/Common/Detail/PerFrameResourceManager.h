@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <concepts>
 #include <functional>
@@ -153,11 +154,13 @@ private:
   std::atomic<frame::Slot::UnderlyingType> current_frame_slot_ { 0 };
 
   //! The set of lambda functions that release the pending resources.
-  std::vector<std::function<void()>>
-    deferred_releases_[frame::kFramesInFlight.get()] {};
+  static constexpr std::size_t kFrameBuckets
+    = static_cast<std::size_t>(frame::kFramesInFlight.get());
+  std::array<std::vector<std::function<void()>>, kFrameBuckets>
+    deferred_releases_ {};
 
   //! Mutex per frame bucket to allow thread-safe registration from workers.
-  std::mutex deferred_mutexes_[frame::kFramesInFlight.get()] {};
+  std::array<std::mutex, kFrameBuckets> deferred_mutexes_ {};
 };
 
 } // namespace oxygen::graphics::detail
