@@ -23,6 +23,9 @@ class Bindless final : public Component {
   OXYGEN_COMPONENT_REQUIRES(oxygen::ObjectMetaData)
 
 public:
+  // Default-construct with no allocator; backend must set allocator later.
+  Bindless() = default;
+
   explicit Bindless(std::unique_ptr<DescriptorAllocator> allocator)
     : allocator_(std::move(allocator))
   {
@@ -36,11 +39,53 @@ public:
 
   [[nodiscard]] auto GetAllocator() const -> const DescriptorAllocator&
   {
+    DCHECK_NOTNULL_F(allocator_, "Bindless allocator not initialized");
     return *allocator_;
   }
   [[nodiscard]] auto GetAllocator() -> DescriptorAllocator&
   {
+    DCHECK_NOTNULL_F(allocator_, "Bindless allocator not initialized");
     return *allocator_;
+  }
+
+  //! Install the backend-provided descriptor allocator.
+  /*!
+   Installs the device-level descriptor allocator used by the bindless
+   system.
+
+   Contract
+   - Must be called exactly once per device (single-assignment).
+   - Call after the native graphics device is fully created and before any
+     descriptor allocations or calls to @ref GetAllocator().
+   - The pointer must be non-null; ownership is transferred to this
+     component.
+   - Not thread-safe; invoke during single-threaded device initialization.
+
+   Preconditions
+   - `allocator != nullptr`
+   - No allocator has been installed yet.
+
+   Postconditions
+   - Subsequent calls to @ref GetAllocator() are valid.
+
+   Error handling
+   - Violations trigger debug checks and terminate in debug builds; no
+     exceptions are thrown.
+
+   @param allocator Backend-specific descriptor allocator instance. Ownership
+                    is transferred.
+   @return void
+
+   @warning Once installed, the allocator cannot be changed.
+   @see GetAllocator, ResourceRegistry,
+        oxygen::graphics::Graphics::SetDescriptorAllocator
+  */
+  auto SetAllocator(std::unique_ptr<DescriptorAllocator> allocator) -> void
+  {
+    CHECK_NOTNULL_F(allocator, "Allocator must not be null");
+    CHECK_F(allocator_ == nullptr,
+      "Bindless allocator has already been set and cannot be changed");
+    allocator_ = std::move(allocator);
   }
 
   [[nodiscard]] auto GetRegistry() const -> const ResourceRegistry&
