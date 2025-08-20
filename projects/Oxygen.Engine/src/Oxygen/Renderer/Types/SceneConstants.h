@@ -14,6 +14,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/Frame.h>
 
 namespace oxygen::engine {
 
@@ -25,16 +26,6 @@ namespace oxygen::engine {
 */
 inline constexpr uint32_t kInvalidDescriptorSlot
   = (std::numeric_limits<uint32_t>::max)();
-
-struct FrameIndex {
-  uint32_t value;
-  explicit constexpr FrameIndex(const uint32_t v = 0)
-    : value(v)
-  {
-  }
-  constexpr auto operator<=>(const FrameIndex&) const = default;
-  constexpr operator uint32_t() const noexcept { return value; }
-};
 
 struct BindlessIndicesSlot {
   uint32_t value;
@@ -151,7 +142,8 @@ public:
     glm::mat4 projection_matrix { 1.0f };
     glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
     float time_seconds { 0.0f };
-    uint32_t frame_index { 0 };
+    frame::Slot::UnderlyingType frame_slot { 0 };
+    frame::SequenceNumber::UnderlyingType frame_seq_num { 0 };
     uint32_t bindless_indices_slot { kInvalidDescriptorSlot };
     uint32_t bindless_draw_metadata_slot { kInvalidDescriptorSlot };
     uint32_t bindless_transforms_slot { kInvalidDescriptorSlot };
@@ -159,6 +151,7 @@ public:
     uint32_t _pad0 { 0 };
     uint32_t _pad1 { 0 };
     uint32_t _pad2 { 0 };
+    uint32_t _pad3 { 0 };
   };
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
@@ -207,11 +200,21 @@ public:
     return *this;
   }
 
-  auto SetFrameIndex(const FrameIndex idx, RendererTag) noexcept
+  auto SetFrameSlot(const frame::Slot slot, RendererTag) noexcept
     -> SceneConstants&
   {
-    if (frame_index_ != idx) {
-      frame_index_ = idx;
+    if (frame_slot_ != slot) {
+      frame_slot_ = slot;
+      version_ = version_.Next();
+    }
+    return *this;
+  }
+
+  auto SetFrameSequenceNumber(
+    const frame::SequenceNumber seq, RendererTag) noexcept -> SceneConstants&
+  {
+    if (frame_seq_num_ != seq) {
+      frame_seq_num_ = seq;
       version_ = version_.Next();
     }
     return *this;
@@ -274,7 +277,7 @@ public:
   }
   [[nodiscard]] constexpr auto GetFrameIndex() const noexcept
   {
-    return frame_index_;
+    return frame_slot_;
   }
 
   //! Shader-visible descriptor heap slot of DrawResourceIndices structured
@@ -322,7 +325,8 @@ private:
       .projection_matrix = projection_matrix_,
       .camera_position = camera_position_,
       .time_seconds = time_seconds_,
-      .frame_index = frame_index_.value,
+      .frame_slot = frame_slot_.get(),
+      .frame_seq_num = frame_seq_num_.get(),
       .bindless_indices_slot = bindless_indices_slot_.value,
       .bindless_draw_metadata_slot = bindless_draw_metadata_slot_.value,
       .bindless_transforms_slot = bindless_transforms_slot_.value,
@@ -338,7 +342,8 @@ private:
 
   // Renderer-managed fields
   float time_seconds_ { 0.0f };
-  FrameIndex frame_index_ {};
+  frame::Slot frame_slot_ {};
+  frame::SequenceNumber frame_seq_num_ {};
   BindlessIndicesSlot bindless_indices_slot_ {};
   BindlessDrawMetadataSlot bindless_draw_metadata_slot_ {};
   BindlessWorldsSlot bindless_transforms_slot_ {};

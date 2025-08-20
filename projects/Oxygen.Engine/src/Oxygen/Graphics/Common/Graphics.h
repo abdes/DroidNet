@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -82,7 +83,8 @@ public:
 
   [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderController(
     std::string_view name, std::weak_ptr<graphics::Surface> surface,
-    uint32_t frames_in_flight) -> std::shared_ptr<graphics::RenderController>;
+    frame::SlotCount frames_in_flight)
+    -> std::shared_ptr<graphics::RenderController>;
 
   [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
@@ -169,7 +171,7 @@ protected:
   }
 
   [[nodiscard]] virtual auto CreateRendererImpl(std::string_view name,
-    std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight)
+    std::weak_ptr<graphics::Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<graphics::RenderController>
     = 0;
 

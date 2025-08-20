@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -128,7 +129,7 @@ namespace graphics {
   public:
     OXYGEN_GFX_API RenderController(std::string_view name,
       std::weak_ptr<Graphics> gfx_weak, std::weak_ptr<Surface> surface_weak,
-      uint32_t frames_in_flight = kFrameBufferCount - 1);
+      frame::SlotCount frames_in_flight = frame::kFramesInFlight);
 
     OXYGEN_GFX_API ~RenderController() override;
 
@@ -178,10 +179,7 @@ namespace graphics {
       bool immediate_submission = true) -> std::unique_ptr<CommandRecorder,
       std::function<void(CommandRecorder*)>>;
 
-    [[nodiscard]] auto CurrentFrameIndex() const
-    {
-      return current_frame_index_;
-    }
+    [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_slot_; }
 
     [[nodiscard]] auto GetPerFrameResourceManager() const
       -> detail::PerFrameResourceManager&
@@ -214,9 +212,9 @@ namespace graphics {
         pending_command_lists;
     };
 
-    uint32_t frame_count_;
+    frame::SlotCount frame_count_;
     std::unique_ptr<Frame[]> frames_;
-    uint32_t current_frame_index_ { 0 };
+    frame::Slot current_frame_slot_ { 0 };
 
     mutable detail::PerFrameResourceManager per_frame_resource_manager_;
   };

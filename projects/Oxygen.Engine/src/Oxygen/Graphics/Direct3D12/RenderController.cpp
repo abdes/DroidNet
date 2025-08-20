@@ -29,7 +29,7 @@ using oxygen::graphics::detail::Bindless;
 
 RenderController::RenderController(const std::string_view name,
   const std::weak_ptr<oxygen::Graphics>& gfx_weak,
-  std::weak_ptr<Surface> surface_weak, const uint32_t frames_in_flight)
+  std::weak_ptr<Surface> surface_weak, const frame::SlotCount frames_in_flight)
   : graphics::RenderController(
       name, gfx_weak, std::move(surface_weak), frames_in_flight)
 {

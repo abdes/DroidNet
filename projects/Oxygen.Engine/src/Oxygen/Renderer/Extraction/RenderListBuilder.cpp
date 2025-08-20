@@ -47,7 +47,7 @@ RenderListBuilder::RenderListBuilder()
 RenderListBuilder::~RenderListBuilder() = default;
 
 auto RenderListBuilder::Collect(scene::Scene& scene, const View& view,
-  std::uint64_t frame_id) -> std::vector<RenderItemData>
+  frame::SequenceNumber frame_seq_num) -> std::vector<RenderItemData>
 {
   // Build a compile-time pipeline with common extractors
   using namespace oxygen::engine::extraction;
@@ -76,7 +76,7 @@ auto RenderListBuilder::Collect(scene::Scene& scene, const View& view,
   for (const auto& node_impl : span) {
     // Process this node through the extraction pipeline.
     WorkItem wi { node_impl };
-    ExtractorContext ctx { view, scene, frame_id };
+    ExtractorContext ctx { view, scene, frame_seq_num };
     pipeline(wi, ctx, out);
   }
 
@@ -138,8 +138,8 @@ auto RenderListBuilder::Finalize(
 }
 
 auto RenderListBuilder::EvictStaleResources(RenderContext& /*render_context*/,
-  std::uint64_t /*current_frame_id*/, std::uint32_t /*keep_frame_count*/)
-  -> void
+  frame::SequenceNumber /*current_frame_seq_num*/,
+  std::uint32_t /*keep_frame_count*/) -> void
 {
   // No-op eviction in minimal implementation.
 }

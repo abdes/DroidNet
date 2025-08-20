@@ -31,7 +31,7 @@ public:
   OXYGEN_D3D12_API RenderController(
     const std::weak_ptr<oxygen::Graphics>& gfx_weak,
     std::weak_ptr<oxygen::graphics::Surface> surface,
-    const uint32_t frames_in_flight = kFrameBufferCount - 1)
+    const frame::SlotCount frames_in_flight = frame::kFramesInFlight)
     : RenderController("D3D12 RenderController", gfx_weak, std::move(surface),
         frames_in_flight)
   {
@@ -41,7 +41,7 @@ public:
   OXYGEN_D3D12_API RenderController(std::string_view name,
     const std::weak_ptr<oxygen::Graphics>& gfx_weak,
     std::weak_ptr<oxygen::graphics::Surface> surface_weak,
-    uint32_t frames_in_flight = kFrameBufferCount - 1);
+    frame::SlotCount frames_in_flight = frame::kFramesInFlight);
 
   OXYGEN_D3D12_API ~RenderController() override = default;
 

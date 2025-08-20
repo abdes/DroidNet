@@ -257,10 +257,12 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
   // Ensure renderer-managed fields are refreshed for this frame prior to
   // snapshot/upload. This also bumps the version when they change.
   if (const auto rc_ptr_local = render_controller_.lock()) {
-    const auto frame_idx = rc_ptr_local->CurrentFrameIndex();
-    scene_const_cpu_.SetFrameIndex(
-      FrameIndex(frame_idx), SceneConstants::kRenderer);
+    const auto fr = rc_ptr_local->CurrentFrameIndex();
+    scene_const_cpu_.SetFrameSlot(
+      rc_ptr_local->CurrentFrameIndex(), SceneConstants::kRenderer);
   }
+  scene_const_cpu_.SetFrameSequenceNumber(
+    frame_seq_num, SceneConstants::kRenderer);
   const auto current_version = scene_const_cpu_.GetVersion();
   if (scene_const_buffer_
     && current_version == last_uploaded_scene_const_version_) {
@@ -336,17 +338,16 @@ auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
 
 auto Renderer::BuildFrame(scene::Scene& scene, const View& view) -> std::size_t
 {
+  // TODO: temporary - this should move out to the engine core
+  (void)frame_seq_num++;
+
   // Reset draw list for this frame
   opaque_items_.Clear();
 
   // Extract items via the new two-phase builder (Collect -> Finalize)
   using extraction::RenderListBuilder;
   RenderListBuilder builder;
-  std::uint64_t frame_id = 0;
-  if (const auto rc_ptr = render_controller_.lock()) {
-    frame_id = rc_ptr->CurrentFrameIndex();
-  }
-  const auto collected = builder.Collect(scene, view, frame_id);
+  const auto collected = builder.Collect(scene, view, frame_seq_num);
   // Finalize directly into the renderer-managed output list.
   // RenderContext is not required by Finalize currently; pass a local.
   RenderContext dummy_context;

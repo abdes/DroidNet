@@ -74,7 +74,8 @@ public:
     (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>,
     CreateRendererImpl,
-    (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t),
+    (std::string_view, std::weak_ptr<oxygen::graphics::Surface>,
+      oxygen::frame::SlotCount),
     (override));
 
   // Add GetCurrentDevice method that D3D12 RenderController constructor calls

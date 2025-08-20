@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/Extraction/RenderItemData.h>
 #include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
@@ -39,7 +40,7 @@ namespace scn_detail = oxygen::scene::detail;
 struct ExtractorContext {
   const View& view;
   scn::Scene& scene;
-  std::uint64_t frame_id = 0;
+  frame::SequenceNumber frame_seq_num { frame::kInvalidSequenceNumber };
 };
 
 // Lightweight facades exposing only the extractor-used API, forwarding to

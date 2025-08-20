@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/Extraction/RenderItemData.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -46,7 +47,7 @@ public:
 
   //! Phase 1: Collect render items from scene (CPU-only, no GPU work)
   OXGN_RNDR_NDAPI auto Collect(scene::Scene& scene, const View& view,
-    std::uint64_t frame_id) -> std::vector<RenderItemData>;
+    frame::SequenceNumber frame_seq_num) -> std::vector<RenderItemData>;
 
   //! Phase 2: Finalize items into GPU-ready renderable list
   OXGN_RNDR_API auto Finalize(std::span<const RenderItemData> collected_items,
@@ -54,7 +55,8 @@ public:
 
   //! Clean up stale resources that haven't been used recently
   OXGN_RNDR_API auto EvictStaleResources(RenderContext& render_context,
-    std::uint64_t current_frame_id, std::uint32_t keep_frame_count = 3) -> void;
+    frame::SequenceNumber current_frame_seq_num,
+    std::uint32_t keep_frame_count = 3) -> void;
 
 private:
   class Impl;

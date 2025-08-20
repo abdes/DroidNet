@@ -103,6 +103,7 @@ static auto MakeTwoLodGeometry(std::shared_ptr<oxygen::data::Mesh> lod0,
 //! Basic smoke tests for RenderListBuilder
 TEST(RenderListBuilder_Basic, Smoke)
 {
+  namespace frame = oxygen::frame;
   // Arrange
   RenderListBuilder builder;
 
@@ -113,7 +114,7 @@ TEST(RenderListBuilder_Basic, Smoke)
   oxygen::engine::View view(vp);
 
   // Act
-  auto collected = builder.Collect(*scene, view, 0);
+  auto collected = builder.Collect(*scene, view, frame::SequenceNumber { 0 });
 
   // Assert - empty scene -> no items
   EXPECT_TRUE(collected.empty());
@@ -124,6 +125,7 @@ TEST(RenderListBuilder_Basic, Smoke)
 TEST(RenderListBuilder_LOD, DistancePolicy_PerView_SelectsDifferentLods)
 {
   using oxygen::scene::DistancePolicy;
+  namespace frame = oxygen::frame;
 
   // Arrange
   RenderListBuilder builder;
@@ -155,7 +157,8 @@ TEST(RenderListBuilder_LOD, DistancePolicy_PerView_SelectsDifferentLods)
   // View A: camera at origin -> expect LOD0
   oxygen::engine::View::Params vpA {};
   oxygen::engine::View view_a(vpA);
-  auto collected_a = builder.Collect(*scene, view_a, 0);
+  auto collected_a
+    = builder.Collect(*scene, view_a, frame::SequenceNumber { 0 });
   ASSERT_EQ(collected_a.size(), 1U);
   EXPECT_EQ(collected_a[0].geometry->MeshAt(collected_a[0].lod_index).get(),
     geometry->MeshAt(0).get());
@@ -167,7 +170,8 @@ TEST(RenderListBuilder_LOD, DistancePolicy_PerView_SelectsDifferentLods)
     = glm::translate(glm::mat4(1.0F), glm::vec3(0.0F, 0.0F, -100.0F * r_eval));
   vpB.proj = glm::perspective(glm::radians(60.0F), 1.0F, 0.1F, 10000.0F);
   oxygen::engine::View view_b(vpB);
-  auto collected_b = builder.Collect(*scene, view_b, 0);
+  auto collected_b
+    = builder.Collect(*scene, view_b, frame::SequenceNumber { 0 });
   ASSERT_EQ(collected_b.size(), 1U);
   EXPECT_EQ(collected_b[0].geometry->MeshAt(collected_b[0].lod_index).get(),
     geometry->MeshAt(1).get());

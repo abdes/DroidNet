@@ -50,8 +50,8 @@ public:
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (std::string_view, oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderController, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderController, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Framebuffer>, CreateFramebuffer, (const oxygen::graphics::FramebufferDesc&,  oxygen::graphics::RenderController&), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (const oxygen::graphics::TextureDesc&), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeObject&), (const, override));

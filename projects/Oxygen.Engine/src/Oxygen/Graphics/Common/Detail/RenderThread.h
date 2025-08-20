@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 
 namespace oxygen::graphics {
@@ -27,7 +28,7 @@ namespace detail {
     using BeginFrameFn = std::function<void()>;
     using EndFrameFn = std::function<void()>;
 
-    explicit RenderThread(uint32_t frames_in_flight,
+    explicit RenderThread(frame::SlotCount frames_in_flight,
       BeginFrameFn begin_frame = nullptr, EndFrameFn end_frame = nullptr);
 
     ~RenderThread() override;

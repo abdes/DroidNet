@@ -198,6 +198,9 @@ private:
 
   // Per-draw world matrices buffer (StructuredBuffer<float4x4>)
   oxygen::engine::detail::BindlessStructuredBuffer<glm::mat4> world_transforms_;
+
+  // TODO: temporary - this should move out to the engine core
+  frame::SequenceNumber frame_seq_num { 0ULL };
 };
 
 } // namespace oxygen::engine

@@ -57,7 +57,8 @@ cbuffer SceneConstants : register(b1) {
     float4x4 projection_matrix;
     float3 camera_position;
     float time_seconds;
-    uint frame_index;
+    uint frame_slot;
+    uint64_t frame_seq_num;
     uint bindless_indices_slot; // dynamic slot (0xFFFFFFFF when absent)
     uint bindless_draw_meta_data_slot; // dynamic slot for per-draw metadata
     uint bindless_transforms_slot; // dynamic slot for per-draw world matrices
@@ -65,6 +66,7 @@ cbuffer SceneConstants : register(b1) {
     uint _pad0; // Padding for alignment
     uint _pad1; // Padding for alignment
     uint _pad2; // Padding for alignment
+    uint _pad3; // Padding for alignment
 }
 
 // Draw index passed as a root constant (32-bit value at register b2)

@@ -208,7 +208,7 @@ auto MainModule::SetupRenderer() -> void
 
   const auto gfx = gfx_weak_.lock();
   renderer_ = gfx->CreateRenderController(
-    "Main Window Renderer", surface_, kFrameBufferCount - 1);
+    "Main Window Renderer", surface_, kFarmesInFlight - 1);
   CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }
 
@@ -295,7 +295,7 @@ auto MainModule::SetupFramebuffers() -> void
   framebuffers_.clear();
 
   // Create a unique depth texture for each frame in flight
-  for (auto i = 0U; i < kFrameBufferCount; ++i) {
+  for (auto i = 0U; i < kFarmesInFlight; ++i) {
     graphics::TextureDesc depth_desc;
     depth_desc.width = 800;
     depth_desc.height = 800;

@@ -114,7 +114,7 @@ auto Graphics::CreateCommandQueue(std::string_view name, QueueRole role,
 }
 
 auto Graphics::CreateRendererImpl(const std::string_view name,
-  std::weak_ptr<Surface> surface, uint32_t frames_in_flight)
+  std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
   -> std::unique_ptr<graphics::RenderController>
 {
   return std::make_unique<RenderController>(

@@ -68,7 +68,7 @@ private:
   std::weak_ptr<platform::Window> window_weak_;
   std::shared_ptr<graphics::Surface> surface_;
   std::shared_ptr<graphics::RenderController> renderer_;
-  StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount>
+  StaticVector<std::shared_ptr<graphics::Framebuffer>, kFarmesInFlight>
     framebuffers_ {};
 
   std::shared_ptr<graphics::Buffer> constant_buffer_;
