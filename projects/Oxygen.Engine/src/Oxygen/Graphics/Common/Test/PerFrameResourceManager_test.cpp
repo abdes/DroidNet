@@ -1,11 +1,12 @@
 //===----------------------------------------------------------------------===//
-// Tests for PerFrameResourceManager
-// Distributed under the 3-Clause BSD License.
+// Tests for PerFrameResourceManager Distributed under the 3-Clause BSD License.
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Testing/GTest.h>
@@ -14,9 +15,9 @@ using namespace oxygen::graphics::detail;
 using ::testing::Test;
 namespace frame = oxygen::frame;
 
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
+//===----------------------------------------------------------------------===//
+// Test Fixtures and Helper Classes
+//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -50,15 +51,8 @@ struct NoReleaseResource {
   std::atomic<int>* counter { nullptr };
 };
 
-} // anonymous namespace
-
-// -----------------------------------------------------------------------------
-// Fixture
-// -----------------------------------------------------------------------------
-
-namespace {
-
-//! Fixture for PerFrameResourceManager tests.
+//! Test fixture for PerFrameResourceManager providing common setup and
+//! teardown.
 class PerFrameResourceManagerTest : public Test {
 protected:
   // Called once before any test in this fixture runs
@@ -71,20 +65,28 @@ protected:
   {
     manager = std::make_unique<PerFrameResourceManager>();
   }
+
   void TearDown() override { manager.reset(); }
 
   std::unique_ptr<PerFrameResourceManager> manager;
 };
 
-} // anonymous namespace
+} // namespace
 
-// -----------------------------------------------------------------------------
-// Tests
-// -----------------------------------------------------------------------------
+//===----------------------------------------------------------------------===//
+// Basic Resource Management Tests Tests core deferred release functionality for
+// different resource types
+//===----------------------------------------------------------------------===//
 
-//! Verify that shared_ptr resources with a Release() method are invoked when
-//! the frame slot cycles (OnBeginFrame called for that index).
-TEST_F(PerFrameResourceManagerTest, SharedPtrWithRelease_IsReleasedOnFrameCycle)
+//! Tests that shared_ptr resources with Release() method are properly released
+//! on frame cycle.
+/*!
+ Verifies that when a shared_ptr resource with a Release() method is registered
+ for deferred release, the Release() method is called when OnBeginFrame() is
+ invoked for the corresponding frame slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_SharedPtrWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   auto res = std::make_shared<TestResource>("res1");
@@ -97,10 +99,15 @@ TEST_F(PerFrameResourceManagerTest, SharedPtrWithRelease_IsReleasedOnFrameCycle)
   EXPECT_TRUE(res->WasReleased());
 }
 
-//! Verify that shared_ptr resources without Release() are reset and destructor
-//! runs when the frame slot cycles.
-TEST_F(PerFrameResourceManagerTest,
-  SharedPtrWithoutRelease_DestructorRunsOnFrameCycle)
+//! Tests that shared_ptr resources without Release() method have destructor
+//! called on frame cycle.
+/*!
+ Verifies that when a shared_ptr resource without a Release() method is
+ registered for deferred release, the destructor is properly invoked when
+ OnBeginFrame() processes the deferred releases for that frame slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_SharedPtrWithoutRelease_CallsDestructorOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   std::atomic<int> destructor_count { 0 };
@@ -116,9 +123,15 @@ TEST_F(PerFrameResourceManagerTest,
   EXPECT_EQ(destructor_count.load(), 1);
 }
 
-//! Verify that raw pointer resources with Release() have Release invoked.
-TEST_F(
-  PerFrameResourceManagerTest, RawPointerWithRelease_IsReleasedOnFrameCycle)
+//! Tests that raw pointer resources with Release() method are properly released
+//! on frame cycle.
+/*!
+ Verifies that when a raw pointer resource with a Release() method is registered
+ for deferred release, the Release() method is called when OnBeginFrame()
+ processes the deferred releases for that frame slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_RawPointerWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   auto res = new TestResource("raw");
@@ -130,12 +143,18 @@ TEST_F(
   // Assert
   EXPECT_TRUE(res->WasReleased());
 
-  // cleanup
+  // Cleanup
   delete res;
 }
 
-//! Verify RegisterDeferredAction is executed when the frame slot cycles.
-TEST_F(PerFrameResourceManagerTest, RegisterDeferredAction_ExecutesOnFrameCycle)
+//! Tests that deferred actions are executed on frame cycle.
+/*!
+ Verifies that lambda functions registered via RegisterDeferredAction() are
+ properly executed when OnBeginFrame() processes the deferred actions for the
+ corresponding frame slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredAction_LambdaFunction_ExecutesOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   std::atomic<bool> ran { false };
@@ -148,9 +167,18 @@ TEST_F(PerFrameResourceManagerTest, RegisterDeferredAction_ExecutesOnFrameCycle)
   EXPECT_TRUE(ran.load());
 }
 
-//! Verify ProcessAllDeferredReleases releases everything across all frames.
-TEST_F(
-  PerFrameResourceManagerTest, ProcessAllDeferredReleases_ReleasesAllFrames)
+//===----------------------------------------------------------------------===//
+// Bulk Operations Tests Tests operations that affect multiple frame slots
+//===----------------------------------------------------------------------===//
+
+//! Tests that ProcessAllDeferredReleases releases resources across all frames.
+/*!
+ Verifies that calling ProcessAllDeferredReleases() processes deferred releases
+ from all frame slots, not just the current one, ensuring complete cleanup
+ during shutdown scenarios.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  ProcessAllDeferredReleases_MultipleFrames_ReleasesAllFrames) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   auto r0 = std::make_shared<TestResource>("r0");
@@ -169,9 +197,14 @@ TEST_F(
   EXPECT_TRUE(r1->WasReleased());
 }
 
-//! Verify OnRendererShutdown processes all deferred releases.
-TEST_F(
-  PerFrameResourceManagerTest, OnRendererShutdown_ProcessesAllDeferredReleases)
+//! Tests that OnRendererShutdown processes all deferred releases.
+/*!
+ Verifies that calling OnRendererShutdown() triggers processing of all deferred
+ releases across all frame slots, ensuring complete cleanup when the renderer is
+ being shut down.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  OnRendererShutdown_WithPendingReleases_ProcessesAllDeferredReleases) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   auto r0 = std::make_shared<TestResource>("r0");
@@ -184,20 +217,35 @@ TEST_F(
   EXPECT_TRUE(r0->WasReleased());
 }
 
-//! Edge case: registering nullptr raw pointer should be safe (no crash).
-TEST_F(PerFrameResourceManagerTest, RegisterNullRawPointer_DoesNotCrash)
+//===----------------------------------------------------------------------===//
+// Edge Case Tests Tests boundary conditions and error handling scenarios
+//===----------------------------------------------------------------------===//
+
+//! Tests that registering null raw pointer is safely handled without crashes.
+/*!
+ Verifies that registering a nullptr raw pointer for deferred release does not
+ cause crashes or undefined behavior when frame processing occurs.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_NullRawPointer_DoesNotCrash) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   TestResource* nullres = nullptr;
 
-  // Act / Assert - should not throw or crash
+  // Act & Assert - should not throw or crash
   manager->RegisterDeferredRelease(nullres);
   manager->OnBeginFrame(frame::Slot { 0 });
   SUCCEED();
 }
 
-//! Edge case: multiple registrations from same frame are all executed.
-TEST_F(PerFrameResourceManagerTest, MultipleRegistrations_AllExecuted)
+//! Tests that multiple registrations from same frame are all executed.
+/*!
+ Verifies that when multiple resources are registered for deferred release
+ within the same frame slot, all of them are properly processed when
+ OnBeginFrame() is called for that slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_MultipleRegistrationsSameFrame_AllExecuted) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   auto a = std::make_shared<TestResource>("a");
@@ -213,9 +261,18 @@ TEST_F(PerFrameResourceManagerTest, MultipleRegistrations_AllExecuted)
   EXPECT_TRUE(b->WasReleased());
 }
 
-//! Verify that registered callbacks execute in the same order they were
-//! enqueued for a single frame bucket.
-TEST_F(PerFrameResourceManagerTest, ReleaseOrder_IsPreservedPerFrame)
+//===----------------------------------------------------------------------===//
+// Ordering and Sequence Tests Tests execution order and sequence preservation
+//===----------------------------------------------------------------------===//
+
+//! Tests that deferred actions execute in registration order within a frame.
+/*!
+ Verifies that when multiple deferred actions are registered for the same frame
+ slot, they are executed in the same order they were registered, ensuring
+ predictable execution sequence.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredAction_MultipleActionsPerFrame_PreservesRegistrationOrder) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   std::vector<int> order;
@@ -233,10 +290,19 @@ TEST_F(PerFrameResourceManagerTest, ReleaseOrder_IsPreservedPerFrame)
   EXPECT_EQ(order[2], 3);
 }
 
-//! Verify that a shared_ptr with a custom deleter is invoked when the frame
-//! slot cycles (custom deleter receives ownership and runs on release).
-TEST_F(
-  PerFrameResourceManagerTest, SharedPtrWithCustomDeleter_IsInvokedOnFrameCycle)
+//===----------------------------------------------------------------------===//
+// Custom Deleter Tests Tests specialized resource cleanup scenarios
+//===----------------------------------------------------------------------===//
+
+//! Tests that shared_ptr with custom deleter is properly invoked on frame
+//! cycle.
+/*!
+ Verifies that when a shared_ptr with a custom deleter is registered for
+ deferred release, the custom deleter is invoked when OnBeginFrame() processes
+ the release for that frame slot.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_SharedPtrWithCustomDeleter_InvokesDeleterOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   std::atomic<bool> deleter_ran { false };
@@ -254,8 +320,18 @@ TEST_F(
   EXPECT_TRUE(deleter_ran.load());
 }
 
-//! Edge case: concurrent registrations do not crash (basic smoke test).
-TEST_F(PerFrameResourceManagerTest, ConcurrentRegistrations_Smoke)
+//===----------------------------------------------------------------------===//
+// Concurrency Tests Tests thread safety and concurrent access patterns
+//===----------------------------------------------------------------------===//
+
+//! Tests that concurrent registrations are handled safely without crashes.
+/*!
+ Verifies that multiple threads can safely register deferred releases
+ concurrently without causing data races or crashes. This is a basic smoke test
+ for thread safety.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  RegisterDeferredRelease_ConcurrentRegistrations_HandledSafely) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
   std::vector<std::thread> threads;
@@ -266,13 +342,30 @@ TEST_F(PerFrameResourceManagerTest, ConcurrentRegistrations_Smoke)
     });
   }
 
+  // Act
   for (auto& t : threads) {
     t.join();
   }
-
-  // Act
   manager->OnBeginFrame(frame::Slot { 0 });
 
-  // Assert - if we reached here, it's a basic concurrency smoke test.
+  // Assert - if we reached here, it's a basic concurrency smoke test
   SUCCEED();
+}
+
+//===----------------------------------------------------------------------===//
+// Death Tests Tests error conditions that should trigger assertions
+//===----------------------------------------------------------------------===//
+
+//! Tests that out-of-bounds frame slot triggers assertion in debug builds.
+/*!
+ Verifies that passing an out-of-bounds frame slot to OnBeginFrame() triggers
+ the debug assertion check, ensuring bounds validation is properly enforced.
+*/
+NOLINT_TEST_F(PerFrameResourceManagerTest,
+  OnBeginFrame_OutOfBoundsSlot_TriggersAssertion) // NOLINT_NEXT_LINE(readability-function-size)
+{
+  // Arrange & Act & Assert CHECK should abort when an out-of-bounds slot is
+  // provided
+  NOLINT_ASSERT_DEATH(
+    manager->OnBeginFrame(frame::kMaxSlot), "Frame slot out of bounds");
 }
