@@ -138,9 +138,14 @@ public:
     }
     uint32_t v = table_[u_index].load(std::memory_order_acquire);
     if (v == 0u) {
-      // lazily initialize to 1 (no races: multiple inits to 1 are fine)
-      table_[u_index].store(1u, std::memory_order_release);
-      return 1u;
+      // Lazily initialize to 1 only if the slot is still zero. Use
+      // compare_exchange to avoid overwriting concurrent bumps which could
+      // otherwise increase the generation (e.g., Bump() racing with Load()).
+      uint32_t expected = 0u;
+      table_[u_index].compare_exchange_strong(
+        expected, 1u, std::memory_order_acq_rel, std::memory_order_acquire);
+      // Return the up-to-date value (either observed bumped value or 1).
+      return table_[u_index].load(std::memory_order_acquire);
     }
     return v;
   }
