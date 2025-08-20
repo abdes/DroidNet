@@ -18,7 +18,6 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -29,7 +28,6 @@
 
 using oxygen::graphics::RenderController;
 using oxygen::graphics::RenderPass;
-using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;
 
 //! Default constructor, sets the object name.
@@ -76,7 +74,7 @@ auto RenderController::GetGraphics() const -> const Graphics&
 auto RenderController::GetDescriptorAllocator() const
   -> const DescriptorAllocator&
 {
-  return GetComponent<Bindless>().GetAllocator();
+  return GetGraphics().GetDescriptorAllocator();
 }
 
 auto RenderController::GetDescriptorAllocator() -> DescriptorAllocator&
@@ -87,7 +85,7 @@ auto RenderController::GetDescriptorAllocator() -> DescriptorAllocator&
 
 auto RenderController::GetResourceRegistry() const -> const ResourceRegistry&
 {
-  return GetComponent<Bindless>().GetRegistry();
+  return GetGraphics().GetResourceRegistry();
 }
 
 auto RenderController::GetResourceRegistry() -> ResourceRegistry&

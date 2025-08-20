@@ -14,9 +14,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
@@ -25,6 +28,9 @@ using oxygen::Graphics;
 Graphics::Graphics(const std::string_view name)
 {
   AddComponent<ObjectMetaData>(name);
+  // Create backend-agnostic Bindless component now; allocator will be set by
+  // backend later after device is created.
+  AddComponent<oxygen::graphics::detail::Bindless>();
 }
 
 Graphics::~Graphics() = default;
@@ -70,6 +76,16 @@ void Graphics::Stop()
   command_queues_.clear();
 
   DLOG_F(INFO, "Graphics Live Object stopped");
+}
+
+auto Graphics::SetDescriptorAllocator(
+  std::unique_ptr<graphics::DescriptorAllocator> allocator) -> void
+{
+  using oxygen::graphics::detail::Bindless;
+  CHECK_NOTNULL_F(allocator);
+  DCHECK_F(HasComponent<Bindless>(),
+    "Bindless component must exist on Graphics before setting allocator");
+  GetComponent<Bindless>().SetAllocator(std::move(allocator));
 }
 
 void Graphics::CreateCommandQueues(
@@ -191,4 +207,27 @@ auto Graphics::AcquireCommandList(
   // The Original shared_ptr will be destroyed, but the command list is now
   // managed by the custom deleter and will be returned to the pool when the
   // returned shared_ptr is destroyed
+}
+
+auto Graphics::GetDescriptorAllocator() const
+  -> const graphics::DescriptorAllocator&
+{
+  return GetComponent<graphics::detail::Bindless>().GetAllocator();
+}
+
+auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
+{
+  return const_cast<graphics::DescriptorAllocator&>(
+    std::as_const(*this).GetDescriptorAllocator());
+}
+
+auto Graphics::GetResourceRegistry() const -> const graphics::ResourceRegistry&
+{
+  return GetComponent<graphics::detail::Bindless>().GetRegistry();
+}
+
+auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
+{
+  return const_cast<graphics::ResourceRegistry&>(
+    std::as_const(*this).GetResourceRegistry());
 }

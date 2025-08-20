@@ -28,6 +28,7 @@ namespace platform {
 } // namespace platform
 
 namespace graphics {
+  class DescriptorAllocator;
   struct BufferDesc;
   class Buffer;
   class CommandList;
@@ -37,6 +38,7 @@ namespace graphics {
   class IShaderByteCode;
   class NativeObject;
   class QueueStrategy;
+  class ResourceRegistry;
   class RenderController;
   class Surface;
   struct TextureDesc;
@@ -51,6 +53,58 @@ namespace imgui {
   class ImguiModule;
 } // namespace imgui
 
+//! Backend-agnostic graphics device and frame orchestrator.
+/*!
+ The Graphics class represents the engine's device-level entry point for the
+ graphics subsystem. It owns global, device-scoped facilities (command queues,
+ bindless allocator/registry, command list pool) and orchestrates renderer
+ lifecycles and frame execution using coroutines.
+
+ ### Key Features
+
+ - Device-scoped ownership of global bindless state (descriptor allocator and
+   resource registry) with backend-provided installation.
+ - Command queue creation via a configurable graphics::QueueStrategy and pooled
+   command list acquisition per queue role.
+ - Creation/orchestration of graphics::RenderController instances bound to
+   platform::Window-backed graphics::Surface objects.
+ - Coroutine-driven activation and run loop (see co::LiveObject), with a
+   per-frame parking lot to start rendering cycles.
+
+ ### Usage Patterns
+
+ - Applications instantiate a backend-derived Graphics (e.g., D3D12, Vulkan),
+   then call ActivateAsync() and Run() on a separate thread.
+ - Backends must, during initialization, call the protected
+   SetDescriptorAllocator() exactly once after creating the native device and
+   before creating any graphics::RenderController.
+ - Upper layers request renderers via CreateRenderController() and use
+   OnRenderStart()/Render() to synchronize frame starts.
+
+ ```cpp
+ // Pseudocode
+ auto gfx = std::make_shared<MyBackendGraphics>("My Device");
+ co::spawn(gfx->ActivateAsync(co::TaskStarted<>{}));
+ std::jthread run_thread([gfx]{ gfx->Run(); });
+ // Later: create surfaces, controllers, and drive frames
+ ```
+
+ ### Architecture Notes
+
+ - Graphics is a Composition root; it provides access to ObjectMetaData and
+   installs a backend-agnostic Bindless component at the device level. The
+   descriptor allocator is late-installed via a single-assignment setter to
+   avoid virtual work in constructors and to keep backend concerns out of base
+   construction.
+ - Global accessors GetDescriptorAllocator() and GetResourceRegistry() expose
+   device-level bindless facilities to renderers and resources.
+
+ @warning The descriptor allocator must be installed exactly once by the backend
+ after device creation; accessing bindless facilities before that is a contract
+ violation and triggers debug assertions.
+ @see graphics::RenderController, graphics::Surface, graphics::QueueStrategy,
+      graphics::DescriptorAllocator, graphics::ResourceRegistry, co::LiveObject
+*/
 class Graphics : public Composition, public co::LiveObject {
 public:
   OXYGEN_GFX_API explicit Graphics(std::string_view name);
@@ -94,7 +148,7 @@ public:
 
   //! Initialize command queues using the provided queue management strategy.
   /*!
-   \param queue_strategy The strategy for initializing command queues.
+  @param queue_strategy The strategy for initializing command queues.
   */
   OXYGEN_GFX_API auto CreateCommandQueues(
     const graphics::QueueStrategy& queue_strategy) -> void;
@@ -112,6 +166,17 @@ public:
     std::string_view unique_id) const
     -> std::shared_ptr<graphics::IShaderByteCode>
     = 0;
+
+  // Bindless global accessors (device-owned)
+  [[nodiscard]] OXYGEN_GFX_API auto GetDescriptorAllocator() const
+    -> const graphics::DescriptorAllocator&;
+  [[nodiscard]] OXYGEN_GFX_API auto GetDescriptorAllocator()
+    -> graphics::DescriptorAllocator&;
+
+  [[nodiscard]] OXYGEN_GFX_API auto GetResourceRegistry() const
+    -> const graphics::ResourceRegistry&;
+  [[nodiscard]] OXYGEN_GFX_API auto GetResourceRegistry()
+    -> graphics::ResourceRegistry&;
 
   //=== Rendering Resources factories ===-----------------------------------//
 
@@ -136,18 +201,44 @@ public:
     = 0;
 
 protected:
+  //! Install the backend descriptor allocator and initialize device bindless.
+  /*!
+   Installs the device-scoped descriptor allocator used by the bindless system
+   and completes initialization of the backend-agnostic Bindless component.
+
+   Call exactly once per device, after the native graphics device is created
+   and before creating any RenderController or performing descriptor
+   allocations. Not thread-safe; invoke during single-threaded initialization.
+
+   Preconditions
+   - allocator != nullptr
+   - No allocator has been installed yet
+
+   Postconditions
+   - GetDescriptorAllocator() and GetResourceRegistry() become valid
+
+   Error model
+   - Violations trigger debug checks in debug builds; no exceptions are thrown
+
+  @param allocator Backend-specific descriptor allocator. Ownership is
+              transferred to Graphics.
+  */
+  OXYGEN_GFX_API auto SetDescriptorAllocator(
+    std::unique_ptr<graphics::DescriptorAllocator> allocator) -> void;
+
   //! Create a command queue for the given role and allocation preference.
   /*!
-   \param queue_name The debug name for this queue.
-   \param role The role of the command queue.
-   \param allocation_preference The allocation preference for the command queue.
-   \return A shared pointer to the created command queue.
-   \throw std::runtime_error If the command queue could not be created.
+   Backend hook to construct an API-specific command queue mapped from the
+   engine role and allocation preference.
 
-   This method is called by the graphics backend to create a command queue for
-   a specific role and allocation preference. The backend implementation is
-   responsible for mapping these parameters to API-specific queue types or
-   families.
+  @param queue_name Debug name for the queue.
+  @param role Engine queue role (graphics, compute, copy, etc.).
+  @param allocation_preference Preferred allocation behavior for the queue.
+  @return Shared pointer to the created command queue.
+  @throw std::runtime_error If the command queue cannot be created.
+
+   Note: Typical callers use CreateCommandQueues() and GetCommandQueue();
+   this method is for backend implementations.
   */
   [[nodiscard]] virtual auto CreateCommandQueue(std::string_view queue_name,
     graphics::QueueRole role,
@@ -155,10 +246,15 @@ protected:
     -> std::shared_ptr<graphics::CommandQueue>
     = 0;
 
-  /**
-   * Creates a new command list for the given queue role.
-   * For internal use by the command list pool.
-   */
+  //! Create a new command list for the given queue role (pool support).
+  /*!
+   Internal factory used by the command list pool. The returned command list
+   must be compatible with the specified queue role.
+
+  @param role Queue role this command list will execute on.
+  @param command_list_name Debug name for the command list.
+  @return Newly created command list.
+  */
   [[nodiscard]] virtual auto CreateCommandListImpl(
     graphics::QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList>
@@ -170,6 +266,16 @@ protected:
     return *nursery_;
   }
 
+  //! Create the backend renderer/controller for the given surface.
+  /*!
+   Constructs a backend-specific RenderController bound to the provided surface
+   and configured for the requested frames-in-flight.
+
+  @param name Debug name for the renderer.
+  @param surface The target surface (typically backed by a platform window).
+  @param frames_in_flight Number of frame slots to pipeline.
+  @return Newly created renderer/controller instance.
+  */
   [[nodiscard]] virtual auto CreateRendererImpl(std::string_view name,
     std::weak_ptr<graphics::Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<graphics::RenderController>
@@ -194,10 +300,10 @@ private:
   //! Active renderers managed by this Graphics instance.
   /*!
    We consider that the RenderingController is created and owned by the upper
-   layers (e.g., the application layer). Its lifetime is tied to the lifetime
-   of the application and the associated rendering context. At the graphics
-   level, we only care about the renderers while they are still alive. When
-   they are not, we just forget about them.
+   layers (e.g., the application layer). Its lifetime is tied to the lifetime of
+   the application and the associated rendering context. At the graphics level,
+   we only care about the renderers while they are still alive. When they are
+   not, we just forget about them.
   */
   std::vector<RendererWeakPtr> renderers_;
 

@@ -10,6 +10,8 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
@@ -104,6 +106,16 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   }
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>();
+
+  // Initialize global Bindless allocator at the device level
+  {
+    auto allocator
+      = std::make_unique<oxygen::graphics::d3d12::DescriptorAllocator>(
+        std::make_shared<oxygen::graphics::d3d12::D3D12HeapAllocationStrategy>(
+          GetCurrentDevice()),
+        GetCurrentDevice());
+    Base::SetDescriptorAllocator(std::move(allocator));
+  }
 }
 
 auto Graphics::CreateCommandQueue(std::string_view name, QueueRole role,

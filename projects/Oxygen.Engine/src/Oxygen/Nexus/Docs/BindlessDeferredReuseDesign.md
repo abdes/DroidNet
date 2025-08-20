@@ -22,46 +22,13 @@ synchronization models:
 Both strategies share a `GenerationTracker` and a `DomainIndexMapper` for
 thread‑safe reuse and CPU‑side handle validation.
 
-## Recommended Architectural Change
-
-To correctly support multi‑surface bindless rendering, refactor ownership and
-coordination as follows.
-
-### Graphics device
-
-1) Single global `DescriptorAllocator` owned by the Graphics device
-2) Shared CBV_SRV_UAV and Sampler heaps bound by all surfaces
-3) Global resource registry at the device level
-4) Unified descriptor index space across all surfaces
-
-### RenderController
-
-1) Hold references to the global allocator (no per‑controller ownership)
-2) Optionally pre‑allocate per‑controller descriptor ranges for isolation
-3) Bind the same global descriptor heaps on all command lists
-4) Enable controlled cross‑surface resource sharing
-
-### Deferred reuse strategies
-
-1) Strategy instance owned/managed by the Graphics device
-2) Coordinate GPU timelines from all surfaces
-3) Provide thread‑safe access from multiple render threads
-4) Prefer Strategy B (timeline‑gated) for multi‑surface safety
-
-Benefits:
-
-- Resource sharing across surfaces
-- Reduced memory fragmentation via a single global heap
-- Consistent, collision‑free index space
-- Natural scalability to many surfaces
-
 ## Multi‑threaded rendering architecture
 
 ### Current implementation
 
-Each `RenderController` currently owns its own `DescriptorAllocator`. This
-complicates global heap management but can be addressed with a hybrid model
-aligned with typical engine resource patterns.
+The system now uses a single global `DescriptorAllocator` at the device level
+and a global resource registry. Per‑renderer ownership is removed in favor of a
+unified index space across all surfaces.
 
 ### Resource ownership patterns
 
@@ -93,14 +60,15 @@ Ownership: engine‑wide cache with checkout/check‑in for thread safety.
 
 ### Simplified architecture
 
-Adopt a single global approach for bindless deferred reuse.
+Adopt a single global approach for bindless deferred reuse with Nexus‑owned
+strategies.
 
 #### Global bindless heap management
 
-- One global `DescriptorAllocator` for all bindless resources
-- One global `GenerationTracker`
-- One global `DomainIndexMapper`
-- One strategy instance managing slot reuse
+- One global `DescriptorAllocator` for all bindless resources (Graphics)
+- One global `GenerationTracker` (Nexus)
+- One global `DomainIndexMapper` (Nexus)
+- One or more strategy instances managing slot reuse (Nexus)
 
 #### Strategy selection by lifecycle
 
@@ -138,7 +106,7 @@ Lifecycle threading:
 
 ### Deferred reuse strategy deployment
 
-Single global strategy instance manages all bindless slot reuse.
+Nexus‑owned strategy instances manage bindless slot reuse across surfaces.
 
 #### Strategy A: frame‑based reclamation
 
@@ -408,7 +376,8 @@ public:
 
 ### Who calls Process() and when (Strategy B)
 
-- Owner: the renderer (same component that owns the strategy instance).
+- Owner: Nexus (strategy instance managed by Nexus). Renderers and subsystems
+  call into Nexus to release and process.
 - Frequency: once per frame after queue submissions, and optionally after large
   upload/copy batches complete; non-blocking and cheap.
 - Goal: opportunistically reclaim any entries whose timelines have advanced;
@@ -500,12 +469,29 @@ Atomicity guarantees:
 
 ## Ownership of pending‑free queue (design note)
 
-- Decision: Each strategy instance owns its pending‑free bookkeeping. Graphics
-  allocator/segments remain unaware.
-  - Pros: zero changes to backend; clear separation of concerns; Renderer
-    controls reuse policy, generation, and synchronization.
-  - Cons: The caller must consistently use one strategy per resource lifetime;
-    mixed ownership is undefined.
+- Decision: Each strategy instance (owned by Nexus) owns its pending‑free
+  bookkeeping. Graphics allocator/segments remain unaware.
+  - Pros: zero changes to backend; clearer separation of concerns; lifecycle
+    policy lives in a higher‑level module; reusable across backends.
+  - Cons: Requires explicit wiring so renderers/subsystems route release and
+    processing calls through Nexus APIs.
+
+## Strategy ownership: Graphics vs Nexus (assessment)
+
+Graphics‑owned
+
+- Pros: direct proximity to allocator; simple access to device objects
+- Cons: couples lifecycle policy to low‑level device; harder to reuse across
+  backends; risks constructor/initialization coupling; not primarily a graphics
+  concern
+
+Nexus‑owned (recommended)
+
+- Pros: separates policy from mechanism; backend‑agnostic; testable in
+  isolation; natural home for generation tracking and domain mapping; aligns
+  with multi‑surface coordination needs
+- Cons: requires clean APIs for Graphics/Renderer to provide timelines and to
+  call Process()/OnBeginFrame hooks
 
 ## Fence id type and semantics (Strategy B)
 

@@ -10,9 +10,6 @@
 #include <type_traits>
 #include <utility>
 
-#include <Oxygen/Graphics/Common/Detail/Bindless.h>
-#include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
-#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
@@ -22,10 +19,7 @@
 #include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 using oxygen::graphics::TextureDesc;
-using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
-using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::RenderController;
-using oxygen::graphics::detail::Bindless;
 
 RenderController::RenderController(const std::string_view name,
   const std::weak_ptr<oxygen::Graphics>& gfx_weak,
@@ -37,10 +31,6 @@ RenderController::RenderController(const std::string_view name,
 
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* gfx = static_cast<Graphics*>(gfx_weak.lock().get());
-  auto allocator = std::make_unique<DescriptorAllocator>(
-    std::make_shared<D3D12HeapAllocationStrategy>(), gfx->GetCurrentDevice());
-  AddComponent<Bindless>(
-    std::move(allocator)); // TODO: make strategy configurable
   AddComponent<detail::PipelineStateCache>(gfx);
 }
 
