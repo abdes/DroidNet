@@ -33,6 +33,27 @@ applyTo: '**/*.cpp;**/*.h'
 - **Macro Names:** Use all uppercase with underscores. Example: `MY_MACRO_NAME`
 - **Class Data Members:** Name like ordinary nonmember variables, but with a trailing underscore (e.g., `my_member_`). Static constant class members follow the rules for constants (e.g., `kMaxValue`).
 - **Struct Data Members:** Name like ordinary nonmember variables (e.g., `my_member`). Do not use trailing underscores for struct members.
+- **Unwrapped Strong Types:** When unwrapping strongly typed variables using `.get()`, prefix the unwrapped variable with `u_` followed by the original variable name. Example: `const auto u_capacity = capacity.get();`, `const auto u_index = index.get();`
+
+## STRONG TYPES (NamedType)
+
+- **Definition Pattern:** Use `oxygen::NamedType<UnderlyingType, TagStruct, Skills...>` to create type-safe wrappers. Tag structs should be declared inline and follow `StructNameTag` convention.
+- **Naming Convention:** Strong type names should be descriptive and domain-specific. Use UpperCamelCase. Example: `BindlessHandle`, `ScreenSpaceError`, `PassMask`
+- **Tag Struct Naming:** Tag structs should match the strong type name with `Tag` suffix. Example: `struct BindlessHandleTag`, `struct ScreenSpaceErrorTag`
+- **Skills Selection:** Choose minimal skills needed for the type's intended usage. Common patterns:
+  - **Identifiers/Handles:** `Hashable`, `Comparable`, `Printable`
+  - **Counts/Quantities:** `DefaultInitialized`, `Arithmetic`, `Comparable`, `Printable`, `Hashable`
+  - **Metrics/Measurements:** `Arithmetic`, `FunctionCallable`, `DefaultInitialized`
+- **Skills Formatting:** List skills vertically with `clang-format off/on` comments for readability
+- **When to Use:** Create strong types for:
+  - API boundaries to prevent parameter confusion
+  - Domain-specific values that should not mix (e.g., different handle types)
+  - Units and measurements to prevent unit confusion
+  - Counts and indices to prevent off-by-one errors
+- **When NOT to Use:** Avoid for:
+  - Internal implementation details with short lifetimes
+  - Cases where the underlying type is already sufficiently type-safe
+  - Over-engineering simple numeric operations
 
 ## CODE QUALITY RULES
 
