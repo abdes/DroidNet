@@ -162,7 +162,7 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
 ### 2. Per‑frame infrastructure
 
 - ✅ PerFrameResourceManager augmentation
-  - ✅ OnBeginFrame(FrameSlotIndex) already exists and executes frame-specific
+  - ✅ OnBeginFrame(oxygen::frame::Slot) already exists and executes frame-specific
     deferred actions
   - ✅ Underlying deferred action infrastructure exists via std::function<void()>
     vectors
@@ -194,19 +194,48 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
   - ✅ Buffer growth for large indices
   - ✅ Edge cases: invalid handles, concurrent double-release protection
 
-### 4. Strategy B — TimelineGatedSlotReuse
+### 4. Strategy B — TimelineGatedSlotReuse (Design Complete)
 
-- ⬜ Implement class skeleton (ctor takes AllocateFn, FreeFn,
-  DescriptorAllocator&)
-- ⬜ Pending-free structure keyed by (timeline ptr, fenceValue); Release()
-  enqueues, Process() polls GetCompletedValue()
-- ⬜ Convenience ReleaseAfterSubmission(recorder): Signal();
-  QueueSignalCommand(value)
-- ⬜ Unit tests (GPU-free)
-  - ⬜ Fake queue/timeline; no reuse before completed<K; reuse after Process()
-    when completed>=K; generation+1
-  - ⬜ Multiple timelines/fence values; double release ignored
-  - ⬜ Engine-wide resource cache integration patterns
+- 🟡 Design complete, implementation not started
+  - 🟡 `TimelineGatedSlotReuse(AllocateFn allocate, FreeFn free, DescriptorAllocator& allocator)` ctor
+  - 🟡 `oxygen::VersionedBindlessHandle Allocate(DomainKey)` and stamp generation (acquire semantics)
+  - 🟡 `void Release(DomainKey, oxygen::VersionedBindlessHandle, const oxygen::graphics::CommandQueue&, oxygen::graphics::FenceValue)`
+  - 🟡 `void ReleaseBatch(const oxygen::graphics::CommandQueue&, oxygen::graphics::FenceValue, std::span<const std::pair<DomainKey, oxygen::VersionedBindlessHandle>>)`
+  - 🟡 `void Process() noexcept` and `void ProcessFor(const oxygen::graphics::CommandQueue&) noexcept`
+
+- 🟡 Pending-free bookkeeping and data structures
+  - 🟡 Per-timeline keying: `std::unordered_map<QueueKey, TimelineBuckets>` where `QueueKey` is `oxygen::graphics::CommandQueue*`.
+  - 🟡 `TimelineBuckets` is an ordered (ascending) map from `oxygen::graphics::FenceValue` → small vector of `{DomainKey, absIndex}`.
+  - 🟡 Atomic pending flag array (e.g., `std::atomic<uint8_t>[]`) for double-release protection.
+  - 🟡 Per-timeline append paths use either a small mutex or lock-free SPSC for common producer patterns; `Process()` is the single consumer.
+
+- 🟡 Monotonic processing and reclamation algorithm
+  - 🟡 `Release` / `ReleaseBatch` only enqueue pending frees; they must CAS the pending flag per index before enqueue.
+  - 🟡 `ProcessFor(queue)` queries `queue->GetCompletedValue()` and reclaims buckets with `fence <= completed` in ascending order.
+  - 🟡 Reclamation: `generation.bump(absIndex)` (memory_order_release) then call injected `free(domain, oxygen::bindless::Handle{absIndex})`.
+  - 🟡 Ensure iteration is safe if `GetCompletedValue()` increases between reads; only front buckets are processed.
+
+- 🟡 Capacity and growth handling
+  - 🟡 `EnsureCapacity_` to grow `GenerationTracker` and pending flags when `Allocate` returns indices beyond current capacity.
+  - 🟡 On ReleaseBatch where indices originate from this strategy, `EnsureCapacity_` can be elided for performance; otherwise, call defensively.
+
+- 🟡 Debug, validation and instrumentation
+  - 🟡 `IsHandleCurrent(oxygen::VersionedBindlessHandle)` implementation using `GenerationTracker`.
+  - 🟡 OXY_DEBUG gated checks for out-of-order fence values per timeline (DCHECK) and for queue lifetime (null checks).
+  - 🟡 Throttled logging for stuck fences (pending-free growth) and optional `FlushAndDrain()` helper for tests/tools.
+
+- 🟡 Unit tests (GPU-free, deterministic)
+  - 🟡 `allocate_then_release_single_then_reclaim_when_completed` — single release with fake queue: no reuse until completed < K, reclaimed when completed >= K and generation increments.
+  - 🟡 `batch_release_then_reclaim_all_under_same_fence` — release batch under same (queue, fence) and reclaim together.
+  - 🟡 `multi_timeline_reclaim` — two queues with different completed values; only eligible buckets reclaimed per queue.
+  - 🟡 `double_release_ignored` — duplicate releases ignored due to pending flag guard.
+  - 🟡 `capacity_growth_on_allocate_and_release` — ensure `EnsureCapacity_` works for large indices.
+  - 🟡 `is_handle_current_detects_stale_handles` — IsHandleCurrent returns false after reclamation.
+
+Notes:
+
+- The implementation should avoid taking ownership of `oxygen::graphics::CommandQueue` pointers; `QueueKey` is a non-owning raw pointer stable for device lifetime. `Process()` runs on the renderer thread; enqueue paths may be invoked from workers.
+- The strategy must remain backend-agnostic: adapters convert backend `uint64_t` fence values into `oxygen::graphics::FenceValue` at call sites.
 
 ### 5. Debug/validation & feature toggles
 
@@ -324,7 +353,7 @@ public:
 ### PerFrameResourceManager requirements
 
 - void RegisterDeferredAction(std::function<void()> action); // thread-safe (implemented)
-- void OnBeginFrame(frame::FrameSlotIndex frame_slot); // executes bucket from
+- void OnBeginFrame(oxygen::frame::Slot frame_slot); // executes bucket from
   previous render of this slot
 
 ### Notes (Strategy A)
@@ -333,69 +362,157 @@ public:
 - Debug helper: IsHandleCurrent compares h.generation against
   generation_table[h.index].
 
-## Strategy B — Explicit fence driven
+## Strategy B — Suggested API for TimelineGatedSlotReuse
 
-Motivation: subsystems like upload/copy may produce long batches decoupled from
+Strategy B provides explicit, timeline-based reclamation decoupled from frame rotation. Callers pair each release with a concrete `oxygen::graphics::CommandQueue` and a strong `oxygen::graphics::FenceValue` captured from `CommandQueue::Signal()` and recorded into the command list via `QueueSignalCommand(...)`. The API is intentionally minimal and backend‑agnostic: no recorder conveniences, no templates — just queue + fence. This makes it a natural fit for multi-surface rendering and long‑running upload/copy batches where the owning timeline is not the renderer's frame index.# Solution Overview
+
+### When to choose TimelineGatedSlotReuse (Strategy B)
+
+Strategy B is aimed at subsystems whose resource lifetime cannot be safely
+expressed using the renderer's frame index rotation. Prefer TimelineGated
+reuse in the following situations:
+
+- Multi-surface or multi-swapchain submission: when a resource may be used by
+  several surfaces that progress on independent presentation/timing paths. The
+  renderer's frame slot for surface A may advance at a different pace than
+  surface B; only a queue-aligned fence can guarantee the resource's final
+  GPU use has completed for all dependent timelines.
+- Background upload/copy/streaming pipelines: long-running transfer batches
+  recorded on a transfer/async queue and flushed infrequently. These batches
+  produce work that outlives a single frame and therefore cannot rely on
+  frame-based rotation to ensure safe reclamation.
+- Cross-queue dependencies: when a resource is produced on one queue and later
+  consumed on another (for example, copy on transfer queue then used on
+  graphics queue), pairing the release with the originating queue's fence is
+  a robust way to express the moment of last GPU use.
+- Off-main-thread recorders: recorders that submit work from worker threads
+  where the per-frame lifecycle is not directly visible to the producer. The
+  producer can capture its command queue and fence value and hand them to the
+  global timeline strategy without accessing per-frame buckets.
+- Subsystems that require explicit determinism for reclamation timing: tools,
+  capture/replay, or testing harnesses that need precise, reproduceable
+  reclamation points should use explicit fence-based releases.
+
+Decision guidance — quick checklist
+
+- If the resource is strictly frame-local (allocated, used and released within
+  one frame slot) → use FrameDrivenSlotReuse (Strategy A).
+- If the resource is shared engine-wide or used across frames but always
+  released from the renderer thread and tightly bound to BeginFrame semantics
+  → Strategy A may still be acceptable.
+- If the resource's last GPU use is recorded into a command list that is not
+  guaranteed to complete within the same frame index (long transfer batches,
+  multi-surface presentation, cross-queue workflows) → prefer TimelineGated
+  (Strategy B).
+
+Practical examples
+
+- Texture streaming: staging textures are uploaded on the transfer queue in
+  large batches; reclamation must wait for the transfer queue's fence to
+  complete before freeing staging descriptors. Use TimelineGated and batch
+  releases with the transfer queue's fence value.
+- Staging descriptor views created by asset importers running on worker
+  threads: those threads can record their own recorder and supply the queue+
+  fence into ReleaseBatch without touching per-frame data structures.
+- Cross-surface readbacks: a texture used for readback on the GPU and then
+  sampled by multiple windows with independent frame pacing — reclamation is
+  only safe after the queue that performed the readback has signalled.
+
+When not to use Strategy B
+
+- High-frequency, per-frame dynamic allocations where the overhead of
+  per-queue bookkeeping outweighs benefits. FrameDrivenSlotReuse is simpler
+  and faster for truly frame-local workloads.
+- When the code path cannot access a CommandQueue or a fence value at the
+  point of release; in that case, prefer migrating the call site to a
+  renderer-mediated release (Strategy A) or provide an adapter that obtains
+  the queue/fence for the producer.
+
+### Summary of TimelineGatedSlotReuse design
+
+Strategy B provides explicit, timeline-based reclamation decoupled from frame rotation. Callers pair each release with a concrete `graphics::CommandQueue` and a strong `graphics::FenceValue` captured from `CommandQueue::Signal()` and recorded into the command list via `QueueSignalCommand(...)`. The API is intentionally minimal and backend‑agnostic: no recorder conveniences, no templates — just queue + fence. This makes it a natural fit for multi-surface rendering and long‑running upload/copy batches where the owning timeline is not the renderer’s frame index.
+
+Internally, the strategy owns a `GenerationTracker` and a `DomainIndexMapper`, and keeps per‑queue pending frees bucketed by monotonically increasing `FenceValue`s. `Release`/`ReleaseBatch` only enqueue entries; `Process()` (or `ProcessFor(queue)`) polls `queue->GetCompletedValue()` and reclaims all buckets with `fence <= completed`, bumping the slot generation before calling the injected backend `free`. The path is non‑blocking and thread‑safe, with double‑release protection via atomic flags and defensive capacity growth to cover large indices.
+
+Ownership is device‑wide and Nexus‑scoped: a single instance serves the global bindless heap backed by the engine’s `DescriptorAllocator`. Typical use: after recording the last GPU use, obtain the target `CommandQueue*`, reserve `auto v = q->Signal();` and record `q->QueueSignalCommand(v);`, then call `Release`/`ReleaseBatch(*q, graphics::FenceValue{v}, ...)`. The renderer calls `Process()` opportunistically (e.g., once per frame after submissions). This keeps lifecycle policy separate from backend mechanics and avoids coupling to per‑frame scheduling.
+
+ Motivation: subsystems like upload/copy may produce long batches decoupled from
 frame index rotation. They need reclamation keyed to their own GPU timeline.
 
-### API (Renderer-layer wrapper around injected allocate/free)
+> Note: The suggested API, FenceValue type, processing rules, capacity/growth guidance and test matrix for Strategy B are in the "Suggested API for TimelineGatedSlotReuse" section below.
 
-```cpp
-// Concepts that match existing engine types — no new structs/classes needed
-template <typename T>
-concept QueueTimeline = requires(const T& t) {
-  { t.GetCompletedValue() } -> std::same_as<uint64_t>;
-};
+### Suggested API for TimelineGatedSlotReuse
 
-template <typename R>
-concept RecorderOnQueue = requires(R& r) {
-  { r.GetTargetQueue() } -> std::same_as<graphics::CommandQueue*>;
-};
+This section provides the suggested API design for TimelineGatedSlotReuse.
+The design is complete but implementation has not yet started. Other narrative
+sections may discuss usage and examples, but the concrete API, types,
+processing rules, and tests are specified here.
 
-// Reserve a fence value on the recorder's queue and enqueue a GPU-side signal
-// with existing APIs — no new renderer hooks needed.
+- Strong fence type: `oxygen::graphics::FenceValue` — IMPLEMENTED
+  (see `src/Oxygen/Graphics/Common/Types/FenceValue.h`). This is a
+  NamedType wrapper around `uint64_t` that supports comparison and basic
+  printable/hashable skills. Values come from `CommandQueue::Signal()` and
+  are observed via `CommandQueue::GetCompletedValue()`; monotonic per-queue.
 
-class TimelineGatedSlotReuse {
-public:
-  explicit TimelineGatedSlotReuse(AllocateFn allocate,
-                                  FreeFn free,
-                                  oxygen::graphics::DescriptorAllocator& allocator);
+- Public API (canonical):
 
-  VersionedBindlessHandle Allocate(DomainKey domain, ResourceKey key /*view descs*/);
-  template <QueueTimeline TL>
-  void Release(DomainKey domain,
-               VersionedBindlessHandle h,
-               const TL& timeline,
-               uint64_t fenceValue);
+  ```cpp
+  class TimelineGatedSlotReuse {
+  public:
+    using AllocateFn = std::function<oxygen::bindless::Handle(DomainKey)>;
+    using FreeFn = std::function<void(DomainKey, oxygen::bindless::Handle)>;
 
-  // Convenience: tie release to a recorder's submission point using its target queue.
-  template <RecorderOnQueue R>
-  void ReleaseAfterSubmission(DomainKey domain,
-                              VersionedBindlessHandle h,
-                              R& recorder) {
-    auto* q = recorder.GetTargetQueue();
-    const uint64_t fv = q->Signal();
-    q->QueueSignalCommand(fv);
-    Release(domain, h, *q, fv);
-  }
-  void Process() noexcept; // non-blocking; reclaims any entries with counter->GetCompletedValue() >= fenceValue
-  bool IsHandleCurrent(VersionedBindlessHandle h) const noexcept; // debug
-};
-```
+    explicit TimelineGatedSlotReuse(AllocateFn allocate,
+                                    FreeFn free,
+                                    oxygen::graphics::DescriptorAllocator& allocator);
 
-### Implementation outline (Strategy B)
+    VersionedBindlessHandle Allocate(DomainKey domain);
 
-- Holds its own GenerationTracker and DomainIndexMapper.
-- Maintains a pending-free min-heap or bucketed map keyed by (timeline ptr,
-  fenceValue). Each PendingFree contains {absIndex, domain, timelineWeak,
-  fenceValue}.
-- Release enqueues PendingFree; it does not call backend free immediately.
-- Process() (invoked by the renderer at convenient points, e.g., once per frame)
-  iterates timelines that have pending frees, queries GetCompletedValue(), and
-  reclaims all entries with fenceValue <= completed:
-  - generation.bump(absIndex) with release semantics; then
-  - free(domain, oxygen::bindless::Handle{absIndex}).
-- Allocate mirrors Strategy A for stamping VersionedBindlessHandle.
+    void Release(DomainKey domain,
+                 VersionedBindlessHandle h,
+                 const oxygen::graphics::CommandQueue& queue,
+                 oxygen::graphics::FenceValue fence_value);
+
+    void ReleaseBatch(const oxygen::graphics::CommandQueue& queue,
+                      oxygen::graphics::FenceValue fence_value,
+                      std::span<const std::pair<DomainKey, VersionedBindlessHandle>> items);
+
+    void Process() noexcept;
+    void ProcessFor(const oxygen::graphics::CommandQueue& queue) noexcept;
+
+    bool IsHandleCurrent(VersionedBindlessHandle h) const noexcept;
+  };
+  ```
+
+- Processing/ordering rules (canonical):
+  - Releases only enqueue PendingFree entries keyed by (QueueKey, oxygen::graphics::FenceValue).
+  - Pending frees are bucketed per-timeline and ordered by ascending oxygen::graphics::FenceValue.
+  - `Release` must CAS an atomic per-index pending flag to prevent double-release
+    prior to enqueueing an entry.
+  - `ProcessFor(queue)` reads `queue->GetCompletedValue()` and reclaims
+    buckets with `fence <= completed` in ascending order. For each reclaimed
+    index: bump generation (release semantics) then call injected `free(domain, Handle{idx})`.
+  - `Allocate` stamps the returned index with `GenerationTracker::Load()`
+    (acquire) to produce a `VersionedBindlessHandle`.
+
+- Capacity and growth (canonical):
+  - `EnsureCapacity_` grows `GenerationTracker` and pending_flags to cover
+    indices returned by backend allocate calls. Batched releases may elide
+    growth when handles are known to come from this strategy, but callers may
+    be defensive and call `EnsureCapacity_` when in doubt.
+
+- Debugging and testing (canonical):
+  - Provide `IsHandleCurrent` to validate stale handles via generation checks.
+  - Offer a `FlushAndDrain()` helper only for tests/tools to force reclamation.
+  - Tests should be GPU-free via a fake `CommandQueue` that can advance
+    `GetCompletedValue()` deterministically.
+
+- Minimal test matrix (canonical):
+  - allocate_then_release_single_then_reclaim_when_completed
+  - batch_release_then_reclaim_all_under_same_fence
+  - multi_timeline_reclaim
+  - double_release_ignored
+  - capacity_growth_on_allocate_and_release
 
 ### Who calls Process() and when (Strategy B)
 
@@ -417,16 +534,19 @@ public:
 
 - Use the queue itself as the timeline. No wrappers are needed. Typical
   patterns:
-  - By name: `auto queue = gfx->GetCommandQueue(queues.GraphicsQueueName());`
+  - By name: `auto queue = gfx->GetCommandQueue(queues.GraphicsQueueName());` (returns `std::shared_ptr<graphics::CommandQueue>`)
   - By role: `auto queue = gfx->GetCommandQueue(queues.TransferQueueName());`
+  - In recorders: `recorder->GetTargetQueue()` exposes the `CommandQueue*` key needed by Strategy B.
 
 ### How fences are injected and advanced (Strategy B)
 
 - After recording the last GPU use and before ending the recorder, reserve a
-  fence value on the recorder’s target CommandQueue via `q->Signal()`.
-  Immediately enqueue a GPU-side `q->QueueSignalCommand(value)` on the same
-  queue. This ensures the fence reaches the reserved value once the recorded
-  work is executed.
+  fence on the recorder’s target queue:
+  1) `auto* q = recorder->GetTargetQueue();`
+  2) `const auto fv_raw = q->Signal();`
+  3) `q->QueueSignalCommand(fv_raw);`
+  4) Feed `FenceValue{fv_raw}` to `Release{,Batch}...`.
+  This queues a GPU-side signal in the same command list so the fence reaches the value after work executes.
 - Which command list: the one that carries the last GPU use of the resource
   being released. The releasing code pairs the reserved `fenceValue` with that
   same queue in `Release(..., queue, fenceValue)`.
@@ -469,8 +589,8 @@ On Release(domain, h):
 
 - Strategy A enqueues a lambda into the current frame’s bucket to be executed at
   the next cycle of this frame index.
-- Strategy B enqueues a PendingFree keyed by (counter, fenceValue) to be
-  reclaimed during Process() once counter->GetCompletedValue() >= fenceValue.
+- Strategy B enqueues a PendingFree keyed by (queue, FenceValue) to be
+  reclaimed during Process() once `queue->GetCompletedValue() >= fenceValue.get()`.
 
 Atomicity guarantees:
 
@@ -499,32 +619,25 @@ Atomicity guarantees:
   - Cons: Requires explicit wiring so renderers/subsystems route release and
     processing calls through Nexus APIs.
 
-## Strategy ownership: Graphics vs Nexus (assessment)
+## Strategy ownership: Nexus
 
-Graphics‑owned
+All bindless slot reuse strategies are owned by Nexus, as the Unified GPU Resource Manager (UGRM). This design choice provides:
 
-- Pros: direct proximity to allocator; simple access to device objects
-- Cons: couples lifecycle policy to low‑level device; harder to reuse across
-  backends; risks constructor/initialization coupling; not primarily a graphics
-  concern
-
-Nexus‑owned (recommended)
-
-- Pros: separates policy from mechanism; backend‑agnostic; testable in
-  isolation; natural home for generation tracking and domain mapping; aligns
-  with multi‑surface coordination needs
-- Cons: requires clean APIs for Graphics/Renderer to provide timelines and to
-  call Process()/OnBeginFrame hooks
+- **Policy separation**: Separates lifecycle policy from low-level graphics mechanisms
+- **Backend agnostic**: Testable in isolation from specific graphics APIs
+- **Natural coordination**: Nexus serves as the orchestration point for GPU residency decisions
+- **Multi-surface support**: Aligns with multi-surface coordination needs across the engine
+- **Clean abstractions**: Graphics/Renderer provide timelines via clean APIs; Nexus manages the deferred reuse logic
 
 ## Fence id type and semantics (Strategy B)
 
-- Type: uint64_t fence value, monotonically increasing, as returned by
-  ID3D12Fence::GetCompletedValue via the engine’s abstraction.
+- Type: `oxygen::graphics::FenceValue` wrapping the raw `uint64_t` returned by
+  `CommandQueue::Signal()` / `GetCompletedValue()`.
 - Semantics: Fence is completely independent from frame index. The renderer
   calls TimelineGatedSlotReuse::Process(), which queries timelines and reclaims
   accordingly. No calls to OnBeginFrame/PerFrameResourceManager are required.
 
-### C++20 concept-based usage aligned with MainModule flow
+### Example usage aligned with MainModule flow
 
 ```cpp
 auto recorder = render_controller->AcquireCommandRecorder(
@@ -534,19 +647,24 @@ auto recorder = render_controller->AcquireCommandRecorder(
 
 // Option A: explicit queue + fence value (using existing APIs)
 auto* queue = recorder->GetTargetQueue();
-const uint64_t fenceValue = queue->Signal();
-queue->QueueSignalCommand(fenceValue);
-timelineReuse.Release(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, handle, *queue, fenceValue); // QueueTimeline auto&
+const auto fenceValueRaw = queue->Signal();
+queue->QueueSignalCommand(fenceValueRaw);
+timelineReuse.Release(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, handle, *queue, oxygen::graphics::FenceValue{fenceValueRaw});
 
-// Option B: convenience API using RecorderOnQueue
-timelineReuse.ReleaseAfterSubmission(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, handle, *recorder);
+// Batch example (e.g., upload queue freeing many staging views)
+std::array<std::pair<DomainKey, VersionedBindlessHandle>, 3> batch = { {
+  { DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, h0 },
+  { DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, h1 },
+  { DomainKey{ ResourceViewType::kBuffer_CBV,   DescriptorVisibility::kShaderVisible }, h2 },
+} };
+timelineReuse.ReleaseBatch(*queue, oxygen::graphics::FenceValue{fenceValueRaw}, batch);
 
 // Later (EndFrame) submission happens and the queued signal is injected.
 timelineReuse.Process();
 ```
 
 ```cpp
-// Global strategy instance (owned by Graphics device, shared by all RenderControllers)
+// Global strategy instance (owned by Nexus, shared by all RenderControllers)
 // Strategy A — frame-based reclamation
 auto hA = globalFrameReuse.Allocate(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, key, view);
 globalFrameReuse.Release(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, hA);
@@ -555,14 +673,14 @@ globalFrameReuse.Release(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVi
 // Strategy B — timeline-based reclamation (preferred for multi-surface)
 // Each surface contributes its timeline to the global strategy
 auto hB = globalTimelineReuse.Allocate(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, key, view);
-globalTimelineReuse.ReleaseAfterSubmission(DomainKey{ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, hB, *surface1_recorder);
+// Explicit queue + fence usage only; recorder convenience removed.
 // Resource is safely reclaimed only when all dependent GPU timelines have progressed
-globalTimelineReuse.Process(); // Called periodically by Graphics device
+globalTimelineReuse.Process(); // Called periodically by Nexus
 ```
 
 ## Reclamation scheduling
 
-- Strategy A: Renderer thread only, during BeginFrame(frame::FrameSlotIndex).
+- Strategy A: Renderer thread only, during BeginFrame(oxygen::frame::Slot).
   Rationale: Oxygen’s BeginFrame contract guarantees prior use for that slot has
   completed across queues (see RenderController::Frame.timeline_values), so
   reuse is safe without explicit fences.
@@ -582,7 +700,70 @@ globalTimelineReuse.Process(); // Called periodically by Graphics device
   required.
 - Strategy B: Use a fake CommandQueue (or a thin test double) exposing
   GetCompletedValue()/Signal()/QueueSignalCommand with a controllable completed
-  value to drive reclamation.
+  value to drive reclamation. Cover single and batched release flows.
+
+---
+
+## Integration points in the current codebase (validated)
+
+Where to obtain a recorder and queue:
+
+- `RenderController::AcquireCommandRecorder(queue_name, list_name, immediate)` returns a `std::unique_ptr<graphics::CommandRecorder>` with a custom deleter. The recorder exposes `CommandRecorder::GetTargetQueue()` (raw `graphics::CommandQueue*`).
+- `Graphics::GetCommandQueue(name)` returns a `std::shared_ptr<graphics::CommandQueue>`; Strategy B uses the raw pointer as a stable timeline key. Lifetime is managed by Graphics (global for device lifespan).
+
+How to reserve and inject a fence signal:
+
+- `graphics::CommandQueue` APIs provide `Signal()` (returns `uint64_t`) and `QueueSignalCommand(uint64_t)`. Call these while the recorder is still recording, before `CommandRecorder::End()` is invoked by the deleter.
+- D3D12 backend confirms these methods exist and are wired (see `Direct3D12/CommandQueue.[h|cpp]`).
+
+When to enqueue releases:
+
+- After recording the last GPU use and before destroying the recorder: get the queue from the recorder, reserve a fence (`q->Signal()`), record the GPU-side signal (`q->QueueSignalCommand(value)`), then call `Release(...)` or `ReleaseBatch(...)` with that `queue` and `oxygen::graphics::FenceValue{value}`.
+
+When to process:
+
+- Call `TimelineGatedSlotReuse::Process()` once per frame on the renderer thread after queue submissions. Optional `ProcessFor(queue)` can be used after heavy upload batches to accelerate reclamation for the transfer queue.
+
+Notes on immediate vs deferred submission:
+
+- `RenderController` supports both immediate and deferred list submission in its recorder deleter. The queued signal recorded via `QueueSignalCommand()` follows the command list; it will execute when the list is submitted — either immediately or during a later flush. Strategy B does not need to distinguish between the two.
+
+Thread-safety:
+
+- Release paths may be called from worker threads; Strategy B maintains a small mutex per timeline (or a global mutex) to append into buckets. `Process()` runs on the renderer thread.
+
+---
+
+## Scenarios and step-by-step flows
+
+Scenario: Upload queue (transfer) batching
+
+- A background worker records an upload/copy list using `RenderController::AcquireCommandRecorder(TransferQueueName(), ...)`.
+- While recording, it stages N transient descriptors; for each, it collects `{domain, handle}` in a `std::vector`.
+- Before finishing, it reserves a fence on the queue (`auto v = q->Signal(); q->QueueSignalCommand(v);`) and calls `timelineReuse.ReleaseBatch(*q, oxygen::graphics::FenceValue{v}, items)`. All items are enqueued into the `(queue, oxygen::graphics::FenceValue)` bucket.
+- Later, renderer calls `timelineReuse.Process()`; Strategy reads `queue->GetCompletedValue()`, reclaims any buckets whose `oxygen::graphics::FenceValue <= completed`, bumps generations, and frees all indices.
+
+Scenario: Graphics queue single release
+
+- A streaming system updates a texture on the graphics queue. After the last use, it fetches the queue, reserves a fence, records the GPU-side signal, then calls `Release(domain, handle, *queue, oxygen::graphics::FenceValue{value})`.
+  - Same reclamation flow as above; no batching required.
+
+Edge cases handled
+
+- Double release: guarded by atomic pending flag; second attempt ignored.
+- Out-of-order fence values on a timeline: ignored; buckets are ordered, only front buckets are processed.
+- Queue lifetime: raw pointer key comes from engine-owned queues; no ownership taken.
+- Capacity growth: EnsureCapacity_ covers large indices; cost amortized.
+
+---
+
+## Tests to add (GPU-free)
+
+- allocate_then_release_then_no_reuse_until_fence_single: completed < K → no reuse; after Process with completed >= K → reuse with generation+1; IsHandleCurrent(old) == false.
+- allocate_then_batch_release_then_reclaim: enqueue M handles under same `(queue, oxygen::graphics::FenceValue)`; Process reclaims all when completed >= fence.
+- multi_timeline_processing: two queues with different completed values; only eligible buckets reclaimed per queue.
+- double_release_ignored_batched: batch contains duplicate handle → only one reclaim occurs.
+- capacity_growth_paths: release/allocate indices beyond initial capacity; EnsureCapacity_ keeps types safe.
 
 ---
 

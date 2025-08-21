@@ -7,6 +7,8 @@
 #include <sstream>
 #include <string>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
@@ -15,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -534,4 +537,13 @@ auto oxygen::graphics::to_string(const PrimitiveType value) -> std::string
   }
 
   return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(const FenceValue v) -> std::string
+{
+  // Validate the value: valid values are [0, kFramesInFlight)
+  if (v == fence::kInvalidValue) {
+    return fmt::format("FenceValue(__Invalid__)");
+  }
+  return fmt::format("FenceValue({})", v.get());
 }
