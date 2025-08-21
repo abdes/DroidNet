@@ -107,7 +107,8 @@ public:
    generation 1 atomically.
 
    @param index Bindless handle index to query
-   @return Current generation value (>= 1 for valid slots, 0 for out-of-bounds)
+   @return Current generation value as a strong type (>= 1 for valid slots,
+     0 for out-of-bounds)
 
    ### Performance Characteristics
 
@@ -119,8 +120,8 @@ public:
 
    ```cpp
    auto handle = oxygen::bindless::Handle{42};
-   auto generation = tracker.Load(handle);
-   if (generation == 0) {
+  auto generation = tracker.Load(handle);
+  if (generation.get() == 0) {
      // Handle is out of bounds or invalid
    }
    ```
@@ -130,11 +131,11 @@ public:
    @see Bump, Resize
   */
   [[nodiscard]] auto Load(oxygen::bindless::Handle index) const noexcept
-    -> uint32_t
+    -> bindless::Generation
   {
     const auto u_index = index.get();
     if (u_index >= size_) {
-      return 0u;
+      return bindless::Generation { 0u };
     }
     uint32_t v = table_[u_index].load(std::memory_order_acquire);
     if (v == 0u) {
@@ -145,9 +146,10 @@ public:
       table_[u_index].compare_exchange_strong(
         expected, 1u, std::memory_order_acq_rel, std::memory_order_acquire);
       // Return the up-to-date value (either observed bumped value or 1).
-      return table_[u_index].load(std::memory_order_acquire);
+      return bindless::Generation { table_[u_index].load(
+        std::memory_order_acquire) };
     }
-    return v;
+    return bindless::Generation { v };
   }
 
   //! Increment generation value for resource reclamation.

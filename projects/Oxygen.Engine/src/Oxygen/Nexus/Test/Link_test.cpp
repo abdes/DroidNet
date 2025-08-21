@@ -57,7 +57,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
 
     // Test lazy initialization
     const auto gen1 = tracker.Load(handle);
-    if (gen1 >= 1) {
+    if (gen1.get() >= 1) {
       std::cout << "✓ GenerationTracker lazy initialization works (gen=" << gen1
                 << ")\n";
     } else {
@@ -69,7 +69,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     // Test generation bump
     tracker.Bump(handle);
     const auto gen2 = tracker.Load(handle);
-    if (gen2 == gen1 + 1) {
+    if (gen2.get() == gen1.get() + 1) {
       std::cout << "✓ GenerationTracker bump increments correctly (gen=" << gen2
                 << ")\n";
     } else {
@@ -79,7 +79,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
 
     // Test out-of-bounds safety
     const auto gen_oob = tracker.Load(bindless::Handle { 100 });
-    if (gen_oob == 0) {
+    if (gen_oob.get() == 0) {
       std::cout << "✓ GenerationTracker out-of-bounds returns 0\n";
     } else {
       std::cout << "✗ GenerationTracker out-of-bounds check failed\n";

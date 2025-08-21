@@ -45,13 +45,11 @@ using oxygen::nexus::FrameDrivenSlotReuse;
  @see Allocate, Release
 */
 FrameDrivenSlotReuse::FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
-  oxygen::graphics::DescriptorAllocator& allocator,
   oxygen::graphics::detail::PerFrameResourceManager& per_frame)
   : allocate_(std::move(allocate))
   , free_(std::move(free))
   , per_frame_(per_frame)
   , generations_(oxygen::bindless::Capacity { 0 })
-  , mapper_(allocator /* capture domains lazily at call-sites if needed */)
 {
   // pending_flags_ will be lazily sized when we first allocate
 }
@@ -89,8 +87,8 @@ auto FrameDrivenSlotReuse::Allocate(DomainKey domain)
 {
   const auto idx = allocate_(domain);
   EnsureCapacity_(idx);
-  const uint32_t gen = generations_.Load(idx);
-  return { idx, oxygen::VersionedBindlessHandle::Generation { gen } };
+  const auto gen = generations_.Load(idx);
+  return { idx, gen };
 }
 
 /*!
@@ -226,8 +224,8 @@ auto FrameDrivenSlotReuse::IsHandleCurrent(
     return false;
   }
   const auto idx = h.ToBindlessHandle();
-  const uint32_t current = generations_.Load(idx);
-  return current == h.GenerationValue().get();
+  const auto current = generations_.Load(idx);
+  return current.get() == h.GenerationValue().get();
 }
 
 /*!

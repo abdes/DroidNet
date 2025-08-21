@@ -118,13 +118,12 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   // Arrange
   oxygen::graphics::detail::PerFrameResourceManager per_frame;
-  FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -172,7 +171,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -223,7 +222,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -289,7 +288,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, Release_InvalidHandle_IsNoOp)
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -322,7 +321,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, IsHandleCurrent_InvalidHandle_ReturnsFalse)
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   // Act & Assert - Default-constructed VersionedBindlessHandle is invalid
   EXPECT_FALSE(reuse.IsHandleCurrent(VersionedBindlessHandle {}));
@@ -366,7 +365,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -414,7 +413,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };
@@ -468,7 +467,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
-    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, allocator, per_frame);
+    [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
   DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
     oxygen::graphics::DescriptorVisibility::kShaderVisible };

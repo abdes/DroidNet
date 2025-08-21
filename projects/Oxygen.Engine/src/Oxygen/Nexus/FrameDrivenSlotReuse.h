@@ -62,7 +62,6 @@ public:
 
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   OXGN_NXS_API explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
-    oxygen::graphics::DescriptorAllocator& allocator,
     oxygen::graphics::detail::PerFrameResourceManager& per_frame);
 
   //! Allocate a bindless slot in the specified domain.
@@ -90,10 +89,6 @@ private:
 
   // Generation tracking for stale-handle detection.
   mutable GenerationTracker generations_;
-
-  // Domain mapping (present for completeness; not required for core flow
-  // because callers provide the domain to Release()).
-  DomainIndexMapper mapper_;
 
   // Double-release guard: 0 = not pending, 1 = pending free.
   //
