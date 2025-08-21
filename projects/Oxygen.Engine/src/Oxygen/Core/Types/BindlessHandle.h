@@ -60,6 +60,11 @@ using BindlessHandleCapacity
   oxygen::Printable,
   oxygen::Hashable>; // clang-format on
 
+//! Sentinel value representing an invalid bindless handle.
+static constexpr BindlessHandle kInvalidBindlessHandle {
+  kInvalidBindlessIndex
+};
+
 //! Explicit namespace with concise aliases for the bindless numeric types to
 //! improve ergonomic at use sites.
 namespace bindless {
@@ -96,11 +101,6 @@ OXGN_CORE_NDAPI auto to_string(BindlessHandleCount count) -> std::string;
 
 //! Convert a BindlessHandleCapacity to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandleCapacity capacity) -> std::string;
-
-//! Sentinel value representing an invalid bindless handle.
-static constexpr BindlessHandle kInvalidBindlessHandle {
-  kInvalidBindlessIndex
-};
 
 // Forward declaration for the hasher, so that we can use it for the Hasher type
 // alias
