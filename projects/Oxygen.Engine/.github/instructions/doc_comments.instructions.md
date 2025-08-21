@@ -46,10 +46,11 @@ specified.
 
 ## CONTENT STRUCTURE TEMPLATES
 
-- For methods detailed content, use this template (vertical allignment of content on the *):
+- For methods detailed content, use this template (vertical allignment of content on the *, i.e. content lines are indented with one space only from left edge of block):
 
   /*!
    Detailed description of the method.
+
    @tparam TemplateParam Description
    @param parameter_name Description
    @return Description
