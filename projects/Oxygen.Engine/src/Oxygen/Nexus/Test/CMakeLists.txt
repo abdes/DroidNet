@@ -38,4 +38,5 @@ m_gtest_program(
     "GenerationTracker_test.cpp"
     "DomainIndexMapper_test.cpp"
     "FrameDrivenSlotReuse_test.cpp"
+    "TimelineGatedSlotReuse_test.cpp"
 )

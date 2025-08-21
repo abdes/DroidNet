@@ -54,14 +54,17 @@ set_target_properties(
 set(
   OXYGEN_NEXUS_HEADERS
   "api_export.h"
-  "GenerationTracker.h"
   "DomainIndexMapper.h"
   "FrameDrivenSlotReuse.h"
+  "GenerationTracker.h"
+  "TimelineGatedSlotReuse.h"
+  "Types/Domain.h"
 )
 set(
   OXYGEN_NEXUS_PRIVATE_SOURCES
   "DomainIndexMapper.cpp"
   "FrameDrivenSlotReuse.cpp"
+  "TimelineGatedSlotReuse.cpp"
 )
 
 target_sources(

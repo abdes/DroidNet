@@ -20,6 +20,13 @@ protected:
   void TearDown() override { }
 };
 
+using Generation = oxygen::VersionedBindlessHandle::Generation;
+// Strong-typed generation constants for readability and reuse
+inline constexpr Generation kGen0 { 0u };
+inline constexpr Generation kGen1 { 1u };
+inline constexpr Generation kGen2 { 2u };
+inline constexpr Generation kGen3 { 3u };
+
 //! Ensure that loading an uninitialized slot returns at least 1 after first
 //! access and Bump increments the generation counter.
 NOLINT_TEST_F(
@@ -39,8 +46,8 @@ NOLINT_TEST_F(
   const auto gen_after = tracker.Load(idx);
 
   // Assert
-  EXPECT_GE(gen_before, 1u);
-  EXPECT_EQ(gen_after, gen_before + 1u);
+  EXPECT_GE(gen_before, kGen1);
+  EXPECT_EQ(gen_after, gen_before + kGen1);
 }
 
 //! Ensure Resize preserves existing generations and expands size. Ensure Resize
@@ -60,18 +67,19 @@ NOLINT_TEST_F(GenerationTrackerTest,
   // Act + Assert: initialize and bump
   const auto g0 = t.Load(idx0);
   t.Bump(idx0);
-  EXPECT_EQ(t.Load(idx0), g0 + 1u);
+  EXPECT_EQ(t.Load(idx0), g0 + kGen1);
 
   // Resize larger
   t.Resize(b::Capacity { 4u });
 
   // Assert: previously initialized slot still has value
-  EXPECT_GT(t.Load(idx0), 0u);
-  EXPECT_GT(t.Load(idx1), 0u); // idx1 should have been lazily initialized to 1
+  EXPECT_GT(t.Load(idx0), kGen0);
+  EXPECT_GT(
+    t.Load(idx1), kGen0); // idx1 should have been lazily initialized to 1
 
   // Assert: new slots after expansion are lazily initialized to 1
   const auto new_slot_gen = t.Load(b::Handle { 3u }); // new slot
-  EXPECT_EQ(new_slot_gen, 1u);
+  EXPECT_EQ(new_slot_gen, kGen1);
 }
 
 //! Verify Load and Bump are no-ops/zero for out-of-range indices.
@@ -90,8 +98,8 @@ NOLINT_TEST_F(
   t.Bump(out);
 
   // Assert
-  EXPECT_EQ(before, 0u);
-  EXPECT_EQ(t.Load(out), 0u);
+  EXPECT_EQ(before, kGen0);
+  EXPECT_EQ(t.Load(out), kGen0);
 }
 
 //! Shrinking the tracker drops slots beyond the new capacity and their
@@ -110,13 +118,13 @@ NOLINT_TEST_F(
   t.Bump(idx3);
 
   // Assert it was initialized
-  EXPECT_GT(t.Load(idx3), 0u);
+  EXPECT_GT(t.Load(idx3), kGen0);
 
   // Act: shrink to smaller capacity
   t.Resize(b::Capacity { 2u });
 
   // Assert previously initialized slot should be dropped
-  EXPECT_EQ(t.Load(idx3), 0u);
+  EXPECT_EQ(t.Load(idx3), kGen0);
 }
 
 //! Verify that generations are never reset on reuse, only incremented. This
@@ -133,17 +141,17 @@ NOLINT_TEST_F(GenerationTrackerTest, Bump_GenerationsNeverReset_OnlyIncrement)
 
   // Act & Assert: Test multiple consecutive bumps increment correctly
   const auto initial = t.Load(idx);
-  EXPECT_GE(initial, 1u);
+  EXPECT_GE(initial, kGen1);
 
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), initial + 1u);
+  EXPECT_EQ(t.Load(idx), initial + kGen1);
 
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), initial + 2u);
+  EXPECT_EQ(t.Load(idx), initial + kGen2);
 
   t.Bump(idx);
   const auto after_multiple_bumps = t.Load(idx);
-  EXPECT_EQ(after_multiple_bumps, initial + 3u);
+  EXPECT_EQ(after_multiple_bumps, initial + kGen3);
 
   // Act & Assert: Simulate allocation, use, release cycle multiple times
   auto gen1 = after_multiple_bumps; // current generation after previous bumps
@@ -157,8 +165,8 @@ NOLINT_TEST_F(GenerationTrackerTest, Bump_GenerationsNeverReset_OnlyIncrement)
   // Assert: each reuse should see a higher generation
   EXPECT_GT(gen2, gen1);
   EXPECT_GT(gen3, gen2);
-  EXPECT_EQ(gen2, gen1 + 1u);
-  EXPECT_EQ(gen3, gen1 + 2u);
+  EXPECT_EQ(gen2, gen1 + kGen1);
+  EXPECT_EQ(gen3, gen1 + kGen2);
 }
 
 //! Verify that resizing to the same capacity is a no-op and preserves all
@@ -208,19 +216,19 @@ NOLINT_TEST_F(GenerationTrackerTest, Resize_ZeroCapacity_AllAccessesReturnZero)
 
   // Initialize a slot
   t.Bump(idx);
-  EXPECT_GT(t.Load(idx), 0u);
+  EXPECT_GT(t.Load(idx), kGen0);
 
   // Act: resize to zero capacity
   t.Resize(b::Capacity { 0u });
 
   // Assert: all accesses should return zero
-  EXPECT_EQ(t.Load(b::Handle { 0u }), 0u);
-  EXPECT_EQ(t.Load(idx), 0u);
-  EXPECT_EQ(t.Load(b::Handle { 10u }), 0u);
+  EXPECT_EQ(t.Load(b::Handle { 0u }), kGen0);
+  EXPECT_EQ(t.Load(idx), kGen0);
+  EXPECT_EQ(t.Load(b::Handle { 10u }), kGen0);
 
   // Bump should be no-op
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), 0u);
+  EXPECT_EQ(t.Load(idx), kGen0);
 }
 
 //! Verify generation persistence across multiple resize operations (expand,
@@ -275,7 +283,7 @@ NOLINT_TEST_F(
   // Act: Get initial generation (lazy initialization to 1), then simulate many
   // bumps
   const auto initial_gen = t.Load(idx); // This should be 1 (lazy init)
-  EXPECT_EQ(initial_gen, 1u);
+  EXPECT_EQ(initial_gen, kGen1);
 
   // Note: In real implementation, this would be atomic operations
   constexpr uint32_t num_bumps = 1000000u;
@@ -287,11 +295,11 @@ NOLINT_TEST_F(
 
   // Assert: should handle large generation values correctly Started at 1,
   // bumped num_bumps times, so should be 1 + num_bumps
-  EXPECT_EQ(final_gen, initial_gen + num_bumps);
+  EXPECT_EQ(final_gen, initial_gen + Generation { num_bumps });
 
   // One more bump should still work
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), final_gen + 1u);
+  EXPECT_EQ(t.Load(idx), final_gen + kGen1);
 }
 
 //! Verify the lazy initialization contract: uninitialized slots return 1 on
@@ -311,33 +319,33 @@ NOLINT_TEST_F(
 
   // Act & Assert: First load of any uninitialized slot should return 1
   const auto gen0_first = t.Load(idx0);
-  EXPECT_EQ(gen0_first, 1u);
+  EXPECT_EQ(gen0_first, kGen1);
 
   const auto gen1_first = t.Load(idx1);
-  EXPECT_EQ(gen1_first, 1u);
+  EXPECT_EQ(gen1_first, kGen1);
 
   const auto gen2_first = t.Load(idx2);
-  EXPECT_EQ(gen2_first, 1u);
+  EXPECT_EQ(gen2_first, kGen1);
 
   // Act & Assert: Subsequent loads of the same slots should return the same
   // value (1)
   const auto gen0_second = t.Load(idx0);
-  EXPECT_EQ(gen0_second, 1u);
+  EXPECT_EQ(gen0_second, kGen1);
   EXPECT_EQ(gen0_second, gen0_first);
 
   const auto gen1_second = t.Load(idx1);
-  EXPECT_EQ(gen1_second, 1u);
+  EXPECT_EQ(gen1_second, kGen1);
   EXPECT_EQ(gen1_second, gen1_first);
 
   // Act & Assert: Bump on a lazily initialized slot should increment from 1 to
   // 2
   t.Bump(idx0);
   const auto gen0_after_bump = t.Load(idx0);
-  EXPECT_EQ(gen0_after_bump, 2u);
+  EXPECT_EQ(gen0_after_bump, kGen2);
 
   // Act & Assert: Other slots should remain unaffected
-  EXPECT_EQ(t.Load(idx1), 1u);
-  EXPECT_EQ(t.Load(idx2), 1u);
+  EXPECT_EQ(t.Load(idx1), kGen1);
+  EXPECT_EQ(t.Load(idx2), kGen1);
 }
 
 //! Verify that Bump on completely uninitialized slots works correctly. This
@@ -361,15 +369,15 @@ NOLINT_TEST_F(
   // The actual implementation behavior: Bump on uninitialized slot results in 1
   // (not 2 as originally expected). This suggests Bump initializes to 0, then
   // increments to 1, while Load() initializes directly to 1.
-  EXPECT_EQ(gen_after_bump, 1u);
+  EXPECT_EQ(gen_after_bump, kGen1);
 
   // Act & Assert: Another bump should increment to 2
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), 2u);
+  EXPECT_EQ(t.Load(idx), kGen2);
 
   // Act & Assert: Another bump should increment to 3
   t.Bump(idx);
-  EXPECT_EQ(t.Load(idx), 3u);
+  EXPECT_EQ(t.Load(idx), kGen3);
 }
 
 //===----------------------------------------------------------------------===//
@@ -401,7 +409,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
     threads.emplace_back([&tracker, idx, t, &results, loads_per_thread]() {
       results[t].reserve(loads_per_thread);
       for (int i = 0; i < loads_per_thread; ++i) {
-        results[t].push_back(tracker.Load(idx));
+        results[t].push_back(tracker.Load(idx).get());
       }
     });
   }
@@ -456,7 +464,7 @@ NOLINT_TEST_F(
 
   // Assert: Final generation should reflect all increments
   const auto final_gen = tracker.Load(idx);
-  EXPECT_EQ(final_gen, initial_gen + expected_total_bumps);
+  EXPECT_EQ(final_gen, initial_gen + Generation { expected_total_bumps });
 }
 
 //! Verify mixed concurrent Load and Bump operations maintain consistency and
@@ -488,7 +496,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
       }
 
       for (int i = 0; i < operations_per_thread; ++i) {
-        const auto gen = tracker.Load(idx);
+        const auto gen = tracker.Load(idx).get();
 
         // Update observed range atomically
         uint32_t current_min = min_observed_gen.load();
@@ -532,14 +540,15 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   const auto observed_max = max_observed_gen.load();
 
   // Readers should never observe generations higher than the final value
-  EXPECT_LE(observed_max, final_gen);
+  EXPECT_LE(observed_max, final_gen.get());
 
   // Minimum observed should be at least 1 (lazy initialization)
   EXPECT_GE(observed_min, 1u);
 
   // Final generation should reflect the expected number of bumps
   const auto expected_bumps = num_writer_threads * operations_per_thread;
-  EXPECT_EQ(final_gen, 1u + expected_bumps); // 1 from lazy init + all bumps
+  EXPECT_EQ(
+    final_gen.get(), 1u + expected_bumps); // 1 from lazy init + all bumps
 }
 
 //! Verify concurrent access to different slots is independent and doesn't
@@ -575,7 +584,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
           }
 
           // Store final generation for this slot
-          final_generations[slot].store(tracker.Load(idx));
+          final_generations[slot].store(tracker.Load(idx).get());
         });
     }
   }
@@ -589,7 +598,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   for (int slot = 0; slot < num_slots; ++slot) {
     const auto idx = b::Handle { static_cast<uint32_t>(slot) };
     const auto expected_gen = 1u + (threads_per_slot * operations_per_thread);
-    EXPECT_EQ(tracker.Load(idx), expected_gen);
+    EXPECT_EQ(tracker.Load(idx), Generation { expected_gen });
   }
 }
 
@@ -624,7 +633,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 
   // Assert: Can access new slots
   const auto new_slot = b::Handle { 75u };
-  EXPECT_EQ(tracker.Load(new_slot), 1u); // Lazy init
+  EXPECT_EQ(tracker.Load(new_slot), kGen1); // Lazy init
 }
 
 //! Tests GenerationTracker monotonicity under concurrent reader/writer access.
@@ -665,7 +674,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
       while (!start.load(std::memory_order_acquire)) { }
       uint32_t last = 0;
       for (int i = 0; i < kIters; ++i) {
-        const uint32_t v = tracker.Load(oxygen::bindless::Handle { 0 });
+        const uint32_t v = tracker.Load(oxygen::bindless::Handle { 0 }).get();
 
         // Assert - Must be non-decreasing per reader
         EXPECT_GE(v, last);
