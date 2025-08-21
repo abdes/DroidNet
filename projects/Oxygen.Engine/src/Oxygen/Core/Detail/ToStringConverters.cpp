@@ -138,10 +138,15 @@ auto oxygen::to_string(oxygen::FrameSlotNumber s) -> std::string
 {
   using namespace oxygen::frame;
 
-  // Validate slot range: valid slots are [0, kFramesInFlight)
-  if (s.get() >= kFramesInFlight.get()) {
+  if (s == frame::kInvalidSlot) {
     return fmt::format("Frame(slot:__Invalid__)");
   }
+#if !defined(NDEBUG)
+  // Validate slot range: valid slots are [0, kFramesInFlight)
+  if (s.get() >= frame::kFramesInFlight.get()) {
+    return fmt::format("Frame(slot:{}-OOB)", s.get());
+  }
+#endif
   return fmt::format("Frame(slot:{})", s.get());
 }
 
@@ -150,7 +155,7 @@ auto oxygen::to_string(oxygen::FrameSequenceNumber seq) -> std::string
   using namespace oxygen::frame;
 
   // Validate sequence number: valid sequences are [0, kMaxSequenceNumber)
-  if (seq.get() >= kMaxSequenceNumber.get()) {
+  if (seq == frame::kInvalidSequenceNumber) {
     return fmt::format("Frame(seq:__Invalid__)");
   }
   return fmt::format("Frame(seq:{})", seq.get());
