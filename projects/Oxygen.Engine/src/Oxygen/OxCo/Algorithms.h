@@ -74,7 +74,27 @@ template <Awaitable... Ts> auto AnyOf(Ts&&... awaitables) -> Awaitable auto
 
 //! Run multiple awaitables concurrently, but for variable-length ranges of
 //! awaitables.
-//! \see AnyOf(Ts&&...)
+/*!
+ When creating coroutines in a loop with parameters, avoid lambda capture issues
+ by using immediate lambda invocation pattern:
+
+ @code{cpp}
+ std::vector<Co<>> jobs;
+ for (const auto& spec : data) {
+   jobs.push_back([this](std::string name, int value) -> Co<> {
+     // Use name and value safely - they are function parameters, not captures
+     co_await DoWork(name, value);
+   }(spec.name, spec.value)); // Immediate invocation with current iteration
+ values
+ }
+ co_await AnyOf(std::move(jobs));
+ @endcode
+
+ This pattern ensures proper parameter passing without lambda capture lifetime
+ issues that can occur when coroutines are executed after the loop completes.
+
+ @see AnyOf(Ts&&...)
+*/
 template <AwaitableRange<> Range> auto AnyOf(Range&& range) -> Awaitable auto
 {
   return MakeAwaitable<detail::AnyOfRange<Range>, Range>(
@@ -96,7 +116,27 @@ template <Awaitable... Ts> auto MostOf(Ts&&... awaitables) -> Awaitable auto
 
 //! Run multiple awaitables concurrently with `MostOf`, but for variable-length
 //! ranges of awaitables.
-//! \see MostOf(Ts&&...)
+/*!
+ When creating coroutines in a loop with parameters, avoid lambda capture issues
+ by using immediate lambda invocation pattern:
+
+ @code{cpp}
+ std::vector<Co<>> jobs;
+ for (const auto& spec : data) {
+   jobs.push_back([this](std::string name, int value) -> Co<> {
+     // Use name and value safely - they are function parameters, not captures
+     co_await DoWork(name, value);
+   }(spec.name, spec.value)); // Immediate invocation with current iteration
+ values
+ }
+ co_await MostOf(std::move(jobs));
+ @endcode
+
+ This pattern ensures proper parameter passing without lambda capture lifetime
+ issues that can occur when coroutines are executed after the loop completes.
+
+ @see MostOf(Ts&&...)
+*/
 template <AwaitableRange<> Range> auto MostOf(Range&& range) -> Awaitable auto
 {
   return MakeAwaitable<detail::MostOfRange<Range>, Range>(
@@ -118,7 +158,27 @@ template <Awaitable... Ts> auto AllOf(Ts&&... awaitables) -> Awaitable auto
 
 //! Run multiple awaitables concurrently with `AllOf`, but for variable-length
 //! ranges of awaitables.
-//! \see AllOf(Ts&&...)
+/*!
+ When creating coroutines in a loop with parameters, avoid lambda capture issues
+ by using immediate lambda invocation pattern:
+
+ @code{cpp}
+ std::vector<Co<>> jobs;
+ for (const auto& spec : data) {
+   jobs.push_back([this](std::string name, int value) -> Co<> {
+     // Use name and value safely - they are function parameters, not captures
+     co_await DoWork(name, value);
+   }(spec.name, spec.value)); // Immediate invocation with current iteration
+ values
+ }
+ co_await AllOf(std::move(jobs));
+ @endcode
+
+ This pattern ensures proper parameter passing without lambda capture lifetime
+ issues that can occur when coroutines are executed after the loop completes.
+
+ @see AllOf(Ts&&...)
+*/
 template <AwaitableRange<> Range> auto AllOf(Range&& range) -> Awaitable auto
 {
   return MakeAwaitable<detail::AllOfRange<Range>, Range>(
