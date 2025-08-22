@@ -130,6 +130,13 @@ public:
   virtual auto Parse(std::any& value_store, const std::string& token) const
     -> bool
     = 0;
+
+  //! Finalize the value by applying storage / notification side-effects.
+  /*! Called after the full command line has been parsed so that concrete
+      implementations can propagate the final (possibly default or implicit)
+      value to user-provided storage (StoreTo) or invoke callbacks. The
+      default implementation does nothing. */
+  virtual auto Finalize(const std::any& /*value_store*/) const -> void { }
 };
 
 } // namespace oxygen::clap

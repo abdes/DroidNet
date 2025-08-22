@@ -10,6 +10,7 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
 namespace oxygen::clap {
@@ -105,6 +106,27 @@ auto Options::Print(
 auto Options::Add(const std::shared_ptr<Option>& option) -> void
 {
   options.emplace_back(option);
+}
+
+auto Option::FinalizeValue(const OptionValuesMap& ovm) const -> void
+{
+  if (!value_semantic_) {
+    return;
+  }
+  if (ovm.HasOption(key_)) {
+    const auto& values = ovm.ValuesOf(key_);
+    if (!values.empty()) {
+      value_semantic_->Finalize(values.back().Value());
+      return;
+    }
+  }
+  if (value_semantic_->HasDefaultValue()) {
+    std::any value_store;
+    std::string text_repr;
+    if (value_semantic_->ApplyDefault(value_store, text_repr)) {
+      value_semantic_->Finalize(value_store);
+    }
+  }
 }
 
 } // namespace oxygen::clap

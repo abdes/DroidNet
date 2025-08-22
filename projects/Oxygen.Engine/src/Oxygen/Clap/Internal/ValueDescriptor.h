@@ -256,7 +256,7 @@ public:
    - If a  notification callback was provided via a previous call to Notifier(),
      call that function.
    */
-  auto OnFinalValue(const std::any& value_store) const -> void
+  auto Finalize(const std::any& value_store) const -> void override
   {
     const T* value = std::any_cast<T>(&value_store);
     if (store_to_) {
