@@ -27,6 +27,8 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 
 #include "GraphicsLayer.h"
+#include "ModuleContext.h"
+#include "ModuleManager.h"
 
 namespace oxygen::examples::asyncsim {
 
@@ -111,6 +113,12 @@ public:
   //! Starts internal coroutine frame loop (returns immediately).
   auto Run(uint32_t frame_count) -> void; //!< Fire-and-forget cooperative loop
 
+  //! Initialize all registered modules
+  auto InitializeModules() -> co::Co<>;
+
+  //! Shutdown all registered modules
+  auto ShutdownModules() -> co::Co<>;
+
   //! Configure rendering surfaces for multi-surface rendering
   void AddSurface(const RenderSurface& surface);
   void ClearSurfaces();
@@ -126,27 +134,45 @@ public:
     return graphics_;
   }
 
+  //! Module management
+  [[nodiscard]] ModuleManager& GetModuleManager() noexcept
+  {
+    return module_manager_;
+  }
+  [[nodiscard]] const ModuleManager& GetModuleManager() const noexcept
+  {
+    return module_manager_;
+  }
+
 private:
-  // Ordered phases (Category A)
+  // Ordered phases (Category A) - now with module integration
   void PhaseFrameStart();
-  auto PhaseInput() -> co::Co<>; // async (simulated work)
-  auto PhaseFixedSim() -> co::Co<>; // async (simulated work)
-  auto PhaseGameplay() -> co::Co<>; // async (simulated work)
-  auto PhaseNetworkReconciliation()
+  auto PhaseInput(ModuleContext& context) -> co::Co<>; // async (simulated work)
+  auto PhaseFixedSim(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseGameplay(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseNetworkReconciliation(ModuleContext& context)
     -> co::Co<>; // network packet application & reconciliation
   auto PhaseRandomSeedManagement()
     -> co::Co<>; // random seed management for determinism
-  auto PhaseSceneMutation() -> co::Co<>; // async (simulated work) - B2 barrier
-  auto PhaseTransforms() -> co::Co<>; // async (simulated work)
-  auto PhaseSnapshot() -> co::Co<>; // async (simulated work)
-  auto PhasePostParallel() -> co::Co<>; // async (simulated work)
-  auto PhaseFrameGraph() -> co::Co<>; // async (simulated work)
-  auto PhaseDescriptorTablePublication()
+  auto PhaseSceneMutation(ModuleContext& context)
+    -> co::Co<>; // async (simulated work) - B2 barrier
+  auto PhaseTransforms(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseSnapshot(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhasePostParallel(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseFrameGraph(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseDescriptorTablePublication(ModuleContext& context)
     -> co::Co<>; // global descriptor/bindless table publication
-  auto PhaseResourceStateTransitions()
+  auto PhaseResourceStateTransitions(ModuleContext& context)
     -> co::Co<>; // resource state transitions planning
-  auto PhaseCommandRecord() -> co::Co<>; // async (simulated work)
-  void PhasePresent(); // synchronous presentation
+  auto PhaseCommandRecord(ModuleContext& context)
+    -> co::Co<>; // async (simulated work)
+  void PhasePresent(ModuleContext& context); // synchronous presentation
 
   // Multi-surface rendering helpers
   void RecordSurfaceCommands(
@@ -154,7 +180,7 @@ private:
   void SubmitSurfaceCommands(
     const RenderSurface& surface, size_t surface_index);
   void PresentSurface(const RenderSurface& surface, size_t surface_index);
-  void PhaseAsyncPoll();
+  void PhaseAsyncPoll(ModuleContext& context);
   void PhaseBudgetAdapt();
   void PhaseFrameEnd();
 
@@ -162,7 +188,8 @@ private:
   void LaunchParallelTasks(); // legacy sync version (unused in async path)
   void JoinParallelTasks(); // legacy sync version (unused in async path)
   void ResetParallelSync();
-  auto ParallelTasks() -> co::Co<>; // coroutine version (future integration)
+  auto ParallelTasks(ModuleContext& context)
+    -> co::Co<>; // coroutine version with module integration
 
   // Async job ticking
   void TickAsyncJobs();
@@ -198,6 +225,9 @@ private:
 
   // Graphics layer owning global systems
   GraphicsLayer graphics_;
+
+  // Module management system
+  ModuleManager module_manager_;
 
   // Signals completion when FrameLoop exits.
   oxygen::co::Event completed_ {};

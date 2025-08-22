@@ -27,6 +27,10 @@ add_executable(
   "AsyncEngineSimulator.h"
   "GraphicsLayer.cpp"
   "GraphicsLayer.h"
+  "IEngineModule.h"
+  "ModuleContext.h"
+  "ModuleManager.h"
+  "ExampleModules.h"
   "main_impl.cpp"
   "../main.cpp"
 )
