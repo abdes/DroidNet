@@ -26,63 +26,12 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
+#include "EngineTypes.h"
 #include "GraphicsLayer.h"
 #include "ModuleContext.h"
 #include "ModuleManager.h"
 
 namespace oxygen::examples::asyncsim {
-
-//! Basic synthetic task categories.
-enum class TaskCategory { Ordered, ParallelFrame, AsyncPipeline, Detached };
-
-struct SyntheticTaskSpec {
-  std::string name;
-  TaskCategory category { TaskCategory::ParallelFrame };
-  std::chrono::microseconds cost { 1000 }; // simulated CPU time
-};
-
-struct ParallelResult {
-  std::string name;
-  std::chrono::microseconds duration { 0 };
-};
-
-struct AsyncJobState {
-  std::string name;
-  std::chrono::microseconds remaining { 0 };
-  uint64_t submit_frame { 0 };
-  bool ready { false };
-};
-
-struct FrameMetrics {
-  uint64_t frame_index { 0 };
-  std::chrono::microseconds frame_cpu_time { 0 };
-  std::chrono::microseconds parallel_span { 0 };
-  size_t parallel_jobs { 0 };
-  size_t async_ready { 0 };
-};
-
-//! Engine configuration properties.
-struct EngineProps {
-  uint32_t target_fps { 0 }; //!< 0 = uncapped
-};
-
-//! Immutable per-frame snapshot passed to Category B parallel tasks
-//! (placeholder).
-struct FrameSnapshot {
-  uint64_t frame_index { 0 };
-};
-
-//! Represents a rendering surface with command recording state
-struct RenderSurface {
-  std::string name;
-  std::chrono::microseconds record_cost {
-    800
-  }; // simulated command recording time
-  std::chrono::microseconds submit_cost { 200 }; // simulated submission time
-  std::chrono::microseconds present_cost { 300 }; // simulated presentation time
-  bool commands_recorded { false };
-  bool commands_submitted { false };
-};
 
 //! Async engine simulator orchestrating frame phases.
 class AsyncEngineSimulator final {

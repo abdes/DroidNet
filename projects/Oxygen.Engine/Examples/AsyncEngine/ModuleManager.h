@@ -44,7 +44,7 @@ public:
     }
 
     LOG_F(INFO, "Registering module '{}' with priority {} and phases 0x{:X}",
-      module->GetName(), static_cast<uint32_t>(module->GetPriority()),
+      module->GetName(), module->GetPriority(),
       static_cast<uint32_t>(module->GetSupportedPhases()));
 
     modules_.emplace_back(std::move(module));

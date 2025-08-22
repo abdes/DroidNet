@@ -30,7 +30,11 @@
 #include <Oxygen/OxCo/asio.h>
 
 #include "AsyncEngineSimulator.h"
-#include "ExampleModules.h"
+#include "Examples/GameModule.h"
+#include "Modules/RenderGraphModule.h"
+#include "Modules/GeometryRenderModule.h"
+#include "Modules/DebugOverlayModule.h"
+#include "Modules/ConsoleModule.h"
 
 using namespace oxygen::examples::asyncsim;
 using namespace std::chrono_literals;
@@ -162,17 +166,23 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       io_ctx, std::max(1u, std::thread::hardware_concurrency()));
     AsyncEngineSimulator engine { pool, EngineProps { target_fps } };
 
-    // Register game modules
+    // Register engine modules
     LOG_F(INFO, "Registering engine modules...");
 
-    // Core game module (high priority)
+    // Core render graph module (priority: High=100 - sets up render graph infrastructure)
+    engine.GetModuleManager().RegisterModule(std::make_unique<RenderGraphModule>());
+
+    // Core game module (priority: High=100 - main game logic)
     engine.GetModuleManager().RegisterModule(std::make_unique<GameModule>());
 
-    // Debug overlay module (low priority)
+    // Geometry rendering module (priority: Normal=500 - geometry rendering via render graph)
+    engine.GetModuleManager().RegisterModule(std::make_unique<GeometryRenderModule>());
+
+    // Debug overlay module (priority: Low=800 - non-critical debug visualization)
     engine.GetModuleManager().RegisterModule(
       std::make_unique<DebugOverlayModule>());
 
-    // Console module (normal priority)
+    // Console module (priority: Normal=500 - development console commands)
     engine.GetModuleManager().RegisterModule(std::make_unique<ConsoleModule>());
 
     LOG_F(INFO, "Registered {} modules",
