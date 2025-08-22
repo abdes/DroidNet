@@ -9,21 +9,70 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/OxCo/Co.h>
+#include <fmt/format.h>
 
 namespace oxygen::examples::asyncsim {
 
 class ModuleContext;
 class GraphicsLayer;
 
-//! Priority levels for module execution order within each phase
-enum class ModulePriority : uint32_t {
-  Critical = 0, //!< System-critical modules (input, core systems)
-  High = 100, //!< High-priority gameplay modules
-  Normal = 500, //!< Standard gameplay modules
-  Low = 800, //!< Non-critical modules (debug, profiling)
-  Background = 900 //!< Background services
+//! Strong type for module execution priority (lower values = higher priority)
+using ModulePriority
+  = NamedType<uint32_t, struct ModulePriorityTag, Comparable>;
+
+//! Predefined priority levels for convenience
+namespace ModulePriorities {
+  inline constexpr auto Critical
+    = ModulePriority { 0 }; //!< System-critical modules (input, core systems)
+  inline constexpr auto High
+    = ModulePriority { 100 }; //!< High-priority gameplay modules
+  inline constexpr auto Normal
+    = ModulePriority { 500 }; //!< Standard gameplay modules
+  inline constexpr auto Low
+    = ModulePriority { 800 }; //!< Non-critical modules (debug, profiling)
+  inline constexpr auto Background
+    = ModulePriority { 900 }; //!< Background services
+}
+
+//! Convert ModulePriority to string for logging and debugging
+inline std::string to_string(const ModulePriority& priority)
+{
+  const auto value = priority.get();
+
+  // Check for predefined priorities
+  if (value == ModulePriorities::Critical.get())
+    return "Critical";
+  if (value == ModulePriorities::High.get())
+    return "High";
+  if (value == ModulePriorities::Normal.get())
+    return "Normal";
+  if (value == ModulePriorities::Low.get())
+    return "Low";
+  if (value == ModulePriorities::Background.get())
+    return "Background";
+
+  // Return numeric value for custom priorities
+  return std::to_string(value);
+}
+
+} // namespace oxygen::examples::asyncsim
+
+//! fmt formatter for ModulePriority to support direct formatting in logs
+template <> struct fmt::formatter<oxygen::examples::asyncsim::ModulePriority> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const oxygen::examples::asyncsim::ModulePriority& priority,
+    FormatContext& ctx)
+  {
+    return fmt::format_to(
+      ctx.out(), "{}", oxygen::examples::asyncsim::to_string(priority));
+  }
 };
+
+namespace oxygen::examples::asyncsim {
 
 //! Flags indicating which frame phases a module participates in
 enum class ModulePhases : uint32_t {
@@ -93,7 +142,7 @@ public:
   [[nodiscard]] virtual std::string_view GetName() const noexcept = 0;
   [[nodiscard]] virtual ModulePriority GetPriority() const noexcept
   {
-    return ModulePriority::Normal;
+    return ModulePriorities::Normal;
   }
   [[nodiscard]] virtual ModulePhases GetSupportedPhases() const noexcept = 0;
 
@@ -191,7 +240,7 @@ public:
 class EngineModuleBase : public IEngineModule {
 public:
   explicit EngineModuleBase(std::string name, ModulePhases phases,
-    ModulePriority priority = ModulePriority::Normal)
+    ModulePriority priority = ModulePriorities::Normal)
     : name_(std::move(name))
     , phases_(phases)
     , priority_(priority)

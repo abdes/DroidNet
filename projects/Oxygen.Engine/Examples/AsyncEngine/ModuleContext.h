@@ -10,12 +10,16 @@
 
 #include <Oxygen/OxCo/ThreadPool.h>
 
+#include "EngineTypes.h"
 #include "GraphicsLayer.h"
 
+// Forward declarations for render graph integration
 namespace oxygen::examples::asyncsim {
+class RenderGraphModule;
+class RenderGraphBuilder;
+}
 
-struct FrameSnapshot;
-struct EngineProps;
+namespace oxygen::examples::asyncsim {
 
 //! Frame execution context providing access to engine systems and data
 //!
@@ -34,6 +38,12 @@ public:
     , props_(props)
   {
   }
+
+  // Non-copyable, movable
+  ModuleContext(const ModuleContext&) = delete;
+  auto operator=(const ModuleContext&) -> ModuleContext& = delete;
+  ModuleContext(ModuleContext&&) = default;
+  auto operator=(ModuleContext&&) -> ModuleContext& = default;
 
   // === FRAME INFORMATION ===
 
@@ -61,6 +71,25 @@ public:
   [[nodiscard]] const GraphicsLayer& GetGraphics() const noexcept
   {
     return graphics_;
+  }
+
+  // === RENDER GRAPH ACCESS ===
+
+  //! Set render graph module reference (called during module registration)
+  void SetRenderGraphModule(RenderGraphModule* render_graph_module) noexcept
+  {
+    render_graph_module_ = render_graph_module;
+  }
+
+  //! Get render graph builder for current frame
+  //! Only valid during FrameGraph phase when render graph module is active
+  [[nodiscard]] RenderGraphBuilder* GetRenderGraphBuilder() noexcept;
+
+  //! Check if render graph is available for this frame
+  [[nodiscard]] bool HasRenderGraphAccess() const noexcept
+  {
+    return render_graph_module_ != nullptr
+      && current_phase_ == FramePhase::FrameGraph;
   }
 
   // === SNAPSHOT ACCESS (Category B - Parallel phases only) ===
@@ -179,6 +208,9 @@ private:
   const FrameSnapshot* frame_snapshot_ { nullptr };
   FrameTiming frame_timing_ {};
   FramePhase current_phase_ { FramePhase::Unknown };
+
+  // Render graph integration
+  RenderGraphModule* render_graph_module_ { nullptr };
 };
 
 } // namespace oxygen::examples::asyncsim

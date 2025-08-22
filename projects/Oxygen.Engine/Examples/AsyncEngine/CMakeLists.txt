@@ -18,6 +18,12 @@ asap_module_declare(
 asap_push_module("${META_MODULE_NAME}")
 
 # ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(glm CONFIG REQUIRED)
+
+# ------------------------------------------------------------------------------
 # Sources
 # ------------------------------------------------------------------------------
 
@@ -25,14 +31,41 @@ add_executable(
   ${META_MODULE_TARGET}
   "AsyncEngineSimulator.cpp"
   "AsyncEngineSimulator.h"
+  "EngineTypes.h"
   "GraphicsLayer.cpp"
   "GraphicsLayer.h"
   "IEngineModule.h"
   "ModuleContext.h"
+  "ModuleContext.cpp"
   "ModuleManager.h"
-  "ExampleModules.h"
   "main_impl.cpp"
   "../main.cpp"
+  # Render Graph System
+  "Renderer/Graph/Types.cpp"
+  "Renderer/Graph/Resource.cpp"
+  "Renderer/Passes/RenderPass.h"
+  "Renderer/Passes/RenderPass.cpp"
+  "Renderer/Graph/ExecutionContext.cpp"
+  "Renderer/Graph/RenderGraphBuilder.cpp"
+  "Renderer/Graph/Scheduler.cpp"
+  "Renderer/Graph/Cache.cpp"
+  "Renderer/Graph/Validator.cpp"
+  "Renderer/Graph/RenderGraph.cpp"
+  # AsyncEngine Integration
+  "Renderer/Integration/GraphicsLayerIntegration.h"
+  "Renderer/Integration/GraphicsLayerIntegration.cpp"
+  # Core Engine Modules
+  "Modules/RenderGraphModule.h"
+  "Modules/RenderGraphModule.cpp"
+  "Modules/DebugOverlayModule.h"
+  "Modules/DebugOverlayModule.cpp"
+  "Modules/ConsoleModule.h"
+  "Modules/ConsoleModule.cpp"
+  "Modules/GeometryRenderModule.h"
+  "Modules/GeometryRenderModule.cpp"
+  # Game Example Modules
+  "Examples/GameModule.h"
+  "Examples/GameModule.cpp"
 )
 
 set_target_properties(
@@ -43,6 +76,7 @@ set_target_properties(
 )
 
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
 
 target_include_directories(
   ${META_MODULE_TARGET}
@@ -57,7 +91,9 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    glm::glm
     oxygen::base
+    oxygen::renderer
     oxygen::composition
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     oxygen::oxco
