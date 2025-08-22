@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -23,6 +25,8 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+
+#include "GraphicsLayer.h"
 
 namespace oxygen::examples::asyncsim {
 
@@ -115,6 +119,13 @@ public:
     return surfaces_;
   }
 
+  //! Graphics layer access
+  [[nodiscard]] GraphicsLayer& GetGraphics() noexcept { return graphics_; }
+  [[nodiscard]] const GraphicsLayer& GetGraphics() const noexcept
+  {
+    return graphics_;
+  }
+
 private:
   // Ordered phases (Category A)
   void PhaseFrameStart();
@@ -136,7 +147,6 @@ private:
     -> co::Co<>; // resource state transitions planning
   auto PhaseCommandRecord() -> co::Co<>; // async (simulated work)
   void PhasePresent(); // synchronous presentation
-  auto PhaseDeferredDestruction() -> co::Co<>; // deferred destruction draining
 
   // Multi-surface rendering helpers
   void RecordSurfaceCommands(
@@ -167,6 +177,9 @@ private:
   auto SimulateWorkOrdered(std::chrono::microseconds cost) const
     -> co::Co<>; // runs inline (Category A)
 
+  //! Internal coroutine performing the per-frame sequence and yielding.
+  auto FrameLoop(uint32_t frame_count) -> co::Co<>;
+
   std::vector<SyntheticTaskSpec> parallel_specs_ {};
   std::vector<ParallelResult> parallel_results_ {};
   std::mutex parallel_results_mutex_;
@@ -177,13 +190,14 @@ private:
   EngineProps props_ {};
   co::Nursery* nursery_ { nullptr };
   uint64_t frame_index_ { 0 };
+
   // Timing helpers
   std::chrono::steady_clock::time_point frame_start_ts_ {};
   std::chrono::microseconds phase_accum_ { 0 };
   FrameSnapshot snapshot_ {};
-  // Internal coroutine driving the frame loop
-  //! Internal coroutine performing the per-frame sequence and yielding.
-  auto FrameLoop(uint32_t frame_count) -> co::Co<>;
+
+  // Graphics layer owning global systems
+  GraphicsLayer graphics_;
 
   // Signals completion when FrameLoop exits.
   oxygen::co::Event completed_ {};

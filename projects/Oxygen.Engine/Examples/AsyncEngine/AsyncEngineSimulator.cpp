@@ -56,6 +56,14 @@ AsyncEngineSimulator::AsyncEngineSimulator(
 
   // Initialize detached services (Category D)
   InitializeDetachedServices();
+
+  // Register some initial persistent resources with the Graphics layer
+  auto& registry = graphics_.GetResourceRegistry();
+  registry.RegisterResource("FrameUniformBuffer");
+  registry.RegisterResource("GlobalVertexBuffer");
+  registry.RegisterResource("GlobalIndexBuffer");
+  registry.RegisterResource("ShadowMapAtlas");
+  registry.RegisterResource("EnvironmentMap");
 }
 
 AsyncEngineSimulator::~AsyncEngineSimulator() = default;
@@ -163,10 +171,9 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
       frame_index_);
     // Adaptive budget management for next frame
     PhaseBudgetAdapt();
-    // Deferred destruction draining (after fence signal)
-    co_await PhaseDeferredDestruction();
     // Frame end timing and metrics
     PhaseFrameEnd();
+
     // Yield control to thread pool
     co_await pool_.Run([](co::ThreadPool::CancelToken) { });
   }
@@ -183,20 +190,13 @@ void AsyncEngineSimulator::PhaseFrameStart()
   frame_start_ts_ = std::chrono::steady_clock::now();
   phase_accum_ = 0us;
 
-  // TODO: Implement fence polling for GPU synchronization
-  // Poll GPU fences from previous frames to ensure completion
+  // Initialize graphics layer for this frame
+  graphics_.BeginFrame(frame_index_);
 
   // TODO: Implement epoch advance for resource lifetime management
   // Advance frame epoch counter for generation-based validation
 
-  // TODO: Implement deferred destruction retirement
-  // Retire resources whose last used GPU fence has signaled and epoch
-  // difference >= N
-
-  LOG_F(1,
-    "Frame {} start (fence polling, epoch advance, deferred destruction "
-    "retirement)",
-    frame_index_);
+  LOG_F(1, "Frame {} start (epoch advance)", frame_index_);
 }
 auto AsyncEngineSimulator::PhaseInput() -> co::Co<>
 {
@@ -233,6 +233,35 @@ auto AsyncEngineSimulator::PhaseSceneMutation() -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseSceneMutation (B2: structural integrity barrier)",
     frame_index_);
+
+  // Simulate dynamic resource creation during scene mutations
+  auto& registry = graphics_.GetResourceRegistry();
+  auto& allocator = graphics_.GetDescriptorAllocator();
+
+  // Simulate creating new dynamic resources (streaming assets, UI textures,
+  // etc.)
+  if (frame_index_ % 4 == 0) {
+    // Every 4th frame, simulate loading new streaming textures
+    // 1. Allocate descriptor slot first (reserve space in global heap)
+    auto descriptor_id = allocator.AllocateDescriptor();
+    // 2. Create GPU resource and register handle (maps to descriptor slot)
+    auto texture_handle = registry.RegisterResource(
+      "StreamingTexture_" + std::to_string(frame_index_));
+    LOG_F(2, "[F{}] Created streaming texture {} with descriptor {}",
+      frame_index_, texture_handle, descriptor_id);
+  }
+
+  if (frame_index_ % 7 == 0) {
+    // Every 7th frame, simulate creating temporary render targets
+    // 1. Allocate descriptor slot first
+    auto descriptor_id = allocator.AllocateDescriptor();
+    // 2. Create GPU resource and register handle
+    auto rt_handle = registry.RegisterResource(
+      "TempRenderTarget_" + std::to_string(frame_index_));
+    LOG_F(2, "[F{}] Created temp render target {} with descriptor {}",
+      frame_index_, rt_handle, descriptor_id);
+  }
+
   // TODO: Implement scene graph structural mutations
   // Apply spawn/despawn, reparent operations, handle allocations
   // Ensure structural integrity before transform propagation
@@ -257,6 +286,40 @@ auto AsyncEngineSimulator::PhasePostParallel() -> co::Co<>
 auto AsyncEngineSimulator::PhaseFrameGraph() -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseFrameGraph", frame_index_);
+
+  // Frame graph creates and manages render targets for the current frame
+  auto& registry = graphics_.GetResourceRegistry();
+  auto& allocator = graphics_.GetDescriptorAllocator();
+
+  // Create frame-specific render targets based on frame graph analysis
+  // Main color buffer for this frame
+  // 1. Allocate descriptor slot first
+  auto color_descriptor = allocator.AllocateDescriptor();
+  // 2. Create GPU resource and register handle
+  auto color_buffer_handle = registry.RegisterResource(
+    "ColorBuffer_Frame" + std::to_string(frame_index_));
+
+  // Depth buffer for this frame
+  // 1. Allocate descriptor slot first
+  auto depth_descriptor = allocator.AllocateDescriptor();
+  // 2. Create GPU resource and register handle
+  auto depth_buffer_handle = registry.RegisterResource(
+    "DepthBuffer_Frame" + std::to_string(frame_index_));
+
+  // Shadow map if needed (every few frames)
+  if (frame_index_ % 3 == 0) {
+    // 1. Allocate descriptor slot first
+    auto shadow_descriptor = allocator.AllocateDescriptor();
+    // 2. Create GPU resource and register handle
+    auto shadow_map_handle = registry.RegisterResource(
+      "ShadowMap_Frame" + std::to_string(frame_index_));
+    LOG_F(2, "[F{}] Created shadow map {} with descriptor {}", frame_index_,
+      shadow_map_handle, shadow_descriptor);
+  }
+
+  LOG_F(2, "[F{}] Created frame render targets: color={}, depth={}",
+    frame_index_, color_buffer_handle, depth_buffer_handle);
+
   // TODO: Implement frame graph/render pass dependency planning
   // Resolve pass dependencies and resource transition planning
   co_await SimulateWorkOrdered(500us);
@@ -264,9 +327,34 @@ auto AsyncEngineSimulator::PhaseFrameGraph() -> co::Co<>
 auto AsyncEngineSimulator::PhaseDescriptorTablePublication() -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseDescriptorTablePublication", frame_index_);
-  // TODO: Implement global descriptor/bindless table publication
-  // Stage versioned publication step with monotonic version bump in ordered
-  // phase Allow parallel allocation but serialize publication for atomicity
+
+  // Use Graphics layer descriptor allocator for global descriptor management
+  auto& allocator = graphics_.GetDescriptorAllocator();
+
+  // At this point, all resources for the frame should be ready and have
+  // descriptors allocated In a real engine, this would batch-update the GPU
+  // descriptor heap with all frame resources
+
+  // Simulate allocating descriptors for frame-specific resources (uniform
+  // buffers, etc.)
+  auto frame_descriptor_count
+    = 3; // Per-frame uniforms, camera data, lighting data
+  for (uint32_t i = 0; i < frame_descriptor_count; ++i) {
+    auto descriptor_id = allocator.AllocateDescriptor();
+    LOG_F(2, "[F{}] Allocated frame descriptor {} for uniform buffer",
+      frame_index_, descriptor_id);
+  }
+
+  // Publish the complete descriptor table to GPU - this makes all resources
+  // visible to shaders In a real engine, this would issue GPU commands to
+  // update descriptor heaps
+  allocator.PublishDescriptorTable(frame_index_);
+
+  LOG_F(1,
+    "[F{}] Published global descriptor table (all resources now "
+    "bindless-accessible)",
+    frame_index_);
+
   co_await SimulateWorkOrdered(200us);
 }
 auto AsyncEngineSimulator::PhaseResourceStateTransitions() -> co::Co<>
@@ -328,6 +416,34 @@ void AsyncEngineSimulator::PhasePresent()
     PresentSurface(surfaces_[i], i);
   }
 
+  // After presentation, schedule frame-specific resources for cleanup
+  // These resources are safe to destroy after this frame completes
+  auto& reclaimer = graphics_.GetDeferredReclaimer();
+
+  // Schedule cleanup of this frame's render targets (they're done being used)
+  // Use simulated handles that correspond to resources created this frame
+  auto color_handle = 100000 + frame_index_; // Simulated color buffer handle
+  auto depth_handle = 200000 + frame_index_; // Simulated depth buffer handle
+
+  reclaimer.ScheduleReclaim(color_handle, frame_index_,
+    "ColorBuffer_Frame" + std::to_string(frame_index_));
+  reclaimer.ScheduleReclaim(depth_handle, frame_index_,
+    "DepthBuffer_Frame" + std::to_string(frame_index_));
+
+  LOG_F(1,
+    "[F{}] Scheduled 2 render targets for deferred cleanup (color={}, "
+    "depth={})",
+    frame_index_, color_handle, depth_handle);
+
+  // Every few frames, schedule cleanup of temporary resources
+  if (frame_index_ % 3 == 0 && frame_index_ > 0) {
+    auto shadow_handle = 300000 + frame_index_; // Simulated shadow map handle
+    reclaimer.ScheduleReclaim(shadow_handle, frame_index_,
+      "ShadowMap_Frame" + std::to_string(frame_index_));
+    LOG_F(1, "[F{}] Scheduled shadow map for cleanup (handle={})", frame_index_,
+      shadow_handle);
+  }
+
   LOG_F(1, "[F{}][A] PhasePresent complete - all {} surfaces presented",
     frame_index_, surfaces_.size());
 }
@@ -341,17 +457,11 @@ void AsyncEngineSimulator::PhaseBudgetAdapt()
   // LOD, prefetch assets) Provide hysteresis to avoid oscillation (time-window
   // averaging)
 }
-auto AsyncEngineSimulator::PhaseDeferredDestruction() -> co::Co<>
-{
-  LOG_F(1, "[F{}][A] PhaseDeferredDestruction", frame_index_);
-  // TODO: Implement deferred destruction draining after fence signal
-  // Only retire resources whose last used GPU fence signaled and epoch
-  // difference >= N Drain deferred destruction queue safely after GPU
-  // synchronization
-  co_await SimulateWorkOrdered(150us);
-}
 void AsyncEngineSimulator::PhaseFrameEnd()
 {
+  // Finalize graphics layer for this frame
+  graphics_.EndFrame();
+
   auto frame_end = std::chrono::steady_clock::now();
   auto total = std::chrono::duration_cast<std::chrono::microseconds>(
     frame_end - frame_start_ts_);

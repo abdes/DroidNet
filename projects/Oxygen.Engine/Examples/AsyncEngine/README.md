@@ -38,7 +38,7 @@ Adaptive overrides: degrade B→C or skip when over budget; upgrade C tasks when
 
 Frame start sequencing that ensures determinism & hazard-free state:
 
-- Frame index / epoch advance, fence polling, deferred destruction retirement
+- Frame index / epoch advance (fence polling & deferred destruction retirement handled by Graphics layer)
 - Input sampling (produce immutable snapshot for frame)
 - Fixed timestep simulation loop (0..N steps): physics integration, constraints
 - Deterministic gameplay logic mutating authoritative state
@@ -48,7 +48,8 @@ Frame start sequencing that ensures determinism & hazard-free state:
 - Random seed management
 - Frame graph / render pass dependency & resource transition planning
 - Global descriptor/bindless table publication, resource state transitions, queue submission ordering
-- Deferred destruction draining (after fence signal)
+
+Note: Deferred destruction draining (after fence signal) is handled internally by the Graphics layer during frame start.
 
 ### B. Synchronous Outcome, Parallelizable (Barriered Structured Concurrency)
 
@@ -128,7 +129,9 @@ Can shift category based on load:
 13. Present (synchronous sequential presentation of all surfaces)
 14. Async Pipeline Poll & Publish (Category C readiness)
 15. Budget Adaptation decisions for next frame
-16. Deferred destruction scheduling, end-of-frame bookkeeping
+16. End-of-frame bookkeeping
+
+Note: Deferred destruction scheduling happens at call sites and reclamation is managed by the Graphics layer internally during frame start, eliminating the need for a dedicated engine-level deferred destruction phase.
 
 ---
 
@@ -245,7 +248,7 @@ participant "Async Pipelines\n(Assets/PSO/BLAS)" as Pipelines
 participant "Detached Services\n(Telemetry/Log)" as Detached
 
 == Frame Start ==
-Main -> Main : Advance FrameIndex / Epoch\nPoll GPU fences\nRetire deferred destroys
+Main -> Main : Advance FrameIndex / Epoch\n(Graphics layer handles GPU fence polling & resource reclamation)
 
 == Input ==
 Main -> Main : Sample devices → Input Snapshot
@@ -339,7 +342,11 @@ Detached -> Detached : Telemetry flush / Logging / Metrics (fire-and-forget)
 Main -> Detached : Enqueue log/telemetry events (non-blocking)
 
 == Frame End ==
-Main -> Main : Schedule deferred releases (next safe epoch)
+Main -> Main : End-of-frame bookkeeping
+
+note over Main
+Deferred destruction scheduling handled at call sites.\nReclamation managed by Graphics layer during frame start.
+end note
 
 @enduml
 ```
