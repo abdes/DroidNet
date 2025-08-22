@@ -10,6 +10,8 @@
 #include <ranges>
 #include <thread>
 
+#include "ModuleContext.h"
+
 using namespace std::chrono_literals;
 
 namespace oxygen::examples::asyncsim {
@@ -88,54 +90,75 @@ auto AsyncEngineSimulator::Run(uint32_t frame_count) -> void
     [this, frame_count]() -> co::Co<> { co_await FrameLoop(frame_count); });
 }
 
+auto AsyncEngineSimulator::InitializeModules() -> co::Co<>
+{
+  ModuleContext context(0, pool_, graphics_, props_);
+  co_await module_manager_.InitializeModules(context);
+}
+
+auto AsyncEngineSimulator::ShutdownModules() -> co::Co<>
+{
+  ModuleContext context(frame_index_, pool_, graphics_, props_);
+  co_await module_manager_.ShutdownModules(context);
+}
+
 auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
 {
   LOG_F(INFO, "Starting frame loop for {} frames (target_fps={})", frame_count,
     props_.target_fps);
+
+  // Initialize modules before frame loop
+  co_await InitializeModules();
+
   for (uint32_t i = 0; i < frame_count; ++i) {
     LOG_SCOPE_F(INFO, fmt::format("Frame {}", i).c_str());
     frame_index_ = i;
+
+    // Create module context for this frame
+    ModuleContext context(frame_index_, pool_, graphics_, props_);
 
     // Fence polling, epoch advance, deferred destruction retirement
     PhaseFrameStart();
 
     // B0: Input snapshot
-    co_await PhaseInput();
+    co_await PhaseInput(context);
     // B1: Fixed simulation deterministic state
-    co_await PhaseFixedSim();
+    co_await PhaseFixedSim(context);
     // Variable gameplay logic
-    co_await PhaseGameplay();
+    co_await PhaseGameplay(context);
     // Network packet application & reconciliation
-    co_await PhaseNetworkReconciliation();
+    co_await PhaseNetworkReconciliation(context);
     // Random seed management for determinism
     co_await PhaseRandomSeedManagement();
     // B2: Structural mutations
-    co_await PhaseSceneMutation();
+    co_await PhaseSceneMutation(context);
     // Transform propagation
-    co_await PhaseTransforms();
+    co_await PhaseTransforms(context);
     // Immutable snapshot build (B3)
-    co_await PhaseSnapshot();
+    co_await PhaseSnapshot(context);
 
     // Build immutable snapshot for Category B tasks (B3 complete after this).
     snapshot_.frame_index = frame_index_;
+    context.SetFrameSnapshot(&snapshot_);
     LOG_F(1, "[F{}][B3 built] Immutable snapshot ready", frame_index_);
+
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
-    co_await ParallelTasks();
+    co_await ParallelTasks(context);
 
     // Serial post-parallel integration (Category A resumes after B4)
-    co_await PhasePostParallel();
+    co_await PhasePostParallel(context);
     // Frame graph/render pass dependency planning
-    co_await PhaseFrameGraph();
+    co_await PhaseFrameGraph(context);
     // Global descriptor/bindless table publication
-    co_await PhaseDescriptorTablePublication();
+    co_await PhaseDescriptorTablePublication(context);
     // Resource state transitions planning
-    co_await PhaseResourceStateTransitions();
+    co_await PhaseResourceStateTransitions(context);
     // Multi-surface command recording and submission
-    co_await PhaseCommandRecord();
+    co_await PhaseCommandRecord(context);
     LOG_F(1, "[F{}][B5 submitted] All command lists submitted via pipeline",
       frame_index_);
     // Synchronous sequential presentation
-    PhasePresent();
+    PhasePresent(context);
     // Frame pacing immediately after Present
     if (props_.target_fps > 0) {
       const auto desired = std::chrono::nanoseconds(
@@ -166,7 +189,7 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
       }
     }
     // Poll async pipeline readiness and integrate ready resources
-    PhaseAsyncPoll();
+    PhaseAsyncPoll(context);
     LOG_F(1, "[F{}][B6 async polled] Async resources integrated (if any)",
       frame_index_);
     // Adaptive budget management for next frame
@@ -177,6 +200,10 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
     // Yield control to thread pool
     co_await pool_.Run([](co::ThreadPool::CancelToken) { });
   }
+
+  // Shutdown modules after frame loop
+  co_await ShutdownModules();
+
   // Signal completion once the frame loop has finished executing.
   LOG_F(INFO,
     "Simulation complete after {} frames. Triggering completion event.",
@@ -198,24 +225,44 @@ void AsyncEngineSimulator::PhaseFrameStart()
 
   LOG_F(1, "Frame {} start (epoch advance)", frame_index_);
 }
-auto AsyncEngineSimulator::PhaseInput() -> co::Co<>
+auto AsyncEngineSimulator::PhaseInput(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseInput", frame_index_);
+
+  // Execute module input processing first
+  co_await module_manager_.ExecuteInput(context);
+
+  // Then execute engine's own input processing
   co_await SimulateWorkOrdered(500us);
 }
-auto AsyncEngineSimulator::PhaseFixedSim() -> co::Co<>
+auto AsyncEngineSimulator::PhaseFixedSim(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseFixedSim", frame_index_);
+
+  // Execute module fixed simulation first
+  co_await module_manager_.ExecuteFixedSimulation(context);
+
+  // Then execute engine's own fixed simulation
   co_await SimulateWorkOrdered(1000us);
 }
-auto AsyncEngineSimulator::PhaseGameplay() -> co::Co<>
+auto AsyncEngineSimulator::PhaseGameplay(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseGameplay", frame_index_);
+
+  // Execute module gameplay logic first
+  co_await module_manager_.ExecuteGameplay(context);
+
+  // Then execute engine's own gameplay logic
   co_await SimulateWorkOrdered(1500us);
 }
-auto AsyncEngineSimulator::PhaseNetworkReconciliation() -> co::Co<>
+auto AsyncEngineSimulator::PhaseNetworkReconciliation(ModuleContext& context)
+  -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseNetworkReconciliation", frame_index_);
+
+  // Execute module network reconciliation first
+  co_await module_manager_.ExecuteNetworkReconciliation(context);
+
   // TODO: Implement network packet application & authoritative reconciliation
   // Apply received network packets to authoritative game state
   // Reconcile client predictions with server authority
@@ -229,10 +276,14 @@ auto AsyncEngineSimulator::PhaseRandomSeedManagement() -> co::Co<>
   // Ensure reproducible random number generation for gameplay systems
   co_await SimulateWorkOrdered(100us);
 }
-auto AsyncEngineSimulator::PhaseSceneMutation() -> co::Co<>
+auto AsyncEngineSimulator::PhaseSceneMutation(ModuleContext& context)
+  -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseSceneMutation (B2: structural integrity barrier)",
     frame_index_);
+
+  // Execute module scene mutations first
+  co_await module_manager_.ExecuteSceneMutation(context);
 
   // Simulate dynamic resource creation during scene mutations
   auto& registry = graphics_.GetResourceRegistry();
@@ -267,25 +318,43 @@ auto AsyncEngineSimulator::PhaseSceneMutation() -> co::Co<>
   // Ensure structural integrity before transform propagation
   co_await SimulateWorkOrdered(300us);
 }
-auto AsyncEngineSimulator::PhaseTransforms() -> co::Co<>
+auto AsyncEngineSimulator::PhaseTransforms(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseTransforms", frame_index_);
+
+  // Execute module transform propagation first
+  co_await module_manager_.ExecuteTransformPropagation(context);
+
+  // Then execute engine's own transform work
   co_await SimulateWorkOrdered(400us);
 }
-auto AsyncEngineSimulator::PhaseSnapshot() -> co::Co<>
+auto AsyncEngineSimulator::PhaseSnapshot(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseSnapshot (build immutable snapshot)", frame_index_);
+
+  // Execute module snapshot building first
+  co_await module_manager_.ExecuteSnapshotBuild(context);
+
+  // Then execute engine's own snapshot work
   co_await SimulateWorkOrdered(300us);
 }
-auto AsyncEngineSimulator::PhasePostParallel() -> co::Co<>
+auto AsyncEngineSimulator::PhasePostParallel(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhasePostParallel (integrate Category B outputs)",
     frame_index_);
+
+  // Execute module post-parallel integration first
+  co_await module_manager_.ExecutePostParallel(context);
+
+  // Then execute engine's own post-parallel work
   co_await SimulateWorkOrdered(600us);
 }
-auto AsyncEngineSimulator::PhaseFrameGraph() -> co::Co<>
+auto AsyncEngineSimulator::PhaseFrameGraph(ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseFrameGraph", frame_index_);
+
+  // Execute module frame graph work first
+  co_await module_manager_.ExecuteFrameGraph(context);
 
   // Frame graph creates and manages render targets for the current frame
   auto& registry = graphics_.GetResourceRegistry();
@@ -324,9 +393,13 @@ auto AsyncEngineSimulator::PhaseFrameGraph() -> co::Co<>
   // Resolve pass dependencies and resource transition planning
   co_await SimulateWorkOrdered(500us);
 }
-auto AsyncEngineSimulator::PhaseDescriptorTablePublication() -> co::Co<>
+auto AsyncEngineSimulator::PhaseDescriptorTablePublication(
+  ModuleContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseDescriptorTablePublication", frame_index_);
+
+  // Execute module descriptor publication work first
+  co_await module_manager_.ExecuteDescriptorPublication(context);
 
   // Use Graphics layer descriptor allocator for global descriptor management
   auto& allocator = graphics_.GetDescriptorAllocator();
@@ -357,18 +430,27 @@ auto AsyncEngineSimulator::PhaseDescriptorTablePublication() -> co::Co<>
 
   co_await SimulateWorkOrdered(200us);
 }
-auto AsyncEngineSimulator::PhaseResourceStateTransitions() -> co::Co<>
+auto AsyncEngineSimulator::PhaseResourceStateTransitions(ModuleContext& context)
+  -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseResourceStateTransitions", frame_index_);
+
+  // Execute module resource state transitions first
+  co_await module_manager_.ExecuteResourceTransitions(context);
+
   // TODO: Implement resource state transition planning
   // Plan GPU resource state transitions for optimal barrier placement
   // Coordinate with frame graph for proper resource lifecycle management
   co_await SimulateWorkOrdered(300us);
 }
-auto AsyncEngineSimulator::PhaseCommandRecord() -> co::Co<>
+auto AsyncEngineSimulator::PhaseCommandRecord(ModuleContext& context)
+  -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseCommandRecord - {} surfaces (record+submit pipeline)",
     frame_index_, surfaces_.size());
+
+  // Execute module command recording first
+  co_await module_manager_.ExecuteCommandRecord(context);
 
   // Reset surface states for new frame
   for (auto& surface : surfaces_) {
@@ -406,10 +488,13 @@ auto AsyncEngineSimulator::PhaseCommandRecord() -> co::Co<>
     frame_index_, surfaces_.size());
 }
 
-void AsyncEngineSimulator::PhasePresent()
+void AsyncEngineSimulator::PhasePresent(ModuleContext& context)
 {
   LOG_F(1, "[F{}][A] PhasePresent - {} surfaces synchronously", frame_index_,
     surfaces_.size());
+
+  // Execute module present work first (fire and forget for now)
+  auto present_work = module_manager_.ExecutePresent(context);
 
   // Present all surfaces synchronously (sequential presentation)
   for (size_t i = 0; i < surfaces_.size(); ++i) {
@@ -447,7 +532,14 @@ void AsyncEngineSimulator::PhasePresent()
   LOG_F(1, "[F{}][A] PhasePresent complete - all {} surfaces presented",
     frame_index_, surfaces_.size());
 }
-void AsyncEngineSimulator::PhaseAsyncPoll() { TickAsyncJobs(); }
+void AsyncEngineSimulator::PhaseAsyncPoll(ModuleContext& context)
+{
+  // Execute module async work (fire and forget style for now)
+  auto async_work = module_manager_.ExecuteAsyncWork(context);
+
+  // Execute engine's async job polling
+  TickAsyncJobs();
+}
 void AsyncEngineSimulator::PhaseBudgetAdapt()
 {
   // TODO: Implement adaptive budget management
@@ -485,17 +577,20 @@ void AsyncEngineSimulator::LaunchParallelTasks()
 
 void AsyncEngineSimulator::JoinParallelTasks() { /* already joined inline */ }
 
-auto AsyncEngineSimulator::ParallelTasks() -> co::Co<>
+auto AsyncEngineSimulator::ParallelTasks(ModuleContext& context) -> co::Co<>
 {
   parallel_results_.clear();
   parallel_results_.reserve(parallel_specs_.size());
 
-  LOG_F(1, "[F{}][B] Dispatching {} parallel tasks", frame_index_,
-    parallel_specs_.size());
+  LOG_F(1, "[F{}][B] Dispatching {} parallel tasks + module parallel work",
+    frame_index_, parallel_specs_.size());
 
   // Create vector of coroutines following the test pattern
   std::vector<co::Co<>> jobs;
-  jobs.reserve(parallel_specs_.size());
+  jobs.reserve(parallel_specs_.size() + 1); // +1 for module parallel work
+
+  // Add module parallel work as first job
+  jobs.emplace_back(module_manager_.ExecuteParallelWork(context));
 
   // Create each coroutine directly like in the MuxRange tests
   for (const auto& spec : parallel_specs_) {

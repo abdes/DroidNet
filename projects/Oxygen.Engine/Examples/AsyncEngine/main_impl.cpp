@@ -30,6 +30,7 @@
 #include <Oxygen/OxCo/asio.h>
 
 #include "AsyncEngineSimulator.h"
+#include "ExampleModules.h"
 
 using namespace oxygen::examples::asyncsim;
 using namespace std::chrono_literals;
@@ -107,7 +108,7 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> oxygen::co::Co<int>
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_1;
+  loguru::g_stderr_verbosity = loguru::Verbosity_3;
 
   using namespace oxygen::clap; // NOLINT
 
@@ -160,6 +161,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     oxygen::co::ThreadPool pool(
       io_ctx, std::max(1u, std::thread::hardware_concurrency()));
     AsyncEngineSimulator engine { pool, EngineProps { target_fps } };
+
+    // Register game modules
+    LOG_F(INFO, "Registering engine modules...");
+
+    // Core game module (high priority)
+    engine.GetModuleManager().RegisterModule(std::make_unique<GameModule>());
+
+    // Debug overlay module (low priority)
+    engine.GetModuleManager().RegisterModule(
+      std::make_unique<DebugOverlayModule>());
+
+    // Console module (normal priority)
+    engine.GetModuleManager().RegisterModule(std::make_unique<ConsoleModule>());
+
+    LOG_F(INFO, "Registered {} modules",
+      engine.GetModuleManager().GetModuleCount());
 
     // Configure multi-surface rendering example
     engine.ClearSurfaces(); // Remove default surface
