@@ -62,6 +62,17 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
       HandleVersionCommand(context);
     }
 
+    // Finalize values for all options across all commands so that StoreTo
+    // side-effects are applied (and defaults propagated) once.
+    for (const auto& cmd : commands_) {
+      for (const auto& opt : cmd->CommandOptions()) {
+        opt->FinalizeValue(context.ovm);
+      }
+      for (const auto& opt : cmd->PositionalArguments()) {
+        opt->FinalizeValue(context.ovm);
+      }
+    }
+
     return context;
   }
   if (HasHelpCommand()) {
