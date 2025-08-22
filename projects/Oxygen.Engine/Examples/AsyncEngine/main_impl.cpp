@@ -163,12 +163,17 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     // Configure multi-surface rendering example
     engine.ClearSurfaces(); // Remove default surface
-    engine.AddSurface(RenderSurface{"MainWindow", 800us, 200us, 300us, false, false});
-    engine.AddSurface(RenderSurface{"ShadowMap", 400us, 100us, 50us, false, false});
-    engine.AddSurface(RenderSurface{"ReflectionProbe", 600us, 150us, 100us, false, false});
-    engine.AddSurface(RenderSurface{"UI_Overlay", 200us, 50us, 150us, false, false});
+    engine.AddSurface(
+      RenderSurface { "MainWindow", 800us, 200us, 300us, false, false });
+    engine.AddSurface(
+      RenderSurface { "ShadowMap", 400us, 100us, 50us, false, false });
+    engine.AddSurface(
+      RenderSurface { "ReflectionProbe", 600us, 150us, 100us, false, false });
+    engine.AddSurface(
+      RenderSurface { "UI_Overlay", 200us, 50us, 150us, false, false });
 
-    LOG_F(INFO, "Configured {} rendering surfaces for parallel command recording",
+    LOG_F(INFO,
+      "Configured {} rendering surfaces for parallel command recording",
       engine.GetSurfaces().size());
 
     AsyncEngineApp app { &engine, &io_ctx };

@@ -25,6 +25,8 @@ add_executable(
   ${META_MODULE_TARGET}
   "AsyncEngineSimulator.cpp"
   "AsyncEngineSimulator.h"
+  "GraphicsLayer.cpp"
+  "GraphicsLayer.h"
   "main_impl.cpp"
   "../main.cpp"
 )
