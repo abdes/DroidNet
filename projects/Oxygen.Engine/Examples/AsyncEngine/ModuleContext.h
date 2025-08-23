@@ -73,6 +73,16 @@ public:
     return graphics_;
   }
 
+  // === SURFACE ACCESS (for multi-view render graph) ===
+  void SetSurfacesPtr(const std::vector<RenderSurface>* surfaces) noexcept
+  {
+    surfaces_ = surfaces;
+  }
+  [[nodiscard]] const std::vector<RenderSurface>* GetSurfaces() const noexcept
+  {
+    return surfaces_;
+  }
+
   // === RENDER GRAPH ACCESS ===
 
   //! Set render graph module reference (called during module registration)
@@ -211,6 +221,7 @@ private:
 
   // Render graph integration
   RenderGraphModule* render_graph_module_ { nullptr };
+  const std::vector<RenderSurface>* surfaces_ { nullptr };
 };
 
 } // namespace oxygen::examples::asyncsim

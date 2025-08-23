@@ -66,6 +66,8 @@ public:
   {
     // Stub implementation - Phase 1
     (void)graph;
+    // TODO(Phase2): Incorporate PassCostProfiler dynamic costs for ordering
+    // (minimize critical path)
     return SchedulingResult {};
   }
 
@@ -83,6 +85,8 @@ public:
   {
     // Stub implementation - Phase 1
     (void)result;
+    // TODO(Phase2): Implement queue assignment heuristic using pass type +
+    // dependencies
   }
 
   //! Set scheduling priority for a pass type

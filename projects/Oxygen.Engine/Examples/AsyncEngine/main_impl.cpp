@@ -31,10 +31,10 @@
 
 #include "AsyncEngineSimulator.h"
 #include "Examples/GameModule.h"
-#include "Modules/RenderGraphModule.h"
-#include "Modules/GeometryRenderModule.h"
-#include "Modules/DebugOverlayModule.h"
 #include "Modules/ConsoleModule.h"
+#include "Modules/DebugOverlayModule.h"
+#include "Modules/GeometryRenderModule.h"
+#include "Modules/RenderGraphModule.h"
 
 using namespace oxygen::examples::asyncsim;
 using namespace std::chrono_literals;
@@ -112,7 +112,7 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> oxygen::co::Co<int>
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_3;
+  loguru::g_stderr_verbosity = loguru::Verbosity_2;
 
   using namespace oxygen::clap; // NOLINT
 
@@ -169,16 +169,21 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     // Register engine modules
     LOG_F(INFO, "Registering engine modules...");
 
-    // Core render graph module (priority: High=100 - sets up render graph infrastructure)
-    engine.GetModuleManager().RegisterModule(std::make_unique<RenderGraphModule>());
+    // Core render graph module (priority: High=100 - sets up render graph
+    // infrastructure)
+    engine.GetModuleManager().RegisterModule(
+      std::make_unique<RenderGraphModule>());
 
     // Core game module (priority: High=100 - main game logic)
     engine.GetModuleManager().RegisterModule(std::make_unique<GameModule>());
 
-    // Geometry rendering module (priority: Normal=500 - geometry rendering via render graph)
-    engine.GetModuleManager().RegisterModule(std::make_unique<GeometryRenderModule>());
+    // Geometry rendering module (priority: Normal=500 - geometry rendering via
+    // render graph)
+    engine.GetModuleManager().RegisterModule(
+      std::make_unique<GeometryRenderModule>());
 
-    // Debug overlay module (priority: Low=800 - non-critical debug visualization)
+    // Debug overlay module (priority: Low=800 - non-critical debug
+    // visualization)
     engine.GetModuleManager().RegisterModule(
       std::make_unique<DebugOverlayModule>());
 

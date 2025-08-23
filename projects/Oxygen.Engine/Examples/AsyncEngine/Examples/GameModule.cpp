@@ -13,7 +13,9 @@ namespace oxygen::examples::asyncsim {
 
 GameModule::GameModule()
   : EngineModuleBase("Game",
-      ModulePhases::CoreGameplay | ModulePhases::ParallelWork
+      // Enable full gameplay + scene mutation + transforms + rendering phases
+      ModulePhases::CoreGameplay | ModulePhases::SceneMutation
+        | ModulePhases::TransformPropagation | ModulePhases::ParallelWork
         | ModulePhases::PostParallel | ModulePhases::FrameGraph,
       ModulePriorities::High)
 {
@@ -29,8 +31,10 @@ auto GameModule::Initialize(ModuleContext& context) -> co::Co<>
 
   // Register some game entities with graphics
   auto& registry = context.GetGraphics().GetResourceRegistry();
-  player_entity_handle_ = registry.RegisterResource("PlayerEntity");
-  world_state_handle_ = registry.RegisterResource("WorldState");
+  player_entity_handle_
+    = static_cast<uint32_t>(registry.RegisterResource("PlayerEntity"));
+  world_state_handle_
+    = static_cast<uint32_t>(registry.RegisterResource("WorldState"));
 
   LOG_F(INFO,
     "[Game] Game systems initialized (player_handle={}, world_handle={})",
@@ -46,7 +50,7 @@ auto GameModule::OnInput(ModuleContext& context) -> co::Co<>
   // For simulation, just track input processing
   input_events_processed_++;
 
-  co_await context.GetThreadPool().Run([](auto cancel_token) {
+  co_await context.GetThreadPool().Run([](auto /*cancel_token*/) {
     std::this_thread::sleep_for(100us); // Simulate input processing
   });
 
@@ -65,7 +69,7 @@ auto GameModule::OnFixedSimulation(ModuleContext& context) -> co::Co<>
   game_time_ += fixed_dt;
 
   // Simulate some gameplay logic
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(200us); // Simulate physics integration
 
     // Update player health as example of authoritative state mutation
@@ -85,7 +89,7 @@ auto GameModule::OnGameplay(ModuleContext& context) -> co::Co<>
     2, "[Game] Variable gameplay logic for frame {}", context.GetFrameIndex());
 
   // Variable timestep gameplay (AI decisions, high-level game logic)
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(300us); // Simulate AI processing
 
     // Make some high-level game decisions
@@ -115,7 +119,7 @@ auto GameModule::OnSceneMutation(ModuleContext& context) -> co::Co<>
       dynamic_entities_.size());
   }
 
-  co_await context.GetThreadPool().Run([](auto cancel_token) {
+  co_await context.GetThreadPool().Run([](auto /*cancel_token*/) {
     std::this_thread::sleep_for(150us); // Simulate scene mutation work
   });
   co_return;
@@ -127,7 +131,7 @@ auto GameModule::OnTransformPropagation(ModuleContext& context) -> co::Co<>
     2, "[Game] Transform propagation for frame {}", context.GetFrameIndex());
 
   // Update world transforms for game entities
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(200us); // Simulate transform calculations
 
     // Update player position (example)
@@ -150,7 +154,7 @@ auto GameModule::OnParallelWork(ModuleContext& context) -> co::Co<>
   }
 
   // Simulate parallel game calculations (AI, animation, etc.)
-  co_await context.GetThreadPool().Run([snapshot](auto cancel_token) {
+  co_await context.GetThreadPool().Run([snapshot](auto /*cancel_token*/) {
     std::this_thread::sleep_for(400us); // Simulate AI batch processing
 
     // In real implementation, would process game logic using snapshot data
@@ -168,7 +172,7 @@ auto GameModule::OnPostParallel(ModuleContext& context) -> co::Co<>
     context.GetFrameIndex());
 
   // Integrate results from parallel work phase
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(100us); // Simulate result integration
 
     // Update game state with parallel work results
@@ -186,58 +190,82 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
     context.GetFrameIndex());
 
   // Only contribute to render graph if we have active content to render
-  if (!game_over_ && !dynamic_entities_.empty()) {
-    // Access the render graph builder from context
-    if (auto* builder = context.GetRenderGraphBuilder()) {
-      LOG_F(2, "[Game] Adding game-specific render passes to render graph");
+  if (auto* builder = context.GetRenderGraphBuilder()) {
+    // Multi-view example: Always contribute HUD & entity passes when any
+    // dynamic content exists
+    if (!game_over_ && !dynamic_entities_.empty()) {
+      LOG_F(2,
+        "[Game] Adding multi-view game passes (views={} dynamic_entities={})",
+        builder->GetFrameContext().views.size(), dynamic_entities_.size());
 
-      // Add a game-specific UI pass for player HUD
+      // Shared (once-per-frame) analytics/update pass prior to per-view drawing
+      PassBuilder analyticsBuilder = builder->AddComputePass("GameAnalytics");
+      analyticsBuilder.SetScope(PassScope::Shared)
+        .SetPriority(Priority::Low)
+        .SetExecutor([this](TaskExecutionContext& /*exec*/) {
+          LOG_F(3, "[Game] Shared analytics (time={:.2f})", game_time_);
+          std::this_thread::sleep_for(30us);
+        });
+      auto sharedAnalyticsHandle
+        = builder->AddPass(std::move(analyticsBuilder));
+
+      // Per-view HUD pass (depends on analytics)
       auto hudHandle = builder->AddRasterPass(
-        "GameHUD", [this](PassBuilder& pass) {
+        "GameHUD", [this, sharedAnalyticsHandle](PassBuilder& pass) {
           pass.SetScope(PassScope::PerView)
-            .SetPriority(Priority::Normal)
             .IterateAllViews()
+            .DependsOn(sharedAnalyticsHandle)
+            .SetPriority(Priority::Normal)
             .SetExecutor([this](TaskExecutionContext& exec) {
-              // Render player health, game time, etc.
+              const auto& view_ctx = exec.GetViewContext();
               LOG_F(3,
-                "[Game] Executing HUD render pass (health={:.1f}, time={:.2f})",
-                player_health_, game_time_);
-
-              // In a real implementation, this would render UI elements
-              // For now, just simulate the work
-              std::this_thread::sleep_for(50us);
+                "[Game][HUD][View:{}] HUD pass (health={:.1f}, time={:.2f})",
+                view_ctx.view_name, player_health_, game_time_);
+              std::this_thread::sleep_for(40us);
             });
         });
 
-      // Add a pass for rendering dynamic game entities
-      if (!dynamic_entities_.empty()) {
-        auto entitiesHandle = builder->AddRasterPass(
-          "GameEntities", [this](PassBuilder& pass) {
-            pass.SetScope(PassScope::PerView)
-              .SetPriority(Priority::High)
-              .IterateAllViews()
-              .SetExecutor([this](TaskExecutionContext& exec) {
-                LOG_F(3, "[Game] Executing entities render pass ({} entities)",
-                  dynamic_entities_.size());
+      // Per-view dynamic entities pass (depends on HUD)
+      auto entitiesHandle = builder->AddRasterPass(
+        "GameEntities", [this, hudHandle](PassBuilder& pass) {
+          pass.SetScope(PassScope::PerView)
+            .IterateAllViews()
+            .DependsOn(hudHandle)
+            .SetPriority(Priority::High)
+            .SetExecutor([this](TaskExecutionContext& exec) {
+              const auto& view_ctx = exec.GetViewContext();
+              LOG_F(3,
+                "[Game][ENT][View:{}] Entities pass ({} entities, "
+                "player_x={:.2f})",
+                view_ctx.view_name, dynamic_entities_.size(),
+                player_position_x_);
+              for (auto handle : dynamic_entities_) {
+                (void)handle; // placeholder for draw submission
+              }
+              std::this_thread::sleep_for(80us);
+            });
+        });
 
-                // Render all dynamic entities spawned by the game
-                for (auto handle : dynamic_entities_) {
-                  // In a real implementation, this would submit draw calls for
-                  // entities
-                  (void)handle; // Suppress unused variable warning
-                }
+      // Optional: Per-view minimal debug overlay (depends on entities)
+      builder->AddRasterPass(
+        "GameViewDebug", [this, entitiesHandle](PassBuilder& pass) {
+          pass.SetScope(PassScope::PerView)
+            .IterateAllViews()
+            .DependsOn(entitiesHandle)
+            .SetPriority(Priority::Low)
+            .SetExecutor([this](TaskExecutionContext& exec) {
+              const auto& view_ctx = exec.GetViewContext();
+              LOG_F(3, "[Game][DBG][View:{}] Debug overlay stub",
+                view_ctx.view_name);
+              std::this_thread::sleep_for(20us);
+            });
+        });
 
-                std::this_thread::sleep_for(100us);
-              });
-          });
-      }
-
-      LOG_F(2, "[Game] Game render graph contribution complete");
-    } else {
-      LOG_F(WARNING,
-        "[Game] No render graph builder available - using legacy rendering");
-      // Fallback to traditional rendering approach would go here
+      LOG_F(2, "[Game] Multi-view game passes added");
     }
+  } else {
+    LOG_F(WARNING,
+      "[Game] No render graph builder available - using legacy rendering");
   }
 
   co_return;

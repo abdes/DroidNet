@@ -70,10 +70,11 @@ auto ConsoleModule::OnAsyncWork(ModuleContext& context) -> co::Co<>
     auto command = pending_commands_.front();
     pending_commands_.pop_front();
 
-    co_await context.GetThreadPool().Run([this, command](auto cancel_token) {
-      std::this_thread::sleep_for(100us); // Simulate command processing
-      ExecuteCommand(command);
-    });
+    co_await context.GetThreadPool().Run(
+      [this, command](auto /*cancel_token*/) {
+        std::this_thread::sleep_for(100us); // Simulate command processing
+        ExecuteCommand(command);
+      });
   }
 
   co_return;
@@ -82,7 +83,7 @@ auto ConsoleModule::OnAsyncWork(ModuleContext& context) -> co::Co<>
 auto ConsoleModule::OnDetachedWork(ModuleContext& context) -> co::Co<>
 {
   // Background console services (log file management, command history, etc.)
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(20us); // Minimal background work
 
     // Simulate background console maintenance

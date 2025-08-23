@@ -116,6 +116,7 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
 
     // Create module context for this frame
     ModuleContext context(frame_index_, pool_, graphics_, props_);
+    context.SetSurfacesPtr(&surfaces_);
 
     // Fence polling, epoch advance, deferred destruction retirement
     PhaseFrameStart();
@@ -363,14 +364,14 @@ auto AsyncEngineSimulator::PhaseFrameGraph(ModuleContext& context) -> co::Co<>
   // Create frame-specific render targets based on frame graph analysis
   // Main color buffer for this frame
   // 1. Allocate descriptor slot first
-  auto color_descriptor = allocator.AllocateDescriptor();
+  [[maybe_unused]] auto color_descriptor = allocator.AllocateDescriptor();
   // 2. Create GPU resource and register handle
   auto color_buffer_handle = registry.RegisterResource(
     "ColorBuffer_Frame" + std::to_string(frame_index_));
 
   // Depth buffer for this frame
   // 1. Allocate descriptor slot first
-  auto depth_descriptor = allocator.AllocateDescriptor();
+  [[maybe_unused]] auto depth_descriptor = allocator.AllocateDescriptor();
   // 2. Create GPU resource and register handle
   auto depth_buffer_handle = registry.RegisterResource(
     "DepthBuffer_Frame" + std::to_string(frame_index_));
@@ -411,7 +412,7 @@ auto AsyncEngineSimulator::PhaseDescriptorTablePublication(
   // Simulate allocating descriptors for frame-specific resources (uniform
   // buffers, etc.)
   auto frame_descriptor_count
-    = 3; // Per-frame uniforms, camera data, lighting data
+    = 3U; // Per-frame uniforms, camera data, lighting data
   for (uint32_t i = 0; i < frame_descriptor_count; ++i) {
     auto descriptor_id = allocator.AllocateDescriptor();
     LOG_F(2, "[F{}] Allocated frame descriptor {} for uniform buffer",

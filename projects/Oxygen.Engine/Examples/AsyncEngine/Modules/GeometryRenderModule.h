@@ -138,6 +138,9 @@ public:
     uint32_t transparent_draws { 0 };
     uint32_t total_vertices { 0 };
     uint32_t total_instances { 0 };
+    uint32_t lighting_passes { 0 };
+    uint32_t post_process_passes { 0 };
+    uint32_t ui_passes { 0 };
   };
 
   [[nodiscard]] auto GetLastFrameStats() const -> const RenderStats&
@@ -166,11 +169,16 @@ private:
   ResourceHandle color_buffer_;
   ResourceHandle vertex_buffer_;
   ResourceHandle index_buffer_;
+  ResourceHandle lighting_buffer_;
+  ResourceHandle post_process_buffer_;
 
   // Pass handles for dependencies
   PassHandle depth_prepass_;
   PassHandle opaque_pass_;
   PassHandle transparency_pass_;
+  PassHandle lighting_pass_;
+  PassHandle post_process_pass_;
+  PassHandle ui_pass_;
 
   // === INTERNAL METHODS ===
 
@@ -186,6 +194,15 @@ private:
   //! Add transparency pass to render graph
   auto AddTransparencyPass(RenderGraphBuilder& builder) -> void;
 
+  //! Add lighting pass
+  auto AddLightingPass(RenderGraphBuilder& builder) -> void;
+
+  //! Add post-process pass
+  auto AddPostProcessPass(RenderGraphBuilder& builder) -> void;
+
+  //! Add UI overlay pass
+  auto AddUIPass(RenderGraphBuilder& builder) -> void;
+
   //! Execute depth prepass rendering
   auto ExecuteDepthPrepass(TaskExecutionContext& ctx) -> void;
 
@@ -194,6 +211,15 @@ private:
 
   //! Execute transparency rendering
   auto ExecuteTransparency(TaskExecutionContext& ctx) -> void;
+
+  //! Execute lighting
+  auto ExecuteLighting(TaskExecutionContext& ctx) -> void;
+
+  //! Execute post process
+  auto ExecutePostProcess(TaskExecutionContext& ctx) -> void;
+
+  //! Execute UI overlay
+  auto ExecuteUI(TaskExecutionContext& ctx) -> void;
 
   //! Update render statistics
   auto UpdateRenderStats() -> void;

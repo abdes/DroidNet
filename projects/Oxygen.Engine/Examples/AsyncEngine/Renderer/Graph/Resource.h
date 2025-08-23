@@ -7,10 +7,26 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Types.h"
+
+// Hash function for (ResourceHandle, uint32_t) pairs
+namespace std {
+template <>
+struct hash<std::pair<oxygen::examples::asyncsim::ResourceHandle, uint32_t>> {
+  auto operator()(
+    const std::pair<oxygen::examples::asyncsim::ResourceHandle, uint32_t>& p)
+    const -> std::size_t
+  {
+    return std::hash<uint32_t> {}(p.first.get())
+      ^ (std::hash<uint32_t> {}(p.second) << 1);
+  }
+};
+}
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::examples::asyncsim {
@@ -48,9 +64,9 @@ public:
   ResourceDesc() = default;
   virtual ~ResourceDesc() = default;
 
-  // Non-copyable, movable
-  ResourceDesc(const ResourceDesc&) = delete;
-  auto operator=(const ResourceDesc&) -> ResourceDesc& = delete;
+  // Allow copying (needed for descriptor duplication during build)
+  ResourceDesc(const ResourceDesc&) = default;
+  auto operator=(const ResourceDesc&) -> ResourceDesc& = default;
   ResourceDesc(ResourceDesc&&) = default;
   auto operator=(ResourceDesc&&) -> ResourceDesc& = default;
 
@@ -95,8 +111,30 @@ public:
     return graphics_integration_ != nullptr;
   }
 
+  [[nodiscard]] auto GetGraphicsIntegration() const noexcept
+    -> GraphicsLayerIntegration*
+  {
+    return graphics_integration_;
+  }
+
   //! Get hash for resource compatibility checks
   [[nodiscard]] virtual auto GetCompatibilityHash() const -> std::size_t = 0;
+
+  // === Bindless integration (AsyncEngine Phase 2) ===
+  //! Store allocated descriptor index (bindless table). 0xFFFFFFFF = invalid
+  auto SetDescriptorIndex(uint32_t index) noexcept
+  {
+    descriptor_index_ = index;
+  }
+  [[nodiscard]] auto GetDescriptorIndex() const noexcept -> uint32_t
+  {
+    return descriptor_index_;
+  }
+  [[nodiscard]] auto HasDescriptor() const noexcept -> bool
+  {
+    return descriptor_index_ != InvalidDescriptor;
+  }
+  static constexpr uint32_t InvalidDescriptor = 0xFFFFFFFFu;
 
 protected:
   std::string debug_name_;
@@ -105,6 +143,7 @@ protected:
 
   // AsyncEngine integration
   GraphicsLayerIntegration* graphics_integration_ { nullptr };
+  uint32_t descriptor_index_ { InvalidDescriptor }; // bindless descriptor slot
 };
 
 //! Texture resource descriptor
@@ -214,6 +253,45 @@ public:
   }
 };
 
+//! Resource usage information for lifetime tracking
+struct ResourceUsage {
+  PassHandle pass; //!< Pass that uses this resource
+  ResourceState state; //!< Required resource state for this usage
+  bool is_write_access; //!< True if this usage writes to the resource
+  uint32_t view_index; //!< View index for per-view resources
+
+  ResourceUsage(PassHandle p, ResourceState s, bool write, uint32_t view = 0)
+    : pass(p)
+    , state(s)
+    , is_write_access(write)
+    , view_index(view)
+  {
+  }
+};
+
+//! Resource lifetime analysis result
+struct ResourceLifetimeInfo {
+  PassHandle first_usage; //!< First pass that uses this resource
+  PassHandle last_usage; //!< Last pass that uses this resource
+  std::vector<ResourceUsage> usages; //!< All usages throughout the frame
+  std::vector<ResourceHandle> aliases; //!< Resources this can alias with
+  size_t memory_requirement; //!< Memory requirement in bytes
+  bool has_write_conflicts; //!< True if has overlapping write operations
+  // Optional explicit ordering indices (populated when topological order is
+  // supplied). UINT32_MAX indicates unset.
+  uint32_t first_index { std::numeric_limits<uint32_t>::max() };
+  uint32_t last_index { std::numeric_limits<uint32_t>::max() };
+
+  ResourceLifetimeInfo() = default;
+
+  //! Check if this resource's lifetime overlaps with another
+  [[nodiscard]] auto OverlapsWith(const ResourceLifetimeInfo& other) const
+    -> bool;
+
+  //! Get debug string for this lifetime info
+  [[nodiscard]] auto GetDebugString() const -> std::string;
+};
+
 //! Resource aliasing hazard information
 struct AliasHazard {
   ResourceHandle resource_a;
@@ -240,6 +318,32 @@ public:
   ResourceAliasValidator(ResourceAliasValidator&&) = default;
   auto operator=(ResourceAliasValidator&&) -> ResourceAliasValidator& = default;
 
+  //! Add a resource for lifetime tracking
+  virtual auto AddResource(ResourceHandle handle, const ResourceDesc& desc)
+    -> void
+    = 0;
+
+  //! Add a resource usage for lifetime analysis
+  virtual auto AddResourceUsage(ResourceHandle resource, PassHandle pass,
+    ResourceState state, bool is_write, uint32_t view_index = 0) -> void
+    = 0;
+
+  //! Analyze resource lifetimes and build aliasing information
+  virtual auto AnalyzeLifetimes() -> void = 0;
+
+  //! Provide a topological execution order mapping (pass -> linear index)
+  //! to improve lifetime interval derivation. Optional: implementations may
+  //! ignore if not provided.
+  virtual auto SetTopologicalOrder(
+    const std::unordered_map<PassHandle, uint32_t>& order) -> void
+  {
+    (void)order; // default no-op
+  }
+
+  //! Get lifetime information for a resource
+  [[nodiscard]] virtual auto GetLifetimeInfo(ResourceHandle handle) const
+    -> const ResourceLifetimeInfo* = 0;
+
   //! Validate aliasing configuration and return any hazards found
   /*!
    Performs hazard detection during compilation:
@@ -250,15 +354,11 @@ public:
    - Format Compatibility: Aliased resources must have compatible formats and
    usage flags
    */
-  [[nodiscard]] virtual auto ValidateAliasing() -> std::vector<AliasHazard>
-  {
-    // Stub implementation - Phase 1
-    return {};
-  }
+  [[nodiscard]] virtual auto ValidateAliasing() -> std::vector<AliasHazard> = 0;
 
   //! Check if two resource descriptors are compatible for aliasing
   [[nodiscard]] virtual auto AreCompatible(
-    const ResourceDesc& a, const ResourceDesc& b) -> bool
+    const ResourceDesc& a, const ResourceDesc& b) const -> bool
   {
     // Enhanced compatibility check using type info and hash
     return a.GetTypeInfo() == b.GetTypeInfo()
@@ -268,8 +368,140 @@ public:
   //! Get debug information about resource aliasing
   [[nodiscard]] virtual auto GetDebugInfo() const -> std::string
   {
-    return "ResourceAliasValidator (stub implementation)";
+    return "ResourceAliasValidator (base implementation)";
   }
+};
+
+//! Resource state transition information
+struct ResourceTransition {
+  ResourceHandle resource;
+  ResourceState from_state;
+  ResourceState to_state;
+  PassHandle pass;
+  uint32_t view_index;
+
+  ResourceTransition(ResourceHandle res, ResourceState from, ResourceState to,
+    PassHandle p, uint32_t view = 0)
+    : resource(res)
+    , from_state(from)
+    , to_state(to)
+    , pass(p)
+    , view_index(view)
+  {
+  }
+};
+
+//! Memory pool allocation for resource aliasing
+struct MemoryAllocation {
+  size_t offset; //!< Offset within the memory pool
+  size_t size; //!< Size of this allocation
+  ResourceHandle resource; //!< Resource using this allocation
+  bool is_active; //!< True if currently in use
+
+  MemoryAllocation(size_t off, size_t sz, ResourceHandle res)
+    : offset(off)
+    , size(sz)
+    , resource(res)
+    , is_active(true)
+  {
+  }
+};
+
+//! Memory pool for resource aliasing
+class ResourceMemoryPool {
+public:
+  ResourceMemoryPool() = default;
+  ~ResourceMemoryPool() = default;
+
+  // Non-copyable, movable
+  ResourceMemoryPool(const ResourceMemoryPool&) = delete;
+  auto operator=(const ResourceMemoryPool&) -> ResourceMemoryPool& = delete;
+  ResourceMemoryPool(ResourceMemoryPool&&) = default;
+  auto operator=(ResourceMemoryPool&&) -> ResourceMemoryPool& = default;
+
+  //! Allocate memory for a resource
+  [[nodiscard]] auto Allocate(ResourceHandle resource, size_t size,
+    size_t alignment) -> std::optional<MemoryAllocation>;
+
+  //! Free memory allocation
+  auto Free(ResourceHandle resource) -> void;
+
+  //! Get total pool size
+  [[nodiscard]] auto GetTotalSize() const -> size_t { return total_size_; }
+
+  //! Get current usage
+  [[nodiscard]] auto GetUsedSize() const -> size_t { return used_size_; }
+
+  //! Get peak usage during this frame
+  [[nodiscard]] auto GetPeakUsage() const -> size_t { return peak_usage_; }
+
+  //! Reset peak usage tracking
+  auto ResetPeakUsage() -> void { peak_usage_ = used_size_; }
+
+  //! Get debug information
+  [[nodiscard]] auto GetDebugInfo() const -> std::string;
+
+private:
+  std::vector<MemoryAllocation> allocations_;
+  size_t total_size_ { 0 };
+  size_t used_size_ { 0 };
+  size_t peak_usage_ { 0 };
+
+  //! Find best fit for allocation
+  [[nodiscard]] auto FindBestFit(size_t size, size_t alignment)
+    -> std::optional<size_t>;
+
+  //! Merge adjacent free allocations
+  auto CoalesceFreed() -> void;
+};
+
+//! Resource state tracker for managing GPU resource transitions
+class ResourceStateTracker {
+public:
+  ResourceStateTracker() = default;
+  ~ResourceStateTracker() = default;
+
+  // Non-copyable, movable
+  ResourceStateTracker(const ResourceStateTracker&) = delete;
+  auto operator=(const ResourceStateTracker&) -> ResourceStateTracker& = delete;
+  ResourceStateTracker(ResourceStateTracker&&) = default;
+  auto operator=(ResourceStateTracker&&) -> ResourceStateTracker& = default;
+
+  //! Set initial state for a resource
+  auto SetInitialState(ResourceHandle resource, ResourceState state,
+    uint32_t view_index = 0) -> void;
+
+  //! Request state transition for a resource
+  auto RequestTransition(ResourceHandle resource, ResourceState new_state,
+    PassHandle pass, uint32_t view_index = 0) -> void;
+
+  //! Get current state of a resource
+  [[nodiscard]] auto GetCurrentState(ResourceHandle resource,
+    uint32_t view_index = 0) const -> std::optional<ResourceState>;
+
+  //! Get all planned transitions
+  [[nodiscard]] auto GetPlannedTransitions() const
+    -> const std::vector<ResourceTransition>&
+  {
+    return planned_transitions_;
+  }
+
+  //! Clear all state tracking
+  auto Reset() -> void;
+
+  //! Get debug information
+  [[nodiscard]] auto GetDebugInfo() const -> std::string;
+
+private:
+  struct ResourceStateEntry {
+    ResourceState current_state;
+    PassHandle last_used_pass;
+  };
+
+  // Map from (resource_handle, view_index) to state
+  std::unordered_map<std::pair<ResourceHandle, uint32_t>, ResourceStateEntry>
+    resource_states_;
+  std::vector<ResourceTransition> planned_transitions_;
 };
 
 } // namespace oxygen::examples::asyncsim

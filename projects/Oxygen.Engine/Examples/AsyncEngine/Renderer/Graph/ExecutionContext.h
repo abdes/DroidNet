@@ -224,7 +224,7 @@ public:
 class TaskExecutionContext {
 public:
   TaskExecutionContext() = default;
-  ~TaskExecutionContext() = default;
+  virtual ~TaskExecutionContext() = default;
 
   // Non-copyable, movable
   TaskExecutionContext(const TaskExecutionContext&) = delete;
@@ -281,7 +281,7 @@ public:
   auto SetParallelSafe(bool safe) -> void { is_parallel_safe_ = safe; }
 
   //! Get command recorder for GPU operations
-  [[nodiscard]] auto GetCommandRecorder() -> CommandRecorder&
+  [[nodiscard]] virtual auto GetCommandRecorder() -> CommandRecorder&
   {
     if (!command_recorder_) {
       command_recorder_ = std::make_unique<CommandRecorder>();
@@ -421,3 +421,36 @@ private:
 };
 
 } // namespace oxygen::examples::asyncsim
+
+// Forward declarations for factory functions
+namespace oxygen::examples::asyncsim {
+class TaskExecutionContext;
+
+//! AsyncEngine-specific execution context with enhanced capabilities
+class AsyncEngineTaskExecutionContext : public TaskExecutionContext {
+public:
+  AsyncEngineTaskExecutionContext() = default;
+  ~AsyncEngineTaskExecutionContext() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(AsyncEngineTaskExecutionContext)
+  OXYGEN_MAKE_NON_MOVABLE(AsyncEngineTaskExecutionContext)
+
+  //! Prepare context for pass execution
+  auto PrepareForPassExecution(const std::string& pass_name) -> void
+  {
+    // Prepare execution context for the given pass
+    LOG_F(3, "[ExecutionContext] Preparing for pass: {}", pass_name);
+  }
+
+  //! Finalize pass execution
+  auto FinalizePassExecution() -> void
+  {
+    // Clean up after pass execution
+    LOG_F(3, "[ExecutionContext] Finalizing pass execution");
+  }
+};
+
+//! Factory function to create enhanced execution context
+auto CreateAsyncEngineTaskExecutionContext()
+  -> std::unique_ptr<TaskExecutionContext>;
+}

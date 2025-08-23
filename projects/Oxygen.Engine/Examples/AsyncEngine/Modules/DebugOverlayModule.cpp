@@ -58,7 +58,7 @@ auto DebugOverlayModule::OnParallelWork(ModuleContext& context) -> co::Co<>
   LOG_F(3, "[Debug] Parallel debug work for frame {}", context.GetFrameIndex());
 
   // Build debug visualization data in parallel
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(50us); // Minimal debug processing
 
     // Update debug statistics
@@ -86,7 +86,7 @@ auto DebugOverlayModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
               .SetPriority(
                 Priority::Low) // Low priority - render after main content
               .IterateAllViews()
-              .SetExecutor([this](TaskExecutionContext& exec) {
+              .SetExecutor([this](TaskExecutionContext& /*exec*/) {
                 LOG_F(4, "[Debug] Executing debug overlay render pass");
 
                 // Render debug information (frame stats, performance metrics,
@@ -103,7 +103,7 @@ auto DebugOverlayModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
             pass.SetScope(PassScope::PerView)
               .SetPriority(Priority::Low)
               .IterateAllViews()
-              .SetExecutor([this](TaskExecutionContext& exec) {
+              .SetExecutor([this](TaskExecutionContext& /*exec*/) {
                 LOG_F(4, "[Debug] Executing debug lines render pass");
 
                 // Render debug lines, wireframes, collision volumes, etc.
@@ -134,7 +134,7 @@ auto DebugOverlayModule::OnCommandRecord(ModuleContext& context) -> co::Co<>
     context.GetFrameIndex());
 
   // Record debug rendering commands
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(30us); // Minimal command recording
 
     debug_commands_recorded_ = true;
@@ -170,7 +170,7 @@ auto DebugOverlayModule::OnDetachedWork(ModuleContext& context) -> co::Co<>
     co_return;
 
   // Background debug work (profiling data collection, etc.)
-  co_await context.GetThreadPool().Run([this](auto cancel_token) {
+  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(10us); // Minimal background work
 
     // Collect profiling data, update debug statistics

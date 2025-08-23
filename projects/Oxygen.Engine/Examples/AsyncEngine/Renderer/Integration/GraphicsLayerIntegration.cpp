@@ -93,20 +93,6 @@ auto GraphicsLayerIntegration::ProcessCompletedFrames() -> std::size_t
   return graphics_layer_.ProcessCompletedFrames();
 }
 
-auto GraphicsLayerIntegration::BeginFrame(uint64_t frame_index) -> void
-{
-  LOG_F(2, "[GraphicsIntegration] Beginning frame {}", frame_index);
-
-  graphics_layer_.BeginFrame(frame_index);
-}
-
-auto GraphicsLayerIntegration::EndFrame() -> void
-{
-  LOG_F(2, "[GraphicsIntegration] Ending frame");
-
-  graphics_layer_.EndFrame();
-}
-
 auto GraphicsLayerIntegration::GetIntegrationStats() const -> IntegrationStats
 {
   IntegrationStats stats;

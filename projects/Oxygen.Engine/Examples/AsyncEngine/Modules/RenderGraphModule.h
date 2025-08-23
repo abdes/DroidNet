@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
@@ -13,10 +14,15 @@
 
 #include "../IEngineModule.h"
 #include "../ModuleContext.h"
+#include "../Renderer/Graph/Cache.h"
 #include "../Renderer/Graph/RenderGraph.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
+#include "../Renderer/Integration/GraphicsLayerIntegration.h"
 
 namespace oxygen::examples::asyncsim {
+
+class RenderGraph; // use base type
+class GraphicsLayerIntegration;
 
 //! Core render graph module that orchestrates graph-based rendering
 /*!
@@ -54,14 +60,17 @@ public:
   // === PUBLIC API ===
 
   //! Get the render graph builder for the current frame
-  [[nodiscard]] auto GetRenderGraphBuilder() noexcept -> RenderGraphBuilder&
+  [[nodiscard]] auto GetBuilder() -> RenderGraphBuilder&;
+
+  //! Get the render graph builder (alias for GetBuilder)
+  [[nodiscard]] auto GetRenderGraphBuilder() -> RenderGraphBuilder&
   {
-    return render_graph_builder_;
+    return GetBuilder();
   }
 
   //! Get the compiled render graph (available after OnFrameGraph)
   [[nodiscard]] auto GetRenderGraph() const noexcept
-    -> const std::unique_ptr<RenderGraph>&
+    -> const std::shared_ptr<RenderGraph>&
   {
     return render_graph_;
   }
@@ -73,17 +82,14 @@ public:
   }
 
   //! Get frame statistics for debugging and profiling
-  struct FrameStats {
-    uint32_t pass_count { 0 };
-    uint32_t resource_count { 0 };
+  struct FrameStatistics {
+    std::uint32_t pass_count { 0 };
+    std::uint32_t resource_count { 0 };
     std::chrono::microseconds build_time { 0 };
     std::chrono::microseconds validation_time { 0 };
   };
 
-  [[nodiscard]] auto GetLastFrameStats() const noexcept -> const FrameStats&
-  {
-    return last_frame_stats_;
-  }
+  [[nodiscard]] auto GetLastFrameStats() const -> const FrameStatistics&;
 
 private:
   // === INTERNAL STATE ===
@@ -91,27 +97,36 @@ private:
   //! Current frame's render graph builder
   RenderGraphBuilder render_graph_builder_;
 
-  //! Compiled render graph for current frame
-  std::unique_ptr<RenderGraph> render_graph_;
+  //! Compiled render graph for current frame (shared for cache reuse)
+  std::shared_ptr<RenderGraph> render_graph_;
+
+  //! Cache for compiled render graphs
+  std::unique_ptr<RenderGraphCache> render_graph_cache_;
+
+  //! Graphics layer integration for AsyncEngine
+  std::unique_ptr<GraphicsLayerIntegration> graphics_integration_;
 
   //! Frame statistics for debugging
-  FrameStats last_frame_stats_;
+  FrameStatistics last_frame_stats_;
 
   //! Integration state
   bool is_initialized_ { false };
-  uint64_t current_frame_index_ { 0 };
+  std::uint64_t current_frame_index_ { 0 };
 
   // === INTERNAL METHODS ===
 
   //! Reset builder for new frame
-  auto ResetBuilderForNewFrame(const ModuleContext& context) -> void;
+  auto ResetBuilderForNewFrame(ModuleContext& context) -> void;
 
-  //! Validate render graph construction
-  auto ValidateRenderGraph(const ModuleContext& context) -> bool;
+  //! Create view contexts from available rendering surfaces
+  auto CreateViewContextsFromSurfaces(
+    FrameContext& frame_context, ModuleContext& module_context) -> void;
 
-  //! Update frame statistics
-  auto UpdateFrameStats(std::chrono::microseconds build_time,
-    std::chrono::microseconds validation_time) -> void;
+  //! Wait for all modules to contribute to the render graph
+  auto WaitForModuleContributions(ModuleContext& context) -> co::Co<>;
+
+  //! Compile the render graph from builder data
+  auto CompileRenderGraph(ModuleContext& context) -> co::Co<>;
 };
 
 } // namespace oxygen::examples::asyncsim
