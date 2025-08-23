@@ -298,6 +298,15 @@ struct AliasHazard {
   ResourceHandle resource_b;
   std::vector<PassHandle> conflicting_passes;
   std::string description;
+  enum class Severity : uint8_t { Warning, Error } severity { Severity::Error };
+};
+
+//! Potential safe aliasing candidate (no detected hazards)
+struct AliasCandidate {
+  ResourceHandle resource_a;
+  ResourceHandle resource_b;
+  size_t combined_memory; //!< Max of individual requirements
+  std::string description; //!< Brief rationale / compatibility summary
 };
 
 //! Interface for validating resource aliasing
@@ -355,6 +364,14 @@ public:
    usage flags
    */
   [[nodiscard]] virtual auto ValidateAliasing() -> std::vector<AliasHazard> = 0;
+
+  //! Retrieve safe alias candidates (call after AnalyzeLifetimes). Default
+  //! empty.
+  [[nodiscard]] virtual auto GetAliasCandidates() const
+    -> std::vector<AliasCandidate>
+  {
+    return {};
+  }
 
   //! Check if two resource descriptors are compatible for aliasing
   [[nodiscard]] virtual auto AreCompatible(
