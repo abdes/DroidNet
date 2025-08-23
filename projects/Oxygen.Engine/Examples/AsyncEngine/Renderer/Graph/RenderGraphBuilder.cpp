@@ -31,6 +31,15 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     LOG_F(2,
       "[RenderGraphBuilder] WARNING: Builder has zero passes at build start");
   }
+  // Detect conflicting view filtering configuration (mutually exclusive)
+  if (iterate_all_views_ && (restricted_view_index_.has_value() || view_filter_)) {
+    LOG_F(WARNING,
+      "[RenderGraphBuilder] Conflicting view configuration: IterateAllViews() combined with RestrictToView/RestrictToViews. IterateAllViews() wins; restrictions ignored.");
+  }
+  if (restricted_view_index_.has_value() && view_filter_) {
+    LOG_F(WARNING,
+      "[RenderGraphBuilder] Conflicting view configuration: both single view restriction and custom filter provided. Single view restriction takes precedence.");
+  }
   size_t null_descriptor_count = 0;
   for (const auto& kv : resource_descriptors_) {
     if (!kv.second)
