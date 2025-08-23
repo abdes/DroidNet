@@ -112,8 +112,6 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> oxygen::co::Co<int>
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_2;
-
   using namespace oxygen::clap; // NOLINT
 
   uint32_t frames = 5U;

@@ -373,8 +373,8 @@ public:
   {
     std::vector<AliasHazard> hazards;
 
-  // Reset candidates for fresh validation run
-  alias_candidates_.clear();
+    // Reset candidates for fresh validation run
+    alias_candidates_.clear();
 
     // 1. Integration consistency warnings (non-fatal)
     ValidateIntegrationState(hazards);
@@ -438,7 +438,8 @@ public:
           emitted_hazard = true;
         }
 
-        // 2.e Safe alias candidate (transient, non-overlapping, compatible, no hazards just emitted for this pair)
+        // 2.e Safe alias candidate (transient, non-overlapping, compatible, no
+        // hazards just emitted for this pair)
         if (transient_pair && !lifetimes_overlap && !emitted_hazard
           && AreCompatible(*descA, *descB)) {
           AliasCandidate cand;
@@ -446,9 +447,9 @@ public:
           cand.resource_b = hb;
           const auto sizeA = lifeA.memory_requirement;
           const auto sizeB = lifeB.memory_requirement;
-            cand.combined_memory = std::max(sizeA, sizeB);
-          cand.description = DescriptorSummary(*descA) + " <-> "
-            + DescriptorSummary(*descB);
+          cand.combined_memory = std::max(sizeA, sizeB);
+          cand.description
+            = DescriptorSummary(*descA) + " <-> " + DescriptorSummary(*descB);
           alias_candidates_.push_back(std::move(cand));
         }
       }
@@ -614,7 +615,7 @@ private:
     hz.description = "Transient lifetime overlap: '" + da.GetDebugName()
       + "' vs '" + db.GetDebugName() + "'";
     hz.conflicting_passes = CollectOverlapPasses(la, lb);
-  hz.severity = AliasHazard::Severity::Error;
+    hz.severity = AliasHazard::Severity::Error;
     return hz;
   }
 
@@ -626,7 +627,7 @@ private:
     hz.resource_b = b;
     hz.description = "Scope conflict (" + ScopeString(da.GetScope()) + " vs "
       + ScopeString(db.GetScope()) + ")";
-  hz.severity = AliasHazard::Severity::Warning;
+    hz.severity = AliasHazard::Severity::Warning;
     return hz;
   }
 
@@ -641,7 +642,7 @@ private:
     hz.description = "Overlapping write hazard: '" + da.GetDebugName() + "' & '"
       + db.GetDebugName() + "'";
     hz.conflicting_passes = CollectOverlapPasses(la, lb);
-  hz.severity = AliasHazard::Severity::Error;
+    hz.severity = AliasHazard::Severity::Error;
     return hz;
   }
 
@@ -674,13 +675,13 @@ private:
     if (d.GetTypeInfo() == "TextureDesc") {
       auto const& td = static_cast<const TextureDesc&>(d);
       oss << "Tex['" << d.GetDebugName() << "' " << td.width << "x" << td.height
-          << " fmt=" << static_cast<uint32_t>(td.format) << " use="
-          << static_cast<uint32_t>(td.usage) << "]";
+          << " fmt=" << static_cast<uint32_t>(td.format)
+          << " use=" << static_cast<uint32_t>(td.usage) << "]";
     } else if (d.GetTypeInfo() == "BufferDesc") {
       auto const& bd = static_cast<const BufferDesc&>(d);
       oss << "Buf['" << d.GetDebugName() << "' size=" << bd.size_bytes
-          << " stride=" << bd.stride << " use="
-          << static_cast<uint32_t>(bd.usage) << "]";
+          << " stride=" << bd.stride
+          << " use=" << static_cast<uint32_t>(bd.usage) << "]";
     } else {
       oss << d.GetTypeInfo() << "['" << d.GetDebugName() << "']";
     }

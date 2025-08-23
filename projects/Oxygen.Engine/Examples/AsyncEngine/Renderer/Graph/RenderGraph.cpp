@@ -7,13 +7,16 @@
 #include "RenderGraph.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <future>
 #include <numeric>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/Algorithms.h>
 
 #include "../Integration/GraphicsLayerIntegration.h"
 #include "ExecutionContext.h"
@@ -310,43 +313,203 @@ auto AsyncEngineRenderGraph::ExecutePassBatches(ModuleContext& context)
   }
 
   const bool multiview = IsMultiViewEnabled() && !frame_context_.views.empty();
-  TaskExecutionContext exec_ctx;
+  TaskExecutionContext
+    exec_ctx; // Serial context for non-parallel or main-thread-only passes
   for (size_t bi = 0; bi < batches.size(); ++bi) {
     auto& batch = batches[bi];
-    LOG_F(4, "[RenderGraph] Executing batch {} ({} passes)", bi, batch.size());
-    // Sequential execution inside batch for now (placeholder for future
-    // parallel dispatch)
-    for (auto handle : batch) {
-      if (auto* pass = GetPassMutable(handle)) {
-        auto exec_one = [&](uint32_t view_index) {
-          pass->SetViewIndex(view_index);
-          auto start = std::chrono::high_resolution_clock::now();
-          if (pass_cost_profiler_)
-            pass_cost_profiler_->BeginPass(handle);
-          pass->Execute(exec_ctx);
-          auto end = std::chrono::high_resolution_clock::now();
-          auto cpu_us
-            = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-                .count();
-          if (pass_cost_profiler_) {
-            pass_cost_profiler_->RecordCpuTime(
-              handle, static_cast<float>(cpu_us));
-            // Placeholder GPU timing: real implementation will insert backend
-            // timestamp queries and read them after GPU completion. For now we
-            // approximate GPU time with CPU duration to enable adaptive cost
-            // refinement pathways.
-            pass_cost_profiler_->RecordGpuTime(
-              handle, static_cast<float>(cpu_us));
-            pass_cost_profiler_->EndPass(handle);
+    bool want_parallel = IsParallelBatchExecutionEnabled();
+    bool can_parallel = want_parallel && batch.size() > 1;
+    LOG_F(4, "[RenderGraph] Executing batch {} ({} passes){}", bi, batch.size(),
+      can_parallel ? " [parallel]" : " [serial]");
+    if (loguru::g_stderr_verbosity >= 5) {
+      if (!want_parallel) {
+        LOG_F(5,
+          "[RenderGraph][Batch{}] forcing serial: global parallel disabled",
+          bi);
+      } else if (batch.size() <= 1) {
+        LOG_F(5,
+          "[RenderGraph][Batch{}] serial: width=1 (no concurrency opportunity)",
+          bi);
+      }
+    }
+
+    const auto batch_start = std::chrono::high_resolution_clock::now();
+
+    if (!can_parallel) {
+      // Fallback serial path
+      for (auto handle : batch) {
+        if (auto* pass = GetPassMutable(handle)) {
+          auto exec_one = [&](uint32_t view_index) {
+            pass->SetViewIndex(view_index);
+            auto start = std::chrono::high_resolution_clock::now();
+            if (pass_cost_profiler_)
+              pass_cost_profiler_->BeginPass(handle);
+            pass->Execute(exec_ctx);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto cpu_us = std::chrono::duration_cast<std::chrono::microseconds>(
+              end - start)
+                            .count();
+            if (pass_cost_profiler_) {
+              pass_cost_profiler_->RecordCpuTime(
+                handle, static_cast<float>(cpu_us));
+              pass_cost_profiler_->RecordGpuTime(
+                handle, static_cast<float>(cpu_us));
+              pass_cost_profiler_->EndPass(handle);
+            }
+          };
+          if (multiview && pass->GetScope() == PassScope::PerView) {
+            for (uint32_t vi = 0; vi < frame_context_.views.size(); ++vi) {
+              exec_one(vi);
+            }
+          } else {
+            exec_one(pass->GetViewIndex());
           }
-        };
-        if (multiview && pass->GetScope() == PassScope::PerView) {
-          for (uint32_t vi = 0; vi < frame_context_.views.size(); ++vi) {
-            exec_one(vi);
-          }
-        } else {
-          exec_one(pass->GetViewIndex());
         }
+      }
+    } else {
+      // Parallel path: dispatch each pass (and each view instance if per-view)
+      // as a separate task.
+      struct TaskRecord {
+        PassHandle handle;
+        uint32_t view_index;
+      };
+      // Timing storage (must exist before possible main-thread execution path
+      // uses it). Use a vector indexed by the underlying PassHandle id to
+      // avoid concurrent unordered_map insertions (which triggered ASan UAF
+      // due to node allocations during concurrent access).
+      struct Timing {
+        std::atomic<long long> total_cpu_us { 0 };
+      };
+      uint32_t max_pass_id = 0;
+      for (auto h : batch) {
+        max_pass_id = std::max<uint32_t>(max_pass_id, h.get());
+      }
+      // Reserve space for multiview expansion worst case (optional; ids are
+      // stable so capacity only needs max id + 1).
+      std::unique_ptr<Timing[]> timing_vec {
+        new Timing[std::max<uint32_t>(1, max_pass_id + 1)]
+      };
+      std::vector<TaskRecord> tasks;
+      tasks.reserve(
+        batch.size() * (multiview ? frame_context_.views.size() : 1));
+      for (auto handle : batch) {
+        if (auto* pass = GetPassMutable(handle)) {
+          if (pass->RequiresMainThread()) {
+            // Execute immediately on main thread (respect view iteration)
+            auto exec_main = [&](uint32_t view_index) {
+              pass->SetViewIndex(view_index);
+              auto start = std::chrono::high_resolution_clock::now();
+              if (pass_cost_profiler_)
+                pass_cost_profiler_->BeginPass(handle);
+              // Main-thread path uses shared exec_ctx serially
+              pass->Execute(exec_ctx);
+              auto end = std::chrono::high_resolution_clock::now();
+              auto cpu_us
+                = std::chrono::duration_cast<std::chrono::microseconds>(
+                  end - start)
+                    .count();
+              if (pass_cost_profiler_) {
+                pass_cost_profiler_->RecordCpuTime(
+                  handle, static_cast<float>(cpu_us));
+                pass_cost_profiler_->RecordGpuTime(
+                  handle, static_cast<float>(cpu_us));
+                pass_cost_profiler_->EndPass(handle);
+              }
+              timing_vec[handle.get()].total_cpu_us.fetch_add(
+                cpu_us, std::memory_order_relaxed);
+            };
+            if (multiview && pass->GetScope() == PassScope::PerView) {
+              for (uint32_t vi = 0; vi < frame_context_.views.size(); ++vi)
+                exec_main(vi);
+            } else {
+              exec_main(pass->GetViewIndex());
+            }
+            continue; // skip adding job
+          }
+          if (multiview && pass->GetScope() == PassScope::PerView) {
+            for (uint32_t vi = 0; vi < frame_context_.views.size(); ++vi) {
+              tasks.push_back({ handle, vi });
+            }
+          } else {
+            tasks.push_back({ handle, pass->GetViewIndex() });
+          }
+        }
+      }
+      // No dynamic reservations needed for timing_vec (fixed size by max id).
+
+      std::vector<co::Co<>> jobs;
+      jobs.reserve(tasks.size());
+      for (auto& t : tasks) {
+        if (!GetPassMutable(t.handle))
+          continue;
+        jobs.push_back([&, h = t.handle,
+                         view_index = t.view_index]() -> co::Co<> {
+          co_await context.GetThreadPool().Run([&, h, view_index](
+                                                 co::ThreadPool::CancelToken) {
+            auto* p = GetPassMutable(h);
+            if (!p)
+              return;
+            p->SetViewIndex(view_index);
+            // Diagnostic: show parallel task start (verbosity 5+)
+            if (loguru::g_stderr_verbosity >= 5) {
+              const size_t tid_hash
+                = std::hash<std::thread::id> {}(std::this_thread::get_id());
+              LOG_F(5,
+                "[RenderGraph][Parallel][TaskStart] pass={} view={} thread={} "
+                "(tasks may reorder)",
+                h.get(), view_index, tid_hash);
+            }
+            // Create a fresh execution context per task to avoid concurrent
+            // access to shared state (e.g., CommandRecorder unique_ptr)
+            TaskExecutionContext local_ctx;
+            // Propagate view context (if available) - multiview ensures
+            // frame_context_.views is valid.
+            if (view_index < frame_context_.views.size()) {
+              local_ctx.SetViewContext(frame_context_.views[view_index]);
+            }
+            // Mark as parallel safe for passes wanting to branch behavior
+            local_ctx.SetParallelSafe(true);
+            auto start = std::chrono::high_resolution_clock::now();
+            if (pass_cost_profiler_)
+              pass_cost_profiler_->BeginPass(h);
+            p->Execute(local_ctx);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto cpu_us = std::chrono::duration_cast<std::chrono::microseconds>(
+              end - start)
+                            .count();
+            if (pass_cost_profiler_) {
+              pass_cost_profiler_->RecordCpuTime(h, static_cast<float>(cpu_us));
+              pass_cost_profiler_->RecordGpuTime(h, static_cast<float>(cpu_us));
+              pass_cost_profiler_->EndPass(h);
+            }
+            timing_vec[h.get()].total_cpu_us.fetch_add(
+              cpu_us, std::memory_order_relaxed);
+          });
+        }());
+      }
+
+      // Use OxCo AllOf helper to await all tasks concurrently
+      co_await co::AllOf(std::move(jobs));
+
+      // Batch timing summary
+      long long sum_cpu_us = 0;
+      if (timing_vec) {
+        for (uint32_t pid = 0; pid <= max_pass_id; ++pid) {
+          sum_cpu_us
+            += timing_vec[pid].total_cpu_us.load(std::memory_order_relaxed);
+        }
+      }
+      auto batch_end = std::chrono::high_resolution_clock::now();
+      auto wall_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        batch_end - batch_start)
+                       .count();
+      if (wall_us > 0 && sum_cpu_us > 0) {
+        const double speedup
+          = static_cast<double>(sum_cpu_us) / static_cast<double>(wall_us);
+        LOG_F(4,
+          "[RenderGraph][Parallel] batch={} tasks={} wall={}us sum_cpu={}us "
+          "speedup_x={:.2f}",
+          bi, tasks.size(), wall_us, sum_cpu_us, speedup);
       }
     }
   }

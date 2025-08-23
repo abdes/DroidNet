@@ -410,6 +410,17 @@ public:
   auto ExecutePassBatches(ModuleContext& context) -> co::Co<> override;
   auto PresentResults(ModuleContext& context) -> co::Co<> override;
 
+  //! Enable or disable intra-batch parallel execution (thread pool dispatch)
+  auto SetParallelBatchExecution(bool enabled) noexcept -> void
+  {
+    parallel_batch_execution_enabled_ = enabled;
+  }
+
+  [[nodiscard]] auto IsParallelBatchExecutionEnabled() const noexcept -> bool
+  {
+    return parallel_batch_execution_enabled_;
+  }
+
 private:
   // Implementation details in .cpp file
   auto CreateExecutionBatches() -> std::vector<std::vector<PassHandle>>;
@@ -418,6 +429,7 @@ private:
 
   // Persistent resource state tracker for transition planning phase
   ResourceStateTracker resource_state_tracker_;
+  bool parallel_batch_execution_enabled_ { true }; // default on
 
 public:
   //! Access planned transitions (after PlanResourceTransitions)
