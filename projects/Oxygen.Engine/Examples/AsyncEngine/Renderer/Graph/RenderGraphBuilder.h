@@ -286,6 +286,21 @@ public:
   //! Build the final render graph
   auto Build() -> std::unique_ptr<RenderGraph>;
 
+  //! (Phase 2) Optimize per-view duplicated read-only resources into a single
+  //! shared resource when safe.
+  /*!\n   * Detects groups of per-view resources cloned from the same base
+   * handle\n   * (via internal mapping) whose descriptors are compatible and
+   * which are\n   * only ever read (never written) by passes. Such resources
+   * can be promoted\n   * to a single ResourceScope::Shared instance to reduce
+   * memory usage.\n   *\n   * Safety constraints for promotion:\n   *  - All
+   * variants have identical descriptor compatibility hash\n   *  - No pass
+   * writes to any variant (read-only across frame)\n   *  - Variants span all
+   * active views (partial sets skipped)\n   *  - Original scope was PerView (we
+   * never downgrade Shared)\n   *\n   * The optimization occurs prior to
+   * validation & scheduling so subsequent\n   * lifetime analysis sees the
+   * promoted shared resource.\n   */
+  auto OptimizeSharedPerViewResources(class RenderGraph* render_graph) -> void;
+
   //! Get resource descriptor by handle
   [[nodiscard]] auto GetResourceDescriptor(ResourceHandle handle) const
     -> const ResourceDesc*
