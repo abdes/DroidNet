@@ -85,6 +85,11 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     "[RenderGraphBuilder] Transferred passes (graph_passes={}) prior to "
     "validation",
     render_graph->GetPassCount());
+
+  // Shared resource optimization (Phase 2): promote duplicate per-view
+  // read-only resources to a single shared instance before validation so
+  // downstream analysis sees the reduced resource set.
+  OptimizeSharedPerViewResources(render_graph.get());
   // (Deferred) Transfer of resource descriptors now happens AFTER
   // alias/lifetime analysis so that the validator can still observe descriptors
   // locally. This avoids moved-out (nullptr) descriptors causing "unknown
@@ -293,6 +298,136 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     render_graph->GetValidationResult().GetErrorCount());
 
   return render_graph;
+}
+
+auto RenderGraphBuilder::OptimizeSharedPerViewResources(
+  RenderGraph* render_graph) -> void
+{
+  if (!multi_view_enabled_ || active_view_indices_.size() <= 1) {
+    return; // Nothing to optimize (single view or disabled)
+  }
+  // Build reverse map: base_handle -> vector<view_index, variant_handle>
+  struct VariantSet {
+    std::vector<std::pair<size_t, ResourceHandle>> variants; // (view, handle)
+    const ResourceDesc* prototype { nullptr };
+  };
+  std::unordered_map<ResourceHandle, VariantSet> groups;
+  for (auto const& [key, variant] : per_view_resource_mapping_) {
+    const auto& base = key.first;
+    auto view_index = key.second;
+    auto* desc = GetResourceDescriptor(variant);
+    if (!desc)
+      continue;
+    auto& set = groups[base];
+    set.variants.emplace_back(view_index, variant);
+    if (!set.prototype)
+      set.prototype = desc;
+  }
+
+  size_t promoted_count = 0;
+  size_t bytes_saved_estimate = 0;
+
+  // Helper to test if a resource handle is written by any pass
+  auto is_written = [render_graph](ResourceHandle h) {
+    for (auto const& [ph, pass_ptr] : render_graph->GetPasses()) {
+      (void)ph; // unused
+      if (!pass_ptr)
+        continue;
+      for (auto const& w : pass_ptr->GetWriteResources()) {
+        if (w == h)
+          return true;
+      }
+    }
+    return false;
+  };
+
+  for (auto& [base_handle, set] : groups) {
+    // Skip if original base descriptor already gone or not PerView
+    auto base_it = resource_descriptors_.find(base_handle);
+    if (base_it == resource_descriptors_.end() || !base_it->second)
+      continue;
+    if (base_it->second->GetScope() != ResourceScope::PerView)
+      continue;
+    // Require full coverage of active views
+    if (set.variants.size() != active_view_indices_.size())
+      continue;
+    // Check compatibility & read-only
+    bool can_promote = true;
+    const auto* proto = set.prototype;
+    if (!proto)
+      continue;
+    for (auto const& [view_idx, handle] : set.variants) {
+      (void)view_idx;
+      auto* desc = GetResourceDescriptor(handle);
+      if (!desc || !proto->IsFormatCompatibleWith(*desc)) {
+        can_promote = false;
+        break;
+      }
+      if (is_written(handle)) {
+        can_promote = false;
+        break;
+      }
+    }
+    if (!can_promote)
+      continue;
+
+    // Choose first variant as the shared resource representative
+    auto shared_handle = set.variants.front().second;
+    auto* shared_desc = resource_descriptors_[shared_handle].get();
+    if (!shared_desc)
+      continue;
+    shared_desc->SetScope(ResourceScope::Shared);
+
+    // Redirect all pass reads of other variants to shared_handle
+    for (auto const& [view_idx, handle] : set.variants) {
+      if (handle == shared_handle)
+        continue;
+      for (auto& [ph, pass_ptr] : const_cast<
+             std::unordered_map<PassHandle, std::unique_ptr<RenderPass>>&>(
+             render_graph->GetPasses())) {
+        if (!pass_ptr)
+          continue;
+        // Replace in read arrays
+        auto& reads = pass_ptr->MutableReadResources();
+        for (auto& r : reads)
+          if (r == handle)
+            r = shared_handle;
+        // Writes should not exist (guarded), but keep defensive replacement
+        auto& writes = pass_ptr->MutableWriteResources();
+        for (auto& w : writes)
+          if (w == handle)
+            w = shared_handle;
+      }
+      // Erase descriptor for redundant variant and mapping entries
+      resource_descriptors_.erase(handle);
+    }
+    // Erase base descriptor if it's distinct and unused; keep shared variant
+    // only
+    if (base_handle != shared_handle) {
+      resource_descriptors_.erase(base_handle);
+    }
+
+    // Update per_view_resource_mapping_ so subsequent lookups yield shared
+    // handle
+    for (auto const& [view_idx, _h] : set.variants) {
+      per_view_resource_mapping_[std::make_pair(base_handle, view_idx)]
+        = shared_handle;
+    }
+
+    // Estimate memory saving: (variants-1) * prototype size heuristic
+    // We do not have explicit size; approximate using compatibility hash
+    // uniqueness. Provide count-based estimate only.
+    bytes_saved_estimate += (set.variants.size() - 1) * 0; // unknown size
+    ++promoted_count;
+  }
+
+  if (promoted_count) {
+    LOG_F(3,
+      "[RenderGraphBuilder] Shared resource optimization: promoted {} "
+      "duplicated per-view read-only resource groups (est_saved={}B, "
+      "new_resource_count={})",
+      promoted_count, bytes_saved_estimate, resource_descriptors_.size());
+  }
 }
 
 auto RenderGraphBuilder::ProcessMultiViewConfiguration(

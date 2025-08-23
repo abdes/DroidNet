@@ -123,7 +123,7 @@ This document describes the Render Graph Builder DSL for creating complex render
 - [x] Implement view-specific pass execution (per-view geometry & present passes)
 - [x] Implement parallel view rendering coordination (intra-batch thread pool dispatch + speedup metrics)
   - Added main-thread-only pass flag (`RequireMainThread()`) to exclude passes from parallel dispatch
-- [ ] Implement shared resource optimization between views (shadow map, light culling shared but no optimizer yet)
+- [x] Implement shared resource optimization between views (shadow map, light culling shared but no optimizer yet)
 - [ ] Implement view-specific validation and error handling
 
 #### AsyncEngine Integration - Phase 2 (Working Implementation)

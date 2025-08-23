@@ -450,15 +450,6 @@ auto AsyncEngineRenderGraph::ExecutePassBatches(ModuleContext& context)
             if (!p)
               return;
             p->SetViewIndex(view_index);
-            // Diagnostic: show parallel task start (verbosity 5+)
-            if (loguru::g_stderr_verbosity >= 5) {
-              const size_t tid_hash
-                = std::hash<std::thread::id> {}(std::this_thread::get_id());
-              LOG_F(5,
-                "[RenderGraph][Parallel][TaskStart] pass={} view={} thread={} "
-                "(tasks may reorder)",
-                h.get(), view_index, tid_hash);
-            }
             // Create a fresh execution context per task to avoid concurrent
             // access to shared state (e.g., CommandRecorder unique_ptr)
             TaskExecutionContext local_ctx;

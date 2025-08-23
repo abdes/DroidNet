@@ -7,6 +7,7 @@
 #include "GameModule.h"
 
 #include "../AsyncEngineSimulator.h"
+#include "../Renderer/Graph/Resource.h" // For TextureDesc, ResourceState
 #include <cmath>
 
 namespace oxygen::examples::asyncsim {
@@ -198,6 +199,16 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
         "[Game] Adding multi-view game passes (views={} dynamic_entities={})",
         builder->GetFrameContext().views.size(), dynamic_entities_.size());
 
+      // Create a deliberately duplicated per-view read-only resource to
+      // exercise the shared resource optimization promotion. This texture is
+      // never written (only sampled), so the optimizer should detect the
+      // identical per-view variants and promote them to a single shared
+      // instance, logging the promotion.
+      auto overlayDataHandle = builder->CreateTexture("HUDOverlayData",
+        TextureDesc { 64, 64, TextureDesc::Format::RGBA8_UNorm,
+          TextureDesc::Usage::ShaderResource },
+        ResourceLifetime::FrameLocal, ResourceScope::PerView);
+
       // Shared (once-per-frame) analytics/update pass prior to per-view drawing
       PassBuilder analyticsBuilder = builder->AddComputePass("GameAnalytics");
       analyticsBuilder.SetScope(PassScope::Shared)
@@ -210,12 +221,13 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
         = builder->AddPass(std::move(analyticsBuilder));
 
       // Per-view HUD pass (depends on analytics)
-      auto hudHandle = builder->AddRasterPass(
-        "GameHUD", [this, sharedAnalyticsHandle](PassBuilder& pass) {
+      auto hudHandle = builder->AddRasterPass("GameHUD",
+        [this, sharedAnalyticsHandle, overlayDataHandle](PassBuilder& pass) {
           pass.SetScope(PassScope::PerView)
             .IterateAllViews()
             .DependsOn(sharedAnalyticsHandle)
             .SetPriority(Priority::Normal)
+            .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
               const auto& view_ctx = exec.GetViewContext();
               LOG_F(3,
@@ -226,12 +238,13 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
         });
 
       // Per-view dynamic entities pass (depends on HUD)
-      auto entitiesHandle = builder->AddRasterPass(
-        "GameEntities", [this, hudHandle](PassBuilder& pass) {
+      auto entitiesHandle = builder->AddRasterPass("GameEntities",
+        [this, hudHandle, overlayDataHandle](PassBuilder& pass) {
           pass.SetScope(PassScope::PerView)
             .IterateAllViews()
             .DependsOn(hudHandle)
             .SetPriority(Priority::High)
+            .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
               const auto& view_ctx = exec.GetViewContext();
               LOG_F(3,
@@ -247,12 +260,13 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
         });
 
       // Optional: Per-view minimal debug overlay (depends on entities)
-      builder->AddRasterPass(
-        "GameViewDebug", [this, entitiesHandle](PassBuilder& pass) {
+      builder->AddRasterPass("GameViewDebug",
+        [this, entitiesHandle, overlayDataHandle](PassBuilder& pass) {
           pass.SetScope(PassScope::PerView)
             .IterateAllViews()
             .DependsOn(entitiesHandle)
             .SetPriority(Priority::Low)
+            .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
               const auto& view_ctx = exec.GetViewContext();
               LOG_F(3, "[Game][DBG][View:{}] Debug overlay stub",
