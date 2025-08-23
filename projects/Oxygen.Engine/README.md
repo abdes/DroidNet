@@ -62,7 +62,7 @@ python -m venv .venv
 Make sure the "Desktop development with C++" workload is checked.
 After installation, check for vcvarsall.bat in:
 
-```
+```pwsh
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\
 ```
 

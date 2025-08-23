@@ -196,5 +196,6 @@
   "yaml.validate": true,
   "C_Cpp.default.defines": [
     "LOGURU_USE_FMTLIB=1"
-  ]
+  ],
+  "powershell.codeFormatting.preset": "OTBS"
 }
