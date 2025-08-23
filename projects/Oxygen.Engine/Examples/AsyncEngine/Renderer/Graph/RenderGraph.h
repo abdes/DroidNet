@@ -6,6 +6,11 @@
 
 #pragma once
 
+// Forward declarations
+namespace oxygen::examples::asyncsim {
+class ModuleContext;
+}
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -19,8 +24,12 @@
 #include "Scheduler.h"
 #include "Types.h"
 #include "Validator.h"
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::examples::asyncsim {
+
+// Forward declarations
+class ModuleContext;
 
 //! Execution statistics for performance monitoring
 struct ExecutionStats {
@@ -50,9 +59,12 @@ struct ExecutionStats {
  execution logic needed to render a frame.
  */
 class RenderGraph {
+  // Allow AsyncEngineRenderGraph access to private members
+  friend class AsyncEngineRenderGraph;
+
 public:
   RenderGraph() = default;
-  ~RenderGraph() = default;
+  virtual ~RenderGraph() = default; // ensure proper polymorphic deletion
 
   // Non-copyable, movable
   RenderGraph(const RenderGraph&) = delete;
@@ -77,16 +89,35 @@ public:
     // 4. Manage resource state transitions
     // 5. Collect performance metrics
 
-    for (const auto& [handle, pass] : passes_) {
-      if (pass) {
-        TaskExecutionContext context;
-        // Set up context for the pass
-        SetupExecutionContext(context, handle);
+    // Simple ordered iteration using execution_order_ if available
+    std::vector<PassHandle> order
+      = execution_order_.empty() ? GetPassHandles() : execution_order_;
 
-        // Execute the pass
-        pass->Execute(context);
-        execution_stats_.passes_executed++;
+    ResourceStateTracker state_tracker; // local tracker (future: persist)
+
+    for (const auto& handle : order) {
+      auto* pass = GetPassMutable(handle);
+      if (!pass)
+        continue;
+
+      // Plan transitions using actual per-resource states
+      const auto& reads = pass->GetReadResources();
+      const auto& read_states = pass->GetReadStates();
+      for (size_t i = 0; i < reads.size(); ++i) {
+        state_tracker.RequestTransition(
+          reads[i], read_states[i], handle, pass->GetViewIndex());
       }
+      const auto& writes = pass->GetWriteResources();
+      const auto& write_states = pass->GetWriteStates();
+      for (size_t i = 0; i < writes.size(); ++i) {
+        state_tracker.RequestTransition(
+          writes[i], write_states[i], handle, pass->GetViewIndex());
+      }
+
+      TaskExecutionContext context;
+      SetupExecutionContext(context, handle);
+      pass->Execute(context);
+      execution_stats_.passes_executed++;
     }
 
     return true;
@@ -97,6 +128,35 @@ public:
   {
     frame_context_ = frame_context;
     return Execute();
+  }
+
+  //! Execute with module context (async version)
+  virtual auto Execute(ModuleContext& context) -> co::Co<>
+  {
+    // Default implementation for backward compatibility
+    Execute();
+    co_return;
+  }
+
+  //! Plan resource state transitions
+  virtual auto PlanResourceTransitions(ModuleContext& context) -> co::Co<>
+  {
+    // Default implementation - stub
+    co_return;
+  }
+
+  //! Execute pass batches in parallel
+  virtual auto ExecutePassBatches(ModuleContext& context) -> co::Co<>
+  {
+    // Default implementation for backward compatibility
+    co_return;
+  }
+
+  //! Present rendering results to surfaces
+  virtual auto PresentResults(ModuleContext& context) -> co::Co<>
+  {
+    // Default implementation for backward compatibility
+    co_return;
   }
 
   //! Get execution statistics
@@ -123,8 +183,12 @@ public:
     auto it = passes_.find(handle);
     return (it != passes_.end()) ? it->second.get() : nullptr;
   }
+  [[nodiscard]] auto GetPassMutable(PassHandle handle) -> RenderPass*
+  {
+    auto it = passes_.find(handle);
+    return (it != passes_.end()) ? it->second.get() : nullptr;
+  }
 
-  //! Get resource descriptor by handle
   [[nodiscard]] auto GetResourceDescriptor(ResourceHandle handle) const
     -> const ResourceDesc*
   {
@@ -160,6 +224,32 @@ public:
     return multi_view_enabled_;
   }
 
+  //! Get number of passes in this graph
+  [[nodiscard]] auto GetPassCount() const -> std::uint32_t
+  {
+    return static_cast<std::uint32_t>(passes_.size());
+  }
+
+  //! Get all passes in this graph
+  [[nodiscard]] auto GetPasses() const
+    -> const std::unordered_map<PassHandle, std::unique_ptr<RenderPass>>&
+  {
+    return passes_;
+  }
+
+  //! Get explicit dependency graph (built by builder) if available
+  [[nodiscard]] auto GetExplicitDependencies() const
+    -> const std::unordered_map<PassHandle, std::vector<PassHandle>>&
+  {
+    return explicit_dependencies_;
+  }
+
+  //! Get number of resources in this graph
+  [[nodiscard]] auto GetResourceCount() const -> std::uint32_t
+  {
+    return static_cast<std::uint32_t>(resource_descriptors_.size());
+  }
+
   //! Get validation result from compilation
   [[nodiscard]] auto GetValidationResult() const -> const ValidationResult&
   {
@@ -170,6 +260,19 @@ public:
   [[nodiscard]] auto GetSchedulingResult() const -> const SchedulingResult&
   {
     return scheduling_result_;
+  }
+
+  //! Access pass cost profiler (may be null in stub builds)
+  [[nodiscard]] auto GetPassCostProfiler() const
+    -> const std::shared_ptr<PassCostProfiler>&
+  {
+    return pass_cost_profiler_;
+  }
+
+  //! Inject a pass cost profiler (builder/module can provide one)
+  auto SetPassCostProfiler(std::shared_ptr<PassCostProfiler> profiler) -> void
+  {
+    pass_cost_profiler_ = std::move(profiler);
   }
 
   //! Get cache key for this graph
@@ -260,12 +363,21 @@ protected:
   //! Set cache key
   auto SetCacheKey(const RenderGraphCacheKey& key) -> void { cache_key_ = key; }
 
+  //! Set explicit dependency graph (builder)
+  auto SetExplicitDependencies(
+    std::unordered_map<PassHandle, std::vector<PassHandle>> deps) -> void
+  {
+    explicit_dependencies_ = std::move(deps);
+  }
+
 private:
   // Core graph data
   std::unordered_map<PassHandle, std::unique_ptr<RenderPass>> passes_;
   std::unordered_map<ResourceHandle, std::unique_ptr<ResourceDesc>>
     resource_descriptors_;
   std::vector<PassHandle> execution_order_;
+  std::unordered_map<PassHandle, std::vector<PassHandle>>
+    explicit_dependencies_;
 
   // Configuration
   FrameContext frame_context_;
@@ -278,6 +390,45 @@ private:
 
   // Runtime data
   ExecutionStats execution_stats_;
+
+  // Adaptive scheduling support
+  std::shared_ptr<PassCostProfiler> pass_cost_profiler_;
 };
+
+//! Enhanced RenderGraph with complete AsyncEngine execution pipeline
+/*!
+ AsyncEngineRenderGraph provides a fully-featured render graph implementation
+ with coroutine-based execution, resource state tracking, and multi-view
+ rendering support.
+ */
+class AsyncEngineRenderGraph : public RenderGraph {
+public:
+  AsyncEngineRenderGraph() = default;
+
+  auto Execute(ModuleContext& context) -> co::Co<> override;
+  auto PlanResourceTransitions(ModuleContext& context) -> co::Co<> override;
+  auto ExecutePassBatches(ModuleContext& context) -> co::Co<> override;
+  auto PresentResults(ModuleContext& context) -> co::Co<> override;
+
+private:
+  // Implementation details in .cpp file
+  auto CreateExecutionBatches() -> std::vector<std::vector<PassHandle>>;
+  auto ExecuteBatch(
+    const std::vector<PassHandle>& batch, ModuleContext& context) -> co::Co<>;
+
+  // Persistent resource state tracker for transition planning phase
+  ResourceStateTracker resource_state_tracker_;
+
+public:
+  //! Access planned transitions (after PlanResourceTransitions)
+  [[nodiscard]] auto GetPlannedTransitions() const
+    -> const std::vector<ResourceTransition>&
+  {
+    return resource_state_tracker_.GetPlannedTransitions();
+  }
+};
+
+// Factory declaration for creating an AsyncEngine-enabled render graph
+auto CreateAsyncEngineRenderGraph() -> std::unique_ptr<RenderGraph>;
 
 } // namespace oxygen::examples::asyncsim

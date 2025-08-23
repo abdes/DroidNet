@@ -21,45 +21,50 @@ namespace oxygen::examples::asyncsim {
 class TaskExecutionContext;
 
 //! Enumerations for render graph system
-namespace {
+//! NOTE: Previously these enums were inside an anonymous namespace giving them
+//! internal linkage per TU. That risks ODR mismatches and prevents their safe
+//! use across translation units. They are now promoted to the public namespace
+//! for consistent strong typing engine-wide.
 
-  //! Resource scope determines sharing across views
-  enum class ResourceScope : uint32_t {
-    Shared, //!< Resource computed once and used by all views (shadows, lighting
-            //!< data)
-    PerView //!< Resource that is view-specific (depth buffers, color buffers)
-  };
+//! Resource scope determines sharing across views
+enum class ResourceScope : uint32_t {
+  Shared, //!< Resource computed once and used by all views (shadows, lighting
+          //!< data)
+  PerView //!< Resource that is view-specific (depth buffers, color buffers)
+};
 
-  //! Resource lifetime controls memory aliasing and pooling
-  enum class ResourceLifetime : uint32_t {
-    FrameLocal, //!< Resources that live for the entire frame
-    Transient //!< Resources that can be aliased after their last use
-  };
+//! Resource lifetime controls memory aliasing and pooling
+enum class ResourceLifetime : uint32_t {
+  FrameLocal, //!< Resources that live for the entire frame
+  Transient, //!< Resources that can be aliased after their last use
+  External //!< External resources managed outside the render graph
+};
 
-  //! Pass scope determines execution pattern
-  enum class PassScope : uint32_t {
-    Shared, //!< Passes that run once for all views (shadow mapping, light
-            //!< culling)
-    PerView //!< Passes that run independently for each view
-  };
+//! Pass scope determines execution pattern
+enum class PassScope : uint32_t {
+  Shared, //!< Passes that run once for all views (shadow mapping, light
+          //!< culling)
+  PerView //!< Passes that run independently for each view
+};
 
-  //! Queue type for GPU command submission
-  enum class QueueType : uint32_t {
-    Graphics, //!< Graphics queue for rendering operations
-    Compute, //!< Compute queue for compute shader work
-    Copy //!< Copy queue for resource transfers
-  };
+//! Queue type for GPU command submission
+enum class QueueType : uint32_t {
+  Graphics, //!< Graphics queue for rendering operations
+  Compute, //!< Compute queue for compute shader work
+  Copy //!< Copy queue for resource transfers
+};
 
-  //! Priority levels for pass execution scheduling
-  enum class Priority : uint32_t {
-    Critical, //!< Highest priority - must execute first
-    High, //!< High priority for critical path work
-    Normal, //!< Standard priority for most work
-    Low, //!< Lower priority for non-critical work
-    Background //!< Lowest priority for background tasks
-  };
+//! Priority levels for pass execution scheduling
+enum class Priority : uint32_t {
+  Critical, //!< Highest priority - must execute first
+  High, //!< High priority for critical path work
+  Normal, //!< Standard priority for most work
+  Low, //!< Lower priority for non-critical work
+  Background //!< Lowest priority for background tasks
+};
 
-} // anonymous namespace
+// TODO(Phase2): Consider adding explicit serialization helpers for these enums
+// to support caching & hot-reload of compiled graphs.
 
 //! Strong-typed handle for render passes
 // clang-format off
@@ -83,6 +88,17 @@ using ResourceHandle = oxygen::NamedType<
 >;
 // clang-format on
 
+//! Strong-typed handle for view identifiers
+// clang-format off
+using ViewId = oxygen::NamedType<
+  uint32_t,
+  struct ViewIdTag,
+  oxygen::Hashable,
+  oxygen::Comparable,
+  oxygen::Printable
+>;
+// clang-format on
+
 //! Pass executor function type - synchronous command recording only
 /*!
  Pass executors are synchronous callables that only record GPU commands without
@@ -100,21 +116,33 @@ using PassExecutor = std::move_only_function<void(TaskExecutionContext&)>;
  store indices and fetch via TaskExecutionContext.
  */
 struct ViewContext {
+  ViewId view_id { 0 }; //!< Unique identifier for this view
+  uint32_t surface_index { 0 }; //!< Index of the target surface
   std::shared_ptr<void> surface; //!< Target surface (window/render target) -
                                  //!< placeholder for graphics::Surface
   oxygen::engine::View camera; //!< View-specific camera matrices and parameters
-  std::string view_name; //!< Unique identifier for this view
+  std::string view_name; //!< Human-readable name for this view
+
+  // Viewport definition
+  struct Viewport {
+    float x { 0.0f }, y { 0.0f }, width { 1920.0f }, height { 1080.0f };
+    float min_depth { 0.0f }, max_depth { 1.0f };
+  } viewport;
 
   ViewContext()
-    : surface(nullptr)
+    : view_id { 0 }
+    , surface_index { 0 }
+    , surface(nullptr)
     , camera(CreateDefaultView())
     , view_name("default")
   {
   }
 
-  ViewContext(std::shared_ptr<void> surf, const oxygen::engine::View& cam,
-    std::string name)
-    : surface(std::move(surf))
+  ViewContext(ViewId id, uint32_t surf_idx, std::shared_ptr<void> surf,
+    const oxygen::engine::View& cam, std::string name)
+    : view_id(id)
+    , surface_index(surf_idx)
+    , surface(std::move(surf))
     , camera(cam)
     , view_name(std::move(name))
   {

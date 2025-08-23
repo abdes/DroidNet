@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Oxygen/Base/Logging.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -61,11 +62,23 @@ public:
     return read_resources_;
   }
 
+  //! Get read states (1:1 with read resources)
+  [[nodiscard]] auto GetReadStates() const -> const std::vector<ResourceState>&
+  {
+    return read_states_;
+  }
+
   //! Get resources written by this pass
   [[nodiscard]] auto GetWriteResources() const
     -> const std::vector<ResourceHandle>&
   {
     return write_resources_;
+  }
+
+  //! Get write states (1:1 with write resources)
+  [[nodiscard]] auto GetWriteStates() const -> const std::vector<ResourceState>&
+  {
+    return write_states_;
   }
 
   //! Get pass dependencies
@@ -118,20 +131,90 @@ public:
     dependencies_.push_back(dependency);
   }
 
+  //! Set the debug name
+  auto SetDebugName(const std::string& name) -> void { debug_name_ = name; }
+
+  //! Set view index (for view-specific passes)
+  auto SetViewIndex(uint32_t view_index) -> void { view_index_ = view_index; }
+
   //! Get type information for this pass
   [[nodiscard]] virtual auto GetTypeInfo() const -> std::string = 0;
+
+  //! Get the type name for debugging and scheduling
+  [[nodiscard]] virtual auto GetTypeName() const -> const char* = 0;
+
+  //! Get view index for view-specific passes (returns 0 for shared passes)
+  [[nodiscard]] virtual auto GetViewIndex() const -> uint32_t
+  {
+    return view_index_;
+  }
+
+  //! Clone this pass for multi-view rendering
+  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<RenderPass> = 0;
+
+  //! View filtering flags
+  [[nodiscard]] auto IsFiltered() const -> bool { return has_view_filter_; }
+  [[nodiscard]] auto MatchesView(uint32_t view_index) const -> bool
+  {
+    if (!has_view_filter_)
+      return true;
+    if (single_view_only_)
+      return view_index == view_index_;
+    if (!allowed_views_.empty()) {
+      return std::find(allowed_views_.begin(), allowed_views_.end(), view_index)
+        != allowed_views_.end();
+    }
+    return true;
+  }
+  auto SetSingleView(uint32_t view_index) -> void
+  {
+    has_view_filter_ = true;
+    single_view_only_ = true;
+    view_index_ = view_index;
+  }
+  auto SetAllowedViews(std::vector<uint32_t> views) -> void
+  {
+    has_view_filter_ = true;
+    single_view_only_ = false;
+    allowed_views_ = std::move(views);
+  }
 
   //! Execute this pass (calls the executor function)
   virtual auto Execute(TaskExecutionContext& context) -> void
   {
-    if (executor_) {
-      executor_(context);
+    // Pass executors are required to be set by graph construction. If this
+    // triggers it indicates a cloning or builder regression where the
+    // move-only executor was not propagated to a per-view instance.
+    DCHECK_F(static_cast<bool>(executor_),
+      "RenderPass '{}' executed without executor (scope={})", debug_name_,
+      static_cast<unsigned>(scope_));
+    if (!executor_) [[unlikely]] {
+      return; // Safety in non-debug builds
     }
+    executor_(context);
   }
 
 protected:
   friend class PassBuilder;
   friend class RenderGraphBuilder;
+
+  //! Copy base class data to another pass (for cloning)
+  auto CopyTo(RenderPass& other) const -> void
+  {
+    other.handle_ = handle_;
+    other.debug_name_ = debug_name_;
+    other.scope_ = scope_;
+    other.priority_ = priority_;
+    other.queue_type_ = queue_type_;
+    other.iterate_all_views_ = iterate_all_views_;
+    other.view_index_ = view_index_;
+    other.read_resources_ = read_resources_;
+    other.read_states_ = read_states_;
+    other.write_resources_ = write_resources_;
+    other.write_states_ = write_states_;
+    other.dependencies_ = dependencies_;
+    // Note: executor_ is not copied as it's move-only
+  }
 
   PassHandle handle_ { 0 };
   std::string debug_name_;
@@ -139,6 +222,7 @@ protected:
   Priority priority_ { Priority::Normal };
   QueueType queue_type_ { QueueType::Graphics };
   bool iterate_all_views_ { false };
+  uint32_t view_index_ { 0 };
 
   std::vector<ResourceHandle> read_resources_;
   std::vector<ResourceState> read_states_;
@@ -146,7 +230,30 @@ protected:
   std::vector<ResourceState> write_states_;
   std::vector<PassHandle> dependencies_;
 
+  // View filtering meta
+  bool has_view_filter_ { false };
+  bool single_view_only_ { false };
+  std::vector<uint32_t> allowed_views_;
+
   PassExecutor executor_;
+
+  // Mutable accessors for internal graph construction (builder & friends)
+  auto MutableReadResources() -> std::vector<ResourceHandle>&
+  {
+    return read_resources_;
+  }
+  auto MutableWriteResources() -> std::vector<ResourceHandle>&
+  {
+    return write_resources_;
+  }
+  auto MutableReadStates() -> std::vector<ResourceState>&
+  {
+    return read_states_;
+  }
+  auto MutableWriteStates() -> std::vector<ResourceState>&
+  {
+    return write_states_;
+  }
 };
 
 //! Raster pass for traditional graphics pipeline rendering
@@ -158,6 +265,18 @@ public:
   [[nodiscard]] auto GetTypeInfo() const -> std::string override
   {
     return "RasterPass";
+  }
+
+  [[nodiscard]] auto GetTypeName() const -> const char* override
+  {
+    return "RasterPass";
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<RenderPass> override
+  {
+    auto clone = std::make_unique<RasterPass>();
+    CopyTo(*clone);
+    return clone;
   }
 };
 
@@ -171,6 +290,18 @@ public:
   {
     return "ComputePass";
   }
+
+  [[nodiscard]] auto GetTypeName() const -> const char* override
+  {
+    return "ComputePass";
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<RenderPass> override
+  {
+    auto clone = std::make_unique<ComputePass>();
+    CopyTo(*clone);
+    return clone;
+  }
 };
 
 //! Copy pass for resource transfer operations
@@ -182,6 +313,18 @@ public:
   [[nodiscard]] auto GetTypeInfo() const -> std::string override
   {
     return "CopyPass";
+  }
+
+  [[nodiscard]] auto GetTypeName() const -> const char* override
+  {
+    return "CopyPass";
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<RenderPass> override
+  {
+    auto clone = std::make_unique<CopyPass>();
+    CopyTo(*clone);
+    return clone;
   }
 };
 
@@ -294,6 +437,20 @@ public:
   auto IterateAllViews() -> PassBuilder&
   {
     pass_->SetIterateAllViews(true);
+    return *this;
+  }
+
+  //! Restrict pass to a single specific view index
+  auto RestrictToView(uint32_t view_index) -> PassBuilder&
+  {
+    pass_->SetSingleView(view_index);
+    return *this;
+  }
+
+  //! Restrict pass to a set of allowed view indices
+  auto RestrictToViews(const std::vector<uint32_t>& views) -> PassBuilder&
+  {
+    pass_->SetAllowedViews(views);
     return *this;
   }
 

@@ -80,6 +80,18 @@ auto GeometryRenderModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
     AddTransparencyPass(*render_graph_builder);
   }
 
+  // Add extra dummy passes to exercise scheduling & dependencies
+  AddLightingPass(*render_graph_builder);
+  AddPostProcessPass(*render_graph_builder);
+  AddUIPass(*render_graph_builder);
+
+  // Debug: log pass handles to verify they are registered before build
+  LOG_F(2,
+    "[GeometryRenderer] Pass handles: depth={} opaque={} transp={} light={} "
+    "post={} ui={}",
+    depth_prepass_.get(), opaque_pass_.get(), transparency_pass_.get(),
+    lighting_pass_.get(), post_process_pass_.get(), ui_pass_.get());
+
   LOG_F(2,
     "[GeometryRenderer] Render graph contribution complete - "
     "DepthPrepass: {}, Transparency: {}",
@@ -153,6 +165,22 @@ auto GeometryRenderModule::CreateRenderResources(RenderGraphBuilder& builder)
     "Depth: {}, Color: {}, Vertex: {}, Index: {}",
     depth_buffer_.get(), color_buffer_.get(), vertex_buffer_.get(),
     index_buffer_.get());
+
+  // Additional intermediate targets for dummy passes (check underlying value
+  // since ResourceHandle is a NamedType without is_valid())
+  if (lighting_buffer_.get() == 0) {
+    TextureDesc lighting_desc(1920, 1080, TextureDesc::Format::RGBA16_Float,
+      TextureDesc::Usage::RenderTarget);
+    lighting_buffer_
+      = builder.CreateTexture("LightingBuffer", std::move(lighting_desc),
+        ResourceLifetime::FrameLocal, ResourceScope::PerView);
+  }
+  if (post_process_buffer_.get() == 0) {
+    TextureDesc pp_desc(1920, 1080, TextureDesc::Format::RGBA8_UNorm,
+      TextureDesc::Usage::RenderTarget);
+    post_process_buffer_ = builder.CreateTexture("PostProcessBuffer",
+      std::move(pp_desc), ResourceLifetime::FrameLocal, ResourceScope::PerView);
+  }
 }
 
 auto GeometryRenderModule::AddDepthPrepass(RenderGraphBuilder& builder) -> void
@@ -217,6 +245,62 @@ auto GeometryRenderModule::AddTransparencyPass(RenderGraphBuilder& builder)
 
   LOG_F(3, "[GeometryRenderer] Transparency pass added with handle {}",
     transparency_pass_.get());
+}
+
+auto GeometryRenderModule::AddLightingPass(RenderGraphBuilder& builder) -> void
+{
+  LOG_F(3, "[GeometryRenderer] Adding lighting pass");
+  lighting_pass_ = builder.AddRasterPass(
+    "GeometryLightingPass", [this](PassBuilder& pass) {
+      pass.SetScope(PassScope::PerView)
+        .IterateAllViews()
+        .SetExecutor(
+          [this](TaskExecutionContext& ctx) { ExecuteLighting(ctx); })
+        .Reads(color_buffer_) // GBuffer color
+        .Reads(depth_buffer_) // Depth for lighting (e.g., reconstruct position)
+        .Outputs(lighting_buffer_);
+      // Depend on latest color-producing pass (transparency if enabled else
+      // opaque)
+      if (config_.enable_transparency) {
+        pass.DependsOn(transparency_pass_);
+      } else {
+        pass.DependsOn(opaque_pass_);
+      }
+    });
+  LOG_F(3, "[GeometryRenderer] Lighting pass added with handle {}",
+    lighting_pass_.get());
+}
+
+auto GeometryRenderModule::AddPostProcessPass(RenderGraphBuilder& builder)
+  -> void
+{
+  LOG_F(3, "[GeometryRenderer] Adding post-process pass");
+  post_process_pass_ = builder.AddRasterPass(
+    "GeometryPostProcessPass", [this](PassBuilder& pass) {
+      pass.SetScope(PassScope::PerView)
+        .IterateAllViews()
+        .SetExecutor(
+          [this](TaskExecutionContext& ctx) { ExecutePostProcess(ctx); })
+        .Reads(lighting_buffer_)
+        .Outputs(post_process_buffer_)
+        .DependsOn(lighting_pass_);
+    });
+  LOG_F(3, "[GeometryRenderer] Post-process pass added with handle {}",
+    post_process_pass_.get());
+}
+
+auto GeometryRenderModule::AddUIPass(RenderGraphBuilder& builder) -> void
+{
+  LOG_F(3, "[GeometryRenderer] Adding UI overlay pass");
+  ui_pass_ = builder.AddRasterPass("GeometryUIPass", [this](PassBuilder& pass) {
+    pass.SetScope(PassScope::PerView)
+      .IterateAllViews()
+      .SetExecutor([this](TaskExecutionContext& ctx) { ExecuteUI(ctx); })
+      .Reads(post_process_buffer_)
+      .Outputs(color_buffer_) // Composite back into main color buffer
+      .DependsOn(post_process_pass_);
+  });
+  LOG_F(3, "[GeometryRenderer] UI pass added with handle {}", ui_pass_.get());
 }
 
 auto GeometryRenderModule::ExecuteDepthPrepass(TaskExecutionContext& ctx)
@@ -289,6 +373,35 @@ auto GeometryRenderModule::ExecuteTransparency(TaskExecutionContext& ctx)
 
   // Update statistics
   last_frame_stats_.transparent_draws = transparent_draws;
+}
+
+auto GeometryRenderModule::ExecuteLighting(TaskExecutionContext& ctx) -> void
+{
+  LOG_F(3, "[GeometryRenderer] Executing lighting for view '{}'",
+    ctx.GetViewContext().view_name);
+  auto& cmd = ctx.GetCommandRecorder();
+  // Simulate lighting work: sample GBuffer & depth
+  cmd.ClearRenderTarget(lighting_buffer_, { 0.1f, 0.1f, 0.15f, 1.0f });
+  last_frame_stats_.lighting_passes++;
+}
+
+auto GeometryRenderModule::ExecutePostProcess(TaskExecutionContext& ctx) -> void
+{
+  LOG_F(3, "[GeometryRenderer] Executing post-process for view '{}'",
+    ctx.GetViewContext().view_name);
+  auto& cmd = ctx.GetCommandRecorder();
+  cmd.ClearRenderTarget(post_process_buffer_, { 0.0f, 0.0f, 0.0f, 0.0f });
+  last_frame_stats_.post_process_passes++;
+}
+
+auto GeometryRenderModule::ExecuteUI(TaskExecutionContext& ctx) -> void
+{
+  LOG_F(3, "[GeometryRenderer] Executing UI overlay for view '{}'",
+    ctx.GetViewContext().view_name);
+  auto& cmd = ctx.GetCommandRecorder();
+  // Composite UI: just a clear with alpha to simulate draw
+  cmd.ClearRenderTarget(color_buffer_, { 0.05f, 0.05f, 0.05f, 0.0f });
+  last_frame_stats_.ui_passes++;
 }
 
 auto GeometryRenderModule::UpdateRenderStats() -> void

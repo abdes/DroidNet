@@ -15,21 +15,22 @@
 
 namespace oxygen::examples::asyncsim {
 
-//! Strong types for render graph resource integration
-namespace {
-  // clang-format off
-  using RenderGraphResourceHandle = oxygen::NamedType<uint64_t, struct RenderGraphResourceHandleTag,
-    oxygen::Hashable,
-    oxygen::Comparable,
-    oxygen::Printable>;
+//! Strong types for render graph resource integration (exported - not
+//! anonymous)
+// clang-format off
+struct RenderGraphResourceHandleTag;
+using RenderGraphResourceHandle = oxygen::NamedType<uint64_t, RenderGraphResourceHandleTag,
+  oxygen::Hashable,
+  oxygen::Comparable,
+  oxygen::Printable>;
 
-  using RenderGraphDescriptorIndex = oxygen::NamedType<uint32_t, struct RenderGraphDescriptorIndexTag,
-    oxygen::DefaultInitialized,
-    oxygen::Comparable,
-    oxygen::Printable,
-    oxygen::Hashable>;
-  // clang-format on
-}
+struct RenderGraphDescriptorIndexTag;
+using RenderGraphDescriptorIndex = oxygen::NamedType<uint32_t, RenderGraphDescriptorIndexTag,
+  oxygen::DefaultInitialized,
+  oxygen::Comparable,
+  oxygen::Printable,
+  oxygen::Hashable>;
+// clang-format on
 
 //! Integration layer bridging render graph resources with AsyncEngine
 //! GraphicsLayer
@@ -86,14 +87,6 @@ public:
 
   //! Process completed frames and trigger resource reclamation
   [[nodiscard]] auto ProcessCompletedFrames() -> std::size_t;
-
-  // === FRAME LIFECYCLE ===
-
-  //! Begin frame processing (triggers cleanup of old resources)
-  auto BeginFrame(uint64_t frame_index) -> void;
-
-  //! End frame processing
-  auto EndFrame() -> void;
 
   // === DEBUGGING AND DIAGNOSTICS ===
 

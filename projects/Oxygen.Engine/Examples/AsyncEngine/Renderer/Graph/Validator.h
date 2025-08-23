@@ -169,8 +169,8 @@ public:
   }
 
   //! Validate complete render graph
-  [[nodiscard]] virtual auto ValidateGraph(const RenderGraphBuilder& builder)
-    -> ValidationResult
+  [[nodiscard]] virtual auto ValidateGraph(
+    const RenderGraphBuilder& /*builder*/) -> ValidationResult
   {
     ValidationResult result;
 
@@ -335,5 +335,23 @@ protected:
   // AsyncEngine integration
   ModuleContext* module_context_ { nullptr };
 };
+
+//! AsyncEngine-specific render graph validator
+/*!
+ Enhanced validator with AsyncEngine integration for cross-module validation,
+ graphics layer compatibility checking, and performance optimization.
+ */
+class AsyncEngineRenderGraphValidator : public RenderGraphValidator {
+public:
+  AsyncEngineRenderGraphValidator() = default;
+
+  [[nodiscard]] auto ValidateGraph(const RenderGraphBuilder& builder)
+    -> ValidationResult override;
+};
+
+//! Factory function to create AsyncEngine validator
+// Unified factory returning base interface pointer
+auto CreateAsyncEngineRenderGraphValidator()
+  -> std::unique_ptr<RenderGraphValidator>;
 
 } // namespace oxygen::examples::asyncsim

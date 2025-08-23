@@ -10,17 +10,58 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../Passes/RenderPass.h"
 #include "ExecutionContext.h"
 #include "Resource.h"
+#include "Scheduler.h"
 #include "Types.h"
+
+// Hash function for (ResourceHandle, size_t) pairs
+namespace std {
+template <>
+struct hash<std::pair<oxygen::examples::asyncsim::ResourceHandle, size_t>> {
+  auto operator()(
+    const std::pair<oxygen::examples::asyncsim::ResourceHandle, size_t>& p)
+    const -> std::size_t
+  {
+    return std::hash<uint32_t> {}(p.first.get())
+      ^ (std::hash<size_t> {}(p.second) << 1);
+  }
+};
+
+// Hash function for (PassHandle, size_t) pairs
+template <>
+struct hash<std::pair<oxygen::examples::asyncsim::PassHandle, size_t>> {
+  auto operator()(
+    const std::pair<oxygen::examples::asyncsim::PassHandle, size_t>& p) const
+    -> std::size_t
+  {
+    return std::hash<uint32_t> {}(p.first.get())
+      ^ (std::hash<size_t> {}(p.second) << 1);
+  }
+};
+}
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::examples::asyncsim {
 class ModuleContext;
 class GraphicsLayerIntegration;
+class RenderGraphValidator; // base interface
+class RenderGraphScheduler;
+class ResourceAliasValidator;
+
+// Factory for resource alias validator
+auto CreateAsyncEngineResourceValidator(GraphicsLayerIntegration* integration)
+  -> std::unique_ptr<ResourceAliasValidator>;
+
+// Factory function (defined in Validator.cpp) returns derived async validator
+auto CreateAsyncEngineRenderGraphValidator()
+  -> std::unique_ptr<RenderGraphValidator>;
+auto CreateAsyncEngineRenderGraphScheduler()
+  -> std::unique_ptr<RenderGraphScheduler>;
 }
 
 namespace oxygen::examples::asyncsim {
@@ -89,6 +130,12 @@ public:
   auto EnableMultiViewRendering(bool enabled) -> void
   {
     multi_view_enabled_ = enabled;
+  }
+
+  //! Inject pass cost profiler to be attached to final graph
+  auto SetPassCostProfiler(std::shared_ptr<PassCostProfiler> profiler) -> void
+  {
+    pass_cost_profiler_ = std::move(profiler);
   }
 
   //! Create a texture resource
@@ -295,7 +342,59 @@ public:
     return handles;
   }
 
+  //! Get all passes (for scheduler/validator)
+  [[nodiscard]] auto GetPasses() const -> std::vector<PassHandle>;
+
+  //! Build a dependency adjacency list (Pass -> deps) using explicit pass
+  //! dependencies only. Resource hazard based edges are added later in
+  //! scheduling phase once lifetimes are known.
+  [[nodiscard]] auto GetExplicitDependencyGraph() const
+    -> std::unordered_map<PassHandle, std::vector<PassHandle>>
+  {
+    std::unordered_map<PassHandle, std::vector<PassHandle>> graph;
+    for (const auto& [handle, pass] : passes_) {
+      auto& list = graph[handle];
+      list.insert(list.end(), pass->GetDependencies().begin(),
+        pass->GetDependencies().end());
+    }
+    return graph;
+  }
+
 private:
+  //! Process multi-view configuration and create per-view resources
+  auto ProcessMultiViewConfiguration(RenderGraph* render_graph) -> void;
+
+  //! Process passes with view filtering applied
+  auto ProcessPassesWithViewFiltering(RenderGraph* render_graph) -> void;
+
+  //! Create per-view variants of resources
+  auto CreatePerViewResources(
+    ResourceHandle base_handle, const ResourceDesc& desc) -> void;
+
+  //! Create per-view variants of passes
+  auto CreatePerViewPasses(PassHandle base_handle, RenderPass* base_pass,
+    RenderGraph* render_graph) -> void;
+
+  //! Rebuild explicit dependency graph after per-view expansion so that
+  //! dependencies reference the actual cloned pass handles instead of
+  //! template base handles that never execute.
+  auto RebuildExplicitDependencies(const RenderGraph* render_graph)
+    -> std::unordered_map<PassHandle, std::vector<PassHandle>>;
+
+  //! Determine which views are active based on filters
+  [[nodiscard]] auto DetermineActiveViews() -> std::vector<size_t>;
+
+  //! Check if a pass should be executed for current view configuration
+  [[nodiscard]] auto ShouldExecutePassForViews(const RenderPass& pass) const
+    -> bool;
+
+  //! Remap resource handles in a pass to view-specific variants
+  auto RemapResourceHandlesForView(RenderPass* pass, size_t view_index) -> void;
+
+  //! Get view-specific resource handle
+  [[nodiscard]] auto GetViewSpecificResourceHandle(ResourceHandle base_handle,
+    size_t view_index) const -> std::optional<ResourceHandle>;
+
   //! Get next unique resource handle
   auto GetNextResourceHandle() -> ResourceHandle
   {
@@ -328,10 +427,23 @@ private:
   std::optional<size_t> restricted_view_index_;
   std::function<bool(const ViewContext&)> view_filter_;
 
+  // Multi-view state tracking
+  std::vector<size_t> active_view_indices_;
+  std::unordered_map<std::pair<ResourceHandle, size_t>, ResourceHandle>
+    per_view_resource_mapping_;
+  // Map (base pass handle, view_index) -> cloned per-view pass handle
+  std::unordered_map<std::pair<PassHandle, size_t>, PassHandle>
+    per_view_pass_mapping_;
+  // Track which base pass handles were expanded into per-view clones
+  std::unordered_set<PassHandle> expanded_per_view_passes_;
+
   // AsyncEngine integration
   ModuleContext* module_context_ { nullptr };
   GraphicsLayerIntegration* graphics_integration_ { nullptr };
   bool is_thread_safe_ { false };
+
+  // Adaptive scheduling instrumentation
+  std::shared_ptr<PassCostProfiler> pass_cost_profiler_;
 };
 
 } // namespace oxygen::examples::asyncsim

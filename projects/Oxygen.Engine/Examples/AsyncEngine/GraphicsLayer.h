@@ -24,7 +24,7 @@ public:
   // TODO: Implement descriptor heap management
   // Lock-free bump allocation with versioned publication
   uint32_t AllocateDescriptor() const { return next_descriptor_++; }
-  void PublishDescriptorTable(uint64_t version) const
+  void PublishDescriptorTable(uint64_t /*version*/) const
   {
     // TODO: Atomic publication with monotonic version bump
   }
@@ -38,11 +38,11 @@ class GlobalResourceRegistry {
 public:
   // TODO: Implement resource handle management
   // Generation-based handles with atomic registration
-  uint64_t RegisterResource(const std::string& name) const
+  uint64_t RegisterResource(const std::string& /*name*/) const
   {
     return next_handle_++;
   }
-  void UnregisterResource(uint64_t handle) const
+  void UnregisterResource(uint64_t /*handle*/) const
   {
     // TODO: Mark for deferred destruction
   }
@@ -88,7 +88,7 @@ public:
   DeferredReclaimer& GetDeferredReclaimer() { return deferred_reclaimer_; }
 
   // Frame lifecycle management
-  void BeginFrame(uint64_t frame_index);
+  void BeginFrame(uint64_t /*frame_index*/);
   void EndFrame();
 
   //! Get the number of resources reclaimed in the last frame start
@@ -99,6 +99,17 @@ public:
   std::size_t ProcessCompletedFrames();
 
   uint64_t GetCurrentFrame() const { return current_frame_; }
+
+  //! Get default viewport for fallback scenarios
+  struct Viewport {
+    float x { 0.0f }, y { 0.0f }, width { 1920.0f }, height { 1080.0f };
+    float min_depth { 0.0f }, max_depth { 1.0f };
+  };
+
+  Viewport GetDefaultViewport() const
+  {
+    return Viewport {}; // Return default 1920x1080 viewport
+  }
 
 private:
   //! Poll GPU for completion status (abstracts fence checking)

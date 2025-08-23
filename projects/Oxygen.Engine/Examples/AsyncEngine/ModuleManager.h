@@ -75,43 +75,39 @@ public:
   //! Initialize all modules
   auto InitializeModules(ModuleContext& context) -> co::Co<>
   {
-    LOG_F(INFO, "Initializing {} modules", modules_.size());
+    LOG_SCOPE_F(
+      INFO, fmt::format("Initializing {} modules", modules_.size()).c_str());
 
     for (auto& module : modules_) {
+      LOG_SCOPE_F(INFO, fmt::format("{}", module->GetName()).c_str());
       try {
-        LOG_F(1, "Initializing module '{}'", module->GetName());
         co_await module->Initialize(context);
-        LOG_F(1, "Module '{}' initialized successfully", module->GetName());
       } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to initialize module '{}': {}", module->GetName(),
-          e.what());
+        LOG_F(ERROR, " -failed- to initialize module '{}': {}",
+          module->GetName(), e.what());
         // Continue with other modules - don't let one failure stop everything
       }
     }
-
-    LOG_F(INFO, "Module initialization complete");
   }
 
   //! Shutdown all modules (in reverse order)
   auto ShutdownModules(ModuleContext& context) -> co::Co<>
   {
-    LOG_F(INFO, "Shutting down {} modules", modules_.size());
+    LOG_SCOPE_F(
+      INFO, fmt::format("Shutting down {} modules", modules_.size()).c_str());
 
     // Shutdown in reverse order to handle dependencies
     for (auto it = modules_.rbegin(); it != modules_.rend(); ++it) {
       auto& module = *it;
       try {
-        LOG_F(1, "Shutting down module '{}'", module->GetName());
+        LOG_SCOPE_F(INFO, fmt::format("{}", module->GetName()).c_str());
         co_await module->Shutdown(context);
-        LOG_F(1, "Module '{}' shutdown successfully", module->GetName());
       } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to shutdown module '{}': {}", module->GetName(),
+        LOG_F(ERROR, "-failed- to shutdown module '{}': {}", module->GetName(),
           e.what());
         // Continue shutdown process despite errors
       }
     }
-
-    LOG_F(INFO, "Module shutdown complete");
   }
 
   // === PHASE EXECUTION METHODS ===
