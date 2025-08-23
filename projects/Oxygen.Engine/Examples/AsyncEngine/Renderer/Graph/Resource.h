@@ -120,6 +120,12 @@ public:
   //! Get hash for resource compatibility checks
   [[nodiscard]] virtual auto GetCompatibilityHash() const -> std::size_t = 0;
 
+  //! Format compatibility check (default: exact type + hash match)
+  [[nodiscard]] virtual auto IsFormatCompatibleWith(const ResourceDesc& other) const -> bool
+  {
+    return GetTypeInfo() == other.GetTypeInfo() && GetCompatibilityHash() == other.GetCompatibilityHash();
+  }
+
   // === Bindless integration (AsyncEngine Phase 2) ===
   //! Store allocated descriptor index (bindless table). 0xFFFFFFFF = invalid
   auto SetDescriptorIndex(uint32_t index) noexcept
@@ -206,6 +212,27 @@ public:
       + (hash << 6) + (hash >> 2);
     return hash;
   }
+
+  [[nodiscard]] auto IsFormatCompatibleWith(const ResourceDesc& other) const -> bool override
+  {
+    if (other.GetTypeInfo() != GetTypeInfo()) return false;
+    const auto& o = static_cast<const TextureDesc&>(other);
+    // Allow alias if same dimensions & format or if both formats are same size class (e.g., RGBA8_UNorm vs D24 depth not allowed)
+    if (width != o.width || height != o.height || depth != o.depth) return false;
+    if (format == o.format) return true;
+    // Simple size class heuristic
+    auto sizeClass = [](Format f){
+      switch(f){
+        case Format::RGBA8_UNorm: return 4u;
+        case Format::D32_Float: return 4u;
+        case Format::D24_UNorm_S8_UInt: return 4u;
+        case Format::RGBA16_Float: return 8u;
+        case Format::RGBA32_Float: return 16u;
+        default: return 0u;
+      }
+    };
+    return sizeClass(format) != 0u && sizeClass(format) == sizeClass(o.format) && usage == o.usage;
+  }
 };
 
 //! Buffer resource descriptor
@@ -250,6 +277,21 @@ public:
     hash ^= std::hash<uint32_t> {}(static_cast<uint32_t>(usage)) + 0x9e3779b9
       + (hash << 6) + (hash >> 2);
     return hash;
+  }
+
+  [[nodiscard]] auto IsFormatCompatibleWith(const ResourceDesc& other) const -> bool override
+  {
+    if (other.GetTypeInfo() != GetTypeInfo()) return false;
+    const auto& o = static_cast<const BufferDesc&>(other);
+    // Same size or either is transient smaller (permit alias if target large enough)
+    if (size_bytes == o.size_bytes) return usage == o.usage;
+    auto max_size = std::max(size_bytes, o.size_bytes);
+    auto min_size = std::min(size_bytes, o.size_bytes);
+    // Allow larger buffer aliasing smaller if usage flags are a superset.
+    auto usage_bits = static_cast<uint32_t>(usage);
+    auto other_bits = static_cast<uint32_t>(o.usage);
+    bool usage_compatible = (usage_bits | other_bits) == usage_bits || (usage_bits | other_bits) == other_bits;
+    return min_size * 2 <= max_size ? false : usage_compatible; // reject if size disparity >2x to avoid fragmentation issues
   }
 };
 
@@ -377,9 +419,8 @@ public:
   [[nodiscard]] virtual auto AreCompatible(
     const ResourceDesc& a, const ResourceDesc& b) const -> bool
   {
-    // Enhanced compatibility check using type info and hash
-    return a.GetTypeInfo() == b.GetTypeInfo()
-      && a.GetCompatibilityHash() == b.GetCompatibilityHash();
+  if (a.GetLifetime() != b.GetLifetime()) return false; // require same lifetime category for now
+  return a.IsFormatCompatibleWith(b) && b.IsFormatCompatibleWith(a);
   }
 
   //! Get debug information about resource aliasing

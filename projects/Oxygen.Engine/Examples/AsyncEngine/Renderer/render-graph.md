@@ -99,7 +99,7 @@ This document describes the Render Graph Builder DSL for creating complex render
 - [ ] Implement resource aliasing system with memory pooling
 - [x] Implement `ResourceAliasValidator` with hazard detection logic
 - [x] Implement resource state transition management (planning + 113 transitions logged)
-- [ ] Implement resource format compatibility checking
+- [x] Implement resource format compatibility checking
 
 #### Pass System Implementation
 

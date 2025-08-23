@@ -373,6 +373,9 @@ public:
   {
     std::vector<AliasHazard> hazards;
 
+  // Reset candidates for fresh validation run
+  alias_candidates_.clear();
+
     // 1. Integration consistency warnings (non-fatal)
     ValidateIntegrationState(hazards);
 
@@ -405,21 +408,26 @@ public:
 
         const bool lifetimes_overlap = lifeA.OverlapsWith(lifeB);
 
+        bool emitted_hazard = false;
+
         // 2.a Lifetime overlap hazard for transient pair
         if (transient_pair && lifetimes_overlap) {
           hazards.push_back(
             MakeOverlapHazard(ha, hb, lifeA, lifeB, *descA, *descB));
+          emitted_hazard = true;
         }
 
         // 2.b Scope conflict (Shared vs PerView) when overlapping
         if (lifetimes_overlap && descA->GetScope() != descB->GetScope()) {
           hazards.push_back(MakeScopeHazard(ha, hb, *descA, *descB));
+          emitted_hazard = true; // still count as hazard, may co-exist
         }
 
         // 2.c Overlapping writes (write-write) – always hazardous if overlap
         if (lifetimes_overlap && HasWriteOverlap(lifeA, lifeB)) {
           hazards.push_back(
             MakeWriteConflictHazard(ha, hb, lifeA, lifeB, *descA, *descB));
+          emitted_hazard = true;
         }
 
         // 2.d Incompatibility (non-overlapping but cannot alias due to
@@ -427,6 +435,21 @@ public:
         if (transient_pair && !lifetimes_overlap
           && !AreCompatible(*descA, *descB)) {
           hazards.push_back(MakeIncompatibilityHazard(ha, hb, *descA, *descB));
+          emitted_hazard = true;
+        }
+
+        // 2.e Safe alias candidate (transient, non-overlapping, compatible, no hazards just emitted for this pair)
+        if (transient_pair && !lifetimes_overlap && !emitted_hazard
+          && AreCompatible(*descA, *descB)) {
+          AliasCandidate cand;
+          cand.resource_a = ha;
+          cand.resource_b = hb;
+          const auto sizeA = lifeA.memory_requirement;
+          const auto sizeB = lifeB.memory_requirement;
+            cand.combined_memory = std::max(sizeA, sizeB);
+          cand.description = DescriptorSummary(*descA) + " <-> "
+            + DescriptorSummary(*descB);
+          alias_candidates_.push_back(std::move(cand));
         }
       }
     }
@@ -591,6 +614,7 @@ private:
     hz.description = "Transient lifetime overlap: '" + da.GetDebugName()
       + "' vs '" + db.GetDebugName() + "'";
     hz.conflicting_passes = CollectOverlapPasses(la, lb);
+  hz.severity = AliasHazard::Severity::Error;
     return hz;
   }
 
@@ -602,6 +626,7 @@ private:
     hz.resource_b = b;
     hz.description = "Scope conflict (" + ScopeString(da.GetScope()) + " vs "
       + ScopeString(db.GetScope()) + ")";
+  hz.severity = AliasHazard::Severity::Warning;
     return hz;
   }
 
@@ -616,6 +641,7 @@ private:
     hz.description = "Overlapping write hazard: '" + da.GetDebugName() + "' & '"
       + db.GetDebugName() + "'";
     hz.conflicting_passes = CollectOverlapPasses(la, lb);
+  hz.severity = AliasHazard::Severity::Error;
     return hz;
   }
 
@@ -625,8 +651,9 @@ private:
     AliasHazard hz;
     hz.resource_a = a;
     hz.resource_b = b;
-    hz.description = "Incompatible descriptors for aliasing: '"
-      + da.GetDebugName() + "' vs '" + db.GetDebugName() + "'";
+    hz.description = "Incompatible for aliasing: " + DescriptorSummary(da)
+      + " vs " + DescriptorSummary(db);
+    hz.severity = AliasHazard::Severity::Warning;
     return hz;
   }
 
@@ -639,6 +666,25 @@ private:
       return "PerView";
     }
     return "Unknown";
+  }
+
+  static std::string DescriptorSummary(const ResourceDesc& d)
+  {
+    std::ostringstream oss;
+    if (d.GetTypeInfo() == "TextureDesc") {
+      auto const& td = static_cast<const TextureDesc&>(d);
+      oss << "Tex['" << d.GetDebugName() << "' " << td.width << "x" << td.height
+          << " fmt=" << static_cast<uint32_t>(td.format) << " use="
+          << static_cast<uint32_t>(td.usage) << "]";
+    } else if (d.GetTypeInfo() == "BufferDesc") {
+      auto const& bd = static_cast<const BufferDesc&>(d);
+      oss << "Buf['" << d.GetDebugName() << "' size=" << bd.size_bytes
+          << " stride=" << bd.stride << " use="
+          << static_cast<uint32_t>(bd.usage) << "]";
+    } else {
+      oss << d.GetTypeInfo() << "['" << d.GetDebugName() << "']";
+    }
+    return oss.str();
   }
 };
 
