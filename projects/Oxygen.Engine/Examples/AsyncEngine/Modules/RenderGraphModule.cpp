@@ -201,6 +201,11 @@ auto RenderGraphModule::CreateViewContextsFromSurfaces(
     }
   }
 
+  // Initialize presentable flags to match the number of views and clear them
+  // so worker threads may safely set flags during command recording/processing.
+  frame_context.presentable_flags.assign(
+    frame_context.views.size(), static_cast<uint8_t>(0));
+
   LOG_F(2, "[RenderGraph] Created {} view contexts (multi-view={})",
     frame_context.views.size(), frame_context.views.size() > 1);
 }

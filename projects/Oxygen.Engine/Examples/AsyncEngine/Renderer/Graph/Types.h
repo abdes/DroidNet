@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -166,6 +167,10 @@ struct FrameContext {
   std::shared_ptr<void>
     scene_data; //!< Shared scene geometry/materials - placeholder
   std::vector<ViewContext> views; //!< All views to render this frame
+  // Per-view presentable flags. Stored as plain bytes so FrameContext remains
+  // copyable. Use std::atomic_ref<uint8_t> when accessing these from worker
+  // threads (set with release) and the frame thread (load with acquire).
+  std::vector<uint8_t> presentable_flags;
 
   FrameContext() = default;
 

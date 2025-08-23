@@ -10,6 +10,7 @@
 #include <ranges>
 #include <thread>
 
+#include "./Modules/RenderGraphModule.h"
 #include "ModuleContext.h"
 
 using namespace std::chrono_literals;
@@ -53,8 +54,14 @@ AsyncEngineSimulator::AsyncEngineSimulator(
   async_jobs_.push_back({ "ProceduralGeometry", 20ms, 0, false });
   async_jobs_.push_back({ "GPUReadback", 5ms, 0, false });
 
+  // TODO: move out of here...
   // Default single surface setup if no surfaces are explicitly added
-  surfaces_.push_back({ "MainSurface", 800us, 200us, 300us, false, false });
+  surfaces_.push_back({
+    .name = "MainSurface",
+    .record_cost = 800us,
+    .submit_cost = 200us,
+    .present_cost = 300us,
+  });
 
   // Initialize detached services (Category D)
   InitializeDetachedServices();
@@ -453,40 +460,13 @@ auto AsyncEngineSimulator::PhaseCommandRecord(ModuleContext& context)
   // Execute module command recording first
   co_await module_manager_.ExecuteCommandRecord(context);
 
-  // Reset surface states for new frame
-  for (auto& surface : surfaces_) {
-    surface.commands_recorded = false;
-    surface.commands_submitted = false;
-  }
-
-  // Record and submit commands in parallel for each surface using immediate
-  // lambda invocation pattern Each surface does: Record -> Submit immediately
-  // (pipeline style)
-  std::vector<co::Co<>> pipeline_tasks;
-  pipeline_tasks.reserve(surfaces_.size());
-
-  for (size_t i = 0; i < surfaces_.size(); ++i) {
-    pipeline_tasks.push_back([](const RenderSurface& surface, size_t index,
-                               AsyncEngineSimulator* sim) -> co::Co<> {
-      // Execute both record and submit on the same thread pool worker
-      co_await sim->pool_.Run([surface, index, sim](
-                                co::ThreadPool::CancelToken) -> void {
-        loguru::set_thread_name((std::string("pool-") + surface.name).c_str());
-        // Record commands for this surface
-        sim->RecordSurfaceCommands(surface, index);
-        // Immediately submit commands on the same thread
-        sim->SubmitSurfaceCommands(surface, index);
-      });
-      co_return;
-    }(surfaces_[i], i, this));
-  }
-
-  // Wait for all surfaces to complete their record+submit pipeline
-  co_await co::AllOf(std::move(pipeline_tasks));
-
-  LOG_F(1,
-    "[F{}][A] PhaseCommandRecord complete - all {} surfaces recorded+submitted",
-    frame_index_, surfaces_.size());
+  // In the revised design the render graph / renderer modules own command
+  // recording and submission. Module implementations should perform per-view
+  // recording and mark views/surfaces as ready (for example by setting
+  // FrameContext::presentable_flags). The simulator no longer performs
+  // per-surface record/submit work itself.
+  LOG_F(1, "[F{}][A] PhaseCommandRecord complete - modules recorded commands",
+    frame_index_);
 }
 
 void AsyncEngineSimulator::PhasePresent(ModuleContext& context)
@@ -497,37 +477,69 @@ void AsyncEngineSimulator::PhasePresent(ModuleContext& context)
   // Execute module present work first (fire and forget for now)
   auto present_work = module_manager_.ExecutePresent(context);
 
-  // Present all surfaces synchronously (sequential presentation)
-  for (size_t i = 0; i < surfaces_.size(); ++i) {
-    PresentSurface(surfaces_[i], i);
+  // If a render graph module produced per-view presentable flags, consult
+  // them so only views marked ready by worker threads are presented. This
+  // allows worker threads to mark views as presentable (release) and the
+  // frame thread to read (acquire) and present them safely.
+  bool presented_via_flags = false;
+  if (auto* rgm = context.GetRenderGraphModule()) {
+    const auto& graph = rgm->GetRenderGraph();
+    const auto& frame_ctx = graph->GetFrameContext();
+    const auto& flags = frame_ctx.presentable_flags;
+    if (!flags.empty() && flags.size() == surfaces_.size()) {
+      presented_via_flags = true;
+      // NOTE/TODO: This is a temporary, simulator-side convenience.
+      // The long-term ownership model is that the GraphicsLayer (or the
+      // renderer/render-graph integration) owns the authoritative surface
+      // structures and performs presentation. At the engine/graph layer we
+      // should only hold a non-mutable reference or view into those
+      // surfaces for coordination. Avoid copying/mutating RenderSurface here
+      // in production code; this copy-based path exists only for the demo.
+      // Build a vector of surfaces that are marked presentable and present
+      std::vector<RenderSurface> to_present;
+      to_present.reserve(surfaces_.size());
+      for (size_t i = 0; i < surfaces_.size(); ++i) {
+        std::atomic_ref<const uint8_t> ref(flags[i]);
+        uint8_t v = ref.load(std::memory_order_acquire);
+        if (v) {
+          to_present.push_back(surfaces_[i]);
+        }
+      }
+      if (!to_present.empty()) {
+        graphics_.PresentSurfaces(to_present);
+      }
+    }
   }
 
-  // After presentation, schedule frame-specific resources for cleanup
-  // These resources are safe to destroy after this frame completes
-  auto& reclaimer = graphics_.GetDeferredReclaimer();
+  // TODO:does not belong here - just for dummy testing
+  {
+    // After presentation, schedule frame-specific resources for cleanup
+    // These resources are safe to destroy after this frame completes
+    auto& reclaimer = graphics_.GetDeferredReclaimer();
 
-  // Schedule cleanup of this frame's render targets (they're done being used)
-  // Use simulated handles that correspond to resources created this frame
-  auto color_handle = 100000 + frame_index_; // Simulated color buffer handle
-  auto depth_handle = 200000 + frame_index_; // Simulated depth buffer handle
+    // Schedule cleanup of this frame's render targets (they're done being used)
+    // Use simulated handles that correspond to resources created this frame
+    auto color_handle = 100000 + frame_index_; // Simulated color buffer handle
+    auto depth_handle = 200000 + frame_index_; // Simulated depth buffer handle
 
-  reclaimer.ScheduleReclaim(color_handle, frame_index_,
-    "ColorBuffer_Frame" + std::to_string(frame_index_));
-  reclaimer.ScheduleReclaim(depth_handle, frame_index_,
-    "DepthBuffer_Frame" + std::to_string(frame_index_));
+    reclaimer.ScheduleReclaim(color_handle, frame_index_,
+      "ColorBuffer_Frame" + std::to_string(frame_index_));
+    reclaimer.ScheduleReclaim(depth_handle, frame_index_,
+      "DepthBuffer_Frame" + std::to_string(frame_index_));
 
-  LOG_F(1,
-    "[F{}] Scheduled 2 render targets for deferred cleanup (color={}, "
-    "depth={})",
-    frame_index_, color_handle, depth_handle);
+    LOG_F(1,
+      "[F{}] Scheduled 2 render targets for deferred cleanup (color={}, "
+      "depth={})",
+      frame_index_, color_handle, depth_handle);
 
-  // Every few frames, schedule cleanup of temporary resources
-  if (frame_index_ % 3 == 0 && frame_index_ > 0) {
-    auto shadow_handle = 300000 + frame_index_; // Simulated shadow map handle
-    reclaimer.ScheduleReclaim(shadow_handle, frame_index_,
-      "ShadowMap_Frame" + std::to_string(frame_index_));
-    LOG_F(1, "[F{}] Scheduled shadow map for cleanup (handle={})", frame_index_,
-      shadow_handle);
+    // Every few frames, schedule cleanup of temporary resources
+    if (frame_index_ % 3 == 0 && frame_index_ > 0) {
+      auto shadow_handle = 300000 + frame_index_; // Simulated shadow map handle
+      reclaimer.ScheduleReclaim(shadow_handle, frame_index_,
+        "ShadowMap_Frame" + std::to_string(frame_index_));
+      LOG_F(1, "[F{}] Scheduled shadow map for cleanup (handle={})",
+        frame_index_, shadow_handle);
+    }
   }
 
   LOG_F(1, "[F{}][A] PhasePresent complete - all {} surfaces presented",
@@ -707,48 +719,8 @@ auto AsyncEngineSimulator::SimulateWorkOrdered(
   co_return;
 }
 
-void AsyncEngineSimulator::RecordSurfaceCommands(
-  const RenderSurface& surface, size_t surface_index)
-{
-  LOG_F(1, "[F{}][B][{}] Recording commands for surface '{}' ({}us)",
-    frame_index_, surface_index, surface.name, surface.record_cost.count());
-
-  std::this_thread::sleep_for(surface.record_cost);
-
-  // Mark surface as having commands recorded
-  const_cast<RenderSurface&>(surface).commands_recorded = true;
-
-  LOG_F(1, "[F{}][B][{}][DONE] Surface '{}' commands recorded", frame_index_,
-    surface_index, surface.name);
-}
-
-void AsyncEngineSimulator::SubmitSurfaceCommands(
-  const RenderSurface& surface, size_t surface_index)
-{
-  LOG_F(1, "[F{}][B][{}] Submitting commands for surface '{}' (same thread)",
-    frame_index_, surface_index, surface.name);
-
-  std::this_thread::sleep_for(surface.submit_cost);
-
-  const_cast<RenderSurface&>(surface).commands_submitted = true;
-
-  LOG_F(1,
-    "[F{}][B][{}][DONE] Surface '{}' commands submitted ({}us same thread)",
-    frame_index_, surface_index, surface.name, surface.submit_cost.count());
-}
-
-void AsyncEngineSimulator::PresentSurface(
-  const RenderSurface& surface, size_t surface_index)
-{
-  LOG_F(1, "[F{}][A][{}] Presenting surface '{}'", frame_index_, surface_index,
-    surface.name);
-
-  // Simulate presentation work (synchronous per surface)
-  std::this_thread::sleep_for(surface.present_cost);
-
-  LOG_F(1, "[F{}][A][{}][DONE] Surface '{}' presented ({}us)", frame_index_,
-    surface_index, surface.name, surface.present_cost.count());
-}
+// Note: Per-surface helpers were removed. Presentation and command recording
+// are owned by renderer / render-graph code now.
 
 void AsyncEngineSimulator::InitializeDetachedServices()
 {

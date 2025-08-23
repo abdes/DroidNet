@@ -7,6 +7,9 @@
 #include "GraphicsLayer.h"
 
 #include <algorithm>
+#include <thread>
+
+#include "EngineTypes.h"
 
 #include "Oxygen/Base/Logging.h"
 
@@ -19,6 +22,19 @@ void DeferredReclaimer::ScheduleReclaim(
   pending_reclaims_.push_back({ handle, frame, name });
   LOG_F(1, "[Graphics] Scheduled reclaim: {} (handle={}, frame={})", name,
     handle, frame);
+}
+
+void GraphicsLayer::PresentSurfaces(const std::vector<RenderSurface>& surfaces)
+{
+  // Simulate synchronous present for each surface in order
+  for (size_t i = 0; i < surfaces.size(); ++i) {
+    const auto& s = surfaces[i];
+    LOG_F(1, "[Graphics] Presenting surface {} (index={})", s.name, i);
+    // Simulate GPU present latency per surface
+    if (s.present_cost.count() > 0) {
+      std::this_thread::sleep_for(s.present_cost);
+    }
+  }
 }
 
 size_t DeferredReclaimer::ProcessCompletedFrame(uint64_t completed_frame)
