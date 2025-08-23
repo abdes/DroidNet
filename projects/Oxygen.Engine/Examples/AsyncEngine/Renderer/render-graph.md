@@ -105,7 +105,7 @@ This document describes the Render Graph Builder DSL for creating complex render
 
 - [x] Implement pass dependency resolution with topological sorting (validated: 40 passes ordered, 0 errors)
 - [x] Implement multi-view pass scoping and iteration (per-view cloning & mapping)
-- [ ] Implement view filtering and restriction logic
+- [x] Implement view filtering and restriction logic
 - [x] Implement pass execution batching for parallelism (batch construction: 6 batches, width metrics logged; execution still sequential inside batches)
 - [x] Implement command recording integration (executors record commands; integrated with AsyncEngine phases)
 
