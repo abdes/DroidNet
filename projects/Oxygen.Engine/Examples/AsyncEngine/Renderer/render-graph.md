@@ -121,7 +121,8 @@ This document describes the Render Graph Builder DSL for creating complex render
 
 - [x] Implement per-view resource creation and management (per-view depth/color/back buffers allocated)
 - [x] Implement view-specific pass execution (per-view geometry & present passes)
-- [ ] Implement parallel view rendering coordination (batching prepared; intra-batch parallelism pending)
+- [x] Implement parallel view rendering coordination (intra-batch thread pool dispatch + speedup metrics)
+  - Added main-thread-only pass flag (`RequireMainThread()`) to exclude passes from parallel dispatch
 - [ ] Implement shared resource optimization between views (shadow map, light culling shared but no optimizer yet)
 - [ ] Implement view-specific validation and error handling
 

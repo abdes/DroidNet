@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "../Graph/ExecutionContext.h"
 #include "../Graph/Resource.h"
 #include "../Graph/Types.h"
 
@@ -85,6 +86,17 @@ public:
   [[nodiscard]] auto GetDependencies() const -> const std::vector<PassHandle>&
   {
     return dependencies_;
+  }
+
+  //! Whether this pass must execute on the main thread (non-thread-safe
+  //! executor or uses thread-affine APIs)
+  [[nodiscard]] auto RequiresMainThread() const noexcept -> bool
+  {
+    return requires_main_thread_;
+  }
+  auto SetRequiresMainThread(bool v) noexcept -> void
+  {
+    requires_main_thread_ = v;
   }
 
   //! Get the pass executor function
@@ -191,6 +203,8 @@ public:
     if (!executor_) [[unlikely]] {
       return; // Safety in non-debug builds
     }
+    DLOG_F(5, "[RenderPass][Execute] pass={} view={}", GetDebugName(),
+      context.GetViewContext().view_name);
     executor_(context);
   }
 
@@ -229,6 +243,9 @@ protected:
   std::vector<ResourceHandle> write_resources_;
   std::vector<ResourceState> write_states_;
   std::vector<PassHandle> dependencies_;
+  bool requires_main_thread_ {
+    false
+  }; //!< True if pass must run on main thread (excluded from parallel dispatch)
 
   // View filtering meta
   bool has_view_filter_ { false };
@@ -458,6 +475,14 @@ public:
   auto SetExecutor(PassExecutor executor) -> PassBuilder&
   {
     pass_->SetExecutor(std::move(executor));
+    return *this;
+  }
+
+  //! Mark this pass as requiring main-thread execution (excluded from parallel
+  //! pool dispatch)
+  auto RequireMainThread() -> PassBuilder&
+  {
+    pass_->SetRequiresMainThread(true);
     return *this;
   }
 
