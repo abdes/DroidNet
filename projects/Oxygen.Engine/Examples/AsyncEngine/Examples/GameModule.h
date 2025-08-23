@@ -178,7 +178,7 @@ private:
   // Resource handles
   uint32_t player_entity_handle_ { 0 };
   uint32_t world_state_handle_ { 0 };
-  std::vector<uint32_t> dynamic_entities_;
+  std::vector<uint64_t> dynamic_entities_;
 
   // Statistics
   uint32_t input_events_processed_ { 0 };

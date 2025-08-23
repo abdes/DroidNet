@@ -79,8 +79,6 @@ struct RenderSurface {
   }; // simulated command recording time
   std::chrono::microseconds submit_cost { 200 }; // simulated submission time
   std::chrono::microseconds present_cost { 300 }; // simulated presentation time
-  bool commands_recorded { false };
-  bool commands_submitted { false };
 };
 
 } // namespace oxygen::examples::asyncsim

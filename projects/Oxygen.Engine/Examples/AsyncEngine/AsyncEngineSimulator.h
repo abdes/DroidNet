@@ -113,6 +113,7 @@ private:
     -> co::Co<>; // async (simulated work)
   auto PhasePostParallel(ModuleContext& context)
     -> co::Co<>; // async (simulated work)
+
   auto PhaseFrameGraph(ModuleContext& context)
     -> co::Co<>; // async (simulated work)
   auto PhaseDescriptorTablePublication(ModuleContext& context)
@@ -120,15 +121,10 @@ private:
   auto PhaseResourceStateTransitions(ModuleContext& context)
     -> co::Co<>; // resource state transitions planning
   auto PhaseCommandRecord(ModuleContext& context)
+
     -> co::Co<>; // async (simulated work)
   void PhasePresent(ModuleContext& context); // synchronous presentation
 
-  // Multi-surface rendering helpers
-  void RecordSurfaceCommands(
-    const RenderSurface& surface, size_t surface_index);
-  void SubmitSurfaceCommands(
-    const RenderSurface& surface, size_t surface_index);
-  void PresentSurface(const RenderSurface& surface, size_t surface_index);
   void PhaseAsyncPoll(ModuleContext& context);
   void PhaseBudgetAdapt();
   void PhaseFrameEnd();

@@ -91,6 +91,11 @@ public:
     render_graph_module_ = render_graph_module;
   }
 
+  [[nodiscard]] RenderGraphModule* GetRenderGraphModule() const noexcept
+  {
+    return render_graph_module_;
+  }
+
   //! Get render graph builder for current frame
   //! Only valid during FrameGraph phase when render graph module is active
   [[nodiscard]] RenderGraphBuilder* GetRenderGraphBuilder() noexcept;

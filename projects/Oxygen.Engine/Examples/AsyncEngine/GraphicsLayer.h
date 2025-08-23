@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "EngineTypes.h"
+
 #include <Oxygen/Base/Macros.h>
 
 namespace oxygen::examples::asyncsim {
@@ -110,6 +112,12 @@ public:
   {
     return Viewport {}; // Return default 1920x1080 viewport
   }
+
+  //! Present multiple surfaces (renderer integration point)
+  //! This takes the authoritative list of surfaces for the current frame
+  //! and issues platform-specific present operations. For the simulator this
+  //! simply iterates and logs (and simulates present_cost sleep).
+  void PresentSurfaces(const std::vector<RenderSurface>& surfaces);
 
 private:
   //! Poll GPU for completion status (abstracts fence checking)
