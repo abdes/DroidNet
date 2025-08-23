@@ -97,7 +97,7 @@ This document describes the Render Graph Builder DSL for creating complex render
 
 - [x] Implement resource lifetime analysis and tracking (basic interval analysis & reclamation scheduling in place)
 - [ ] Implement resource aliasing system with memory pooling
-- [ ] Implement `ResourceAliasValidator` with hazard detection logic
+- [x] Implement `ResourceAliasValidator` with hazard detection logic
 - [x] Implement resource state transition management (planning + 113 transitions logged)
 - [ ] Implement resource format compatibility checking
 

@@ -138,18 +138,8 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   LOG_F(4,
     "[RenderGraphBuilder] Collected resource usages for lifetime analysis "
     "(deferred)");
-  auto hazards = alias_validator->ValidateAliasing();
-  if (!hazards.empty()) {
-    for (const auto& h : hazards) {
-      ValidationError err { ValidationErrorType::ResourceAliasHazard,
-        "Aliasing hazard: " + h.description };
-      // Attach involved passes when available
-      err.affected_passes.insert(err.affected_passes.end(),
-        h.conflicting_passes.begin(), h.conflicting_passes.end());
-      validation_result.AddError(err);
-    }
-    render_graph->SetValidationResult(validation_result);
-  }
+  // NOTE: Hazard emission deferred until after lifetime analysis
+  // (post-scheduling).
 
   if (!validation_result.IsValid()) {
     LOG_F(ERROR, "[RenderGraphBuilder] Graph validation failed with {} errors",
@@ -197,6 +187,42 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     LOG_F(3,
       "[RenderGraphBuilder] Lifetime analysis complete (fallback no topo "
       "order)");
+  }
+
+  // Perform hazard validation now that lifetimes are analyzed.
+  {
+    auto hazards = alias_validator->ValidateAliasing();
+    if (!hazards.empty()) {
+      for (const auto& h : hazards) {
+        ValidationError err { ValidationErrorType::ResourceAliasHazard,
+          std::string("Aliasing ")
+            + (h.severity == AliasHazard::Severity::Error ? "error: "
+                                                          : "warning: ")
+            + h.description };
+        err.affected_passes.insert(err.affected_passes.end(),
+          h.conflicting_passes.begin(), h.conflicting_passes.end());
+        if (h.severity == AliasHazard::Severity::Error) {
+          validation_result.AddError(err);
+        } else {
+          validation_result.AddWarning(err);
+        }
+      }
+      render_graph->SetValidationResult(validation_result);
+    }
+
+    // Log safe alias candidates (informational)
+    auto candidates = alias_validator->GetAliasCandidates();
+    if (!candidates.empty()) {
+      LOG_F(3, "[RenderGraphBuilder] {} safe alias candidates detected",
+        candidates.size());
+      if (loguru::g_stderr_verbosity >= 5) {
+        for (auto const& c : candidates) {
+          LOG_F(5, "  Candidate: {} <-> {} (mem={} bytes) : {}",
+            c.resource_a.get(), c.resource_b.get(), c.combined_memory,
+            c.description.c_str());
+        }
+      }
+    }
   }
 
   // Transfer resource descriptors now that analysis is complete

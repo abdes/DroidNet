@@ -373,88 +373,71 @@ public:
   {
     std::vector<AliasHazard> hazards;
 
-    // Enhanced validation with AsyncEngine integration
-    if (graphics_integration_) {
-      // Validate integration state consistency
-      if (!graphics_integration_->ValidateIntegrationState()) {
-        AliasHazard hazard;
-        hazard.description = "Graphics layer integration state is inconsistent";
-        hazards.push_back(std::move(hazard));
-      }
+    // 1. Integration consistency warnings (non-fatal)
+    ValidateIntegrationState(hazards);
 
-      // Check for resource lifetime conflicts with deferred reclaimer
-      const auto stats = graphics_integration_->GetIntegrationStats();
-      if (stats.pending_reclaims > 0) {
-        LOG_F(2,
-          "[ResourceValidator] {} pending resource reclaims detected "
-          "during aliasing validation",
-          stats.pending_reclaims);
-      }
-    }
+    // 2. Pairwise hazard scan (transient / potentially aliasable resources)
+    std::vector<ResourceHandle> handles;
+    handles.reserve(resource_lifetimes_.size());
+    for (auto const& kv : resource_lifetimes_)
+      handles.push_back(kv.first);
+    std::sort(handles.begin(), handles.end(),
+      [](auto a, auto b) { return a.get() < b.get(); });
 
-    // Validate resource aliasing hazards
-    for (const auto& [handle, lifetime] : resource_lifetimes_) {
-      for (const auto& alias_handle : lifetime.aliases) {
-        const auto alias_it = resource_lifetimes_.find(alias_handle);
-        if (alias_it == resource_lifetimes_.end())
+    for (size_t i = 0; i < handles.size(); ++i) {
+      auto ha = handles[i];
+      const auto* descA = GetDesc(ha);
+      if (!descA)
+        continue;
+      for (size_t j = i + 1; j < handles.size(); ++j) {
+        auto hb = handles[j];
+        const auto* descB = GetDesc(hb);
+        if (!descB)
           continue;
 
-        const auto& alias_lifetime = alias_it->second;
+        const auto& lifeA = resource_lifetimes_[ha];
+        const auto& lifeB = resource_lifetimes_[hb];
 
-        // Check for lifetime overlap hazards
-        if (lifetime.OverlapsWith(alias_lifetime)) {
-          AliasHazard hazard;
-          hazard.resource_a = handle;
-          hazard.resource_b = alias_handle;
-          hazard.description = "Aliased resources have overlapping lifetimes";
+        // Only consider transient resources for alias opportunities / hazards
+        const bool transient_pair
+          = descA->GetLifetime() == ResourceLifetime::Transient
+          && descB->GetLifetime() == ResourceLifetime::Transient;
 
-          // Find conflicting passes
-          for (const auto& usage_a : lifetime.usages) {
-            for (const auto& usage_b : alias_lifetime.usages) {
-              if (usage_a.pass == usage_b.pass) {
-                hazard.conflicting_passes.push_back(usage_a.pass);
-              }
-            }
-          }
+        const bool lifetimes_overlap = lifeA.OverlapsWith(lifeB);
 
-          hazards.push_back(std::move(hazard));
+        // 2.a Lifetime overlap hazard for transient pair
+        if (transient_pair && lifetimes_overlap) {
+          hazards.push_back(
+            MakeOverlapHazard(ha, hb, lifeA, lifeB, *descA, *descB));
         }
 
-        // Detect write-after-write or write-after-read within overlapping usage
-        // windows per view
-        for (const auto& usage_a : lifetime.usages) {
-          for (const auto& usage_b : alias_lifetime.usages) {
-            if (usage_a.pass == usage_b.pass)
-              continue; // already handled above or same pass
-            if (usage_a.view_index != usage_b.view_index)
-              continue; // different view can be relaxed later
-            const bool overlap
-              = true; // placeholder: refine with real time ordering
-            // TODO(Phase2): Derive overlap from topological order + lifetime
-            // first/last indices instead of placeholder
-            if (!overlap)
-              continue;
-            // Hazard if both write, or one writes and lifetimes overlap for
-            // alias
-            if ((usage_a.is_write_access && usage_b.is_write_access)
-              || (usage_a.is_write_access != usage_b.is_write_access)) {
-              AliasHazard hazard;
-              hazard.resource_a = handle;
-              hazard.resource_b = alias_handle;
-              hazard.description
-                = usage_a.is_write_access && usage_b.is_write_access
-                ? "Write/Write hazard between aliased resources"
-                : "Read/Write hazard between aliased resources";
-              hazard.conflicting_passes.push_back(usage_a.pass);
-              hazard.conflicting_passes.push_back(usage_b.pass);
-              hazards.push_back(std::move(hazard));
-            }
-          }
+        // 2.b Scope conflict (Shared vs PerView) when overlapping
+        if (lifetimes_overlap && descA->GetScope() != descB->GetScope()) {
+          hazards.push_back(MakeScopeHazard(ha, hb, *descA, *descB));
+        }
+
+        // 2.c Overlapping writes (write-write) – always hazardous if overlap
+        if (lifetimes_overlap && HasWriteOverlap(lifeA, lifeB)) {
+          hazards.push_back(
+            MakeWriteConflictHazard(ha, hb, lifeA, lifeB, *descA, *descB));
+        }
+
+        // 2.d Incompatibility (non-overlapping but cannot alias due to
+        // format/size)
+        if (transient_pair && !lifetimes_overlap
+          && !AreCompatible(*descA, *descB)) {
+          hazards.push_back(MakeIncompatibilityHazard(ha, hb, *descA, *descB));
         }
       }
     }
 
     return hazards;
+  }
+
+  [[nodiscard]] auto GetAliasCandidates() const
+    -> std::vector<AliasCandidate> override
+  {
+    return alias_candidates_;
   }
 
   [[nodiscard]] auto GetDebugInfo() const -> std::string override
@@ -478,6 +461,7 @@ private:
   std::unordered_map<PassHandle, uint32_t> topological_order_;
   std::unordered_map<ResourceHandle, uint32_t> first_usage_index_;
   std::unordered_map<ResourceHandle, uint32_t> last_usage_index_;
+  std::vector<AliasCandidate> alias_candidates_;
 
   //! Calculate memory requirement for a resource descriptor
   [[nodiscard]] auto CalculateMemoryRequirement(const ResourceDesc& desc) const
@@ -524,6 +508,137 @@ private:
     }
 
     return true;
+  }
+
+  // === Hazard helper routines (decomposed for low complexity) ===
+
+  void ValidateIntegrationState(std::vector<AliasHazard>& hazards) const
+  {
+    if (!graphics_integration_)
+      return;
+    if (!graphics_integration_->ValidateIntegrationState()) {
+      AliasHazard hz;
+      hz.description = "Graphics layer integration state is inconsistent";
+      hazards.push_back(std::move(hz));
+    }
+    const auto stats = graphics_integration_->GetIntegrationStats();
+    if (stats.pending_reclaims > 0) {
+      LOG_F(
+        3, "[ResourceValidator] Pending reclaims: {}", stats.pending_reclaims);
+    }
+  }
+
+  [[nodiscard]] const ResourceDesc* GetDesc(ResourceHandle h) const
+  {
+    auto it = resource_descriptors_.find(h);
+    return it == resource_descriptors_.end() ? nullptr : it->second;
+  }
+
+  [[nodiscard]] bool HasWriteOverlap(
+    const ResourceLifetimeInfo& a, const ResourceLifetimeInfo& b) const
+  {
+    // Fast reject via interval overlap is assumed already done by caller
+    for (auto const& ua : a.usages)
+      if (ua.is_write_access)
+        for (auto const& ub : b.usages)
+          if (ub.is_write_access && ua.pass == ub.pass)
+            return true;
+    // If no same-pass writes, approximate using index windows for conservative
+    // detection
+    return (a.first_index <= b.last_index) && (b.first_index <= a.last_index)
+      && (HasAnyWrite(a) && HasAnyWrite(b));
+  }
+
+  [[nodiscard]] bool HasAnyWrite(const ResourceLifetimeInfo& l) const
+  {
+    return std::any_of(l.usages.begin(), l.usages.end(),
+      [](auto const& u) { return u.is_write_access; });
+  }
+
+  [[nodiscard]] std::vector<PassHandle> CollectOverlapPasses(
+    const ResourceLifetimeInfo& a, const ResourceLifetimeInfo& b) const
+  {
+    std::vector<PassHandle> passes;
+    const uint32_t begin = std::max(a.first_index, b.first_index);
+    const uint32_t end = std::min(a.last_index, b.last_index);
+    if (begin == std::numeric_limits<uint32_t>::max()
+      || end == std::numeric_limits<uint32_t>::max())
+      return passes;
+    auto collect = [&](auto const& life) {
+      for (auto const& u : life.usages) {
+        auto it = topological_order_.find(u.pass);
+        uint32_t idx
+          = it != topological_order_.end() ? it->second : u.pass.get();
+        if (idx >= begin && idx <= end) {
+          if (std::find(passes.begin(), passes.end(), u.pass) == passes.end())
+            passes.push_back(u.pass);
+        }
+      }
+    };
+    collect(a);
+    collect(b);
+    return passes;
+  }
+
+  [[nodiscard]] AliasHazard MakeOverlapHazard(ResourceHandle a,
+    ResourceHandle b, const ResourceLifetimeInfo& la,
+    const ResourceLifetimeInfo& lb, const ResourceDesc& da,
+    const ResourceDesc& db) const
+  {
+    AliasHazard hz;
+    hz.resource_a = a;
+    hz.resource_b = b;
+    hz.description = "Transient lifetime overlap: '" + da.GetDebugName()
+      + "' vs '" + db.GetDebugName() + "'";
+    hz.conflicting_passes = CollectOverlapPasses(la, lb);
+    return hz;
+  }
+
+  [[nodiscard]] AliasHazard MakeScopeHazard(ResourceHandle a, ResourceHandle b,
+    const ResourceDesc& da, const ResourceDesc& db) const
+  {
+    AliasHazard hz;
+    hz.resource_a = a;
+    hz.resource_b = b;
+    hz.description = "Scope conflict (" + ScopeString(da.GetScope()) + " vs "
+      + ScopeString(db.GetScope()) + ")";
+    return hz;
+  }
+
+  [[nodiscard]] AliasHazard MakeWriteConflictHazard(ResourceHandle a,
+    ResourceHandle b, const ResourceLifetimeInfo& la,
+    const ResourceLifetimeInfo& lb, const ResourceDesc& da,
+    const ResourceDesc& db) const
+  {
+    AliasHazard hz;
+    hz.resource_a = a;
+    hz.resource_b = b;
+    hz.description = "Overlapping write hazard: '" + da.GetDebugName() + "' & '"
+      + db.GetDebugName() + "'";
+    hz.conflicting_passes = CollectOverlapPasses(la, lb);
+    return hz;
+  }
+
+  [[nodiscard]] AliasHazard MakeIncompatibilityHazard(ResourceHandle a,
+    ResourceHandle b, const ResourceDesc& da, const ResourceDesc& db) const
+  {
+    AliasHazard hz;
+    hz.resource_a = a;
+    hz.resource_b = b;
+    hz.description = "Incompatible descriptors for aliasing: '"
+      + da.GetDebugName() + "' vs '" + db.GetDebugName() + "'";
+    return hz;
+  }
+
+  static std::string ScopeString(ResourceScope scope)
+  {
+    switch (scope) {
+    case ResourceScope::Shared:
+      return "Shared";
+    case ResourceScope::PerView:
+      return "PerView";
+    }
+    return "Unknown";
   }
 };
 
