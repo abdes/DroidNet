@@ -1,30 +1,39 @@
 # Oxygen Engine CLI Tools
 
-Professional command-line utilities for building and running CMake targets in the Oxygen Engine project.
+Professional command-line utilities for building and running CMake targets in
+the Oxygen Engine project.
 
 ## Overview
 
-The Oxygen Engine CLI tools provide an intuitive interface for developers to build and execute CMake targets with advanced features including intelligent fuzzy matching, preset integration, and robust artifact discovery. These tools streamline the development workflow by automatically handling CMake configuration, build processes, and target execution.
+The Oxygen Engine CLI tools provide an intuitive interface for developers to
+build and execute CMake targets with advanced features including intelligent
+fuzzy matching, preset integration, and robust artifact discovery. These tools
+streamline the development workflow by automatically handling CMake
+configuration, build processes, and target execution.
 
 ## Tools
 
 ### `oxyrun.ps1` - Build and Run Targets
 
-Builds and executes CMake targets with intelligent target name resolution and argument forwarding.
+Builds and executes CMake targets with intelligent target name resolution and
+argument forwarding.
 
 ### `oxybuild.ps1` - Build Targets
 
-Builds CMake targets without execution, optimized for CI/CD workflows and development automation.
+Builds CMake targets without execution, optimized for CI/CD workflows and
+development automation.
 
 ### `oxy-targets.ps1` - Shared Library
 
-Core functionality module providing CMake File API integration, preset management, and fuzzy matching capabilities.
+Core functionality module providing CMake File API integration, preset
+management, and fuzzy matching capabilities.
 
 ## Key Features
 
 ### 🎯 **Intelligent Fuzzy Matching**
 
-Never type long target names again! The tools support sophisticated pattern matching with enhanced algorithms:
+Never type long target names again! The tools support sophisticated pattern
+matching with enhanced algorithms:
 
 - **Exact Match**: `oxygen-base` matches exactly
 - **Substring Match**: `base` → `oxygen-base`
@@ -190,66 +199,29 @@ Smart executable discovery with multiple strategies:
 
 ```powershell
 # Oxygen Engine VS Code Terminal Profile
-# Guards against recursive execution
-if ($env:OXYGEN_PROFILE_LOADED) { return }
-$env:OXYGEN_PROFILE_LOADED = "1"
+Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+Enter-VsDevShell c190ff26 -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+if ($env:TERM_PROGRAM -eq "vscode") { . "$(code --locate-shell-integration-path pwsh)" }
 
-# Add tools directory to PATH for direct command access
+# Activate Python virtual environment if it exists
+$venvActivateScript = "F:\projects\.venv\Scripts\activate.ps1"
+if (Test-Path $venvActivateScript) {
+    . $venvActivateScript
+}
+
+# Helper function to add Oxygen CLI tools to PATH
 function Add-OxygenTools {
-    $toolsPath = "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli"
-    if (Test-Path $toolsPath) {
-        $env:PATH = "$toolsPath;$env:PATH"
-        Write-Host "Oxygen CLI tools loaded" -ForegroundColor Green
+    $engineRoot = "F:\projects\DroidNet\projects\Oxygen.Engine"
+    $oxygenCliPath = Join-Path $engineRoot "tools\cli"
+    if (Test-Path $oxygenCliPath) {
+        $env:PATH = "$oxygenCliPath;$env:PATH"
+        Write-Host "Added Oxygen CLI tools to PATH: $oxygenCliPath" -ForegroundColor Green
     }
 }
 
-# Helper functions for reliable access with proper parameter handling
-function oxyrun {
-    param([Parameter(ValueFromRemainingArguments = $true)]$Args)
-    $scriptPath = "$PSScriptRoot\oxyrun.ps1"
-    if (Test-Path $scriptPath) {
-        if ($Args.Count -eq 0) {
-            & $scriptPath -?
-        } else {
-            # Use Invoke-Expression for proper parameter parsing
-            $argString = ($Args | ForEach-Object {
-                if ($_ -match '^-\w') { $_ } else { "'$_'" }
-            }) -join ' '
-            $command = "& '$scriptPath' $argString"
-            Invoke-Expression $command
-        }
-    }
-}
-
-function oxybuild {
-    param([Parameter(ValueFromRemainingArguments = $true)]$Args)
-    $scriptPath = "$PSScriptRoot\oxybuild.ps1"
-    if (Test-Path $scriptPath) {
-        if ($Args.Count -eq 0) {
-            & $scriptPath -?
-        } else {
-            # Use Invoke-Expression for proper parameter parsing
-            $argString = ($Args | ForEach-Object {
-                if ($_ -match '^-\w') { $_ } else { "'$_'" }
-            }) -join ' '
-            $command = "& '$scriptPath' $argString"
-            Invoke-Expression $command
-        }
-    }
-}
-
-# Initialize environment
-Add-OxygenTools
-
-# Load Visual Studio Developer environment (optional)
-if (Get-Command "Enter-VsDevShell" -ErrorAction SilentlyContinue) {
-    Enter-VsDevShell -VsInstallPath "C:\Program Files\Microsoft Visual Studio\2022\Professional" -DevCmdArguments "-arch=x64"
-}
-
-# Activate Python virtual environment (if available)
-$venvPath = "F:\projects\.venv\Scripts\Activate.ps1"
-if (Test-Path $venvPath) { & $venvPath }
-```
+# Simple aliases for reliable argument passing
+Set-Alias -Name oxyrun -Value "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1"
+Set-Alias -Name oxybuild -Value "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxybuild.ps1"
 
 ### Configure VS Code Settings** (`.vscode/settings.json`)
 
@@ -284,34 +256,24 @@ oxyrun asyncsim -NoBuild -- --frames 10
 oxybuild gr-d3d -Config Release -DryRun
 ```
 
-### Profile Features
-
-The profile setup provides:
-
-- **Direct Command Access**: Use `oxyrun` and `oxybuild` without full paths
-- **PATH Integration**: Tools available from any directory in the terminal
-- **Environment Loading**: Automatic Visual Studio Developer environment
-- **Python Integration**: Automatic virtual environment activation
-- **Recursive Protection**: Guards against profile loading loops
-- **Reliable Fallbacks**: Helper functions work regardless of PATH state
-
 ### Troubleshooting Profile Setup
 
 If commands aren't found after setup:
 
 ```powershell
-# Check if tools are in PATH
-Get-Command oxyrun.ps1
+# Check if aliases are loaded
+Get-Alias oxyrun
+Get-Alias oxybuild
 
-# Manually add tools to PATH
-Add-OxygenTools
+# Reload the profile if needed
+. $PROFILE
 
-# Use helper functions as fallback (they handle parameters correctly)
-oxyrun asyncsim -DryRun    # Uses proper parameter parsing
-oxybuild base -Config Release      # Handles switches correctly
+# Use full paths as fallback
+& "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1" asyncsim -- -f 1 -v 1
 ```
 
-**Note**: The helper functions now use `Invoke-Expression` for proper parameter handling, ensuring switches like `-DryRun` and `-Config` work correctly.
+**Note**: The aliases provide direct access to the scripts with no intermediate
+argument processing, ensuring reliable parameter passing.
 
 ### Alternative Setup (System-wide)
 
@@ -325,43 +287,6 @@ $env:PATH += ";F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli"
 Set-Alias oxyrun "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1"
 Set-Alias oxybuild "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxybuild.ps1"
 ```
-
-## Recent Improvements
-
-### Enhanced Fuzzy Matching Algorithm (v2024.8)
-
-- **Dynamic Pattern Length**: Pattern length now scales with target complexity (2-6 characters)
-- **Intelligent Character Distribution**: Calculates optimal chars per segment (e.g., 5 segments = 1 char each + remainder)
-- **Non-Boundary Matching**: Characters can match anywhere in target names, not just at word boundaries
-- **Sequential Pattern Generation**: Creates patterns like `lish` for `LightCulling_shader` using smart distribution
-
-### Fixed VS Code Integration
-
-- **Proper Parameter Handling**: Switch parameters like `-DryRun` now work correctly through profile functions
-- **Invoke-Expression Method**: Uses proper command construction to handle all parameter types
-- **Reliable Argument Forwarding**: Target arguments and switches are parsed correctly
-
-### Improved Target Resolution
-
-- **100% Success Rate**: Comprehensive testing shows perfect pattern resolution
-- **Better Specificity**: Longer patterns for complex targets reduce ambiguity
-- **Maintained Compatibility**: All existing patterns continue to work
-
-## Safety and Security
-
-- **Conservative execution**: Only runs files with known executable extensions
-- **Path validation**: All paths are resolved and validated before use
-- **No arbitrary execution**: Never treats non-executable files as runnable
-- **User confirmation**: Interactive prompts for ambiguous target selection
-
-## Integration
-
-These tools integrate seamlessly with:
-
-- **VS Code**: Direct command access via custom PowerShell profile (see [VS Code Integration Setup](#vs-code-integration-setup))
-- **CI/CD pipelines**: Proper exit code handling and logging
-- **Development workflows**: Fast iteration with `-NoBuild` and fuzzy matching
-- **Build automation**: Scriptable with predictable behavior
 
 ## Contributing
 
