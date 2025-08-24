@@ -6,7 +6,7 @@ applyTo: '**/*.cpp;**/*.h'
 ## GENERAL RULES
 
 - Follow the Google C++ Style Guide: https://google.github.io/styleguide/cppguide.html
-- Use C++20 features and standard library only (no compatibility with older standards).
+- Use language features up to c++23 (no compatibility required with older standards).
 - Use `#pragma once` for include guards in all headers.
 - Prefix all standard library types and functions with `std::`, except for <cstdint> types.
 - Use `#include <...>` syntax for all includes.
@@ -26,9 +26,9 @@ applyTo: '**/*.cpp;**/*.h'
 - **Type Names (classes, structs, enums, typedefs):** Use UpperCamelCase. Example: `MyClass`
 - **Variable Names:** Use lower_case_with_underscores. Example: `my_variable`
 - **Constant Names:** Use kUpperCamelCase. Example: `kMaxValue`
+- **Enumerator Names:** Use kUpperCamelCase. Example: `kFirstValue`
 - **Function Names:** Use UpperCamelCase. Example: `ComputeValue()`
 - **Namespace Names:** Use all lowercase, words joined by underscores. Example: `my_namespace`
-- **Enumerator Names:** Use kUpperCamelCase. Example: `kFirstValue`
 - **Template Parameter Names:** Use UpperCamelCase or single capital letters. Example: `typename T`
 - **Macro Names:** Use all uppercase with underscores. Example: `MY_MACRO_NAME`
 - **Class Data Members:** Name like ordinary nonmember variables, but with a trailing underscore (e.g., `my_member_`). Static constant class members follow the rules for constants (e.g., `kMaxValue`).
