@@ -299,6 +299,26 @@ include(cmake/FasterBuild.cmake)
 # Print a summary of the configuration
 # ------------------------------------------------------------------------------
 
+# Detect and report C++ standard support via module
+include(cmake/DetectCxxStandards.cmake)
+
+# Small helper to print support for a standard using a prefix
+function(_report_standard prefix std_name)
+  string(TOUPPER ${prefix} _PREF)
+  set(_supported_var "${_PREF}_${std_name}_SUPPORTED")
+  set(_flag_var "${_PREF}_${std_name}_FLAG")
+  if(${${_supported_var}})
+    message(STATUS "     ${std_name}: supported (${${_flag_var}})")
+  else()
+    message(STATUS "     ${std_name}: NOT supported")
+  endif()
+endfunction()
+
+# This will detect C++ standard support and set variables
+# OXYGEN_CXX20_SUPPORTED, OXYGEN_CXX20_FLAG, OXYGEN_CXX23_SUPPORTED,
+# OXYGEN_CXX23_FLAG when <compiler> supports the respective standard
+detect_cxx_standards(OXYGEN)
+
 message(STATUS "PROJECT `${META_NAME_VERSION}`")
 message(STATUS "")
 message(STATUS "  -- Directories --")
@@ -308,12 +328,17 @@ message(STATUS "     Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "")
 message(STATUS "  -- General configuration --")
 message(STATUS "     CMake version: ${CMAKE_VERSION}")
+
 message(
   STATUS
   "     C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
 )
-message(STATUS "     Compiler flags: ${OXYGEN_COMMON_CXX_FLAGS}")
-message(STATUS "     Exe Linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
+
+_report_standard(OXYGEN CXX20)
+_report_standard(OXYGEN CXX23)
+
+message(STATUS "     Common Compiler flags: ${OXYGEN_COMMON_CXX_FLAGS}")
+message(STATUS "     Common Exe Linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "     Build system: ${CMAKE_GENERATOR}")
 message(STATUS "")
 message(STATUS "  -- Build configuration --")
