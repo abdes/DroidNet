@@ -22,21 +22,21 @@ This file outlines the target architecture and conceptual awaitables.
 
 ### 1. ThreadPool
 
-- A pool of worker threads for CPU-bound tasks.
-- Used for file reading, asset decoding, buffer packing, and any heavy computation.
-- Integrated with Corral via `co_threadpool` awaitable.
+* A pool of worker threads for CPU-bound tasks.
+* Used for file reading, asset decoding, buffer packing, and any heavy computation.
+* Integrated with Corral via `co_threadpool` awaitable.
 
 ### 2. Coroutines (Corral)
 
-- Each asset load is a coroutine that yields at each async step.
-- Corral's `co_threadpool` and `co_background` are used to offload work to the ThreadPool.
-- Coroutines can be chained for multi-stage processing.
+* Each asset load is a coroutine that yields at each async step.
+* Corral's `co_threadpool` and `co_background` are used to offload work to the ThreadPool.
+* Coroutines can be chained for multi-stage processing.
 
 ### 3. GPU Upload Queue (Copy Engine)
 
-- A thread-safe queue of upload requests.
-- A dedicated thread or coroutine dequeues requests and submits them to the GPU using the copy engine (e.g., Direct3D12/Vulkan copy queue).
-- Uses fences/events to notify coroutines when uploads are complete.
+* A thread-safe queue of upload requests.
+* A dedicated thread or coroutine dequeues requests and submits them to the GPU using the copy engine (e.g., Direct3D12/Vulkan copy queue).
+* Uses fences/events to notify coroutines when uploads are complete.
 
 ### 4. Asset Pipeline Flow (Target)
 
@@ -69,15 +69,15 @@ corral::task<GpuBuffer> load_and_upload_asset_async(ThreadPool& pool, GpuUploadQ
 
 ### ThreadPool Integration
 
-- Use Corral's `co_threadpool(pool, lambda)` to offload any CPU-bound work.
-- The coroutine will yield and resume when the work is done.
+* Use Corral's `co_threadpool(pool, lambda)` to offload any CPU-bound work.
+* The coroutine will yield and resume when the work is done.
 
 ### GPU Upload Queue
 
-- Implement a thread-safe queue for upload requests:
-  - Each request contains source data, destination GPU buffer, size, and a Corral event for completion.
-- A dedicated thread/coroutine dequeues requests and submits them to the GPU copy engine.
-- After the GPU signals upload completion (via fence or callback), the event is set, resuming the waiting coroutine.
+* Implement a thread-safe queue for upload requests:
+  * Each request contains source data, destination GPU buffer, size, and a Corral event for completion.
+* A dedicated thread/coroutine dequeues requests and submits them to the GPU copy engine.
+* After the GPU signals upload completion (via fence or callback), the event is set, resuming the waiting coroutine.
 
 ### Example: GPU Upload Awaitable
 
@@ -91,14 +91,14 @@ corral::task<void> upload_to_gpu_async(GpuUploadQueue& queue, Buffer& buffer) {
 
 ### Error Handling
 
-- Each coroutine step can throw exceptions; errors propagate naturally through the coroutine chain.
-- Use try/catch blocks within coroutines for custom error handling or fallback logic.
+* Each coroutine step can throw exceptions; errors propagate naturally through the coroutine chain.
+* Use try/catch blocks within coroutines for custom error handling or fallback logic.
 
 ### Extensibility
 
-- Add new asset types by implementing new coroutine chains.
-- Add new processing steps by inserting additional `co_threadpool` or async steps.
-- The system is agnostic to the underlying graphics API (Direct3D12, Vulkan, etc.) as long as the copy engine interface is respected.
+* Add new asset types by implementing new coroutine chains.
+* Add new processing steps by inserting additional `co_threadpool` or async steps.
+* The system is agnostic to the underlying graphics API (Direct3D12, Vulkan, etc.) as long as the copy engine interface is respected.
 
 ## Detailed Component Specifications
 
@@ -106,11 +106,11 @@ corral::task<void> upload_to_gpu_async(GpuUploadQueue& queue, Buffer& buffer) {
 
 The `UploadQueue` is responsible for managing and scheduling GPU upload operations, ensuring that data is transferred efficiently and asynchronously using the GPU copy engine. It provides:
 
-- **Thread-safe enqueueing** of upload requests from any thread or coroutine.
-- **Dedicated upload thread/coroutine** that dequeues requests and submits them to the GPU copy queue.
-- **Completion notification** using `corral::event` or similar, so coroutines can `co_await` upload completion.
-- **Batching** (optional): Multiple uploads can be batched for efficiency.
-- **Fence or callback integration**: Ensures the upload is complete before signaling.
+* **Thread-safe enqueueing** of upload requests from any thread or coroutine.
+* **Dedicated upload thread/coroutine** that dequeues requests and submits them to the GPU copy queue.
+* **Completion notification** using `corral::event` or similar, so coroutines can `co_await` upload completion.
+* **Batching** (optional): Multiple uploads can be batched for efficiency.
+* **Fence or callback integration**: Ensures the upload is complete before signaling.
 
 #### Example API
 
@@ -144,12 +144,12 @@ corral::task<void> upload_to_gpu_async(UploadQueue& queue, void* src, GpuBuffer 
 
 The `AssetLoader` orchestrates the full asset pipeline, from disk I/O to GPU upload. It:
 
-- **Splits assets into chunks** (for large assets, e.g., gLTF buffers or images)
-- **Schedules disk reads and decoding** on the ThreadPool using `co_threadpool`
-- **Prepares GPU buffers** (staging, layout, etc.)
-- **Enqueues upload requests** to the `UploadQueue`
-- **Handles dependencies** (e.g., textures, buffer views, mesh primitives)
-- **Returns a handle or structure representing the loaded asset**
+* **Splits assets into chunks** (for large assets, e.g., gLTF buffers or images)
+* **Schedules disk reads and decoding** on the ThreadPool using `co_threadpool`
+* **Prepares GPU buffers** (staging, layout, etc.)
+* **Enqueues upload requests** to the `UploadQueue`
+* **Handles dependencies** (e.g., textures, buffer views, mesh primitives)
+* **Returns a handle or structure representing the loaded asset**
 
 #### Example API
 
@@ -208,21 +208,20 @@ corral::task<GltfModel> AssetLoader::load_gltf_async(const AssetKey& key) {
 
 ## Benefits
 
-- **Performance**: Maximizes CPU and GPU utilization, minimizes stalls.
-- **Responsiveness**: Main/game thread is never blocked by asset loading or uploads.
-- **Simplicity**: Coroutine-based code is easy to read, write, and maintain.
-- **Scalability**: Handles many concurrent asset loads efficiently.
+* **Performance**: Maximizes CPU and GPU utilization, minimizes stalls.
+* **Responsiveness**: Main/game thread is never blocked by asset loading or uploads.
+* **Simplicity**: Coroutine-based code is easy to read, write, and maintain.
+* **Scalability**: Handles many concurrent asset loads efficiently.
 
 ## Dependencies
 
-- [Corral coroutine library](https://github.com/hudson-trading/corral)
-- C++20 compiler
-- ThreadPool implementation (can use std::thread or a third-party pool)
-- Graphics API with copy engine support (Direct3D12, Vulkan, etc.)
+* [Corral coroutine library](https://github.com/hudson-trading/corral)
+* ThreadPool implementation (can use std::thread or a third-party pool)
+* Graphics API with copy engine support (Direct3D12, Vulkan, etc.)
 
 ## Example: Asset Pipeline Diagram
 
-```
+```text
 [Disk I/O] --(ThreadPool)--> [Decode/Process] --(ThreadPool)--> [Buffer Prep] --(ThreadPool)--> [GPU Upload] --(Copy Engine)--> [Ready]
 ```
 
@@ -262,9 +261,9 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
 
 **Note:**
 
-- The ThreadPool is not used for file I/O, which is handled efficiently with coroutines and cooperative concurrency.
-- The ThreadPool is justified by the need to perform CPU-intensive asset transformation (e.g., decoding, format conversion, buffer packing) and to prepare/upload data to the GPU without blocking the main engine thread.
-- The GPU Upload Queue is decoupled from asset loading and transformation, ensuring that uploads are batched and submitted asynchronously.
+* The ThreadPool is not used for file I/O, which is handled efficiently with coroutines and cooperative concurrency.
+* The ThreadPool is justified by the need to perform CPU-intensive asset transformation (e.g., decoding, format conversion, buffer packing) and to prepare/upload data to the GPU without blocking the main engine thread.
+* The GPU Upload Queue is decoupled from asset loading and transformation, ensuring that uploads are batched and submitted asynchronously.
 
 ---
 
@@ -272,29 +271,29 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
 
 ### 1. 🧩 Asset Manager
 
-- Central entry point for loading, tracking, and unloading assets.
-- Coroutine-based async API:
+* Central entry point for loading, tracking, and unloading assets.
+* Coroutine-based async API:
 
   ```cpp
   co_await assetManager.LoadAsync<ModelAsset>("knight.model");
   ```
 
-- Responsibilities:
-  - Route requests to appropriate loaders
-  - Manage asset lifecycle and reference counting
-  - Handle hot-reloading and versioning
-  - Maintain registry of loaded assets and their states
+* Responsibilities:
+  * Route requests to appropriate loaders
+  * Manage asset lifecycle and reference counting
+  * Handle hot-reloading and versioning
+  * Maintain registry of loaded assets and their states
 
 ---
 
 ### 2. 🔌 Asset Type Loaders
 
-- One loader per asset type (e.g., geometry, texture, shader, material).
-- Each loader:
-  - Parses and deserializes its asset format
-  - Produces CPU-side asset representations
-  - Optionally schedules GPU upload tasks
-- Registered via:
+* One loader per asset type (e.g., geometry, texture, shader, material).
+* Each loader:
+  * Parses and deserializes its asset format
+  * Produces CPU-side asset representations
+  * Optionally schedules GPU upload tasks
+* Registered via:
 
   ```cpp
   assetManager.RegisterLoader<GeometryAsset>(std::make_unique<GeometryLoader>());
@@ -304,41 +303,41 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
 
 ### 3. 🔄 Asset I/O Scheduler
 
-- Manages asynchronous file I/O and decompression using coroutines and a thread pool.
-- Handles:
-  - File reads
-  - Format decoding (e.g., DDS, glTF, custom binary)
-  - Dependency resolution (e.g., material → texture)
-- Supports prioritization and cancellation for streaming
+* Manages asynchronous file I/O and decompression using coroutines and a thread pool.
+* Handles:
+  * File reads
+  * Format decoding (e.g., DDS, glTF, custom binary)
+  * Dependency resolution (e.g., material → texture)
+* Supports prioritization and cancellation for streaming
 
 ---
 
 ### 4. 🚀 GPU Upload Queue
 
-- Dedicated queue for GPU resource creation (textures, buffers, etc.).
-- Decoupled from asset loading to:
-  - Avoid blocking I/O threads
-  - Batch uploads efficiently
-  - Respect residency budgets and upload bandwidth
-- Integrated with the renderer’s frame graph or resource allocator
+* Dedicated queue for GPU resource creation (textures, buffers, etc.).
+* Decoupled from asset loading to:
+  * Avoid blocking I/O threads
+  * Batch uploads efficiently
+  * Respect residency budgets and upload bandwidth
+* Integrated with the renderer’s frame graph or resource allocator
 
 ---
 
 ### 5. 🧠 Asset Cache and Deduplication
 
-- Central cache maps asset keys to loaded instances:
+* Central cache maps asset keys to loaded instances:
 
   ```cpp
   std::unordered_map<AssetKey, std::shared_ptr<Asset>>
   ```
 
-- Deduplication strategies:
-  - File-level: same path or GUID → same asset
-  - Resource-level: identical texture data → same GPU resource
-- Cache supports:
-  - Reference counting
-  - LRU or usage-based eviction
-  - Hot-reload invalidation
+* Deduplication strategies:
+  * File-level: same path or GUID → same asset
+  * Resource-level: identical texture data → same GPU resource
+* Cache supports:
+  * Reference counting
+  * LRU or usage-based eviction
+  * Hot-reload invalidation
 
 ---
 
@@ -346,7 +345,7 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
 
 ### Asset Keys
 
-- Use a structured key for flexibility and versioning:
+* Use a structured key for flexibility and versioning:
 
   ```cpp
   struct AssetKey {
@@ -359,9 +358,9 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
   static_assert(sizeof(AssetKey) == 16);
   ```
 
-- The 'variant' field is a 32-bit project-defined mask/flag, not interpreted by the engine, and not used for LODs.
-- LODs are always built-in to geometry assets.
-- Geometry = one or more LODs (indexed 0..N-1), each LOD is a Mesh, each Mesh is one or more MeshViews (sub-meshes).
+* The 'variant' field is a 32-bit project-defined mask/flag, not interpreted by the engine, and not used for LODs.
+* LODs are always built-in to geometry assets.
+* Geometry = one or more LODs (indexed 0..N-1), each LOD is a Mesh, each Mesh is one or more MeshViews (sub-meshes).
 
 ---
 
@@ -393,9 +392,9 @@ This design outlines a modular, asynchronous, and streaming-aware asset manageme
 
 ## 🛠 Additional Considerations
 
-- GPU residency tracking: integrate with a residency manager for eviction and prefetching.
-- Streaming prioritization: use distance-to-camera or importance heuristics.
-- Dependency graph: track asset dependencies for hot-reloading and unloading.
-- Editor integration: expose asset states, references, and live reload feedback.
+* GPU residency tracking: integrate with a residency manager for eviction and prefetching.
+* Streaming prioritization: use distance-to-camera or importance heuristics.
+* Dependency graph: track asset dependencies for hot-reloading and unloading.
+* Editor integration: expose asset states, references, and live reload feedback.
 
 ---
