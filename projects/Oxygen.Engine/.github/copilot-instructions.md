@@ -10,6 +10,12 @@ When answering:
 
 Evaluate claims and assumptions, ask a focused clarification question when necessary, and prefer concrete, testable recommendations over vague advice.
 
+## When in Doubt or New to a Module
+- Check for a `README.md` in the relevant subsystem directory.
+- Check for a doc file in `Docs` subdirectory of the relevant subsystem directory.
+- Check for a doc file in the project `design/*.md`.
+- Follow the patterns in existing code and tests for consistency.
+
 ## Architecture & Major Patterns
 
 - **Modular Subsystems**: Graphics, Scene, Data, Renderer, etc., each with a clear API and local `README.md`. Refer to the module's README.md when implementing or modifying functionality within that module.
@@ -21,24 +27,10 @@ Evaluate claims and assumptions, ask a focused clarification question when neces
 - **Command, Factory, Pool Patterns**: Used for render operations, resource creation, and memory management.
 - **PIMPL Idiom**: Used for ABI stability and encapsulation (see `Clap/Internal/Args.h`).
 - **Coroutine-Driven Frame Execution**: Frame logic is asynchronous, with explicit suspension/resumption points for GPU/CPU sync.
-
-## Developer Workflows
-- **Build**: Use CMake with presets and Conan. Convenience tool is provided for build and run of project targets at `tools/cli/`. Use `oxybuild` and `oxyrun` commands with the target name. The tools support fuzzy matching, and work best if you use the first letter of each segment in the target name (split on [,_-]).
-- **Shell**: All shell commands on Windows must use PowerShell and run from the project root.
-
-## Coding & Documentation Conventions
-- **C++23**: Use modern C++23 features; avoid legacy patterns and do not write code to be compatible with older standards.
-- **Naming**: strictly follow instructions in `.github/instructions/cpp_coding_style.instructions.md`.
-- **Doc Comments**: strictly follow instructions in `.github/instructions/doc_comments.instructions.md`.
-- **Testing**: Use Google Test for all tests you write and strictly follow the testing conventions outlined in `.github/instructions/unit_tests.instructions.md`.
-
-## Project-Specific Patterns & Examples
 - **Oxygen Base**: Several low level types, utilities and abstractions are provided in `src/Oxygen/Base`. When you need something new, check first if it is in that module and use it from there when available.
 - **Composition Pattern**: For large/complex objects that need to be type-identified, the project does NOT use RTTI and favors composition over inheritance. `Composition` uses the `src/Oxygen/Composition` module. Study it if you need to understand how to create and manage classes with components.
 - **Component/Handle Patterns**: Scene nodes, resources, and descriptors use handle/view and component-based patterns for safety and extensibility.
 
-## When in Doubt or New to a Module
-- Check for a `README.md` in the relevant subsystem directory.
-- Check for a doc file in `Docs` subdirectory of the relevant subsystem directory.
-- Check for a doc file in the project `design/*.md`.
-- Follow the patterns in existing code and tests for consistency.
+## Developer Workflows
+- **Build**: Use CMake with presets and Conan. Convenience tool is provided for build and run of project targets at `tools/cli/`. Use `oxybuild` and `oxyrun` commands with the target name. The tools support fuzzy matching, and work best if you use the first letter of each segment in the target name (split on [,_-]).
+- **Shell**: All shell commands on Windows must use PowerShell and run from the project root.
