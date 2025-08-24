@@ -72,6 +72,7 @@ m_gtest_program(
     "StateMachine_doc_test.cpp"
 )
 m_gtest_program(NamedType SOURCES "NamedType_test.cpp")
+m_gtest_program(ObserverPtr SOURCES "ObserverPtr_test.cpp")
 
 # -- Catch2 Test Programs -------------------------------------------------------
 

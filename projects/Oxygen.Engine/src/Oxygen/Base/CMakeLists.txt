@@ -65,6 +65,7 @@ set(
   "NamedType.h"
   "NoInline.h"
   "NoStd.h"
+  "ObserverPtr.h"
   "Platforms.h"
   "Resource.h"
   "ResourceHandle.h"
