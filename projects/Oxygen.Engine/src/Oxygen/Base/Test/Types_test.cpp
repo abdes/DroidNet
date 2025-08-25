@@ -7,7 +7,6 @@
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
-#include <Oxygen/Base/Types/Viewport.h>
 
 #include <cstdint>
 #include <numbers>
@@ -38,7 +37,6 @@ NOLINT_TEST(CommonTypes, HaveToString)
   CHECK_HAS_TO_STRING(SubPixelBounds);
   CHECK_HAS_TO_STRING(PixelMotion);
   CHECK_HAS_TO_STRING(SubPixelMotion);
-  CHECK_HAS_TO_STRING(Viewport);
   CHECK_HAS_TO_STRING(Axis1D);
   CHECK_HAS_TO_STRING(Axis2D);
 }

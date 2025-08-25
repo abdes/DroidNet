@@ -36,9 +36,7 @@ using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::Scissors;
 using oxygen::graphics::Texture;
-using oxygen::graphics::ViewPort;
 
 ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
   : RenderPass(config ? config->debug_name : "ShaderPass")

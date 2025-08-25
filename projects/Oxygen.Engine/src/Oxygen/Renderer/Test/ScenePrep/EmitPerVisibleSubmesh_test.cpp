@@ -71,12 +71,12 @@ protected:
 
   void ConfigurePerspectiveView(glm::vec3 eye, glm::vec3 center,
     glm::vec3 up = { 0, 1, 0 }, float fovy_deg = 60.0f, float aspect = 1.0f,
-    float znear = 0.1f, float zfar = 1000.0f, int viewport = 1000)
+    float znear = 0.1f, float zfar = 1000.0f, float viewport = 1000.0f)
   {
     View::Params p {};
     p.view = glm::lookAt(eye, center, up);
     p.proj = glm::perspective(glm::radians(fovy_deg), aspect, znear, zfar);
-    p.viewport = { 0, 0, viewport, viewport };
+    p.viewport = { 0.0f, 0.0f, viewport, viewport };
     p.has_camera_position = true;
     p.camera_position = eye;
     view_ = View { p };

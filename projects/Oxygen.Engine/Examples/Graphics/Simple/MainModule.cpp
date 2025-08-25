@@ -18,6 +18,7 @@
 #include <Oxygen/Platform/Platform.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -323,7 +324,12 @@ auto EnsureMainCamera(const int width, const int height) -> void
     cam.SetAspectRatio(aspect);
     cam.SetNearPlane(0.1F);
     cam.SetFarPlane(600.0F);
-    cam.SetViewport(glm::ivec4 { 0, 0, width, height });
+    cam.SetViewport(oxygen::ViewPort { .top_left_x = 0.0f,
+      .top_left_y = 0.0f,
+      .width = static_cast<float>(width),
+      .height = static_cast<float>(height),
+      .min_depth = 0.0f,
+      .max_depth = 1.0f });
   }
 }
 

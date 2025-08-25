@@ -9,10 +9,10 @@
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
 #include <Oxygen/Base/VariantHelpers.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>

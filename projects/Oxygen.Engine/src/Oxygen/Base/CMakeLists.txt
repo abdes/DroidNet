@@ -81,7 +81,6 @@ set(
   "TypeList.h"
   "Types/Geometry.h"
   "Types/Overload.h"
-  "Types/Viewport.h"
   "Unreachable.h"
   "VariantHelpers.h"
   "Windows/ComError.h"

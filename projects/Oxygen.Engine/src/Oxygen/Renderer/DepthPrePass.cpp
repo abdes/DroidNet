@@ -12,6 +12,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -22,14 +24,14 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+using oxygen::Scissors;
+using oxygen::ViewPort;
 using oxygen::engine::DepthPrePass;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Color;
@@ -38,9 +40,7 @@ using oxygen::graphics::Framebuffer;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::Scissors;
 using oxygen::graphics::Texture;
-using oxygen::graphics::ViewPort;
 
 DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
   : RenderPass(config->debug_name)
