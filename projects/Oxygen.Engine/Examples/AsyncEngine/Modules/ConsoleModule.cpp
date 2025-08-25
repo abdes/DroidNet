@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ConsoleModule.h"
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::examples::asyncsim {
 
@@ -16,8 +17,11 @@ ConsoleModule::ConsoleModule()
 {
 }
 
-auto ConsoleModule::Initialize(ModuleContext& context) -> co::Co<>
+auto ConsoleModule::Initialize(AsyncEngineSimulator& engine) -> co::Co<>
 {
+  // Store engine reference for later use
+  engine_ = observer_ptr { &engine };
+
   LOG_F(INFO, "[Console] Initializing console system");
 
   // Register built-in commands
@@ -45,7 +49,7 @@ auto ConsoleModule::Initialize(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto ConsoleModule::OnInput(ModuleContext& context) -> co::Co<>
+auto ConsoleModule::OnInput(FrameContext& context) -> co::Co<>
 {
   LOG_F(3, "[Console] Processing console input for frame {}",
     context.GetFrameIndex());
@@ -60,7 +64,7 @@ auto ConsoleModule::OnInput(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto ConsoleModule::OnAsyncWork(ModuleContext& context) -> co::Co<>
+auto ConsoleModule::OnAsyncWork(FrameContext& context) -> co::Co<>
 {
   LOG_F(3, "[Console] Processing async console work for frame {}",
     context.GetFrameIndex());
@@ -70,7 +74,7 @@ auto ConsoleModule::OnAsyncWork(ModuleContext& context) -> co::Co<>
     auto command = pending_commands_.front();
     pending_commands_.pop_front();
 
-    co_await context.GetThreadPool().Run(
+    co_await context.GetThreadPool()->Run(
       [this, command](auto /*cancel_token*/) {
         std::this_thread::sleep_for(100us); // Simulate command processing
         ExecuteCommand(command);
@@ -80,10 +84,10 @@ auto ConsoleModule::OnAsyncWork(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto ConsoleModule::OnDetachedWork(ModuleContext& context) -> co::Co<>
+auto ConsoleModule::OnDetachedWork(FrameContext& context) -> co::Co<>
 {
   // Background console services (log file management, command history, etc.)
-  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(20us); // Minimal background work
 
     // Simulate background console maintenance
@@ -99,7 +103,7 @@ auto ConsoleModule::OnDetachedWork(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto ConsoleModule::Shutdown(ModuleContext& context) -> co::Co<>
+auto ConsoleModule::Shutdown() -> co::Co<>
 {
   LOG_F(INFO, "[Console] Shutting down console system");
 

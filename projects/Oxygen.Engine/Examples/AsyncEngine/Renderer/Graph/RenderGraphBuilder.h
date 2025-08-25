@@ -6,62 +6,39 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include "../../FrameContext.h"
+#include "../../Types/ViewIndex.h"
 #include "../Passes/RenderPass.h"
+#include "BuildPipeline.h"
 #include "ExecutionContext.h"
+#include "RenderGraphStrategies.h"
 #include "Resource.h"
 #include "Scheduler.h"
 #include "Types.h"
 
-// Hash function for (ResourceHandle, size_t) pairs
-namespace std {
-template <>
-struct hash<std::pair<oxygen::examples::asyncsim::ResourceHandle, size_t>> {
-  auto operator()(
-    const std::pair<oxygen::examples::asyncsim::ResourceHandle, size_t>& p)
-    const -> std::size_t
-  {
-    return std::hash<uint32_t> {}(p.first.get())
-      ^ (std::hash<size_t> {}(p.second) << 1);
-  }
-};
-
-// Hash function for (PassHandle, size_t) pairs
-template <>
-struct hash<std::pair<oxygen::examples::asyncsim::PassHandle, size_t>> {
-  auto operator()(
-    const std::pair<oxygen::examples::asyncsim::PassHandle, size_t>& p) const
-    -> std::size_t
-  {
-    return std::hash<uint32_t> {}(p.first.get())
-      ^ (std::hash<size_t> {}(p.second) << 1);
-  }
-};
-}
+#include <Oxygen/Base/Hash.h>
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::examples::asyncsim {
-class ModuleContext;
-class GraphicsLayerIntegration;
+class FrameContext;
 class RenderGraphValidator; // base interface
 class RenderGraphScheduler;
-class ResourceAliasValidator;
-
-// Factory for resource alias validator
-auto CreateAsyncEngineResourceValidator(GraphicsLayerIntegration* integration)
-  -> std::unique_ptr<ResourceAliasValidator>;
-
-// Factory function (defined in Validator.cpp) returns derived async validator
-auto CreateAsyncEngineRenderGraphValidator()
-  -> std::unique_ptr<RenderGraphValidator>;
-auto CreateAsyncEngineRenderGraphScheduler()
-  -> std::unique_ptr<RenderGraphScheduler>;
+class RenderGraphCache;
+// ResourceAliasValidator and its factory are internal to the
+// AliasLifetimeAnalysis
+auto CreateAsyncRenderGraphValidator() -> std::unique_ptr<RenderGraphValidator>;
+auto CreateAsyncRenderGraphScheduler() -> std::unique_ptr<RenderGraphScheduler>;
+// Create default render graph cache for engine
+auto CreateAsyncRenderGraphCache() -> std::unique_ptr<RenderGraphCache>;
 }
 
 namespace oxygen::examples::asyncsim {
@@ -69,17 +46,20 @@ namespace oxygen::examples::asyncsim {
 // Forward declarations
 class RenderGraph;
 
+// Build context made available to pipeline phases and strategies. Kept small
+// and frame-local (non-owning pointers).
+struct BuildContext {
+  RenderGraphBuilder* builder { nullptr };
+  RenderGraph* render_graph { nullptr };
+  FrameContext* frame_context { nullptr };
+};
+
 //! Main builder interface for constructing render graphs
 /*!
  Provides a fluent API for creating resources, passes, and configuring
- multi-view rendering. The builder validates and optimizes the graph
- during construction.
-
- Enhanced with AsyncEngine integration for:
- - ModuleContext integration for cross-module data access
- - Thread-safety for ModulePhases::ParallelWork
- - GraphicsLayer resource lifetime management
- */
+ rendering with any number of views. The builder validates and optimizes the
+ graph during construction.
+*/
 class RenderGraphBuilder {
 public:
   RenderGraphBuilder() = default;
@@ -91,52 +71,19 @@ public:
   RenderGraphBuilder(RenderGraphBuilder&&) = default;
   auto operator=(RenderGraphBuilder&&) -> RenderGraphBuilder& = default;
 
-  // === ASYNCENGINE INTEGRATION ===
+  // === RENDER GRAPH BUILDER API ===
 
-  //! Set module context for engine integration
-  auto SetModuleContext(ModuleContext* module_context) -> void
-  {
-    module_context_ = module_context;
-  }
+  //! Begin building a render graph for the given frame context
+  /*!
+   Must be called before any other operations. Initializes the builder
+   with frame context for this frame.
 
-  //! Set graphics integration for resource management
-  auto SetGraphicsIntegration(GraphicsLayerIntegration* integration) -> void
-  {
-    graphics_integration_ = integration;
-  }
-
-  //! Check if AsyncEngine integration is available
-  [[nodiscard]] auto HasAsyncEngineIntegration() const -> bool
-  {
-    return module_context_ != nullptr && graphics_integration_ != nullptr;
-  }
-
-  //! Enable thread-safe mode for parallel work phases
-  auto SetThreadSafeMode(bool thread_safe) -> void
-  {
-    is_thread_safe_ = thread_safe;
-  }
-
-  //! Check if builder is in thread-safe mode
-  [[nodiscard]] auto IsThreadSafe() const -> bool { return is_thread_safe_; }
-
-  //! Set the frame context for this render graph
-  auto SetFrameContext(const FrameContext& context) -> void
-  {
-    frame_context_ = context;
-  }
-
-  //! Enable or disable multi-view rendering
-  auto EnableMultiViewRendering(bool enabled) -> void
-  {
-    multi_view_enabled_ = enabled;
-  }
-
-  //! Inject pass cost profiler to be attached to final graph
-  auto SetPassCostProfiler(std::shared_ptr<PassCostProfiler> profiler) -> void
-  {
-    pass_cost_profiler_ = std::move(profiler);
-  }
+   @param context The frame context for this frame
+   @warning Must be called before adding any resources or passes
+   @note Graphics integration should be set via SetGraphicsIntegration() before
+   calling this
+   */
+  auto BeginGraph(FrameContext& context) -> void;
 
   //! Create a texture resource
   auto CreateTexture(const std::string& name, TextureDesc desc,
@@ -149,11 +96,6 @@ public:
     resource_desc->SetDebugName(name);
     resource_desc->SetLifetime(lifetime);
     resource_desc->SetScope(scope);
-
-    // Set graphics integration for AsyncEngine resource management
-    if (graphics_integration_) {
-      resource_desc->SetGraphicsIntegration(graphics_integration_);
-    }
 
     resource_descriptors_[handle] = std::move(resource_desc);
     return handle;
@@ -170,11 +112,6 @@ public:
     resource_desc->SetDebugName(name);
     resource_desc->SetLifetime(lifetime);
     resource_desc->SetScope(scope);
-
-    // Set graphics integration for AsyncEngine resource management
-    if (graphics_integration_) {
-      resource_desc->SetGraphicsIntegration(graphics_integration_);
-    }
 
     resource_descriptors_[handle] = std::move(resource_desc);
     return handle;
@@ -269,7 +206,7 @@ public:
   }
 
   //! Restrict to a specific view
-  auto RestrictToView(size_t view_index) -> RenderGraphBuilder&
+  auto RestrictToView(ViewIndex view_index) -> RenderGraphBuilder&
   {
     restricted_view_index_ = view_index;
     return *this;
@@ -285,6 +222,49 @@ public:
 
   //! Build the final render graph
   auto Build() -> std::unique_ptr<RenderGraph>;
+
+  // Internal: run configured build pipeline phases
+  auto RunBuildPipeline(BuildContext& ctx) -> std::expected<void, PhaseError>;
+
+  // Run registered optimization strategies (invoked by build phases)
+  auto RunOptimizationStrategies(RenderGraph* render_graph) -> void;
+
+  // Strategy registration: allow injection of optimization & analysis
+  // strategies. Stored as polymorphic unique_ptrs to avoid exposing
+  // implementation details.
+  auto RegisterOptimizationStrategy(std::unique_ptr<IGraphOptimization> s)
+    -> void;
+  auto ClearOptimizationStrategies() -> void;
+
+  // Public wrappers for use by pipeline phases. These call the private
+  // implementations and maintain encapsulation for external users.
+  auto RunProcessViewConfiguration(RenderGraph* render_graph) -> void
+  {
+    ProcessViewConfiguration(render_graph);
+  }
+  auto RunProcessPassesWithViewFiltering(RenderGraph* render_graph) -> void
+  {
+    ProcessPassesWithViewFiltering(render_graph);
+  }
+  auto RunOptimizeSharedPerViewResources(RenderGraph* render_graph) -> void
+  {
+    OptimizeSharedPerViewResources(render_graph);
+  }
+  // Per-view helpers (public wrappers for pipeline/service use)
+  auto RunCreatePerViewResources(ResourceHandle base, const ResourceDesc& d)
+    -> void
+  {
+    CreatePerViewResources(base, d);
+  }
+  auto RunCreatePerViewPasses(
+    PassHandle base, RenderPass* base_pass, RenderGraph* render_graph) -> void
+  {
+    CreatePerViewPasses(base, base_pass, render_graph);
+  }
+  auto RunDetermineActiveViews() -> std::vector<ViewIndex>
+  {
+    return DetermineActiveViews();
+  }
 
   //! (Phase 2) Optimize per-view duplicated read-only resources into a single
   //! shared resource when safe.
@@ -323,16 +303,11 @@ public:
     return (it != passes_.end()) ? it->second.get() : nullptr;
   }
 
-  //! Get frame context
-  [[nodiscard]] auto GetFrameContext() const -> const FrameContext&
+  //! Get mutable pass pointer by handle for internal phases/services
+  [[nodiscard]] auto GetPassMutable(PassHandle handle) -> RenderPass*
   {
-    return frame_context_;
-  }
-
-  //! Check if multi-view rendering is enabled
-  [[nodiscard]] auto IsMultiViewEnabled() const -> bool
-  {
-    return multi_view_enabled_;
+    auto it = passes_.find(handle);
+    return (it != passes_.end()) ? it->second.get() : nullptr;
   }
 
   //! Get all resource handles
@@ -376,8 +351,20 @@ public:
   }
 
 private:
-  //! Process multi-view configuration and create per-view resources
-  auto ProcessMultiViewConfiguration(RenderGraph* render_graph) -> void;
+  //! Enable thread-safe mode for parallel work phases (engine internal)
+  auto SetThreadSafeMode(bool thread_safe) -> void
+  {
+    is_thread_safe_ = thread_safe;
+  }
+
+  //! Inject pass cost profiler to be attached to final graph (engine internal)
+  auto SetPassCostProfiler(std::shared_ptr<PassCostProfiler> profiler) -> void
+  {
+    pass_cost_profiler_ = std::move(profiler);
+  }
+
+  //! Process view configuration and create per-view resources
+  auto ProcessViewConfiguration(RenderGraph* render_graph) -> void;
 
   //! Process passes with view filtering applied
   auto ProcessPassesWithViewFiltering(RenderGraph* render_graph) -> void;
@@ -397,18 +384,19 @@ private:
     -> std::unordered_map<PassHandle, std::vector<PassHandle>>;
 
   //! Determine which views are active based on filters
-  [[nodiscard]] auto DetermineActiveViews() -> std::vector<size_t>;
+  [[nodiscard]] auto DetermineActiveViews() -> std::vector<ViewIndex>;
 
   //! Check if a pass should be executed for current view configuration
   [[nodiscard]] auto ShouldExecutePassForViews(const RenderPass& pass) const
     -> bool;
 
   //! Remap resource handles in a pass to view-specific variants
-  auto RemapResourceHandlesForView(RenderPass* pass, size_t view_index) -> void;
+  auto RemapResourceHandlesForView(RenderPass* pass, ViewIndex view_index)
+    -> void;
 
   //! Get view-specific resource handle
   [[nodiscard]] auto GetViewSpecificResourceHandle(ResourceHandle base_handle,
-    size_t view_index) const -> std::optional<ResourceHandle>;
+    ViewIndex view_index) const -> std::optional<ResourceHandle>;
 
   //! Get next unique resource handle
   auto GetNextResourceHandle() -> ResourceHandle
@@ -423,10 +411,6 @@ private:
   }
 
 private:
-  // Core state
-  FrameContext frame_context_;
-  bool multi_view_enabled_ { false };
-
   // Resource management
   std::unordered_map<ResourceHandle, std::unique_ptr<ResourceDesc>>
     resource_descriptors_;
@@ -439,26 +423,37 @@ private:
 
   // View configuration
   bool iterate_all_views_ { false };
-  std::optional<size_t> restricted_view_index_;
-  std::function<bool(const ViewContext&)> view_filter_;
+  std::optional<ViewIndex> restricted_view_index_;
+  std::function<bool(const ViewInfo&)> view_filter_;
 
-  // Multi-view state tracking
-  std::vector<size_t> active_view_indices_;
-  std::unordered_map<std::pair<ResourceHandle, size_t>, ResourceHandle>
+  // View state tracking
+  std::vector<ViewIndex> active_view_indices_;
+  std::unordered_map<std::pair<ResourceHandle, ViewIndex>, ResourceHandle,
+    PairHash<ResourceHandle, ViewIndex>>
     per_view_resource_mapping_;
   // Map (base pass handle, view_index) -> cloned per-view pass handle
-  std::unordered_map<std::pair<PassHandle, size_t>, PassHandle>
+  std::unordered_map<std::pair<PassHandle, ViewIndex>, PassHandle,
+    PairHash<PassHandle, ViewIndex>>
     per_view_pass_mapping_;
   // Track which base pass handles were expanded into per-view clones
   std::unordered_set<PassHandle> expanded_per_view_passes_;
 
   // AsyncEngine integration
-  ModuleContext* module_context_ { nullptr };
-  GraphicsLayerIntegration* graphics_integration_ { nullptr };
   bool is_thread_safe_ { false };
+  FrameContext* frame_context_ { nullptr };
 
   // Adaptive scheduling instrumentation
   std::shared_ptr<PassCostProfiler> pass_cost_profiler_;
+  // Registered optimization strategies
+  std::vector<std::unique_ptr<IGraphOptimization>> optimization_strategies_;
+  // Optional injected scheduler & cache providers (ownership by builder)
+  std::unique_ptr<RenderGraphScheduler> scheduler_;
+  std::unique_ptr<RenderGraphCache> render_graph_cache_;
+
+public:
+  // Scheduler / cache registration
+  auto RegisterScheduler(std::unique_ptr<RenderGraphScheduler> s) -> void;
+  auto RegisterRenderGraphCache(std::unique_ptr<RenderGraphCache> c) -> void;
 };
 
 } // namespace oxygen::examples::asyncsim

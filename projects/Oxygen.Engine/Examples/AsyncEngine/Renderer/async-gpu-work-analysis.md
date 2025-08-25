@@ -68,7 +68,7 @@ class CommandQueue {
 ```cpp
 namespace oxygen::examples::asyncsim {
 
-class AsyncEngineRenderGraph {
+class AsyncRenderGraph {
 public:
     //! Execute render graph with async GPU coordination
     auto Execute(ModuleContext& context) -> co::Co<> override {

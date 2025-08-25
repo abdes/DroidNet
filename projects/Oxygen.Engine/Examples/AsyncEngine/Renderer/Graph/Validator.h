@@ -11,14 +11,14 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../../ModuleContext.h"
+#include "../../FrameContext.h"
 #include "../Passes/RenderPass.h"
 #include "Resource.h"
 #include "Types.h"
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::examples::asyncsim {
-class ModuleContext;
+class FrameContext;
 }
 
 namespace oxygen::examples::asyncsim {
@@ -40,9 +40,9 @@ enum class ValidationErrorType : uint32_t {
   ResourceLifetimeViolation, //!< Resource accessed outside its lifetime
   ResourceAliasHazard, //!< Dangerous resource aliasing detected
 
-  // Multi-view errors
+  // View errors
   ViewScopeViolation, //!< Pass scope doesn't match view configuration
-  ViewContextMissing, //!< Required view context not provided
+  ViewInfoMissing, //!< Required view context not provided
 
   // Performance warnings
   SuboptimalScheduling, //!< Scheduling could be improved
@@ -131,7 +131,7 @@ struct ValidationResult {
 //! Interface for render graph validation
 /*!
  Provides comprehensive validation of render graph structure, resource usage,
- dependencies, and multi-view configuration. Reports detailed error information
+ dependencies, and view configuration. Reports detailed error information
  with actionable feedback.
 
  Enhanced with AsyncEngine integration for proper error reporting through
@@ -151,7 +151,7 @@ public:
   // === ASYNCENGINE INTEGRATION ===
 
   //! Set module context for AsyncEngine error reporting integration
-  auto SetModuleContext(ModuleContext* module_context) -> void
+  auto SetModuleContext(FrameContext* module_context) -> void
   {
     module_context_ = module_context;
   }
@@ -209,16 +209,16 @@ public:
     return result;
   }
 
-  //! Validate multi-view configuration
-  [[nodiscard]] virtual auto ValidateMultiView(
-    const FrameContext& frame_context) -> ValidationResult
+  //! Validate view configuration
+  [[nodiscard]] virtual auto ValidateViews(const FrameContext& frame_context)
+    -> ValidationResult
   {
     ValidationResult result;
 
     // Basic validation
-    if (frame_context.views.empty()) {
-      result.AddError(ValidationError { ValidationErrorType::ViewContextMissing,
-        "No views configured for multi-view rendering" });
+    if (frame_context.GetViews().empty()) {
+      result.AddError(ValidationError { ValidationErrorType::ViewInfoMissing,
+        "No views configured forrendering" });
     }
 
     return result;
@@ -333,7 +333,7 @@ protected:
   size_t memory_pressure_threshold_ { 1024 * 1024 * 1024 }; // 1GB
 
   // AsyncEngine integration
-  ModuleContext* module_context_ { nullptr };
+  FrameContext* module_context_ { nullptr };
 };
 
 //! AsyncEngine-specific render graph validator
@@ -341,9 +341,9 @@ protected:
  Enhanced validator with AsyncEngine integration for cross-module validation,
  graphics layer compatibility checking, and performance optimization.
  */
-class AsyncEngineRenderGraphValidator : public RenderGraphValidator {
+class AsyncRenderGraphValidator : public RenderGraphValidator {
 public:
-  AsyncEngineRenderGraphValidator() = default;
+  AsyncRenderGraphValidator() = default;
 
   [[nodiscard]] auto ValidateGraph(const RenderGraphBuilder& builder)
     -> ValidationResult override;
@@ -351,7 +351,6 @@ public:
 
 //! Factory function to create AsyncEngine validator
 // Unified factory returning base interface pointer
-auto CreateAsyncEngineRenderGraphValidator()
-  -> std::unique_ptr<RenderGraphValidator>;
+auto CreateAsyncRenderGraphValidator() -> std::unique_ptr<RenderGraphValidator>;
 
 } // namespace oxygen::examples::asyncsim

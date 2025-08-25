@@ -146,11 +146,37 @@ public:
   }
 
   //! Get cache statistics
+  // Structured stats exposed to callers for testing and diagnostics
+  struct RenderGraphCacheStats {
+    size_t entries { 0 };
+    size_t memory_usage { 0 };
+    uint64_t total_requests { 0 };
+    uint64_t hits { 0 };
+    uint64_t misses { 0 };
+    uint64_t evictions { 0 };
+  };
+
+  //! Get human-readable cache statistics
   [[nodiscard]] virtual auto GetCacheStats() const -> std::string
   {
     return "Cache entries: " + std::to_string(cache_entries_.size()) + "/"
       + std::to_string(max_cache_entries_);
   }
+
+  //! Get structured cache statistics (thread-safe if implemented by derived)
+  [[nodiscard]] virtual auto GetCacheStatsObj() const -> RenderGraphCacheStats
+  {
+    // Default: return the shared stats object (implementations may update it
+    // under their own locks). Update derived fields that can be computed from
+    // the base storage.
+    RenderGraphCacheStats s = stats_;
+    s.entries = cache_entries_.size();
+    s.memory_usage = GetMemoryUsage();
+    return s;
+  }
+
+  //! Log structured cache statistics using engine logging
+  virtual auto LogStats() const -> void;
 
   //! Get memory usage estimate
   [[nodiscard]] virtual auto GetMemoryUsage() const -> size_t
@@ -166,6 +192,9 @@ protected:
   std::unordered_map<uint64_t, RenderGraphCacheEntry> cache_entries_;
   size_t max_cache_entries_ { 32 };
   size_t max_memory_bytes_ { 64 * 1024 * 1024 }; // 64MB default
+  // Centralized stats storage shared by cache implementations. Concrete
+  // implementations should update these under their own synchronization.
+  mutable RenderGraphCacheStats stats_;
 };
 
 //! Interface for compilation result caching
@@ -254,7 +283,7 @@ namespace cache_utils {
 
   //! Compute deterministic hash for viewport configuration
   [[nodiscard]] inline auto ComputeViewportHash(
-    const std::vector<ViewContext>& views) -> uint64_t
+    const std::span<const ViewInfo> views) -> uint64_t
   {
     // Stub implementation - Phase 1
     uint64_t hash = 0;
@@ -290,6 +319,9 @@ namespace cache_utils {
   }
 
 } // namespace cache_utils
+
+// Factory for default cache implementation
+auto CreateAsyncRenderGraphCache() -> std::unique_ptr<RenderGraphCache>;
 
 } // namespace oxygen::examples::asyncsim
 

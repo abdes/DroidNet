@@ -16,8 +16,8 @@
 
 #include <Oxygen/Base/Logging.h>
 
+#include "../FrameContext.h"
 #include "../IEngineModule.h"
-#include "../ModuleContext.h"
 
 using namespace std::chrono_literals;
 
@@ -42,19 +42,19 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  auto Initialize(ModuleContext& context) -> co::Co<> override;
-  auto Shutdown(ModuleContext& context) -> co::Co<> override;
+  auto Initialize(AsyncEngineSimulator& engine) -> co::Co<> override;
+  auto Shutdown() -> co::Co<> override;
 
   // === FRAME PHASE IMPLEMENTATIONS ===
 
   //! Input phase - process console input commands
-  auto OnInput(ModuleContext& context) -> co::Co<> override;
+  auto OnInput(FrameContext& context) -> co::Co<> override;
 
   //! Async work phase - execute commands asynchronously
-  auto OnAsyncWork(ModuleContext& context) -> co::Co<> override;
+  auto OnAsyncWork(FrameContext& context) -> co::Co<> override;
 
   //! Detached work phase - background console maintenance
-  auto OnDetachedWork(ModuleContext& context) -> co::Co<> override;
+  auto OnDetachedWork(FrameContext& context) -> co::Co<> override;
 
   // === PUBLIC API ===
 

@@ -12,8 +12,9 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../../ModuleContext.h"
+#include "../../FrameContext.h"
 #include "../Integration/GraphicsLayerIntegration.h"
+#include <Oxygen/Renderer/Types/View.h>
 
 // Hash function for pair<uint32_t, uint32_t>
 namespace std {
@@ -42,7 +43,7 @@ public:
   auto SetViewport(const std::vector<float>& viewport) -> void override
   {
     if (context_ && context_->HasAsyncEngineIntegration()) {
-      const auto& view_ctx = context_->GetViewContext();
+      const auto& view_ctx = context_->GetViewInfo();
       LOG_F(3, "[CommandRecorder] Setting viewport for view '{}' frame {}",
         view_ctx.view_name, context_->GetFrameIndex());
 
@@ -51,12 +52,13 @@ public:
         const auto width = static_cast<uint32_t>(viewport[2]);
         const auto height = static_cast<uint32_t>(viewport[3]);
 
-        if (width != view_ctx.viewport.width
-          || height != view_ctx.viewport.height) {
+        if (width != view_ctx.view->Viewport().width
+          || height != view_ctx.view->Viewport().height) {
           LOG_F(WARNING,
             "[CommandRecorder] Viewport size mismatch: expected {}x{}, got "
             "{}x{}",
-            view_ctx.viewport.width, view_ctx.viewport.height, width, height);
+            view_ctx.view->Viewport().width, view_ctx.view->Viewport().height,
+            width, height);
         }
       }
     }
@@ -89,7 +91,7 @@ public:
     -> void override
   {
     if (context_ && context_->HasAsyncEngineIntegration()) {
-      const auto& view_ctx = context_->GetViewContext();
+      const auto& view_ctx = context_->GetViewInfo();
       LOG_F(3,
         "[CommandRecorder] Clearing render target {} for view '{}' frame {}",
         target.get(), view_ctx.view_name, context_->GetFrameIndex());
@@ -109,7 +111,7 @@ public:
     ResourceHandle target, float depth, uint8_t stencil) -> void override
   {
     if (context_ && context_->HasAsyncEngineIntegration()) {
-      const auto& view_ctx = context_->GetViewContext();
+      const auto& view_ctx = context_->GetViewInfo();
       LOG_F(3,
         "[CommandRecorder] Clearing depth stencil {} for view '{}' (depth: {}, "
         "stencil: {})",
@@ -155,7 +157,7 @@ public:
     -> void override
   {
     if (context_ && context_->HasAsyncEngineIntegration()) {
-      const auto& view_ctx = context_->GetViewContext();
+      const auto& view_ctx = context_->GetViewInfo();
       LOG_F(9,
         "[CommandRecorder] Draw indexed instanced for view '{}': {} indices, "
         "{} instances",
@@ -223,7 +225,7 @@ public:
   auto ExecuteCommands() -> void
   {
     if (context_ && context_->HasAsyncEngineIntegration()) {
-      const auto& view_ctx = context_->GetViewContext();
+      const auto& view_ctx = context_->GetViewInfo();
       LOG_F(2, "[CommandRecorder] Executing {} commands for view '{}'",
         GetTotalCommandCount(), view_ctx.view_name);
     }

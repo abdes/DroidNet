@@ -168,7 +168,7 @@ auto ResourceMemoryPool::CoalesceFreed() -> void
 // === ResourceStateTracker Implementation ===
 
 auto ResourceStateTracker::SetInitialState(
-  ResourceHandle resource, ResourceState state, uint32_t view_index) -> void
+  ResourceHandle resource, ResourceState state, ViewIndex view_index) -> void
 {
   const auto key = std::make_pair(resource, view_index);
   resource_states_[key] = { state, PassHandle() };
@@ -178,7 +178,7 @@ auto ResourceStateTracker::SetInitialState(
 }
 
 auto ResourceStateTracker::RequestTransition(ResourceHandle resource,
-  ResourceState new_state, PassHandle pass, uint32_t view_index) -> void
+  ResourceState new_state, PassHandle pass, ViewIndex view_index) -> void
 {
   const auto key = std::make_pair(resource, view_index);
   auto it = resource_states_.find(key);
@@ -209,7 +209,7 @@ auto ResourceStateTracker::RequestTransition(ResourceHandle resource,
 }
 
 auto ResourceStateTracker::GetCurrentState(ResourceHandle resource,
-  uint32_t view_index) const -> std::optional<ResourceState>
+  ViewIndex view_index) const -> std::optional<ResourceState>
 {
   const auto key = std::make_pair(resource, view_index);
   const auto it = resource_states_.find(key);
@@ -260,7 +260,7 @@ public:
   }
 
   auto AddResourceUsage(ResourceHandle resource, PassHandle pass,
-    ResourceState state, bool is_write, uint32_t view_index) -> void override
+    ResourceState state, bool is_write, ViewIndex view_index) -> void override
   {
     auto it = resource_lifetimes_.find(resource);
     if (it == resource_lifetimes_.end()) {
@@ -290,9 +290,9 @@ public:
     // Update first/last usage
     // Determine ordering using provided topological order if available
     const auto current_index_it = topological_order_.find(pass);
-    const uint32_t current_index = current_index_it != topological_order_.end()
+    const auto current_index = current_index_it != topological_order_.end()
       ? current_index_it->second
-      : static_cast<uint32_t>(pass.get()); // fallback to handle id
+      : pass.get(); // fallback to handle id
 
     if (lifetime.usages.size() == 1) {
       lifetime.first_usage = pass;
@@ -583,16 +583,16 @@ private:
     const ResourceLifetimeInfo& a, const ResourceLifetimeInfo& b) const
   {
     std::vector<PassHandle> passes;
-    const uint32_t begin = std::max(a.first_index, b.first_index);
-    const uint32_t end = std::min(a.last_index, b.last_index);
+    const auto begin = std::max(a.first_index, b.first_index);
+    const auto end = std::min(a.last_index, b.last_index);
     if (begin == std::numeric_limits<uint32_t>::max()
-      || end == std::numeric_limits<uint32_t>::max())
+      || end == std::numeric_limits<uint32_t>::max()) {
       return passes;
+    }
     auto collect = [&](auto const& life) {
       for (auto const& u : life.usages) {
         auto it = topological_order_.find(u.pass);
-        uint32_t idx
-          = it != topological_order_.end() ? it->second : u.pass.get();
+        auto idx = it != topological_order_.end() ? it->second : u.pass.get();
         if (idx >= begin && idx <= end) {
           if (std::find(passes.begin(), passes.end(), u.pass) == passes.end())
             passes.push_back(u.pass);

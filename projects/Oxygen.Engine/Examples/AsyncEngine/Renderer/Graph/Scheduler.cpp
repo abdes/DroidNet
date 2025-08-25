@@ -19,9 +19,9 @@ namespace oxygen::examples::asyncsim {
 
 //! Enhanced RenderGraphScheduler with topological sorting and dependency
 //! resolution
-class AsyncEngineRenderGraphScheduler : public RenderGraphScheduler {
+class AsyncRenderGraphScheduler : public RenderGraphScheduler {
 public:
-  AsyncEngineRenderGraphScheduler() = default;
+  AsyncRenderGraphScheduler() = default;
 
   [[nodiscard]] auto SchedulePasses(const RenderGraph& graph)
     -> SchedulingResult override
@@ -580,10 +580,9 @@ private:
 };
 
 //! Factory function to create AsyncEngine-integrated scheduler
-auto CreateAsyncEngineRenderGraphScheduler()
-  -> std::unique_ptr<RenderGraphScheduler>
+auto CreateAsyncRenderGraphScheduler() -> std::unique_ptr<RenderGraphScheduler>
 {
-  return std::make_unique<AsyncEngineRenderGraphScheduler>();
+  return std::make_unique<AsyncRenderGraphScheduler>();
 }
 
 } // namespace oxygen::examples::asyncsim

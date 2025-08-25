@@ -10,7 +10,7 @@ This document describes the Render Graph Builder DSL for creating complex render
 
 - [x] Define complete `PassHandle` class with ID, debug name, and comparison operators
 - [x] Define `PassExecutor` type alias using `std::move_only_function<void(TaskExecutionContext&)>`
-- [x] Define complete `ViewContext` struct with surface, camera, viewport, and view name
+- [x] Define complete `ViewInfo` struct with surface, camera, viewport, and view name
 - [x] Define complete `FrameContext` struct with frame index, scene data, and views
 - [x] Define `ResourceHandle` class with ID, type info, and debug methods
 - [x] Define all enums: `ResourceScope`, `ResourceLifetime`, `PassScope`, `QueueType`, `Priority`
@@ -307,7 +307,7 @@ The following table summarizes all API improvements addressing the critical desi
 | **String Dependencies** | Typo-prone `DependsOn("PassName")` | `PassHandle` with `.DependsOn(handle)` | **100% elimination** of dependency typos |
 | **Resource Aliasing Hazards** | Silent aliasing conflicts | `ResourceAliasValidator` with hazard graph analysis | Prevents GPU crashes, **validates before execution** |
 | **Cache Key Scalability** | `std::vector<ViewportDesc>` in hash keys | Precomputed viewport hash with LRU management | **10x faster** cache lookups, bounded memory |
-| **Lambda Capture Overhead** | Heavy view capture in executors | `exec.GetViewContext()` pattern | Lighter capture, better cache locality |
+| **Lambda Capture Overhead** | Heavy view capture in executors | `exec.GetViewInfo()` pattern | Lighter capture, better cache locality |
 | **Present State Backend Issues** | Undefined present resource handling | Explicit Vulkan/D3D12 present state warnings | Prevents incorrect resource states |
 | **Priority Scheduling** | Vague priority hints | `SetEstimatedCost({cpu_us, gpu_us, memory_bytes})` with critical path analysis | **20-40% better** GPU utilization |
 | **Cost Feedback** | Static cost estimates | `PassCostProfiler` with exponential moving average | Self-improving performance over time |
@@ -507,12 +507,12 @@ public:
 
 ### Data Contracts
 
-#### ViewContext
+#### ViewInfo
 
 Defines a single view of the scene with its own camera, viewport, and target surface. Keep this lightweight for efficient capture semantics.
 
 ```cpp
-struct ViewContext {
+struct ViewInfo {
     std::shared_ptr<graphics::Surface> surface;  // Target surface (window/render target)
     CameraMatrices camera;                       // View-specific camera matrices
     ViewportDesc viewport;                       // Viewport dimensions
@@ -531,7 +531,7 @@ Contains shared frame data and all view definitions.
 struct FrameContext {
     uint64_t frameIndex;                        // Current frame number
     SceneData sceneData;                        // Shared scene geometry/materials
-    std::vector<ViewContext> views;             // All views to render this frame
+    std::vector<ViewInfo> views;             // All views to render this frame
 };
 ```
 
@@ -549,6 +549,7 @@ struct FrameContext {
   - **Auto-iterate**: `.SetScope(PassScope::PerView)` automatically creates pass instances for all views
   - **Explicit view**: `.SetScope(PassScope::PerView, viewIndex)` targets a specific view
   - **Filtered**: Use `.RestrictToViews(viewFilter)` to control which views get the pass
+- **PassScope::Viewless**: Passes that run once without needing view context (compute shaders, texture streaming, background tasks)
 
 #### Pass Scoping API Contract
 
@@ -563,11 +564,16 @@ auto& mainViewUIPass = builder.AddRasterPass("MainViewUI")
     .SetScope(PassScope::PerView, 0)       // Only view index 0
     .RestrictToView(0);                    // Compile-time validation
 
-// Filtered multi-view
+// Filtered view rendering
 auto& particlePass = builder.AddRasterPass("ParticleEffects")
     .SetScope(PassScope::PerView)
-    .RestrictToViews([](const ViewContext& view) {
+    .RestrictToViews([](const ViewInfo& view) {
         return view.viewName == "PlayerView";  // Only main view gets particles
+
+// Viewless passes (always execute regardless of view count)
+auto& computePass = builder.AddComputePass("ParticleSimulation")
+    .SetScope(PassScope::Viewless)         // No view dependency
+    .SetExecutor([](TaskExecutionContext& ctx) { /* compute work */ });
     });
 ```
 
@@ -657,7 +663,7 @@ auto viewDepth = builder.CreateTexture("ViewDepth", desc,
 //-----------------------------------------------------------------------------
 // Setup: Multi-View Frame Context
 //-----------------------------------------------------------------------------
-struct ViewContext {
+struct ViewInfo {
     std::shared_ptr<graphics::Surface> surface;
     CameraMatrices camera;          // Different camera per view
     ViewportDesc viewport;          // Different viewport per view
@@ -670,19 +676,19 @@ ctx.sceneData = LoadSceneBuffers();  // Same scene data for all views
 
 // Define multiple views of the same scene
 ctx.views = {
-    ViewContext{
+    ViewInfo{
         .surface = mainWindowSurface_,
         .camera = playerCamera_.GetMatrices(),
         .viewport = {0, 0, 1920, 1080},
         .viewName = "PlayerView"
     },
-    ViewContext{
+    ViewInfo{
         .surface = topDownSurface_,
         .camera = topDownCamera_.GetMatrices(),
         .viewport = {0, 0, 800, 600},
         .viewName = "TopDownView"
     },
-    ViewContext{
+    ViewInfo{
         .surface = sideViewSurface_,
         .camera = sideCamera_.GetMatrices(),
         .viewport = {0, 0, 1280, 720},
@@ -824,10 +830,10 @@ for (size_t viewIndex = 0; viewIndex < ctx.views.size(); ++viewIndex) {
       .Read(lightCullingBuffer, ResourceState::PixelShaderResource)  // Shared lighting
       .Write(viewDepthBuffers[viewIndex], ResourceState::DepthWrite) // Write order: 0 = depth
       .Write(viewColorBuffers[viewIndex], ResourceState::RenderTarget) // 1 = color
-      .SetViewContext(view)  // Pass view-specific camera and viewport
-      .SetExecutor([this](TaskExecutionContext& exec) {  // Use exec.GetViewContext() instead of capture
+      .SetViewInfo(view)  // Pass view-specific camera and viewport
+      .SetExecutor([this](TaskExecutionContext& exec) {  // Use exec.GetViewInfo() instead of capture
         auto& rec = exec.GetCommandRecorder();
-        const auto& view_ctx = exec.GetViewContext();  // Fetch context instead of capturing
+        const auto& view_ctx = exec.GetViewInfo();  // Fetch context instead of capturing
 
         // Set view-specific viewport
         rec.SetViewport({ 0, 0, view_ctx.viewport.width, view_ctx.viewport.height });
@@ -884,7 +890,7 @@ for (size_t viewIndex = 0; viewIndex < ctx.views.size(); ++viewIndex) {
 // Modules can contribute to specific views or all views
 for (auto& module : modules_) {
     module->SubmitRenderTasks(builder, ctx,
-        [](const RenderTask& task, const ViewContext& view) -> bool {
+        [](const RenderTask& task, const ViewInfo& view) -> bool {
             // Example: Debug overlay only in main view
             if (task.type == TaskType::DebugOverlay && view.viewName != "PlayerView") {
                 return false;
@@ -1549,7 +1555,7 @@ public:
     auto GetInstanceCount() -> uint32_t;
 
     // View context (for per-view passes)
-    auto GetViewContext() -> const ViewContext&;
+    auto GetViewInfo() -> const ViewInfo&;
     auto GetTargetSurfaces() -> std::span<Surface*>;
 };
 ```
@@ -1622,7 +1628,7 @@ auto AsyncEngineSimulator::PhaseRenderGraph(ModuleContext& context) -> co::Co<>
   frame_ctx.views.reserve(surfaces_.size());
   for (size_t i = 0; i < surfaces_.size(); ++i) {
     const auto& surface = surfaces_[i];
-    frame_ctx.views.push_back(ViewContext{
+    frame_ctx.views.push_back(ViewInfo{
       .surface = surface.surface_ptr,  // Actual graphics::Surface from RenderSurface
       .camera = GetCameraForSurface(surface),
       .viewport = {0, 0, surface.width, surface.height},
@@ -1751,7 +1757,7 @@ public:
       .Write("ViewColorBuffer", ResourceState::RenderTarget)
       .SetExecutor([this](TaskExecutionContext& exec) {
         auto& rec = exec.GetCommandRecorder();
-        auto& view_ctx = exec.GetViewContext();
+        auto& view_ctx = exec.GetViewInfo();
 
         // Set view-specific camera
         rec.SetGraphicsRootConstantBufferView(
@@ -1767,7 +1773,7 @@ public:
       auto& particlePass = builder.AddRasterPass("Game_ParticleEffects")
         .SetPriority(Priority::Medium)
         .SetScope(PassScope::PerView)
-        .SetViewFilter([](const ViewContext& view) {
+        .SetViewFilter([](const ViewInfo& view) {
           return view.viewName == "PlayerView";  // Only main view
         });
 

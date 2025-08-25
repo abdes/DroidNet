@@ -16,6 +16,8 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Renderer/Types/View.h>
 
+#include "../Integration/GraphicsLayerIntegration.h"
+
 namespace oxygen::examples::asyncsim {
 
 // Forward declarations
@@ -45,7 +47,9 @@ enum class ResourceLifetime : uint32_t {
 enum class PassScope : uint32_t {
   Shared, //!< Passes that run once for all views (shadow mapping, light
           //!< culling)
-  PerView //!< Passes that run independently for each view
+  PerView, //!< Passes that run independently for each view
+  Viewless //!< Passes that run once without needing view context (compute,
+           //!< streaming)
 };
 
 //! Queue type for GPU command submission
@@ -78,17 +82,6 @@ using PassHandle = oxygen::NamedType<
 >;
 // clang-format on
 
-//! Strong-typed handle for resources
-// clang-format off
-using ResourceHandle = oxygen::NamedType<
-  uint32_t,
-  struct ResourceHandleTag,
-  oxygen::Hashable,
-  oxygen::Comparable,
-  oxygen::Printable
->;
-// clang-format on
-
 //! Strong-typed handle for view identifiers
 // clang-format off
 using ViewId = oxygen::NamedType<
@@ -109,75 +102,5 @@ using ViewId = oxygen::NamedType<
           They are purely command recording functions.
  */
 using PassExecutor = std::move_only_function<void(TaskExecutionContext&)>;
-
-//! Defines a single view of the scene with its own camera, viewport, and target
-//! surface
-/*!
- Keep this lightweight for efficient capture semantics. For heavier data,
- store indices and fetch via TaskExecutionContext.
- */
-struct ViewContext {
-  ViewId view_id { 0 }; //!< Unique identifier for this view
-  uint32_t surface_index { 0 }; //!< Index of the target surface
-  std::shared_ptr<void> surface; //!< Target surface (window/render target) -
-                                 //!< placeholder for graphics::Surface
-  oxygen::engine::View camera; //!< View-specific camera matrices and parameters
-  std::string view_name; //!< Human-readable name for this view
-
-  // Viewport definition
-  struct Viewport {
-    float x { 0.0f }, y { 0.0f }, width { 1920.0f }, height { 1080.0f };
-    float min_depth { 0.0f }, max_depth { 1.0f };
-  } viewport;
-
-  ViewContext()
-    : view_id { 0 }
-    , surface_index { 0 }
-    , surface(nullptr)
-    , camera(CreateDefaultView())
-    , view_name("default")
-  {
-  }
-
-  ViewContext(ViewId id, uint32_t surf_idx, std::shared_ptr<void> surf,
-    const oxygen::engine::View& cam, std::string name)
-    : view_id(id)
-    , surface_index(surf_idx)
-    , surface(std::move(surf))
-    , camera(cam)
-    , view_name(std::move(name))
-  {
-  }
-
-private:
-  static auto CreateDefaultView() -> oxygen::engine::View
-  {
-    oxygen::engine::View::Params p;
-    p.view = glm::mat4(1.0f);
-    p.proj = glm::mat4(1.0f);
-    p.viewport = glm::ivec4(0, 0, 1920, 1080); // Default viewport
-    p.reverse_z = false;
-    return oxygen::engine::View(p);
-  }
-};
-
-//! Contains shared frame data and all view definitions
-struct FrameContext {
-  uint64_t frame_index { 0 }; //!< Current frame number
-  std::shared_ptr<void>
-    scene_data; //!< Shared scene geometry/materials - placeholder
-  std::vector<ViewContext> views; //!< All views to render this frame
-  // Per-view presentable flags. Stored as plain bytes so FrameContext remains
-  // copyable. Use std::atomic_ref<uint8_t> when accessing these from worker
-  // threads (set with release) and the frame thread (load with acquire).
-  std::vector<uint8_t> presentable_flags;
-
-  FrameContext() = default;
-
-  explicit FrameContext(uint64_t frame_idx)
-    : frame_index(frame_idx)
-  {
-  }
-};
 
 } // namespace oxygen::examples::asyncsim

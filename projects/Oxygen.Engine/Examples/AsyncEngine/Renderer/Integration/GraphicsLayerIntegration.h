@@ -12,24 +12,13 @@
 #include <Oxygen/Base/NamedType.h>
 
 #include "../../GraphicsLayer.h"
+#include "../../ResourceHandle.h"
 
 namespace oxygen::examples::asyncsim {
 
-//! Strong types for render graph resource integration (exported - not
-//! anonymous)
-// clang-format off
-struct RenderGraphResourceHandleTag;
-using RenderGraphResourceHandle = oxygen::NamedType<uint64_t, RenderGraphResourceHandleTag,
-  oxygen::Hashable,
-  oxygen::Comparable,
-  oxygen::Printable>;
-
-struct RenderGraphDescriptorIndexTag;
-using RenderGraphDescriptorIndex = oxygen::NamedType<uint32_t, RenderGraphDescriptorIndexTag,
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>;
+using RenderGraphDescriptorIndex = oxygen::NamedType<uint32_t,
+  struct RenderGraphDescriptorIndexTag, oxygen::DefaultInitialized,
+  oxygen::Comparable, oxygen::Printable, oxygen::Hashable>;
 // clang-format on
 
 //! Integration layer bridging render graph resources with AsyncEngine
@@ -62,11 +51,11 @@ public:
 
   //! Register a render graph resource with the global resource registry
   [[nodiscard]] auto RegisterResource(const std::string& resource_name)
-    -> RenderGraphResourceHandle;
+    -> ResourceHandle;
 
   //! Unregister a render graph resource (schedules deferred cleanup)
-  auto UnregisterResource(RenderGraphResourceHandle resource_handle,
-    uint64_t frame_index, const std::string& debug_name) -> void;
+  auto UnregisterResource(ResourceHandle resource_handle, uint64_t frame_index,
+    const std::string& debug_name) -> void;
 
   // === DESCRIPTOR ALLOCATION ===
 
@@ -79,7 +68,7 @@ public:
   // === RESOURCE LIFETIME MANAGEMENT ===
 
   //! Schedule resource for deferred reclamation
-  auto ScheduleResourceReclaim(RenderGraphResourceHandle resource_handle,
+  auto ScheduleResourceReclaim(ResourceHandle resource_handle,
     uint64_t submitted_frame, const std::string& debug_name) -> void;
 
   //! Get count of pending reclaim operations
@@ -116,9 +105,9 @@ private:
 
   //! Convert engine resource handle to render graph handle
   [[nodiscard]] auto ConvertToRenderGraphHandle(uint64_t engine_handle) const
-    -> RenderGraphResourceHandle
+    -> ResourceHandle
   {
-    return RenderGraphResourceHandle { engine_handle };
+    return ResourceHandle { engine_handle };
   }
 
   //! Convert engine descriptor ID to render graph descriptor index

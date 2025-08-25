@@ -12,8 +12,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Co.h>
 
+#include "../FrameContext.h"
 #include "../IEngineModule.h"
-#include "../ModuleContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Types.h"
 
@@ -25,7 +25,7 @@ namespace oxygen::examples::asyncsim {
  - How to integrate with ModulePhases::FrameGraph
  - Creating resources using the render graph builder
  - Adding passes with dependencies
- - Working with multi-view rendering
+ - Working with view rendering
  - Resource lifetime management with AsyncEngine integration
 
  ## ARCHITECTURAL ROLE & POSITIONING
@@ -95,19 +95,16 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  auto Initialize(ModuleContext& context) -> co::Co<> override;
-  auto Shutdown(ModuleContext& context) -> co::Co<> override;
+  auto Initialize(AsyncEngineSimulator& engine) -> co::Co<> override;
+  auto Shutdown() -> co::Co<> override;
 
   // === FRAME PHASE IMPLEMENTATIONS ===
 
   //! Frame graph phase - contribute geometry passes to render graph
-  auto OnFrameGraph(ModuleContext& context) -> co::Co<> override;
-
-  //! Snapshot build phase - prepare geometry data for rendering
-  auto OnSnapshotBuild(ModuleContext& context) -> co::Co<> override;
+  auto OnFrameGraph(FrameContext& context) -> co::Co<> override;
 
   //! Parallel work phase - process geometry in parallel (culling, etc.)
-  auto OnParallelWork(ModuleContext& context) -> co::Co<> override;
+  auto OnParallelWork(FrameContext& context) -> co::Co<> override;
 
   // === PUBLIC API ===
 
@@ -165,12 +162,12 @@ private:
   std::vector<GeometryData> geometry_objects_;
 
   // Resource handles created during FrameGraph phase
-  ResourceHandle depth_buffer_;
-  ResourceHandle color_buffer_;
-  ResourceHandle vertex_buffer_;
-  ResourceHandle index_buffer_;
-  ResourceHandle lighting_buffer_;
-  ResourceHandle post_process_buffer_;
+  ResourceHandle depth_buffer_ { 0 };
+  ResourceHandle color_buffer_ { 0 };
+  ResourceHandle vertex_buffer_ { 0 };
+  ResourceHandle index_buffer_ { 0 };
+  ResourceHandle lighting_buffer_ { 0 };
+  ResourceHandle post_process_buffer_ { 0 };
 
   // Pass handles for dependencies
   PassHandle depth_prepass_;

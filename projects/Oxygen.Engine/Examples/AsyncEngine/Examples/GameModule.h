@@ -12,8 +12,8 @@
 
 #include <Oxygen/Base/Logging.h>
 
+#include "../FrameContext.h"
 #include "../IEngineModule.h"
-#include "../ModuleContext.h"
 #include "../Renderer/Graph/ExecutionContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 
@@ -116,34 +116,37 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  auto Initialize(ModuleContext& context) -> co::Co<> override;
-  auto Shutdown(ModuleContext& context) -> co::Co<> override;
+  auto Initialize(AsyncEngineSimulator& engine) -> co::Co<> override;
+  auto Shutdown() -> co::Co<> override;
+
+  void OnFrameStart(FrameContext& context) override;
+  void OnFrameEnd(FrameContext& context) override;
 
   // === FRAME PHASE IMPLEMENTATIONS ===
 
   //! Input phase - process player input
-  auto OnInput(ModuleContext& context) -> co::Co<> override;
+  auto OnInput(FrameContext& context) -> co::Co<> override;
 
   //! Fixed simulation phase - deterministic physics/gameplay
-  auto OnFixedSimulation(ModuleContext& context) -> co::Co<> override;
+  auto OnFixedSimulation(FrameContext& context) -> co::Co<> override;
 
   //! Gameplay phase - variable timestep game logic
-  auto OnGameplay(ModuleContext& context) -> co::Co<> override;
+  auto OnGameplay(FrameContext& context) -> co::Co<> override;
 
   //! Scene mutation phase - spawn/despawn entities
-  auto OnSceneMutation(ModuleContext& context) -> co::Co<> override;
+  auto OnSceneMutation(FrameContext& context) -> co::Co<> override;
 
   //! Transform propagation phase - update world transforms
-  auto OnTransformPropagation(ModuleContext& context) -> co::Co<> override;
+  auto OnTransformPropagation(FrameContext& context) -> co::Co<> override;
 
   //! Parallel work phase - AI and batch processing
-  auto OnParallelWork(ModuleContext& context) -> co::Co<> override;
+  auto OnParallelWork(FrameContext& context) -> co::Co<> override;
 
   //! Post-parallel phase - integrate parallel work results
-  auto OnPostParallel(ModuleContext& context) -> co::Co<> override;
+  auto OnPostParallel(FrameContext& context) -> co::Co<> override;
 
   //! Frame graph phase - contribute game-specific render passes
-  auto OnFrameGraph(ModuleContext& context) -> co::Co<> override;
+  auto OnFrameGraph(FrameContext& context) -> co::Co<> override;
 
   // === PUBLIC API ===
 
@@ -175,10 +178,21 @@ private:
   float player_position_x_ { 0.0f };
   bool game_over_ { false };
 
+  // Surfaces
+  std::vector<RenderSurface> surfaces_;
+  struct SurfaceChange {
+    size_t index;
+    enum {
+      kAdd,
+      kRemove,
+    } type;
+  };
+  std::vector<SurfaceChange> surface_change_set_ {};
+
   // Resource handles
-  uint32_t player_entity_handle_ { 0 };
-  uint32_t world_state_handle_ { 0 };
-  std::vector<uint64_t> dynamic_entities_;
+  ResourceHandle player_entity_handle_ { 0 };
+  ResourceHandle world_state_handle_ { 0 };
+  std::vector<ResourceHandle> dynamic_entities_;
 
   // Statistics
   uint32_t input_events_processed_ { 0 };

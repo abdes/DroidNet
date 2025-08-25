@@ -10,28 +10,24 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include "../../Types/ViewIndex.h"
 #include "Types.h"
 
-// Hash function for (ResourceHandle, uint32_t) pairs
-namespace std {
-template <>
-struct hash<std::pair<oxygen::examples::asyncsim::ResourceHandle, uint32_t>> {
-  auto operator()(
-    const std::pair<oxygen::examples::asyncsim::ResourceHandle, uint32_t>& p)
-    const -> std::size_t
+// Generic pair hasher for our local pair-key maps. We avoid specializing
+// std::hash for our pair combinations in headers to prevent ordering
+// / instantiation issues across translation units. Use PairHash as the
+// unordered_map hasher where needed.
+template <typename A, typename B> struct PairHash {
+  auto operator()(const std::pair<A, B>& p) const noexcept -> std::size_t
   {
-    return std::hash<uint32_t> {}(p.first.get())
-      ^ (std::hash<uint32_t> {}(p.second) << 1);
+    const auto h1 = std::hash<A> {}(p.first);
+    const auto h2 = std::hash<B> {}(p.second);
+    return h1 ^ (h2 << 1);
   }
 };
-}
-
-// Forward declarations for AsyncEngine integration
-namespace oxygen::examples::asyncsim {
-class GraphicsLayerIntegration;
-}
 
 namespace oxygen::examples::asyncsim {
 
@@ -99,24 +95,6 @@ public:
 
   // === ASYNCENGINE INTEGRATION ===
 
-  //! Set graphics layer integration for bindless resource management
-  auto SetGraphicsIntegration(GraphicsLayerIntegration* integration) -> void
-  {
-    graphics_integration_ = integration;
-  }
-
-  //! Check if AsyncEngine integration is available
-  [[nodiscard]] auto HasGraphicsIntegration() const -> bool
-  {
-    return graphics_integration_ != nullptr;
-  }
-
-  [[nodiscard]] auto GetGraphicsIntegration() const noexcept
-    -> GraphicsLayerIntegration*
-  {
-    return graphics_integration_;
-  }
-
   //! Get hash for resource compatibility checks
   [[nodiscard]] virtual auto GetCompatibilityHash() const -> std::size_t = 0;
 
@@ -150,7 +128,6 @@ protected:
   ResourceScope scope_ { ResourceScope::PerView };
 
   // AsyncEngine integration
-  GraphicsLayerIntegration* graphics_integration_ { nullptr };
   uint32_t descriptor_index_ { InvalidDescriptor }; // bindless descriptor slot
 };
 
@@ -322,9 +299,10 @@ struct ResourceUsage {
   PassHandle pass; //!< Pass that uses this resource
   ResourceState state; //!< Required resource state for this usage
   bool is_write_access; //!< True if this usage writes to the resource
-  uint32_t view_index; //!< View index for per-view resources
+  ViewIndex view_index; //!< View index for per-view resources
 
-  ResourceUsage(PassHandle p, ResourceState s, bool write, uint32_t view = 0)
+  ResourceUsage(
+    PassHandle p, ResourceState s, bool write, ViewIndex view = ViewIndex { 0 })
     : pass(p)
     , state(s)
     , is_write_access(write)
@@ -398,7 +376,8 @@ public:
 
   //! Add a resource usage for lifetime analysis
   virtual auto AddResourceUsage(ResourceHandle resource, PassHandle pass,
-    ResourceState state, bool is_write, uint32_t view_index = 0) -> void
+    ResourceState state, bool is_write, ViewIndex view_index = ViewIndex { 0 })
+    -> void
     = 0;
 
   //! Analyze resource lifetimes and build aliasing information
@@ -459,10 +438,10 @@ struct ResourceTransition {
   ResourceState from_state;
   ResourceState to_state;
   PassHandle pass;
-  uint32_t view_index;
+  ViewIndex view_index;
 
   ResourceTransition(ResourceHandle res, ResourceState from, ResourceState to,
-    PassHandle p, uint32_t view = 0)
+    PassHandle p, ViewIndex view = ViewIndex { 0 })
     : resource(res)
     , from_state(from)
     , to_state(to)
@@ -550,15 +529,16 @@ public:
 
   //! Set initial state for a resource
   auto SetInitialState(ResourceHandle resource, ResourceState state,
-    uint32_t view_index = 0) -> void;
+    ViewIndex view_index = ViewIndex { 0 }) -> void;
 
   //! Request state transition for a resource
   auto RequestTransition(ResourceHandle resource, ResourceState new_state,
-    PassHandle pass, uint32_t view_index = 0) -> void;
+    PassHandle pass, ViewIndex view_index = ViewIndex { 0 }) -> void;
 
   //! Get current state of a resource
-  [[nodiscard]] auto GetCurrentState(ResourceHandle resource,
-    uint32_t view_index = 0) const -> std::optional<ResourceState>;
+  [[nodiscard]] auto GetCurrentState(
+    ResourceHandle resource, ViewIndex view_index = ViewIndex { 0 }) const
+    -> std::optional<ResourceState>;
 
   //! Get all planned transitions
   [[nodiscard]] auto GetPlannedTransitions() const
@@ -580,9 +560,12 @@ private:
   };
 
   // Map from (resource_handle, view_index) to state
-  std::unordered_map<std::pair<ResourceHandle, uint32_t>, ResourceStateEntry>
+  std::unordered_map<std::pair<ResourceHandle, ViewIndex>, ResourceStateEntry,
+    PairHash<ResourceHandle, ViewIndex>>
     resource_states_;
   std::vector<ResourceTransition> planned_transitions_;
 };
 
 } // namespace oxygen::examples::asyncsim
+
+// No std::hash specializations here; use PairHash for local pair-key maps.

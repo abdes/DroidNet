@@ -191,37 +191,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Registered {} modules",
       engine.GetModuleManager().GetModuleCount());
 
-    // Configure multi-surface rendering example
-    engine.ClearSurfaces(); // Remove default surface
-    engine.AddSurface(RenderSurface {
-      .name = "MainWindow",
-      .record_cost = 800us,
-      .submit_cost = 200us,
-      .present_cost = 300us,
-    });
-    engine.AddSurface(RenderSurface {
-      .name = "ShadowMap",
-      .record_cost = 400us,
-      .submit_cost = 100us,
-      .present_cost = 50us,
-    });
-    engine.AddSurface(RenderSurface {
-      .name = "ReflectionProbe",
-      .record_cost = 600us,
-      .submit_cost = 150us,
-      .present_cost = 100us,
-    });
-    engine.AddSurface(RenderSurface {
-      .name = "UI_Overlay",
-      .record_cost = 200us,
-      .submit_cost = 50us,
-      .present_cost = 150us,
-    });
-
-    LOG_F(INFO,
-      "Configured {} rendering surfaces for parallel command recording",
-      engine.GetSurfaces().size());
-
     AsyncEngineApp app { &engine, &io_ctx };
 
     const auto rc = oxygen::co::Run(app, AsyncMain(app, frames));
