@@ -12,11 +12,10 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Co.h>
 
+#include "../FrameContext.h"
 #include "../IEngineModule.h"
-#include "../ModuleContext.h"
 #include "../Renderer/Graph/Cache.h"
 #include "../Renderer/Graph/RenderGraph.h"
-#include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
 
 namespace oxygen::examples::asyncsim {
@@ -31,7 +30,7 @@ class GraphicsLayerIntegration;
  phase
  - Compiling and validating the render graph after all modules contribute
  - Managing render graph resources with AsyncEngine's GraphicsLayer
- - Coordinating multi-view rendering across different surfaces
+ - Coordinating view rendering across different surfaces
  */
 class RenderGraphModule final : public EngineModuleBase {
 public:
@@ -43,30 +42,18 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  auto Initialize(ModuleContext& context) -> co::Co<> override;
-  auto Shutdown(ModuleContext& context) -> co::Co<> override;
+  auto Initialize(AsyncEngineSimulator& engine) -> co::Co<> override;
+  auto Shutdown() -> co::Co<> override;
 
   // === FRAME PHASE IMPLEMENTATIONS ===
 
   //! Frame graph phase - orchestrate render graph construction
-  auto OnFrameGraph(ModuleContext& context) -> co::Co<> override;
-
-  //! Resource transitions phase - plan GPU resource state changes
-  auto OnResourceTransitions(ModuleContext& context) -> co::Co<> override;
+  auto OnFrameGraph(FrameContext& context) -> co::Co<> override;
 
   //! Command recording phase - execute render graph
-  auto OnCommandRecord(ModuleContext& context) -> co::Co<> override;
+  auto OnCommandRecord(FrameContext& context) -> co::Co<> override;
 
   // === PUBLIC API ===
-
-  //! Get the render graph builder for the current frame
-  [[nodiscard]] auto GetBuilder() -> RenderGraphBuilder&;
-
-  //! Get the render graph builder (alias for GetBuilder)
-  [[nodiscard]] auto GetRenderGraphBuilder() -> RenderGraphBuilder&
-  {
-    return GetBuilder();
-  }
 
   //! Get the compiled render graph (available after OnFrameGraph)
   [[nodiscard]] auto GetRenderGraph() const noexcept
@@ -94,17 +81,11 @@ public:
 private:
   // === INTERNAL STATE ===
 
-  //! Current frame's render graph builder
-  RenderGraphBuilder render_graph_builder_;
-
   //! Compiled render graph for current frame (shared for cache reuse)
   std::shared_ptr<RenderGraph> render_graph_;
 
   //! Cache for compiled render graphs
   std::unique_ptr<RenderGraphCache> render_graph_cache_;
-
-  //! Graphics layer integration for AsyncEngine
-  std::unique_ptr<GraphicsLayerIntegration> graphics_integration_;
 
   //! Frame statistics for debugging
   FrameStatistics last_frame_stats_;
@@ -115,18 +96,17 @@ private:
 
   // === INTERNAL METHODS ===
 
-  //! Reset builder for new frame
-  auto ResetBuilderForNewFrame(ModuleContext& context) -> void;
-
   //! Create view contexts from available rendering surfaces
-  auto CreateViewContextsFromSurfaces(
-    FrameContext& frame_context, ModuleContext& module_context) -> void;
+  auto CreateViewInfosFromSurfaces(FrameContext& frame_context) -> void;
 
   //! Wait for all modules to contribute to the render graph
-  auto WaitForModuleContributions(ModuleContext& context) -> co::Co<>;
+  auto WaitForModuleContributions(FrameContext& context) -> co::Co<>;
 
   //! Compile the render graph from builder data
-  auto CompileRenderGraph(ModuleContext& context) -> co::Co<>;
+  auto CompileRenderGraph(FrameContext& context) -> co::Co<>;
+
+  //! Plan resource transitions for the compiled render graph
+  auto PlanResourceTransitions(FrameContext& context) -> co::Co<>;
 };
 
 } // namespace oxygen::examples::asyncsim

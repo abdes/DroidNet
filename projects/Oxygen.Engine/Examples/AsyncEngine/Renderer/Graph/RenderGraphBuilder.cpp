@@ -5,11 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "RenderGraphBuilder.h"
+#include "AliasLifetimeAnalysis.h"
+#include "BuildPipeline.h"
+#include "PerViewExpansionService.h"
+#include "RenderGraphStrategies.h"
+#include "SharedReadOnlyPromotionStrategy.h"
 
 #include <algorithm>
 
 #include <Oxygen/Base/Logging.h>
 
+#include "../../FrameContext.h"
 #include "../Integration/GraphicsLayerIntegration.h"
 #include "Cache.h"
 #include "RenderGraph.h"
@@ -18,13 +24,106 @@
 
 namespace oxygen::examples::asyncsim {
 
+// DiagnosticsSink implementation that forwards into ValidationResult so
+// strategies can report issues in a structured way without pulling in
+// logging directly.
+struct ValidationDiagnosticsSink : public DiagnosticsSink {
+  explicit ValidationDiagnosticsSink(ValidationResult& r)
+    : result(r)
+  {
+  }
+  void AddError(const ValidationError& err) override { result.AddError(err); }
+  void AddWarning(const ValidationError& w) override { result.AddWarning(w); }
+  ValidationResult& result;
+};
+
+// Simple phase: view configuration
+class ViewConfigPhase final : public IBuildPhase {
+public:
+  PhaseResult Run(BuildContext& ctx) const override
+  {
+    if (!ctx.builder || !ctx.render_graph)
+      return PhaseResult { std::unexpected(PhaseError { "Invalid context" }) };
+    ctx.builder->RunProcessViewConfiguration(ctx.render_graph);
+    return PhaseResult { std::expected<void, PhaseError> {} };
+  }
+};
+
+// Simple phase: transfer passes with view filtering
+class PassTransferPhase final : public IBuildPhase {
+public:
+  PhaseResult Run(BuildContext& ctx) const override
+  {
+    if (!ctx.builder || !ctx.render_graph)
+      return PhaseResult { std::unexpected(PhaseError { "Invalid context" }) };
+    ctx.builder->RunProcessPassesWithViewFiltering(ctx.render_graph);
+    return PhaseResult { std::expected<void, PhaseError> {} };
+  }
+};
+
+// Simple phase: optimize duplicated per-view resources
+class SharedPromotePhase final : public IBuildPhase {
+public:
+  PhaseResult Run(BuildContext& ctx) const override
+  {
+    if (!ctx.builder || !ctx.render_graph)
+      return PhaseResult { std::unexpected(PhaseError { "Invalid context" }) };
+    ctx.builder->RunOptimizationStrategies(ctx.render_graph);
+    return PhaseResult { std::expected<void, PhaseError> {} };
+  }
+};
+
+auto RenderGraphBuilder::BeginGraph(FrameContext& context) -> void
+{
+  // Reset builder state for new graph
+  frame_context_ = &context;
+
+  // Configure builder based on frame context
+  is_thread_safe_
+    = false; // Will be set by engine if needed for parallel phases
+
+  // Clear any previous state
+  resource_descriptors_.clear();
+  passes_.clear();
+  surface_mappings_.clear();
+  active_view_indices_.clear();
+  per_view_resource_mapping_.clear();
+  per_view_pass_mapping_.clear();
+  expanded_per_view_passes_.clear();
+
+  // Reset ID counters
+  next_resource_id_ = 0;
+  next_pass_id_ = 0;
+
+  // Reset view configuration
+  iterate_all_views_ = false;
+  restricted_view_index_.reset();
+  view_filter_ = nullptr;
+
+  // Ensure default optimization strategies are present (promotion by default)
+  optimization_strategies_.clear();
+  optimization_strategies_.push_back(
+    std::make_unique<SharedReadOnlyPromotionStrategy>());
+
+  LOG_F(
+    2, "[RenderGraphBuilder] BeginGraph: views={}", context.GetViews().size());
+}
+
 auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
 {
-  LOG_F(2,
-    "[RenderGraphBuilder] Build start: passes={} resources={} views={} "
-    "multiview={}",
-    passes_.size(), resource_descriptors_.size(), frame_context_.views.size(),
-    multi_view_enabled_);
+  LOG_SCOPE_F(3, "[RenderGraphBuilder] Build");
+
+  // Validate that BeginGraph was called
+  if (!frame_context_) {
+    LOG_F(ERROR,
+      "[RenderGraphBuilder] Build() called without BeginGraph() - invalid "
+      "state");
+    return nullptr;
+  }
+
+  LOG_F(2, "[RenderGraphBuilder] Build start: passes={} resources={} views={}",
+    passes_.size(), resource_descriptors_.size(),
+    frame_context_->GetViews().size());
 
   // Stage 0: Basic invariants
   if (passes_.empty()) {
@@ -53,43 +152,44 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   if (null_descriptor_count) {
     LOG_F(WARNING,
       "[RenderGraphBuilder] Detected {} null resource descriptors before "
-      "processing multi-view (total resources={})",
+      "processing views (total resources={})",
       null_descriptor_count, resource_descriptors_.size());
   }
 
   // Create the render graph
-  auto render_graph = CreateAsyncEngineRenderGraph();
-
-  // Set frame context and configuration
-  render_graph->SetFrameContext(frame_context_);
-  render_graph->SetMultiViewEnabled(multi_view_enabled_);
+  auto render_graph = CreateAsyncRenderGraph();
 
   // Attach pass cost profiler if provided
   if (pass_cost_profiler_) {
     render_graph->SetPassCostProfiler(pass_cost_profiler_);
   }
 
-  // Process multi-view configuration and resource creation
-  LOG_F(3, "[RenderGraphBuilder] Multi-view configuration phase (resources={})",
-    resource_descriptors_.size());
-  ProcessMultiViewConfiguration(render_graph.get());
+  // Run the initial build pipeline phases. Each phase may use existing
+  // RenderGraphBuilder helpers to keep behavior identical while enabling
+  // easier unit testing and future extension.
+  BuildContext ctx;
+  ctx.builder = this;
+  ctx.render_graph = render_graph.get();
+  ctx.frame_context = frame_context_;
+
+  PhaseList phases;
+  phases.emplace_back(std::make_unique<ViewConfigPhase>());
+  phases.emplace_back(std::make_unique<PassTransferPhase>());
+  phases.emplace_back(std::make_unique<SharedPromotePhase>());
+
+  for (const auto& p : phases) {
+    auto res = p->Run(ctx);
+    if (!res.status) {
+      LOG_F(ERROR, "[RenderGraphBuilder] Build pipeline phase failed: {}",
+        res.status.error().message);
+      return nullptr;
+    }
+  }
+
   LOG_F(3,
-    "[RenderGraphBuilder] Multi-view configuration complete (active_views={})",
+    "[RenderGraphBuilder] View configuration & pass transfer complete "
+    "(active_views={})",
     active_view_indices_.size());
-
-  // Transfer passes to the graph with view filtering applied
-  // (Phase 1) Transfer passes with view filtering before validation &
-  // scheduling
-  ProcessPassesWithViewFiltering(render_graph.get());
-  LOG_F(3,
-    "[RenderGraphBuilder] Transferred passes (graph_passes={}) prior to "
-    "validation",
-    render_graph->GetPassCount());
-
-  // Shared resource optimization (Phase 2): promote duplicate per-view
-  // read-only resources to a single shared instance before validation so
-  // downstream analysis sees the reduced resource set.
-  OptimizeSharedPerViewResources(render_graph.get());
   // (Deferred) Transfer of resource descriptors now happens AFTER
   // alias/lifetime analysis so that the validator can still observe descriptors
   // locally. This avoids moved-out (nullptr) descriptors causing "unknown
@@ -97,21 +197,23 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
 
   // Enhanced validation (Phase 2)
   LOG_F(3, "[RenderGraphBuilder] Validation start");
-  auto validator = CreateAsyncEngineRenderGraphValidator();
+  auto validator = CreateAsyncRenderGraphValidator();
   auto validation_result = validator->ValidateGraph(*this);
   render_graph->SetValidationResult(validation_result);
   LOG_F(3, "[RenderGraphBuilder] Validation complete (errors={})",
     validation_result.GetErrorCount());
 
   // Resource lifetime & alias analysis (Phase 2 partial)
-  // Build alias validator data from pass resource usages.
-  // NOTE: For now we only analyze explicit pass resource arrays; view-specific
-  // duplication happens earlier so we use final pass set transferred to graph.
-  auto alias_validator = CreateAsyncEngineResourceValidator(nullptr);
+  // Use AliasLifetimeAnalysis wrapper to collect resources and usages. This
+  // provides a clean seam for testing and future strategy injection.
+  AliasLifetimeAnalysis alias_analysis;
+  alias_analysis.Initialize(frame_context_->AcquireGraphics().get());
   // Add resources (descriptors still owned by builder at this stage)
   for (const auto& [handle, desc_ptr] : resource_descriptors_) {
     if (desc_ptr) {
-      alias_validator->AddResource(handle, *desc_ptr);
+      LOG_F(1, "[RenderGraphBuilder] Registering resource handle {} ({})",
+        handle.get(), desc_ptr->GetDebugName());
+      alias_analysis.AddResource(handle, *desc_ptr);
     }
   }
   // Add usages: iterate the passes actually transferred to the graph so we
@@ -138,13 +240,17 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     const auto& read_resources = pass_ptr->GetReadResources();
     const auto& read_states = pass_ptr->GetReadStates();
     for (size_t i = 0; i < read_resources.size(); ++i) {
-      alias_validator->AddResourceUsage(
+      LOG_F(9, "[RenderGraphBuilder] Pass {} reading resource {}", ph.get(),
+        read_resources[i].get());
+      alias_analysis.AddUsage(
         read_resources[i], ph, read_states[i], false, view_index);
     }
     const auto& write_resources = pass_ptr->GetWriteResources();
     const auto& write_states = pass_ptr->GetWriteStates();
     for (size_t i = 0; i < write_resources.size(); ++i) {
-      alias_validator->AddResourceUsage(
+      LOG_F(9, "[RenderGraphBuilder] Pass {} writing resource {}", ph.get(),
+        write_resources[i].get());
+      alias_analysis.AddUsage(
         write_resources[i], ph, write_states[i], true, view_index);
     }
   }
@@ -171,8 +277,16 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   // Enhanced scheduling (Phase 2)
   LOG_F(3, "[RenderGraphBuilder] Scheduling start (graph_passes={})",
     render_graph->GetPassCount());
-  auto scheduler = CreateAsyncEngineRenderGraphScheduler();
-  auto scheduling_result = scheduler->SchedulePasses(*render_graph);
+  // Prefer injected scheduler if present, else create default engine scheduler
+  std::unique_ptr<RenderGraphScheduler> local_scheduler;
+  RenderGraphScheduler* scheduler_ptr = nullptr;
+  if (scheduler_) {
+    scheduler_ptr = scheduler_.get();
+  } else {
+    local_scheduler = CreateAsyncRenderGraphScheduler();
+    scheduler_ptr = local_scheduler.get();
+  }
+  auto scheduling_result = scheduler_ptr->SchedulePasses(*render_graph);
   render_graph->SetSchedulingResult(scheduling_result);
   render_graph->SetExecutionOrder(scheduling_result.execution_order);
 
@@ -182,7 +296,7 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   // adaptive enabled.
 
   // Optimize for multi-queue execution
-  scheduler->OptimizeMultiQueue(scheduling_result);
+  scheduler_ptr->OptimizeMultiQueue(scheduling_result);
   render_graph->SetSchedulingResult(scheduling_result);
   LOG_F(3, "[RenderGraphBuilder] Scheduling complete (execution_order={})",
     scheduling_result.execution_order.size());
@@ -192,17 +306,18 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   if (!scheduling_result.execution_order.empty()) {
     std::unordered_map<PassHandle, uint32_t> topo_index;
     topo_index.reserve(scheduling_result.execution_order.size());
-    for (uint32_t i = 0; i < scheduling_result.execution_order.size(); ++i) {
-      topo_index.emplace(scheduling_result.execution_order[i], i);
+    for (auto i = 0U; i < scheduling_result.execution_order.size(); ++i) {
+      topo_index.emplace(
+        scheduling_result.execution_order[i], static_cast<uint32_t>(i));
     }
-    alias_validator->SetTopologicalOrder(topo_index); // new API expected
-    alias_validator->AnalyzeLifetimes();
+    alias_analysis.SetTopologicalOrder(topo_index); // new API expected
+    alias_analysis.AnalyzeLifetimes();
     LOG_F(3,
       "[RenderGraphBuilder] Lifetime analysis complete (topological order "
       "applied)");
   } else {
     // Fallback if scheduling failed (should already have errors logged)
-    alias_validator->AnalyzeLifetimes();
+    alias_analysis.AnalyzeLifetimes();
     LOG_F(3,
       "[RenderGraphBuilder] Lifetime analysis complete (fallback no topo "
       "order)");
@@ -210,32 +325,20 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
 
   // Perform hazard validation now that lifetimes are analyzed.
   {
-    auto hazards = alias_validator->ValidateAliasing();
-    if (!hazards.empty()) {
-      for (const auto& h : hazards) {
-        ValidationError err { ValidationErrorType::ResourceAliasHazard,
-          std::string("Aliasing ")
-            + (h.severity == AliasHazard::Severity::Error ? "error: "
-                                                          : "warning: ")
-            + h.description };
-        err.affected_passes.insert(err.affected_passes.end(),
-          h.conflicting_passes.begin(), h.conflicting_passes.end());
-        if (h.severity == AliasHazard::Severity::Error) {
-          validation_result.AddError(err);
-        } else {
-          validation_result.AddWarning(err);
-        }
+    auto analysis_out = alias_analysis.ValidateAndCollect();
+    if (!analysis_out.hazards.empty()) {
+      for (const auto& err : analysis_out.hazards) {
+        validation_result.AddError(err);
       }
       render_graph->SetValidationResult(validation_result);
     }
 
     // Log safe alias candidates (informational)
-    auto candidates = alias_validator->GetAliasCandidates();
-    if (!candidates.empty()) {
+    if (!analysis_out.candidates.empty()) {
       LOG_F(3, "[RenderGraphBuilder] {} safe alias candidates detected",
-        candidates.size());
+        analysis_out.candidates.size());
       if (loguru::g_stderr_verbosity >= 5) {
-        for (auto const& c : candidates) {
+        for (auto const& c : analysis_out.candidates) {
           LOG_F(5, "  Candidate: {} <-> {} (mem={} bytes) : {}",
             c.resource_a.get(), c.resource_b.get(), c.combined_memory,
             c.description.c_str());
@@ -248,8 +351,8 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
   LOG_F(4, "[RenderGraphBuilder] Transferring resource descriptors (count={})",
     resource_descriptors_.size());
   for (auto& [handle, desc] : resource_descriptors_) {
-    if (desc && desc->HasGraphicsIntegration() && !desc->HasDescriptor()) {
-      if (auto* integration = desc->GetGraphicsIntegration()) {
+    if (desc && !desc->HasDescriptor()) {
+      if (auto integration = frame_context_->AcquireGraphics()) {
         auto descriptor = integration->AllocateDescriptor();
         desc->SetDescriptorIndex(descriptor.get());
         LOG_F(4,
@@ -266,14 +369,21 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
 
   // Generate cache key
   RenderGraphCacheKey cache_key;
-  cache_key.view_count = static_cast<uint32_t>(frame_context_.views.size());
+  cache_key.view_count
+    = static_cast<uint32_t>(frame_context_->GetViews().size());
   cache_key.structure_hash
     = cache_utils::ComputeStructureHash(render_graph->GetPassHandles());
   cache_key.resource_hash
     = cache_utils::ComputeResourceHash(render_graph->GetResourceHandles());
   cache_key.viewport_hash
-    = cache_utils::ComputeViewportHash(frame_context_.views);
+    = cache_utils::ComputeViewportHash(frame_context_->GetViews());
   render_graph->SetCacheKey(cache_key);
+
+  // Note: Render graph caching and ownership is managed by the engine-level
+  // module (`RenderGraphModule`). The builder does not transfer the compiled
+  // graph into the cache to avoid ambiguous ownership. If a cache is injected
+  // the module is expected to call cache->Set(...) after taking ownership of
+  // the compiled graph.
 
   // Store explicit dependency graph for scheduler/hazard analysis
   // IMPORTANT: The original explicit dependency graph built from builder
@@ -297,21 +407,26 @@ auto RenderGraphBuilder::Build() -> std::unique_ptr<RenderGraph>
     render_graph->GetPassCount(),
     render_graph->GetValidationResult().GetErrorCount());
 
+  // Reset frame context to prevent accidental reuse
+  frame_context_ = nullptr;
+
   return render_graph;
 }
 
 auto RenderGraphBuilder::OptimizeSharedPerViewResources(
   RenderGraph* render_graph) -> void
 {
-  if (!multi_view_enabled_ || active_view_indices_.size() <= 1) {
-    return; // Nothing to optimize (single view or disabled)
+  if (active_view_indices_.size() <= 1) {
+    return; // Nothing to optimize (single view)
   }
   // Build reverse map: base_handle -> vector<view_index, variant_handle>
   struct VariantSet {
-    std::vector<std::pair<size_t, ResourceHandle>> variants; // (view, handle)
+    std::vector<std::pair<ViewIndex, ResourceHandle>>
+      variants; // (view, handle)
     const ResourceDesc* prototype { nullptr };
   };
   std::unordered_map<ResourceHandle, VariantSet> groups;
+
   for (auto const& [key, variant] : per_view_resource_mapping_) {
     const auto& base = key.first;
     auto view_index = key.second;
@@ -430,49 +545,33 @@ auto RenderGraphBuilder::OptimizeSharedPerViewResources(
   }
 }
 
-auto RenderGraphBuilder::ProcessMultiViewConfiguration(
-  RenderGraph* /*render_graph*/) -> void
+auto RenderGraphBuilder::ProcessViewConfiguration(RenderGraph* render_graph)
+  -> void
 {
-  LOG_F(3,
-    "[RenderGraphBuilder] Processing multi-view configuration for {} views",
-    frame_context_.views.size());
+  LOG_F(3, "[RenderGraphBuilder] Processing view configuration for {} views",
+    frame_context_->GetViews().size());
 
-  if (!multi_view_enabled_ || frame_context_.views.empty()) {
-    LOG_F(3, "[RenderGraphBuilder] Multi-view disabled or no views available");
+  if (frame_context_->GetViews().empty()) {
+    LOG_F(3, "[RenderGraphBuilder] No views available");
     return;
   }
 
-  // IMPORTANT: We must not mutate resource_descriptors_ while iterating it.
-  // The previous implementation called CreatePerViewResources() directly
-  // inside the for-range loop, which inserts new entries into the
-  // unordered_map. This can trigger a rehash and invalidate the structured
-  // binding references (UB / crash). To fix this we:
-  //  1. Collect the original handles requiring per-view expansion first.
-  //  2. Perform expansion in a second phase.
-  std::vector<ResourceHandle> per_view_originals;
-  per_view_originals.reserve(resource_descriptors_.size());
-
-  for (auto const& [handle, desc] : resource_descriptors_) {
-    if (!desc)
-      continue;
-    if (desc->GetScope() == ResourceScope::PerView) {
-      per_view_originals.push_back(handle);
-    }
-  }
-
-  // Second phase – safe to mutate container
-  for (auto const handle : per_view_originals) {
-    auto* desc = GetResourceDescriptor(handle);
-    if (!desc)
-      continue; // descriptor removed meanwhile (defensive)
-    CreatePerViewResources(handle, *desc);
-  }
+  // Delegate per-view expansion responsibilities to dedicated service to
+  // improve testability and separate concerns.
+  PerViewExpansionService svc(*this);
+  // Use the render_graph pointer if available, otherwise pass nullptr safe
+  // handling in the service.
+  RenderGraph* rg = render_graph;
+  svc.ExpandPerViewResources(rg);
 
   // Apply view filters to determine active views
-  active_view_indices_ = DetermineActiveViews();
+  active_view_indices_ = svc.DetermineActiveViews();
 
-  LOG_F(3, "[RenderGraphBuilder] Active views: {}/{}",
-    active_view_indices_.size(), frame_context_.views.size());
+  // Expansion of per-view passes is handled separately in the pass-transfer
+  // phase so that view configuration remains focused on resource cloning and
+  // active view determination.
+  LOG_F(3, "[RenderGraphBuilder] View configuration complete (passes={})",
+    passes_.size());
 }
 
 auto RenderGraphBuilder::ProcessPassesWithViewFiltering(
@@ -504,8 +603,9 @@ auto RenderGraphBuilder::CreatePerViewResources(
   LOG_F(9, "[RenderGraphBuilder] Creating per-view resources for '{}'",
     desc.GetDebugName());
 
-  for (size_t view_index = 0; view_index < frame_context_.views.size();
-    ++view_index) {
+  for (auto view_index = ViewIndex { 0 };
+    view_index < ViewIndex(frame_context_->GetViews().size());
+    (void)++view_index) {
     // Skip views that don't match our filters
     if (!active_view_indices_.empty()
       && std::find(
@@ -529,27 +629,24 @@ auto RenderGraphBuilder::CreatePerViewResources(
 
     if (view_desc) {
       // Update debug name to include view index
-      const auto& view = frame_context_.views[view_index];
+      const auto& view = frame_context_->GetViews()[view_index.get()];
       const auto view_suffix = view.view_name.empty()
-        ? "_view" + std::to_string(view_index)
+        ? "_view" + nostd::to_string(view_index.get())
         : "_" + view.view_name;
       view_desc->SetDebugName(desc.GetDebugName() + view_suffix);
       view_desc->SetScope(ResourceScope::PerView);
       view_desc->SetLifetime(desc.GetLifetime());
-
-      // Set graphics integration
-      if (graphics_integration_) {
-        view_desc->SetGraphicsIntegration(graphics_integration_);
-      }
 
       // Store mapping from base handle to view-specific handle
       per_view_resource_mapping_[std::make_pair(base_handle, view_index)]
         = view_handle;
       resource_descriptors_[view_handle] = std::move(view_desc);
 
-      LOG_F(9,
-        "[RenderGraphBuilder] Created view-specific resource '{}' for view {}",
-        resource_descriptors_[view_handle]->GetDebugName(), view_index);
+      LOG_F(1,
+        "[RenderGraphBuilder] Created view-specific resource '{}' (handle {} "
+        "-> {}) for view {}",
+        resource_descriptors_[view_handle]->GetDebugName(), base_handle.get(),
+        view_handle.get(), view_index);
     }
   }
 }
@@ -557,13 +654,31 @@ auto RenderGraphBuilder::CreatePerViewResources(
 auto RenderGraphBuilder::CreatePerViewPasses(PassHandle base_handle,
   RenderPass* base_pass, RenderGraph* render_graph) -> void
 {
-  LOG_F(9, "[RenderGraphBuilder] Creating per-view passes for '{}'",
+  LOG_F(1, "[RenderGraphBuilder] Creating per-view passes for '{}'",
     base_pass->GetDebugName());
+
+  // Developer note: Ownership & ordering rationale
+  // ----------------------------------------------
+  // Per-view pass cloning is intentionally performed here in the builder and
+  // not inside the PerViewExpansionService. Reasons:
+  //  - The final RenderGraph owns the runtime containers for passes; cloning
+  //    and calling RenderGraph::AddPass must happen while those containers are
+  //    being populated so that ownership transfers (std::move) are safe.
+  //  - Performing cloning in the service led to double-insert and
+  //    use-after-move bugs where the same pass object could be moved or
+  //    inserted from two places. Centralizing cloning in the builder avoids
+  //    that by making this the single canonical insertion point.
+  //  - The builder has immediate access to view filters, active view indices,
+  //    and remapping helpers (RemapResourceHandlesForView) which are needed
+  //    to produce correct per-view clones before insertion into the graph.
+  //  - Keeping cloning here keeps the service focused on resource descriptor
+  //    expansion and active-view determination, improving testability and
+  //    separation of concerns.
 
   expanded_per_view_passes_.insert(base_handle);
   // NOTE: Executor propagation for per-view cloning.
   // RenderPass::Clone() intentionally does not copy the executor_ because it
-  // is a move-only function. For multi-view expansion we still need each
+  // is a move-only function. For per-view expansion we still need each
   // cloned pass to invoke the original executor. We solve this by moving the
   // base pass executor into a shared wrapper that each clone calls. The base
   // (template) pass itself is never executed, so transferring ownership is
@@ -590,9 +705,9 @@ auto RenderGraphBuilder::CreatePerViewPasses(PassHandle base_handle,
     auto view_handle = GetNextPassHandle();
 
     // Update debug name and view context
-    const auto& view = frame_context_.views[view_index];
+    const auto& view = frame_context_->GetViews()[view_index.get()];
     const auto view_suffix = view.view_name.empty()
-      ? "_view" + std::to_string(view_index)
+      ? "_view" + std::to_string(view_index.get())
       : "_" + view.view_name;
     view_pass->SetDebugName(base_pass->GetDebugName() + view_suffix);
     view_pass->SetViewIndex(view_index);
@@ -623,7 +738,7 @@ auto RenderGraphBuilder::CreatePerViewPasses(PassHandle base_handle,
       = view_handle;
 
     LOG_F(9, "[RenderGraphBuilder] Created view-specific pass '{}' for view {}",
-      base_pass->GetDebugName() + view_suffix, view_index);
+      base_pass->GetDebugName() + view_suffix, view_index.get());
   }
 }
 
@@ -637,9 +752,8 @@ auto RenderGraphBuilder::RebuildExplicitDependencies(
 
   // Helper to look up cloned pass for (base, view)
   auto map_clone
-    = [&](PassHandle base, uint32_t view_index) -> std::optional<PassHandle> {
-    auto it = per_view_pass_mapping_.find(
-      std::make_pair(base, static_cast<size_t>(view_index)));
+    = [&](PassHandle base, ViewIndex view_index) -> std::optional<PassHandle> {
+    auto it = per_view_pass_mapping_.find(std::make_pair(base, view_index));
     if (it != per_view_pass_mapping_.end())
       return it->second;
     return std::nullopt;
@@ -649,7 +763,7 @@ auto RenderGraphBuilder::RebuildExplicitDependencies(
   for (const auto& [handle, pass_ptr] : render_graph->GetPasses()) {
     if (!pass_ptr)
       continue;
-    const uint32_t view_index = static_cast<uint32_t>(pass_ptr->GetViewIndex());
+    const auto view_index = pass_ptr->GetViewIndex();
 
     // Rebuild dependencies for this pass
     std::vector<PassHandle> deps_out;
@@ -702,31 +816,34 @@ auto RenderGraphBuilder::RebuildExplicitDependencies(
   return remapped;
 }
 
-auto RenderGraphBuilder::DetermineActiveViews() -> std::vector<size_t>
+auto RenderGraphBuilder::DetermineActiveViews() -> std::vector<ViewIndex>
 {
-  std::vector<size_t> active_views;
+  std::vector<ViewIndex> active_views;
 
   if (iterate_all_views_) {
     // Include all views
-    for (size_t i = 0; i < frame_context_.views.size(); ++i) {
-      active_views.push_back(i);
+    for (auto i = 0U; i < frame_context_->GetViews().size(); ++i) {
+      active_views.push_back(ViewIndex { i });
     }
   } else if (restricted_view_index_.has_value()) {
     // Include only the restricted view
-    if (*restricted_view_index_ < frame_context_.views.size()) {
+    if (*restricted_view_index_
+      < ViewIndex { frame_context_->GetViews().size() }) {
       active_views.push_back(*restricted_view_index_);
     }
   } else if (view_filter_) {
     // Apply custom filter
-    for (size_t i = 0; i < frame_context_.views.size(); ++i) {
-      if (view_filter_(frame_context_.views[i])) {
-        active_views.push_back(i);
+    for (ViewIndex index = ViewIndex { 0 };
+      index.get() < frame_context_->GetViews().size(); (void)++index) {
+      if (view_filter_(frame_context_->GetViews()[index.get()])) {
+        active_views.push_back(index);
       }
     }
   } else {
     // Default: include all views
-    for (size_t i = 0; i < frame_context_.views.size(); ++i) {
-      active_views.push_back(i);
+    for (ViewIndex index = ViewIndex { 0 };
+      index.get() < frame_context_->GetViews().size(); (void)++index) {
+      active_views.push_back(index);
     }
   }
 
@@ -750,28 +867,42 @@ auto RenderGraphBuilder::ShouldExecutePassForViews(const RenderPass& pass) const
 }
 
 auto RenderGraphBuilder::RemapResourceHandlesForView(
-  RenderPass* pass, size_t view_index) -> void
+  RenderPass* pass, ViewIndex view_index) -> void
 {
-  LOG_F(9,
+  LOG_F(1,
     "[RenderGraphBuilder] Remapping resource handles for pass '{}' view {}",
     pass->GetDebugName(), view_index);
 
   // Replace read handles
   for (auto& r : pass->MutableReadResources()) {
     if (auto mapped = GetViewSpecificResourceHandle(r, view_index)) {
+      LOG_F(1,
+        "[RenderGraphBuilder] Remapping read handle {} -> {} for view {}",
+        r.get(), mapped->get(), view_index);
       r = *mapped;
+    } else {
+      LOG_F(1,
+        "[RenderGraphBuilder] No mapping found for read handle {} view {}",
+        r.get(), view_index);
     }
   }
   // Replace write handles
   for (auto& w : pass->MutableWriteResources()) {
     if (auto mapped = GetViewSpecificResourceHandle(w, view_index)) {
+      LOG_F(1,
+        "[RenderGraphBuilder] Remapping write handle {} -> {} for view {}",
+        w.get(), mapped->get(), view_index);
       w = *mapped;
+    } else {
+      LOG_F(1,
+        "[RenderGraphBuilder] No mapping found for write handle {} view {}",
+        w.get(), view_index);
     }
   }
 }
 
 auto RenderGraphBuilder::GetViewSpecificResourceHandle(
-  ResourceHandle base_handle, size_t view_index) const
+  ResourceHandle base_handle, ViewIndex view_index) const
   -> std::optional<ResourceHandle>
 {
   const auto key = std::make_pair(base_handle, view_index);
@@ -787,6 +918,70 @@ auto RenderGraphBuilder::GetViewSpecificResourceHandle(
 auto RenderGraphBuilder::GetPasses() const -> std::vector<PassHandle>
 {
   return GetPassHandles();
+}
+
+auto RenderGraphBuilder::RunBuildPipeline(BuildContext& ctx)
+  -> std::expected<void, PhaseError>
+{
+  // Default pipeline for now mirrors Build()'s initial phases
+  PhaseList phases;
+  phases.emplace_back(std::make_unique<ViewConfigPhase>());
+  phases.emplace_back(std::make_unique<PassTransferPhase>());
+  phases.emplace_back(std::make_unique<SharedPromotePhase>());
+
+  for (const auto& p : phases) {
+    auto res = p->Run(ctx);
+    if (!res.status)
+      return std::unexpected(res.status.error());
+  }
+  return {};
+}
+
+} // namespace oxygen::examples::asyncsim
+
+namespace oxygen::examples::asyncsim {
+
+auto RenderGraphBuilder::RegisterOptimizationStrategy(
+  std::unique_ptr<IGraphOptimization> s) -> void
+{
+  if (s)
+    optimization_strategies_.push_back(std::move(s));
+}
+
+auto RenderGraphBuilder::ClearOptimizationStrategies() -> void
+{
+  optimization_strategies_.clear();
+}
+
+auto RenderGraphBuilder::RunOptimizationStrategies(RenderGraph* render_graph)
+  -> void
+{
+  if (!render_graph)
+    return;
+  BuildContext ctx;
+  ctx.builder = this;
+  ctx.render_graph = render_graph;
+  ctx.frame_context = frame_context_;
+
+  ValidationResult tmp_result;
+  ValidationDiagnosticsSink sink(tmp_result);
+
+  for (const auto& strat : optimization_strategies_) {
+    if (strat)
+      strat->apply(ctx, sink);
+  }
+}
+
+auto RenderGraphBuilder::RegisterScheduler(
+  std::unique_ptr<RenderGraphScheduler> s) -> void
+{
+  scheduler_ = std::move(s);
+}
+
+auto RenderGraphBuilder::RegisterRenderGraphCache(
+  std::unique_ptr<RenderGraphCache> c) -> void
+{
+  render_graph_cache_ = std::move(c);
 }
 
 } // namespace oxygen::examples::asyncsim

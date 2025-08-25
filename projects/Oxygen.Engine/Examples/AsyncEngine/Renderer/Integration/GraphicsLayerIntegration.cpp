@@ -11,7 +11,7 @@
 namespace oxygen::examples::asyncsim {
 
 auto GraphicsLayerIntegration::RegisterResource(
-  const std::string& resource_name) -> RenderGraphResourceHandle
+  const std::string& resource_name) -> ResourceHandle
 {
   LOG_F(3, "[GraphicsIntegration] Registering resource: {}", resource_name);
 
@@ -30,7 +30,7 @@ auto GraphicsLayerIntegration::RegisterResource(
 }
 
 auto GraphicsLayerIntegration::UnregisterResource(
-  RenderGraphResourceHandle resource_handle, uint64_t frame_index,
+  ResourceHandle resource_handle, uint64_t frame_index,
   const std::string& debug_name) -> void
 {
   LOG_F(3, "[GraphicsIntegration] Unregistering resource '{}' (handle: {})",
@@ -70,7 +70,7 @@ auto GraphicsLayerIntegration::PublishDescriptorTable(uint64_t version) -> void
 }
 
 auto GraphicsLayerIntegration::ScheduleResourceReclaim(
-  RenderGraphResourceHandle resource_handle, uint64_t submitted_frame,
+  ResourceHandle resource_handle, uint64_t submitted_frame,
   const std::string& debug_name) -> void
 {
   LOG_F(3, "[GraphicsIntegration] Scheduling reclaim for '{}' (frame: {})",

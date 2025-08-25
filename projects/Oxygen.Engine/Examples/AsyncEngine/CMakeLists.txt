@@ -8,7 +8,10 @@
 # Meta information about this module
 # ------------------------------------------------------------------------------
 
-set(description "Async engine simulator: structured frame phases, parallel task group, async pipelines.")
+set(
+  description
+  "Async engine simulator: structured frame phases, parallel task group, async pipelines."
+)
 
 asap_module_declare(
   MODULE_NAME "Oxygen.AsyncEngine.Simulator"
@@ -22,24 +25,24 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
+find_package(asio CONFIG REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Sources
 # ------------------------------------------------------------------------------
 
-add_executable(
-  ${META_MODULE_TARGET}
+set(
+  ASYNC_ENGINE_CORE_SOURCES
   "AsyncEngineSimulator.cpp"
   "AsyncEngineSimulator.h"
   "EngineTypes.h"
   "GraphicsLayer.cpp"
   "GraphicsLayer.h"
   "IEngineModule.h"
-  "ModuleContext.h"
-  "ModuleContext.cpp"
+  "FrameContext.h"
+  "ResourceHandle.h"
+  "FrameContext.cpp"
   "ModuleManager.h"
-  "main_impl.cpp"
-  "../main.cpp"
   # Render Graph System
   "Renderer/Graph/Types.cpp"
   "Renderer/Graph/Resource.cpp"
@@ -47,6 +50,9 @@ add_executable(
   "Renderer/Passes/RenderPass.cpp"
   "Renderer/Graph/ExecutionContext.cpp"
   "Renderer/Graph/RenderGraphBuilder.cpp"
+  "Renderer/Graph/PerViewExpansionService.cpp"
+  "Renderer/Graph/SharedReadOnlyPromotionStrategy.cpp"
+  "Renderer/Graph/AliasLifetimeAnalysis.cpp"
   "Renderer/Graph/Scheduler.cpp"
   "Renderer/Graph/Cache.cpp"
   "Renderer/Graph/Validator.cpp"
@@ -68,16 +74,45 @@ add_executable(
   "Examples/GameModule.cpp"
 )
 
+add_library(${META_MODULE_TARGET}.core STATIC ${ASYNC_ENGINE_CORE_SOURCES})
+
+add_executable(
+  ${META_MODULE_TARGET}
+  "main_impl.cpp"
+  "../main.cpp"
+)
+
+target_link_libraries(${META_MODULE_TARGET} PRIVATE ${META_MODULE_TARGET}.core)
+
+set_target_properties(
+  ${META_MODULE_TARGET}.core
+  PROPERTIES
+    FOLDER
+      "Examples"
+)
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
-    FOLDER "Examples"
-    OUTPUT_NAME ${META_MODULE_NAME}
+    FOLDER
+      "Examples"
+    OUTPUT_NAME
+      ${META_MODULE_NAME}
 )
 
+target_compile_options(
+  ${META_MODULE_TARGET}.core
+  PRIVATE
+    ${OXYGEN_COMMON_CXX_FLAGS}
+)
+target_compile_features(${META_MODULE_TARGET}.core PRIVATE cxx_std_23)
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
 
+target_include_directories(
+  ${META_MODULE_TARGET}.core
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 target_include_directories(
   ${META_MODULE_TARGET}
   PRIVATE
@@ -89,8 +124,8 @@ target_include_directories(
 # ------------------------------------------------------------------------------
 
 target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
+  ${META_MODULE_TARGET}.core
+  PUBLIC
     glm::glm
     oxygen::base
     oxygen::renderer
@@ -99,6 +134,7 @@ target_link_libraries(
     oxygen::oxco
     oxygen::clap
 )
+target_link_libraries(${META_MODULE_TARGET} PRIVATE ${META_MODULE_TARGET}.core)
 
 # ------------------------------------------------------------------------------
 # Install
@@ -106,7 +142,12 @@ target_link_libraries(
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}
-  TARGETS ${META_MODULE_TARGET}
+  TARGETS
+    ${META_MODULE_TARGET}
 )
+
+# ------------------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------------------
 
 asap_pop_module("${META_MODULE_NAME}")

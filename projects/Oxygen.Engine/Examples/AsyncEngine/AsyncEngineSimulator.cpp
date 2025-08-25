@@ -11,17 +11,28 @@
 #include <thread>
 
 #include "./Modules/RenderGraphModule.h"
-#include "ModuleContext.h"
+#include "FrameContext.h"
+#include "Renderer/Graph/RenderGraphBuilder.h"
 
 using namespace std::chrono_literals;
 
 namespace oxygen::examples::asyncsim {
+
+// Engine core implementation of EngineTagFactory
+// This provides access to EngineTag capability tokens for engine-internal
+// operations
+namespace internal {
+  EngineTag EngineTagFactory::Get() noexcept { return EngineTag {}; }
+}
 
 AsyncEngineSimulator::AsyncEngineSimulator(
   oxygen::co::ThreadPool& pool, EngineProps props) noexcept
   : pool_(pool)
   , props_(props)
 {
+  // HACK: Create a full graphics layer integration instance
+  full_graphics_ = std::make_shared<GraphicsLayerIntegration>(graphics_);
+
   // Example synthetic parallel tasks (Category B)
   parallel_specs_.push_back(
     { "Animation", TaskCategory::ParallelFrame, 2000us });
@@ -54,15 +65,6 @@ AsyncEngineSimulator::AsyncEngineSimulator(
   async_jobs_.push_back({ "ProceduralGeometry", 20ms, 0, false });
   async_jobs_.push_back({ "GPUReadback", 5ms, 0, false });
 
-  // TODO: move out of here...
-  // Default single surface setup if no surfaces are explicitly added
-  surfaces_.push_back({
-    .name = "MainSurface",
-    .record_cost = 800us,
-    .submit_cost = 200us,
-    .present_cost = 300us,
-  });
-
   // Initialize detached services (Category D)
   InitializeDetachedServices();
 
@@ -77,18 +79,6 @@ AsyncEngineSimulator::AsyncEngineSimulator(
 
 AsyncEngineSimulator::~AsyncEngineSimulator() = default;
 
-void AsyncEngineSimulator::AddSurface(const RenderSurface& surface)
-{
-  // If this is the first surface being added and we only have the default,
-  // replace it
-  if (surfaces_.size() == 1 && surfaces_[0].name == "MainSurface") {
-    surfaces_.clear();
-  }
-  surfaces_.push_back(surface);
-}
-
-void AsyncEngineSimulator::ClearSurfaces() { surfaces_.clear(); }
-
 auto AsyncEngineSimulator::Run(uint32_t frame_count) -> void
 {
   CHECK_F(nursery_ != nullptr,
@@ -99,14 +89,14 @@ auto AsyncEngineSimulator::Run(uint32_t frame_count) -> void
 
 auto AsyncEngineSimulator::InitializeModules() -> co::Co<>
 {
-  ModuleContext context(0, pool_, graphics_, props_);
-  co_await module_manager_.InitializeModules(context);
+  // Modules get engine reference, not FrameContext for init/shutdown
+  co_await module_manager_.InitializeModules(*this);
 }
 
 auto AsyncEngineSimulator::ShutdownModules() -> co::Co<>
 {
-  ModuleContext context(frame_index_, pool_, graphics_, props_);
-  co_await module_manager_.ShutdownModules(context);
+  // Modules get engine reference, not FrameContext for init/shutdown
+  co_await module_manager_.ShutdownModules(*this);
 }
 
 auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
@@ -122,88 +112,74 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
     frame_index_ = i;
 
     // Create module context for this frame
-    ModuleContext context(frame_index_, pool_, graphics_, props_);
-    context.SetSurfacesPtr(&surfaces_);
+    FrameContext context;
+    auto engineTag = internal::EngineTagFactory::Get();
+
+    // Configure engine state with current frame
+    context.SetThreadPool(&pool_, engineTag);
+    context.SetGraphicsBackend(std::weak_ptr<Graphics> {},
+      engineTag); // TODO: Set proper graphics reference
+
+    // Advance frame index to current frame
+    for (uint64_t j = 0; j < frame_index_; ++j) {
+      context.AdvanceFrameIndex(engineTag);
+    }
+
+    // TODO: SetSurfacesPtr equivalent needs to be implemented in new API
+    // context.SetSurfacesPtr(&surfaces_);
 
     // Fence polling, epoch advance, deferred destruction retirement
-    PhaseFrameStart();
+    PhaseFrameStart(context);
 
     // B0: Input snapshot
     co_await PhaseInput(context);
+    // Network packet application & reconciliation
+    co_await PhaseNetworkReconciliation(context);
+    // Random seed management for determinism (BEFORE any systems use
+    // randomness)
+    PhaseRandomSeedManagement();
     // B1: Fixed simulation deterministic state
     co_await PhaseFixedSim(context);
     // Variable gameplay logic
     co_await PhaseGameplay(context);
-    // Network packet application & reconciliation
-    co_await PhaseNetworkReconciliation(context);
-    // Random seed management for determinism
-    co_await PhaseRandomSeedManagement();
     // B2: Structural mutations
     co_await PhaseSceneMutation(context);
     // Transform propagation
     co_await PhaseTransforms(context);
-    // Immutable snapshot build (B3)
-    co_await PhaseSnapshot(context);
 
-    // Build immutable snapshot for Category B tasks (B3 complete after this).
-    snapshot_.frame_index = frame_index_;
-    context.SetFrameSnapshot(&snapshot_);
-    LOG_F(1, "[F{}][B3 built] Immutable snapshot ready", frame_index_);
+    // Immutable snapshot build (B3)
+    PhaseSnapshot(context);
 
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
     co_await ParallelTasks(context);
-
     // Serial post-parallel integration (Category A resumes after B4)
     co_await PhasePostParallel(context);
-    // Frame graph/render pass dependency planning
-    co_await PhaseFrameGraph(context);
-    // Global descriptor/bindless table publication
-    co_await PhaseDescriptorTablePublication(context);
-    // Resource state transitions planning
-    co_await PhaseResourceStateTransitions(context);
-    // Multi-surface command recording and submission
-    co_await PhaseCommandRecord(context);
-    LOG_F(1, "[F{}][B5 submitted] All command lists submitted via pipeline",
-      frame_index_);
+
+    {
+      SetRenderGraphBuilder(context);
+
+      // Frame graph/render pass dependency planning, resource transitions,
+      // optimization, bindless indices collection for the frame
+      co_await PhaseFrameGraph(context);
+
+      // Unified command recording and submission phase (parallel recording with
+      // ordered submission)
+      co_await PhaseCommandRecord(context);
+
+      ClearRenderGraphBuilder(context);
+    }
+
     // Synchronous sequential presentation
     PhasePresent(context);
-    // Frame pacing immediately after Present
-    if (props_.target_fps > 0) {
-      const auto desired = std::chrono::nanoseconds(
-        1'000'000'000ull / static_cast<uint64_t>(props_.target_fps));
-      auto now = std::chrono::steady_clock::now();
-      auto frame_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        now - frame_start_ts_);
-      if (frame_elapsed < desired) {
-        auto sleep_for = desired - frame_elapsed;
-        LOG_F(INFO,
-          "[F{}] Frame pacing: elapsed={}us target={}us sleeping={}us",
-          frame_index_,
-          std::chrono::duration_cast<std::chrono::microseconds>(frame_elapsed)
-            .count(),
-          std::chrono::duration_cast<std::chrono::microseconds>(desired)
-            .count(),
-          std::chrono::duration_cast<std::chrono::microseconds>(sleep_for)
-            .count());
-        std::this_thread::sleep_for(sleep_for);
-      } else {
-        LOG_F(INFO,
-          "[F{}] Frame pacing: elapsed={}us exceeded target ({}us) no sleep",
-          frame_index_,
-          std::chrono::duration_cast<std::chrono::microseconds>(frame_elapsed)
-            .count(),
-          std::chrono::duration_cast<std::chrono::microseconds>(desired)
-            .count());
-      }
-    }
+
     // Poll async pipeline readiness and integrate ready resources
     PhaseAsyncPoll(context);
-    LOG_F(1, "[F{}][B6 async polled] Async resources integrated (if any)",
-      frame_index_);
+
     // Adaptive budget management for next frame
     PhaseBudgetAdapt();
+
     // Frame end timing and metrics
-    PhaseFrameEnd();
+    PhaseFrameEnd(context);
 
     // Yield control to thread pool
     co_await pool_.Run([](co::ThreadPool::CancelToken) { });
@@ -220,22 +196,38 @@ auto AsyncEngineSimulator::FrameLoop(uint32_t frame_count) -> co::Co<>
   co_return;
 }
 
-void AsyncEngineSimulator::PhaseFrameStart()
+void AsyncEngineSimulator::PhaseFrameStart(FrameContext& context)
 {
   frame_start_ts_ = std::chrono::steady_clock::now();
   phase_accum_ = 0us;
 
+  // Reset presentable flags for new frame - surfaces start as not presentable
+  context.ClearPresentableFlags(internal::EngineTagFactory::Get());
+  context.SetCurrentPhase(
+    FrameContext::FramePhase::FrameStart, internal::EngineTagFactory::Get());
+  context.SetFrameStartTime(frame_start_ts_, internal::EngineTagFactory::Get());
+  context.SetGraphicsBackend(full_graphics_, internal::EngineTagFactory::Get());
+  // TODO: setup all the properties of context that need to be set at start of
+  // frame
+
   // Initialize graphics layer for this frame
   graphics_.BeginFrame(frame_index_);
+
+  // Execute module frame start work
+  module_manager_.ExecuteFrameStart(context);
 
   // TODO: Implement epoch advance for resource lifetime management
   // Advance frame epoch counter for generation-based validation
 
   LOG_F(1, "Frame {} start (epoch advance)", frame_index_);
 }
-auto AsyncEngineSimulator::PhaseInput(ModuleContext& context) -> co::Co<>
+auto AsyncEngineSimulator::PhaseInput(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseInput", frame_index_);
+
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::Input, engine_tag);
 
   // Execute module input processing first
   co_await module_manager_.ExecuteInput(context);
@@ -243,19 +235,35 @@ auto AsyncEngineSimulator::PhaseInput(ModuleContext& context) -> co::Co<>
   // Then execute engine's own input processing
   co_await SimulateWorkOrdered(500us);
 }
-auto AsyncEngineSimulator::PhaseFixedSim(ModuleContext& context) -> co::Co<>
+auto AsyncEngineSimulator::PhaseFixedSim(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseFixedSim", frame_index_);
+  // NOTE: This phase uses coroutines for cooperative parallelism within the
+  // phase. Multiple physics modules can cooperate efficiently (rigid body,
+  // particles, fluids, cloth, etc.) but the phase runs to completion before
+  // engine continues. This maintains deterministic timing while enabling
+  // modular efficiency.
 
-  // Execute module fixed simulation first
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(
+    FrameContext::FramePhase::FixedSimulation, engine_tag);
+
+  // Execute module fixed simulation cooperatively
   co_await module_manager_.ExecuteFixedSimulation(context);
 
-  // Then execute engine's own fixed simulation
+  // Engine's own fixed simulation work
+  // Real implementation: physics integration, collision detection, constraint
+  // solving
   co_await SimulateWorkOrdered(1000us);
 }
-auto AsyncEngineSimulator::PhaseGameplay(ModuleContext& context) -> co::Co<>
+auto AsyncEngineSimulator::PhaseGameplay(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseGameplay", frame_index_);
+
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::Gameplay, engine_tag);
 
   // Execute module gameplay logic first
   co_await module_manager_.ExecuteGameplay(context);
@@ -263,10 +271,15 @@ auto AsyncEngineSimulator::PhaseGameplay(ModuleContext& context) -> co::Co<>
   // Then execute engine's own gameplay logic
   co_await SimulateWorkOrdered(1500us);
 }
-auto AsyncEngineSimulator::PhaseNetworkReconciliation(ModuleContext& context)
+auto AsyncEngineSimulator::PhaseNetworkReconciliation(FrameContext& context)
   -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseNetworkReconciliation", frame_index_);
+
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(
+    FrameContext::FramePhase::NetworkReconciliation, engine_tag);
 
   // Execute module network reconciliation first
   co_await module_manager_.ExecuteNetworkReconciliation(context);
@@ -276,19 +289,44 @@ auto AsyncEngineSimulator::PhaseNetworkReconciliation(ModuleContext& context)
   // Reconcile client predictions with server authority
   co_await SimulateWorkOrdered(300us);
 }
-auto AsyncEngineSimulator::PhaseRandomSeedManagement() -> co::Co<>
+void AsyncEngineSimulator::PhaseRandomSeedManagement()
 {
   LOG_F(1, "[F{}][A] PhaseRandomSeedManagement", frame_index_);
+  // CRITICAL: This phase must execute BEFORE any systems that consume
+  // randomness to ensure deterministic behavior across runs and network
+  // clients.
+  //
+  // Systems that depend on deterministic randomness include:
+  // - Physics simulation (particle dynamics, soft body physics)
+  // - AI decision making and pathfinding
+  // - Gameplay mechanics (weapon spread, critical hits, loot generation)
+  // - Procedural content generation
+  // - Animation noise and procedural animation
+  // - Particle systems
+  // - Audio variation systems
+  //
+  // Random seed advancement strategy:
+  // 1. Advance global seed based on frame index for temporal consistency
+  // 2. Branch seeds for different subsystems to avoid cross-contamination
+  // 3. Ensure seeds are synchronized across network clients after
+  // reconciliation
+
   // TODO: Implement deterministic random seed management
-  // Update random seeds for deterministic simulation across frames
-  // Ensure reproducible random number generation for gameplay systems
-  co_await SimulateWorkOrdered(100us);
+  // Real implementation would be:
+  // - globalSeed = hashFunction(frame_index_, networkSeed_);
+  // - physicsSeed = branchSeed(globalSeed, PHYSICS_STREAM);
+  // - aiSeed = branchSeed(globalSeed, AI_STREAM);
+  // - gameplaySeed = branchSeed(globalSeed, GAMEPLAY_STREAM);
+  // This is pure computation - no I/O, no waiting, deterministic timing
 }
-auto AsyncEngineSimulator::PhaseSceneMutation(ModuleContext& context)
-  -> co::Co<>
+auto AsyncEngineSimulator::PhaseSceneMutation(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseSceneMutation (B2: structural integrity barrier)",
     frame_index_);
+
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::SceneMutation, engine_tag);
 
   // Execute module scene mutations first
   co_await module_manager_.ExecuteSceneMutation(context);
@@ -326,9 +364,14 @@ auto AsyncEngineSimulator::PhaseSceneMutation(ModuleContext& context)
   // Ensure structural integrity before transform propagation
   co_await SimulateWorkOrdered(300us);
 }
-auto AsyncEngineSimulator::PhaseTransforms(ModuleContext& context) -> co::Co<>
+auto AsyncEngineSimulator::PhaseTransforms(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseTransforms", frame_index_);
+
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(
+    FrameContext::FramePhase::TransformPropagation, engine_tag);
 
   // Execute module transform propagation first
   co_await module_manager_.ExecuteTransformPropagation(context);
@@ -336,17 +379,14 @@ auto AsyncEngineSimulator::PhaseTransforms(ModuleContext& context) -> co::Co<>
   // Then execute engine's own transform work
   co_await SimulateWorkOrdered(400us);
 }
-auto AsyncEngineSimulator::PhaseSnapshot(ModuleContext& context) -> co::Co<>
+
+void AsyncEngineSimulator::PhaseSnapshot(FrameContext& context)
 {
   LOG_F(1, "[F{}][A] PhaseSnapshot (build immutable snapshot)", frame_index_);
-
-  // Execute module snapshot building first
-  co_await module_manager_.ExecuteSnapshotBuild(context);
-
-  // Then execute engine's own snapshot work
-  co_await SimulateWorkOrdered(300us);
+  context.PublishSnapshots(internal::EngineTagFactory::Get());
 }
-auto AsyncEngineSimulator::PhasePostParallel(ModuleContext& context) -> co::Co<>
+
+auto AsyncEngineSimulator::PhasePostParallel(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhasePostParallel (integrate Category B outputs)",
     frame_index_);
@@ -357,11 +397,38 @@ auto AsyncEngineSimulator::PhasePostParallel(ModuleContext& context) -> co::Co<>
   // Then execute engine's own post-parallel work
   co_await SimulateWorkOrdered(600us);
 }
-auto AsyncEngineSimulator::PhaseFrameGraph(ModuleContext& context) -> co::Co<>
+
+void AsyncEngineSimulator::SetRenderGraphBuilder(FrameContext& context)
+{
+  render_graph_builder_ = std::make_unique<RenderGraphBuilder>();
+  auto engine_tag = internal::EngineTagFactory::Get();
+
+  // Initialize the builder with the current frame context
+  render_graph_builder_->BeginGraph(context);
+
+  // Set the builder in the frame context so modules can access it
+  context.SetRenderGraphBuilder(
+    observer_ptr { render_graph_builder_.get() }, engine_tag);
+}
+
+void AsyncEngineSimulator::ClearRenderGraphBuilder(FrameContext& context)
+{
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetRenderGraphBuilder(
+    observer_ptr<RenderGraphBuilder> {}, engine_tag);
+  render_graph_builder_.reset();
+}
+
+auto AsyncEngineSimulator::PhaseFrameGraph(FrameContext& context) -> co::Co<>
 {
   LOG_F(1, "[F{}][A] PhaseFrameGraph", frame_index_);
 
-  // Execute module frame graph work first
+  // Engine core sets the current phase
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::FrameGraph, engine_tag);
+
+  // Execute module frame graph work - modules will use
+  // context.GetRenderGraphBuilder()
   co_await module_manager_.ExecuteFrameGraph(context);
 
   // Frame graph creates and manages render targets for the current frame
@@ -401,114 +468,40 @@ auto AsyncEngineSimulator::PhaseFrameGraph(ModuleContext& context) -> co::Co<>
   // Resolve pass dependencies and resource transition planning
   co_await SimulateWorkOrdered(500us);
 }
-auto AsyncEngineSimulator::PhaseDescriptorTablePublication(
-  ModuleContext& context) -> co::Co<>
+
+auto AsyncEngineSimulator::PhaseCommandRecord(FrameContext& context) -> co::Co<>
 {
-  LOG_F(1, "[F{}][A] PhaseDescriptorTablePublication", frame_index_);
-
-  // Execute module descriptor publication work first
-  co_await module_manager_.ExecuteDescriptorPublication(context);
-
-  // Use Graphics layer descriptor allocator for global descriptor management
-  auto& allocator = graphics_.GetDescriptorAllocator();
-
-  // At this point, all resources for the frame should be ready and have
-  // descriptors allocated In a real engine, this would batch-update the GPU
-  // descriptor heap with all frame resources
-
-  // Simulate allocating descriptors for frame-specific resources (uniform
-  // buffers, etc.)
-  auto frame_descriptor_count
-    = 3U; // Per-frame uniforms, camera data, lighting data
-  for (uint32_t i = 0; i < frame_descriptor_count; ++i) {
-    auto descriptor_id = allocator.AllocateDescriptor();
-    LOG_F(2, "[F{}] Allocated frame descriptor {} for uniform buffer",
-      frame_index_, descriptor_id);
-  }
-
-  // Publish the complete descriptor table to GPU - this makes all resources
-  // visible to shaders In a real engine, this would issue GPU commands to
-  // update descriptor heaps
-  allocator.PublishDescriptorTable(frame_index_);
-
   LOG_F(1,
-    "[F{}] Published global descriptor table (all resources now "
-    "bindless-accessible)",
-    frame_index_);
-
-  co_await SimulateWorkOrdered(200us);
-}
-auto AsyncEngineSimulator::PhaseResourceStateTransitions(ModuleContext& context)
-  -> co::Co<>
-{
-  LOG_F(1, "[F{}][A] PhaseResourceStateTransitions", frame_index_);
-
-  // Execute module resource state transitions first
-  co_await module_manager_.ExecuteResourceTransitions(context);
-
-  // TODO: Implement resource state transition planning
-  // Plan GPU resource state transitions for optimal barrier placement
-  // Coordinate with frame graph for proper resource lifecycle management
-  co_await SimulateWorkOrdered(300us);
-}
-auto AsyncEngineSimulator::PhaseCommandRecord(ModuleContext& context)
-  -> co::Co<>
-{
-  LOG_F(1, "[F{}][A] PhaseCommandRecord - {} surfaces (record+submit pipeline)",
-    frame_index_, surfaces_.size());
+    "[F{}][A] PhaseCommandRecord - {} surfaces (unified record+submit phase)",
+    context.GetFrameIndex(), context.GetSurfaces().size());
 
   // Execute module command recording first
   co_await module_manager_.ExecuteCommandRecord(context);
 
-  // In the revised design the render graph / renderer modules own command
-  // recording and submission. Module implementations should perform per-view
-  // recording and mark views/surfaces as ready (for example by setting
-  // FrameContext::presentable_flags). The simulator no longer performs
-  // per-surface record/submit work itself.
+  // In the unified design, the render graph / renderer modules own command
+  // recording and submission as a single phase. Module implementations should
+  // perform per-view recording and submission, then mark views/surfaces as
+  // Modules may stage FrameGraph or CommandRecord phases to mark work as
+  // ready (for example by calling context.SetSurfacePresentable()). The
+  // simulator no longer performs per-surface record/submit work itself.
   LOG_F(1, "[F{}][A] PhaseCommandRecord complete - modules recorded commands",
     frame_index_);
 }
 
-void AsyncEngineSimulator::PhasePresent(ModuleContext& context)
+void AsyncEngineSimulator::PhasePresent(FrameContext& context)
 {
-  LOG_F(1, "[F{}][A] PhasePresent - {} surfaces synchronously", frame_index_,
-    surfaces_.size());
+  // If modules marked surfaces as presentable during rendering, use those
+  // flags to determine which surfaces to present. This allows modules to
+  // mark surfaces as ready asynchronously and the engine to present them.
+  auto presentable_surfaces = context.GetPresentableSurfaces();
 
-  // Execute module present work first (fire and forget for now)
-  auto present_work = module_manager_.ExecutePresent(context);
+  LOG_F(1, "[F{}][A] PhasePresent - {} surfaces synchronously",
+    context.GetFrameIndex(), presentable_surfaces.size());
 
-  // If a render graph module produced per-view presentable flags, consult
-  // them so only views marked ready by worker threads are presented. This
-  // allows worker threads to mark views as presentable (release) and the
-  // frame thread to read (acquire) and present them safely.
-  bool presented_via_flags = false;
-  if (auto* rgm = context.GetRenderGraphModule()) {
-    const auto& graph = rgm->GetRenderGraph();
-    const auto& frame_ctx = graph->GetFrameContext();
-    const auto& flags = frame_ctx.presentable_flags;
-    if (!flags.empty() && flags.size() == surfaces_.size()) {
-      presented_via_flags = true;
-      // NOTE/TODO: This is a temporary, simulator-side convenience.
-      // The long-term ownership model is that the GraphicsLayer (or the
-      // renderer/render-graph integration) owns the authoritative surface
-      // structures and performs presentation. At the engine/graph layer we
-      // should only hold a non-mutable reference or view into those
-      // surfaces for coordination. Avoid copying/mutating RenderSurface here
-      // in production code; this copy-based path exists only for the demo.
-      // Build a vector of surfaces that are marked presentable and present
-      std::vector<RenderSurface> to_present;
-      to_present.reserve(surfaces_.size());
-      for (size_t i = 0; i < surfaces_.size(); ++i) {
-        std::atomic_ref<const uint8_t> ref(flags[i]);
-        uint8_t v = ref.load(std::memory_order_acquire);
-        if (v) {
-          to_present.push_back(surfaces_[i]);
-        }
-      }
-      if (!to_present.empty()) {
-        graphics_.PresentSurfaces(to_present);
-      }
-    }
+  bool presented_via_flags = !presentable_surfaces.empty();
+  if (presented_via_flags) {
+    // Use the filtered presentable surfaces directly
+    graphics_.PresentSurfaces(presentable_surfaces);
   }
 
   // TODO:does not belong here - just for dummy testing
@@ -543,16 +536,18 @@ void AsyncEngineSimulator::PhasePresent(ModuleContext& context)
   }
 
   LOG_F(1, "[F{}][A] PhasePresent complete - all {} surfaces presented",
-    frame_index_, surfaces_.size());
+    context.GetFrameIndex(), presentable_surfaces.size());
 }
-void AsyncEngineSimulator::PhaseAsyncPoll(ModuleContext& context)
+void AsyncEngineSimulator::PhaseAsyncPoll(FrameContext& context)
 {
+  // Engine core sets the current phase for async work
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::AsyncPoll, engine_tag);
+
   // Execute module async work (fire and forget style for now)
   auto async_work = module_manager_.ExecuteAsyncWork(context);
-
-  // Execute engine's async job polling
-  TickAsyncJobs();
 }
+
 void AsyncEngineSimulator::PhaseBudgetAdapt()
 {
   // TODO: Implement adaptive budget management
@@ -561,9 +556,39 @@ void AsyncEngineSimulator::PhaseBudgetAdapt()
   // GI updates) Upgrade tasks when under budget (extra probe updates, higher
   // LOD, prefetch assets) Provide hysteresis to avoid oscillation (time-window
   // averaging)
+
+  // Frame pacing
+  if (props_.target_fps > 0) {
+    const auto desired = std::chrono::nanoseconds(
+      1'000'000'000ull / static_cast<uint64_t>(props_.target_fps));
+    auto now = std::chrono::steady_clock::now();
+    auto frame_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      now - frame_start_ts_);
+    if (frame_elapsed < desired) {
+      auto sleep_for = desired - frame_elapsed;
+      LOG_F(INFO, "[F{}] Frame pacing: elapsed={}us target={}us sleeping={}us",
+        frame_index_,
+        std::chrono::duration_cast<std::chrono::microseconds>(frame_elapsed)
+          .count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(desired).count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(sleep_for)
+          .count());
+      std::this_thread::sleep_for(sleep_for);
+    } else {
+      LOG_F(INFO,
+        "[F{}] Frame pacing: elapsed={}us exceeded target ({}us) no sleep",
+        frame_index_,
+        std::chrono::duration_cast<std::chrono::microseconds>(frame_elapsed)
+          .count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(desired).count());
+    }
+  }
 }
-void AsyncEngineSimulator::PhaseFrameEnd()
+void AsyncEngineSimulator::PhaseFrameEnd(FrameContext& context)
 {
+  // Execute module frame end work first
+  module_manager_.ExecuteFrameEnd(context);
+
   // Finalize graphics layer for this frame
   graphics_.EndFrame();
 
@@ -575,28 +600,17 @@ void AsyncEngineSimulator::PhaseFrameEnd()
     0); // parallel span placeholder
 }
 
-void AsyncEngineSimulator::LaunchParallelTasks()
-{
-  parallel_results_.clear();
-  parallel_results_.reserve(parallel_specs_.size());
-  for (const auto& spec : parallel_specs_) {
-    auto start = std::chrono::steady_clock::now();
-    std::this_thread::sleep_for(spec.cost);
-    auto end = std::chrono::steady_clock::now();
-    parallel_results_.push_back({ spec.name,
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start) });
-  }
-}
-
-void AsyncEngineSimulator::JoinParallelTasks() { /* already joined inline */ }
-
-auto AsyncEngineSimulator::ParallelTasks(ModuleContext& context) -> co::Co<>
+auto AsyncEngineSimulator::ParallelTasks(FrameContext& context) -> co::Co<>
 {
   parallel_results_.clear();
   parallel_results_.reserve(parallel_specs_.size());
 
   LOG_F(1, "[F{}][B] Dispatching {} parallel tasks + module parallel work",
     frame_index_, parallel_specs_.size());
+
+  // Engine core sets the current phase for parallel work
+  auto engine_tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(FrameContext::FramePhase::ParallelWork, engine_tag);
 
   // Create vector of coroutines following the test pattern
   std::vector<co::Co<>> jobs;
@@ -648,52 +662,6 @@ auto AsyncEngineSimulator::ParallelTasks(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-void AsyncEngineSimulator::TickAsyncJobs()
-{
-  size_t ready_count = 0;
-  size_t pending_count = 0;
-  for (auto& job : async_jobs_) {
-    if (!job.ready) {
-      if (job.submit_frame == 0)
-        job.submit_frame = frame_index_;
-      if (job.remaining > 0ms) {
-        auto slice = 5ms; // increased slice for quicker readiness
-        if (job.remaining <= slice) {
-          job.remaining = 0ms;
-          job.ready = true;
-          LOG_F(1, "[F{}][C] Async job {} READY (submitted frame {})",
-            frame_index_, job.name, job.submit_frame);
-
-          // TODO: Implement proper async resource publishing with generation
-          // checks Each async job should publish results with atomic swap and
-          // generation validation Handle specific job types:
-          // - AssetLoadA: I/O → decompress → transcode → GPU upload → publish
-          // swap
-          // - ShaderCompileA: Compile & reflection (fallback variant until
-          // ready)
-          // - PSOBuild: Pipeline State Object build & cache insertion
-          // - BLASBuild/TLASRefit: Acceleration structure builds/refits
-          // - LightmapBake/ProbeBake: Progressive GI baking & denoise
-          // - NavMeshGen: Navigation mesh generation or updates
-          // - ProceduralGeometry: Terrain tiles, impostors regeneration
-          // - GPUReadback: Timings, screenshots, async compute results
-
-          LOG_F(1, "[F{}][C] PUBLISH {} resource to main frame state",
-            frame_index_, job.name);
-        } else {
-          job.remaining -= slice;
-        }
-      }
-    }
-    if (job.ready)
-      ++ready_count;
-    else
-      ++pending_count;
-  }
-  LOG_F(1, "[F{}][C] AsyncPoll summary: ready={} pending={}", frame_index_,
-    ready_count, pending_count);
-}
-
 auto AsyncEngineSimulator::SimulateWork(std::chrono::microseconds cost) const
   -> co::Co<>
 {
@@ -719,8 +687,8 @@ auto AsyncEngineSimulator::SimulateWorkOrdered(
   co_return;
 }
 
-// Note: Per-surface helpers were removed. Presentation and command recording
-// are owned by renderer / render-graph code now.
+// Note: Per-surface helpers were removed. Presentation and unified command
+// recording/submission are owned by renderer / render-graph code now.
 
 void AsyncEngineSimulator::InitializeDetachedServices()
 {

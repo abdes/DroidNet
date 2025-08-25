@@ -10,13 +10,14 @@
 #include <string>
 #include <vector>
 
-#include "../../ModuleContext.h"
+#include "../../FrameContext.h"
 #include "Resource.h"
 #include "Types.h"
+#include <Oxygen/Base/Logging.h>
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::examples::asyncsim {
-class ModuleContext;
+class FrameContext;
 class GraphicsLayerIntegration;
 }
 
@@ -235,13 +236,13 @@ public:
   // === ASYNCENGINE INTEGRATION ===
 
   //! Set module context for cross-module data access
-  auto SetModuleContext(ModuleContext* module_context) -> void
+  auto SetModuleContext(FrameContext* module_context) -> void
   {
     module_context_ = module_context;
   }
 
   //! Get module context for accessing engine systems
-  [[nodiscard]] auto GetModuleContext() const -> ModuleContext*
+  [[nodiscard]] auto GetModuleContext() const -> FrameContext*
   {
     return module_context_;
   }
@@ -290,16 +291,13 @@ public:
   }
 
   //! Get view context for this execution
-  [[nodiscard]] auto GetViewContext() const -> const ViewContext&
+  [[nodiscard]] auto GetViewInfo() const -> const ViewInfo&
   {
     return view_context_;
   }
 
   //! Set view context for this execution
-  auto SetViewContext(const ViewContext& context) -> void
-  {
-    view_context_ = context;
-  }
+  auto SetViewInfo(const ViewInfo& context) -> void { view_context_ = context; }
 
   //! Get read resource by index
   [[nodiscard]] auto GetReadResource(size_t index) const -> ResourceHandle
@@ -407,7 +405,7 @@ public:
 
 private:
   std::unique_ptr<CommandRecorder> command_recorder_;
-  ViewContext view_context_;
+  ViewInfo view_context_;
   std::vector<ResourceHandle> read_resources_;
   std::vector<ResourceHandle> write_resources_;
   std::vector<DrawItem> opaque_draws_;
@@ -415,7 +413,7 @@ private:
   uint32_t instance_count_ { 1 };
 
   // AsyncEngine integration
-  ModuleContext* module_context_ { nullptr };
+  FrameContext* module_context_ { nullptr };
   GraphicsLayerIntegration* graphics_integration_ { nullptr };
   bool is_parallel_safe_ { false };
 };

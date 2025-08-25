@@ -13,19 +13,13 @@
 
 namespace oxygen::examples::asyncsim {
 
-auto AsyncEngineRenderGraphValidator::ValidateGraph(
-  const RenderGraphBuilder& builder) -> ValidationResult
+auto AsyncRenderGraphValidator::ValidateGraph(const RenderGraphBuilder& builder)
+  -> ValidationResult
 {
   ValidationResult result;
 
   LOG_F(2, "[RenderGraphValidator] Validating render graph (frame {})",
     GetCurrentFrameIndex());
-
-  // Basic integration check
-  if (!builder.HasAsyncEngineIntegration()) {
-    result.AddError(ValidationError { ValidationErrorType::InvalidConfiguration,
-      "Missing AsyncEngine integration (module + graphics)" });
-  }
 
   // Simple sanity warnings
   if (builder.GetPassHandles().empty()) {
@@ -39,15 +33,14 @@ auto AsyncEngineRenderGraphValidator::ValidateGraph(
         "Render graph has no resources" });
   }
 
-  result.summary = "AsyncEngineRenderGraphValidator stub - "
+  result.summary = "AsyncRenderGraphValidator stub - "
     + std::string(result.IsValid() ? "PASSED" : "FAILED");
   return result;
 }
 
-auto CreateAsyncEngineRenderGraphValidator()
-  -> std::unique_ptr<RenderGraphValidator>
+auto CreateAsyncRenderGraphValidator() -> std::unique_ptr<RenderGraphValidator>
 {
-  return std::make_unique<AsyncEngineRenderGraphValidator>();
+  return std::make_unique<AsyncRenderGraphValidator>();
 }
 
 } // namespace oxygen::examples::asyncsim

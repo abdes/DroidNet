@@ -67,9 +67,10 @@ struct EngineProps {
 
 //! Immutable per-frame snapshot passed to Category B parallel tasks
 //! (placeholder for future scene/game state).
-struct FrameSnapshot {
-  uint64_t frame_index { 0 };
-};
+// NOTE: FrameSnapshot is now fully defined in FrameContext.h
+// struct FrameSnapshot {
+//   uint64_t frame_index { 0 };
+// };
 
 //! Represents a rendering surface with command recording state
 struct RenderSurface {

@@ -10,13 +10,15 @@
 #include <string_view>
 
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
 #include <fmt/format.h>
 
 namespace oxygen::examples::asyncsim {
 
-class ModuleContext;
+class FrameContext;
 class GraphicsLayer;
+class AsyncEngineSimulator; // Forward declare for engine reference
 
 //! Strong type for module execution priority (lower values = higher priority)
 using ModulePriority
@@ -79,34 +81,33 @@ enum class ModulePhases : uint32_t {
   None = 0,
 
   // Ordered phases (Category A) - deterministic, sequential
-  Input = 1 << 0, //!< Input sampling phase
-  FixedSimulation = 1 << 1, //!< Fixed timestep simulation
-  Gameplay = 1 << 2, //!< Variable gameplay logic
-  NetworkReconciliation = 1 << 3, //!< Network packet reconciliation
-  SceneMutation = 1 << 4, //!< Scene structural changes
-  TransformPropagation = 1 << 5, //!< Transform hierarchy updates
-  SnapshotBuild = 1 << 6, //!< Immutable snapshot creation
-  PostParallel = 1 << 7, //!< Integration after parallel work
-  FrameGraph = 1 << 8, //!< Render graph assembly
-  DescriptorPublication = 1 << 9, //!< Bindless descriptor updates
-  ResourceTransitions = 1 << 10, //!< GPU resource state planning
-  CommandRecord = 1 << 11, //!< Command list recording
-  Present = 1 << 12, //!< Final presentation
+  FrameStart = 1u << 0, //!< Frame start hook
+  Input = 1u << 1, //!< Input sampling phase
+  FixedSimulation = 1u << 2, //!< Fixed timestep simulation
+  Gameplay = 1u << 3, //!< Variable gameplay logic
+  NetworkReconciliation = 1u << 4, //!< Network packet reconciliation
+  SceneMutation = 1u << 5, //!< Scene structural changes
+  TransformPropagation = 1u << 6, //!< Transform hierarchy updates
+  PostParallel = 1u << 7, //!< Integration after parallel work
+  FrameGraph = 1u << 8, //!< Render graph assembly
+  CommandRecord = 1u << 9, //!< Command list recording
+  // NOTE: Present is engine-only and not available to modules
 
   // Parallel phases (Category B) - snapshot-based, concurrent
-  ParallelWork = 1 << 16, //!< Parallel frame work
+  ParallelWork = 1u << 10, //!< Parallel frame work
 
   // Async phases (Category C) - multi-frame pipelines
-  AsyncWork = 1 << 20, //!< Async pipeline work
+  AsyncWork = 1u << 11, //!< Async pipeline work
 
   // Detached phases (Category D) - fire-and-forget
-  DetachedWork = 1 << 24, //!< Background services
+  DetachedWork = 1u << 12, //!< Background services
+
+  FrameEnd = 1u << 13, //!< Frame end hook
 
   // Common combinations
   CoreGameplay
   = Input | FixedSimulation | Gameplay | SceneMutation | TransformPropagation,
-  Rendering = SnapshotBuild | ParallelWork | PostParallel | FrameGraph
-    | CommandRecord | Present,
+  Rendering = ParallelWork | PostParallel | FrameGraph | CommandRecord,
   AllPhases = 0xFFFFFFFF
 };
 
@@ -146,94 +147,89 @@ public:
   }
   [[nodiscard]] virtual ModulePhases GetSupportedPhases() const noexcept = 0;
 
+  //! Engine reference management - modules can store engine as observer_ptr
+  //! Engine lifetime is guaranteed to be greater than any module it manages
+  virtual void SetEngine(AsyncEngineSimulator* engine) noexcept
+  {
+    engine_ = observer_ptr { engine };
+  }
+
+protected:
+  //! Engine reference stored as observer_ptr - NOT owned by module
+  oxygen::observer_ptr<AsyncEngineSimulator> engine_ { nullptr };
+
+public:
   //! Lifecycle management
-  virtual auto Initialize(ModuleContext& context) -> co::Co<> { co_return; }
-  virtual auto Shutdown(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto Initialize(AsyncEngineSimulator& engine) -> co::Co<>
+  {
+    co_return;
+  }
+  virtual auto Shutdown() -> co::Co<> { co_return; }
 
   // === ORDERED PHASES (Category A) - Sequential, deterministic ===
   // Can mutate authoritative state, strict ordering enforced
 
+  virtual void OnFrameStart(FrameContext& /*context*/) { }
+  virtual void OnFrameEnd(FrameContext& /*context*/) { }
+
   //! Input sampling phase - produce immutable input snapshot
-  virtual auto OnInput(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnInput(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Fixed timestep simulation - deterministic physics/gameplay
-  virtual auto OnFixedSimulation(ModuleContext& context) -> co::Co<>
+  virtual auto OnFixedSimulation(FrameContext& context) -> co::Co<>
   {
     co_return;
   }
 
   //! Variable gameplay logic - high-level game state mutations
-  virtual auto OnGameplay(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnGameplay(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Network reconciliation - apply network updates to authoritative state
-  virtual auto OnNetworkReconciliation(ModuleContext& context) -> co::Co<>
+  virtual auto OnNetworkReconciliation(FrameContext& context) -> co::Co<>
   {
     co_return;
   }
 
   //! Scene mutations - structural changes (spawn/despawn, reparent)
-  virtual auto OnSceneMutation(ModuleContext& context) -> co::Co<>
-  {
-    co_return;
-  }
+  virtual auto OnSceneMutation(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Transform propagation - hierarchy traversal and world transform updates
-  virtual auto OnTransformPropagation(ModuleContext& context) -> co::Co<>
-  {
-    co_return;
-  }
-
-  //! Snapshot build - create immutable views for parallel work
-  virtual auto OnSnapshotBuild(ModuleContext& context) -> co::Co<>
+  virtual auto OnTransformPropagation(FrameContext& context) -> co::Co<>
   {
     co_return;
   }
 
   //! Post-parallel integration - merge results from parallel work
-  virtual auto OnPostParallel(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnPostParallel(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Frame graph assembly - build render pass dependency graph
-  virtual auto OnFrameGraph(ModuleContext& context) -> co::Co<> { co_return; }
-
-  //! Descriptor publication - update bindless descriptor tables
-  virtual auto OnDescriptorPublication(ModuleContext& context) -> co::Co<>
-  {
-    co_return;
-  }
-
-  //! Resource transitions - plan GPU resource state changes
-  virtual auto OnResourceTransitions(ModuleContext& context) -> co::Co<>
-  {
-    co_return;
-  }
+  virtual auto OnFrameGraph(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Command recording - record GPU command lists (may be parallel per surface)
-  virtual auto OnCommandRecord(ModuleContext& context) -> co::Co<>
-  {
-    co_return;
-  }
+  virtual auto OnCommandRecord(FrameContext& context) -> co::Co<> { co_return; }
 
-  //! Present - final surface presentation (synchronous)
-  virtual auto OnPresent(ModuleContext& context) -> co::Co<> { co_return; }
+  // === FRAME BOUNDARY PHASES - Hooks at frame start/end ===
+  // NOTE: Present is engine-only and not available to modules - the engine
+  // handles presentation through the GraphicsLayer for platform abstraction
 
   // === PARALLEL PHASE (Category B) - Concurrent, snapshot-based ===
   // Read-only snapshot access, parallel execution safe
 
   //! Parallel work phase - concurrent processing on immutable snapshot
   //! Safe for parallel execution, no shared mutable state access
-  virtual auto OnParallelWork(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnParallelWork(FrameContext& context) -> co::Co<> { co_return; }
 
   // === ASYNC PHASE (Category C) - Multi-frame pipelines ===
   // Eventual consistency, results integrated when ready
 
   //! Async work - multi-frame operations (asset loading, compilation, etc.)
-  virtual auto OnAsyncWork(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnAsyncWork(FrameContext& context) -> co::Co<> { co_return; }
 
   // === DETACHED PHASE (Category D) - Fire-and-forget ===
   // Background services, no frame dependencies
 
   //! Detached work - background services (telemetry, logging, etc.)
-  virtual auto OnDetachedWork(ModuleContext& context) -> co::Co<> { co_return; }
+  virtual auto OnDetachedWork(FrameContext& context) -> co::Co<> { co_return; }
 };
 
 //! Convenience base class providing default implementations

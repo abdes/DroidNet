@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "../../Types/ViewIndex.h"
 #include "../Graph/ExecutionContext.h"
 #include "../Graph/Resource.h"
 #include "../Graph/Types.h"
@@ -147,7 +148,7 @@ public:
   auto SetDebugName(const std::string& name) -> void { debug_name_ = name; }
 
   //! Set view index (for view-specific passes)
-  auto SetViewIndex(uint32_t view_index) -> void { view_index_ = view_index; }
+  auto SetViewIndex(ViewIndex view_index) -> void { view_index_ = view_index; }
 
   //! Get type information for this pass
   [[nodiscard]] virtual auto GetTypeInfo() const -> std::string = 0;
@@ -156,7 +157,7 @@ public:
   [[nodiscard]] virtual auto GetTypeName() const -> const char* = 0;
 
   //! Get view index for view-specific passes (returns 0 for shared passes)
-  [[nodiscard]] virtual auto GetViewIndex() const -> uint32_t
+  [[nodiscard]] virtual auto GetViewIndex() const -> ViewIndex
   {
     return view_index_;
   }
@@ -166,7 +167,7 @@ public:
 
   //! View filtering flags
   [[nodiscard]] auto IsFiltered() const -> bool { return has_view_filter_; }
-  [[nodiscard]] auto MatchesView(uint32_t view_index) const -> bool
+  [[nodiscard]] auto MatchesView(ViewIndex view_index) const -> bool
   {
     if (!has_view_filter_)
       return true;
@@ -178,13 +179,13 @@ public:
     }
     return true;
   }
-  auto SetSingleView(uint32_t view_index) -> void
+  auto SetSingleView(ViewIndex view_index) -> void
   {
     has_view_filter_ = true;
     single_view_only_ = true;
     view_index_ = view_index;
   }
-  auto SetAllowedViews(std::vector<uint32_t> views) -> void
+  auto SetAllowedViews(std::vector<ViewIndex> views) -> void
   {
     has_view_filter_ = true;
     single_view_only_ = false;
@@ -204,7 +205,7 @@ public:
       return; // Safety in non-debug builds
     }
     DLOG_F(5, "[RenderPass][Execute] pass={} view={}", GetDebugName(),
-      context.GetViewContext().view_name);
+      context.GetViewInfo().view_name);
     executor_(context);
   }
 
@@ -236,7 +237,7 @@ protected:
   Priority priority_ { Priority::Normal };
   QueueType queue_type_ { QueueType::Graphics };
   bool iterate_all_views_ { false };
-  uint32_t view_index_ { 0 };
+  ViewIndex view_index_ { 0 };
 
   std::vector<ResourceHandle> read_resources_;
   std::vector<ResourceState> read_states_;
@@ -250,7 +251,7 @@ protected:
   // View filtering meta
   bool has_view_filter_ { false };
   bool single_view_only_ { false };
-  std::vector<uint32_t> allowed_views_;
+  std::vector<ViewIndex> allowed_views_;
 
   PassExecutor executor_;
 
@@ -385,6 +386,28 @@ public:
     return *this;
   }
 
+  //! Convenience method: Set scope to Viewless (executes once without view
+  //! dependency)
+  auto SetViewless() -> PassBuilder&
+  {
+    pass_->scope_ = PassScope::Viewless;
+    return *this;
+  }
+
+  //! Convenience method: Set scope to Shared (executes once for all views)
+  auto SetShared() -> PassBuilder&
+  {
+    pass_->scope_ = PassScope::Shared;
+    return *this;
+  }
+
+  //! Convenience method: Set scope to PerView (executes once per view)
+  auto SetPerView() -> PassBuilder&
+  {
+    pass_->scope_ = PassScope::PerView;
+    return *this;
+  }
+
   //! Set the queue type
   auto SetQueue(QueueType queue) -> PassBuilder&
   {
@@ -444,7 +467,7 @@ public:
   }
 
   //! Set view context for per-view passes
-  auto SetViewContext(const ViewContext& view) -> PassBuilder&
+  auto SetViewInfo(const ViewInfo& view) -> PassBuilder&
   {
     view_context_ = view;
     return *this;
@@ -458,14 +481,14 @@ public:
   }
 
   //! Restrict pass to a single specific view index
-  auto RestrictToView(uint32_t view_index) -> PassBuilder&
+  auto RestrictToView(ViewIndex view_index) -> PassBuilder&
   {
     pass_->SetSingleView(view_index);
     return *this;
   }
 
   //! Restrict pass to a set of allowed view indices
-  auto RestrictToViews(const std::vector<uint32_t>& views) -> PassBuilder&
+  auto RestrictToViews(const std::vector<ViewIndex>& views) -> PassBuilder&
   {
     pass_->SetAllowedViews(views);
     return *this;
@@ -496,7 +519,7 @@ public:
   }
 
   //! Get the view context
-  [[nodiscard]] auto GetViewContext() const -> const ViewContext&
+  [[nodiscard]] auto GetViewInfo() const -> const ViewInfo&
   {
     return view_context_;
   }
@@ -504,7 +527,7 @@ public:
 private:
   std::unique_ptr<RenderPass> pass_;
   PassCost estimated_cost_;
-  ViewContext view_context_;
+  ViewInfo view_context_;
 };
 
 } // namespace oxygen::examples::asyncsim

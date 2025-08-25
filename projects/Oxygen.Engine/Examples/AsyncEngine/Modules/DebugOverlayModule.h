@@ -11,10 +11,11 @@
 
 #include <Oxygen/Base/Logging.h>
 
+#include "../FrameContext.h"
 #include "../IEngineModule.h"
-#include "../ModuleContext.h"
 #include "../Renderer/Graph/ExecutionContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
+#include "../Renderer/Graph/Types.h"
 
 using namespace std::chrono_literals;
 
@@ -39,28 +40,22 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  auto Initialize(ModuleContext& context) -> co::Co<> override;
-  auto Shutdown(ModuleContext& context) -> co::Co<> override;
+  auto Initialize(AsyncEngineSimulator& engine) -> co::Co<> override;
+  auto Shutdown() -> co::Co<> override;
 
   // === FRAME PHASE IMPLEMENTATIONS ===
 
-  //! Snapshot build phase - capture frame statistics
-  auto OnSnapshotBuild(ModuleContext& context) -> co::Co<> override;
-
   //! Parallel work phase - build debug visualization data
-  auto OnParallelWork(ModuleContext& context) -> co::Co<> override;
+  auto OnParallelWork(FrameContext& context) -> co::Co<> override;
 
   //! Frame graph phase - contribute debug overlay passes
-  auto OnFrameGraph(ModuleContext& context) -> co::Co<> override;
+  auto OnFrameGraph(FrameContext& context) -> co::Co<> override;
 
   //! Command recording phase - record debug rendering commands
-  auto OnCommandRecord(ModuleContext& context) -> co::Co<> override;
-
-  //! Present phase - display debug information
-  auto OnPresent(ModuleContext& context) -> co::Co<> override;
+  auto OnCommandRecord(FrameContext& context) -> co::Co<> override;
 
   //! Detached work phase - background profiling data collection
-  auto OnDetachedWork(ModuleContext& context) -> co::Co<> override;
+  auto OnDetachedWork(FrameContext& context) -> co::Co<> override;
 
   // === PUBLIC API ===
 
@@ -94,8 +89,8 @@ private:
   };
 
   bool enabled_ { false };
-  uint32_t debug_font_handle_ { 0 };
-  uint32_t debug_line_buffer_handle_ { 0 };
+  ResourceHandle debug_font_handle_ { 0 };
+  ResourceHandle debug_line_buffer_handle_ { 0 };
 
   DebugFrameStats frame_stats_ {};
   uint32_t debug_lines_count_ { 0 };

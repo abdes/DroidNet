@@ -8,14 +8,16 @@
 
 // Forward declarations
 namespace oxygen::examples::asyncsim {
-class ModuleContext;
+class FrameContext;
 }
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "../../FrameContext.h"
 #include "../Passes/RenderPass.h"
 #include "Cache.h"
 #include "ExecutionContext.h"
@@ -29,7 +31,7 @@ class ModuleContext;
 namespace oxygen::examples::asyncsim {
 
 // Forward declarations
-class ModuleContext;
+class FrameContext;
 
 //! Execution statistics for performance monitoring
 struct ExecutionStats {
@@ -59,11 +61,42 @@ struct ExecutionStats {
  execution logic needed to render a frame.
  */
 class RenderGraph {
-  // Allow AsyncEngineRenderGraph access to private members
-  friend class AsyncEngineRenderGraph;
+  friend class AsyncRenderGraph;
 
 public:
-  RenderGraph() = default;
+  // Strategy interfaces
+  struct IExecutor {
+    virtual ~IExecutor() = default;
+    virtual co::Co<> Execute(RenderGraph& graph, FrameContext& ctx) = 0;
+    virtual co::Co<> ExecutePassBatches(RenderGraph& graph, FrameContext& ctx)
+      = 0;
+    virtual co::Co<> Present(RenderGraph& graph, FrameContext& ctx) = 0;
+  };
+
+  struct IScheduler {
+    virtual ~IScheduler() = default;
+    virtual void Schedule(RenderGraph& graph) = 0;
+  };
+
+  struct ITransitionPlanner {
+    virtual ~ITransitionPlanner() = default;
+    virtual co::Co<> PlanTransitions(RenderGraph& graph, FrameContext& ctx) = 0;
+  };
+
+public:
+  // Construction requires exclusive ownership of mandatory components.
+  RenderGraph(std::unique_ptr<IExecutor> executor,
+    std::unique_ptr<IScheduler> scheduler,
+    std::unique_ptr<ITransitionPlanner> planner)
+    : executor_(std::move(executor))
+    , scheduler_(std::move(scheduler))
+    , planner_(std::move(planner))
+  {
+    if (!executor_ || !scheduler_ || !planner_)
+      throw std::invalid_argument(
+        "RenderGraph requires non-null executor, scheduler and planner");
+  }
+
   virtual ~RenderGraph() = default; // ensure proper polymorphic deletion
 
   // Non-copyable, movable
@@ -72,91 +105,28 @@ public:
   RenderGraph(RenderGraph&&) = default;
   auto operator=(RenderGraph&&) -> RenderGraph& = default;
 
-  //! Execute the render graph
-  /*!
-   Executes all passes in the scheduled order, managing resource state
-   transitions and multi-view rendering.
-   */
-  virtual auto Execute() -> bool
+  //! Execute the render graph (delegates to executor)
+  auto Execute(FrameContext& context) -> co::Co<>
   {
-    execution_stats_.Reset();
-
-    // Stub implementation - Phase 1
-    // In a real implementation, this would:
-    // 1. Prepare resources for the frame
-    // 2. Execute passes in dependency order
-    // 3. Handle multi-view rendering
-    // 4. Manage resource state transitions
-    // 5. Collect performance metrics
-
-    // Simple ordered iteration using execution_order_ if available
-    std::vector<PassHandle> order
-      = execution_order_.empty() ? GetPassHandles() : execution_order_;
-
-    ResourceStateTracker state_tracker; // local tracker (future: persist)
-
-    for (const auto& handle : order) {
-      auto* pass = GetPassMutable(handle);
-      if (!pass)
-        continue;
-
-      // Plan transitions using actual per-resource states
-      const auto& reads = pass->GetReadResources();
-      const auto& read_states = pass->GetReadStates();
-      for (size_t i = 0; i < reads.size(); ++i) {
-        state_tracker.RequestTransition(
-          reads[i], read_states[i], handle, pass->GetViewIndex());
-      }
-      const auto& writes = pass->GetWriteResources();
-      const auto& write_states = pass->GetWriteStates();
-      for (size_t i = 0; i < writes.size(); ++i) {
-        state_tracker.RequestTransition(
-          writes[i], write_states[i], handle, pass->GetViewIndex());
-      }
-
-      TaskExecutionContext context;
-      SetupExecutionContext(context, handle);
-      pass->Execute(context);
-      execution_stats_.passes_executed++;
-    }
-
-    return true;
+    return executor_->Execute(*this, context);
   }
 
-  //! Execute with specific frame context
-  virtual auto Execute(const FrameContext& frame_context) -> bool
+  //! Plan resource state transitions (delegates to planner)
+  auto PlanResourceTransitions(FrameContext& context) -> co::Co<>
   {
-    frame_context_ = frame_context;
-    return Execute();
+    return planner_->PlanTransitions(*this, context);
   }
 
-  //! Execute with module context (async version)
-  virtual auto Execute(ModuleContext& context) -> co::Co<>
+  //! Execute pass batches in parallel (delegates to executor)
+  auto ExecutePassBatches(FrameContext& context) -> co::Co<>
   {
-    // Default implementation for backward compatibility
-    Execute();
-    co_return;
+    return executor_->ExecutePassBatches(*this, context);
   }
 
-  //! Plan resource state transitions
-  virtual auto PlanResourceTransitions(ModuleContext& context) -> co::Co<>
+  // Presentation is not done by the render graph; delegate to executor
+  auto PresentResults(FrameContext& context) -> co::Co<>
   {
-    // Default implementation - stub
-    co_return;
-  }
-
-  //! Execute pass batches in parallel
-  virtual auto ExecutePassBatches(ModuleContext& context) -> co::Co<>
-  {
-    // Default implementation for backward compatibility
-    co_return;
-  }
-
-  //! Present rendering results to surfaces
-  virtual auto PresentResults(ModuleContext& context) -> co::Co<>
-  {
-    // Default implementation for backward compatibility
-    co_return;
+    return executor_->Present(*this, context);
   }
 
   //! Get execution statistics
@@ -218,12 +188,6 @@ public:
     return handles;
   }
 
-  //! Check if multi-view rendering is enabled
-  [[nodiscard]] auto IsMultiViewEnabled() const -> bool
-  {
-    return multi_view_enabled_;
-  }
-
   //! Get number of passes in this graph
   [[nodiscard]] auto GetPassCount() const -> std::uint32_t
   {
@@ -281,13 +245,6 @@ public:
     return cache_key_;
   }
 
-  //! Get debug information
-  [[nodiscard]] virtual auto GetDebugInfo() const -> std::string
-  {
-    return "RenderGraph: " + std::to_string(passes_.size()) + " passes, "
-      + std::to_string(resource_descriptors_.size()) + " resources";
-  }
-
   //! Optimize the graph for better performance
   virtual auto Optimize() -> void
   {
@@ -295,7 +252,7 @@ public:
     // In real implementation would optimize:
     // - Resource aliasing
     // - Pass ordering
-    // - Multi-view parallelism
+    // - View parallelism
     // - Memory usage
   }
 
@@ -312,7 +269,7 @@ protected:
 
     // In real implementation would:
     // 1. Set up resource bindings
-    // 2. Configure view context for multi-view
+    // 2. Configure view context for rendering
     // 3. Prepare draw lists
     // 4. Set up command recorder
   }
@@ -336,18 +293,7 @@ protected:
     execution_order_ = std::move(order);
   }
 
-  //! Set frame context
-  auto SetFrameContext(const FrameContext& context) -> void
-  {
-    frame_context_ = context;
-  }
-
-  //! Set multi-view enabled flag
-  auto SetMultiViewEnabled(bool enabled) -> void
-  {
-    multi_view_enabled_ = enabled;
-  }
-
+  //! Set view enabled flag
   //! Set validation result
   auto SetValidationResult(const ValidationResult& result) -> void
   {
@@ -370,6 +316,21 @@ protected:
     explicit_dependencies_ = std::move(deps);
   }
 
+  //! Read-only accessors for injected components
+  [[nodiscard]] auto GetExecutor() const noexcept -> IExecutor*
+  {
+    return executor_.get();
+  }
+  [[nodiscard]] auto GetScheduler() const noexcept -> IScheduler*
+  {
+    return scheduler_.get();
+  }
+  [[nodiscard]] auto GetTransitionPlanner() const noexcept
+    -> ITransitionPlanner*
+  {
+    return planner_.get();
+  }
+
 private:
   // Core graph data
   std::unordered_map<PassHandle, std::unique_ptr<RenderPass>> passes_;
@@ -381,7 +342,6 @@ private:
 
   // Configuration
   FrameContext frame_context_;
-  bool multi_view_enabled_ { false };
 
   // Compilation results
   ValidationResult validation_result_;
@@ -393,23 +353,99 @@ private:
 
   // Adaptive scheduling support
   std::shared_ptr<PassCostProfiler> pass_cost_profiler_;
+  // Injected mandatory strategies (exclusive ownership)
+  std::unique_ptr<IExecutor> executor_;
+  std::unique_ptr<IScheduler> scheduler_;
+  std::unique_ptr<ITransitionPlanner> planner_;
 };
 
 //! Enhanced RenderGraph with complete AsyncEngine execution pipeline
 /*!
- AsyncEngineRenderGraph provides a fully-featured render graph implementation
- with coroutine-based execution, resource state tracking, and multi-view
- rendering support.
+ AsyncRenderGraph provides a fully-featured render graph implementation
+ with coroutine-based execution, resource state tracking, and view-agnostic
+ rendering support. Supports three execution patterns:
+ - PassScope::Shared: Execute once for all views
+ - PassScope::PerView: Execute once per view (skipped if no views)
+ - PassScope::Viewless: Execute once without view dependency
  */
-class AsyncEngineRenderGraph : public RenderGraph {
+class AsyncRenderGraph : public RenderGraph {
 public:
-  AsyncEngineRenderGraph() = default;
+  AsyncRenderGraph();
 
-  auto Execute(ModuleContext& context) -> co::Co<> override;
-  auto PlanResourceTransitions(ModuleContext& context) -> co::Co<> override;
-  auto ExecutePassBatches(ModuleContext& context) -> co::Co<> override;
-  auto PresentResults(ModuleContext& context) -> co::Co<> override;
+private:
+  // Implementation entrypoints called by adapters (private)
+  auto ExecuteImpl(FrameContext& context) -> co::Co<>;
+  auto PlanResourceTransitionsImpl(FrameContext& context) -> co::Co<>;
+  auto ExecutePassBatchesImpl(FrameContext& context) -> co::Co<>;
+  auto PresentResultsImpl(FrameContext& context) -> co::Co<>;
 
+  // Adapters used to satisfy the base class' strategy interfaces. These are
+  // simple thin wrappers that forward into the AsyncRenderGraph impl methods.
+  struct ExecAdapter final : IExecutor {
+    AsyncRenderGraph* owner;
+    explicit ExecAdapter(AsyncRenderGraph* o) noexcept
+      : owner(o)
+    {
+    }
+    auto Execute(RenderGraph& g, FrameContext& ctx) -> co::Co<> override
+    {
+      (void)g;
+      return owner->ExecuteImpl(ctx);
+    }
+    auto ExecutePassBatches(RenderGraph& g, FrameContext& ctx)
+      -> co::Co<> override
+    {
+      (void)g;
+      return owner->ExecutePassBatchesImpl(ctx);
+    }
+    auto Present(RenderGraph& g, FrameContext& ctx) -> co::Co<> override
+    {
+      (void)g;
+      return owner->PresentResultsImpl(ctx);
+    }
+  };
+
+  struct SchedulerAdapter final : IScheduler {
+    AsyncRenderGraph* owner;
+    explicit SchedulerAdapter(AsyncRenderGraph* o) noexcept
+      : owner(o)
+    {
+    }
+    void Schedule(RenderGraph& g) override { (void)g; /* nop */ }
+  };
+
+  struct PlannerAdapter final : ITransitionPlanner {
+    AsyncRenderGraph* owner;
+    explicit PlannerAdapter(AsyncRenderGraph* o) noexcept
+      : owner(o)
+    {
+    }
+    auto PlanTransitions(RenderGraph& g, FrameContext& ctx) -> co::Co<> override
+    {
+      (void)g;
+      return owner->PlanResourceTransitionsImpl(ctx);
+    }
+  };
+
+private:
+  // Helper methods for ExecutePassBatches
+  auto BuildDependencyGraph(const std::vector<PassHandle>& order)
+    -> std::unordered_map<PassHandle, int>;
+  auto LogDependencyDiagnostics(const std::vector<PassHandle>& order,
+    const std::unordered_map<PassHandle, int>& remaining_deps) -> void;
+  auto BuildExecutionBatches(const std::vector<PassHandle>& order,
+    std::unordered_map<PassHandle, int>& remaining_deps)
+    -> std::vector<std::vector<PassHandle>>;
+  auto ExecuteBatchSerial(const std::vector<PassHandle>& batch,
+    const std::span<const ViewInfo>& views, TaskExecutionContext& exec_ctx)
+    -> void;
+  auto ExecuteBatchParallel(FrameContext& context,
+    const std::vector<PassHandle>& batch, size_t bi,
+    const std::span<const ViewInfo>& views, TaskExecutionContext& exec_ctx,
+    const std::chrono::high_resolution_clock::time_point& batch_start)
+    -> co::Co<>;
+
+public:
   //! Enable or disable intra-batch parallel execution (thread pool dispatch)
   auto SetParallelBatchExecution(bool enabled) noexcept -> void
   {
@@ -421,15 +457,34 @@ public:
     return parallel_batch_execution_enabled_;
   }
 
-private:
-  // Implementation details in .cpp file
-  auto CreateExecutionBatches() -> std::vector<std::vector<PassHandle>>;
-  auto ExecuteBatch(
-    const std::vector<PassHandle>& batch, ModuleContext& context) -> co::Co<>;
+  // Test access (Google Test)
+  friend class RenderGraphSchedulingTests_LinearChain_Test; // gtest naming
+                                                            // convention
+  friend class RenderGraphSchedulingTests_Independent_Test;
+  friend class RenderGraphSchedulingTests_Diamond_Test;
+  friend class RenderGraphSchedulingTests_CycleDetection_Test;
 
+  // Tests should use injected strategy objects; keep no test-only mutators.
+
+private:
   // Persistent resource state tracker for transition planning phase
   ResourceStateTracker resource_state_tracker_;
   bool parallel_batch_execution_enabled_ { true }; // default on
+
+  struct BatchMetrics {
+    uint32_t batch_count { 0 };
+    uint32_t max_width { 0 };
+    double avg_width { 0.0 };
+    double parallel_pass_fraction {
+      0.0
+    }; // fraction of passes in multi-pass batches
+  } batch_metrics_;
+
+public:
+  [[nodiscard]] auto GetBatchMetrics() const -> const BatchMetrics&
+  {
+    return batch_metrics_;
+  }
 
 public:
   //! Access planned transitions (after PlanResourceTransitions)
@@ -441,6 +496,6 @@ public:
 };
 
 // Factory declaration for creating an AsyncEngine-enabled render graph
-auto CreateAsyncEngineRenderGraph() -> std::unique_ptr<RenderGraph>;
+auto CreateAsyncRenderGraph() -> std::unique_ptr<RenderGraph>;
 
 } // namespace oxygen::examples::asyncsim

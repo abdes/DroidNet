@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 #include "../Renderer/Graph/Resource.h"
 
@@ -16,14 +17,16 @@ namespace oxygen::examples::asyncsim {
 
 GeometryRenderModule::GeometryRenderModule()
   : EngineModuleBase("GeometryRenderer",
-      ModulePhases::SnapshotBuild | ModulePhases::ParallelWork
-        | ModulePhases::FrameGraph,
+      ModulePhases::ParallelWork | ModulePhases::FrameGraph,
       ModulePriorities::Normal)
 {
 }
 
-auto GeometryRenderModule::Initialize(ModuleContext& context) -> co::Co<>
+auto GeometryRenderModule::Initialize(AsyncEngineSimulator& engine) -> co::Co<>
 {
+  // Store engine reference for later use
+  engine_ = observer_ptr { &engine };
+
   LOG_F(INFO, "[GeometryRenderer] Initializing geometry rendering module");
 
   // Initialize example geometry data
@@ -43,7 +46,7 @@ auto GeometryRenderModule::Initialize(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GeometryRenderModule::Shutdown(ModuleContext& context) -> co::Co<>
+auto GeometryRenderModule::Shutdown() -> co::Co<>
 {
   LOG_F(INFO, "[GeometryRenderer] Shutting down geometry rendering module");
 
@@ -55,12 +58,12 @@ auto GeometryRenderModule::Shutdown(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GeometryRenderModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
+auto GeometryRenderModule::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[GeometryRenderer] Contributing to render graph for frame {}",
     context.GetFrameIndex());
 
-  auto* render_graph_builder = context.GetRenderGraphBuilder();
+  auto render_graph_builder = context.GetRenderGraphBuilder();
   if (!render_graph_builder) {
     LOG_F(WARNING, "[GeometryRenderer] No render graph builder available");
     co_return;
@@ -100,25 +103,13 @@ auto GeometryRenderModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GeometryRenderModule::OnSnapshotBuild(ModuleContext& context) -> co::Co<>
-{
-  LOG_F(3, "[GeometryRenderer] Building geometry snapshot for frame {}",
-    context.GetFrameIndex());
-
-  // Prepare geometry data for parallel processing
-  // In a real implementation, this would update transform matrices,
-  // material parameters, etc.
-
-  co_return;
-}
-
-auto GeometryRenderModule::OnParallelWork(ModuleContext& context) -> co::Co<>
+auto GeometryRenderModule::OnParallelWork(FrameContext& context) -> co::Co<>
 {
   LOG_F(3, "[GeometryRenderer] Processing geometry in parallel for frame {}",
     context.GetFrameIndex());
 
   // Perform parallel geometry processing (culling, sorting, etc.)
-  co_await context.GetThreadPool().Run([this](auto) {
+  co_await context.GetThreadPool()->Run([this](auto) {
     std::this_thread::sleep_for(
       std::chrono::microseconds(150)); // Simulate processing
 
@@ -166,20 +157,24 @@ auto GeometryRenderModule::CreateRenderResources(RenderGraphBuilder& builder)
     depth_buffer_.get(), color_buffer_.get(), vertex_buffer_.get(),
     index_buffer_.get());
 
-  // Additional intermediate targets for dummy passes (check underlying value
-  // since ResourceHandle is a NamedType without is_valid())
+  // Create lighting and post-processing buffers if needed
   if (lighting_buffer_.get() == 0) {
     TextureDesc lighting_desc(1920, 1080, TextureDesc::Format::RGBA16_Float,
       TextureDesc::Usage::RenderTarget);
     lighting_buffer_
       = builder.CreateTexture("LightingBuffer", std::move(lighting_desc),
         ResourceLifetime::FrameLocal, ResourceScope::PerView);
+    LOG_F(1, "[GeometryRenderer] Created lighting_buffer_ with handle {}",
+      lighting_buffer_.get());
   }
+
   if (post_process_buffer_.get() == 0) {
     TextureDesc pp_desc(1920, 1080, TextureDesc::Format::RGBA8_UNorm,
       TextureDesc::Usage::RenderTarget);
     post_process_buffer_ = builder.CreateTexture("PostProcessBuffer",
       std::move(pp_desc), ResourceLifetime::FrameLocal, ResourceScope::PerView);
+    LOG_F(1, "[GeometryRenderer] Created post_process_buffer_ with handle {}",
+      post_process_buffer_.get());
   }
 }
 
@@ -307,7 +302,7 @@ auto GeometryRenderModule::ExecuteDepthPrepass(TaskExecutionContext& ctx)
   -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing depth prepass for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
 
   auto& cmd = ctx.GetCommandRecorder();
 
@@ -330,7 +325,7 @@ auto GeometryRenderModule::ExecuteOpaqueGeometry(TaskExecutionContext& ctx)
   -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing opaque geometry for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
 
   auto& cmd = ctx.GetCommandRecorder();
 
@@ -357,7 +352,7 @@ auto GeometryRenderModule::ExecuteTransparency(TaskExecutionContext& ctx)
   -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing transparency for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
 
   auto& cmd = ctx.GetCommandRecorder();
 
@@ -378,7 +373,7 @@ auto GeometryRenderModule::ExecuteTransparency(TaskExecutionContext& ctx)
 auto GeometryRenderModule::ExecuteLighting(TaskExecutionContext& ctx) -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing lighting for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
   auto& cmd = ctx.GetCommandRecorder();
   // Simulate lighting work: sample GBuffer & depth
   cmd.ClearRenderTarget(lighting_buffer_, { 0.1f, 0.1f, 0.15f, 1.0f });
@@ -388,7 +383,7 @@ auto GeometryRenderModule::ExecuteLighting(TaskExecutionContext& ctx) -> void
 auto GeometryRenderModule::ExecutePostProcess(TaskExecutionContext& ctx) -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing post-process for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
   auto& cmd = ctx.GetCommandRecorder();
   cmd.ClearRenderTarget(post_process_buffer_, { 0.0f, 0.0f, 0.0f, 0.0f });
   last_frame_stats_.post_process_passes++;
@@ -397,7 +392,7 @@ auto GeometryRenderModule::ExecutePostProcess(TaskExecutionContext& ctx) -> void
 auto GeometryRenderModule::ExecuteUI(TaskExecutionContext& ctx) -> void
 {
   LOG_F(3, "[GeometryRenderer] Executing UI overlay for view '{}'",
-    ctx.GetViewContext().view_name);
+    ctx.GetViewInfo().view_name);
   auto& cmd = ctx.GetCommandRecorder();
   // Composite UI: just a clear with alpha to simulate draw
   cmd.ClearRenderTarget(color_buffer_, { 0.05f, 0.05f, 0.05f, 0.0f });

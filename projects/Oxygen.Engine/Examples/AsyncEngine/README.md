@@ -77,7 +77,8 @@ For any task, evaluate:
 Rule of thumb (Decision Matrix):
 
 ```text
-If (needs deterministic simulation OR mutates authoritative shared state) AND (result needed this frame)
+If (needs deterministic simulation OR mutates authoritative shared state)
+AND (result needed this frame)
  => Synchronous Ordered (Category A)
 Else if (result needed this frame) AND (can operate on immutable snapshot)
  => Structured Parallel (Category B)
@@ -100,6 +101,24 @@ Rendering, UI). Foundational services are orchestrated directly by the
 AsyncEngine coordinator, while application modules consume services via
 ModuleContext injection.
 
+### Network Reconciliation Phase Placement Decision
+
+**NetworkReconciliation** is positioned after **Input** and before **FixedSimulation/Gameplay**
+to align with industry standards and networking best practices:
+
+- **Server Authority**: Server authoritative state must be applied before any client
+  predictions or gameplay logic executes
+- **Client Prediction Model**: Client rewinds to server state, then replays
+  unacknowledged inputs - this requires happening before new gameplay logic
+- **Industry Alignment**: Source Engine, Gabriel Gambetta's authoritative networking
+  articles, and established client-server architectures all place network reconciliation
+  early in the frame
+- **Determinism**: Ensures all subsequent simulation (physics, gameplay) operates
+  on the corrected authoritative baseline
+
+This placement follows the pattern: **Input → NetworkReconciliation → Simulation → Gameplay**
+which is proven in production networked games.
+
 ### A. Must Be Synchronous & Strictly Ordered
 
 **WHO**: AsyncEngine coordinator calls foundational subsystems directly;
@@ -111,6 +130,13 @@ Frame start sequencing that ensures determinism & hazard-free state:
   deferred destruction retirement
 - **Platform Layer Integration**: Input device sampling (produce immutable
   snapshot for frame)
+- **Networking Subsystem Integration**: Network Reconciliation - Apply server
+  authoritative updates, rewind client predictions to server state, and replay
+- **Networking Subsystem Integration**: Network Reconciliation - Apply server
+  authoritative updates, rewind client predictions to server state, and replay
+  unacknowledged inputs. Critical for maintaining deterministic multiplayer state.
+- **Engine State Management**: Random seed management, frame counters
+  (CRITICAL: Must happen before any systems that consume randomness)
 - **Physics Subsystem Integration**: Fixed timestep simulation loop (0..N
   steps): integration, constraints
 - **Application Module Execution**: Deterministic gameplay logic mutating
@@ -118,8 +144,6 @@ Frame start sequencing that ensures determinism & hazard-free state:
 - **Scene System Integration**: Structural mutations (spawn/despawn, reparent,
   handle allocations)
 - **Scene System Integration**: Transform hierarchy propagation (parent→child)
-- **Networking Subsystem Integration**: Packet application & authoritative
-  reconciliation
 - **Engine State Management**: Random seed management, frame counters
 - **Render Graph Module**: Frame graph/render pass dependency & resource
   transition planning (consumes Graphics Layer services)
@@ -157,8 +181,8 @@ Parallel (workers / coroutines) on an immutable snapshot; join before consumers:
   packing - consumes Graphics services
 - **Render Graph Module**: Command list recording per pass / bucket (if inputs
   immutable) - consumes Graphics services
-- **Render Graph Module**: Multi-surface command recording (parallel recording
-  with immediate submission per surface) - consumes Graphics services
+- **Render Graph Module**: Command recording & submission (unified phase with
+  parallel recording and ordered submission) - consumes Graphics services
 - **Graphics Layer Services**: GPU upload staging population (writes into
   reserved sub‑allocations)
 - **Graphics Layer Services**: Occlusion query reduction from prior frame
@@ -254,21 +278,23 @@ Can shift category based on load:
 
 1. Frame Start & Epoch Maintenance
 2. Input Sample (atomic snapshot)
-3. Fixed Simulation (0..k loops)
-4. Variable Gameplay (authoritative logic)
-5. Structural Scene Mutations applied
-6. Transform Propagation
-7. Build Immutable Snapshot (component/transforms view)
-8. Launch Parallel Frame Task Group (Category B jobs)
-9. Barrier Join
-10. Post-Parallel Serial Integration (particle merges, sorting)
-11. Frame Graph / Render Pass Assembly
-12. Command Recording & Submission (parallel per surface with immediate
-    submission pipeline)
-13. Present (synchronous sequential presentation of all surfaces)
-14. Async Pipeline Poll & Publish (Category C readiness)
-15. Budget Adaptation decisions for next frame
-16. End-of-frame bookkeeping
+3. Network Reconciliation (apply server authoritative state, rewind client predictions)
+4. Random Seed Management (deterministic RNG setup - MUST happen before any systems use randomness)
+5. Fixed Simulation (0..k loops)
+6. Variable Gameplay (authoritative logic)
+7. Structural Scene Mutations applied
+8. Transform Propagation
+9. Build Immutable Snapshot (component/transforms view)
+10. Launch Parallel Frame Task Group (Category B jobs)
+11. Barrier Join
+12. Post-Parallel Serial Integration (particle merges, sorting)
+13. Frame Graph / Render Pass Assembly
+14. Command Recording & Submission (unified phase with parallel recording and
+    ordered submission)
+15. Present (synchronous sequential presentation of all surfaces)
+16. Async Pipeline Poll & Publish (Category C readiness)
+17. Budget Adaptation decisions for next frame
+18. End-of-frame bookkeeping
 
 Note: Deferred destruction scheduling happens at call sites and reclamation is
 managed by the Graphics layer internally during frame start, eliminating the
@@ -280,13 +306,14 @@ need for a dedicated engine-level deferred destruction phase.
 
 | Barrier | Ensures | Upstream | Downstream |
 |---------|---------|----------|------------|
-| B0 | Stable input snapshot | OS/Input | Simulation |
-| B1 | Deterministic physics state | FixedSim | Variable gameplay |
-| B2 | Structural integrity | Gameplay | Transform propagation |
-| B3 | Complete world transforms | Transforms | Parallel tasks |
-| B4 | All parallel outputs ready | Workers | Frame graph build |
-| B5 | Valid command lists & resource states | Recording | GPU submission |
-| B6 | Ready async resources published | Pipelines | Future frame consumers |
+| B0 | Stable input snapshot | OS/Input | Network reconciliation |
+| B1 | Server authoritative state applied | NetworkReconciliation | Simulation |
+| B2 | Deterministic physics state | FixedSim | Variable gameplay |
+| B3 | Structural integrity | Gameplay | Transform propagation |
+| B4 | Complete world transforms | Transforms | Parallel tasks |
+| B5 | All parallel outputs ready | Workers | Frame graph build |
+| B6 | Valid command lists & resource states | Recording | GPU submission |
+| B7 | Ready async resources published | Pipelines | Future frame consumers |
 
 ---
 
@@ -322,8 +349,8 @@ Design Rules:
 - Copy queue handles uploads & readbacks; publication occurs only after fence
 - Command list recording parallelizable if resource states & descriptors
   immutable for duration
-- Multi-surface rendering with parallel command recording and immediate
-  submission per surface
+- Multi-surface rendering with unified command recording and submission phase
+  (parallel recording with ordered submission per surface)
 
 ---
 
@@ -367,9 +394,9 @@ registers them; `wait()` at barrier B4.
 per-frame context struct `{ FrameIndex, Epoch, Snapshot*, TaskGroup*,
 BudgetStats }`.
 
-**Multi-Surface Rendering**: Parallel command recording with immediate
-submission pipeline; each surface records and submits on thread pool workers,
-followed by synchronous sequential presentation.
+**Multi-Surface Rendering**: Unified command recording and submission phase with
+parallel recording followed by ordered submission; each surface records and
+submits on thread pool workers, followed by synchronous sequential presentation.
 
 ### Subsystem-Owned Async Pipelines
 
@@ -455,6 +482,9 @@ Main -> Main : Advance FrameIndex / Epoch\n(Graphics layer handles GPU fence pol
 
 == Input ==
 Main -> Main : Sample devices → Input Snapshot
+
+== Network Reconciliation ==
+Main -> Main : Apply server authoritative state\nRewind client predictions & replay unacknowledged inputs
 
 == Fixed Simulation ==
 loop 0..k FixedSteps
@@ -714,13 +744,14 @@ skinparam state {
 }
 
 [*] --> InputSampled : B0
-InputSampled --> FixedSimComplete : Fixed steps done (0..k)
+InputSampled --> NetworkReconciled : Apply server state (B1)
+NetworkReconciled --> FixedSimComplete : Fixed steps done (0..k)
 FixedSimComplete --> GameplayMutationsApplied : Variable logic + staging flush
 GameplayMutationsApplied --> TransformsPropagated : Hierarchy traversal
 TransformsPropagated --> SnapshotBuilt : Immutable frame view
-SnapshotBuilt --> ParallelTasksComplete : FrameTaskGroup barrier (B4)
+SnapshotBuilt --> ParallelTasksComplete : FrameTaskGroup barrier (B5)
 ParallelTasksComplete --> FrameGraphBuilt : Pass & resource plan
-FrameGraphBuilt --> CommandsSubmitted : Queues submit (B5)
+FrameGraphBuilt --> CommandsSubmitted : Queues submit (B6)
 CommandsSubmitted --> AsyncPolled : Poll futures / integrate
 AsyncPolled --> FrameEnd : Deferred releases scheduled
 FrameEnd --> [*]
@@ -793,8 +824,9 @@ CLI). It currently:
   LOD) using structured coroutines with OxCo nursery for proper cancellation.
 - Simulates multi-frame async jobs (asset load, shader compile) with slice-based
   progression and readiness logging.
-- Implements multi-surface rendering with parallel command recording, immediate
-  submission pipeline, and synchronous presentation.
+- Implements multi-surface rendering with unified command recording and
+  submission phase (parallel recording with ordered submission), and synchronous
+  presentation.
 - Provides a CLI option `--frames/-f` to select number of frames (default 5).
 
 ### Build

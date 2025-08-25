@@ -27,8 +27,8 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 
 #include "EngineTypes.h"
+#include "FrameContext.h"
 #include "GraphicsLayer.h"
-#include "ModuleContext.h"
 #include "ModuleManager.h"
 
 namespace oxygen::examples::asyncsim {
@@ -68,19 +68,15 @@ public:
   //! Shutdown all registered modules
   auto ShutdownModules() -> co::Co<>;
 
-  //! Configure rendering surfaces for multi-surface rendering
-  void AddSurface(const RenderSurface& surface);
-  void ClearSurfaces();
-  [[nodiscard]] const std::vector<RenderSurface>& GetSurfaces() const noexcept
-  {
-    return surfaces_;
-  }
-
   //! Graphics layer access
-  [[nodiscard]] GraphicsLayer& GetGraphics() noexcept { return graphics_; }
-  [[nodiscard]] const GraphicsLayer& GetGraphics() const noexcept
+  [[nodiscard]] std::weak_ptr<GraphicsLayerIntegration> GetGraphics() noexcept
   {
-    return graphics_;
+    return full_graphics_;
+  }
+  [[nodiscard]] std::weak_ptr<GraphicsLayerIntegration>
+  GetGraphics() const noexcept
+  {
+    return full_graphics_;
   }
 
   //! Module management
@@ -95,49 +91,41 @@ public:
 
 private:
   // Ordered phases (Category A) - now with module integration
-  void PhaseFrameStart();
-  auto PhaseInput(ModuleContext& context) -> co::Co<>; // async (simulated work)
-  auto PhaseFixedSim(ModuleContext& context)
-    -> co::Co<>; // async (simulated work)
-  auto PhaseGameplay(ModuleContext& context)
-    -> co::Co<>; // async (simulated work)
-  auto PhaseNetworkReconciliation(ModuleContext& context)
+  void PhaseFrameStart(FrameContext& context);
+  auto PhaseInput(FrameContext& context) -> co::Co<>; // async (simulated work)
+  auto PhaseNetworkReconciliation(FrameContext& context)
     -> co::Co<>; // network packet application & reconciliation
-  auto PhaseRandomSeedManagement()
-    -> co::Co<>; // random seed management for determinism
-  auto PhaseSceneMutation(ModuleContext& context)
+  void PhaseRandomSeedManagement(); // synchronous random seed management for
+                                    // determinism
+  auto PhaseFixedSim(FrameContext& context)
+    -> co::Co<>; // cooperative parallelism within deterministic phase
+  auto PhaseGameplay(FrameContext& context)
+    -> co::Co<>; // async (simulated work)
+  auto PhaseSceneMutation(FrameContext& context)
     -> co::Co<>; // async (simulated work) - B2 barrier
-  auto PhaseTransforms(ModuleContext& context)
-    -> co::Co<>; // async (simulated work)
-  auto PhaseSnapshot(ModuleContext& context)
-    -> co::Co<>; // async (simulated work)
-  auto PhasePostParallel(ModuleContext& context)
+  auto PhaseTransforms(FrameContext& context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseFrameGraph(ModuleContext& context)
+  void PhaseSnapshot(FrameContext& context);
+
+  auto ParallelTasks(FrameContext& context) -> co::Co<>;
+  auto PhasePostParallel(FrameContext& context)
     -> co::Co<>; // async (simulated work)
-  auto PhaseDescriptorTablePublication(ModuleContext& context)
-    -> co::Co<>; // global descriptor/bindless table publication
-  auto PhaseResourceStateTransitions(ModuleContext& context)
-    -> co::Co<>; // resource state transitions planning
-  auto PhaseCommandRecord(ModuleContext& context)
+
+  auto PhaseFrameGraph(FrameContext& context)
+    -> co::Co<>; // async (simulated work)
+
+  auto PhaseCommandRecord(FrameContext& context)
 
     -> co::Co<>; // async (simulated work)
-  void PhasePresent(ModuleContext& context); // synchronous presentation
+  void PhasePresent(FrameContext& context); // synchronous presentation
 
-  void PhaseAsyncPoll(ModuleContext& context);
+  // Poll futures from async jobs (Assets, PSOs, BLAS, LightMaps)
+  void PhaseAsyncPoll(FrameContext& context);
+
   void PhaseBudgetAdapt();
-  void PhaseFrameEnd();
 
-  // Launch structured parallel tasks
-  void LaunchParallelTasks(); // legacy sync version (unused in async path)
-  void JoinParallelTasks(); // legacy sync version (unused in async path)
-  void ResetParallelSync();
-  auto ParallelTasks(ModuleContext& context)
-    -> co::Co<>; // coroutine version with module integration
-
-  // Async job ticking
-  void TickAsyncJobs();
+  void PhaseFrameEnd(FrameContext& context);
 
   // Detached services (Category D)
   void InitializeDetachedServices();
@@ -152,11 +140,14 @@ private:
   //! Internal coroutine performing the per-frame sequence and yielding.
   auto FrameLoop(uint32_t frame_count) -> co::Co<>;
 
+  void SetRenderGraphBuilder(FrameContext& context);
+  void ClearRenderGraphBuilder(FrameContext& context);
+  std::unique_ptr<RenderGraphBuilder> render_graph_builder_;
+
   std::vector<SyntheticTaskSpec> parallel_specs_ {};
   std::vector<ParallelResult> parallel_results_ {};
   std::mutex parallel_results_mutex_;
   std::vector<AsyncJobState> async_jobs_ {};
-  std::vector<RenderSurface> surfaces_ {};
 
   oxygen::co::ThreadPool& pool_;
   EngineProps props_ {};
@@ -168,8 +159,9 @@ private:
   std::chrono::microseconds phase_accum_ { 0 };
   FrameSnapshot snapshot_ {};
 
-  // Graphics layer owning global systems
+  // HACK: temporary until full graphics integration
   GraphicsLayer graphics_;
+  std::shared_ptr<GraphicsLayerIntegration> full_graphics_;
 
   // Module management system
   ModuleManager module_manager_;

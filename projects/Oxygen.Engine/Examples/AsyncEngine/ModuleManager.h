@@ -13,8 +13,8 @@
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 
+#include "FrameContext.h"
 #include "IEngineModule.h"
-#include "ModuleContext.h"
 
 namespace oxygen::examples::asyncsim {
 
@@ -72,8 +72,8 @@ public:
 
   // === LIFECYCLE MANAGEMENT ===
 
-  //! Initialize all modules
-  auto InitializeModules(ModuleContext& context) -> co::Co<>
+  //! Initialize all modules with engine reference
+  auto InitializeModules(AsyncEngineSimulator& engine) -> co::Co<>
   {
     LOG_SCOPE_F(
       INFO, fmt::format("Initializing {} modules", modules_.size()).c_str());
@@ -81,7 +81,9 @@ public:
     for (auto& module : modules_) {
       LOG_SCOPE_F(INFO, fmt::format("{}", module->GetName()).c_str());
       try {
-        co_await module->Initialize(context);
+        // Pass engine reference to Initialize - modules can store as
+        // observer_ptr engine lifetime > module lifetime
+        co_await module->Initialize(engine);
       } catch (const std::exception& e) {
         LOG_F(ERROR, " -failed- to initialize module '{}': {}",
           module->GetName(), e.what());
@@ -91,7 +93,7 @@ public:
   }
 
   //! Shutdown all modules (in reverse order)
-  auto ShutdownModules(ModuleContext& context) -> co::Co<>
+  auto ShutdownModules(AsyncEngineSimulator& engine) -> co::Co<>
   {
     LOG_SCOPE_F(
       INFO, fmt::format("Shutting down {} modules", modules_.size()).c_str());
@@ -101,7 +103,9 @@ public:
       auto& module = *it;
       try {
         LOG_SCOPE_F(INFO, fmt::format("{}", module->GetName()).c_str());
-        co_await module->Shutdown(context);
+        co_await module->Shutdown();
+        // Clear engine reference after shutdown
+        module->SetEngine(nullptr);
       } catch (const std::exception& e) {
         LOG_F(ERROR, "-failed- to shutdown module '{}': {}", module->GetName(),
           e.what());
@@ -111,41 +115,60 @@ public:
   }
 
   // === PHASE EXECUTION METHODS ===
-  // Each method calls modules that support the corresponding phase
 
 #define DEFINE_ORDERED_PHASE_METHOD(PhaseName, PhaseEnum, MethodName)          \
-  auto Execute##PhaseName(ModuleContext& context) -> co::Co<>                  \
+  void Execute##PhaseName(FrameContext& context)                               \
   {                                                                            \
-    context.SetCurrentPhase(ModuleContext::FramePhase::PhaseName);             \
+    for (auto& module : modules_) {                                            \
+      if (HasPhase(module->GetSupportedPhases(), ModulePhases::PhaseEnum)) {   \
+        try {                                                                  \
+          LOG_F(                                                               \
+            2, "[{}] Executing module '{}'", #PhaseName, module->GetName());   \
+          module->MethodName(context);                                         \
+          LOG_F(                                                               \
+            2, "[{}] Module '{}' completed", #PhaseName, module->GetName());   \
+        } catch (const std::exception& e) {                                    \
+          LOG_F(ERROR, "[{}] Module '{}' failed: {}", #PhaseName,              \
+            module->GetName(), e.what());                                      \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
+  }
+  // clang-format off
+  DEFINE_ORDERED_PHASE_METHOD(FrameStart, FrameStart, OnFrameStart)
+  DEFINE_ORDERED_PHASE_METHOD(FrameEnd, FrameEnd, OnFrameEnd)
+  // clang-format on
+#undef DEFINE_ORDERED_PHASE_METHOD
+
+#define DEFINE_ORDERED_PHASE_ASYNC_METHOD(PhaseName, PhaseEnum, MethodName)    \
+  auto Execute##PhaseName(FrameContext& context) -> co::Co<>                   \
+  {                                                                            \
+    context.SetCurrentPhase(                                                   \
+      FrameContext::FramePhase::PhaseName, internal::EngineTagFactory::Get()); \
     co_await ExecuteOrderedPhase(                                              \
       ModulePhases::PhaseEnum,                                                 \
-      [](IEngineModule& module, ModuleContext& ctx) {                          \
+      [](IEngineModule& module, FrameContext& ctx) {                           \
         return module.MethodName(ctx);                                         \
       },                                                                       \
       context, #PhaseName);                                                    \
   }
   // clang-format off
-  DEFINE_ORDERED_PHASE_METHOD(Input, Input, OnInput)
-  DEFINE_ORDERED_PHASE_METHOD(FixedSimulation, FixedSimulation, OnFixedSimulation)
-  DEFINE_ORDERED_PHASE_METHOD(Gameplay, Gameplay, OnGameplay)
-  DEFINE_ORDERED_PHASE_METHOD(NetworkReconciliation, NetworkReconciliation, OnNetworkReconciliation)
-  DEFINE_ORDERED_PHASE_METHOD(SceneMutation, SceneMutation, OnSceneMutation)
-  DEFINE_ORDERED_PHASE_METHOD(TransformPropagation, TransformPropagation, OnTransformPropagation)
-  DEFINE_ORDERED_PHASE_METHOD(SnapshotBuild, SnapshotBuild, OnSnapshotBuild)
-  DEFINE_ORDERED_PHASE_METHOD(PostParallel, PostParallel, OnPostParallel)
-  DEFINE_ORDERED_PHASE_METHOD(FrameGraph, FrameGraph, OnFrameGraph)
-  DEFINE_ORDERED_PHASE_METHOD(DescriptorPublication, DescriptorPublication, OnDescriptorPublication)
-  DEFINE_ORDERED_PHASE_METHOD(ResourceTransitions, ResourceTransitions, OnResourceTransitions)
-  DEFINE_ORDERED_PHASE_METHOD(CommandRecord, CommandRecord, OnCommandRecord)
-  DEFINE_ORDERED_PHASE_METHOD(Present, Present, OnPresent)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(Input, Input, OnInput)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(FixedSimulation, FixedSimulation, OnFixedSimulation)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(Gameplay, Gameplay, OnGameplay)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(NetworkReconciliation, NetworkReconciliation, OnNetworkReconciliation)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(SceneMutation, SceneMutation, OnSceneMutation)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(TransformPropagation, TransformPropagation, OnTransformPropagation)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(PostParallel, PostParallel, OnPostParallel)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(FrameGraph, FrameGraph, OnFrameGraph)
+  DEFINE_ORDERED_PHASE_ASYNC_METHOD(CommandRecord, CommandRecord, OnCommandRecord)
+  // NOTE: Present is engine-only and not exposed to modules
   // clang-format on
-#undef DEFINE_ORDERED_PHASE_METHOD
+#undef DEFINE_ORDERED_PHASE_ASYNC_METHOD
 
   //! Execute parallel work phase (Category B) - concurrent execution
-  auto ExecuteParallelWork(ModuleContext& context) -> co::Co<>
+  auto ExecuteParallelWork(FrameContext& context) -> co::Co<>
   {
-    context.SetCurrentPhase(ModuleContext::FramePhase::ParallelWork);
-
     std::vector<co::Co<>> parallel_tasks;
 
     for (auto& module : modules_) {
@@ -153,7 +176,7 @@ public:
         // Create parallel task for this module
         parallel_tasks.emplace_back(ExecuteModuleTask(
           *module,
-          [](IEngineModule& mod, ModuleContext& ctx) {
+          [](IEngineModule& mod, FrameContext& ctx) {
             return mod.OnParallelWork(ctx);
           },
           context, "ParallelWork"));
@@ -168,21 +191,19 @@ public:
   }
 
   //! Execute async work phase (Category C) - fire-and-forget
-  auto ExecuteAsyncWork(ModuleContext& context) -> co::Co<>
+  auto ExecuteAsyncWork(FrameContext& context) -> co::Co<>
   {
-    context.SetCurrentPhase(ModuleContext::FramePhase::AsyncWork);
     co_await ExecuteOrderedPhase(
       ModulePhases::AsyncWork,
-      [](IEngineModule& module, ModuleContext& ctx) {
+      [](IEngineModule& module, FrameContext& ctx) {
         return module.OnAsyncWork(ctx);
       },
       context, "AsyncWork");
   }
 
   //! Execute detached work phase (Category D) - background services
-  auto ExecuteDetachedWork(ModuleContext& context) -> co::Co<>
+  auto ExecuteDetachedWork(FrameContext& context) -> co::Co<>
   {
-    context.SetCurrentPhase(ModuleContext::FramePhase::DetachedWork);
     // Detached work doesn't block - fire and forget
     for (auto& module : modules_) {
       if (HasPhase(module->GetSupportedPhases(), ModulePhases::DetachedWork)) {
@@ -203,7 +224,7 @@ private:
   //! Execute ordered phase with sequential module execution
   template <typename MethodInvoker>
   auto ExecuteOrderedPhase(ModulePhases phase, MethodInvoker&& invoker,
-    ModuleContext& context, const char* phase_name) -> co::Co<>
+    FrameContext& context, const char* phase_name) -> co::Co<>
   {
     for (auto& module : modules_) {
       if (HasPhase(module->GetSupportedPhases(), phase)) {
@@ -216,7 +237,7 @@ private:
   //! Execute individual module task with error handling
   template <typename MethodInvoker>
   auto ExecuteModuleTask(IEngineModule& module, MethodInvoker&& invoker,
-    ModuleContext& context, const char* phase_name) -> co::Co<>
+    FrameContext& context, const char* phase_name) -> co::Co<>
   {
     try {
       LOG_F(2, "[{}] Executing module '{}'", phase_name, module.GetName());

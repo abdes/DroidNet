@@ -4,46 +4,101 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+
 #include "GameModule.h"
 
 #include "../AsyncEngineSimulator.h"
 #include "../Renderer/Graph/Resource.h" // For TextureDesc, ResourceState
-#include <cmath>
+#include "../Renderer/Integration/GraphicsLayerIntegration.h"
 
 namespace oxygen::examples::asyncsim {
 
 GameModule::GameModule()
   : EngineModuleBase("Game",
-      // Enable full gameplay + scene mutation + transforms + rendering phases
-      ModulePhases::CoreGameplay | ModulePhases::SceneMutation
-        | ModulePhases::TransformPropagation | ModulePhases::ParallelWork
-        | ModulePhases::PostParallel | ModulePhases::FrameGraph,
+      ModulePhases::CoreGameplay | ModulePhases::FrameStart
+        | ModulePhases::FrameGraph,
       ModulePriorities::High)
 {
 }
 
-auto GameModule::Initialize(ModuleContext& context) -> co::Co<>
+auto GameModule::Initialize(AsyncEngineSimulator& engine) -> co::Co<>
 {
+  // Store engine reference for later use
+  engine_ = observer_ptr { &engine };
+
   LOG_F(INFO, "[Game] Initializing game systems");
+
+  LOG_F(INFO, "Creating surfaces");
+
+  // Configure multi-surface rendering example
+
+  surfaces_.push_back(RenderSurface {
+    .name = "MainWindow",
+    .record_cost = 800us,
+    .submit_cost = 200us,
+    .present_cost = 300us,
+  });
+  surface_change_set_.push_back({ 0, SurfaceChange::kAdd });
+  surfaces_.push_back(RenderSurface {
+    .name = "ShadowMap",
+    .record_cost = 400us,
+    .submit_cost = 100us,
+    .present_cost = 50us,
+  });
+  surface_change_set_.push_back({ 1, SurfaceChange::kAdd });
+  surfaces_.push_back(RenderSurface {
+    .name = "ReflectionProbe",
+    .record_cost = 600us,
+    .submit_cost = 150us,
+    .present_cost = 100us,
+  });
+  surface_change_set_.push_back({ 2, SurfaceChange::kAdd });
+  surfaces_.push_back(RenderSurface {
+    .name = "UI_Overlay",
+    .record_cost = 200us,
+    .submit_cost = 50us,
+    .present_cost = 150us,
+  });
+  surface_change_set_.push_back({ 3, SurfaceChange::kAdd });
 
   // Initialize game state
   player_health_ = 100.0f;
   game_time_ = 0.0f;
 
   // Register some game entities with graphics
-  auto& registry = context.GetGraphics().GetResourceRegistry();
-  player_entity_handle_
-    = static_cast<uint32_t>(registry.RegisterResource("PlayerEntity"));
-  world_state_handle_
-    = static_cast<uint32_t>(registry.RegisterResource("WorldState"));
+  auto gfx = engine.GetGraphics().lock();
+  player_entity_handle_ = gfx->RegisterResource("PlayerEntity");
+  world_state_handle_ = gfx->RegisterResource("WorldState");
 
   LOG_F(INFO,
     "[Game] Game systems initialized (player_handle={}, world_handle={})",
-    player_entity_handle_, world_state_handle_);
+    player_entity_handle_.get(), world_state_handle_.get());
   co_return;
 }
 
-auto GameModule::OnInput(ModuleContext& context) -> co::Co<>
+void GameModule::OnFrameStart(FrameContext& context)
+{
+  LOG_F(2, "[Game] OnFrameStart: {} surface changes to apply",
+    surface_change_set_.size());
+
+  // Apply surface updates
+  for (auto& change : surface_change_set_) {
+    if (change.type == SurfaceChange::kAdd) {
+      context.AddSurface(surfaces_[change.index]);
+      LOG_F(2, "[Game] Added surface {} to frame context", change.index);
+    } else {
+      context.RemoveSurfaceAt(change.index);
+      LOG_F(2, "[Game] Removed surface {} from frame context", change.index);
+    }
+  }
+
+  LOG_F(2, "[Game] Frame context now has {} surfaces",
+    context.GetSurfaces().size());
+}
+void GameModule::OnFrameEnd(FrameContext& context) { }
+
+auto GameModule::OnInput(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[Game] Processing input for frame {}", context.GetFrameIndex());
 
@@ -51,7 +106,7 @@ auto GameModule::OnInput(ModuleContext& context) -> co::Co<>
   // For simulation, just track input processing
   input_events_processed_++;
 
-  co_await context.GetThreadPool().Run([](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([](auto /*cancel_token*/) {
     std::this_thread::sleep_for(100us); // Simulate input processing
   });
 
@@ -60,7 +115,7 @@ auto GameModule::OnInput(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnFixedSimulation(ModuleContext& context) -> co::Co<>
+auto GameModule::OnFixedSimulation(FrameContext& context) -> co::Co<>
 {
   LOG_F(
     2, "[Game] Fixed simulation step for frame {}", context.GetFrameIndex());
@@ -70,7 +125,7 @@ auto GameModule::OnFixedSimulation(ModuleContext& context) -> co::Co<>
   game_time_ += fixed_dt;
 
   // Simulate some gameplay logic
-  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(200us); // Simulate physics integration
 
     // Update player health as example of authoritative state mutation
@@ -84,13 +139,13 @@ auto GameModule::OnFixedSimulation(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnGameplay(ModuleContext& context) -> co::Co<>
+auto GameModule::OnGameplay(FrameContext& context) -> co::Co<>
 {
   LOG_F(
     2, "[Game] Variable gameplay logic for frame {}", context.GetFrameIndex());
 
   // Variable timestep gameplay (AI decisions, high-level game logic)
-  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(300us); // Simulate AI processing
 
     // Make some high-level game decisions
@@ -104,35 +159,35 @@ auto GameModule::OnGameplay(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnSceneMutation(ModuleContext& context) -> co::Co<>
+auto GameModule::OnSceneMutation(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[Game] Scene mutations for frame {}", context.GetFrameIndex());
 
   // Spawn/despawn entities, structural scene changes
   if (context.GetFrameIndex() % 10 == 0) {
     // Simulate spawning a new entity every 10 frames
-    auto& registry = context.GetGraphics().GetResourceRegistry();
-    auto entity_handle = registry.RegisterResource(
+    auto gfx = context.AcquireGraphics();
+    auto entity_handle = gfx->RegisterResource(
       "DynamicEntity_" + std::to_string(context.GetFrameIndex()));
     dynamic_entities_.push_back(entity_handle);
 
-    LOG_F(2, "[Game] Spawned entity {} (total: {})", entity_handle,
+    LOG_F(2, "[Game] Spawned entity {} (total: {})", entity_handle.get(),
       dynamic_entities_.size());
   }
 
-  co_await context.GetThreadPool().Run([](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([](auto /*cancel_token*/) {
     std::this_thread::sleep_for(150us); // Simulate scene mutation work
   });
   co_return;
 }
 
-auto GameModule::OnTransformPropagation(ModuleContext& context) -> co::Co<>
+auto GameModule::OnTransformPropagation(FrameContext& context) -> co::Co<>
 {
   LOG_F(
     2, "[Game] Transform propagation for frame {}", context.GetFrameIndex());
 
   // Update world transforms for game entities
-  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(200us); // Simulate transform calculations
 
     // Update player position (example)
@@ -143,7 +198,7 @@ auto GameModule::OnTransformPropagation(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnParallelWork(ModuleContext& context) -> co::Co<>
+auto GameModule::OnParallelWork(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[Game] Parallel work for frame {}", context.GetFrameIndex());
 
@@ -155,7 +210,7 @@ auto GameModule::OnParallelWork(ModuleContext& context) -> co::Co<>
   }
 
   // Simulate parallel game calculations (AI, animation, etc.)
-  co_await context.GetThreadPool().Run([snapshot](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([snapshot](auto /*cancel_token*/) {
     std::this_thread::sleep_for(400us); // Simulate AI batch processing
 
     // In real implementation, would process game logic using snapshot data
@@ -167,13 +222,13 @@ auto GameModule::OnParallelWork(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnPostParallel(ModuleContext& context) -> co::Co<>
+auto GameModule::OnPostParallel(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[Game] Post-parallel integration for frame {}",
     context.GetFrameIndex());
 
   // Integrate results from parallel work phase
-  co_await context.GetThreadPool().Run([this](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([this](auto /*cancel_token*/) {
     std::this_thread::sleep_for(100us); // Simulate result integration
 
     // Update game state with parallel work results
@@ -185,19 +240,41 @@ auto GameModule::OnPostParallel(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
+auto GameModule::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[Game] Contributing to render graph for frame {}",
     context.GetFrameIndex());
 
+  // Create views from the surfaces we added during OnFrameStart
+  auto surfaces = context.GetSurfaces();
+  LOG_F(2, "[Game] Creating views from {} surfaces", surfaces.size());
+
+  if (!surfaces.empty()) {
+    std::vector<ViewInfo> views;
+    views.reserve(surfaces.size());
+
+    for (size_t view_index = 0; view_index < surfaces.size(); ++view_index) {
+      const auto& surface = surfaces[view_index];
+      ViewInfo view;
+      view.view_name = "GameView_" + std::to_string(view_index);
+      view.surface
+        = ViewInfo::SurfaceHandle { std::make_shared<RenderSurface>(surface) };
+      views.push_back(view);
+    }
+
+    context.SetViews(std::move(views));
+    LOG_F(2, "[Game] Created {} views from surfaces", surfaces.size());
+  } else {
+    LOG_F(2, "[Game] No surfaces available - no views created");
+  }
+
   // Only contribute to render graph if we have active content to render
-  if (auto* builder = context.GetRenderGraphBuilder()) {
-    // Multi-view example: Always contribute HUD & entity passes when any
+  if (auto& builder = context.GetRenderGraphBuilder()) {
+    // View example: Always contribute HUD & entity passes when any
     // dynamic content exists
     if (!game_over_ && !dynamic_entities_.empty()) {
-      LOG_F(2,
-        "[Game] Adding multi-view game passes (views={} dynamic_entities={})",
-        builder->GetFrameContext().views.size(), dynamic_entities_.size());
+      LOG_F(2, "[Game] Adding view game passes (views={} dynamic_entities={})",
+        context.GetViews().size(), dynamic_entities_.size());
 
       // Create a deliberately duplicated per-view read-only resource to
       // exercise the shared resource optimization promotion. This texture is
@@ -229,7 +306,7 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
             .SetPriority(Priority::Normal)
             .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
-              const auto& view_ctx = exec.GetViewContext();
+              const auto& view_ctx = exec.GetViewInfo();
               LOG_F(3,
                 "[Game][HUD][View:{}] HUD pass (health={:.1f}, time={:.2f})",
                 view_ctx.view_name, player_health_, game_time_);
@@ -246,7 +323,7 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
             .SetPriority(Priority::High)
             .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
-              const auto& view_ctx = exec.GetViewContext();
+              const auto& view_ctx = exec.GetViewInfo();
               LOG_F(3,
                 "[Game][ENT][View:{}] Entities pass ({} entities, "
                 "player_x={:.2f})",
@@ -268,14 +345,14 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
             .SetPriority(Priority::Low)
             .Read(overlayDataHandle, ResourceState::PixelShaderResource)
             .SetExecutor([this](TaskExecutionContext& exec) {
-              const auto& view_ctx = exec.GetViewContext();
+              const auto& view_ctx = exec.GetViewInfo();
               LOG_F(3, "[Game][DBG][View:{}] Debug overlay stub",
                 view_ctx.view_name);
               std::this_thread::sleep_for(20us);
             });
         });
 
-      LOG_F(2, "[Game] Multi-view game passes added");
+      LOG_F(2, "[Game] View game passes added");
     }
   } else {
     LOG_F(WARNING,
@@ -285,22 +362,23 @@ auto GameModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto GameModule::Shutdown(ModuleContext& context) -> co::Co<>
+auto GameModule::Shutdown() -> co::Co<>
 {
   LOG_F(INFO, "[Game] Shutting down game systems");
 
-  // Clean up game state
-  auto& reclaimer = context.GetGraphics().GetDeferredReclaimer();
+  // Clean up game state - use stored engine reference
+  if (engine_) {
+    auto gfx = engine_->GetGraphics().lock();
 
-  // Schedule cleanup of game resources
-  reclaimer.ScheduleReclaim(
-    player_entity_handle_, context.GetFrameIndex(), "PlayerEntity");
-  reclaimer.ScheduleReclaim(
-    world_state_handle_, context.GetFrameIndex(), "WorldState");
+    // Schedule cleanup of game resources
+    // Note: We don't have frame index here, so use 0 or a special value
+    gfx->ScheduleResourceReclaim(player_entity_handle_, 0, "PlayerEntity");
+    gfx->ScheduleResourceReclaim(world_state_handle_, 0, "WorldState");
 
-  for (auto handle : dynamic_entities_) {
-    reclaimer.ScheduleReclaim(handle, context.GetFrameIndex(),
-      "DynamicEntity_" + std::to_string(handle));
+    for (auto handle : dynamic_entities_) {
+      gfx->ScheduleResourceReclaim(
+        handle, 0, "DynamicEntity_" + std::to_string(handle.get()));
+    }
   }
 
   LOG_F(INFO,

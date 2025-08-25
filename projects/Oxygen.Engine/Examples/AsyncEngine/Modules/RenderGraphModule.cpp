@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/Logging.h>
 
+#include "../FrameContext.h"
 #include "../Renderer/Graph/RenderGraph.h"
 #include "../Renderer/Graph/Validator.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
@@ -18,29 +19,21 @@ namespace oxygen::examples::asyncsim {
 
 RenderGraphModule::RenderGraphModule()
   : EngineModuleBase("RenderGraph",
-      ModulePhases::FrameGraph | ModulePhases::ResourceTransitions
-        | ModulePhases::CommandRecord,
-      ModulePriorities::High)
+      ModulePhases::FrameGraph | ModulePhases::CommandRecord,
+      ModulePriority { ModulePriorities::Low.get()
+        - 1 }) // Runs after all content modules have contributed
 {
 }
 
-auto RenderGraphModule::Initialize(ModuleContext& context) -> co::Co<>
+auto RenderGraphModule::Initialize(AsyncEngineSimulator& engine) -> co::Co<>
 {
+  // Store engine reference for later use
+  engine_ = observer_ptr { &engine };
+
   LOG_F(INFO, "[RenderGraph] Initializing render graph module");
 
-  // Create graphics layer integration
-  graphics_integration_
-    = std::make_unique<GraphicsLayerIntegration>(context.GetGraphics());
-
-  // Create render graph cache
-  render_graph_cache_ = std::make_unique<RenderGraphCache>();
-
-  // Attach a pass cost profiler to builder (basic implementation)
-  render_graph_builder_.SetPassCostProfiler(
-    std::make_shared<PassCostProfiler>());
-
-  // Initialize render graph builder with graphics layer integration
-  ResetBuilderForNewFrame(context);
+  // Create render graph cache using engine factory
+  render_graph_cache_ = CreateAsyncRenderGraphCache();
 
   is_initialized_ = true;
   current_frame_index_ = 0;
@@ -49,77 +42,89 @@ auto RenderGraphModule::Initialize(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto RenderGraphModule::Shutdown(ModuleContext& context) -> co::Co<>
+auto RenderGraphModule::Shutdown() -> co::Co<>
 {
-  LOG_F(INFO, "[RenderGraph] Shutting down render graph module");
+  LOG_F(INFO, "Shutting down...");
+
+  // Periodically log cache stats from the module (every 5 frames).
+  // Use the frame index from FrameContext so logging aligns with engine
+  // frame numbering.
+  if (render_graph_cache_) {
+    render_graph_cache_->LogStats();
+  }
 
   // Clean up render graph resources
   render_graph_.reset();
-  graphics_integration_.reset();
   is_initialized_ = false;
 
-  LOG_F(INFO, "[RenderGraph] Render graph module shutdown complete");
   co_return;
 }
 
-auto RenderGraphModule::OnFrameGraph(ModuleContext& context) -> co::Co<>
+auto RenderGraphModule::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
-  // Preparation only; actual compile deferred to ResourceTransitions phase
-  LOG_F(2, "[RenderGraph] Preparing builder for frame {} (deferred compile)",
-    context.GetFrameIndex());
+  LOG_F(2, "[RenderGraph] OnFrameGraph for frame {}", context.GetFrameIndex());
 
-  context.SetRenderGraphModule(this);
+  // Update frame tracking
+  current_frame_index_ = context.GetFrameIndex();
 
-  if (context.GetFrameIndex() != current_frame_index_) {
-    current_frame_index_ = context.GetFrameIndex();
-    ResetBuilderForNewFrame(context);
-  }
+  // Views should already be created by GameModule
+  LOG_F(
+    2, "[RenderGraph] Frame context has {} views", context.GetViews().size());
 
-  FrameContext frame_context;
-  frame_context.frame_index = context.GetFrameIndex();
-  CreateViewContextsFromSurfaces(frame_context, context);
-  render_graph_builder_.SetFrameContext(frame_context);
-  render_graph_builder_.EnableMultiViewRendering(
-    frame_context.views.size() > 1);
-
-  LOG_F(2,
-    "[RenderGraph] Builder ready (views={}) waiting for other modules' "
-    "contributions",
-    frame_context.views.size());
-  co_return;
-}
-
-auto RenderGraphModule::OnResourceTransitions(ModuleContext& context)
-  -> co::Co<>
-{
-  // If graph not yet compiled this frame, compile now after all FrameGraph
-  // contributions
-  if (!render_graph_) {
-    const auto start = std::chrono::high_resolution_clock::now();
-    LOG_F(2,
-      "[RenderGraph] Deferred compile at ResourceTransitions for frame {}",
-      context.GetFrameIndex());
-    co_await CompileRenderGraph(context);
-    const auto end = std::chrono::high_resolution_clock::now();
-    last_frame_stats_.build_time
-      = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    LOG_F(2, "[RenderGraph] Deferred compile complete ({} μs)",
-      last_frame_stats_.build_time.count());
-  }
-  if (!render_graph_) {
-    LOG_F(ERROR,
-      "[RenderGraph] Cannot plan transitions - graph missing after deferred "
-      "compile");
+  // Get the render graph builder from the frame context (set by
+  // AsyncEngineSimulator)
+  auto builder = context.GetRenderGraphBuilder();
+  if (!builder) {
+    LOG_F(WARNING,
+      "[RenderGraph] No render graph builder available in frame context");
     co_return;
   }
+
+  // Configure the builder with graphics integration
+  // Note: The graphics integration should be set by the engine, but the module
+  // can provide additional configuration here if needed
+
+  LOG_F(2, "[RenderGraph] Using render graph builder from frame context");
+
+  // Other modules will also access the builder via
+  // context.GetRenderGraphBuilder() and add their passes and resources. This
+  // module's primary role is to compile the final graph after all contributions
+  // are made.
+
+  // Wait for other modules to contribute (this is where the deferred compile
+  // pattern helps)
+  co_await WaitForModuleContributions(context);
+
+  // Now compile the render graph with all contributions
+  co_await CompileRenderGraph(context);
+
+  // Plan resource transitions for the compiled render graph
+  if (render_graph_) {
+    co_await PlanResourceTransitions(context);
+  }
+
+  co_return;
+}
+
+auto RenderGraphModule::PlanResourceTransitions(FrameContext& context)
+  -> co::Co<>
+{
   LOG_F(2, "[RenderGraph] Planning resource transitions for frame {}",
     context.GetFrameIndex());
+
+  if (!render_graph_) {
+    LOG_F(WARNING,
+      "[RenderGraph] No render graph available for resource transition "
+      "planning");
+    co_return;
+  }
+
   co_await render_graph_->PlanResourceTransitions(context);
   LOG_F(2, "[RenderGraph] Resource transitions planned");
   co_return;
 }
 
-auto RenderGraphModule::OnCommandRecord(ModuleContext& context) -> co::Co<>
+auto RenderGraphModule::OnCommandRecord(FrameContext& context) -> co::Co<>
 {
   if (!render_graph_) {
     LOG_F(
@@ -137,80 +142,57 @@ auto RenderGraphModule::OnCommandRecord(ModuleContext& context) -> co::Co<>
   co_return;
 }
 
-auto RenderGraphModule::GetBuilder() -> RenderGraphBuilder&
-{
-  return render_graph_builder_;
-}
-
 auto RenderGraphModule::GetLastFrameStats() const -> const FrameStatistics&
 {
   return last_frame_stats_;
 }
 
-auto RenderGraphModule::ResetBuilderForNewFrame(ModuleContext& context) -> void
+auto RenderGraphModule::CreateViewInfosFromSurfaces(FrameContext& frame_context)
+  -> void
 {
-  LOG_F(2, "[RenderGraph] Resetting render graph builder for new frame");
+  auto surfaces = frame_context.GetSurfaces();
+  LOG_F(2, "[RenderGraph] Found {} surfaces", surfaces.size());
 
-  // Create new builder instance for clean state
-  render_graph_builder_ = RenderGraphBuilder {};
-
-  // Initialize builder with graphics layer integration
-  if (graphics_integration_) {
-    render_graph_builder_.SetGraphicsIntegration(graphics_integration_.get());
-  }
-}
-
-auto RenderGraphModule::CreateViewContextsFromSurfaces(
-  FrameContext& frame_context, ModuleContext& module_context) -> void
-{
-  const auto* surfaces = module_context.GetSurfaces();
-  if (!surfaces || surfaces->empty()) {
+  if (surfaces.empty()) {
     // Fallback single view
-    ViewContext default_view;
-    default_view.view_id = ViewId { 0 };
-    default_view.surface_index = 0;
-    if (graphics_integration_) {
-      const auto& graphics = module_context.GetGraphics();
-      const auto vp = graphics.GetDefaultViewport();
-      default_view.viewport
-        = { vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth };
-    } else {
-      default_view.viewport = { 0.0f, 0.0f, 1920.0f, 1080.0f, 0.0f, 1.0f };
-    }
-    frame_context.views.push_back(default_view);
+    ViewInfo default_view;
+    default_view.view_name = "DefaultView";
+    // Create a default surface handle
+    default_view.surface = ViewInfo::SurfaceHandle { std::make_shared<int>(0) };
+
+    // Add the default view
+    frame_context.AddView(default_view);
+    LOG_F(2, "[RenderGraph] Created default view (no surfaces available)");
   } else {
-    frame_context.views.reserve(surfaces->size());
-    uint32_t view_index = 0;
-    for (const auto& surface : *surfaces) {
-      ViewContext view;
-      view.view_id = ViewId { view_index };
-      view.surface_index = view_index;
-      // Attempt to fetch a readable name and dimensions from the surface
-      // object. Using generic members (name / width / height) with fallbacks if
-      // unavailable.
-      if constexpr (requires { surface.name; }) {
-        view.view_name = surface.name;
-      }
-      // RenderSurface currently has no width/height fields; use placeholder
-      // defaults (future: query GraphicsLayer / swapchain for actual size).
-      float width = 1920.0f;
-      float height = 1080.0f;
-      view.viewport = { 0.0f, 0.0f, width, height, 0.0f, 1.0f };
-      frame_context.views.push_back(view);
-      ++view_index;
+    std::vector<ViewInfo> views;
+    views.reserve(surfaces.size());
+
+    for (size_t view_index = 0; view_index < surfaces.size(); ++view_index) {
+      const auto& surface = surfaces[view_index];
+      ViewInfo view;
+      view.view_name = "View_" + std::to_string(view_index);
+
+      // Create surface handle from the render surface
+      view.surface
+        = ViewInfo::SurfaceHandle { std::make_shared<RenderSurface>(surface) };
+
+      views.push_back(view);
     }
+
+    // Set all views at once
+    frame_context.SetViews(std::move(views));
+    LOG_F(2, "[RenderGraph] Created {} views from surfaces", surfaces.size());
+
+    // Debug: Verify views were set correctly
+    LOG_F(2, "[RenderGraph] Verification: frame context now has {} views",
+      frame_context.GetViews().size());
   }
 
-  // Initialize presentable flags to match the number of views and clear them
-  // so worker threads may safely set flags during command recording/processing.
-  frame_context.presentable_flags.assign(
-    frame_context.views.size(), static_cast<uint8_t>(0));
-
-  LOG_F(2, "[RenderGraph] Created {} view contexts (multi-view={})",
-    frame_context.views.size(), frame_context.views.size() > 1);
+  LOG_F(2, "[RenderGraph] Created {} view contexts (views={})",
+    frame_context.GetViews().size(), frame_context.GetViews().size() > 1);
 }
 
-auto RenderGraphModule::WaitForModuleContributions(ModuleContext& context)
+auto RenderGraphModule::WaitForModuleContributions(FrameContext& context)
   -> co::Co<>
 {
   // This is where we would coordinate with other modules
@@ -227,32 +209,37 @@ auto RenderGraphModule::WaitForModuleContributions(ModuleContext& context)
   co_return;
 }
 
-auto RenderGraphModule::CompileRenderGraph(ModuleContext& context) -> co::Co<>
+auto RenderGraphModule::CompileRenderGraph(FrameContext& context) -> co::Co<>
 {
   LOG_F(2, "[RenderGraph] Compiling render graph");
+
+  // Get the render graph builder from the frame context
+  auto builder = context.GetRenderGraphBuilder();
+  if (!builder) {
+    LOG_F(ERROR,
+      "[RenderGraph] No render graph builder available in frame context");
+    co_return;
+  }
 
   try {
     // Build cache key first (structure/resources/views) using builder data
     RenderGraphCacheKey key;
-    key.view_count = static_cast<uint32_t>(
-      render_graph_builder_.GetFrameContext().views.size());
-    key.structure_hash = cache_utils::ComputeStructureHash(
-      render_graph_builder_.GetPassHandles());
-    key.resource_hash = cache_utils::ComputeResourceHash(
-      render_graph_builder_.GetResourceHandles());
-    key.viewport_hash = cache_utils::ComputeViewportHash(
-      render_graph_builder_.GetFrameContext().views);
+    key.view_count = static_cast<uint32_t>(context.GetViews().size());
+    key.structure_hash
+      = cache_utils::ComputeStructureHash(builder->GetPassHandles());
+    key.resource_hash
+      = cache_utils::ComputeResourceHash(builder->GetResourceHandles());
+    key.viewport_hash = cache_utils::ComputeViewportHash(context.GetViews());
 
     // Diagnostic: log builder pass/resource counts before cache lookup
     LOG_F(3,
       "[RenderGraph] Builder pre-cache state: passes={} resources={} views={} "
       "(structure_hash={:08x})",
-      render_graph_builder_.GetPassHandles().size(),
-      render_graph_builder_.GetResourceHandles().size(), key.view_count,
-      key.structure_hash);
+      builder->GetPassHandles().size(), builder->GetResourceHandles().size(),
+      key.view_count, key.structure_hash);
 
     // If no passes yet, skip cache lookup and defer (expect later phase to add)
-    if (render_graph_builder_.GetPassHandles().empty()) {
+    if (builder->GetPassHandles().empty()) {
       LOG_F(
         2, "[RenderGraph] Compile skipped: zero passes (will attempt later)");
       co_return;
@@ -268,7 +255,8 @@ auto RenderGraphModule::CompileRenderGraph(ModuleContext& context) -> co::Co<>
           last_frame_stats_.pass_count, last_frame_stats_.resource_count);
         // Frame budget check (cache hit path)
         const auto& sched = render_graph_->GetSchedulingResult();
-        const auto target_fps = context.GetEngineProps().target_fps;
+        // TODO: Get target FPS from engine configuration when available
+        const uint32_t target_fps = 60; // Default target FPS
         if (target_fps > 0 && sched.estimated_frame_time_ms > 0.0f) {
           const float budget_ms = 1000.0f / static_cast<float>(target_fps);
           if (sched.estimated_frame_time_ms > budget_ms) {
@@ -289,7 +277,7 @@ auto RenderGraphModule::CompileRenderGraph(ModuleContext& context) -> co::Co<>
 
     // Build and validate the render graph (validator created internally) when
     // cache miss
-    auto built = render_graph_builder_.Build();
+    auto built = builder->Build();
     render_graph_ = std::shared_ptr<RenderGraph>(std::move(built));
 
     if (!render_graph_) {
@@ -313,7 +301,8 @@ auto RenderGraphModule::CompileRenderGraph(ModuleContext& context) -> co::Co<>
 
     // Frame budget check (cache miss path)
     const auto& sched = render_graph_->GetSchedulingResult();
-    const auto target_fps = context.GetEngineProps().target_fps;
+    // TODO: Get target FPS from engine configuration when available
+    const uint32_t target_fps = 60; // Default target FPS
     if (target_fps > 0 && sched.estimated_frame_time_ms > 0.0f) {
       const float budget_ms = 1000.0f / static_cast<float>(target_fps);
       if (sched.estimated_frame_time_ms > budget_ms) {
