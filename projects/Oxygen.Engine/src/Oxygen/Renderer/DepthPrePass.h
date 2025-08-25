@@ -12,11 +12,11 @@
 #include <span>
 #include <string>
 
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Renderer/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -101,18 +101,12 @@ public:
   OXYGEN_DEFAULT_COPYABLE(DepthPrePass)
   OXYGEN_DEFAULT_MOVABLE(DepthPrePass)
 
-  OXGN_RNDR_API auto SetViewport(const graphics::ViewPort& viewport) -> void;
-  auto GetViewport() const -> std::optional<graphics::ViewPort>
-  {
-    return viewport_;
-  }
+  OXGN_RNDR_API auto SetViewport(const ViewPort& viewport) -> void;
+  auto GetViewport() const -> std::optional<ViewPort> { return viewport_; }
   auto HasViewport() const -> bool { return viewport_.has_value(); }
 
-  OXGN_RNDR_API auto SetScissors(const graphics::Scissors& scissors) -> void;
-  auto GetScissors() const -> std::optional<graphics::Scissors>
-  {
-    return scissors_;
-  }
+  OXGN_RNDR_API auto SetScissors(const Scissors& scissors) -> void;
+  auto GetScissors() const -> std::optional<Scissors> { return scissors_; }
   auto HasScissors() const -> bool { return scissors_.has_value(); }
 
   //! Sets the clear color for this render pass.
@@ -171,10 +165,10 @@ private:
   std::shared_ptr<Config> config_;
 
   //! Current viewport for the pass.
-  std::optional<graphics::ViewPort> viewport_ {};
+  std::optional<ViewPort> viewport_ {};
 
   //! Current scissor rectangle for the pass.
-  std::optional<graphics::Scissors> scissors_ {};
+  std::optional<Scissors> scissors_ {};
 
   //! Current clear color for the pass (interpreted for depth/stencil).
   std::optional<graphics::Color>

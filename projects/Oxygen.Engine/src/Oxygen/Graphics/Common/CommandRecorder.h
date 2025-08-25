@@ -15,15 +15,15 @@
 #include <Oxygen/Base/Macros.h>
 // ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {

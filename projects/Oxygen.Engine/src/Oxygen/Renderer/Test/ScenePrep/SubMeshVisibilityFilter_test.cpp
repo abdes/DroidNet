@@ -83,13 +83,13 @@ protected:
   }
 
   // Minimal view with explicit camera position (affects MeshResolver only)
-  void ConfigureView(glm::vec3 cam_pos, int viewport_height, float m11 = 1.0f)
+  void ConfigureView(glm::vec3 cam_pos, float viewport_height, float m11 = 1.0f)
   {
     View::Params p {};
     p.view = glm::mat4(1.0f);
     p.proj = glm::mat4(1.0f);
     p.proj[1][1] = m11;
-    p.viewport = { 0, 0, 0, viewport_height };
+    p.viewport = { 0.0f, 0.0f, 0.0f, viewport_height };
     p.has_camera_position = true;
     p.camera_position = cam_pos;
     SetView(View { p });
@@ -98,12 +98,12 @@ protected:
   // Proper perspective view for frustum-based tests
   void ConfigurePerspectiveView(glm::vec3 eye, glm::vec3 center,
     glm::vec3 up = { 0, 1, 0 }, float fovy_deg = 60.0f, float aspect = 1.0f,
-    float znear = 0.1f, float zfar = 1000.0f, int viewport = 1000)
+    float znear = 0.1f, float zfar = 1000.0f, float viewport = 1000.0f)
   {
     View::Params p {};
     p.view = glm::lookAt(eye, center, up);
     p.proj = glm::perspective(glm::radians(fovy_deg), aspect, znear, zfar);
-    p.viewport = { 0, 0, viewport, viewport };
+    p.viewport = { 0.0f, 0.0f, viewport, viewport };
     p.has_camera_position = true;
     p.camera_position = eye;
     SetView(View { p });

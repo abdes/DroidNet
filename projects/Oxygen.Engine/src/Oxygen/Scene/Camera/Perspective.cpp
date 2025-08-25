@@ -100,9 +100,9 @@ auto PerspectiveCamera::WorldToScreen(
 
  @see SetViewport, GetViewport
 */
-auto PerspectiveCamera::ActiveViewport() const -> glm::ivec4
+auto PerspectiveCamera::ActiveViewport() const -> ViewPort
 {
-  return viewport_.value_or(glm::ivec4(0, 0, 0, 0));
+  return viewport_.value_or(ViewPort {});
 }
 
 /*!

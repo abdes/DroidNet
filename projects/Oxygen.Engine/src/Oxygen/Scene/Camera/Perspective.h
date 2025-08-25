@@ -9,6 +9,7 @@
 #include <optional>
 
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/ProjectionConvention.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/api_export.h>
@@ -150,11 +151,11 @@ public:
     Sets the viewport rectangle, defining the region of the render target
     (screen or texture) where the camera's output will be drawn. Useful for
     split-screen or editor views.
-    @param viewport Rectangle as (x, y, width, height).
+    @param viewport ViewPort struct with position, size, and depth range.
     @note Setting the viewport overrides the default full-target rendering.
     @see Viewport, ActiveViewport
   */
-  auto SetViewport(const glm::ivec4& viewport) -> void { viewport_ = viewport; }
+  auto SetViewport(const ViewPort& viewport) -> void { viewport_ = viewport; }
 
   //! Resets the viewport to unset (full target).
   /*!
@@ -169,7 +170,7 @@ public:
     @return The viewport rectangle, or std::nullopt if unset.
     @see SetViewport, ResetViewport
   */
-  OXGN_SCN_NDAPI auto GetViewport() const -> std::optional<glm::ivec4>
+  OXGN_SCN_NDAPI auto GetViewport() const -> std::optional<ViewPort>
   {
     return viewport_;
   }
@@ -184,7 +185,7 @@ public:
     const glm::vec2& p, const glm::vec4& viewport) const -> glm::vec2;
 
   //! Returns the set viewport, or a default rectangle if unset.
-  OXGN_SCN_NDAPI auto ActiveViewport() const -> glm::ivec4;
+  OXGN_SCN_NDAPI auto ActiveViewport() const -> ViewPort;
 
   //! Returns the extents of the camera's frustum at the near plane, in view
   //! space.
@@ -215,7 +216,7 @@ private:
   float aspect_ = 1.0f;
   float near_ = 0.1f;
   float far_ = 1000.0f;
-  std::optional<glm::ivec4> viewport_;
+  std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };
   camera::ProjectionConvention convention_;
 };

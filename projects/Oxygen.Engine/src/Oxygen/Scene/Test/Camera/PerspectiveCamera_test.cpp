@@ -92,14 +92,21 @@ TEST_F(D3d12PerspectiveCameraTest, SettersAndGetters) // NOLINT(*-magic-numbers)
   camera_->SetAspectRatio(2.0f);
   camera_->SetNearPlane(0.5f);
   camera_->SetFarPlane(500.0f);
-  camera_->SetViewport({ 10, 20, 640, 480 });
+  oxygen::ViewPort vp { 10.f, 20.f, 640.f, 480.f, 0.f, 1.f };
+  camera_->SetViewport(vp);
   // Assert
   EXPECT_FLOAT_EQ(camera_->GetFieldOfView(), 0.5f);
   EXPECT_FLOAT_EQ(camera_->GetAspectRatio(), 2.0f);
   EXPECT_FLOAT_EQ(camera_->GetNearPlane(), 0.5f);
   EXPECT_FLOAT_EQ(camera_->GetFarPlane(), 500.0f);
   ASSERT_TRUE(camera_->GetViewport().has_value());
-  EXPECT_EQ(camera_->GetViewport().value(), glm::ivec4(10, 20, 640, 480));
+  const auto vpr = camera_->GetViewport().value();
+  EXPECT_FLOAT_EQ(vpr.top_left_x, 10.f);
+  EXPECT_FLOAT_EQ(vpr.top_left_y, 20.f);
+  EXPECT_FLOAT_EQ(vpr.width, 640.f);
+  EXPECT_FLOAT_EQ(vpr.height, 480.f);
+  EXPECT_FLOAT_EQ(vpr.min_depth, 0.f);
+  EXPECT_FLOAT_EQ(vpr.max_depth, 1.f);
   camera_->ResetViewport();
   EXPECT_FALSE(camera_->GetViewport().has_value());
 }
@@ -121,9 +128,25 @@ TEST_F(D3d12PerspectiveCameraTest, ProjectionMatrix_Valid)
 TEST_F(D3d12PerspectiveCameraTest, ActiveViewport_ReturnsSetOrDefault)
 {
   // Act & Assert
-  EXPECT_EQ(camera_->ActiveViewport(), glm::ivec4(0, 0, 0, 0));
-  camera_->SetViewport({ 1, 2, 3, 4 });
-  EXPECT_EQ(camera_->ActiveViewport(), glm::ivec4(1, 2, 3, 4));
+  {
+    const auto avp = camera_->ActiveViewport();
+    EXPECT_FLOAT_EQ(avp.top_left_x, 0.f);
+    EXPECT_FLOAT_EQ(avp.top_left_y, 0.f);
+    EXPECT_FLOAT_EQ(avp.width, 0.f);
+    EXPECT_FLOAT_EQ(avp.height, 0.f);
+    EXPECT_FLOAT_EQ(avp.min_depth, 0.f);
+    EXPECT_FLOAT_EQ(avp.max_depth, 1.f);
+  }
+  camera_->SetViewport(oxygen::ViewPort { 1.f, 2.f, 3.f, 4.f, 0.f, 1.f });
+  {
+    const auto avp_set = camera_->ActiveViewport();
+    EXPECT_FLOAT_EQ(avp_set.top_left_x, 1.f);
+    EXPECT_FLOAT_EQ(avp_set.top_left_y, 2.f);
+    EXPECT_FLOAT_EQ(avp_set.width, 3.f);
+    EXPECT_FLOAT_EQ(avp_set.height, 4.f);
+    EXPECT_FLOAT_EQ(avp_set.min_depth, 0.f);
+    EXPECT_FLOAT_EQ(avp_set.max_depth, 1.f);
+  }
 }
 
 //! Test ClippingRectangle returns correct near-plane extents

@@ -100,13 +100,20 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, SettersAndGetters)
 
   // Act
   camera_->SetExtents(-2, 2, -3, 3, 0.5f, 500.0f);
-  camera_->SetViewport({ 10, 20, 640, 480 });
+  oxygen::ViewPort vp { 10.f, 20.f, 640.f, 480.f, 0.f, 1.f };
+  camera_->SetViewport(vp);
 
   // Assert
   EXPECT_EQ(camera_->GetExtents(),
     (std::array<float, 6> { -2, 2, -3, 3, 0.5f, 500.0f }));
   ASSERT_TRUE(camera_->GetViewport().has_value());
-  EXPECT_EQ(camera_->GetViewport().value(), glm::ivec4(10, 20, 640, 480));
+  const auto vpr = camera_->GetViewport().value();
+  EXPECT_FLOAT_EQ(vpr.top_left_x, 10.f);
+  EXPECT_FLOAT_EQ(vpr.top_left_y, 20.f);
+  EXPECT_FLOAT_EQ(vpr.width, 640.f);
+  EXPECT_FLOAT_EQ(vpr.height, 480.f);
+  EXPECT_FLOAT_EQ(vpr.min_depth, 0.f);
+  EXPECT_FLOAT_EQ(vpr.max_depth, 1.f);
 
   // Act
   camera_->ResetViewport();
@@ -135,12 +142,26 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, ProjectionMatrix_Valid)
 NOLINT_TEST_F(D3d12OrthographicCameraTest, ActiveViewport_ReturnsSetOrDefault)
 {
   // Arrange/Act/Assert
-  EXPECT_EQ(camera_->ActiveViewport(), glm::ivec4(0, 0, 0, 0));
+  {
+    const auto avp = camera_->ActiveViewport();
+    EXPECT_FLOAT_EQ(avp.top_left_x, 0.f);
+    EXPECT_FLOAT_EQ(avp.top_left_y, 0.f);
+    EXPECT_FLOAT_EQ(avp.width, 0.f);
+    EXPECT_FLOAT_EQ(avp.height, 0.f);
+    EXPECT_FLOAT_EQ(avp.min_depth, 0.f);
+    EXPECT_FLOAT_EQ(avp.max_depth, 1.f);
+  }
 
   // Act
-  camera_->SetViewport({ 1, 2, 3, 4 });
+  camera_->SetViewport(oxygen::ViewPort { 1.f, 2.f, 3.f, 4.f, 0.f, 1.f });
   // Assert
-  EXPECT_EQ(camera_->ActiveViewport(), glm::ivec4(1, 2, 3, 4));
+  const auto avp_set = camera_->ActiveViewport();
+  EXPECT_FLOAT_EQ(avp_set.top_left_x, 1.f);
+  EXPECT_FLOAT_EQ(avp_set.top_left_y, 2.f);
+  EXPECT_FLOAT_EQ(avp_set.width, 3.f);
+  EXPECT_FLOAT_EQ(avp_set.height, 4.f);
+  EXPECT_FLOAT_EQ(avp_set.min_depth, 0.f);
+  EXPECT_FLOAT_EQ(avp_set.max_depth, 1.f);
 }
 
 //! ClippingRectangle returns correct near-plane extents

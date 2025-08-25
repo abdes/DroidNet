@@ -22,22 +22,6 @@
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
-
-auto oxygen::graphics::to_string(const ViewPort& viewport) -> std::string
-{
-  return fmt::format(
-    "ViewPort{{tl.x={}, tl.y={}, w={}, h={}, min_depth={}, max_depth={}}}",
-    viewport.top_left_x, viewport.top_left_y, viewport.width, viewport.height,
-    viewport.min_depth, viewport.max_depth);
-}
-
-auto oxygen::graphics::to_string(const Scissors& scissors) -> std::string
-{
-  return fmt::format("Scissors{{l={}, t={}, r={}, b={}}}", scissors.left,
-    scissors.top, scissors.right, scissors.bottom);
-}
 
 auto oxygen::graphics::to_string(const NativeObject& obj) -> std::string
 {

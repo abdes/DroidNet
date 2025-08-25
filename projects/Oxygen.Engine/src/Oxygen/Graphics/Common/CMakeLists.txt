@@ -120,9 +120,7 @@ target_sources(
       "Types/ResourceAccessMode.h"
       "Types/ResourceStates.h"
       "Types/ResourceViewType.h"
-      "Types/Scissors.h"
       "Types/TrackableResource.h"
-      "Types/ViewPort.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

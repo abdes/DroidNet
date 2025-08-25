@@ -98,13 +98,13 @@ protected:
 
   // Helper: configure a simple View with explicit camera position and viewport
   // height; proj is identity except for m11 to get a positive focal length.
-  void ConfigureView(glm::vec3 cam_pos, int viewport_height, float m11 = 1.0f)
+  void ConfigureView(glm::vec3 cam_pos, float viewport_height, float m11 = 1.0f)
   {
     View::Params p {};
     p.view = glm::mat4(1.0f);
     p.proj = glm::mat4(1.0f);
     p.proj[1][1] = m11;
-    p.viewport = { 0, 0, 0, viewport_height };
+    p.viewport = { 0.0f, 0.0f, 0.0f, viewport_height };
     p.has_camera_position = true;
     p.camera_position = cam_pos;
     SetView(View { p });
@@ -275,7 +275,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Near_SelectsFineLOD)
 
   // Place camera at the world-sphere center to get distance ~ 0
   const auto center = glm::vec3(GetWorldMatrix()[3]); // translation (0.2)
-  ConfigureView(center, /*viewport_height*/ 720, /*m11*/ 1.0f);
+  ConfigureView(center, /*viewport_height*/ 720.0f, /*m11*/ 1.0f);
 
   // Act
   MeshResolver(Context(), State(), Proto());
@@ -295,7 +295,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
 
   // Far camera to make normalized distance >> thresholds
   const auto center = glm::vec3(GetWorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), 720, 1.0f);
+  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), 720.0f, 1.0f);
 
   // Act
   MeshResolver(Context(), State(), Proto());
@@ -318,7 +318,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NearHighSSE_SelectsFine)
 
   // Camera ~ at center -> z ~= 0 -> clamped to 1e-6 -> very large SSE
   const auto center = glm::vec3(GetWorldMatrix()[3]);
-  ConfigureView(center, /*viewport_height*/ 1000, /*m11*/ 1.0f);
+  ConfigureView(center, /*viewport_height*/ 1000.0f, /*m11*/ 1.0f);
 
   // Act
   MeshResolver(Context(), State(), Proto());
@@ -339,7 +339,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
 
   // Far camera -> small sse -> coarser LOD
   const auto center = glm::vec3(GetWorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), /*height*/ 1000,
+  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), /*height*/ 1000.0f,
     /*m11*/ 1.0f);
 
   // Act
@@ -359,7 +359,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
     .exit_coarser_sse = { 8.0f, 4.0f } };
   Node().GetRenderable().SetLodPolicy(sp);
   const auto center = glm::vec3(GetWorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(10.0f, 0.0f, 0.0f), /*height*/ 0,
+  ConfigureView(center + glm::vec3(10.0f, 0.0f, 0.0f), /*height*/ 0.0f,
     /*m11*/ 1.0f);
 
   // Act

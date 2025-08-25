@@ -43,8 +43,6 @@ using oxygen::graphics::DepthStencilStateDesc;
 using oxygen::graphics::Framebuffer;
 using oxygen::graphics::RasterizerStateDesc;
 using oxygen::graphics::ResourceStates;
-using oxygen::graphics::Scissors;
-using oxygen::graphics::ViewPort;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //

@@ -39,7 +39,7 @@ View::View(const Params& p)
   // For orthographic matrices, proj_[1][1] encodes pixels-per-world-unit in Y
   // scaled to NDC; approximate f_pixels using viewport height and
   // |proj_[1][1]|.
-  const float vp_h = static_cast<float>((std::max)(viewport_.w, 0));
+  const float vp_h = static_cast<float>((std::max)(viewport_.height, 0.0f));
   const float m11 = proj_[1][1];
   if (vp_h > 0.0f && std::isfinite(m11) && m11 > 0.0f) {
     focal_length_pixels_ = m11 * (vp_h * 0.5f);

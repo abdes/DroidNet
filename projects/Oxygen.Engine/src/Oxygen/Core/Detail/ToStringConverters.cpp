@@ -13,8 +13,10 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 
 auto oxygen::to_string(oxygen::Format format) -> const char*
 {
@@ -239,4 +241,18 @@ auto oxygen::to_string(const oxygen::TextureType value) -> const char*
   }
 
   return "__NotSupported__";
+}
+
+auto oxygen::to_string(const ViewPort& viewport) -> std::string
+{
+  return fmt::format(
+    "ViewPort{{tl.x={}, tl.y={}, w={}, h={}, min_depth={}, max_depth={}}}",
+    viewport.top_left_x, viewport.top_left_y, viewport.width, viewport.height,
+    viewport.min_depth, viewport.max_depth);
+}
+
+auto oxygen::to_string(const Scissors& scissors) -> std::string
+{
+  return fmt::format("Scissors{{l={}, t={}, r={}, b={}}}", scissors.left,
+    scissors.top, scissors.right, scissors.bottom);
 }

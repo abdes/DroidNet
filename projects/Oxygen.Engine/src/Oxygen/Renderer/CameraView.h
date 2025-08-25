@@ -10,6 +10,8 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -26,8 +28,8 @@ public:
     // Camera node handle (non-owning). Must have a camera component.
     oxygen::scene::SceneNode camera_node;
     // Optional overrides; if not set, camera's ActiveViewport() is used.
-    std::optional<glm::ivec4> viewport {};
-    std::optional<glm::ivec4> scissor {};
+    std::optional<ViewPort> viewport {};
+    std::optional<Scissors> scissor {};
     glm::vec2 pixel_jitter { 0.0f, 0.0f };
     bool reverse_z = false;
     bool mirrored = false;

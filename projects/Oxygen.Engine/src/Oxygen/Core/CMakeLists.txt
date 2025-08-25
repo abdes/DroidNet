@@ -60,8 +60,10 @@ set(
   "Types/BindlessHandle.h"
   "Types/Format.h"
   "Types/Frame.h"
+  "Types/Scissors.h"
   "Types/ShaderType.h"
   "Types/TextureType.h"
+  "Types/ViewPort.h"
   "version-info.h"
   "Version.h"
   # Generated headers (Bindless)

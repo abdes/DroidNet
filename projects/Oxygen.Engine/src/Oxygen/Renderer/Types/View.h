@@ -8,6 +8,8 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Renderer/Types/Frustum.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -35,8 +37,8 @@ public:
   struct Params {
     glm::mat4 view { 1.0f };
     glm::mat4 proj { 1.0f };
-    glm::ivec4 viewport { 0, 0, 0, 0 };
-    glm::ivec4 scissor { 0, 0, 0, 0 };
+    ViewPort viewport {};
+    Scissors scissor {};
     glm::vec2 pixel_jitter { 0.0f, 0.0f };
     bool reverse_z = false;
     bool mirrored = false;
@@ -47,51 +49,27 @@ public:
   OXGN_RNDR_API explicit View(const Params& p);
 
   // Getters (immutable)
-  [[nodiscard]] auto ViewMatrix() const noexcept -> const glm::mat4&
-  {
-    return view_;
-  }
-  [[nodiscard]] auto ProjectionMatrix() const noexcept -> const glm::mat4&
-  {
-    return proj_;
-  }
-  [[nodiscard]] auto InverseView() const noexcept -> const glm::mat4&
-  {
-    return inv_view_;
-  }
-  [[nodiscard]] auto InverseProjection() const noexcept -> const glm::mat4&
-  {
-    return inv_proj_;
-  }
-  [[nodiscard]] auto ViewProjection() const noexcept -> const glm::mat4&
-  {
-    return view_proj_;
-  }
-  [[nodiscard]] auto InverseViewProjection() const noexcept -> const glm::mat4&
+  [[nodiscard]] auto ViewMatrix() const noexcept { return view_; }
+  [[nodiscard]] auto ProjectionMatrix() const noexcept { return proj_; }
+  [[nodiscard]] auto InverseView() const noexcept { return inv_view_; }
+  [[nodiscard]] auto InverseProjection() const noexcept { return inv_proj_; }
+  [[nodiscard]] auto ViewProjection() const noexcept { return view_proj_; }
+  [[nodiscard]] auto InverseViewProjection() const noexcept
   {
     return inv_view_proj_;
   }
-  [[nodiscard]] auto GetFrustum() const noexcept -> const Frustum&
-  {
-    return frustum_;
-  }
-  [[nodiscard]] auto Viewport() const noexcept -> glm::ivec4
-  {
-    return viewport_;
-  }
-  [[nodiscard]] auto Scissor() const noexcept -> glm::ivec4 { return scissor_; }
-  [[nodiscard]] auto PixelJitter() const noexcept -> glm::vec2
-  {
-    return pixel_jitter_;
-  }
-  [[nodiscard]] auto ReverseZ() const noexcept -> bool { return reverse_z_; }
-  [[nodiscard]] auto Mirrored() const noexcept -> bool { return mirrored_; }
-  [[nodiscard]] auto CameraPosition() const noexcept -> glm::vec3
+  [[nodiscard]] auto GetFrustum() const noexcept { return frustum_; }
+  [[nodiscard]] auto Viewport() const noexcept { return viewport_; }
+  [[nodiscard]] auto Scissor() const noexcept { return scissor_; }
+  [[nodiscard]] auto PixelJitter() const noexcept { return pixel_jitter_; }
+  [[nodiscard]] auto ReverseZ() const noexcept { return reverse_z_; }
+  [[nodiscard]] auto Mirrored() const noexcept { return mirrored_; }
+  [[nodiscard]] auto CameraPosition() const noexcept
   {
     return camera_position_;
   }
   //! Vertical focal length in pixels derived from projection and viewport.
-  [[nodiscard]] auto FocalLengthPixels() const noexcept -> float
+  [[nodiscard]] auto FocalLengthPixels() const noexcept
   {
     return focal_length_pixels_;
   }
@@ -104,8 +82,8 @@ private:
   glm::mat4 view_proj_ { 1.0f };
   glm::mat4 inv_view_proj_ { 1.0f };
 
-  glm::ivec4 viewport_ { 0, 0, 0, 0 };
-  glm::ivec4 scissor_ { 0, 0, 0, 0 };
+  ViewPort viewport_ {};
+  Scissors scissor_ {};
   glm::vec2 pixel_jitter_ { 0.0f, 0.0f };
   bool reverse_z_ = false;
   bool mirrored_ = false;

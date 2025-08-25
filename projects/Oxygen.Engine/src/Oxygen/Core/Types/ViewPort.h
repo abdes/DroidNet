@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <string>
 
-#include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
-namespace oxygen::graphics {
+namespace oxygen {
 
 struct ViewPort {
   float top_left_x { 0.f };
@@ -29,6 +29,6 @@ struct ViewPort {
   }
 };
 
-OXYGEN_GFX_NDAPI auto to_string(const ViewPort& viewport) -> std::string;
+OXGN_CORE_NDAPI auto to_string(const ViewPort& viewport) -> std::string;
 
-} // namespace oxygen::graphics
+} // namespace oxygen
