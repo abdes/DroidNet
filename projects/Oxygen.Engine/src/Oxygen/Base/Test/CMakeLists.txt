@@ -49,11 +49,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   )
 endif()
 
-m_gtest_program(
-  TypeList
-  SOURCES
-    "TypeList_test.cpp"
-)
+m_gtest_program(TypeList SOURCES "TypeList_test.cpp")
 
 m_gtest_program(
   Resource
@@ -73,6 +69,12 @@ m_gtest_program(
 )
 m_gtest_program(NamedType SOURCES "NamedType_test.cpp")
 m_gtest_program(ObserverPtr SOURCES "ObserverPtr_test.cpp")
+m_gtest_program(
+  EnumIndexArray
+  SOURCES
+    "EnumIndexArray_test.cpp"
+    "EnumAsIndex_test.cpp"
+)
 
 # -- Catch2 Test Programs -------------------------------------------------------
 
