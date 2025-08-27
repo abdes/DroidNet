@@ -13,6 +13,8 @@
 #include <span>
 #include <unordered_map>
 
+#include <Oxygen/Renderer/RenderItem.h>
+
 namespace oxygen::graphics {
 class Framebuffer;
 class Buffer;
@@ -27,7 +29,6 @@ class Light;
 namespace oxygen::engine {
 
 class Renderer;
-struct RenderItem;
 class RenderPass;
 
 //=== Pass Type List and Compile-Time Indexing ===----------------------------//
