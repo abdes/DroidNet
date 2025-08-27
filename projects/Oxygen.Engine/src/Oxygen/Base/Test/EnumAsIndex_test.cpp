@@ -4,9 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/EnumIndexedArray.h>
 #include <array>
 #include <functional>
 #include <numeric>
@@ -14,6 +11,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Base/EnumIndexedArray.h>
 
 using oxygen::EnumAsIndex;
 using oxygen::EnumIndexedArray;
@@ -257,10 +258,18 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, ArithmeticOverflowTerminates)
     "");
 }
 
-//=== Helpers for ietration tests ===-----------------------------------------//
+//=== Helpers for iteration tests ===-----------------------------------------//
 
-enum class Color { kRed, kGreen, kBlue, kCount, kFirst = kRed };
-using ColorIndex = oxygen::EnumAsIndex<Color>;
+enum class Color {
+  kFirst = 0,
+  kRed = kFirst,
+  kGreen,
+  kBlue,
+
+  // ReSharper disable once CppEnumeratorNeverUsed
+  kCount,
+};
+using ColorIndex = EnumAsIndex<Color>;
 constexpr std::string_view ColorToString(ColorIndex color)
 {
   switch (color.to_enum()) {
@@ -325,7 +334,7 @@ NOLINT_TEST(EnumAsIndexConstexprTest, CompileTimeArithmeticAndToEnum)
 }
 
 //! Constexpr loop sum: compute a compile-time sum by iterating
-//! EnumAsIndex::begin()..end().
+//! EnumAsIndex::begin() ... end().
 NOLINT_TEST(EnumAsIndexConstexprTest, ConstexprLoopSum)
 {
   // Compute sum at compile time using a consteval lambda and

@@ -4,13 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/EnumIndexedArray.h>
 #include <memory>
 #include <numeric>
 #include <ranges>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Base/EnumIndexedArray.h>
 
 using oxygen::EnumAsIndex;
 using oxygen::EnumIndexedArray;
@@ -102,6 +103,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IteratorsAndSize)
 
 //! Named-index wrapper: simulate a strong-type index with get().
 struct MyIndex {
+  // ReSharper disable once CppDeclaratorNeverUsed
   std::size_t get() const noexcept { return value; }
   std::size_t value;
 };
@@ -331,7 +333,13 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesFindIfAlgorithm)
 
 //=== Compile time tests ===--------------------------------------------------//
 
-enum class CTEnum : std::size_t { kFirst = 0, kSecond, kCount };
+enum class CTEnum : std::size_t {
+  kFirst = 0,
+  kSecond,
+
+  // ReSharper disable once CppEnumeratorNeverUsed
+  kCount,
+};
 
 // consteval function that creates and manipulates an EnumIndexedArray
 consteval bool ConstevalEnumIndexedArrayChecks()
@@ -355,7 +363,9 @@ consteval bool ConstevalEnumIndexedArrayChecks()
 
   // Test the enum_as_index view size and iterator distance in consteval
   auto viewSize = enum_as_index<CTEnum>.size();
+  // ReSharper disable once CppDFAConstantConditions
   if (viewSize != std::ranges::size(enum_as_index<CTEnum>)) {
+    // ReSharper disable once CppDFAUnreachableCode
     return false;
   }
 

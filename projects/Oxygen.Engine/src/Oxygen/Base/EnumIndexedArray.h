@@ -8,15 +8,14 @@
 
 #include <array>
 #include <concepts>
-#include <cstdint>
 #include <ranges>
 #include <type_traits>
 
-#include <cassert>
 #include <compare>
 #include <stdexcept>
 
 namespace oxygen {
+
 //! Concept: EnumWithCount
 /*!
  Constrains enums used with helpers in this header. An enum satisfying
@@ -65,10 +64,8 @@ public:
   constexpr explicit EnumAsIndex(Enum id) noexcept
     : value_(static_cast<RawIndexType>(id))
   {
-    // MSVC won't let consteval bounds checking pass. Only do the bounds check
-    // at *runtime*, and push the compile time assertions to the caller site.
-    if (!std::is_constant_evaluated()) {
-      if (!(value_ < static_cast<RawIndexType>(Enum::kCount))) {
+    if !consteval {
+      if (value_ >= static_cast<RawIndexType>(Enum::kCount)) {
         std::terminate();
       }
     }
@@ -170,21 +167,21 @@ public:
     return *this;
   }
 
-  friend [[nodiscard]] constexpr auto operator+(
+  [[nodiscard]] friend constexpr auto operator+(
     EnumAsIndex p, std::ptrdiff_t off) noexcept
   {
     return EnumAsIndex(CheckedFromValueAndOffset(p.get(), off), 0);
   }
 
-  friend [[nodiscard]] constexpr auto operator-(
+  [[nodiscard]] friend constexpr auto operator-(
     EnumAsIndex p, std::ptrdiff_t off) noexcept
   {
     return EnumAsIndex(CheckedFromValueAndOffset(p.get(), -off), 0);
   }
 
-  //! For algorithms that need “how many steps apart"; enables
+  //! For algorithms that need 'how many steps apart'; enables
   //! `std::ranges::distance`-style usage.
-  friend [[nodiscard]] constexpr auto operator-(
+  [[nodiscard]] friend constexpr auto operator-(
     EnumAsIndex a, EnumAsIndex b) noexcept
   {
     return static_cast<std::ptrdiff_t>(a.value_)
@@ -208,7 +205,7 @@ private:
     RawIndexType value, std::ptrdiff_t off) noexcept
   {
     const auto raw = static_cast<std::ptrdiff_t>(value) + off;
-    if (!std::is_constant_evaluated()) {
+    if !consteval {
       if (!(raw >= 0 && raw <= static_cast<std::ptrdiff_t>(Enum::kCount))) {
         std::terminate();
       }
@@ -396,27 +393,25 @@ template <oxygen::EnumWithCount E>
 inline constexpr bool enable_view<oxygen::EnumAsIndexView<E>> = true;
 
 template <oxygen::EnumWithCount E>
-inline constexpr bool borrowed_range<oxygen::EnumAsIndexView<E>> = true;
+inline constexpr bool enable_borrowed_range<oxygen::EnumAsIndexView<E>> = true;
 }
 
 //! `enum_as_index` convenience variable
 /*!
- Constexpr view instance that yields `EnumAsIndex<Enum>`. Use in range- based
+ Constexpr view instance that yields `EnumAsIndex<Enum>`. Use in range-based
  loops to iterate enum values safely and readably.
 */
 template <oxygen::EnumWithCount Enum>
 inline constexpr auto enum_as_index = oxygen::EnumAsIndexView<Enum> {};
 
-namespace std {
 //! Provide std::hash specialization for EnumAsIndex so it can be used in hashed
 //! containers. This is a template so any EnumAsIndex<Enum> is hashable.
-template <typename Enum> struct hash<oxygen::EnumAsIndex<Enum>> {
+template <typename Enum> struct std::hash<oxygen::EnumAsIndex<Enum>> {
   constexpr std::size_t operator()(oxygen::EnumAsIndex<Enum> idx) const noexcept
   {
     return static_cast<std::size_t>(idx.get());
   }
-};
-} // namespace std
+}; // namespace std
 
 namespace oxygen {
 
