@@ -1,8 +1,8 @@
 {
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
   "source_version": "1.0.1",
-  "tool_version": "1.2.0",
-  "generated": "2025-08-28 07:43:24",
+  "tool_version": "1.2.1",
+  "generated": "2025-08-28 10:50:37",
   "schema_version": "1.0.0",
   "defaults": {
     "invalid_index": 4294967295
