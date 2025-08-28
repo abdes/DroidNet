@@ -604,47 +604,68 @@ def generate(
     # If the existing file differs only by the Generated timestamp line,
     # preserve the old file content (including its timestamp) so git won't
     # treat it as modified.
-    def _normalize_generated_ts(text: str) -> str:
-        # Replace the Generated timestamp line with a stable marker for
-        # comparison. Handles different comment styles that our templates
-        # emit (C++/HLSL comment formats).
+    def _normalize_generated_timestamps(text: str) -> str:
         try:
-            return re.sub(
-                r"(^[ \t]*// Generated: ).*$",
-                r"\1<TS>",
-                text,
-                flags=re.MULTILINE,
-            )
-        except Exception:
-            return text
+            out = text
 
-    # Extend normalization to also hide timestamps embedded in JSON and
-    # in the Meta C++ header string variable used by some templates. This
-    # keeps comparisons stable when only the generated-at timestamp differs.
-    def _normalize_generated_ts_extended(text: str) -> str:
-        try:
-            # First normalize C++/HLSL comment timestamps (existing behavior)
+            # 1) C++/HLSL single-line comment: // Generated: ...
             out = re.sub(
-                r"(^[ \t]*// Generated: ).*$",
+                r"(^[ \t]*//\s*Generated:\s*).*$(?:\n)?",
                 r"\1<TS>",
-                text,
+                out,
                 flags=re.MULTILINE,
             )
-            # Normalize JSON fields like "generated": "2025-08-18 12:34:56"
+
+            # 2) C-style block comment: /* Generated: ... */ (multiline)
             out = re.sub(
-                r'("generated"\s*:\s*")([^"\n]*)(")',
+                r"/\*\s*Generated:\s*(.*?)\s*\*/",
+                r"/* Generated: <TS> */",
+                out,
+                flags=re.DOTALL,
+            )
+
+            # 3) JSON fields: "generated" / "generated_at" / "generatedAt" etc.
+            out = re.sub(
+                r'("(?:generated|generated_at|generatedAt|generated-at)"\s*:\s*")([^"\n]*)(")',
+                r"\1<TS>\3",
+                out,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+
+            # 4) Common meta keys inside JSON-like or JS-style objects
+            out = re.sub(
+                r"(\"?generated[^\"\s]*\"?\s*[:=]\s*\")([^\"\n]*)(\")",
+                r"\1<TS>\3",
+                out,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+
+            # 5) C++ string constants or constexpr variables that include
+            # 'Generated' in the identifier, e.g. kBindlessGeneratedAt[] = "...";
+            out = re.sub(
+                r'(\b\w*Generated(?:At)?\s*\[\s*\]\s*=\s*")([^"\n]*)(";)',
                 r"\1<TS>\3",
                 out,
                 flags=re.MULTILINE,
             )
-            # Normalize Meta.h style C++ string constants, e.g.
-            # static constexpr char kBindlessGeneratedAt[] = "2025-...";
+
+            # 6) General C++/C-like assignments where identifier contains
+            # 'Generated' or 'GENERATED', e.g. static const char kXGenerated[] = "...";
             out = re.sub(
-                r'(kBindlessGeneratedAt\s*\[\s*]\s*=\s*")([^"\n]*)(";)',
+                r'(\b\w*(?:Generated|GENERATED)\w*\b[^=\n]*=\s*")([^"\n]*)(")',
                 r"\1<TS>\3",
                 out,
                 flags=re.MULTILINE,
             )
+
+            # 7) Preprocessor macros: #define SOMETHING_GENERATED "..."
+            out = re.sub(
+                r'(#define\s+\w*GENERAT\w*\w*\s+")([^"\n]*)(")',
+                r"\1<TS>\3",
+                out,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+
             return out
         except Exception:
             return text
@@ -662,9 +683,9 @@ def generate(
                 # to avoid spurious diffs when the content other than the
                 # timestamp is identical.
                 if ts_strategy == "preserve":
-                    if _normalize_generated_ts_extended(
+                    if _normalize_generated_timestamps(
                         old
-                    ) == _normalize_generated_ts_extended(content):
+                    ) == _normalize_generated_timestamps(content):
                         rep.debug(
                             "Preserving existing timestamp for %s", _short(path)
                         )
