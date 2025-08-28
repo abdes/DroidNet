@@ -8,8 +8,8 @@
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 1.0.1
 // Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.2.0
-// Generated: 2025-08-28 07:43:24
+// Tool: BindlessCodeGen 1.2.1
+// Generated: 2025-08-28 10:50:37
 
 #ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
 #define OXYGEN_BINDLESS_LAYOUT_HLSL

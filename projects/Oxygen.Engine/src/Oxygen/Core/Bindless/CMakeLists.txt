@@ -38,8 +38,16 @@ set(
   "${_gentool_dir}/requirements.txt"
 )
 
+# Local helper invocation for copying generated files (keeps repeated usage DRY)
+set(
+  _copy_helper
+  ${Python3_EXECUTABLE}
+  -m
+  bindless_codegen._copy_helper
+  --verbose
+)
+
 # ------------------------------------------------------------------------------
-# Generation model (Option 2):
 # - We intentionally write successfully generated files into the SOURCE tree
 #   (under this folder) so they are versioned in git.
 # - To prevent CMake/VS "Clean" from deleting these versioned files, we DO NOT
@@ -67,13 +75,19 @@ add_custom_command(
     ${_bindless_schema_file}
   # After generation, move generated files to the appropriate source locations.
   COMMAND
+    ${CMAKE_COMMAND} -E echo "Copying generated files to the source tree..."
+  COMMAND
     ${CMAKE_COMMAND} -E make_directory "${_bindless_meta_dir}"
   # First, move JSON sidecars (meta files) from the temporary output into
   # the Meta folder so they become the authoritative, versioned copies.
   # Use a helper to copy JSON sidecars (meta files). The helper will avoid
   # overwriting files when the only difference is a single-line timestamp.
-  COMMAND ${Python3_EXECUTABLE} -m bindless_codegen._copy_helper "${_gen_all_json}" "${_bindless_meta_dir}/Generated.All.json"
-  COMMAND ${Python3_EXECUTABLE} -m bindless_codegen._copy_helper "${_gen_heaps_json}" "${_bindless_meta_dir}/Generated.Heaps.D3D12.json"
+  COMMAND
+    ${_copy_helper} "${_gen_all_json}"
+    "${_bindless_meta_dir}/Generated.All.json"
+  COMMAND
+    ${_copy_helper} "${_gen_heaps_json}"
+    "${_bindless_meta_dir}/Generated.Heaps.D3D12.json"
   # Remove the meta JSON files from the temporary output so they are not
   # included when we copy the remaining generated files into the source tree.
   COMMAND
@@ -83,8 +97,8 @@ add_custom_command(
   # the same helper so we avoid spurious commits caused by timestamp-only
   # differences. We iterate files in the temp dir and copy them individually.
   COMMAND
-    ${CMAKE_COMMAND} -E echo "[BindlessCodeGen] Copying generated files into source tree using intelligent helper"
-  COMMAND ${Python3_EXECUTABLE} -m bindless_codegen._copy_helper_batch "${_gen_temp_dir}" "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    ${_copy_helper} "${_gen_temp_dir}" "${CMAKE_CURRENT_SOURCE_DIR}"
   # Remove the temporary generation directory
   COMMAND
     ${CMAKE_COMMAND} -E remove_directory "${_gen_temp_dir}"

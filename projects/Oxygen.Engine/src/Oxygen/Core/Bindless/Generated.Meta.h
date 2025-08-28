@@ -9,8 +9,8 @@
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 1.0.1
 // Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.2.0
-// Generated: 2025-08-28 07:43:24
+// Tool: BindlessCodeGen 1.2.1
+// Generated: 2025-08-28 10:50:37
 
 #pragma once
 
@@ -20,8 +20,8 @@ namespace oxygen::engine::binding {
 static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
 static constexpr const char kBindlessSourceVersion[] = "1.0.1";
 static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
-static constexpr const char kBindlessToolVersion[] = "1.2.0";
-static constexpr const char kBindlessGeneratedAt[] = "2025-08-28 07:43:24";
+static constexpr const char kBindlessToolVersion[] = "1.2.1";
+static constexpr const char kBindlessGeneratedAt[] = "2025-08-28 10:50:37";
 
 } // namespace oxygen::engine::binding
 // clang-format on
