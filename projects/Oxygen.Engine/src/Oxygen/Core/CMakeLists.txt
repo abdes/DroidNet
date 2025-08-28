@@ -52,9 +52,11 @@ set_target_properties(
 
 set(
   OXYGEN_CORE_HEADERS
-  "AnyCache.h"
   "api_export.h"
+  "AnyCache.h"
   "Detail/FormatUtils.h"
+  "Modules/EngineModule.h"
+  "PhaseRegistry.h"
   "Resources.h"
   "SafeCall.h"
   "Types/BindlessHandle.h"
@@ -71,12 +73,14 @@ set(
   "Bindless/Generated.Heaps.D3D12.h"
   "Bindless/Generated.Meta.h"
   "Bindless/Generated.RootSignature.h"
+  "Modules/ModuleManager.h"
 )
 set(
   OXYGEN_CORE_PRIVATE_SOURCES
   "Detail/FormatUtils.cpp"
   "Detail/ToStringConverters.cpp"
   "Version.cpp"
+  "Modules/ModuleManager.cpp"
 )
 
 target_sources(
@@ -92,6 +96,7 @@ target_sources(
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
+target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
