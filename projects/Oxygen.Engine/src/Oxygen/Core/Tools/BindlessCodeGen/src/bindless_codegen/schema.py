@@ -23,10 +23,10 @@ except Exception:  # pragma: no cover
 
 
 def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
-    """Resolve Spec.schema.json according to priority:
+    """Resolve Bindless.schema.json according to priority:
     1. explicit_path (if provided)
     2. directory containing script_path
-    3. script_dir/../../Bindless/Spec.schema.json
+    3. repository layout fallback: src/.../Bindless/Bindless.schema.json
 
     Returns the Path or None if not found.
     """
@@ -35,16 +35,11 @@ def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
         if p.exists():
             return p
     sdir = Path(script_path).resolve().parent
-    candidate = sdir / "Spec.schema.json"
+    candidate = sdir / "Bindless.schema.json"
     if candidate.exists():
         return candidate
-    # common layout: tool_root/Spec.schema.json (two levels up from module)
-    tool_root = sdir.parents[1]
-    candidate2 = tool_root / "Spec.schema.json"
-    if candidate2.exists():
-        return candidate2
-    # repository layout fallback: src/.../Bindless/Spec.schema.json
-    fallback = sdir.parents[1] / "Bindless" / "Spec.schema.json"
+    # repository layout fallback: src/.../Bindless/Bindless.schema.json
+    fallback = sdir.parents[1] / "Bindless" / "Bindless.schema.json"
     if fallback.exists():
         return fallback
     return None

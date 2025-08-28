@@ -144,6 +144,14 @@ def transactional_write_files(files: dict[str, str]) -> bool:
         # Stage: write temp files and decide which files will change
         for target, content in files.items():
             tmp = target + tmp_suffix
+            # Ensure parent directory exists for the temporary file/target
+            try:
+                parent = Path(tmp).parent
+                if str(parent) and not parent.exists():
+                    parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                # If directory creation fails, let the subsequent open raise
+                pass
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(content)
             wrote_tmps.append((target, tmp))
@@ -180,6 +188,14 @@ def transactional_write_files(files: dict[str, str]) -> bool:
                 continue
             # Backup existing if present
             bak = target + bak_suffix
+            # Ensure parent directory exists for the target when creating new files
+            try:
+                tparent = Path(target).parent
+                if str(tparent) and not tparent.exists():
+                    tparent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                # If directory creation fails, let os.replace raise and trigger rollback
+                pass
             if os.path.exists(target):
                 shutil.copyfile(target, bak)
                 backups[target] = bak
@@ -302,7 +318,7 @@ def generate(
         except Exception:
             return p
 
-    rep.info("base: %s", base_dir)
+    rep.info("Output directory: %s", base_dir)
     rep.progress("Loading input YAML: %s", _short(input_yaml))
     with open(input_yaml, "r", encoding="utf-8") as f:
         doc = yaml.safe_load(f)
@@ -313,21 +329,16 @@ def generate(
             schema_label = _short(schema_path)
     except Exception:
         pass
+
     rep.progress("Resolving schema (%s)", schema_label)
-    resolved = None
-    try:
-        # Prefer a schema adjacent to the input YAML
-        sib = Path(input_yaml).with_name("Spec.schema.json")
-        if sib.exists():
-            resolved = sib
-    except Exception:
-        resolved = None
-    if resolved is None:
-        resolved = find_schema(schema_path, __file__)
+    # Delegate schema discovery to schema.find_schema.
+    # The function implements the search policy (explicit path, tool dir,
+    # repository fallback) and returns an absolute Path when found.
+    resolved = find_schema(schema_path, __file__)
     if resolved is None:
         rep.info("Schema: not found (skipping)")
     else:
-        rep.info("Schema: %s", _short(str(resolved)))
+        rep.info("Schema: %s", resolved)
     # If available, read schema version hint (x-oxygen-schema-version)
     schema_version = None
     try:
@@ -339,6 +350,7 @@ def generate(
                 rep.info("Schema version: %s", schema_version)
     except Exception:
         pass
+
     rep.progress("Normalizing + validating document")
     validate_input(doc, resolved)
     # Enforce semantic versioning presence on spec (meta.version)

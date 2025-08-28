@@ -6,22 +6,22 @@
 // clang-format off
 
 // Generated file - do not edit.
-// Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
+// Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 1.0.1
 // Schema-Version: 1.0.0
 // Tool: BindlessCodeGen 1.2.0
-// Generated: 2025-08-18 12:58:51
+// Generated: 2025-08-28 07:43:24
 
 #pragma once
 
 namespace oxygen::engine::binding {
 
 // Compile-time meta about the bindless SSoT used for generation
-static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml";
+static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
 static constexpr const char kBindlessSourceVersion[] = "1.0.1";
 static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
 static constexpr const char kBindlessToolVersion[] = "1.2.0";
-static constexpr const char kBindlessGeneratedAt[] = "2025-08-18 12:58:51";
+static constexpr const char kBindlessGeneratedAt[] = "2025-08-28 07:43:24";
 
 } // namespace oxygen::engine::binding
 // clang-format on
