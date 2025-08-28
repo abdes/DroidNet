@@ -26,12 +26,19 @@ find_package(fmt CONFIG REQUIRED)
 # Build instructions
 # ==============================================================================
 
-# Generate version-header
-configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
+# ------------------------------------------------------------------------------
+# Bindless generation and Tools integration
+# ------------------------------------------------------------------------------
+
+add_subdirectory("Tools")
+add_subdirectory("Bindless")
 
 # ------------------------------------------------------------------------------
 # Main module target
 # ------------------------------------------------------------------------------
+
+# Generate version-header
+configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
 
 add_library(${META_MODULE_TARGET})
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
@@ -73,14 +80,24 @@ set(
   "Bindless/Generated.Heaps.D3D12.h"
   "Bindless/Generated.Meta.h"
   "Bindless/Generated.RootSignature.h"
-  "Modules/ModuleManager.h"
 )
+# Remove any headers that do not exist so we only add existing files to the
+# target. We modify OXYGEN_CORE_HEADERS in-place rather than creating a new
+# list variable.
+foreach(_h IN LISTS OXYGEN_CORE_HEADERS)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_h}")
+    list(REMOVE_ITEM OXYGEN_CORE_HEADERS "${_h}")
+    message(
+      VERBOSE
+      "Skipping missing header: ${CMAKE_CURRENT_SOURCE_DIR}/${_h}"
+    )
+  endif()
+endforeach()
 set(
   OXYGEN_CORE_PRIVATE_SOURCES
   "Detail/FormatUtils.cpp"
   "Detail/ToStringConverters.cpp"
   "Version.cpp"
-  "Modules/ModuleManager.cpp"
 )
 
 target_sources(
@@ -111,18 +128,8 @@ target_link_libraries(
     oxygen::composition
 )
 
-# ------------------------------------------------------------------------------
-# Bindless generation and Tools integration
-# ------------------------------------------------------------------------------
-
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Bindless/CMakeLists.txt")
-  add_subdirectory("Bindless")
-  if(TARGET generate_bindless_headers)
-    add_dependencies(${META_MODULE_TARGET} generate_bindless_headers)
-  endif()
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools/CMakeLists.txt")
-  add_subdirectory("Tools")
+if(TARGET oxygen-core_bindless_gen)
+  add_dependencies(${META_MODULE_TARGET} oxygen-core_bindless_gen)
 endif()
 
 # ------------------------------------------------------------------------------

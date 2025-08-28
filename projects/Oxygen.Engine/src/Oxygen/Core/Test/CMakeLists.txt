@@ -51,3 +51,4 @@ m_gtest_program(
     "AnyCache_concurrency_test.cpp"
 )
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
+m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
