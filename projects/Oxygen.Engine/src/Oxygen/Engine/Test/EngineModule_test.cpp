@@ -6,11 +6,14 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Core/Modules/EngineModule.h>
+#include <Oxygen/Engine/Modules/EngineModule.h>
 
 namespace {
 
-using namespace oxygen::core;
+using oxygen::core::MakePhaseMask;
+using oxygen::core::PhaseId;
+using oxygen::engine::MakeModuleMask;
+using oxygen::engine::ModulePhaseMask;
 
 // Compile-time helper correctness for ModulePhaseMask and MakeModuleMask.
 // These are module-level compile checks tied to `EngineModule` utilities.
