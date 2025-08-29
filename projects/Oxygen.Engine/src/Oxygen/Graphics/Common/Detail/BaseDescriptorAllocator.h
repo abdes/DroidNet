@@ -44,8 +44,7 @@ namespace oxygen::graphics::detail {
  Thread safety is provided through a mutex that protects all allocation and
  release operations.
 */
-class BaseDescriptorAllocator : public DescriptorAllocator,
-                                public oxygen::Object {
+class BaseDescriptorAllocator : public DescriptorAllocator, public Object {
   OXYGEN_TYPED(BaseDescriptorAllocator)
 public:
   explicit BaseDescriptorAllocator(
@@ -55,10 +54,8 @@ public:
           : std::make_shared<DefaultDescriptorAllocationStrategy>())
   {
     PrecomputeHeapKeys();
-    DLOG_F(INFO,
-      "Descriptor Allocator created; {} heaps configured in allocation "
-      "strategy.",
-      heaps_.size());
+    DLOG_F(
+      INFO, "Descriptor Allocator ( with lazy segment allocation) created");
   }
 
   ~BaseDescriptorAllocator() override
@@ -170,7 +167,7 @@ public:
    Thread-safe implementation that returns the descriptor to its original
    segment for future reuse.
   */
-  void Release(DescriptorHandle& handle) override
+  auto Release(DescriptorHandle& handle) -> void override
   {
     if (!handle.IsValid()) {
       return;
@@ -275,13 +272,17 @@ public:
     return AbortOnFailed(__func__, [&]() {
       std::lock_guard lock(mutex_);
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
-      const auto& segments = heaps_.at(key);
-      bindless::Count total { 0 };
-      for (const auto& segment : segments) {
-        total += segment->GetAllocatedCount();
+      // If no segments were created yet for this heap key, return zero.
+      if (const auto it = heaps_.find(key); it == heaps_.end()) {
+        return bindless::Count { 0 };
+      } else {
+        const auto& segments = it->second;
+        bindless::Count total { 0 };
+        for (const auto& segment : segments) {
+          total += segment->GetAllocatedCount();
+        }
+        return total;
       }
-
-      return total;
     });
   }
 
@@ -397,7 +398,7 @@ protected:
   }
 
   auto GetAllocationStrategy() const noexcept
-    -> const graphics::DescriptorAllocationStrategy&
+    -> const DescriptorAllocationStrategy&
   {
     DCHECK_NOTNULL_F(heap_strategy_, "Heap strategy should never be null");
     return *heap_strategy_;
@@ -520,7 +521,7 @@ private:
    *
    * This method is called once from the constructor and never again.
    */
-  void PrecomputeHeapKeys()
+  auto PrecomputeHeapKeys() -> void
   {
     for (size_t v = 1; v < kNumVisibilities; ++v) {
       for (size_t t = 1; t < kNumResourceViewTypes; ++t) {
