@@ -199,6 +199,17 @@ public:
     size_t src_offset, size_t size)
     = 0;
 
+  // Copies from a (staging) buffer into a texture region. The region(s) are
+  // described by TextureUploadRegion which references a buffer offset, pitches
+  // and a destination TextureSlice / TextureSubResourceSet.
+  virtual void CopyBufferToTexture(
+    const Buffer& src, const TextureUploadRegion& region, Texture& dst)
+    = 0;
+
+  virtual void CopyBufferToTexture(const Buffer& src,
+    std::span<const TextureUploadRegion> regions, Texture& dst)
+    = 0;
+
   //=== Resource State Management and Barriers (Templates) ===--------------//
 
   //! @{
@@ -293,9 +304,10 @@ protected:
   */
   virtual void ExecuteBarriers(std::span<const detail::Barrier> barriers) = 0;
 
-private:
   friend class RenderController;
   OXYGEN_GFX_API virtual void OnSubmitted();
+
+private:
   [[nodiscard]] auto GetSubmissionMode() const -> SubmissionMode
   {
     return submission_mode_;

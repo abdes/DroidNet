@@ -49,15 +49,14 @@ struct TextureDesc {
   bool is_typeless = false;
   bool is_shading_rate_surface = false;
 
-  // TODO: consider supporting shared textures
-  // SharedResourceFlags shared_resource_flags = SharedResourceFlags::None;
+  // TODO: consider supporting shared textures SharedResourceFlags
+  // shared_resource_flags = SharedResourceFlags::None;
 
-  // TODO: consider supporting tiled and virtual resources
-  // Indicates that the texture is created with no backing memory,
-  // and memory is bound to the texture later using bindTextureMemory.
-  // On DX12, the texture resource is created at the time of memory binding.
-  // bool is_virtual = false;
-  // bool is_tiled = false;
+  // TODO: consider supporting tiled and virtual resources Indicates that the
+  // texture is created with no backing memory, and memory is bound to the
+  // texture later using bindTextureMemory. On DX12, the texture resource is
+  // created at the time of memory binding. bool is_virtual = false; bool
+  // is_tiled = false;
 
   Color clear_value;
   bool use_clear_value = false;
@@ -98,16 +97,16 @@ struct TextureSlice {
   uint32_t y = 0; //!< Y offset into the texture (in texels).
   uint32_t z = 0; //!< Z offset into the texture (in texels, for 3D textures).
 
-  //! Width of the region in texels.
-  //! Value of uint32_t(-1) means the entire width.
+  //! Width of the region in texels. Value of uint32_t(-1) means the entire
+  //! width.
   uint32_t width = static_cast<uint32_t>(-1);
 
-  //! Height of the region in texels.
-  //! Value of uint32_t(-1) means the entire height.
+  //! Height of the region in texels. Value of uint32_t(-1) means the entire
+  //! height.
   uint32_t height = static_cast<uint32_t>(-1);
 
-  //! Depth of the region in texels.
-  //! Value of uint32_t(-1) means the entire depth.
+  //! Depth of the region in texels. Value of uint32_t(-1) means the entire
+  //! depth.
   uint32_t depth = static_cast<uint32_t>(-1);
 
   //! Mip level to access (0 is the largest/original texture).
@@ -120,19 +119,18 @@ struct TextureSlice {
   //! specified mip level.
   /*!
    When width, height, or depth is set to uint32_t(-1), this method calculates
-   the actual dimensions based on the texture description and mip level. This
-   is particularly useful when:
+   the actual dimensions based on the texture description and mip level. This is
+   particularly useful when:
    - You want to refer to the entire width/height/depth of a texture at a
      specific mip level.
    - You need to account for mip level scaling (each mip level reduces
      dimensions by half).
 
-   The method ensures proper dimension calculations with mip chain reduction
-   (>> mipLevel) while guaranteeing dimensions are at least 1 texel.
+   The method ensures proper dimension calculations with mip chain reduction (>>
+   mipLevel) while guaranteeing dimensions are at least 1 texel.
 
-   \param desc The base texture description.
-   \return A new TextureSlice with all dimensions fully resolved to
-   actual values.
+   \param desc The base texture description. \return A new TextureSlice with all
+   dimensions fully resolved to actual values.
    */
   [[nodiscard]] OXYGEN_GFX_API auto Resolve(const TextureDesc& desc) const
     -> TextureSlice;
@@ -181,14 +179,12 @@ struct TextureSubResourceSet {
   //! description.
   /*!
    Converts kAllMipLevels and kAllArraySlices to actual ranges based on the
-   texture. Also handles dimension-specific array slice resolution for
-   different texture types.
+   texture. Also handles dimension-specific array slice resolution for different
+   texture types.
 
-   \param desc The base texture description.
-   \param single_mip_level If true, forces the result to target only a single
-   mip level.
-   \return A new TextureSubResourceSet with all values resolved to concrete
-   ranges.
+   \param desc The base texture description. \param single_mip_level If true,
+   forces the result to target only a single mip level. \return A new
+   TextureSubResourceSet with all values resolved to concrete ranges.
    */
   [[nodiscard]] OXYGEN_GFX_API auto Resolve(const TextureDesc& desc,
     bool single_mip_level) const -> TextureSubResourceSet;
@@ -224,18 +220,16 @@ struct TextureViewDescription {
   //! The visibility of the view (shader visible, etc.).
   DescriptorVisibility visibility { DescriptorVisibility::kShaderVisible };
 
-  //! The format of the texture view (e.g., RGBA8, D24S8).
-  //! This may differ from the texture format in some cases (e.g., typeless
-  //! textures).
+  //! The format of the texture view (e.g., RGBA8, D24S8). This may differ from
+  //! the texture format in some cases (e.g., typeless textures).
   Format format { Format::kUnknown };
 
-  //! The dimension of the texture (1D, 2D, 3D, etc.).
-  //! This may differ from the texture dimension in some cases (e.g., typeless
-  //! textures).
+  //! The dimension of the texture (1D, 2D, 3D, etc.). This may differ from the
+  //! texture dimension in some cases (e.g., typeless textures).
   TextureType dimension { TextureType::kUnknown };
 
-  //! The sub-resource set to use for the view.
-  //! This defines which mip levels and array slices to include in the view.
+  //! The sub-resource set to use for the view. This defines which mip levels
+  //! and array slices to include in the view.
   TextureSubResourceSet sub_resources {
     TextureSubResourceSet::EntireTexture()
   };
@@ -244,6 +238,38 @@ struct TextureViewDescription {
   bool is_read_only_dsv { false };
 
   auto operator==(const TextureViewDescription&) const -> bool = default;
+};
+
+// Describes a single upload region from a CPU/GPU buffer into a texture.
+/*!
+TextureUploadRegion describes a single contiguous region in the source buffer
+and the destination texture region to receive the data. It's intended to be
+compact, trivially-copyable, and suitable for serialization and multi-region
+uploads via std::span.
+
+Semantics:
+- buffer_offset: byte offset from the start of the source buffer where the
+  upload data begins.
+- buffer_row_pitch: bytes between rows in the buffer. If zero, the buffer is
+  treated as tightly packed (row pitch computed from dst format).
+- buffer_slice_pitch: bytes between 2D slices in the buffer (for 3D or array
+  textures). If zero, computed as height * row_pitch.
+- dst_slice: destination region in the texture (uses TextureSlice; call
+  dst_slice.Resolve(dst_desc) before computing addresses to expand -1 values).
+- dst_subresources: optional set describing multiple mip levels / array slices
+  that the region should be applied to; typically used when copying the same
+  region into multiple array layers or mips. Resolve it with the destination
+  texture descriptor before use.
+*/
+struct TextureUploadRegion {
+  size_t buffer_offset = 0;
+  size_t buffer_row_pitch = 0; // 0 => tightly packed
+  size_t buffer_slice_pitch = 0; // 0 => computed from row_pitch * height
+
+  TextureSlice dst_slice; // region within a single subresource
+  TextureSubResourceSet dst_subresources {
+    TextureSubResourceSet::EntireTexture()
+  };
 };
 
 } // namespace oxygen::graphics

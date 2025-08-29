@@ -652,6 +652,180 @@ void CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
     dst_resource, dst_offset, src_resource, src_offset, size);
 }
 
+// NOTE (UPLOAD PATH LIMITATIONS & ROADMAP)
+// ---------------------------------------------------------------------------
+// Current implementation notes:
+// - The implementation below uses ID3D12Device::GetCopyableFootprints to
+//   obtain authoritative placed-subresource footprints for the destination
+//   texture and issues CopyTextureRegion calls that reference those
+//   placed footprints.
+// - To bridge from the caller-provided source buffer to the placed
+//   footprint we currently only adjust the placed footprint Offset by
+//   `region.buffer_offset` and then perform a full-subresource
+//   CopyTextureRegion.
+// - This implementation implicitly assumes the source data in the buffer is
+//   packed to match the device footprint layout (RowPitch and slice pitch)
+//   or that region.buffer_offset points directly to a placed footprint that
+//   already encodes the correct row pitch. In practice callers may provide
+//   `buffer_row_pitch`/`buffer_slice_pitch` values that differ from the
+//   device RowPitch. Those cases are NOT fully handled by this code and can
+//   lead to incorrect copies.
+//
+// Known limitations:
+// 1) Mismatched row/slice pitches (most common): If the source buffer uses
+//    a different row pitch than the device footprint, the implementation
+//    must repack rows into an upload region that matches the D3D12
+//    RowPitch before issuing CopyTextureRegion. Currently we do not
+//    repack; we only offset the placed footprint. This is a correctness
+//    gap for partial/heterogeneous uploads.
+// 2) Partial-row or sub-row uploads: The code issues a full-subresource copy
+//    (via the placed footprint). Partial-region copies that touch only a
+//    subset of rows or columns require per-row/box copies or repacking; the
+//    current implementation does not perform per-row CopyTextureRegion
+//    with manual D3D12_BOX widths computed from buffer_row_pitch.
+// 3) No persistent mapped upload ring: A production-quality path should
+//    write into a persistent, fenced, mapped upload ring (per-frame). That
+//    ring provides allocation, wrap-around, and GPU-fenced lifetime so the
+//    CPU can efficiently memcpy into GPU-visible memory without temporary
+//    heap allocations. Right now we have no ring implementation; adding one
+//    is required to implement efficient repacking at scale.
+// 4) Block-compressed formats: These must be handled at block-row
+//    granularity. Repacking logic must read/write in block units (e.g. 4x4)
+//    and respect the device block layout. The current code treats the
+//    placed footprint as authoritative but does not repack from arbitrary
+//    buffer pitches into block-padded footprints.
+// 5) Alignment constraints: D3D12 enforces D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+//    for RowPitch and other alignment constraints. Any repack must honor
+//    these constraints and pad accordingly.
+// 6) Synchronization and fencing: When implementing an upload ring the
+//    uploader must wait on fences (or allocate only when a slot is free)
+//    to avoid overwriting in-flight regions. This logic is not present and
+//    must be added with per-frame fences or by integrating with the existing
+//    frame/slot system.
+//
+// Recommended roadmap to make uploads robust and performant:
+// A) Implement a persistent mapped upload ring (preferred):
+//    - Per-frame ring allocator with mapped CPU pointer and fence-based
+//      slot reclamation.
+//    - Allocation API that returns a mapped pointer and a GPU-visible
+//      placed-footprint offset (or a small temporary buffer) ready for
+//      CopyTextureRegion.
+//    - Repack source rows into the mapped region using the footprint's
+//      RowPitch and slice pitch. For block-compressed formats repack in
+//      block-rows.
+//    - Emit a single CopyTextureRegion per subresource using the placed
+//      footprint offset (fast GPU-side copy).
+//
+// B) Fallback per-row copy path (only for tiny uploads):
+//    - If ring allocation fails or the upload is extremely small, perform
+//      per-row (or per-block-row) CopyTextureRegion calls where the
+//      src D3D12_TEXTURE_COPY_LOCATION references the buffer with the
+//      correct offset for each row and a D3D12_BOX limits the copied extents.
+//    - This avoids extra staging memory but generates many GPU copy
+//      commands and should be rate-limited.
+//
+// C) Logging, validation and tests:
+//    - Emit warnings when buffer_row_pitch or buffer_slice_pitch differ from
+//      the footprint RowPitch/slice pitch and when falling back to per-row
+//      copies.
+//    - Add unit/integration tests covering row-pitch mismatch, partial
+//      uploads, and block-compressed formats.
+//
+// D) Performance and budgeting:
+//    - Size the upload ring to avoid frequent waiting/alloc failures.
+//    - Consider batching multiple small uploads into one staging region to
+//      reduce command overhead.
+//
+// Until the upload ring and repack path are implemented this method should
+// be considered best-effort and primarily suitable for tightly-packed
+// uploads where the caller ensures buffer pitches match device footprints.
+// ---------------------------------------------------------------------------
+void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  const graphics::TextureUploadRegion& region, graphics::Texture& dst)
+{
+  // Single-region wrapper
+  CopyBufferToTexture(
+    src, std::span<const graphics::TextureUploadRegion>(&region, 1), dst);
+}
+
+void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  std::span<const graphics::TextureUploadRegion> regions,
+  graphics::Texture& dst)
+{
+  // Expectations: caller ensured resource states (src is COPY_SOURCE, dst is
+  // COPY_DEST)
+  const auto* command_list = GetConcreteCommandList();
+  DCHECK_NOTNULL_F(command_list);
+  auto* d3d12_command_list = command_list->GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& src_buf = static_cast<const d3d12::Buffer&>(src);
+  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
+
+  auto* src_resource = src_buf.GetResource();
+  auto* dst_native = dst.GetNativeResource().AsPointer<ID3D12Resource>();
+  DCHECK_NOTNULL_F(src_resource);
+  DCHECK_NOTNULL_F(dst_native);
+
+  // Use device to compute copyable footprints
+  auto* device = renderer_->GetGraphics().GetCurrentDevice();
+  const auto& desc = dst.GetDescriptor();
+
+  for (const auto& region : regions) {
+    // Resolve destination slice and subresources
+    auto dst_slice = region.dst_slice.Resolve(desc);
+    auto subresources = region.dst_subresources.Resolve(desc, true);
+
+    const UINT first_sub = static_cast<UINT>(
+      dst_slice.array_slice * desc.mip_levels + dst_slice.mip_level);
+    const UINT num_sub = static_cast<UINT>(
+      subresources.num_array_slices * subresources.num_mip_levels);
+
+    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(num_sub);
+    std::vector<UINT> row_counts(num_sub);
+    UINT64 total_bytes = 0;
+
+    if (device) {
+      // Get a resource desc for the destination texture
+      D3D12_RESOURCE_DESC rd = dst_native->GetDesc();
+      device->GetCopyableFootprints(&rd, first_sub, num_sub, 0,
+        footprints.data(), row_counts.data(), nullptr, &total_bytes);
+    }
+
+    // Iterate each array slice / mip targeted
+    for (UINT si = 0; si < subresources.num_array_slices; ++si) {
+      for (UINT mi = 0; mi < subresources.num_mip_levels; ++mi) {
+        const UINT sub_index = si * subresources.num_mip_levels + mi;
+        const auto& fp = footprints[sub_index];
+
+        // Setup src (buffer) location using the placed footprint but adjust the
+        // offset by the region.buffer_offset if provided.
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT adjusted_fp = fp;
+        adjusted_fp.Offset += static_cast<UINT64>(region.buffer_offset);
+
+        D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+        src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        src_loc.pResource = src_resource;
+        src_loc.PlacedFootprint = adjusted_fp;
+
+        // Setup dst (texture) location
+        D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+        dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dst_loc.pResource = dst_native;
+        const UINT dst_subresource_index
+          = static_cast<UINT>((dst_slice.array_slice + si) * desc.mip_levels
+            + (dst_slice.mip_level + mi));
+        dst_loc.SubresourceIndex = dst_subresource_index;
+
+        // Copy the full subresource as defined by the footprint
+        d3d12_command_list->CopyTextureRegion(
+          &dst_loc, dst_slice.x, dst_slice.y, dst_slice.z, &src_loc, nullptr);
+      }
+    }
+  }
+}
+
 // D3D12 specific command implementations
 void CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   const NativeObject& dsv, const ClearFlags clear_flags, const float depth,
