@@ -15,8 +15,8 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Internal/Bindless.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
@@ -25,13 +25,14 @@
 #include <Oxygen/OxCo/Nursery.h>
 
 using oxygen::Graphics;
+using oxygen::graphics::internal::Bindless;
 
 Graphics::Graphics(const std::string_view name)
 {
   AddComponent<ObjectMetaData>(name);
   // Create backend-agnostic Bindless component now; allocator will be set by
   // backend later after device is created.
-  AddComponent<oxygen::graphics::detail::Bindless>();
+  AddComponent<Bindless>();
 }
 
 Graphics::~Graphics() = default;
@@ -82,7 +83,6 @@ void Graphics::Stop()
 auto Graphics::SetDescriptorAllocator(
   std::unique_ptr<graphics::DescriptorAllocator> allocator) -> void
 {
-  using oxygen::graphics::detail::Bindless;
   CHECK_NOTNULL_F(allocator);
   DCHECK_F(HasComponent<Bindless>(),
     "Bindless component must exist on Graphics before setting allocator");
@@ -213,7 +213,7 @@ auto Graphics::AcquireCommandList(
 auto Graphics::GetDescriptorAllocator() const
   -> const graphics::DescriptorAllocator&
 {
-  return GetComponent<graphics::detail::Bindless>().GetAllocator();
+  return GetComponent<Bindless>().GetAllocator();
 }
 
 auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
@@ -224,7 +224,7 @@ auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
 
 auto Graphics::GetResourceRegistry() const -> const graphics::ResourceRegistry&
 {
-  return GetComponent<graphics::detail::Bindless>().GetRegistry();
+  return GetComponent<Bindless>().GetRegistry();
 }
 
 auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
