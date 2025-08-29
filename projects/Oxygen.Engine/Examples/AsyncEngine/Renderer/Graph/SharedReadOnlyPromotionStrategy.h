@@ -6,7 +6,7 @@
 
 #include "RenderGraphStrategies.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 class SharedReadOnlyPromotionStrategy : public IGraphOptimization {
 public:
@@ -16,4 +16,4 @@ public:
   void apply(BuildContext& ctx, DiagnosticsSink& /*sink*/) override;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

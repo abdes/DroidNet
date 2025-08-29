@@ -13,7 +13,7 @@
 
 #include "Oxygen/Base/Logging.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 void DeferredReclaimer::ScheduleReclaim(
   uint64_t handle, uint64_t frame, const std::string& name)
@@ -30,10 +30,6 @@ void GraphicsLayer::PresentSurfaces(const std::vector<RenderSurface>& surfaces)
   for (size_t i = 0; i < surfaces.size(); ++i) {
     const auto& s = surfaces[i];
     LOG_F(1, "[Graphics] Presenting surface {} (index={})", s.name, i);
-    // Simulate GPU present latency per surface
-    if (s.present_cost.count() > 0) {
-      std::this_thread::sleep_for(s.present_cost);
-    }
   }
 }
 
@@ -142,4 +138,4 @@ std::uint64_t GraphicsLayer::PollGPUCompletion() const
   return 0; // No frames completed yet
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

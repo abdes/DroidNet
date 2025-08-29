@@ -12,13 +12,13 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Co.h>
 
-#include "../FrameContext.h"
 #include "../IEngineModule.h"
 #include "../Renderer/Graph/Cache.h"
 #include "../Renderer/Graph/RenderGraph.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 class RenderGraph; // use base type
 class GraphicsLayerIntegration;
@@ -109,4 +109,4 @@ private:
   auto PlanResourceTransitions(FrameContext& context) -> co::Co<>;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

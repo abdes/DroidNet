@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Logging.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 auto GraphicsLayerIntegration::RegisterResource(
   const std::string& resource_name) -> ResourceHandle
@@ -126,4 +126,4 @@ auto GraphicsLayerIntegration::ValidateIntegrationState() const -> bool
   return true;
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

@@ -6,9 +6,9 @@
 
 #include "RenderPass.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Implementation details for RenderPass.h
 // Currently most methods are inline
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

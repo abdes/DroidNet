@@ -11,7 +11,7 @@
 
 #include "RenderGraphBuilder.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 auto AsyncRenderGraphValidator::ValidateGraph(const RenderGraphBuilder& builder)
   -> ValidationResult
@@ -43,4 +43,4 @@ auto CreateAsyncRenderGraphValidator() -> std::unique_ptr<RenderGraphValidator>
   return std::make_unique<AsyncRenderGraphValidator>();
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

@@ -7,7 +7,7 @@
 
 #include <Oxygen/Base/NamedType.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Strong types for render graph resource integration (exported - not
 //! anonymous)
@@ -17,4 +17,4 @@ using ResourceHandle = oxygen::NamedType<uint64_t, struct ResourceHandleTag,
   oxygen::Comparable,
   oxygen::Printable>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

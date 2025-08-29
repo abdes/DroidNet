@@ -10,7 +10,7 @@
 
 #include <Oxygen/OxCo/ThreadPool.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 DebugOverlayModule::DebugOverlayModule()
   : EngineModuleBase("DebugOverlay",
@@ -169,4 +169,4 @@ auto DebugOverlayModule::Shutdown() -> co::Co<>
   co_return;
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

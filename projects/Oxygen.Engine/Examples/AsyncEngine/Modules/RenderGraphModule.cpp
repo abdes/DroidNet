@@ -10,12 +10,13 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../FrameContext.h"
 #include "../Renderer/Graph/RenderGraph.h"
+#include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Validator.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 RenderGraphModule::RenderGraphModule()
   : EngineModuleBase("RenderGraph",
@@ -326,4 +327,4 @@ auto RenderGraphModule::CompileRenderGraph(FrameContext& context) -> co::Co<>
   co_return;
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

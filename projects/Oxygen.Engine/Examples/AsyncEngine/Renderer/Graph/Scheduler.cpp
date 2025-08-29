@@ -15,7 +15,7 @@
 
 #include "RenderGraph.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Enhanced RenderGraphScheduler with topological sorting and dependency
 //! resolution
@@ -585,4 +585,4 @@ auto CreateAsyncRenderGraphScheduler() -> std::unique_ptr<RenderGraphScheduler>
   return std::make_unique<AsyncRenderGraphScheduler>();
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

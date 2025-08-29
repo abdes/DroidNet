@@ -6,8 +6,8 @@
 
 #include "Types.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Implementation details for Types.h (if needed in the future)
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

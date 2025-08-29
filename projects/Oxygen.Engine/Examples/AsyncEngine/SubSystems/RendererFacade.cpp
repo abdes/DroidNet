@@ -7,14 +7,14 @@
 #pragma once
 
 #include "./RendererFacade.h"
-#include "../FrameContext.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-using oxygen::examples::asyncsim::RendererFacade;
+using oxygen::engine::asyncsim::RendererFacade;
 
 void RendererFacade::BeginFrame(const FrameContext& ctx)
 {
   ctx.render_graph_builder
-    = std::make_unique<oxygen::examples::asyncsim::RenderGraphBuilder>();
+    = std::make_unique<oxygen::engine::asyncsim::RenderGraphBuilder>();
 }
 
 void RendererFacade::EndFrame(const FrameContext& ctx)

@@ -15,7 +15,7 @@
 #include "../Passes/RenderPass.h"
 #include "Types.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class RenderGraph;
@@ -226,4 +226,4 @@ protected:
   float smoothing_factor_ { 0.1f };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

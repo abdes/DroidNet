@@ -15,7 +15,7 @@
 #include "Types.h"
 #include "Validator.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Simple value-like outputs from lifetime analysis
 struct AliasAnalysisResult {
@@ -48,4 +48,4 @@ private:
   std::unique_ptr<ResourceAliasValidator> validator_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

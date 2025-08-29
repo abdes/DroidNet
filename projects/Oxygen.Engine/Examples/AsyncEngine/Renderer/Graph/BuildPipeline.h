@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 struct PhaseError {
   std::string message;
@@ -27,4 +27,4 @@ struct IBuildPhase {
 
 using PhaseList = std::vector<std::unique_ptr<IBuildPhase>>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

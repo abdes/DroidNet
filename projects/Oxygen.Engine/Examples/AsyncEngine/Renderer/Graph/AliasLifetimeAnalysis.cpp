@@ -7,12 +7,12 @@
 
 // Forward-declare factory to avoid heavy includes; definition is in
 // Resource.cpp
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 std::unique_ptr<ResourceAliasValidator> CreateAsyncEngineResourceValidator(
   GraphicsLayerIntegration* integration);
 }
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 void AliasLifetimeAnalysis::Initialize(GraphicsLayerIntegration* integration)
 {
@@ -73,4 +73,4 @@ AliasAnalysisResult AliasLifetimeAnalysis::ValidateAndCollect()
   return out;
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

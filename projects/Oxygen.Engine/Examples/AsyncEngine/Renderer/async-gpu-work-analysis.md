@@ -66,7 +66,7 @@ class CommandQueue {
 ### 2. Async Render Graph Execution Points
 
 ```cpp
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 class AsyncRenderGraph {
 public:
@@ -136,13 +136,13 @@ private:
     }
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 ```
 
 ### 3. Multi-Frame Async Work Pipelines
 
 ```cpp
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Async work coordinator for multi-frame operations
 class AsyncGPUWorkCoordinator {
@@ -193,7 +193,7 @@ public:
     }
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 ```
 
 ### 4. Timeline Semaphore Integration
@@ -247,7 +247,7 @@ auto ExecuteComputeGraphicsSync(ModuleContext& context) -> co::Co<> {
 ### 5. Integration with Module System
 
 ```cpp
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Enhanced RenderGraphModule with async GPU coordination
 class RenderGraphModule : public IEngineModule {
@@ -276,7 +276,7 @@ private:
     AsyncGPUWorkCoordinator async_work_coordinator_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 ```
 
 ## Implementation Priority

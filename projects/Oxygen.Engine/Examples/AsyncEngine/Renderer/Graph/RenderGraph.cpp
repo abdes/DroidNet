@@ -23,14 +23,14 @@
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
-#include "../../FrameContext.h"
 #include "../Integration/GraphicsLayerIntegration.h"
 #include "ExecutionContext.h"
 #include "Resource.h"
 #include "Scheduler.h"
 #include "Validator.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // C++20 constexpr constants for better maintainability
 namespace {
@@ -641,4 +641,4 @@ auto CreateAsyncRenderGraph() -> std::unique_ptr<RenderGraph>
   return std::make_unique<AsyncRenderGraph>();
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

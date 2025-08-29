@@ -11,15 +11,15 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../FrameContext.h"
 #include "../IEngineModule.h"
 #include "../Renderer/Graph/ExecutionContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Types.h"
+#include <Oxygen/Engine/FrameContext.h>
 
 using namespace std::chrono_literals;
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Engine debug overlay module for development and profiling
 /*!
@@ -101,4 +101,4 @@ private:
   uint32_t background_updates_ { 0 };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

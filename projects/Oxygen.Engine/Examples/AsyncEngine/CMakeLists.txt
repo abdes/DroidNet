@@ -39,10 +39,7 @@ set(
   "GraphicsLayer.cpp"
   "GraphicsLayer.h"
   "IEngineModule.h"
-  "FrameContext.h"
   "ResourceHandle.h"
-  "FrameContext.cpp"
-  "ModuleManager.h"
   # Render Graph System
   "Renderer/Graph/Types.cpp"
   "Renderer/Graph/Resource.cpp"

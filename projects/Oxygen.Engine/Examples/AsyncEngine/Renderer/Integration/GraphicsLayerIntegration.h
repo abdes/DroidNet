@@ -14,7 +14,7 @@
 #include "../../GraphicsLayer.h"
 #include "../../ResourceHandle.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 using RenderGraphDescriptorIndex = oxygen::NamedType<uint32_t,
   struct RenderGraphDescriptorIndexTag, oxygen::DefaultInitialized,
@@ -118,4 +118,4 @@ private:
   }
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

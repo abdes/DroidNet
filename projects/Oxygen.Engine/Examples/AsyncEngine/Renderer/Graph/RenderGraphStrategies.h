@@ -10,7 +10,7 @@
 
 #include "Validator.h" // for ValidationError
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 struct BuildContext; // forward (defined in RenderGraphBuilder.h)
 
@@ -41,4 +41,4 @@ struct IAnalysisPass {
   virtual void run(BuildContext& ctx, AnalysisResults& out) = 0;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

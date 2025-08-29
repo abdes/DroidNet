@@ -16,7 +16,7 @@
 #include "../Graph/Resource.h"
 #include "../Graph/Types.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class RenderGraphBuilder;
@@ -530,4 +530,4 @@ private:
   ViewInfo view_context_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

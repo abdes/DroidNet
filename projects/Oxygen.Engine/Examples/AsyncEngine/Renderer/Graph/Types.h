@@ -18,7 +18,7 @@
 
 #include "../Integration/GraphicsLayerIntegration.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class TaskExecutionContext;
@@ -103,4 +103,4 @@ using ViewId = oxygen::NamedType<
  */
 using PassExecutor = std::move_only_function<void(TaskExecutionContext&)>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

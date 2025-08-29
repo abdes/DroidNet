@@ -13,7 +13,7 @@
 
 #include "../Renderer/Graph/Resource.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 GeometryRenderModule::GeometryRenderModule()
   : EngineModuleBase("GeometryRenderer",
@@ -435,4 +435,4 @@ auto GeometryRenderModule::InitializeGeometryData() -> void
     geometry_objects_.size());
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

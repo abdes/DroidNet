@@ -12,8 +12,8 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../../FrameContext.h"
 #include "../Integration/GraphicsLayerIntegration.h"
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Renderer/Types/View.h>
 
 // Hash function for pair<uint32_t, uint32_t>
@@ -27,7 +27,7 @@ template <> struct hash<std::pair<uint32_t, uint32_t>> {
 };
 }
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Enhanced CommandRecorder with AsyncEngine integration and backend
 //! abstraction
@@ -310,4 +310,4 @@ auto CreateAsyncEngineTaskExecutionContext()
   return std::make_unique<AsyncEngineTaskExecutionContext>();
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

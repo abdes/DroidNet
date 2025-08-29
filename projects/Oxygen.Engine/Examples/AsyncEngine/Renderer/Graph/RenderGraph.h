@@ -7,8 +7,8 @@
 #pragma once
 
 // Forward declarations
-namespace oxygen::examples::asyncsim {
-class FrameContext;
+namespace oxygen::engine::asyncsim {
+
 }
 
 #include <memory>
@@ -17,7 +17,6 @@ class FrameContext;
 #include <unordered_map>
 #include <vector>
 
-#include "../../FrameContext.h"
 #include "../Passes/RenderPass.h"
 #include "Cache.h"
 #include "ExecutionContext.h"
@@ -26,12 +25,12 @@ class FrameContext;
 #include "Scheduler.h"
 #include "Types.h"
 #include "Validator.h"
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
-class FrameContext;
 
 //! Execution statistics for performance monitoring
 struct ExecutionStats {
@@ -498,4 +497,4 @@ public:
 // Factory declaration for creating an AsyncEngine-enabled render graph
 auto CreateAsyncRenderGraph() -> std::unique_ptr<RenderGraph>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

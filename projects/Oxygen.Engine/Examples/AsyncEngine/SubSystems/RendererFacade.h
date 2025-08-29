@@ -8,10 +8,10 @@
 
 #include <memory>
 
-#include "../FrameContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 class RendererFacade {
 public:
@@ -19,4 +19,4 @@ public:
   static void EndFrame(const FrameContext& ctx);
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
