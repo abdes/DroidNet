@@ -27,83 +27,90 @@ constexpr uint64_t kDefaultFixedUpdateDuration { 200'000 };
 constexpr uint64_t kDefaultFixedIntervalDuration { 20'000 };
 
 namespace core {
-    class Module;
+  class Module;
 } // namespace core
 
 class Engine : public std::enable_shared_from_this<Engine> {
 public:
-    using ModulePtr = std::shared_ptr<core::Module>;
+  using ModulePtr = std::shared_ptr<core::Module>;
 
-    struct Properties {
-        struct
-        {
-            std::string name;
-            uint32_t version;
-        } application;
-        std::vector<const char*> extensions; // Vulkan instance extensions
-        Duration max_fixed_update_duration { kDefaultFixedUpdateDuration };
-        bool enable_imgui_layer { true };
-        platform::WindowIdType main_window_id {};
-    };
+  struct Properties {
+    struct {
+      std::string name;
+      uint32_t version;
+    } application;
+    std::vector<const char*> extensions; // Vulkan instance extensions
+    Duration max_fixed_update_duration { kDefaultFixedUpdateDuration };
+    bool enable_imgui_layer { true };
+    platform::WindowIdType main_window_id {};
+  };
 
-    OXYGEN_NGIN_API Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props);
+  OXGN_NGIN_API Engine(
+    PlatformPtr platform, GraphicsPtr graphics, Properties props);
 
-    OXYGEN_NGIN_API ~Engine() noexcept;
+  OXGN_NGIN_API ~Engine() noexcept;
 
-    OXYGEN_MAKE_NON_COPYABLE(Engine)
-    OXYGEN_MAKE_NON_MOVABLE(Engine)
+  OXYGEN_MAKE_NON_COPYABLE(Engine)
+  OXYGEN_MAKE_NON_MOVABLE(Engine)
 
-    [[nodiscard]] OXYGEN_NGIN_API auto GetPlatform() const -> Platform&;
+  [[nodiscard]] OXGN_NGIN_API auto GetPlatform() const -> Platform&;
 
-    //! Attaches the given Module to the engine, to be updated, rendered, etc.
-    //! \param module module to be attached.
-    //! \param layer layer to determine the order of invocation. Default is the main layer (`0`).
-    //! \throws std::invalid_argument if the module is attached or the weak_ptr is expired.
-    OXYGEN_NGIN_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
+  //! Attaches the given Module to the engine, to be updated, rendered, etc.
+  //! \param module module to be attached.
+  //! \param layer layer to determine the order of invocation. Default is the
+  //! main layer (`0`).
+  //! \throws std::invalid_argument if the module is attached or the weak_ptr is
+  //! expired.
+  OXGN_NGIN_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
 
-    OXYGEN_NGIN_API auto Run() -> void;
-    constexpr auto IsRunning() const -> bool { return is_running_; }
-    OXYGEN_NGIN_API void Stop();
+  OXGN_NGIN_API auto Run() -> void;
+  constexpr auto IsRunning() const -> bool { return is_running_; }
+  OXGN_NGIN_API void Stop();
 
-    [[nodiscard]] OXYGEN_NGIN_API static auto Name() -> const std::string&;
-    [[nodiscard]] OXYGEN_NGIN_API static auto Version() -> uint32_t;
+  [[nodiscard]] OXGN_NGIN_API static auto Name() -> const std::string&;
+  [[nodiscard]] OXGN_NGIN_API static auto Version() -> uint32_t;
 
-    [[nodiscard]] auto HasImGui() const -> bool { return imgui_module_ != nullptr; }
-    [[nodiscard]] OXYGEN_NGIN_API auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
+  [[nodiscard]] auto HasImGui() const -> bool
+  {
+    return imgui_module_ != nullptr;
+  }
+  [[nodiscard]] OXGN_NGIN_API auto GetImGuiRenderInterface() const
+    -> imgui::ImGuiRenderInterface;
 
 private:
-    //! Detach the given Module from the engine.
-    //! @param module the module to be detached.
-    //! \throws std::invalid_argument if the module is not attached or the weak_ptr is expired.
-    void DetachModule(const ModulePtr& module);
+  //! Detach the given Module from the engine.
+  //! @param module the module to be detached.
+  //! \throws std::invalid_argument if the module is not attached or the
+  //! weak_ptr is expired.
+  void DetachModule(const ModulePtr& module);
 
-    PlatformPtr platform_;
-    GraphicsPtr graphics_;
-    Properties props_;
-    std::unique_ptr<imgui::ImguiModule> imgui_module_ {};
-    bool is_running_ { false };
-    std::atomic_bool is_stop_requested_ { false };
+  PlatformPtr platform_;
+  GraphicsPtr graphics_;
+  Properties props_;
+  std::unique_ptr<imgui::ImguiModule> imgui_module_ {};
+  bool is_running_ { false };
+  std::atomic_bool is_stop_requested_ { false };
 
-    DeltaTimeCounter engine_clock_ {};
+  DeltaTimeCounter engine_clock_ {};
 
-    struct ModuleContext {
-        ModulePtr module;
-        uint32_t layer;
-        Duration fixed_interval { kDefaultFixedIntervalDuration };
-        Duration fixed_accumulator {};
-        ElapsedTimeCounter time_since_start {};
-        DeltaTimeCounter frame_time {};
-        ChangePerSecondCounter fps {};
-        ChangePerSecondCounter ups {};
-        ElapsedTimeCounter log_timer {}; // Add this timer
-    };
-    std::list<ModuleContext> modules_;
+  struct ModuleContext {
+    ModulePtr module;
+    uint32_t layer;
+    Duration fixed_interval { kDefaultFixedIntervalDuration };
+    Duration fixed_accumulator {};
+    ElapsedTimeCounter time_since_start {};
+    DeltaTimeCounter frame_time {};
+    ChangePerSecondCounter fps {};
+    ChangePerSecondCounter ups {};
+    ElapsedTimeCounter log_timer {}; // Add this timer
+  };
+  std::list<ModuleContext> modules_;
 
-    void ReorderLayers();
-    void InitializeModules();
-    void ShutdownModules() noexcept;
-    void InitializeImGui();
-    void ShutdownImGui() noexcept;
+  void ReorderLayers();
+  void InitializeModules();
+  void ShutdownModules() noexcept;
+  void InitializeImGui();
+  void ShutdownImGui() noexcept;
 };
 
 } // namespace oxygen

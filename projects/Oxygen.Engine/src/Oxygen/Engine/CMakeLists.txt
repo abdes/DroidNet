@@ -35,7 +35,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_NGIN_EXPORTS"
+      "OXGN_NGIN_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -46,15 +46,37 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_ENGINE_HEADERS
+  "api_export.h"
+  "Engine.h"
+  "Epoch.h"
+  "FrameContext.h"
+  "System.h"
+  "InputHandler.h"
+  "Modules/EngineModule.h"
+  "Modules/ModuleManager.h"
+  # Legacy
+  "Module.h"
+)
+set(
+  OXYGEN_ENGINE_PRIVATE_SOURCES
+  "Engine.cpp"
+  "FrameContext.cpp"
+  "Modules/ModuleManager.cpp"
+  # Legacy
+  "Module.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Engine.cpp"
-    "Module.cpp"
+    ${OXYGEN_ENGINE_PRIVATE_SOURCES}
+    ${OXYGEN_ENGINE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "api_export.h" "Engine.h" "System.h" "Module.h" "InputHandler.h"
+    FILES ${OXYGEN_ENGINE_HEADERS}
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
