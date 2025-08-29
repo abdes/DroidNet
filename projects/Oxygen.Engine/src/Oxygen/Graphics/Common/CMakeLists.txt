@@ -51,7 +51,7 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Detail/Barriers.cpp"
-    "Detail/Bindless.h"
+    "Internal/Bindless.h"
     "Detail/ToStringConverters.cpp"
     "Detail/FixedDescriptorHeapSegment.cpp"
     "Detail/PerFrameResourceManager.cpp"

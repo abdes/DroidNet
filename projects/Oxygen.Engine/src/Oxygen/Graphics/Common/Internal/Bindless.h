@@ -16,7 +16,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 
-namespace oxygen::graphics::detail {
+namespace oxygen::graphics::internal {
 
 class Bindless final : public Component {
   OXYGEN_COMPONENT(Bindless)
@@ -110,4 +110,4 @@ private:
   std::unique_ptr<ResourceRegistry> registry_ {};
 };
 
-} // namespace oxygen::graphics::detail
+} // namespace oxygen::graphics::internal
