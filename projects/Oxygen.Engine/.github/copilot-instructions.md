@@ -10,6 +10,10 @@ When answering:
 
 Evaluate claims and assumptions, ask a focused clarification question when necessary, and prefer concrete, testable recommendations over vague advice.
 
+For c++ code, follow instruction in the [C++Coding Rules](./instructions/cpp_coding_style.instructions.md).
+For unit test writing, follow instruction in the [UnitTestWritingGuidelines](./instructions/unit_tests.instructions.md).
+For writing doc comments in c++ files, follow instruction in the [DocCommentGuidelines](./instructions/doc_comments.instructions.md).
+
 ## When in Doubt or New to a Module
 - Check for a `README.md` in the relevant subsystem directory.
 - Check for a doc file in `Docs` subdirectory of the relevant subsystem directory.
