@@ -4,7 +4,7 @@
 #include "SharedReadOnlyPromotionStrategy.h"
 #include "RenderGraphBuilder.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 void SharedReadOnlyPromotionStrategy::apply(
   BuildContext& ctx, DiagnosticsSink& /*sink*/)
@@ -15,4 +15,4 @@ void SharedReadOnlyPromotionStrategy::apply(
   ctx.builder->RunOptimizeSharedPerViewResources(ctx.render_graph);
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

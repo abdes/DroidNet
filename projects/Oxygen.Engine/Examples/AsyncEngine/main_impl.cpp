@@ -36,7 +36,7 @@
 #include "Modules/GeometryRenderModule.h"
 #include "Modules/RenderGraphModule.h"
 
-using namespace oxygen::examples::asyncsim;
+using namespace oxygen::engine::asyncsim;
 using namespace std::chrono_literals;
 
 // Wrap simulator plus running flag to model an event loop subject.

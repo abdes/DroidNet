@@ -10,18 +10,17 @@
 #include <string>
 #include <vector>
 
-#include "../../FrameContext.h"
 #include "Resource.h"
 #include "Types.h"
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Engine/FrameContext.h>
 
 // Forward declarations for AsyncEngine integration
-namespace oxygen::examples::asyncsim {
-class FrameContext;
+namespace oxygen::engine::asyncsim {
 class GraphicsLayerIntegration;
 }
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Draw item for Structure-of-Arrays draw data
 /*!
@@ -413,15 +412,15 @@ private:
   uint32_t instance_count_ { 1 };
 
   // AsyncEngine integration
-  FrameContext* module_context_ { nullptr };
+  engine::FrameContext* module_context_ { nullptr };
   GraphicsLayerIntegration* graphics_integration_ { nullptr };
   bool is_parallel_safe_ { false };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 
 // Forward declarations for factory functions
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 class TaskExecutionContext;
 
 //! AsyncEngine-specific execution context with enhanced capabilities

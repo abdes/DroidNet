@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <string>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Basic synthetic task categories.
 enum class TaskCategory { Ordered, ParallelFrame, AsyncPipeline, Detached };
@@ -75,11 +75,6 @@ struct EngineProps {
 //! Represents a rendering surface with command recording state
 struct RenderSurface {
   std::string name;
-  std::chrono::microseconds record_cost {
-    800
-  }; // simulated command recording time
-  std::chrono::microseconds submit_cost { 200 }; // simulated submission time
-  std::chrono::microseconds present_cost { 300 }; // simulated presentation time
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

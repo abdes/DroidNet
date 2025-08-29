@@ -11,19 +11,20 @@
 #include <thread>
 
 #include "./Modules/RenderGraphModule.h"
-#include "FrameContext.h"
 #include "Renderer/Graph/RenderGraphBuilder.h"
+#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Engine/Modules/ModuleManager.h>
 
 using namespace std::chrono_literals;
-
-namespace oxygen::examples::asyncsim {
 
 // Engine core implementation of EngineTagFactory
 // This provides access to EngineTag capability tokens for engine-internal
 // operations
-namespace internal {
-  EngineTag EngineTagFactory::Get() noexcept { return EngineTag {}; }
+namespace oxygen::engine::internal {
+EngineTag EngineTagFactory::Get() noexcept { return EngineTag {}; }
 }
+
+namespace oxygen::engine::asyncsim {
 
 AsyncEngineSimulator::AsyncEngineSimulator(
   oxygen::co::ThreadPool& pool, EngineProps props) noexcept
@@ -81,6 +82,8 @@ AsyncEngineSimulator::~AsyncEngineSimulator() = default;
 
 auto AsyncEngineSimulator::Run(uint32_t frame_count) -> void
 {
+  module_manager_ = std::make_unique<ModuleManager>(this);
+
   CHECK_F(nursery_ != nullptr,
     "Nursery must be opened via StartAsync before Run (call StartAsync first)");
   nursery_->Start(
@@ -700,4 +703,4 @@ void AsyncEngineSimulator::InitializeDetachedServices()
   LOG_F(1, "[D] Crash dump detection service initialized");
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

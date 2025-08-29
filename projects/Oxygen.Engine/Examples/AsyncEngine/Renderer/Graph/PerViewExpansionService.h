@@ -9,7 +9,7 @@
 
 #include "../../Types/ViewIndex.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 class RenderGraphBuilder;
 class RenderGraph;
@@ -31,4 +31,4 @@ private:
   RenderGraphBuilder& builder_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

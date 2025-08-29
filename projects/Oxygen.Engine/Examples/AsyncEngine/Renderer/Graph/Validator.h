@@ -11,17 +11,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../../FrameContext.h"
 #include "../Passes/RenderPass.h"
 #include "Resource.h"
 #include "Types.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-// Forward declarations for AsyncEngine integration
-namespace oxygen::examples::asyncsim {
-class FrameContext;
-}
-
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class RenderGraphBuilder;
@@ -353,4 +348,4 @@ public:
 // Unified factory returning base interface pointer
 auto CreateAsyncRenderGraphValidator() -> std::unique_ptr<RenderGraphValidator>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

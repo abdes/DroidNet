@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 auto PerViewExpansionService::DetermineActiveViews() -> std::vector<ViewIndex>
 {
@@ -43,4 +43,4 @@ auto PerViewExpansionService::ExpandPerViewResources(
   }
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

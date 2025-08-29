@@ -29,7 +29,7 @@ template <typename A, typename B> struct PairHash {
   }
 };
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Resource state enum with all GPU resource states
 enum class ResourceState : uint32_t {
@@ -566,6 +566,6 @@ private:
   std::vector<ResourceTransition> planned_transitions_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 
 // No std::hash specializations here; use PairHash for local pair-key maps.

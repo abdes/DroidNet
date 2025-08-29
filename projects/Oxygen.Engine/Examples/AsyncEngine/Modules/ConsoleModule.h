@@ -16,12 +16,12 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../FrameContext.h"
 #include "../IEngineModule.h"
+#include <Oxygen/Engine/FrameContext.h>
 
 using namespace std::chrono_literals;
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Engine console module for command processing and development tools
 /*!
@@ -102,4 +102,4 @@ private:
   bool quit_requested_ { false };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

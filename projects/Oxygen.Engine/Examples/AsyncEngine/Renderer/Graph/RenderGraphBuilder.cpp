@@ -15,14 +15,14 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../../FrameContext.h"
 #include "../Integration/GraphicsLayerIntegration.h"
 #include "Cache.h"
 #include "RenderGraph.h"
 #include "Scheduler.h"
 #include "Validator.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // DiagnosticsSink implementation that forwards into ValidationResult so
 // strategies can report issues in a structured way without pulling in
@@ -937,9 +937,9 @@ auto RenderGraphBuilder::RunBuildPipeline(BuildContext& ctx)
   return {};
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 auto RenderGraphBuilder::RegisterOptimizationStrategy(
   std::unique_ptr<IGraphOptimization> s) -> void
@@ -984,4 +984,4 @@ auto RenderGraphBuilder::RegisterRenderGraphCache(
   render_graph_cache_ = std::move(c);
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

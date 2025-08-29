@@ -11,7 +11,7 @@
 #include <memory>
 #include <mutex>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Simple concrete cache implementation used by the AsyncEngine.
 // Derives from the public RenderGraphCache so tests and consumers can
@@ -165,4 +165,4 @@ auto RenderGraphCache::LogStats() const -> void
   LOG_F(3, "evictions        : {}", s.evictions);
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

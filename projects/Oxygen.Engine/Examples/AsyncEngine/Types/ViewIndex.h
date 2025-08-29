@@ -10,7 +10,7 @@
 
 #include <Oxygen/Base/NamedType.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 using ViewIndex = NamedType<size_t,
   // clang-format off
@@ -22,4 +22,4 @@ inline [[nodiscard]] auto to_string(const ViewIndex& v) -> std::string
   return std::to_string(v.get());
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

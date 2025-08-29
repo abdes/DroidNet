@@ -13,7 +13,7 @@
 
 #include "../Integration/GraphicsLayerIntegration.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // === ResourceLifetimeInfo Implementation ===
 
@@ -696,4 +696,4 @@ auto CreateAsyncEngineResourceValidator(GraphicsLayerIntegration* integration)
   return std::make_unique<AsyncEngineResourceAliasValidator>(integration);
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

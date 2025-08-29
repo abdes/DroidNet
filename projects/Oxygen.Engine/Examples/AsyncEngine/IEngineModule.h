@@ -13,10 +13,15 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
 #include <fmt/format.h>
+// Phase mutation flags and helpers
+#include <Oxygen/Core/PhaseRegistry.h>
 
-namespace oxygen::examples::asyncsim {
-
+namespace oxygen::engine {
 class FrameContext;
+}
+
+namespace oxygen::engine::asyncsim {
+
 class GraphicsLayer;
 class AsyncEngineSimulator; // Forward declare for engine reference
 
@@ -59,22 +64,22 @@ inline std::string to_string(const ModulePriority& priority)
   return std::to_string(value);
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 
 //! fmt formatter for ModulePriority to support direct formatting in logs
-template <> struct fmt::formatter<oxygen::examples::asyncsim::ModulePriority> {
+template <> struct fmt::formatter<oxygen::engine::asyncsim::ModulePriority> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const oxygen::examples::asyncsim::ModulePriority& priority,
+  auto format(const oxygen::engine::asyncsim::ModulePriority& priority,
     FormatContext& ctx)
   {
     return fmt::format_to(
-      ctx.out(), "{}", oxygen::examples::asyncsim::to_string(priority));
+      ctx.out(), "{}", oxygen::engine::asyncsim::to_string(priority));
   }
 };
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Flags indicating which frame phases a module participates in
 enum class ModulePhases : uint32_t {
@@ -135,9 +140,18 @@ constexpr bool HasPhase(ModulePhases flags, ModulePhases phase)
 //! - Parallel phases: Read-only snapshot access, concurrent execution
 //! - Async phases: Multi-frame operations, eventual consistency
 //! - Detached phases: Fire-and-forget background work
-class IEngineModule {
+//!
+//! Mutation gating:
+//! - The engine exposes `PhaseDesc::MutateFlags` via `PhaseRegistry` to
+//!   indicate whether a phase may mutate GameState and/or EngineState.
+//! - Modules and FrameContext validators should call the debug helpers
+//!   `DebugAssertCanMutateGameState` or `DebugAssertCanMutateEngineState`
+//!   (available in debug builds) before performing gated mutations. Engine
+//!   operations that affect EngineState should still require `EngineTag`
+//!   capability where applicable.
+class EngineModule {
 public:
-  virtual ~IEngineModule() = default;
+  virtual ~EngineModule() = default;
 
   //! Module identification
   [[nodiscard]] virtual std::string_view GetName() const noexcept = 0;
@@ -206,7 +220,13 @@ public:
   virtual auto OnFrameGraph(FrameContext& context) -> co::Co<> { co_return; }
 
   //! Command recording - record GPU command lists (may be parallel per surface)
-  virtual auto OnCommandRecord(FrameContext& context) -> co::Co<> { co_return; }
+  virtual auto OnCommandRecord(FrameContext& context) -> co::Co<>
+  {
+    // Example debug assertion: ensure command recording is allowed to mutate
+    // EngineState (fence/descriptor bookkeeping) in the configured phase.
+    // DebugAssertCanMutateEngineState(PhaseId::kCommandRecord);
+    co_return;
+  }
 
   // === FRAME BOUNDARY PHASES - Hooks at frame start/end ===
   // NOTE: Present is engine-only and not available to modules - the engine
@@ -233,7 +253,7 @@ public:
 };
 
 //! Convenience base class providing default implementations
-class EngineModuleBase : public IEngineModule {
+class EngineModuleBase : public EngineModule {
 public:
   explicit EngineModuleBase(std::string name, ModulePhases phases,
     ModulePriority priority = ModulePriorities::Normal)
@@ -262,4 +282,4 @@ private:
   ModulePriority priority_;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

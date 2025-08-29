@@ -16,7 +16,7 @@
 #include "Scheduler.h"
 #include "Types.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class RenderGraph;
@@ -323,13 +323,13 @@ namespace cache_utils {
 // Factory for default cache implementation
 auto CreateAsyncRenderGraphCache() -> std::unique_ptr<RenderGraphCache>;
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
 
 // Hash specialization for cache keys
 namespace std {
-template <> struct hash<oxygen::examples::asyncsim::RenderGraphCacheKey> {
+template <> struct hash<oxygen::engine::asyncsim::RenderGraphCacheKey> {
   auto operator()(
-    const oxygen::examples::asyncsim::RenderGraphCacheKey& key) const -> size_t
+    const oxygen::engine::asyncsim::RenderGraphCacheKey& key) const -> size_t
   {
     return static_cast<size_t>(key.GetCombinedHash());
   }

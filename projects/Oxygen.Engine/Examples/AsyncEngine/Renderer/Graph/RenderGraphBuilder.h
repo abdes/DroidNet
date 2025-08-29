@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-#include "../../FrameContext.h"
 #include "../../Types/ViewIndex.h"
 #include "../Passes/RenderPass.h"
 #include "BuildPipeline.h"
@@ -24,12 +23,13 @@
 #include "Resource.h"
 #include "Scheduler.h"
 #include "Types.h"
+#include <Oxygen/Engine/FrameContext.h>
 
 #include <Oxygen/Base/Hash.h>
 
 // Forward declarations for AsyncEngine integration
-namespace oxygen::examples::asyncsim {
-class FrameContext;
+namespace oxygen::engine::asyncsim {
+
 class RenderGraphValidator; // base interface
 class RenderGraphScheduler;
 class RenderGraphCache;
@@ -41,7 +41,7 @@ auto CreateAsyncRenderGraphScheduler() -> std::unique_ptr<RenderGraphScheduler>;
 auto CreateAsyncRenderGraphCache() -> std::unique_ptr<RenderGraphCache>;
 }
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 // Forward declarations
 class RenderGraph;
@@ -456,4 +456,4 @@ public:
   auto RegisterRenderGraphCache(std::unique_ptr<RenderGraphCache> c) -> void;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

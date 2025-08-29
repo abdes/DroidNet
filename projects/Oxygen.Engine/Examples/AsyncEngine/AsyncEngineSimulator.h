@@ -27,11 +27,14 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 
 #include "EngineTypes.h"
-#include "FrameContext.h"
 #include "GraphicsLayer.h"
-#include "ModuleManager.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine {
+class ModuleManager;
+}
+
+namespace oxygen::engine::asyncsim {
 
 //! Async engine simulator orchestrating frame phases.
 class AsyncEngineSimulator final {
@@ -82,11 +85,11 @@ public:
   //! Module management
   [[nodiscard]] ModuleManager& GetModuleManager() noexcept
   {
-    return module_manager_;
+    return *module_manager_;
   }
   [[nodiscard]] const ModuleManager& GetModuleManager() const noexcept
   {
-    return module_manager_;
+    return *module_manager_;
   }
 
 private:
@@ -164,10 +167,10 @@ private:
   std::shared_ptr<GraphicsLayerIntegration> full_graphics_;
 
   // Module management system
-  ModuleManager module_manager_;
+  std::unique_ptr<ModuleManager> module_manager_;
 
   // Signals completion when FrameLoop exits.
   oxygen::co::Event completed_ {};
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

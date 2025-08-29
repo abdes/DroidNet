@@ -12,14 +12,14 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "../FrameContext.h"
 #include "../IEngineModule.h"
 #include "../Renderer/Graph/ExecutionContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
+#include <Oxygen/Engine/FrameContext.h>
 
 using namespace std::chrono_literals;
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Example game module demonstrating core gameplay logic
 /*!
@@ -199,4 +199,4 @@ private:
   uint32_t parallel_work_results_integrated_ { 0 };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

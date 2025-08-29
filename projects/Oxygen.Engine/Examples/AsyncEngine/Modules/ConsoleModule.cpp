@@ -7,7 +7,7 @@
 #include "ConsoleModule.h"
 #include <Oxygen/OxCo/ThreadPool.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 ConsoleModule::ConsoleModule()
   : EngineModuleBase("Console",
@@ -159,4 +159,4 @@ void ConsoleModule::ExecuteCommand(const std::string& command_line)
   }
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

@@ -12,12 +12,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Co.h>
 
-#include "../FrameContext.h"
 #include "../IEngineModule.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Types.h"
+#include <Oxygen/Engine/FrameContext.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Example geometry rendering module demonstrating render graph API usage
 /*!
@@ -225,4 +225,4 @@ private:
   auto InitializeGeometryData() -> void;
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

@@ -12,7 +12,7 @@
 #include "../Renderer/Graph/Resource.h" // For TextureDesc, ResourceState
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 GameModule::GameModule()
   : EngineModuleBase("Game",
@@ -387,4 +387,4 @@ auto GameModule::Shutdown() -> co::Co<>
   co_return;
 }
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim

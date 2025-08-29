@@ -18,7 +18,7 @@
 
 #include <Oxygen/Base/Macros.h>
 
-namespace oxygen::examples::asyncsim {
+namespace oxygen::engine::asyncsim {
 
 //! Global descriptor allocator for bindless resource management
 class GlobalDescriptorAllocator {
@@ -133,4 +133,4 @@ private:
   std::size_t last_reclaimed_count_ { 0 };
 };
 
-} // namespace oxygen::examples::asyncsim
+} // namespace oxygen::engine::asyncsim
