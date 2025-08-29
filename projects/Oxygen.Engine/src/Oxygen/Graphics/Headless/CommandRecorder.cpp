@@ -1,0 +1,160 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <unordered_map>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
+#include <Oxygen/Graphics/Common/Internal/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Headless/Buffer.h>
+#include <Oxygen/Graphics/Headless/Command.h>
+#include <Oxygen/Graphics/Headless/CommandRecorder.h>
+#include <Oxygen/Graphics/Headless/Commands/BufferToTextureCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/ClearFramebufferCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
+#include <Oxygen/Graphics/Headless/api_export.h>
+
+namespace oxygen::graphics::headless {
+// Out-of-line destructor to ensure vtable emission in this translation unit.
+OXGN_HDLS_API CommandRecorder::~CommandRecorder() = default;
+
+// Basic barrier execution: log the barrier and perform simple validation.
+// The heavy lifting of tracking is done by the ResourceStateTracker in the
+// common CommandRecorder; here we only simulate execution and assert on
+// obviously invalid uses.
+
+OXGN_HDLS_API auto CommandRecorder::ExecuteBarriers(
+  std::span<const detail::Barrier> barriers) -> void
+{
+  if (barriers.empty()) {
+    return;
+  }
+  LOG_SCOPE_F(4, "Headless ExecuteBarriers: count={}", barriers.size());
+
+  for (const auto& b_const : barriers) {
+    // copy to mutable to call non-const accessors
+    auto b = b_const;
+    // Memory barriers are allowed but do not expose before/after states.
+    if (b.IsMemoryBarrier()) {
+      LOG_F(INFO, "Headless: memory barrier on {}", b.GetResource());
+      continue;
+    }
+
+    // For buffer/texture transitions, log the before/after states and
+    // perform validation against the headless state map.
+    const auto before = b.GetStateBefore();
+    const auto after = b.GetStateAfter();
+    const auto resource = b.GetResource();
+
+    LOG_F(INFO, "Headless barrier: resource={} before={} after={}", resource,
+      before, after);
+
+    // Validate 'after' is known
+    CHECK_F(after != ::oxygen::graphics::ResourceStates::kUnknown,
+      "Barrier has unknown 'after' state for resource {}", resource);
+
+    // Check against observed state. If we haven't seen this resource before,
+    // initialize the observed state from the tracker's 'before' value so the
+    // headless backend's simulated view matches the tracker's expectation.
+    const auto it = observed_states_.find(resource);
+    if (it == observed_states_.end()) {
+      observed_states_[resource] = before;
+      DLOG_F(4, "Headless: initializing observed state for {} -> {}", resource,
+        before);
+    } else {
+      if (it->second != before) {
+        LOG_F(WARNING,
+          "Headless barrier mismatch for {}: expected before={} but barrier "
+          "requests {}",
+          resource, it->second, before);
+        DCHECK_F(
+          it->second == before, "Resource state mismatch for {}", resource);
+      }
+    }
+
+    // Apply the transition in the headless simulated state model.
+    observed_states_[resource] = after;
+  }
+}
+
+auto CommandRecorder::CopyBuffer(graphics::Buffer& dst, size_t dst_offset,
+  const graphics::Buffer& src, size_t src_offset, size_t size) -> void
+{
+  // Record a lambda command capturing the parameters. Command lifetime is
+  // managed by the recorder.
+  auto cmd = std::make_unique<CopyBufferCommand>(
+    &dst, dst_offset, &src, src_offset, size);
+  commands_.push_back(std::move(cmd));
+}
+
+auto CommandRecorder::ClearFramebuffer(const Framebuffer& fb,
+  std::optional<std::vector<std::optional<Color>>> color_clear_values,
+  std::optional<float> depth_clear_value,
+  std::optional<uint8_t> stencil_clear_value) -> void
+{
+  auto cmd = std::make_unique<ClearFramebufferCommand>(
+    &fb, std::move(color_clear_values), depth_clear_value, stencil_clear_value);
+  commands_.push_back(std::move(cmd));
+}
+
+auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
+  const NativeObject& dsv, ClearFlags flags, float depth, uint8_t stencil)
+  -> void
+{
+  auto cmd = std::make_unique<ClearDepthStencilCommand>(
+    &texture, dsv, flags, depth, stencil);
+  commands_.push_back(std::move(cmd));
+}
+
+auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  const TextureUploadRegion& region, graphics::Texture& dst) -> void
+{
+  auto cmd = std::make_unique<BufferToTextureCommand>(&src, region, &dst);
+  commands_.push_back(std::move(cmd));
+}
+
+auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  std::span<const TextureUploadRegion> regions, graphics::Texture& dst) -> void
+{
+  for (const auto& r : regions) {
+    auto cmd = std::make_unique<BufferToTextureCommand>(&src, r, &dst);
+    commands_.push_back(std::move(cmd));
+  }
+}
+
+auto CommandRecorder::PerformCopy(graphics::Buffer& dst, size_t dst_offset,
+  const graphics::Buffer& src, size_t src_offset, size_t size) -> void
+{
+  auto dst_h = static_cast<Buffer*>(&dst);
+  auto src_h = static_cast<const Buffer*>(&src);
+  if (dst_h == nullptr || src_h == nullptr) {
+    LOG_F(WARNING,
+      "Headless PerformCopy: one or both buffers are not headless-backed");
+    return;
+  }
+
+  std::vector<std::uint8_t> temp(size);
+  src_h->ReadBacking(temp.data(), src_offset, size);
+  dst_h->WriteBacking(temp.data(), dst_offset, size);
+}
+
+auto CommandRecorder::OnSubmitted() -> void
+{
+  CommandContext ctx {};
+  ctx.recorder = static_cast<void*>(this);
+  for (auto& c : commands_) {
+    c->Execute(ctx);
+  }
+  commands_.clear();
+
+  // Call base implementation to preserve any existing behavior.
+  graphics::CommandRecorder::OnSubmitted();
+}
+
+} // namespace oxygen::graphics::headless
