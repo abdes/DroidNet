@@ -9,26 +9,24 @@
 #include <memory>
 #include <span>
 
-#include <d3d12.h>
-
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 
-namespace oxygen::graphics::d3d12 {
+namespace oxygen {
+class Graphics;
+} // namespace oxygen::graphics
 
-class Texture;
-class RenderController;
+namespace oxygen::graphics::internal {
 
-class Framebuffer final : public graphics::Framebuffer {
+class FramebufferImpl final : public graphics::Framebuffer {
   using Base = graphics::Framebuffer;
 
 public:
-  Framebuffer(FramebufferDesc desc, RenderController* renderer);
-  ~Framebuffer() override;
+  FramebufferImpl(FramebufferDesc desc, std::weak_ptr<Graphics> gfx_weak);
+  ~FramebufferImpl() override;
 
-  OXYGEN_MAKE_NON_COPYABLE(Framebuffer)
-  OXYGEN_DEFAULT_MOVABLE(Framebuffer)
+  OXYGEN_MAKE_NON_COPYABLE(FramebufferImpl)
+  OXYGEN_DEFAULT_MOVABLE(FramebufferImpl)
 
   [[nodiscard]] auto GetDescriptor() const -> const FramebufferDesc& override
   {
@@ -37,21 +35,28 @@ public:
   [[nodiscard]] auto GetFramebufferInfo() const
     -> const FramebufferInfo& override;
 
+  // TODO: maybe this should go to the render pass?
+  OXYGEN_GFX_API void PrepareForRender(CommandRecorder& crecorder) override;
+
   [[nodiscard]] auto GetRenderTargetViews() const
+    -> std::span<const NativeObject> override
   {
     return std::span(rtvs_.data(), rtvs_.size());
   }
 
-  [[nodiscard]] auto GetDepthStencilView() const -> SIZE_T { return dsv_; }
+  [[nodiscard]] auto GetDepthStencilView() const -> NativeObject override
+  {
+    return dsv_;
+  }
 
 private:
   FramebufferDesc desc_;
-  RenderController* renderer_;
+  std::weak_ptr<Graphics> gfx_weak_;
 
   StaticVector<std::shared_ptr<graphics::Texture>, kMaxRenderTargets>
     textures_ {};
-  StaticVector<SIZE_T, kMaxRenderTargets> rtvs_ {};
-  SIZE_T dsv_ {};
+  StaticVector<NativeObject, kMaxRenderTargets> rtvs_ {};
+  NativeObject dsv_ {};
 
   uint32_t rt_width_ { 0 };
   uint32_t rt_height_ { 0 };

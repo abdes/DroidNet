@@ -5,26 +5,29 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
-#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::Texture;
-using oxygen::graphics::d3d12::Framebuffer;
+using oxygen::graphics::internal::FramebufferImpl;
 
-Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
+FramebufferImpl::FramebufferImpl(
+  FramebufferDesc desc, std::weak_ptr<Graphics> gfx_weak)
   : desc_(std::move(desc))
-  , renderer_(renderer)
+  , gfx_weak_(std::move(gfx_weak))
 {
-  DCHECK_NOTNULL_F(renderer_, "RenderController must not be null");
+  DCHECK_F(!gfx_weak_.expired(), "Graphics must not be null");
+  auto gfx = gfx_weak_.lock();
 
   DCHECK_F(!desc_.color_attachments.empty() || desc_.depth_attachment.IsValid(),
-    "Framebuffer must have at least one color or depth attachment");
+    "FramebufferImpl must have at least one color or depth attachment");
   DCHECK_F(desc_.color_attachments.size() <= kMaxRenderTargets,
-    "Framebuffer can have at most {} color attachments", kMaxRenderTargets);
+    "FramebufferImpl can have at most {} color attachments", kMaxRenderTargets);
 
   // The framebuffer must have a consistent size across all attachments. We
   // will use the size of the first color attachment, or if none is provided,
@@ -39,18 +42,19 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
     rt_height_ = texture->GetDescriptor().height;
   }
 
-  auto& resource_registry = renderer_->GetResourceRegistry();
+  auto& resource_registry = gfx->GetResourceRegistry();
 
   for (const auto& attachment : desc_.color_attachments) {
     auto texture = attachment.texture;
 
     DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
-      "Framebuffer {}: width mismatch between attachments", texture->GetName());
+      "FramebufferImpl {}: width mismatch between attachments",
+      texture->GetName());
     DCHECK_EQ_F(texture->GetDescriptor().height, rt_height_,
-      "Framebuffer {}: height mismatch between attachments",
+      "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    auto rtv_handle = renderer_->GetDescriptorAllocator().Allocate(
+    auto rtv_handle = gfx->GetDescriptorAllocator().Allocate(
       ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
     if (!rtv_handle.IsValid()) {
       throw std::runtime_error(fmt::format(
@@ -75,7 +79,7 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
       throw std::runtime_error(fmt::format(
         "Failed to register RTV view for texture `{}`", texture->GetName()));
     }
-    rtvs_.push_back(rtv.AsInteger());
+    rtvs_.push_back(rtv);
     textures_.push_back(std::move(texture));
   }
 
@@ -83,12 +87,13 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
     depth_attachment.IsValid()) {
     auto texture = depth_attachment.texture;
     DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
-      "Framebuffer {}: width mismatch between attachments", texture->GetName());
+      "FramebufferImpl {}: width mismatch between attachments",
+      texture->GetName());
     DCHECK_EQ_F(texture->GetDescriptor().height, rt_height_,
-      "Framebuffer {}: height mismatch between attachments",
+      "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    DescriptorHandle dsv_handle = renderer_->GetDescriptorAllocator().Allocate(
+    DescriptorHandle dsv_handle = gfx->GetDescriptorAllocator().Allocate(
       ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
     if (!dsv_handle.IsValid()) {
       throw std::runtime_error(fmt::format(
@@ -113,18 +118,23 @@ Framebuffer::Framebuffer(FramebufferDesc desc, RenderController* renderer)
       throw std::runtime_error(fmt::format(
         "Failed to register DSV view for texture `{}`", texture->GetName()));
     }
-    dsv_ = dsv.AsInteger();
+    dsv_ = dsv;
 
     textures_.push_back(std::move(texture));
   }
 }
 
-Framebuffer::~Framebuffer()
+FramebufferImpl::~FramebufferImpl()
 {
-  DCHECK_NOTNULL_F(renderer_, "RenderController must not be null");
+  if (gfx_weak_.expired()) {
+    DLOG_F(2, "Graphics object is no longer valid");
+    return;
+  }
+
+  auto gfx = gfx_weak_.lock();
 
   LOG_SCOPE_F(1, "Destroying framebuffer");
-  auto& resource_registry = renderer_->GetResourceRegistry();
+  auto& resource_registry = gfx->GetResourceRegistry();
   for (const auto& texture : textures_) {
     DCHECK_NOTNULL_F(texture, "Texture must not be null");
     DLOG_F(1, "for texture {}", texture->GetName());
@@ -134,8 +144,32 @@ Framebuffer::~Framebuffer()
   rtvs_.clear();
 }
 
-auto Framebuffer::GetFramebufferInfo() const -> const FramebufferInfo&
+auto FramebufferImpl::GetFramebufferInfo() const -> const FramebufferInfo&
 {
   static FramebufferInfo info(desc_);
   return info;
+}
+
+void FramebufferImpl::PrepareForRender(CommandRecorder& recorder)
+{
+  const auto& desc = GetDescriptor();
+  for (const auto& attachment : desc.color_attachments) {
+    if (attachment.texture) {
+      recorder.BeginTrackingResourceState(
+        *attachment.texture, ResourceStates::kPresent, true);
+      recorder.RequireResourceState(
+        *attachment.texture, ResourceStates::kRenderTarget);
+    }
+  }
+
+  if (desc.depth_attachment.IsValid()) {
+    // Depth attachment starts in the DepthWrite state
+    recorder.BeginTrackingResourceState(
+      *desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
+  }
+
+  // Flush barriers to ensure all resource state transitions are applied and
+  // that subsequent state transitions triggered by the frame rendering task
+  // (application) are executed in a separate batch.
+  recorder.FlushBarriers();
 }

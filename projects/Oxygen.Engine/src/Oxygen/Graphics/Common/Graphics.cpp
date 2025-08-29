@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -230,4 +231,11 @@ auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
 {
   return const_cast<graphics::ResourceRegistry&>(
     std::as_const(*this).GetResourceRegistry());
+}
+
+auto Graphics::CreateFramebuffer(const graphics::FramebufferDesc& desc)
+  -> std::shared_ptr<graphics::Framebuffer>
+{
+  return std::make_shared<graphics::internal::FramebufferImpl>(
+    desc, weak_from_this());
 }

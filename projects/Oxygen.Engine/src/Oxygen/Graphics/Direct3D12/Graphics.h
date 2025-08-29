@@ -23,8 +23,7 @@ class Allocator;
 
 namespace oxygen::graphics::d3d12 {
 
-class Graphics : public oxygen::Graphics,
-                 public std::enable_shared_from_this<Graphics> {
+class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
 
 public:
@@ -41,10 +40,6 @@ public:
     std::weak_ptr<platform::Window> window_weak,
     std::shared_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
-
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateFramebuffer(
-    const FramebufferDesc& desc, graphics::RenderController& renderer)
-    -> std::shared_ptr<graphics::Framebuffer> override;
 
   [[nodiscard]] OXYGEN_D3D12_API auto CreateTexture(
     const TextureDesc& desc) const

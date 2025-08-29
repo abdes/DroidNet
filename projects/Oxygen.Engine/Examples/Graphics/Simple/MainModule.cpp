@@ -559,7 +559,7 @@ auto MainModule::SetupFramebuffers() -> void
                   .AddColorAttachment(surface_->GetBackBuffer(i))
                   .SetDepthAttachment(depth_tex);
 
-    framebuffers_.push_back(gfx->CreateFramebuffer(desc, *render_controller_));
+    framebuffers_.push_back(gfx->CreateFramebuffer(desc));
     CHECK_NOTNULL_F(
       framebuffers_[i], "Failed to create framebuffer for main window");
   }

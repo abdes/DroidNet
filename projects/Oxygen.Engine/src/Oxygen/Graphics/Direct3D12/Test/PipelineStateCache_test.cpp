@@ -16,7 +16,6 @@
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>

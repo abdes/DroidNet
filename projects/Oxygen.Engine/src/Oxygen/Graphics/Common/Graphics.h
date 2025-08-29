@@ -105,7 +105,9 @@ namespace imgui {
  @see graphics::RenderController, graphics::Surface, graphics::QueueStrategy,
       graphics::DescriptorAllocator, graphics::ResourceRegistry, co::LiveObject
 */
-class Graphics : public Composition, public co::LiveObject {
+class Graphics : public Composition,
+                 public co::LiveObject,
+                 public std::enable_shared_from_this<Graphics> {
 public:
   OXYGEN_GFX_API explicit Graphics(std::string_view name);
   OXYGEN_GFX_API ~Graphics() override;
@@ -120,12 +122,12 @@ public:
 
   //=== Async operations ===------------------------------------------------//
 
-  [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started)
+  OXYGEN_GFX_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
   OXYGEN_GFX_API auto Run() -> void override;
 
-  [[nodiscard]] OXYGEN_GFX_API auto IsRunning() const -> bool override;
+  OXYGEN_GFX_NDAPI auto IsRunning() const -> bool override;
 
   OXYGEN_GFX_API auto Stop() -> void override;
 
@@ -153,12 +155,12 @@ public:
   OXYGEN_GFX_API auto CreateCommandQueues(
     const graphics::QueueStrategy& queue_strategy) -> void;
 
-  [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(std::string_view name) const
+  OXYGEN_GFX_NDAPI auto GetCommandQueue(std::string_view name) const
     -> std::shared_ptr<graphics::CommandQueue>;
 
   OXYGEN_GFX_API auto FlushCommandQueues() -> void;
 
-  [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandList(
+  OXYGEN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)
     -> std::shared_ptr<graphics::CommandList>;
 
@@ -168,22 +170,19 @@ public:
     = 0;
 
   // Bindless global accessors (device-owned)
-  [[nodiscard]] OXYGEN_GFX_API auto GetDescriptorAllocator() const
+  OXYGEN_GFX_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator&;
-  [[nodiscard]] OXYGEN_GFX_API auto GetDescriptorAllocator()
+  OXYGEN_GFX_NDAPI auto GetDescriptorAllocator()
     -> graphics::DescriptorAllocator&;
 
-  [[nodiscard]] OXYGEN_GFX_API auto GetResourceRegistry() const
+  OXYGEN_GFX_NDAPI auto GetResourceRegistry() const
     -> const graphics::ResourceRegistry&;
-  [[nodiscard]] OXYGEN_GFX_API auto GetResourceRegistry()
-    -> graphics::ResourceRegistry&;
+  OXYGEN_GFX_NDAPI auto GetResourceRegistry() -> graphics::ResourceRegistry&;
 
   //=== Rendering Resources factories ===-----------------------------------//
 
-  [[nodiscard]] virtual auto CreateFramebuffer(
-    const graphics::FramebufferDesc& desc, graphics::RenderController& renderer)
-    -> std::shared_ptr<graphics::Framebuffer>
-    = 0;
+  OXYGEN_GFX_NDAPI auto CreateFramebuffer(const graphics::FramebufferDesc& desc)
+    -> std::shared_ptr<graphics::Framebuffer>;
 
   [[nodiscard]] virtual auto CreateTexture(
     const graphics::TextureDesc& desc) const

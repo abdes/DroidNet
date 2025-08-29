@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameBuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
@@ -77,28 +76,4 @@ FramebufferInfo::FramebufferInfo(const FramebufferDesc& desc)
     sample_count_ = texture_desc.sample_count;
     sample_quality_ = texture_desc.sample_quality;
   }
-}
-
-void Framebuffer::PrepareForRender(CommandRecorder& recorder)
-{
-  const auto& desc = GetDescriptor();
-  for (const auto& attachment : desc.color_attachments) {
-    if (attachment.texture) {
-      recorder.BeginTrackingResourceState(
-        *attachment.texture, ResourceStates::kPresent, true);
-      recorder.RequireResourceState(
-        *attachment.texture, ResourceStates::kRenderTarget);
-    }
-  }
-
-  if (desc.depth_attachment.IsValid()) {
-    // Depth attachment starts in the DepthWrite state
-    recorder.BeginTrackingResourceState(
-      *desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
-  }
-
-  // Flush barriers to ensure all resource state transitions are applied and
-  // that subsequent state transitions triggered by the frame rendering task
-  // (application) are executed in a separate batch.
-  recorder.FlushBarriers();
 }
