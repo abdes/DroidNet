@@ -58,6 +58,8 @@ target_sources(
     "Detail/RenderThread.cpp"
     "Detail/RenderThread.h"
     "Detail/ResourceStateTracker.cpp"
+    "Internal/FramebufferImpl.cpp"
+    "Internal/FramebufferImpl.h"
     "Buffer.cpp"
     "CommandList.cpp"
     "CommandQueue.cpp"

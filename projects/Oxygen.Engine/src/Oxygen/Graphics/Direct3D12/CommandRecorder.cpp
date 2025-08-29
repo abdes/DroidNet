@@ -21,9 +21,9 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
-#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/RenderController.h>
+#include <Oxygen/Graphics/common/Framebuffer.h>
 
 using oxygen::Overloads;
 using oxygen::graphics::d3d12::CommandRecorder;
@@ -539,12 +539,12 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
   const auto& fb = static_cast<const Framebuffer&>(framebuffer);
   StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
   for (const auto& rtv : fb.GetRenderTargetViews()) {
-    rtvs.emplace_back(rtv);
+    rtvs.emplace_back(rtv.AsInteger());
   }
 
   D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
   if (fb.GetDescriptor().depth_attachment.IsValid()) {
-    dsv.ptr = fb.GetDepthStencilView();
+    dsv.ptr = fb.GetDepthStencilView().AsInteger();
   }
 
   const auto* command_list_impl = GetConcreteCommandList();
@@ -562,7 +562,6 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
   const std::optional<float> depth_clear_value,
   const std::optional<uint8_t> stencil_clear_value)
 {
-  using d3d12::Framebuffer;
   using graphics::detail::GetFormatInfo;
 
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
@@ -583,7 +582,7 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
     if (format_info.has_depth || format_info.has_stencil) {
       continue;
     }
-    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle { .ptr = rtvs[i] };
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle { .ptr = rtvs[i].AsInteger() };
     const Color clear_color = attachment.ResolveClearColor(
       color_clear_values && i < color_clear_values->size()
         ? (*color_clear_values)[i]
@@ -596,7 +595,7 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
   // Clear depth/stencil attachment
   if (desc.depth_attachment.IsValid()) {
     const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr
-      = fb.GetDepthStencilView() };
+      = fb.GetDepthStencilView().AsInteger() };
     const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
 
     auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(

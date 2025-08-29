@@ -252,7 +252,14 @@ public:
   [[nodiscard]] virtual auto GetFramebufferInfo() const
     -> const FramebufferInfo& = 0;
 
-  OXYGEN_GFX_API virtual void PrepareForRender(CommandRecorder& crecorder);
+  // TODO: maybe this should go to the render pass?
+  OXYGEN_GFX_API virtual void PrepareForRender(CommandRecorder& crecorder) = 0;
+
+  OXYGEN_GFX_NDAPI virtual auto GetRenderTargetViews() const
+    -> std::span<const NativeObject>
+    = 0;
+
+  OXYGEN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeObject = 0;
 };
 
 } // namespace oxygen::graphics

@@ -17,7 +17,6 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
-#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/RenderController.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -190,15 +189,6 @@ auto Graphics::GetShader(const std::string_view unique_id) const
   -> std::shared_ptr<IShaderByteCode>
 {
   return GetComponent<EngineShaders>().GetShader(unique_id);
-}
-
-auto Graphics::CreateFramebuffer(
-  const FramebufferDesc& desc, graphics::RenderController& renderer)
-  -> std::shared_ptr<graphics::Framebuffer>
-{
-  return std::make_shared<Framebuffer>(desc,
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-    static_cast<RenderController*>(&renderer));
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const
