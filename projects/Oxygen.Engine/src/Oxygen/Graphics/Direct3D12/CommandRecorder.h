@@ -107,6 +107,19 @@ public:
     const oxygen::graphics::Buffer& src, size_t src_offset,
     size_t size) override;
 
+  // Copies from a (staging) buffer into a texture region using GPU copy
+  // commands. Currently supports whole-subresource uploads (tight-packed
+  // subresource layout produced by GetCopyableFootprints). Partial-region
+  // uploads or mismatching row-pitches are not fully supported and will
+  // produce a warning.
+  void CopyBufferToTexture(const oxygen::graphics::Buffer& src,
+    const oxygen::graphics::TextureUploadRegion& region,
+    oxygen::graphics::Texture& dst) override;
+
+  void CopyBufferToTexture(const oxygen::graphics::Buffer& src,
+    std::span<const oxygen::graphics::TextureUploadRegion> regions,
+    oxygen::graphics::Texture& dst) override;
+
   //! Binds the provided shader-visible descriptor heaps to the underlying
   //! D3D12 command list.
   void SetupDescriptorTables(
