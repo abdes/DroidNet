@@ -22,3 +22,4 @@ include(GTestHelpers)
 
 m_gtest_program(DescriptorAllocator SOURCES "DescriptorAllocator_test.cpp")
 m_gtest_program(SmokeTest SOURCES "Headless_Smoke_test.cpp")
+m_gtest_program(QueueTest SOURCES "Headless_Queue_test.cpp")

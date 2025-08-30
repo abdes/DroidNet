@@ -56,6 +56,7 @@ set(
   "Commands/CopyBufferCommand.h"
   "Graphics.h"
   "Internal/EngineShaders.h"
+  "Internal/QueueManager.h"
   "Surface.h"
   "Texture.h"
 )
@@ -76,6 +77,7 @@ set(
   "Commands/CopyBufferCommand.cpp"
   "Graphics.cpp"
   "Internal/EngineShaders.cpp"
+  "Internal/QueueManager.cpp"
   "Internal/HeadlessModule.cpp"
   "Surface.cpp"
   "Texture.cpp"

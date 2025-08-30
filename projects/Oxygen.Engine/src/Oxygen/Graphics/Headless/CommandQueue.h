@@ -18,8 +18,9 @@ namespace oxygen::graphics::headless {
 
 class CommandQueue final : public graphics::CommandQueue {
 public:
-  explicit CommandQueue(std::string_view name)
+  CommandQueue(std::string_view name, QueueRole role)
     : graphics::CommandQueue(name)
+    , queue_role_(role)
   {
   }
   ~CommandQueue() override = default;
@@ -42,7 +43,7 @@ public:
 
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
-    return QueueRole::kGraphics;
+    return queue_role_;
   }
 
 private:
@@ -50,6 +51,7 @@ private:
   mutable std::condition_variable cv_;
   mutable uint64_t current_value_ { 0 };
   mutable uint64_t completed_value_ { 0 };
+  QueueRole queue_role_ { QueueRole::kGraphics };
 };
 
 } // namespace oxygen::graphics::headless
