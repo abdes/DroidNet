@@ -17,19 +17,13 @@ namespace oxygen::graphics::headless {
 
 class CommandRecorder final : public graphics::CommandRecorder {
 public:
-  CommandRecorder(CommandList* cmd_list, CommandQueue* queue)
+  CommandRecorder(std::shared_ptr<graphics::CommandList> cmd_list,
+    observer_ptr<graphics::CommandQueue> queue)
     : graphics::CommandRecorder(cmd_list, queue)
   {
   }
 
   OXGN_HDLS_API ~CommandRecorder() override;
-
-  // Lifecycle
-  auto Begin() -> void override { graphics::CommandRecorder::Begin(); }
-  auto End() -> CommandList* override
-  {
-    return graphics::CommandRecorder::End();
-  }
 
   // Pipeline state
   auto SetPipelineState(GraphicsPipelineDesc /*desc*/) -> void override { }
@@ -86,23 +80,30 @@ public:
     std::span<const TextureUploadRegion> regions, Texture& dst)
     -> void override;
 
+  // Record a GPU-side queue signal into the command stream. When the
+  // recorded command executes in OnSubmitted(), it will call
+  // `target_queue->QueueSignalCommand(value)` and thus advance the queue's
+  // completed value at the point of execution (GPU-like semantics).
+  OXGN_HDLS_API auto RecordQueueSignal(uint64_t value) -> void;
+
+  // Record a GPU-side queue wait into the command stream. When executed in
+  // OnSubmitted(), the recorded command will call
+  // `target_queue->QueueWaitCommand(value)` so the wait occurs at the recorded
+  // point in the stream (GPU-like semantics).
+  OXGN_HDLS_API auto RecordQueueWait(uint64_t value) -> void;
+
 protected:
   OXGN_HDLS_API auto ExecuteBarriers(
     std::span<const detail::Barrier> /*barriers*/) -> void override;
 
-  // Override OnSubmitted to execute recorded headless commands at submit
-  OXGN_HDLS_API auto OnSubmitted() -> void override;
-
 private:
-  // Intentionally no override for OnSubmitted; base implementation is used.
+  auto QueueCommand(std::shared_ptr<Command> cmd) -> void;
 
   // Observed resource states for this recorder. ResourceStateTracker inside
   // the base CommandRecorder produces a list of pending barriers which is
   // passed into ExecuteBarriers; this member keeps the last-known state per
   // native resource for validation and simulation of transitions.
   std::unordered_map<NativeObject, ResourceStates> observed_states_;
-  // Recorded commands for deferred execution.
-  std::vector<std::unique_ptr<Command>> commands_;
 
   // Helper to perform a single copy immediately (kept for utility).
   auto PerformCopy(graphics::Buffer& dst, size_t dst_offset,

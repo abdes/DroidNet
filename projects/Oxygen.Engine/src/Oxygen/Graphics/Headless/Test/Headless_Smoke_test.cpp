@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
@@ -56,10 +57,55 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     = reinterpret_cast<oxygen::graphics::headless::Graphics*>(backend);
   ASSERT_NE(headless, nullptr);
 
-  // Create a command queue using the headless implementation.
-  auto queue = headless->CreateCommandQueue("test-queue",
-    oxygen::graphics::QueueRole::kGraphics,
-    oxygen::graphics::QueueAllocationPreference::kAllInOne);
+  // Create command queues using a multi-named strategy so multiple named
+  // queues exist and AcquireCommandRecorder can find the requested named
+  // queue. Use the MultiNamedStrategy defined in headless queue tests.
+  class LocalMultiNamedStrategy : public oxygen::graphics::QueueStrategy {
+  public:
+    [[nodiscard]] auto Specifications() const
+      -> std::vector<oxygen::graphics::QueueSpecification> override
+    {
+      using oxygen::graphics::QueueAllocationPreference;
+      using oxygen::graphics::QueueRole;
+      using oxygen::graphics::QueueSharingPreference;
+      using oxygen::graphics::QueueSpecification;
+      return { {
+                 .name = "multi-gfx",
+                 .role = QueueRole::kGraphics,
+                 .allocation_preference = QueueAllocationPreference::kDedicated,
+                 .sharing_preference = QueueSharingPreference::kSeparate,
+               },
+        {
+          .name = "multi-cpu",
+          .role = QueueRole::kCompute,
+          .allocation_preference = QueueAllocationPreference::kDedicated,
+          .sharing_preference = QueueSharingPreference::kSeparate,
+        } };
+    }
+    [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
+    {
+      return "multi-gfx";
+    }
+    [[nodiscard]] auto PresentQueueName() const -> std::string_view override
+    {
+      return "multi-gfx";
+    }
+    [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
+    {
+      return "multi-cpu";
+    }
+    [[nodiscard]] auto TransferQueueName() const -> std::string_view override
+    {
+      return "multi-gfx";
+    }
+    [[nodiscard]] auto Clone() const
+      -> std::unique_ptr<oxygen::graphics::QueueStrategy> override
+    {
+      return std::make_unique<LocalMultiNamedStrategy>(*this);
+    }
+  } queue_strategy;
+  headless->CreateCommandQueues(queue_strategy);
+  auto queue = headless->GetCommandQueue(queue_strategy.GraphicsQueueName());
   ASSERT_NE(queue, nullptr);
 
   // Also exercise HeadlessSurface behaviors: create a surface, set size,
@@ -106,16 +152,9 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     }
   }
 
-  // Create a lightweight CommandList (common implementation) and a headless
-  // recorder.
-  auto cmd_list = std::make_unique<oxygen::graphics::CommandList>(
-    "test-cmdlist", oxygen::graphics::QueueRole::kGraphics);
-  ASSERT_NE(cmd_list, nullptr);
-  auto recorder = std::make_unique<oxygen::graphics::headless::CommandRecorder>(
-    cmd_list.get(), queue.get());
-  ASSERT_NE(recorder, nullptr);
-
-  // Create a simple buffer and texture via headless factories.
+  // Create a simple buffer and texture via headless factories. Keep the
+  // shared_ptrs in this scope so we can unregister them after the recorder
+  // has been submitted by its custom deleter.
   oxygen::graphics::BufferDesc buf_desc {};
   buf_desc.size_bytes = 1024;
   buf_desc.debug_name = "smoke-buffer";
@@ -130,44 +169,69 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   auto texture = headless->CreateTexture(tex_desc);
   ASSERT_NE(texture, nullptr);
 
-  // Track initial states for both resources: register them with the device
-  // registry and begin tracking. Factories return shared_ptrs, which is the
-  // form expected by ResourceRegistry::Register.
-  recorder->Begin();
-  // After Begin, the command list should be in Recording state.
-  EXPECT_TRUE(cmd_list->IsRecording());
-  headless->GetResourceRegistry().Register(buffer);
-  recorder->BeginTrackingResourceState(
-    *buffer, oxygen::graphics::ResourceStates::kUnknown);
+  // Acquire the recorder and perform recording inside a scope. When the
+  // recorder goes out of scope the headless custom deleter will End(),
+  // Submit() and call OnSubmitted() (immediate_submission=true).
+  // Use virtual GetCommandQueue so backends can override lookup/fallback
+  // behavior (for example, falling back to a QueueManager). This keeps the
+  // higher-level contract clean and allows backend-specific policies.
 
-  headless->GetResourceRegistry().Register(texture);
-  recorder->BeginTrackingResourceState(
-    *texture, oxygen::graphics::ResourceStates::kUnknown);
+  auto cmd_list
+    = headless->AcquireCommandList(queue->GetQueueRole(), "test-cmdlist");
+  ASSERT_NE(cmd_list, nullptr);
 
-  // Require the buffer to become a copy destination (should produce a
-  // transition)
-  recorder->RequireResourceState(
-    *buffer, oxygen::graphics::ResourceStates::kCopyDest);
+  const auto before_value = queue->GetCurrentValue();
+  const auto completion_value = before_value + 1;
+  {
+    auto recorder = headless->AcquireCommandRecorder(
+      queue, cmd_list, /*immediate_submission=*/true);
+    ASSERT_NE(recorder, nullptr);
 
-  // Require the texture to have UnorderedAccess (UAV) but it already is in
-  // the same state — this should trigger a memory barrier insertion path
-  recorder->RequireResourceState(
-    *texture, oxygen::graphics::ResourceStates::kUnorderedAccess);
+    // Track initial states for both resources: register them with the
+    // device registry and begin tracking. Factories return shared_ptrs,
+    // which is the form expected by ResourceRegistry::Register.
+    // AcquireCommandRecorder already calls Begin() on the returned recorder.
+    headless->GetResourceRegistry().Register(buffer);
+    recorder->BeginTrackingResourceState(
+      *buffer, oxygen::graphics::ResourceStates::kUnknown);
 
-  // End recording, flush barriers and submit
-  recorder->End();
-  // After End, the command list should be Closed.
-  EXPECT_TRUE(cmd_list->IsClosed());
-  queue->Submit(*cmd_list);
+    headless->GetResourceRegistry().Register(texture);
+    recorder->BeginTrackingResourceState(
+      *texture, oxygen::graphics::ResourceStates::kUnknown);
 
-  // Wait for submission completion using the queue fence. Headless Submit
-  // advances the fence synchronously, but explicitly wait to mirror real
-  // backend usage patterns.
-  const auto signaled = queue->GetCompletedValue();
-  queue->Wait(signaled);
+    // Require the buffer to become a copy destination (should produce a
+    // transition)
+    recorder->RequireResourceState(
+      *buffer, oxygen::graphics::ResourceStates::kCopyDest);
 
-  // Assert: fence advanced (>= 1)
-  EXPECT_GE(signaled, 1u);
+    // Require the texture to have UnorderedAccess (UAV) but it already is in
+    // the same state — this should trigger a memory barrier insertion path
+    recorder->RequireResourceState(
+      *texture, oxygen::graphics::ResourceStates::kUnorderedAccess);
+
+    DLOG_F(2, "Smoke: expected completion value: {}", completion_value);
+    recorder->RecordQueueSignal(completion_value);
+
+    // End of scope triggers the custom deleter which will submit the
+    // recorded commands immediately.
+  }
+
+  // Wait for completion.
+  try {
+    queue->Wait(completion_value);
+    LOG_F(INFO, "Smoke: submission execution completed");
+    cmd_list->OnExecuted();
+  } catch (const std::exception& e) {
+    LOG_F(WARNING, "Smoke: wait for completion value failed: {}", e.what());
+  }
+
+  cmd_list.reset();
+
+  // The headless deleter reserved a tail value (current+1) and submitted the
+  // recorder; therefore the queue should have advanced by at least one from
+  // the value we observed before creating the recorder.
+  EXPECT_GE(queue->GetCompletedValue(), before_value + 1);
+  queue.reset();
 
   // Unregister resources from the device registry and release them.
   headless->GetResourceRegistry().UnRegisterResource(*buffer);

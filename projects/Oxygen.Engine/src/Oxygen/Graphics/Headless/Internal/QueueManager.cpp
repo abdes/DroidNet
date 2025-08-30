@@ -7,12 +7,47 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/Internal/QueueManager.h>
+#include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 
 namespace oxygen::graphics::headless::internal {
 
 QueueManager::QueueManager() { LOG_F(INFO, "QueueManager component created"); }
+
+void QueueManager::CreateQueues(const graphics::QueueStrategy& queue_strategy)
+{
+  if (strategy_ptr_) {
+    // Treat this as a complete reset, due a device loss for example
+    LOG_F(WARNING, "Resetting all queues");
+    name_queues_.clear();
+    role_queues_.clear();
+    universal_queue_.reset();
+  }
+
+  strategy_ptr_ = queue_strategy.Clone();
+
+  // Create queues while not holding the manager's mutex. Each
+  // CreateCommandQueue call will take the mutex as needed.
+  for (const auto& s : strategy_ptr_->Specifications()) {
+    CreateCommandQueue(s.name, s.role, s.allocation_preference);
+  }
+}
+
+auto QueueManager::GetQueueByName(std::string_view name) const
+  -> std::shared_ptr<oxygen::graphics::CommandQueue>
+{
+  std::lock_guard lk(queue_cache_mutex_);
+  if (name.empty()) {
+    return nullptr;
+  }
+  auto it = name_queues_.find(std::string(name));
+  if (it == name_queues_.end()) {
+    return nullptr;
+  }
+  return it->second;
+}
 
 auto QueueManager::CreateCommandQueue(std::string_view queue_name,
   oxygen::graphics::QueueRole role,
@@ -55,6 +90,14 @@ auto QueueManager::CreateCommandQueue(std::string_view queue_name,
       LOG_F(INFO, "Created universal queue '{}' role={}", name,
         nostd::to_string(oxygen::graphics::QueueRole::kGraphics));
     } else {
+      // If the universal queue already exists, ensure that any caller-
+      // provided name maps to the existing universal instance so subsequent
+      // lookups using that name succeed. Previously we didn't register the
+      // new name when reusing the universal queue which caused GetQueueByName
+      // to return null for alternate names that expect the universal queue.
+      if (!queue_name.empty()) {
+        name_queues_.emplace(std::string(queue_name), universal_queue_);
+      }
       LOG_F(INFO, "Reusing universal queue role={}",
         nostd::to_string(oxygen::graphics::QueueRole::kGraphics));
     }
