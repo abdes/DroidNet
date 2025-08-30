@@ -7,12 +7,10 @@ applyTo: '**/*.cpp;**/*.h'
 
 - Use Google Test; use Google Mock only if required.
 - Include src/Oxygen/Testing/GTest.h, when not already included, instead of gtest.h and gmock.h.
-- Write scenario-based tests with clear, descriptive names.
-- Group tests by functionality with detailed comment headers (describe hierarchy, scenario, or feature).
-- Place all tests in anonymous namespaces to avoid symbol clashes.
 - Follow the AAA pattern (Arrange, Act, Assert) with clear comments and empty lines between phases.
 - Use NOLINT_* macros from the file src/Oxygen/Testing/GTest.h for all test cases.
 - Use GCHECK_F for assertion that use helper methods with EXPECT_ inside of them. Use TRACE_GCHECK_F only when the failure location is ambiguous, and always provide a concise tag. Never use SCOPED_TRACE directly.
+- Add doc comments (//! or /*! ...*/) above each test to describe intent and scenario. Brief comment only if the test is trivial.
 
 ## FIXTURES AND HELPERS
 
@@ -25,13 +23,12 @@ applyTo: '**/*.cpp;**/*.h'
 
 ## TEST CASE DESIGN
 
-- Test one behavior per test; use the format TestCase_WhatIsTested (e.g SceneEdgeTest_EmptyScopeTraversesFullScene, CompositionErrorTest_GetComponent_WrongType_Throws ).
-- Add doc comments (//! or /*! ...*/) above each test to describe intent and scenario. Brief comment only if the test is trivial.
+- Test one behavior per test; use the format TestCase_WhatIsTested (e.g - Write scenario-based tests with clear, descriptive names.
+- Group tests by functionality with detailed comment headers (describe hierarchy, scenario, or feature).
+- Place all tests in anonymous namespaces to avoid symbol clashes.
 - Cover normal, boundary, error, edge, and cross-object scenarios.
-- Merge related positive/negative cases into comprehensive tests when possible.
 - Use EXPECT_DEATH for assertion/death scenarios.
 - Verify proper state setup before complex scenarios.
-- Test actual implementation behavior (e.g., empty scope = full scene traversal).
 - Use expressive, scenario-driven test design; avoid trivial or assumption-based tests.
 
 ## ASSERTIONS AND MATCHERS
