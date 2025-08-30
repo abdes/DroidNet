@@ -147,8 +147,6 @@ public:
 
   OXYGEN_GFX_API void OnCommandListClosed();
 
-  OXYGEN_GFX_API void OnCommandListSubmitted();
-
 private:
   struct BasicTrackingInfo {
     ResourceStates initial_state { ResourceStates::kUnknown };

@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 // ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -44,13 +45,10 @@ class NativeObject;
 
 class CommandRecorder {
 public:
-  enum class SubmissionMode : uint8_t { kImmediate, kDeferred };
-
   //=== Lifecycle ===-------------------------------------------------------//
 
-  OXYGEN_GFX_API CommandRecorder(CommandList* command_list,
-    CommandQueue* target_queue,
-    SubmissionMode mode = SubmissionMode::kImmediate);
+  OXYGEN_GFX_API CommandRecorder(std::shared_ptr<CommandList> command_list,
+    observer_ptr<CommandQueue> target_queue);
   OXYGEN_GFX_API virtual ~CommandRecorder(); // Definition moved to .cpp
 
   OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
@@ -61,7 +59,19 @@ public:
   //=== Command List Control ===--------------------------------------------//
 
   OXYGEN_GFX_API virtual void Begin();
-  OXYGEN_GFX_API virtual auto End() -> CommandList*;
+
+  //! Ends the recording session and returns the recorded command list.
+  /*!
+   Upon return from this method, the CommandRecorder should give away ownership
+   of the command list (i.e. should not continue to hold a reference to it). It
+   does not matter if the rrecording failed or succeeded.
+
+   @return The command list, with which this CommandRecorder was constructed,
+   when the recording was successful. An empty shared pointer (null) indicating
+   that the recording did not produce a valid command list, and the recorder
+   must give away ownership of the command list.
+  */
+  OXYGEN_GFX_API virtual auto End() -> std::shared_ptr<CommandList>;
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
 
@@ -291,10 +301,33 @@ public:
 
   //! @}
 
+  //=== Synchronization ===---------------------------------------------------//
+
+  //! Record a queue-side signal into the recorded command stream.
+  /*!
+   Default implementation simply forwards the signal to the target queue by
+   calling `QueueSignalCommand` on the associated `CommandQueue`. Backends may
+   override this to record a backend-specific command.
+
+   @param value The fence/timeline value to signal when the recorded stream
+   reaches this command during submission.
+  */
+  OXYGEN_GFX_API virtual void RecordQueueSignal(uint64_t value);
+
+  /*! Record a GPU-side wait into the recorded command stream. Default
+   implementation simply forwards the wait to the target queue by calling
+   `QueueWaitCommand` on the associated `CommandQueue`. Backends may override
+   this to record a backend-specific command.
+
+   @param value The fence/timeline value the GPU should wait for when the
+   recorded stream reaches this command during submission.
+  */
+  OXYGEN_GFX_API virtual void RecordQueueWait(uint64_t value);
+
 protected:
-  [[nodiscard]] auto GetCommandList() const -> CommandList*
+  [[nodiscard]] auto GetCommandList() const -> CommandList&
   {
-    return command_list_;
+    return *command_list_;
   }
 
   //! Executes the given collection of barriers.
@@ -304,16 +337,7 @@ protected:
   */
   virtual void ExecuteBarriers(std::span<const detail::Barrier> barriers) = 0;
 
-  friend class RenderController;
-  OXYGEN_GFX_API virtual void OnSubmitted();
-
 private:
-  [[nodiscard]] auto GetSubmissionMode() const -> SubmissionMode
-  {
-    return submission_mode_;
-  }
-  SubmissionMode submission_mode_ { SubmissionMode::kImmediate };
-
   //! @{
   //! Private non-template dispatch methods for resource state tracking and
   //! barrier management.
@@ -341,8 +365,8 @@ private:
 
   //! @}
 
-  CommandList* command_list_;
-  CommandQueue* target_queue_;
+  std::shared_ptr<CommandList> command_list_;
+  observer_ptr<CommandQueue> target_queue_;
 
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
 };

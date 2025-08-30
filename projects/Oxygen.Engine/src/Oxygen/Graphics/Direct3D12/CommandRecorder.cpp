@@ -190,7 +190,8 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 } // anonymous namespace
 
 CommandRecorder::CommandRecorder(RenderController* renderer,
-  graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+  std::shared_ptr<graphics::CommandList> command_list,
+  observer_ptr<graphics::CommandQueue> target_queue)
   : Base(command_list, target_queue)
   , renderer_(renderer)
 {
@@ -203,11 +204,6 @@ CommandRecorder::~CommandRecorder()
 }
 
 void CommandRecorder::Begin() { graphics::CommandRecorder::Begin(); }
-
-auto CommandRecorder::End() -> graphics::CommandList*
-{
-  return graphics::CommandRecorder::End();
-}
 
 namespace {
 // Modern bindless root signature layout:
@@ -226,10 +222,10 @@ void CommandRecorder::SetupDescriptorTables(
   // The heap(s) bound here must be the same as those used to allocate CBV/SRV
   // handles in MainModule.cpp. This ensures the shader can access resources
   // using ResourceDescriptorHeap with direct global indices.
-  auto* d3d12_command_list = GetConcreteCommandList()->GetCommandList();
+  auto* d3d12_command_list = GetConcreteCommandList().GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  auto queue_role = GetCommandList()->GetQueueRole();
+  auto queue_role = GetCommandList().GetQueueRole();
   DCHECK_F(
     queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
     "Invalid command list type for SetupDescriptorTables. Expected Graphics or "
@@ -256,7 +252,7 @@ void CommandRecorder::SetupDescriptorTables(
 
   if (!heaps_to_set.empty()) {
     DLOG_F(2, "recorder: set {} descriptor heaps for command list: {}",
-      heaps_to_set.size(), GetConcreteCommandList()->GetName());
+      heaps_to_set.size(), GetConcreteCommandList().GetName());
     d3d12_command_list->SetDescriptorHeaps(
       static_cast<UINT>(heaps_to_set.size()), heaps_to_set.data());
   }
@@ -267,7 +263,7 @@ void CommandRecorder::SetupDescriptorTables(
       DLOG_F(3,
         "recorder: SetGraphicsRootDescriptorTable for command list: {}, root "
         "index={}, gpu_handle={}",
-        GetConcreteCommandList()->GetName(), root_index, gpu_handle.ptr);
+        GetConcreteCommandList().GetName(), root_index, gpu_handle.ptr);
       d3d12_command_list->SetGraphicsRootDescriptorTable(
         root_index, gpu_handle);
     } else if (queue_role == QueueRole::kCompute) {
@@ -302,10 +298,9 @@ void CommandRecorder::SetupDescriptorTables(
 
 void CommandRecorder::SetViewport(const ViewPort& viewport)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
   D3D12_VIEWPORT d3d_viewport;
   d3d_viewport.TopLeftX = viewport.top_left_x;
@@ -315,30 +310,28 @@ void CommandRecorder::SetViewport(const ViewPort& viewport)
   d3d_viewport.MinDepth = viewport.min_depth;
   d3d_viewport.MaxDepth = viewport.max_depth;
 
-  command_list->GetCommandList()->RSSetViewports(1, &d3d_viewport);
+  command_list.GetCommandList()->RSSetViewports(1, &d3d_viewport);
 }
 
 void CommandRecorder::SetScissors(const Scissors& scissors)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
 
   D3D12_RECT rect;
   rect.left = scissors.left;
   rect.top = scissors.top;
   rect.right = scissors.right;
   rect.bottom = scissors.bottom;
-  command_list->GetCommandList()->RSSetScissorRects(1, &rect);
+  command_list.GetCommandList()->RSSetScissorRects(1, &rect);
 }
 
 void CommandRecorder::SetVertexBuffers(const uint32_t num,
   const std::shared_ptr<graphics::Buffer>* vertex_buffers,
   const uint32_t* strides) const
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
   std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
   for (uint32_t i = 0; i < num; ++i) {
@@ -349,7 +342,7 @@ void CommandRecorder::SetVertexBuffers(const uint32_t num,
     vertex_buffer_views[i].StrideInBytes = strides[i];
   }
 
-  command_list->GetCommandList()->IASetVertexBuffers(
+  command_list.GetCommandList()->IASetVertexBuffers(
     0, num, vertex_buffer_views.data());
 }
 
@@ -357,44 +350,41 @@ void CommandRecorder::Draw(const uint32_t vertex_num,
   const uint32_t instances_num, const uint32_t vertex_offset,
   const uint32_t instance_offset)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
   // Prepare for Draw
-  command_list->GetCommandList()->IASetPrimitiveTopology(
+  command_list.GetCommandList()->IASetPrimitiveTopology(
     D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  command_list->GetCommandList()->DrawInstanced(
+  command_list.GetCommandList()->DrawInstanced(
     vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
 void CommandRecorder::DrawIndexed(uint32_t index_count, uint32_t instance_count,
   uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
   // Prepare for DrawIndexed
-  command_list->GetCommandList()->IASetPrimitiveTopology(
+  command_list.GetCommandList()->IASetPrimitiveTopology(
     D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  command_list->GetCommandList()->DrawIndexedInstanced(
+  command_list.GetCommandList()->DrawIndexedInstanced(
     index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
   uint32_t thread_group_count_y, uint32_t thread_group_count_z)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kCompute, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kCompute, "Invalid queue type");
 
-  command_list->GetCommandList()->Dispatch(
+  command_list.GetCommandList()->Dispatch(
     thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
@@ -411,9 +401,8 @@ void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
 
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
 
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
@@ -436,9 +425,8 @@ void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
 
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
 
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
@@ -454,9 +442,8 @@ void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
 void CommandRecorder::SetGraphicsRootConstantBufferView(
   uint32_t root_parameter_index, uint64_t buffer_gpu_address)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   d3d12_command_list->SetGraphicsRootConstantBufferView(
     root_parameter_index, buffer_gpu_address);
 }
@@ -464,9 +451,8 @@ void CommandRecorder::SetGraphicsRootConstantBufferView(
 void CommandRecorder::SetComputeRootConstantBufferView(
   uint32_t root_parameter_index, uint64_t buffer_gpu_address)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   d3d12_command_list->SetComputeRootConstantBufferView(
     root_parameter_index, buffer_gpu_address);
 }
@@ -475,9 +461,8 @@ void CommandRecorder::SetGraphicsRoot32BitConstant(
   uint32_t root_parameter_index, uint32_t src_data,
   uint32_t dest_offset_in_32bit_values)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   d3d12_command_list->SetGraphicsRoot32BitConstant(
     root_parameter_index, src_data, dest_offset_in_32bit_values);
 }
@@ -485,9 +470,8 @@ void CommandRecorder::SetGraphicsRoot32BitConstant(
 void CommandRecorder::SetComputeRoot32BitConstant(uint32_t root_parameter_index,
   uint32_t src_data, uint32_t dest_offset_in_32bit_values)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   d3d12_command_list->SetComputeRoot32BitConstant(
     root_parameter_index, src_data, dest_offset_in_32bit_values);
 }
@@ -498,9 +482,8 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
     return;
   }
 
-  const auto* command_list_impl = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list_impl);
-  auto* d3d12_command_list = command_list_impl->GetCommandList();
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   std::vector<D3D12_RESOURCE_BARRIER> d3d12_barriers;
@@ -525,11 +508,10 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
   }
 }
 
-auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
+auto CommandRecorder::GetConcreteCommandList() const -> CommandList&
 {
   // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
-  return static_cast<CommandList*>(
-    GetCommandList()); // NOLINT(*-pro-type-static-cast_down_cast)
+  return static_cast<CommandList&>(GetCommandList());
 }
 
 // TODO: legacy - should be replaced once render passes are implemented
@@ -547,9 +529,8 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
     dsv.ptr = fb.GetDepthStencilView().AsInteger();
   }
 
-  const auto* command_list_impl = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list_impl);
-  auto* d3d12_command_list = command_list_impl->GetCommandList();
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   d3d12_command_list->OMSetRenderTargets(static_cast<UINT>(rtvs.size()),
@@ -567,9 +548,8 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& fb = static_cast<const Framebuffer&>(framebuffer);
 
-  const auto* command_list_impl = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list_impl);
-  auto* d3d12_command_list = command_list_impl->GetCommandList();
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   const auto& desc = fb.GetDescriptor();
@@ -643,9 +623,8 @@ void CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
     "CopyBuffer: src_offset + size ({}) exceeds source buffer size ({})",
     src_offset + size, src_buffer.GetSize());
 
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   d3d12_command_list->CopyBufferRegion(
@@ -754,9 +733,8 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
 {
   // Expectations: caller ensured resource states (src is COPY_SOURCE, dst is
   // COPY_DEST)
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
-  auto* d3d12_command_list = command_list->GetCommandList();
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
@@ -831,9 +809,8 @@ void CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   const NativeObject& dsv, const ClearFlags clear_flags, const float depth,
   const uint8_t stencil)
 {
-  const auto* command_list_impl = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list_impl);
-  auto* d3d12_command_list = command_list_impl->GetCommandList();
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   // Resolve the clear values for depth and stencil using the texture format.
@@ -888,9 +865,8 @@ void CommandRecorder::SetRenderTargets(
     }
   }
 
-  const auto* command_list_impl = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list_impl);
-  auto* d3d12_command_list = command_list_impl->GetCommandList();
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   d3d12_command_list->OMSetRenderTargets(static_cast<UINT>(rtv_handles.size()),
@@ -900,10 +876,9 @@ void CommandRecorder::SetRenderTargets(
 void CommandRecorder::BindIndexBuffer(
   const graphics::Buffer& buffer, Format format)
 {
-  const auto* command_list = GetConcreteCommandList();
-  DCHECK_NOTNULL_F(command_list);
+  const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
-    command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
+    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
   const auto* d3d12_buffer = static_cast<const d3d12::Buffer*>(&buffer);
   DCHECK_NOTNULL_F(d3d12_buffer, "Buffer must be a D3D12 buffer");
@@ -923,5 +898,5 @@ void CommandRecorder::BindIndexBuffer(
     ib_view.Format = DXGI_FORMAT_UNKNOWN;
     break;
   }
-  command_list->GetCommandList()->IASetIndexBuffer(&ib_view);
+  command_list.GetCommandList()->IASetIndexBuffer(&ib_view);
 }

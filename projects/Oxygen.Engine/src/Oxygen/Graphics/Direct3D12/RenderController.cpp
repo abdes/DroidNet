@@ -48,7 +48,8 @@ auto RenderController::GetGraphics() const -> const Graphics&
 }
 
 auto RenderController::CreateCommandRecorder(
-  graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+  std::shared_ptr<graphics::CommandList> command_list,
+  observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
   return std::make_unique<CommandRecorder>(this, command_list, target_queue);
