@@ -65,13 +65,15 @@ auto CommandQueue::Submit(CommandList& /*command_list*/) -> void
 {
   // For headless, just advance the completed value and log.
   const uint64_t v = Signal();
-  LOG_F(INFO, "Headless Submit advanced fence to {}", v);
+  LOG_F(INFO, "Headless Submit advanced fence to {} (role={})", v,
+    nostd::to_string(queue_role_));
 }
 
 auto CommandQueue::Submit(std::span<CommandList*> /*command_lists*/) -> void
 {
   const uint64_t v = Signal();
-  LOG_F(INFO, "Headless Submit(span) advanced fence to {}", v);
+  LOG_F(INFO, "Headless Submit(span) advanced fence to {} (role={})", v,
+    nostd::to_string(queue_role_));
 }
 
 } // namespace oxygen::graphics::headless

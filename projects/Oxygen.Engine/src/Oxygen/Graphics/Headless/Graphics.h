@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -19,6 +20,8 @@ class Graphics final : public oxygen::Graphics {
 public:
   explicit Graphics(const SerializedBackendConfig& config);
   ~Graphics() override = default;
+
+  // Queue management is delegated to the `internal::QueueManager` component.
 
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override;
