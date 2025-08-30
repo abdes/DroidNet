@@ -45,7 +45,7 @@ enum class BufferMemory : uint32_t { // NOLINT(performance-enum-size)
 
 //! Describes the properties of a buffer resource.
 struct BufferDesc {
-  size_t size_bytes = 0;
+  uint64_t size_bytes = 0;
   BufferUsage usage = BufferUsage::kNone;
   BufferMemory memory = BufferMemory::kDeviceLocal;
 
@@ -182,7 +182,7 @@ public:
       \param size Number of bytes to map (0 = entire buffer).
       \return Pointer to mapped memory.
   */
-  virtual auto Map(size_t offset = 0, size_t size = 0) -> void* = 0;
+  virtual auto Map(uint64_t offset = 0, uint64_t size = 0) -> void* = 0;
 
   //! Un-maps the buffer memory from CPU access.
   virtual void UnMap() = 0;
@@ -192,10 +192,10 @@ public:
       \param size Number of bytes to copy.
       \param offset Byte offset in the buffer to update.
   */
-  virtual void Update(const void* data, size_t size, size_t offset = 0) = 0;
+  virtual void Update(const void* data, uint64_t size, uint64_t offset = 0) = 0;
 
   //! Returns the size of the buffer in bytes.
-  [[nodiscard]] virtual auto GetSize() const noexcept -> size_t = 0;
+  [[nodiscard]] virtual auto GetSize() const noexcept -> uint64_t = 0;
 
   //! Returns the usage flags of the buffer.
   [[nodiscard]] virtual auto GetUsage() const noexcept -> BufferUsage = 0;
