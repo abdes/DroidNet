@@ -42,7 +42,8 @@ class CommandRecorder final : public graphics::CommandRecorder {
 
 public:
   CommandRecorder(RenderController* renderer,
-    graphics::CommandList* command_list, graphics::CommandQueue* target_queue);
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue);
 
   OXYGEN_D3D12_API ~CommandRecorder() override;
 
@@ -50,7 +51,6 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
 
   void Begin() override;
-  auto End() -> graphics::CommandList* override;
 
   void SetPipelineState(GraphicsPipelineDesc desc) override;
   void SetPipelineState(ComputePipelineDesc desc) override;
@@ -130,7 +130,7 @@ protected:
     std::span<const graphics::detail::Barrier> barriers) override;
 
 private:
-  [[nodiscard]] auto GetConcreteCommandList() const -> CommandList*;
+  [[nodiscard]] auto GetConcreteCommandList() const -> CommandList&;
 
   RenderController* renderer_;
 

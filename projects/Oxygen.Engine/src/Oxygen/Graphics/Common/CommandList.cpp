@@ -11,56 +11,57 @@
 using oxygen::graphics::CommandList;
 
 CommandList::CommandList(std::string_view name, const QueueRole type)
-    : type_(type)
-    , state_(State::kFree)
+  : type_(type)
+  , state_(State::kFree)
 {
-    AddComponent<ObjectMetaData>(name);
-    DLOG_F(INFO, "CommandList created: {}", name);
+  AddComponent<ObjectMetaData>(name);
+  DLOG_F(INFO, "CommandList created: {}", name);
 }
 
 CommandList::~CommandList()
 {
-    DLOG_F(INFO, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
+  DLOG_F(INFO, "CommandList destroyed: {}",
+    GetComponent<ObjectMetaData>().GetName());
 }
 
 auto CommandList::GetName() const noexcept -> std::string_view
 {
-    return GetComponent<ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetaData>().GetName();
 }
 
 void CommandList::SetName(const std::string_view name) noexcept
 {
-    GetComponent<ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetaData>().SetName(name);
 }
 
 void CommandList::OnBeginRecording()
 {
-    if (state_ != State::kFree) {
-        throw std::runtime_error("CommandList is not in a Free state");
-    }
-    state_ = State::kRecording;
+  if (state_ != State::kFree) {
+    throw std::runtime_error("CommandList is not in a Free state");
+  }
+  state_ = State::kRecording;
 }
 
 void CommandList::OnEndRecording()
 {
-    if (state_ != State::kRecording) {
-        throw std::runtime_error("CommandList is not in a Recording state");
-    }
-    state_ = State::kClosed;
+  if (state_ != State::kRecording) {
+    throw std::runtime_error("CommandList is not in a Recording state");
+  }
+  state_ = State::kClosed;
 }
 
 void CommandList::OnSubmitted()
 {
-    if (state_ != State::kClosed) {
-        throw std::runtime_error("CommandList is not in a Recorded state");
-    }
-    state_ = State::kSubmitted;
+  if (state_ != State::kClosed) {
+    throw std::runtime_error("CommandList is not in a Recorded state");
+  }
+  state_ = State::kSubmitted;
 }
 
 void CommandList::OnExecuted()
 {
-    if (state_ != State::kSubmitted) {
-        throw std::runtime_error("CommandList is not in an Executing state");
-    }
-    state_ = State::kFree;
+  if (state_ != State::kSubmitted) {
+    throw std::runtime_error("CommandList is not in an Executing state");
+  }
+  state_ = State::kFree;
 }

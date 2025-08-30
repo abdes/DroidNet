@@ -23,66 +23,69 @@ class CommandList;
 
 class CommandQueue : public Composition, public Named {
 public:
-    OXYGEN_GFX_API explicit CommandQueue(std::string_view name);
+  OXYGEN_GFX_API explicit CommandQueue(std::string_view name);
 
-    OXYGEN_GFX_API ~CommandQueue() override;
+  OXYGEN_GFX_API ~CommandQueue() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandQueue)
-    OXYGEN_MAKE_NON_MOVABLE(CommandQueue)
+  OXYGEN_MAKE_NON_COPYABLE(CommandQueue)
+  OXYGEN_MAKE_NON_MOVABLE(CommandQueue)
 
-    //! Set the counter to the specified value on the CPU side.
-    /*!
-      \param [in] value The value to set the counter to. Must be greater than
-      the current value. \note This method is useful in scenarios where command
-      submission is done out of order, and synchronization is required at
-      multiple discrete points in the command queue timeline.
-    */
-    virtual void Signal(uint64_t value) const = 0;
+  //! Set the counter to the specified value on the CPU side.
+  /*!
+    \param [in] value The value to set the counter to. Must be greater than
+    the current value. \note This method is useful in scenarios where command
+    submission is done out of order, and synchronization is required at
+    multiple discrete points in the command queue timeline.
+  */
+  virtual void Signal(uint64_t value) const = 0;
 
-    //! Increment the current value on the CPU side by 1.
-    //! \return The new value, to be used to wait for completion.
-    [[nodiscard]] virtual auto Signal() const -> uint64_t = 0;
+  //! Increment the current value on the CPU side by 1.
+  //! \return The new value, to be used to wait for completion.
+  [[nodiscard]] virtual auto Signal() const -> uint64_t = 0;
 
-    //! Wait up to a certain number of milliseconds, for the counter to reach or
-    //! exceed the specified value, on the CPU side.
-    /*!
-      \param [in] value The awaited value.
-      \param [in] timeout The maximum time to wait for the counter to reach the
-      expected value.
-    */
-    virtual void Wait(uint64_t value, std::chrono::milliseconds timeout) const = 0;
+  //! Wait up to a certain number of milliseconds, for the counter to reach or
+  //! exceed the specified value, on the CPU side.
+  /*!
+    \param [in] value The awaited value.
+    \param [in] timeout The maximum time to wait for the counter to reach the
+    expected value.
+  */
+  virtual void Wait(uint64_t value, std::chrono::milliseconds timeout) const
+    = 0;
 
-    //! Wait for as long as it takes, for the counter to reach or exceed the
-    //! specified value, on the CPU side.
-    //! \param [in] value The awaited value.
-    virtual void Wait(uint64_t value) const = 0;
+  //! Wait for as long as it takes, for the counter to reach or exceed the
+  //! specified value, on the CPU side.
+  //! \param [in] value The awaited value.
+  virtual void Wait(uint64_t value) const = 0;
 
-    //! Enqueue a command to set the counter to the specified value on the GPU
-    //! side.
-    //! \param [in] value The value to set the counter to.
-    virtual void QueueSignalCommand(uint64_t value) = 0;
+  //! Enqueue a command to set the counter to the specified value on the GPU
+  //! side.
+  //! \param [in] value The value to set the counter to.
+  virtual void QueueSignalCommand(uint64_t value) = 0;
 
-    //! Enqueue a command to hold the GPU for the counter to reach or exceed the
-    //! specified value.
-    //! \param [in] value The value that the GPU should be waiting for.
-    virtual void QueueWaitCommand(uint64_t value) const = 0;
+  //! Enqueue a command to hold the GPU for the counter to reach or exceed the
+  //! specified value.
+  //! \param [in] value The value that the GPU should be waiting for.
+  virtual void QueueWaitCommand(uint64_t value) const = 0;
 
-    //! Get the last completed value of the counter.
-    //! \return  The last value signaled by the GPU.
-    [[nodiscard]] virtual auto GetCompletedValue() const -> uint64_t = 0;
+  //! Get the last completed value of the counter.
+  //! \return  The last value signaled by the GPU.
+  [[nodiscard]] virtual auto GetCompletedValue() const -> uint64_t = 0;
 
-    //! Get the current value of the counter.
-    //! \return  The last value signaled by the CPU.
-    [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
+  //! Get the current value of the counter.
+  //! \return  The last value signaled by the CPU.
+  [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
 
-    virtual void Submit(CommandList& command_list) = 0;
-    virtual void Submit(std::span<CommandList*> command_lists) = 0;
-    OXYGEN_GFX_API void Flush() const;
+  virtual void Submit(CommandList& command_list) = 0;
+  virtual void Submit(std::span<CommandList*> command_lists) = 0;
 
-    [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;
+  virtual OXYGEN_GFX_API void Flush() const;
 
-    [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept -> std::string_view override;
-    OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
+  [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;
+
+  [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept
+    -> std::string_view override;
+  OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
 };
 
 } // namespace oxygen::graphics

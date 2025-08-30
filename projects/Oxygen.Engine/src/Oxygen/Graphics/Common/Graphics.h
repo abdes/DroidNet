@@ -152,13 +152,13 @@ public:
   /*!
   @param queue_strategy The strategy for initializing command queues.
   */
-  OXYGEN_GFX_API auto CreateCommandQueues(
+  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateCommandQueues(
     const graphics::QueueStrategy& queue_strategy) -> void;
 
-  OXYGEN_GFX_NDAPI auto GetCommandQueue(std::string_view name) const
+  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(std::string_view name) const
     -> std::shared_ptr<graphics::CommandQueue>;
 
-  OXYGEN_GFX_API auto FlushCommandQueues() -> void;
+  OXYGEN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
 
   OXYGEN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)

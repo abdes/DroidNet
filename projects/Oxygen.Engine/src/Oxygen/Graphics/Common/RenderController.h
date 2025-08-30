@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Constants.h>
@@ -190,8 +191,10 @@ namespace graphics {
     OXYGEN_GFX_API virtual auto FlushPendingCommandLists() -> void;
 
   protected:
-    [[nodiscard]] virtual auto CreateCommandRecorder(CommandList* command_list,
-      CommandQueue* target_queue) -> std::unique_ptr<CommandRecorder>
+    [[nodiscard]] virtual auto CreateCommandRecorder(
+      std::shared_ptr<CommandList> command_list,
+      observer_ptr<CommandQueue> target_queue)
+      -> std::unique_ptr<CommandRecorder>
       = 0;
 
     OXYGEN_GFX_API virtual auto BeginFrame() -> void;

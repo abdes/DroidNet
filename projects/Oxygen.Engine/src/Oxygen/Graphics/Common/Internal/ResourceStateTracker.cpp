@@ -238,10 +238,7 @@ void ResourceStateTracker::OnCommandListClosed()
       },
       tracking);
   }
-}
 
-void ResourceStateTracker::OnCommandListSubmitted()
-{
-  LOG_F(4, "cmd list submitted");
+  LOG_F(4, "resource tracker reset");
   Clear();
 }

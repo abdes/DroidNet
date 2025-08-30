@@ -63,7 +63,8 @@ public:
 
 protected:
   [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(
-    graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue)
     -> std::unique_ptr<graphics::CommandRecorder> override;
 };
 

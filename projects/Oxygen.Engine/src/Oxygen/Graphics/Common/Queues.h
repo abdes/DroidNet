@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,13 +23,13 @@ namespace oxygen::graphics {
  specifications to API-specific queue types or families.
 */
 struct QueueSpecification {
-    // A unique name to identify the queue in the application domain, and which
-    // will also be used to obtain the queue from the device at any time later.
-    std::string name;
+  // A unique name to identify the queue in the application domain, and which
+  // will also be used to obtain the queue from the device at any time later.
+  std::string name;
 
-    QueueRole role;
-    QueueAllocationPreference allocation_preference;
-    QueueSharingPreference sharing_preference;
+  QueueRole role;
+  QueueAllocationPreference allocation_preference;
+  QueueSharingPreference sharing_preference;
 };
 
 //! Abstract interface for queue selection strategies.
@@ -45,26 +46,33 @@ struct QueueSpecification {
 */
 class QueueStrategy {
 public:
-    QueueStrategy() = default;
-    virtual ~QueueStrategy() = default;
+  QueueStrategy() = default;
+  virtual ~QueueStrategy() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(QueueStrategy);
-    OXYGEN_DEFAULT_MOVABLE(QueueStrategy);
+  OXYGEN_DEFAULT_COPYABLE(QueueStrategy);
+  OXYGEN_DEFAULT_MOVABLE(QueueStrategy);
 
-    [[nodiscard]] virtual auto Specifications() const
-        -> std::vector<QueueSpecification>
-        = 0;
+  /*!
+   Virtual clone for polymorphic copying of concrete strategies. Backends
+   can store a copy of the provided strategy via this interface.
+  */
+  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<QueueStrategy>
+    = 0;
 
-    // Get the queue name for a certain type of operation from the queue
-    // strategy and then use it to request the corresponding queue from the
-    // device. This way, the application code is decoupled from the topology of
-    // queues and their roles, whether the physical device offers a single
-    // family or not or many queues per family or not.
+  [[nodiscard]] virtual auto Specifications() const
+    -> std::vector<QueueSpecification>
+    = 0;
 
-    [[nodiscard]] virtual auto GraphicsQueueName() const -> std::string_view = 0;
-    [[nodiscard]] virtual auto PresentQueueName() const -> std::string_view = 0;
-    [[nodiscard]] virtual auto ComputeQueueName() const -> std::string_view = 0;
-    [[nodiscard]] virtual auto TransferQueueName() const -> std::string_view = 0;
+  // Get the queue name for a certain type of operation from the queue
+  // strategy and then use it to request the corresponding queue from the
+  // device. This way, the application code is decoupled from the topology of
+  // queues and their roles, whether the physical device offers a single
+  // family or not or many queues per family or not.
+
+  [[nodiscard]] virtual auto GraphicsQueueName() const -> std::string_view = 0;
+  [[nodiscard]] virtual auto PresentQueueName() const -> std::string_view = 0;
+  [[nodiscard]] virtual auto ComputeQueueName() const -> std::string_view = 0;
+  [[nodiscard]] virtual auto TransferQueueName() const -> std::string_view = 0;
 };
 
 //! A queue strategy that provides a single queue from the all-in-one queue
@@ -83,41 +91,46 @@ public:
 */
 class SingleQueueStrategy final : public QueueStrategy {
 public:
-    SingleQueueStrategy() = default;
-    ~SingleQueueStrategy() override = default;
+  SingleQueueStrategy() = default;
+  ~SingleQueueStrategy() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(SingleQueueStrategy);
-    OXYGEN_DEFAULT_MOVABLE(SingleQueueStrategy);
+  OXYGEN_DEFAULT_COPYABLE(SingleQueueStrategy);
+  OXYGEN_DEFAULT_MOVABLE(SingleQueueStrategy);
 
-    [[nodiscard]] auto Specifications() const
-        -> std::vector<QueueSpecification> override
-    {
-        return { {
-            .name = kSingleQueueName,
-            .role = QueueRole::kGraphics,
-            .allocation_preference = QueueAllocationPreference::kAllInOne,
-            .sharing_preference = QueueSharingPreference::kShared,
-        } };
-    }
-    [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
-    {
-        return kSingleQueueName;
-    }
-    [[nodiscard]] auto PresentQueueName() const -> std::string_view override
-    {
-        return kSingleQueueName;
-    }
-    [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
-    {
-        return kSingleQueueName;
-    }
-    [[nodiscard]] auto TransferQueueName() const -> std::string_view override
-    {
-        return kSingleQueueName;
-    }
+  [[nodiscard]] auto Specifications() const
+    -> std::vector<QueueSpecification> override
+  {
+    return { {
+      .name = kSingleQueueName,
+      .role = QueueRole::kGraphics,
+      .allocation_preference = QueueAllocationPreference::kAllInOne,
+      .sharing_preference = QueueSharingPreference::kShared,
+    } };
+  }
+  [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
+  {
+    return kSingleQueueName;
+  }
+  [[nodiscard]] auto PresentQueueName() const -> std::string_view override
+  {
+    return kSingleQueueName;
+  }
+  [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
+  {
+    return kSingleQueueName;
+  }
+  [[nodiscard]] auto TransferQueueName() const -> std::string_view override
+  {
+    return kSingleQueueName;
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueueStrategy> override
+  {
+    return std::make_unique<SingleQueueStrategy>(*this);
+  }
 
 private:
-    inline static constexpr const char* kSingleQueueName = "universal";
+  inline static constexpr const char* kSingleQueueName = "universal";
 };
 
 } // namespace oxygen::graphics

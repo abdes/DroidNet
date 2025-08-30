@@ -7,6 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Internal/ResourceStateTracker.h>
 
@@ -14,10 +15,9 @@ using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::Texture;
 
-CommandRecorder::CommandRecorder(
-  CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode)
-  : submission_mode_(mode)
-  , command_list_(command_list)
+CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
+  observer_ptr<CommandQueue> target_queue)
+  : command_list_(std::move(command_list))
   , target_queue_(target_queue)
   , resource_state_tracker_(std::make_unique<detail::ResourceStateTracker>())
 {
@@ -35,8 +35,9 @@ void CommandRecorder::Begin()
   command_list_->OnBeginRecording();
 }
 
-auto CommandRecorder::End() -> CommandList*
+auto CommandRecorder::End() -> std::shared_ptr<CommandList>
 {
+  DCHECK_NOTNULL_F(command_list_);
   try {
     // Give a chance to the resource state tracker to restore initial states
     // fore resources that requested to do so. Immediately flush barriers,
@@ -45,18 +46,12 @@ auto CommandRecorder::End() -> CommandList*
     FlushBarriers();
 
     command_list_->OnEndRecording();
-    return command_list_;
+    return std::move(command_list_);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
+    command_list_.reset();
     return {};
   }
-}
-
-void CommandRecorder::OnSubmitted()
-{
-  DCHECK_NOTNULL_F(command_list_);
-  command_list_->OnSubmitted();
-  resource_state_tracker_->OnCommandListSubmitted();
 }
 
 void CommandRecorder::FlushBarriers()
@@ -73,6 +68,30 @@ void CommandRecorder::FlushBarriers()
 
   // Clear the pending barriers
   resource_state_tracker_->ClearPendingBarriers();
+}
+
+void CommandRecorder::RecordQueueSignal(uint64_t value)
+{
+  // Default common implementation: if a target queue exists, forward the
+  // signal request as a queue-side command. Backends may override this to
+  // instead record a backend-specific command into their command stream.
+  if (target_queue_) {
+    target_queue_->QueueSignalCommand(value);
+  } else {
+    LOG_F(WARNING, "RecordQueueSignal: target queue is null");
+  }
+}
+
+void CommandRecorder::RecordQueueWait(uint64_t value)
+{
+  // Default common implementation: forward to the target queue's GPU-side
+  // wait command. Backends can override to enqueue a recorded command
+  // instead, but the default is a direct forward for simplicity.
+  if (target_queue_) {
+    target_queue_->QueueWaitCommand(value);
+  } else {
+    LOG_F(WARNING, "RecordQueueWait: target queue is null");
+  }
 }
 
 // -- Private non-template dispatch method implementations for Buffer
