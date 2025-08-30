@@ -262,9 +262,9 @@ Semantics:
   texture descriptor before use.
 */
 struct TextureUploadRegion {
-  size_t buffer_offset = 0;
-  size_t buffer_row_pitch = 0; // 0 => tightly packed
-  size_t buffer_slice_pitch = 0; // 0 => computed from row_pitch * height
+  uint64_t buffer_offset = 0;
+  uint64_t buffer_row_pitch = 0; // 0 => tightly packed
+  uint64_t buffer_slice_pitch = 0; // 0 => computed from row_pitch * height
 
   TextureSlice dst_slice; // region within a single subresource
   TextureSubResourceSet dst_subresources {
