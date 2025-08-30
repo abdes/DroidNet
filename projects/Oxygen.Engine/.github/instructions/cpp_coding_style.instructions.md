@@ -19,6 +19,7 @@ applyTo: '**/*.cpp;**/*.h'
   // SPDX-License-Identifier: BSD-3-Clause
   //===----------------------------------------------------------------------===//
 - ALWAYS preserve empty lines that exist in the original code, even if they are not needed for formatting.
+- NEVER export the entire class from a DLL. Always export individual methods.
 
 ## NAMING CONVENTIONS
 
