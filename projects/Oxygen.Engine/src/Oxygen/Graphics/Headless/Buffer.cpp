@@ -8,8 +8,12 @@
 #include <cstring>
 
 #include <Oxygen/Graphics/Headless/Buffer.h>
+#include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
+
+// View payloads are small PODs owned by the Buffer. Public nested types
+// (CBV/SRV/UAV) are declared in Buffer.h and used below.
 
 Buffer::Buffer(const BufferDesc& desc)
   : graphics::Buffer("HeadlessBuffer")
@@ -18,41 +22,35 @@ Buffer::Buffer(const BufferDesc& desc)
   if (desc_.size_bytes > 0) {
     data_.resize(desc_.size_bytes);
   }
+  // Headless buffers are ready to be used after construction.
 }
 
-[[nodiscard]] auto Buffer::GetDescriptor() const noexcept -> BufferDesc
-{
-  return desc_;
-}
+auto Buffer::GetDescriptor() const noexcept -> BufferDesc { return desc_; }
 
-[[nodiscard]] auto Buffer::GetNativeResource() const -> NativeObject
+auto Buffer::GetNativeResource() const -> NativeObject
 {
   return NativeObject(const_cast<Buffer*>(this), ClassTypeId());
 }
 
-auto Buffer::Map(size_t /*offset*/, size_t /*size*/) -> void*
+auto Buffer::Map(uint64_t /*offset*/, uint64_t /*size*/) -> void*
 {
-  if (!initialized_) {
-    LOG_F(WARNING, "Headless Buffer::Map called on uninitialized resource");
-    DCHECK_F(initialized_, "Mapping uninitialized buffer");
-    return nullptr;
-  }
-  mapped_ = true;
+  std::lock_guard lk(data_mutex_);
+  // Mapping when empty returns nullptr (no backing allocated) - allowed.
   if (data_.empty()) {
+    mapped_ = true;
     return nullptr;
   }
+  // Map entire buffer by default: return base pointer.
+  mapped_ = true;
   return data_.data();
 }
 
 auto Buffer::UnMap() -> void { mapped_ = false; }
 
-auto Buffer::Update(const void* data, size_t size, size_t offset) -> void
+auto Buffer::Update(const void* data, uint64_t size, uint64_t offset) -> void
 {
-  if (!initialized_) {
-    LOG_F(WARNING, "Headless Buffer::Update called on uninitialized resource");
-    DCHECK_F(initialized_, "Updating uninitialized buffer");
-    return;
-  }
+  std::lock_guard lk(data_mutex_);
+  // Update validates parameters and writes into the backing when present.
   if (data == nullptr || size == 0) {
     return;
   }
@@ -67,7 +65,7 @@ auto Buffer::Update(const void* data, size_t size, size_t offset) -> void
   std::memcpy(data_.data() + offset, data, write_size);
 }
 
-auto Buffer::ReadBacking(void* dst, size_t src_offset, size_t size) const
+auto Buffer::ReadBacking(void* dst, uint64_t src_offset, uint64_t size) const
   -> void
 {
   if (dst == nullptr || size == 0) {
@@ -84,7 +82,7 @@ auto Buffer::ReadBacking(void* dst, size_t src_offset, size_t size) const
   std::memcpy(dst, data_.data() + src_offset, read_size);
 }
 
-auto Buffer::WriteBacking(const void* src, size_t dst_offset, size_t size)
+auto Buffer::WriteBacking(const void* src, uint64_t dst_offset, uint64_t size)
   -> void
 {
   if (src == nullptr || size == 0) {
@@ -101,47 +99,85 @@ auto Buffer::WriteBacking(const void* src, size_t dst_offset, size_t size)
   std::memcpy(data_.data() + dst_offset, src, write_size);
 }
 
-[[nodiscard]] auto Buffer::GetSize() const noexcept -> size_t
-{
-  return desc_.size_bytes;
-}
+auto Buffer::GetSize() const noexcept -> uint64_t { return desc_.size_bytes; }
 
-[[nodiscard]] auto Buffer::GetUsage() const noexcept -> BufferUsage
-{
-  return desc_.usage;
-}
+auto Buffer::GetUsage() const noexcept -> BufferUsage { return desc_.usage; }
 
-[[nodiscard]] auto Buffer::GetMemoryType() const noexcept -> BufferMemory
+auto Buffer::GetMemoryType() const noexcept -> BufferMemory
 {
   return desc_.memory;
 }
 
-[[nodiscard]] auto Buffer::IsMapped() const noexcept -> bool { return mapped_; }
+auto Buffer::IsMapped() const noexcept -> bool { return mapped_; }
 
-[[nodiscard]] auto Buffer::GetGPUVirtualAddress() const -> uint64_t
+auto Buffer::GetGPUVirtualAddress() const -> uint64_t
 {
-  return 0;
+  // Return a stable fake GPU virtual address for headless testing. Use the
+  // pointer value of the object as a deterministic unique address.
+  const auto ptr = reinterpret_cast<uintptr_t>(this);
+  return static_cast<uint64_t>(ptr);
 }
 
-[[nodiscard]] auto Buffer::CreateConstantBufferView(
-  const DescriptorHandle& /*view_handle*/, const BufferRange& /*range*/) const
+//! View payloads created here are owned by the Buffer instance.
+/*!
+ The returned `NativeObject` is a non-owning pointer into the owned payload
+ storage inside the `Buffer`. The `ResourceRegistry` may cache the
+ `NativeObject` value, but it must not assume ownership of the payload memory.
+ Unregister views before destroying the buffer or transfer ownership to the
+ registry if views must outlive the resource.
+*/
+auto Buffer::CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
+  const BufferRange& /*range*/) const -> NativeObject
+{
+  // Allocate raw memory for payload and construct in-place. Use a
+  // function-pointer deleter that calls operator delete for the raw
+  // allocation to avoid deleting an incomplete type with default deleter.
+  void* raw = operator new(sizeof(Buffer::CBV));
+  auto typed
+    = new (raw) Buffer::CBV { this, BufferRange {}, Format::kUnknown, 0 };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      // Explicitly call destructor and free raw memory
+      static_cast<Buffer::CBV*>(p)->~CBV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+}
+
+auto Buffer::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
   -> NativeObject
 {
-  return {};
+  void* raw = operator new(sizeof(Buffer::SRV));
+  auto typed
+    = new (raw) Buffer::SRV { this, BufferRange {}, Format::kUnknown, 0 };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Buffer::SRV*>(p)->~SRV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-[[nodiscard]] auto Buffer::CreateShaderResourceView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  BufferRange /*range*/, uint32_t /*stride*/) const -> NativeObject
+auto Buffer::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
+  -> NativeObject
 {
-  return {};
-}
-
-[[nodiscard]] auto Buffer::CreateUnorderedAccessView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  BufferRange /*range*/, uint32_t /*stride*/) const -> NativeObject
-{
-  return {};
+  void* raw = operator new(sizeof(Buffer::UAV));
+  auto typed
+    = new (raw) Buffer::UAV { this, BufferRange {}, Format::kUnknown, 0 };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Buffer::UAV*>(p)->~UAV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

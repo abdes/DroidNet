@@ -13,8 +13,8 @@ namespace oxygen::graphics::headless {
 
 class CopyBufferCommand : public Command {
 public:
-  CopyBufferCommand(graphics::Buffer* dst, size_t dst_offset,
-    const graphics::Buffer* src, size_t src_offset, size_t size)
+  CopyBufferCommand(graphics::Buffer* dst, uint64_t dst_offset,
+    const graphics::Buffer* src, uint64_t src_offset, uint64_t size)
     : dst_(dst)
     , dst_offset_(dst_offset)
     , src_(src)
@@ -34,10 +34,10 @@ public:
 
 private:
   graphics::Buffer* dst_;
-  size_t dst_offset_;
+  uint64_t dst_offset_;
   const graphics::Buffer* src_;
-  size_t src_offset_;
-  size_t size_;
+  uint64_t src_offset_;
+  uint64_t size_;
 };
 
 } // namespace oxygen::graphics::headless

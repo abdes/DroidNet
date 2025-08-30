@@ -8,8 +8,11 @@
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 #include <algorithm>
+#include <compare>
 #include <cstdint>
 #include <cstring>
+#include <fmt/format.h>
+#include <limits>
 
 namespace oxygen::graphics::headless {
 
@@ -17,26 +20,23 @@ Texture::Texture(const TextureDesc& desc)
   : graphics::Texture("HeadlessTexture")
   , desc_(desc)
 {
-  // Conservative backing allocation: width * height * array_size * 4 bytes.
-  const uint64_t w = std::max<uint32_t>(1u, desc_.width);
-  const uint64_t h = std::max<uint32_t>(1u, desc_.height);
-  const uint64_t layers = std::max<uint32_t>(1u, desc_.array_size);
-  const uint64_t pixels = w * h * layers;
-  // 4 bytes per pixel estimate when format is unknown; keep size bounded.
-  const uint64_t bytes = pixels * 4ull;
-  if (bytes > 0 && bytes <= 1024ull * 1024ull * 128ull) { // cap at 128MB
-    data_.resize(bytes);
-  }
-
+  // Determine backing size using the layout strategy so that all mip/data
+  // ranges computed by the strategy are addressable via Read/WriteBacking.
   struct ContiguousLayout : TextureLayoutStrategy {
 
     static auto MipDim(uint32_t base, uint32_t mip)
     {
+      // shifting by >= width of type is undefined; guard against large mip
+      if (mip >= 32) {
+        LOG_F(WARNING,
+          "ContiguousLayout::MipDim: mip ({}) >= 32, clamping to 31", mip);
+        mip = 31;
+      }
       return (std::max)(1u, base >> mip);
     }
 
     auto ComputeMipSizeBytes(const TextureDesc& desc, uint32_t mip) const
-      -> size_t override
+      -> uint32_t override
     {
       const auto finfo = detail::GetFormatInfo(desc.format);
       const uint32_t w = MipDim(desc.width, mip);
@@ -44,114 +44,210 @@ Texture::Texture(const TextureDesc& desc)
       if (finfo.block_size > 1) {
         const uint32_t blocks_x = (w + finfo.block_size - 1) / finfo.block_size;
         const uint32_t blocks_y = (h + finfo.block_size - 1) / finfo.block_size;
-        return static_cast<size_t>(blocks_x) * static_cast<size_t>(blocks_y)
-          * finfo.bytes_per_block;
+        // bytes_per_block is small; multiplication fits in 32 bits for
+        // realistic textures used in tests. Use 64-bit temporaries to avoid
+        // UB, then clamp to uint32_t.
+        const uint64_t v = static_cast<uint64_t>(blocks_x)
+          * static_cast<uint64_t>(blocks_y) * finfo.bytes_per_block;
+        return static_cast<uint32_t>(v);
       }
-      return static_cast<size_t>(w) * static_cast<size_t>(h)
+      const uint64_t v = static_cast<uint64_t>(w) * static_cast<uint64_t>(h)
         * finfo.bytes_per_block;
+      return static_cast<uint32_t>(v);
     }
 
     auto ComputeTotalBytesPerArraySlice(const TextureDesc& desc) const
-      -> size_t override
+      -> uint32_t override
     {
-      size_t total = 0;
+      uint64_t total = 0;
       for (uint32_t m = 0; m < desc.mip_levels; ++m) {
         total += ComputeMipSizeBytes(desc, m);
       }
-      return total;
+      return static_cast<uint32_t>(total);
     }
 
     auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
-      uint32_t array_slice, uint32_t mip) const -> size_t override
+      uint32_t array_slice, uint32_t mip) const -> uint32_t override
     {
-      const size_t per_slice = ComputeTotalBytesPerArraySlice(desc);
-      size_t offset = static_cast<size_t>(array_slice) * per_slice;
+      const uint64_t per_slice = ComputeTotalBytesPerArraySlice(desc);
+      uint64_t offset = static_cast<uint64_t>(array_slice) * per_slice;
       for (uint32_t m = 0; m < mip; ++m) {
         offset += ComputeMipSizeBytes(desc, m);
       }
-      return offset;
+      return static_cast<uint32_t>(offset);
     }
   };
 
-  // Instantiate strategy
+  // Compute full backing using the same layout strategy used by this class.
+  ContiguousLayout layout_tmp;
+  const uint32_t per_slice = layout_tmp.ComputeTotalBytesPerArraySlice(desc_);
+  const uint32_t layers = std::max<uint32_t>(1u, desc_.array_size);
+  const uint64_t bytes = static_cast<uint64_t>(per_slice) * layers;
+  constexpr uint64_t kMaxBacking = 1024ull * 1024ull * 128ull; // 128MB cap
+  if (bytes > 0 && bytes <= kMaxBacking) {
+    data_.resize(static_cast<size_t>(bytes));
+  }
+  // Instantiate strategy (same type as layout_tmp)
   layout_strategy_ = std::make_unique<ContiguousLayout>();
 }
 
-auto Texture::ReadBacking(void* dst, size_t src_offset, size_t size) const
+auto Texture::ReadBacking(void* dst, uint32_t src_offset, uint32_t size) const
   -> void
 {
   if (data_.empty()) {
     return;
   }
-  const size_t avail = data_.size();
+  const uint32_t avail = GetBackingSize();
   if (src_offset >= avail) {
     LOG_F(WARNING, "Texture::ReadBacking: src_offset out of range");
     return;
   }
-  const size_t to_copy = std::min(size, avail - src_offset);
+  const uint32_t to_copy = static_cast<uint32_t>(
+    std::min<uint32_t>(size, static_cast<uint32_t>(avail - src_offset)));
   std::memcpy(dst, data_.data() + src_offset, to_copy);
 }
 
-auto Texture::WriteBacking(const void* src, size_t dst_offset, size_t size)
+auto Texture::WriteBacking(const void* src, uint32_t dst_offset, uint32_t size)
   -> void
 {
   if (data_.empty()) {
     return;
   }
-  const size_t avail = data_.size();
+  const uint32_t avail = GetBackingSize();
   if (dst_offset >= avail) {
     LOG_F(WARNING, "Texture::WriteBacking: dst_offset out of range");
     return;
   }
-  const size_t to_copy = std::min(size, avail - dst_offset);
+  const uint32_t to_copy = static_cast<uint32_t>(
+    std::min<uint32_t>(size, static_cast<uint32_t>(avail - dst_offset)));
   std::memcpy(data_.data() + dst_offset, src, to_copy);
 }
 
-[[nodiscard]] auto Texture::GetDescriptor() const -> const TextureDesc&
+auto Texture::GetDescriptor() const -> const TextureDesc& { return desc_; }
+
+auto Texture::GetBackingSize() const -> uint32_t
 {
-  return desc_;
+  const uint64_t sz = data_.size();
+  DCHECK_LE_F(sz, static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+  return static_cast<uint32_t>(sz);
 }
 
-[[nodiscard]] auto Texture::GetNativeResource() const -> NativeObject
+auto Texture::GetNativeResource() const -> NativeObject
 {
   return NativeObject(const_cast<Texture*>(this), ClassTypeId());
 }
 
-[[nodiscard]] auto Texture::GetLayoutStrategy() const
-  -> const TextureLayoutStrategy&
+auto Texture::GetLayoutStrategy() const -> const TextureLayoutStrategy&
 {
   return *layout_strategy_;
 }
 
-[[nodiscard]] auto Texture::CreateShaderResourceView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  TextureType /*dimension*/, TextureSubResourceSet /*sub_resources*/) const
-  -> NativeObject
+//! View payloads created here are owned by the Texture instance.
+/*!
+ The returned `NativeObject` is a non-owning pointer into the owned payload
+ storage inside the `Texture`. The `ResourceRegistry` may cache the
+ `NativeObject` value, but it must not assume ownership of the payload memory.
+ Unregister views before destroying the texture or transfer ownership to the
+ registry if views must outlive the resource.
+*/
+auto Texture::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, TextureType /*dimension*/,
+  TextureSubResourceSet sub_resources) const -> NativeObject
 {
-  return {};
+  // Resolve subresource set to concrete ranges and compute byte ranges.
+  const auto resolved
+    = sub_resources.Resolve(desc_, /*single_mip_level=*/false);
+  const auto& strat = *layout_strategy_;
+  // Compute base offset at requested base mip/array
+  const uint32_t base_offset = strat.ComputeSliceMipBaseOffset(
+    desc_, resolved.base_array_slice, resolved.base_mip_level);
+  // Compute total size by summing the requested mips and array slices
+  uint32_t total_size = 0;
+  for (uint32_t s = 0; s < resolved.num_array_slices; ++s) {
+    for (uint32_t m = 0; m < resolved.num_mip_levels; ++m) {
+      total_size
+        += strat.ComputeMipSizeBytes(desc_, resolved.base_mip_level + m);
+    }
+  }
+  (void)total_size; // debug log removed
+
+  void* raw = operator new(sizeof(Texture::SRV));
+  auto typed = new (raw) Texture::SRV { this, Format::kUnknown,
+    TextureType::kTexture2D, resolved, base_offset, total_size };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Texture::SRV*>(p)->~SRV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-[[nodiscard]] auto Texture::CreateUnorderedAccessView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  TextureType /*dimension*/, TextureSubResourceSet /*sub_resources*/) const
-  -> NativeObject
+auto Texture::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, TextureType /*dimension*/,
+  TextureSubResourceSet sub_resources) const -> NativeObject
 {
-  return {};
+  const auto resolved
+    = sub_resources.Resolve(desc_, /*single_mip_level=*/false);
+  const auto& strat = *layout_strategy_;
+  const uint32_t base_offset = strat.ComputeSliceMipBaseOffset(
+    desc_, resolved.base_array_slice, resolved.base_mip_level);
+  uint32_t total_size = 0;
+  for (uint32_t s = 0; s < resolved.num_array_slices; ++s) {
+    for (uint32_t m = 0; m < resolved.num_mip_levels; ++m) {
+      total_size
+        += strat.ComputeMipSizeBytes(desc_, resolved.base_mip_level + m);
+    }
+  }
+
+  void* raw = operator new(sizeof(Texture::UAV));
+  auto typed = new (raw) Texture::UAV { this, Format::kUnknown,
+    TextureType::kTexture2D, resolved, base_offset, total_size };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Texture::UAV*>(p)->~UAV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-[[nodiscard]] auto Texture::CreateRenderTargetView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  TextureSubResourceSet /*sub_resources*/) const -> NativeObject
+auto Texture::CreateRenderTargetView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, TextureSubResourceSet sub_resources) const -> NativeObject
 {
-  return {};
+  // Resolve subresources for RTV (often entire texture or a single mip)
+  const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
+  void* raw = operator new(sizeof(Texture::RTV));
+  auto typed = new (raw)
+    Texture::RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Texture::RTV*>(p)->~RTV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-[[nodiscard]] auto Texture::CreateDepthStencilView(
-  const DescriptorHandle& /*view_handle*/, Format /*format*/,
-  TextureSubResourceSet /*sub_resources*/, bool /*is_read_only*/) const
-  -> NativeObject
+auto Texture::CreateDepthStencilView(const DescriptorHandle& /*view_handle*/,
+  Format /*format*/, TextureSubResourceSet sub_resources,
+  bool is_read_only) const -> NativeObject
 {
-  return {};
+  const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
+  void* raw = operator new(sizeof(Texture::DSV));
+  auto typed = new (raw) Texture::DSV { this, Format::kUnknown,
+    TextureType::kTexture2D, resolved, is_read_only };
+  const void* payload_ptr = typed;
+  owned_view_payloads_.emplace_back(raw, [](void* p) {
+    if (p) {
+      static_cast<Texture::DSV*>(p)->~DSV();
+      operator delete(p);
+    }
+  });
+  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

@@ -483,10 +483,10 @@ NOLINT_TEST_F(HeadlessGraphicsFixture, Concurrency_ConcurrentCreateCalls)
   std::vector<std::shared_ptr<oxygen::graphics::CommandQueue>> other_results;
   std::mutex results_mutex;
 
-  const std::size_t kThreads = 16;
+  const auto kThreads = 16u;
 
   // Act
-  for (std::size_t i = 0; i < kThreads; ++i) {
+  for (auto i = 0u; i < kThreads; ++i) {
     // Capture only what we need explicitly to avoid accidentally capturing
     // any outer-scope `name` variables by reference (which could be const).
     // Capture headless_ by value into 'headless' for use inside the thread.
@@ -520,7 +520,7 @@ NOLINT_TEST_F(HeadlessGraphicsFixture, Concurrency_ConcurrentCreateCalls)
 
   // Assert: basic sanity
   const auto total_results = universal_results.size() + other_results.size();
-  ASSERT_EQ(total_results, kThreads);
+  ASSERT_EQ(total_results, static_cast<std::size_t>(kThreads));
 
   for (const auto& q : universal_results) {
     ASSERT_NE(q.get(), nullptr);

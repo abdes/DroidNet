@@ -17,7 +17,7 @@ namespace {
 
 using namespace oxygen::graphics;
 
-NOLINT_TEST(HeadlessBindless, AllocateRelease)
+NOLINT_TEST(HeadlessAllocator, AllocateRelease)
 {
   // Arrange
   auto alloc = std::make_unique<headless::bindless::DescriptorAllocator>();
