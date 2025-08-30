@@ -45,6 +45,7 @@ auto main(int argc, char** argv) -> int
   const auto ret = RUN_ALL_TESTS();
 
   if (!list_tests) {
+    loguru::flush();
     loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
     loguru::shutdown();
   }
