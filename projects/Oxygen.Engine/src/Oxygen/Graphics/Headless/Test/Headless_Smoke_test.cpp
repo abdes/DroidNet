@@ -40,8 +40,7 @@ protected:
 
 //! Test that creating the backend, allocating simple resources, and submitting
 //! a trivial command list advances the queue fence.
-NOLINT_TEST_F(
-  HeadlessSmokeTest, CreateBackend_CreateResources_SubmitAdvancesFence)
+NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
 {
   // Arrange
   auto module_ptr = static_cast<oxygen::graphics::GraphicsModuleApi*>(
@@ -89,19 +88,19 @@ NOLINT_TEST_F(
 
     // Verify present semantics: record current slot, present a few times and
     // check the current back buffer index advances modulo kFramesInFlight.
-    const uint32_t frames = ::oxygen::frame::kFramesInFlight.get();
-    const uint32_t before = headless_surface->GetCurrentBackBufferIndex();
-    for (uint32_t i = 1; i <= frames + 1; ++i) {
+    const auto frames = ::oxygen::frame::kFramesInFlight.get();
+    const auto before = headless_surface->GetCurrentBackBufferIndex();
+    for (auto i = 1u; i <= frames + 1; ++i) {
       headless_surface->Present();
-      const uint32_t after = headless_surface->GetCurrentBackBufferIndex();
+      const auto after = headless_surface->GetCurrentBackBufferIndex();
       // The index should advance by 1 each present (modulo frames)
-      const uint32_t expected = (before + i) % frames;
+      const auto expected = (before + i) % frames;
       EXPECT_EQ(after, expected);
     }
 
     // Check that GetBackBuffer(slot) returns a non-null texture for each
     // valid slot.
-    for (uint32_t s = 0; s < frames; ++s) {
+    for (auto s = 0u; s < frames; ++s) {
       auto bb = headless_surface->GetBackBuffer(s);
       EXPECT_NE(bb, nullptr);
     }

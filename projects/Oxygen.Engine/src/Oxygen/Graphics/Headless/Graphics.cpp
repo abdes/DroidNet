@@ -52,8 +52,6 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/)
   -> std::shared_ptr<graphics::Buffer>
 {
   auto b = std::make_shared<Buffer>(desc);
-  // Mark buffers created by the headless factory as initialized.
-  b->MarkInitialized();
   return b;
 }
 OXGN_HDLS_NDAPI auto Graphics::CreateCommandQueue(std::string_view queue_name,

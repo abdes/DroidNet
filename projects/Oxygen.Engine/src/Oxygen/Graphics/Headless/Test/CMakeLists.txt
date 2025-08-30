@@ -20,6 +20,12 @@ find_package(GTest REQUIRED CONFIG)
 
 include(GTestHelpers)
 
-m_gtest_program(DescriptorAllocator SOURCES "DescriptorAllocator_test.cpp")
 m_gtest_program(SmokeTest SOURCES "Headless_Smoke_test.cpp")
-m_gtest_program(QueueTest SOURCES "Headless_Queue_test.cpp")
+m_gtest_program(
+  All
+  SOURCES
+    "Headless_Queue_test.cpp"
+    "Headless_Allocator_test.cpp"
+    "Headless_Buffer_test.cpp"
+    "Headless_Texture_test.cpp"
+)

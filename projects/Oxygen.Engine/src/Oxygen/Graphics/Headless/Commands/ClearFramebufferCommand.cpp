@@ -33,7 +33,7 @@ auto ClearFramebufferCommand::Execute(CommandContext& /*ctx*/) -> void
   // clears. Framebuffer stores attachments in its descriptor.
   const auto& desc = framebuffer_->GetDescriptor();
   const auto& color_attachments = desc.color_attachments;
-  for (size_t i = 0; i < color_attachments.size(); ++i) {
+  for (auto i = 0u; i < color_attachments.size(); ++i) {
     const auto& att = color_attachments[i];
     if (!att.IsValid()) {
       continue;
@@ -66,15 +66,15 @@ auto ClearFramebufferCommand::Execute(CommandContext& /*ctx*/) -> void
     // headless WriteBacking helper. We assume base mip level and tightly
     // packed rows for this simple emulation.
     const auto& tdesc = tex->GetDescriptor();
-    constexpr size_t bpp = 4;
-    const size_t row_bytes = static_cast<size_t>(tdesc.width) * bpp;
-    const size_t image_bytes = row_bytes * static_cast<size_t>(tdesc.height)
-      * std::max<uint32_t>(1u, tdesc.array_size);
+    constexpr uint32_t bpp = 4u;
+    const auto row_bytes = tdesc.width * bpp;
+    const auto image_bytes
+      = row_bytes * (tdesc.height * std::max<uint32_t>(1u, tdesc.array_size));
 
     // Build a single row of pixels
     std::vector<uint8_t> row(row_bytes);
-    for (uint32_t x = 0; x < tdesc.width; ++x) {
-      const size_t idx = static_cast<size_t>(x) * 4;
+    for (auto x = 0u; x < tdesc.width; ++x) {
+      const auto idx = static_cast<size_t>(x) * 4u;
       row[idx + 0] = static_cast<uint8_t>(clear_color.r * 255.0f);
       row[idx + 1] = static_cast<uint8_t>(clear_color.g * 255.0f);
       row[idx + 2] = static_cast<uint8_t>(clear_color.b * 255.0f);
@@ -84,13 +84,13 @@ auto ClearFramebufferCommand::Execute(CommandContext& /*ctx*/) -> void
     // Fill the texture by writing rows sequentially.
     std::vector<uint8_t> image;
     image.reserve(image_bytes);
-    for (uint32_t y = 0;
-      y < tdesc.height * std::max<uint32_t>(1u, tdesc.array_size); ++y) {
+    for (auto y = 0u;
+      y < (tdesc.height * std::max<uint32_t>(1u, tdesc.array_size)); ++y) {
       image.insert(image.end(), row.begin(), row.end());
     }
 
     // Write into texture backing (clamped to available space by WriteBacking).
-    tex->WriteBacking(image.data(), 0, image.size());
+    tex->WriteBacking(image.data(), 0, static_cast<uint32_t>(image.size()));
     LOG_F(INFO, "Headless: cleared attachment {} ({} bytes)", i, image.size());
   }
 
