@@ -13,11 +13,7 @@
 
 namespace oxygen::graphics::headless {
 
-struct CommandContext {
-  // Recorder is provided for commands that need backend services.
-  // Forward-declared type used as pointer to avoid circular includes.
-  void* recorder = nullptr;
-};
+struct CommandContext { };
 
 class Command {
 public:

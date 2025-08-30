@@ -7,11 +7,11 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
@@ -20,8 +20,6 @@ class Graphics final : public oxygen::Graphics {
 public:
   explicit Graphics(const SerializedBackendConfig& config);
   ~Graphics() override = default;
-
-  // Queue management is delegated to the `internal::QueueManager` component.
 
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override;
@@ -44,13 +42,50 @@ public:
   [[nodiscard]] auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
 
-  OXGN_HDLS_NDAPI auto CreateCommandListImpl(
-    QueueRole role, std::string_view command_list_name)
-    -> std::unique_ptr<CommandList> override;
+  OXGN_HDLS_NDAPI auto AcquireCommandRecorder(
+    std::shared_ptr<graphics::CommandQueue> queue,
+    std::shared_ptr<graphics::CommandList> command_list,
+    bool immediate_submission = true)
+    -> std::unique_ptr<graphics::CommandRecorder,
+      std::function<void(graphics::CommandRecorder*)>>;
+
+  // Override GetCommandQueue to provide backend-specific lookup/fallback
+  // behavior. The default implementation in Graphics checks the internal
+  // command_queues_ map; headless will additionally consult its
+  // QueueManager so callers that create queues directly through the
+  // backend are still discoverable.
+  OXGN_HDLS_NDAPI auto GetCommandQueue(std::string_view name) const
+    -> std::shared_ptr<graphics::CommandQueue> override;
+
+  // Backend overrides for queue lifecycle and flushing semantics.
+  OXGN_HDLS_NDAPI auto CreateCommandQueues(
+    const graphics::QueueStrategy& queue_strategy) -> void override;
+
+  OXGN_HDLS_NDAPI auto FlushCommandQueues() -> void override;
+
+  // Submit any command lists that were recorded with deferred submission.
+  // This will submit them to their associated target queues and call
+  // OnSubmitted() on each command list after successful submission.
+  OXGN_HDLS_NDAPI auto SubmitDeferredCommandLists() -> void;
 
   [[nodiscard]] auto CreateRendererImpl(std::string_view name,
     std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<RenderController> override;
+
+protected:
+  [[nodiscard]] OXGN_HDLS_NDAPI auto CreateCommandRecorder(
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue)
+    -> std::unique_ptr<graphics::CommandRecorder>;
+
+  OXGN_HDLS_NDAPI auto CreateCommandListImpl(
+    QueueRole role, std::string_view command_list_name)
+    -> std::unique_ptr<graphics::CommandList> override;
+
+private:
+  std::vector<std::shared_ptr<graphics::CommandList>> pending_cmd_lists_;
+  // Protects access to pending_cmd_lists_ in multithreaded scenarios.
+  mutable std::mutex pending_cmd_lists_mutex_;
 };
 
 } // namespace oxygen::graphics::headless

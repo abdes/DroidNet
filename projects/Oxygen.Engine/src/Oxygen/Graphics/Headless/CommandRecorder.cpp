@@ -13,11 +13,14 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
 #include <Oxygen/Graphics/Headless/Command.h>
+#include <Oxygen/Graphics/Headless/CommandList.h>
+#include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Commands/BufferToTextureCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearFramebufferCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
+#include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
@@ -83,14 +86,18 @@ OXGN_HDLS_API auto CommandRecorder::ExecuteBarriers(
   }
 }
 
+inline auto CommandRecorder::QueueCommand(std::shared_ptr<Command> cmd) -> void
+{
+  DCHECK_NOTNULL_F(cmd);
+  auto& cmd_list = static_cast<CommandList&>(GetCommandList());
+  cmd_list.QueueCommand(std::move(cmd));
+}
+
 auto CommandRecorder::CopyBuffer(graphics::Buffer& dst, size_t dst_offset,
   const graphics::Buffer& src, size_t src_offset, size_t size) -> void
 {
-  // Record a lambda command capturing the parameters. Command lifetime is
-  // managed by the recorder.
-  auto cmd = std::make_unique<CopyBufferCommand>(
-    &dst, dst_offset, &src, src_offset, size);
-  commands_.push_back(std::move(cmd));
+  QueueCommand(std::make_shared<CopyBufferCommand>(
+    &dst, dst_offset, &src, src_offset, size));
 }
 
 auto CommandRecorder::ClearFramebuffer(const Framebuffer& fb,
@@ -98,33 +105,29 @@ auto CommandRecorder::ClearFramebuffer(const Framebuffer& fb,
   std::optional<float> depth_clear_value,
   std::optional<uint8_t> stencil_clear_value) -> void
 {
-  auto cmd = std::make_unique<ClearFramebufferCommand>(
-    &fb, std::move(color_clear_values), depth_clear_value, stencil_clear_value);
-  commands_.push_back(std::move(cmd));
+  QueueCommand(std::make_shared<ClearFramebufferCommand>(&fb,
+    std::move(color_clear_values), depth_clear_value, stencil_clear_value));
 }
 
 auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   const NativeObject& dsv, ClearFlags flags, float depth, uint8_t stencil)
   -> void
 {
-  auto cmd = std::make_unique<ClearDepthStencilCommand>(
-    &texture, dsv, flags, depth, stencil);
-  commands_.push_back(std::move(cmd));
+  QueueCommand(std::make_shared<ClearDepthStencilCommand>(
+    &texture, dsv, flags, depth, stencil));
 }
 
 auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   const TextureUploadRegion& region, graphics::Texture& dst) -> void
 {
-  auto cmd = std::make_unique<BufferToTextureCommand>(&src, region, &dst);
-  commands_.push_back(std::move(cmd));
+  QueueCommand(std::make_shared<BufferToTextureCommand>(&src, region, &dst));
 }
 
 auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   std::span<const TextureUploadRegion> regions, graphics::Texture& dst) -> void
 {
   for (const auto& r : regions) {
-    auto cmd = std::make_unique<BufferToTextureCommand>(&src, r, &dst);
-    commands_.push_back(std::move(cmd));
+    QueueCommand(std::make_shared<BufferToTextureCommand>(&src, r, &dst));
   }
 }
 
@@ -144,17 +147,20 @@ auto CommandRecorder::PerformCopy(graphics::Buffer& dst, size_t dst_offset,
   dst_h->WriteBacking(temp.data(), dst_offset, size);
 }
 
-auto CommandRecorder::OnSubmitted() -> void
+auto CommandRecorder::RecordQueueSignal(uint64_t value) -> void
 {
-  CommandContext ctx {};
-  ctx.recorder = static_cast<void*>(this);
-  for (auto& c : commands_) {
-    c->Execute(ctx);
-  }
-  commands_.clear();
+  auto queue = GetTargetQueue();
+  DCHECK_NOTNULL_F(queue);
+  QueueCommand(std::make_shared<LambdaCommand>(
+    [queue, value](CommandContext&) { queue->QueueSignalCommand(value); }));
+}
 
-  // Call base implementation to preserve any existing behavior.
-  graphics::CommandRecorder::OnSubmitted();
+auto CommandRecorder::RecordQueueWait(uint64_t value) -> void
+{
+  auto queue = GetTargetQueue();
+  DCHECK_NOTNULL_F(queue);
+  QueueCommand(std::make_shared<LambdaCommand>(
+    [queue, value](CommandContext&) { queue->QueueWaitCommand(value); }));
 }
 
 } // namespace oxygen::graphics::headless

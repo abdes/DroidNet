@@ -28,4 +28,5 @@ m_gtest_program(
     "Headless_Allocator_test.cpp"
     "Headless_Buffer_test.cpp"
     "Headless_Texture_test.cpp"
+    "Headless_Submission_test.cpp"
 )
