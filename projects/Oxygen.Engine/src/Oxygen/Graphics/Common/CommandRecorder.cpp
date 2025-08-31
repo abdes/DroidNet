@@ -27,16 +27,18 @@ CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
 
 // Destructor implementation is crucial here because ResourceStateTracker is
 // forward-declared in the header
-CommandRecorder::~CommandRecorder() = default;
+CommandRecorder::~CommandRecorder() { DLOG_F(2, "recorder destroyed"); }
 
 void CommandRecorder::Begin()
 {
+  DLOG_F(2, "CommandRecorder::Begin()");
   DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
   command_list_->OnBeginRecording();
 }
 
 auto CommandRecorder::End() -> std::shared_ptr<CommandList>
 {
+  DLOG_F(2, "CommandRecorder::End()");
   DCHECK_NOTNULL_F(command_list_);
   try {
     // Give a chance to the resource state tracker to restore initial states
