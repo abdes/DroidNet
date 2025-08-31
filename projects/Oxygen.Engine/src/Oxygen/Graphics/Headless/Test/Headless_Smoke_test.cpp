@@ -26,17 +26,23 @@
 // Use the module's exported API symbol to create the backend instance in-test.
 // Declare the exported function here; the test links against the headless
 // module project, which provides the symbol at link time.
-extern "C" void* GetGraphicsModuleApi();
+extern "C" auto GetGraphicsModuleApi() -> void*;
 
 namespace {
 
-using ::testing::Test;
+using testing::Test;
+
+using Role = oxygen::graphics::QueueRole;
+using Alloc = oxygen::graphics::QueueAllocationPreference;
+using Share = oxygen::graphics::QueueSharingPreference;
+using oxygen::graphics::QueueKey;
+using oxygen::graphics::QueueSpecification;
 
 //! Basic smoke fixture that creates/destroys the headless backend.
 class HeadlessSmokeTest : public Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
+  auto SetUp() -> void override { }
+  auto TearDown() -> void override { }
 };
 
 //! Test that creating the backend, allocating simple resources, and submitting
@@ -44,68 +50,65 @@ protected:
 NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
 {
   // Arrange
-  auto module_ptr = static_cast<oxygen::graphics::GraphicsModuleApi*>(
-    ::GetGraphicsModuleApi());
+  auto module_ptr
+    = static_cast<oxygen::graphics::GraphicsModuleApi*>(GetGraphicsModuleApi());
   ASSERT_NE(module_ptr, nullptr);
 
-  oxygen::SerializedBackendConfig cfg { "{}", 2 };
+  oxygen::SerializedBackendConfig cfg { .json_data = "{}", .size = 2 };
   void* backend = module_ptr->CreateBackend(cfg);
   ASSERT_NE(backend, nullptr);
 
   // Cast to the headless concrete type so we can use its public helpers.
-  auto* headless
-    = reinterpret_cast<oxygen::graphics::headless::Graphics*>(backend);
+  auto* headless = static_cast<oxygen::graphics::headless::Graphics*>(backend);
   ASSERT_NE(headless, nullptr);
 
   // Create command queues using a multi-named strategy so multiple named
   // queues exist and AcquireCommandRecorder can find the requested named
   // queue. Use the MultiNamedStrategy defined in headless queue tests.
-  class LocalMultiNamedStrategy : public oxygen::graphics::QueueStrategy {
+  class LocalMultiNamedStrategy : public oxygen::graphics::QueuesStrategy {
   public:
     [[nodiscard]] auto Specifications() const
-      -> std::vector<oxygen::graphics::QueueSpecification> override
+      -> std::vector<QueueSpecification> override
     {
-      using oxygen::graphics::QueueAllocationPreference;
-      using oxygen::graphics::QueueRole;
-      using oxygen::graphics::QueueSharingPreference;
-      using oxygen::graphics::QueueSpecification;
-      return { {
-                 .name = "multi-gfx",
-                 .role = QueueRole::kGraphics,
-                 .allocation_preference = QueueAllocationPreference::kDedicated,
-                 .sharing_preference = QueueSharingPreference::kSeparate,
-               },
+      return {
         {
-          .name = "multi-cpu",
-          .role = QueueRole::kCompute,
-          .allocation_preference = QueueAllocationPreference::kDedicated,
-          .sharing_preference = QueueSharingPreference::kSeparate,
-        } };
+          .key = QueueKey { "multi-gfx" },
+          .role = Role::kGraphics,
+          .allocation_preference = Alloc::kDedicated,
+          .sharing_preference = Share::kNamed,
+        },
+        {
+          .key = QueueKey { "multi-cpu" },
+          .role = Role::kCompute,
+          .allocation_preference = Alloc::kDedicated,
+          .sharing_preference = Share::kNamed,
+        },
+      };
     }
-    [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
+
+    [[nodiscard]] auto KeyFor(const Role role) const -> QueueKey override
     {
-      return "multi-gfx";
+      switch (role) {
+      case Role::kGraphics:
+      case Role::kTransfer:
+      case Role::kPresent:
+        return QueueKey { "multi-gfx" };
+      case Role::kCompute:
+        return QueueKey { "multi-cpu" };
+      case oxygen::graphics::QueueRole::kMax:;
+      }
+      return QueueKey { "__invalid__" };
     }
-    [[nodiscard]] auto PresentQueueName() const -> std::string_view override
-    {
-      return "multi-gfx";
-    }
-    [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
-    {
-      return "multi-cpu";
-    }
-    [[nodiscard]] auto TransferQueueName() const -> std::string_view override
-    {
-      return "multi-gfx";
-    }
-    [[nodiscard]] auto Clone() const
-      -> std::unique_ptr<oxygen::graphics::QueueStrategy> override
+
+    [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
     {
       return std::make_unique<LocalMultiNamedStrategy>(*this);
     }
   } queue_strategy;
+
   headless->CreateCommandQueues(queue_strategy);
-  auto queue = headless->GetCommandQueue(queue_strategy.GraphicsQueueName());
+  auto queue
+    = headless->GetCommandQueue(queue_strategy.KeyFor(Role::kGraphics));
   ASSERT_NE(queue, nullptr);
 
   // Also exercise HeadlessSurface behaviors: create a surface, set size,
@@ -120,7 +123,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     = static_cast<oxygen::graphics::headless::HeadlessSurface*>(
       surface.get())) {
     // Use a strong PixelExtent type for SetSize.
-    ::oxygen::PixelExtent new_size { .width = 16u, .height = 8u };
+    oxygen::PixelExtent new_size { .width = 16u, .height = 8u };
     headless_surface->SetSize(new_size);
 
     // Attach a (possibly null) renderer so the surface allocates its
@@ -134,7 +137,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
 
     // Verify present semantics: record current slot, present a few times and
     // check the current back buffer index advances modulo kFramesInFlight.
-    const auto frames = ::oxygen::frame::kFramesInFlight.get();
+    constexpr auto frames = oxygen::frame::kFramesInFlight.get();
     const auto before = headless_surface->GetCurrentBackBufferIndex();
     for (auto i = 1u; i <= frames + 1; ++i) {
       headless_surface->Present();
@@ -153,19 +156,22 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   }
 
   // Create a simple buffer and texture via headless factories. Keep the
-  // shared_ptrs in this scope so we can unregister them after the recorder
+  // shared pointers in this scope so we can unregister them after the recorder
   // has been submitted by its custom deleter.
-  oxygen::graphics::BufferDesc buf_desc {};
-  buf_desc.size_bytes = 1024;
-  buf_desc.debug_name = "smoke-buffer";
+  oxygen::graphics::BufferDesc buf_desc {
+    .size_bytes = 1024,
+    .debug_name = "smoke-buffer",
+  };
   auto buffer = headless->CreateBuffer(buf_desc);
   ASSERT_NE(buffer, nullptr);
 
-  oxygen::graphics::TextureDesc tex_desc {};
-  tex_desc.width = 4;
-  tex_desc.height = 4;
-  tex_desc.format = oxygen::Format::kUnknown;
-  tex_desc.debug_name = "smoke-texture";
+  oxygen::graphics::TextureDesc tex_desc {
+    .width = 4,
+    .height = 4,
+    .format = oxygen::Format::kUnknown,
+    .debug_name = "smoke-texture",
+    .clear_value = oxygen::graphics::Color {},
+  };
   auto texture = headless->CreateTexture(tex_desc);
   ASSERT_NE(texture, nullptr);
 
@@ -177,7 +183,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   // higher-level contract clean and allows backend-specific policies.
 
   auto cmd_list
-    = headless->AcquireCommandList(queue->GetQueueRole(), "test-cmdlist");
+    = headless->AcquireCommandList(queue->GetQueueRole(), "test-cmd-list");
   ASSERT_NE(cmd_list, nullptr);
 
   const auto before_value = queue->GetCurrentValue();
@@ -188,7 +194,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     ASSERT_NE(recorder, nullptr);
 
     // Track initial states for both resources: register them with the
-    // device registry and begin tracking. Factories return shared_ptrs,
+    // device registry and begin tracking. Factories return shared pointers,
     // which is the form expected by ResourceRegistry::Register.
     // AcquireCommandRecorder already calls Begin() on the returned recorder.
     headless->GetResourceRegistry().Register(buffer);
@@ -237,7 +243,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   headless->GetResourceRegistry().UnRegisterResource(*buffer);
   headless->GetResourceRegistry().UnRegisterResource(*texture);
 
-  // Release shared_ptrs to the resources
+  // Release shared pointers to the resources
   buffer.reset();
   texture.reset();
 

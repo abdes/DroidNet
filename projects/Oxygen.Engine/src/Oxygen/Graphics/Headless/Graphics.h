@@ -30,9 +30,8 @@ public:
   OXGN_HDLS_NDAPI auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override;
 
-  OXGN_HDLS_NDAPI auto CreateCommandQueue(std::string_view queue_name,
-    QueueRole role, QueueAllocationPreference allocation_preference)
-    -> std::shared_ptr<graphics::CommandQueue> override;
+  OXGN_HDLS_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
+    QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
 
   OXGN_HDLS_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
@@ -48,20 +47,6 @@ public:
     bool immediate_submission = true)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>>;
-
-  // Override GetCommandQueue to provide backend-specific lookup/fallback
-  // behavior. The default implementation in Graphics checks the internal
-  // command_queues_ map; headless will additionally consult its
-  // QueueManager so callers that create queues directly through the
-  // backend are still discoverable.
-  OXGN_HDLS_NDAPI auto GetCommandQueue(std::string_view name) const
-    -> std::shared_ptr<graphics::CommandQueue> override;
-
-  // Backend overrides for queue lifecycle and flushing semantics.
-  OXGN_HDLS_NDAPI auto CreateCommandQueues(
-    const graphics::QueueStrategy& queue_strategy) -> void override;
-
-  OXGN_HDLS_NDAPI auto FlushCommandQueues() -> void override;
 
   // Submit any command lists that were recorded with deferred submission.
   // This will submit them to their associated target queues and call

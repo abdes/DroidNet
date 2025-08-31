@@ -10,7 +10,6 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
 #include <Oxygen/Graphics/Headless/Internal/Commander.h>
-#include <Oxygen/Graphics/Headless/Internal/QueueManager.h>
 
 namespace oxygen::graphics::headless::internal {
 
@@ -75,7 +74,6 @@ auto Commander::PrepareCommandRecorder(
 
 auto Commander::SubmitDeferredCommandLists() -> void
 {
-  DCHECK_NOTNULL_F(queue_manager_);
   std::vector<DeferredSubmission> submissions;
   {
     std::lock_guard lk(pending_submissions_mutex_);
@@ -106,14 +104,6 @@ auto Commander::SubmitDeferredCommandLists() -> void
   if (!all_submitted) {
     throw std::runtime_error("Some deferred command lists failed to submit");
   }
-}
-
-auto Commander::UpdateDependencies(
-  const std::function<Component&(TypeId)>& get_component) noexcept -> void
-{
-  // Cache pointer to QueueManager to avoid repeated lookups during submission.
-  queue_manager_ = &static_cast<internal::QueueManager&>(
-    get_component(internal::QueueManager::ClassTypeId()));
 }
 
 } // namespace oxygen::graphics::headless::internal
