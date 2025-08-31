@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
 #include <Oxygen/Graphics/Headless/Commands/BufferToTextureCommand.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
-#include <cstdint>
-#include <limits>
 
 using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;
@@ -25,7 +25,7 @@ BufferToTextureCommand::BufferToTextureCommand(const graphics::Buffer* src,
 {
 }
 
-auto BufferToTextureCommand::Execute(CommandContext& /*ctx*/) -> void
+auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
 {
   // Doing arithmetic directly in uint32_t as requested by caller.
 

@@ -20,7 +20,7 @@
 namespace oxygen::graphics::headless {
 
 namespace internal {
-  class SerialExecutor;
+  class CommandExecutor;
 } // namespace internal
 
 class CommandQueue final : public graphics::CommandQueue {
@@ -72,7 +72,7 @@ private:
   // runs a single worker and provides futures for deterministic test sync.
   // Owned via unique_ptr for RAII; the destructor is defined out-of-line
   // in the .cpp where the executor type is complete.
-  internal::SerialExecutor* executor_ { nullptr };
+  internal::CommandExecutor* executor_ { nullptr };
 
 private:
   QueueRole queue_role_ { QueueRole::kGraphics };

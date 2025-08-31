@@ -12,23 +12,22 @@
 namespace {
 // Store the backend instance in a static shared_ptr so the module keeps it
 // alive until DestroyBackend is called.
-static std::shared_ptr<oxygen::graphics::headless::Graphics>
-  g_headless_instance;
+std::shared_ptr<oxygen::graphics::headless::Graphics> g_headless_instance;
 }
 
 extern "C" {
 
-OXGN_HDLS_API void* CreateBackendImpl(
-  const oxygen::SerializedBackendConfig& config)
+OXGN_HDLS_API auto CreateBackendImpl(
+  const oxygen::SerializedBackendConfig& config) -> void*
 {
   LOG_F(INFO, "Headless backend CreateBackend called");
   // Create and store the shared instance. For phase 1 we ignore config.
   g_headless_instance
     = std::make_shared<oxygen::graphics::headless::Graphics>(config);
-  return reinterpret_cast<void*>(g_headless_instance.get());
+  return g_headless_instance.get();
 }
 
-OXGN_HDLS_API void DestroyBackendImpl()
+OXGN_HDLS_API auto DestroyBackendImpl() -> void
 {
   LOG_F(INFO, "Headless backend DestroyBackend called");
   // Reset the stored shared_ptr. Any external shared_ptr copies must be
@@ -43,7 +42,7 @@ static oxygen::graphics::GraphicsModuleApi kHeadlessApi {
 
 } // extern "C"
 
-extern "C" OXGN_HDLS_NDAPI void* GetGraphicsModuleApi()
+extern "C" OXGN_HDLS_NDAPI auto GetGraphicsModuleApi() -> void*
 {
-  return reinterpret_cast<void*>(&kHeadlessApi);
+  return &kHeadlessApi;
 }

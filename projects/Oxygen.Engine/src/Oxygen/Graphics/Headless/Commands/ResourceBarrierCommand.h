@@ -6,32 +6,32 @@
 
 #pragma once
 
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <vector>
+
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Headless/Command.h>
 
 namespace oxygen::graphics::headless {
 
-class ClearDepthStencilCommand : public Command {
+class ResourceBarrierCommand final : public Command {
 public:
-  ClearDepthStencilCommand(const Texture* texture, const NativeObject& dsv,
-    ClearFlags flags, float depth, uint8_t stencil);
+  explicit ResourceBarrierCommand(std::vector<detail::Barrier> barriers)
+    : barriers_(std::move(barriers))
+  {
+  }
 
+  auto Serialize(std::ostream& os) const -> void override;
   [[nodiscard]] auto GetName() const noexcept -> const char* override
   {
-    return "ClearDepthStencilCommand";
+    return "ResourceBarrierCommand";
   }
-  auto Serialize(std::ostream& os) const -> void override;
 
 protected:
   auto DoExecute(CommandContext& ctx) -> void override;
 
 private:
-  const Texture* texture_ = nullptr;
-  NativeObject dsv_ {};
-  ClearFlags flags_ {};
-  float depth_ = 1.0f;
-  uint8_t stencil_ = 0;
+  std::vector<detail::Barrier> barriers_;
+  // observed_states is provided via CommandContext at execute-time.
 };
 
 } // namespace oxygen::graphics::headless

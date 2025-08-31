@@ -6,9 +6,6 @@
 
 #pragma once
 
-#include <memory>
-#include <ostream>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -25,19 +22,19 @@ public:
   {
   }
 
-  void Execute(CommandContext& /*ctx*/) override
+  auto Serialize(std::ostream& /*os*/) const -> void override { }
+
+  [[nodiscard]] auto GetName() const noexcept -> const char* override
   {
-    if (!queue_) [[unlikely]] {
-      DLOG_F(WARNING, "QueueSignalCommand: queue is null!");
-      return;
-    }
-    DLOG_SCOPE_F(3, "QueueWaitCommand");
-    DLOG_F(3, "queue : {}", queue_->GetName());
-    DLOG_F(3, "value : {}", value_);
-    queue_->QueueWaitCommand(value_);
+    return "QueueWaitCommand";
   }
 
-  void Serialize(std::ostream& /*os*/) const override { }
+protected:
+  auto DoExecute(CommandContext& /*ctx*/) -> void override
+  {
+    DLOG_F(3, "value      : {}", value_);
+    queue_->QueueWaitCommand(value_);
+  }
 
 private:
   observer_ptr<const graphics::CommandQueue> queue_ { nullptr };

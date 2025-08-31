@@ -13,7 +13,7 @@
 
 namespace oxygen::graphics::headless {
 
-void CopyBufferCommand::Execute(CommandContext& /*ctx*/)
+void CopyBufferCommand::DoExecute(CommandContext& /*ctx*/)
 {
   auto dst_h = static_cast<Buffer*>(dst_);
   auto src_h = static_cast<const Buffer*>(src_);

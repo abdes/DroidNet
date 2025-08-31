@@ -23,7 +23,10 @@ public:
   {
   }
 
-  auto Execute(CommandContext& ctx) -> void override;
+  [[nodiscard]] auto GetName() const noexcept -> const char* override
+  {
+    return "CopyBufferCommand";
+  }
 
   auto Serialize(std::ostream& os) const -> void override
   {
@@ -31,6 +34,9 @@ public:
     os << "copy_buffer " << dst_ << " " << dst_offset_ << " " << src_ << " "
        << src_offset_ << " " << size_ << "\n";
   }
+
+protected:
+  auto DoExecute(CommandContext& ctx) -> void override;
 
 private:
   graphics::Buffer* dst_;

@@ -6,28 +6,43 @@
 
 #pragma once
 
-#include <memory>
-#include <ostream>
-#include <utility>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
 
-struct CommandContext { };
+struct CommandContext;
 
 class Command {
 public:
+  Command() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(Command)
+  OXYGEN_DEFAULT_MOVABLE(Command)
+
   virtual ~Command() = default;
-  virtual void Execute(CommandContext& ctx) = 0;
-  // Optional serialization hook. Default is no-op.
-  virtual void Serialize(std::ostream& /*os*/) const { }
+
+  OXGN_HDLS_API auto Execute(CommandContext& ctx) -> void;
+
+  [[nodiscard]] virtual auto GetName() const noexcept -> const char* = 0;
+
+  virtual auto Serialize(std::ostream& /*os*/) const -> void { }
+
+protected:
+  virtual auto DoExecute(CommandContext& ctx) -> void = 0;
 };
 
 // A simple no-op command useful for testing and sequencing.
-class NoopCommand : public Command {
+class NoopCommand final : public Command {
 public:
-  NoopCommand() = default;
-  void Execute(CommandContext& /*ctx*/) override { }
-  void Serialize(std::ostream& /*os*/) const override { }
+  [[nodiscard]] auto GetName() const noexcept -> const char* override
+  {
+    return "NoopCommand";
+  }
+  auto Serialize(std::ostream& /*os*/) const -> void override { }
+
+protected:
+  auto DoExecute(CommandContext& /*ctx*/) -> void override { /* nothing */ }
 };
 
 } // namespace oxygen::graphics::headless

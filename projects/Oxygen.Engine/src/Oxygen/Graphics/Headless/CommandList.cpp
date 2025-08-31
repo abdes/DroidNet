@@ -10,7 +10,7 @@
 using oxygen::graphics::headless::CommandList;
 
 CommandList::CommandList(const std::string_view name, const QueueRole role)
-  : ::oxygen::graphics::CommandList(name, role)
+  : graphics::CommandList(name, role)
 {
   LOG_F(INFO, "Headless CommandList created: {} (role={})", name,
     nostd::to_string(role));
@@ -77,25 +77,25 @@ auto CommandList::Clear() -> void
 
 auto CommandList::OnBeginRecording() -> void
 {
-  ::oxygen::graphics::CommandList::OnBeginRecording();
+  graphics::CommandList::OnBeginRecording();
   // No headless-specific action required here.
 }
 
 auto CommandList::OnEndRecording() -> void
 {
-  ::oxygen::graphics::CommandList::OnEndRecording();
+  graphics::CommandList::OnEndRecording();
   // No headless-specific action required here.
 }
 
 auto CommandList::OnSubmitted() -> void
 {
-  ::oxygen::graphics::CommandList::OnSubmitted();
+  graphics::CommandList::OnSubmitted();
   // Keep commands_ until StealCommands() is called by recorder.
 }
 
 auto CommandList::OnExecuted() -> void
 {
-  ::oxygen::graphics::CommandList::OnExecuted();
+  graphics::CommandList::OnExecuted();
   // After execution the command list should be free; clear any remaining
   // commands defensively.
   commands_.clear();

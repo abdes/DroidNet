@@ -21,7 +21,7 @@ ClearDepthStencilCommand::ClearDepthStencilCommand(
 {
 }
 
-auto ClearDepthStencilCommand::Execute(CommandContext& /*ctx*/) -> void
+auto ClearDepthStencilCommand::DoExecute(CommandContext& /*ctx*/) -> void
 {
   if (!texture_) {
     LOG_F(WARNING, "ClearDepthStencilCommand: no texture provided");

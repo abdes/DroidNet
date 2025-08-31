@@ -17,7 +17,7 @@ SerialExecutor::SerialExecutor()
 
 SerialExecutor::~SerialExecutor() { Stop(); }
 
-std::future<void> SerialExecutor::Enqueue(std::function<void()> task)
+auto SerialExecutor::Enqueue(std::function<void()> task) -> std::future<void>
 {
   std::lock_guard lk(mutex_);
   if (stopping_) {
@@ -31,7 +31,7 @@ std::future<void> SerialExecutor::Enqueue(std::function<void()> task)
   return f;
 }
 
-void SerialExecutor::Stop()
+auto SerialExecutor::Stop() -> void
 {
   {
     std::lock_guard lk(mutex_);
@@ -57,7 +57,7 @@ void SerialExecutor::Stop()
   }
 }
 
-void SerialExecutor::WorkerMain()
+auto SerialExecutor::WorkerMain() -> void
 {
   for (;;) {
     std::pair<std::function<void()>, std::promise<void>> item;

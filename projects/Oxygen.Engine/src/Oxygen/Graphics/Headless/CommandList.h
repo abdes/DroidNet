@@ -34,15 +34,15 @@ class Graphics;
  container into a worker thread; callers that access the API concurrently must
  ensure external synchronization.
 */
-class CommandList final : public ::oxygen::graphics::CommandList {
+class CommandList final : public graphics::CommandList {
 public:
   OXGN_HDLS_API CommandList(std::string_view name, QueueRole role);
   OXGN_HDLS_API ~CommandList() override;
 
   OXGN_HDLS_API CommandList(const CommandList&) = delete;
-  OXGN_HDLS_API CommandList& operator=(const CommandList&) = delete;
+  OXGN_HDLS_API auto operator=(const CommandList&) -> CommandList& = delete;
   OXGN_HDLS_API CommandList(CommandList&&) = delete;
-  OXGN_HDLS_API CommandList& operator=(CommandList&&) = delete;
+  OXGN_HDLS_API auto operator=(CommandList&&) -> CommandList& = delete;
 
   //! Queue a command while recording. Throws if not recording.
   OXGN_HDLS_API auto QueueCommand(std::shared_ptr<Command> cmd) -> void;

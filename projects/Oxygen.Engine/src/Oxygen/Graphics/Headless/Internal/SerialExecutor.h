@@ -22,14 +22,14 @@ public:
 
   // Enqueue a task to run serially. Returns a future<void> that will be
   // satisfied when the task completes (or exceptional if the task throws).
-  std::future<void> Enqueue(std::function<void()> task);
+  auto Enqueue(std::function<void()> task) -> std::future<void>;
 
   // Stop the executor and join the worker thread. After Stop(), Enqueue
   // will throw std::runtime_error.
-  void Stop();
+  auto Stop() -> void;
 
 private:
-  void WorkerMain();
+  auto WorkerMain() -> void;
 
   std::mutex mutex_;
   std::condition_variable cv_;

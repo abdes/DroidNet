@@ -22,7 +22,7 @@ ClearFramebufferCommand::ClearFramebufferCommand(const Framebuffer* fb,
 {
 }
 
-auto ClearFramebufferCommand::Execute(CommandContext& /*ctx*/) -> void
+auto ClearFramebufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
 {
   if (!framebuffer_) {
     LOG_F(WARNING, "ClearFramebufferCommand: no framebuffer");
