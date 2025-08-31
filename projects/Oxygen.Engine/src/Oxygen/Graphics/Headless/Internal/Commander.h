@@ -14,7 +14,6 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Headless/Internal/QueueManager.h>
 
 namespace oxygen::graphics::headless {
 
@@ -24,7 +23,6 @@ namespace internal {
 
   class Commander final : public Component {
     OXYGEN_COMPONENT(Commander)
-    OXYGEN_COMPONENT_REQUIRES(QueueManager)
 
   public:
     Commander() = default;
@@ -41,14 +39,7 @@ namespace internal {
 
     auto SubmitDeferredCommandLists() -> void;
 
-  protected:
-    auto UpdateDependencies(
-      const std::function<Component&(TypeId)>& get_component) noexcept
-      -> void override;
-
   private:
-    internal::QueueManager* queue_manager_ { nullptr };
-
     // Store a command list together with its intended submission metadata so
     // we can submit without querying the list during the drain stage.
     struct DeferredSubmission {

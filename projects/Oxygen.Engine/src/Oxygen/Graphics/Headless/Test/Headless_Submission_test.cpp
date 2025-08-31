@@ -19,54 +19,56 @@
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
 
-extern "C" void* GetGraphicsModuleApi();
+extern "C" auto GetGraphicsModuleApi() -> void*;
 
 namespace {
 
-using ::testing::Test;
+using testing::Test;
+
+using Role = oxygen::graphics::QueueRole;
+using Alloc = oxygen::graphics::QueueAllocationPreference;
+using Share = oxygen::graphics::QueueSharingPreference;
+using oxygen::graphics::QueueKey;
+using oxygen::graphics::QueueSpecification;
 
 // Create default queues using a small local strategy similar to the smoke
-// test so we can lookup by name.
-class LocalMultiNamedStrategy : public oxygen::graphics::QueueStrategy {
+// test so we can find by name.
+class LocalMultiNamedStrategy : public oxygen::graphics::QueuesStrategy {
 public:
   [[nodiscard]] auto Specifications() const
-    -> std::vector<oxygen::graphics::QueueSpecification> override
+    -> std::vector<QueueSpecification> override
   {
-    using oxygen::graphics::QueueAllocationPreference;
-    using oxygen::graphics::QueueRole;
-    using oxygen::graphics::QueueSharingPreference;
-    using oxygen::graphics::QueueSpecification;
-    return { {
-               .name = "multi-gfx",
-               .role = QueueRole::kGraphics,
-               .allocation_preference = QueueAllocationPreference::kDedicated,
-               .sharing_preference = QueueSharingPreference::kSeparate,
-             },
+    return {
+      QueueSpecification {
+        .key = QueueKey { "multi-gfx" },
+        .role = Role::kGraphics,
+        .allocation_preference = Alloc::kDedicated,
+        .sharing_preference = Share::kNamed,
+      },
       {
-        .name = "multi-cpu",
-        .role = QueueRole::kCompute,
-        .allocation_preference = QueueAllocationPreference::kDedicated,
-        .sharing_preference = QueueSharingPreference::kSeparate,
-      } };
+        .key = QueueKey { "multi-cpu" },
+        .role = Role::kCompute,
+        .allocation_preference = Alloc::kDedicated,
+        .sharing_preference = Share::kNamed,
+      },
+    };
   }
-  [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
+
+  [[nodiscard]] auto KeyFor(const Role role) const -> QueueKey override
   {
-    return "multi-gfx";
+    switch (role) {
+    case Role::kGraphics:
+    case Role::kTransfer:
+    case Role::kPresent:
+      return QueueKey { "multi-gfx" };
+    case Role::kCompute:
+      return QueueKey { "multi-cpu" };
+    case oxygen::graphics::QueueRole::kMax:;
+    }
+    return QueueKey { "__invalid__" };
   }
-  [[nodiscard]] auto PresentQueueName() const -> std::string_view override
-  {
-    return "multi-gfx";
-  }
-  [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
-  {
-    return "multi-cpu";
-  }
-  [[nodiscard]] auto TransferQueueName() const -> std::string_view override
-  {
-    return "multi-gfx";
-  }
-  [[nodiscard]] auto Clone() const
-    -> std::unique_ptr<oxygen::graphics::QueueStrategy> override
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
   {
     return std::make_unique<LocalMultiNamedStrategy>(*this);
   }
@@ -74,32 +76,32 @@ public:
 
 class HeadlessSubmissionTest : public Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
+  auto SetUp() -> void override { }
+  auto TearDown() -> void override { }
 };
 
 NOLINT_TEST_F(HeadlessSubmissionTest, DeferredBasic)
 {
-  auto module_ptr = static_cast<oxygen::graphics::GraphicsModuleApi*>(
-    ::GetGraphicsModuleApi());
+  auto module_ptr
+    = static_cast<oxygen::graphics::GraphicsModuleApi*>(GetGraphicsModuleApi());
   ASSERT_NE(module_ptr, nullptr);
 
   oxygen::SerializedBackendConfig cfg { "{}", 2 };
   void* backend = module_ptr->CreateBackend(cfg);
   ASSERT_NE(backend, nullptr);
 
-  auto* headless
-    = reinterpret_cast<oxygen::graphics::headless::Graphics*>(backend);
+  auto* headless = static_cast<oxygen::graphics::headless::Graphics*>(backend);
   ASSERT_NE(headless, nullptr);
   LocalMultiNamedStrategy queue_strategy;
   headless->CreateCommandQueues(queue_strategy);
-  auto queue = headless->GetCommandQueue(queue_strategy.GraphicsQueueName());
+  auto queue
+    = headless->GetCommandQueue(queue_strategy.KeyFor(Role::kGraphics));
   ASSERT_NE(queue, nullptr);
 
   // Acquire a command list and record a single signal into it. Use
   // immediate_submission=false so the deleter will not submit automatically.
   auto cmd_list
-    = headless->AcquireCommandList(queue->GetQueueRole(), "deferred-cmdlist");
+    = headless->AcquireCommandList(queue->GetQueueRole(), "deferred-cmd-list");
   ASSERT_NE(cmd_list, nullptr);
 
   const auto before_value = queue->GetCurrentValue();

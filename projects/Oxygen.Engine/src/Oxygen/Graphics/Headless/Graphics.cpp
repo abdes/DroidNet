@@ -16,7 +16,6 @@
 #include <Oxygen/Graphics/Headless/Graphics.h>
 #include <Oxygen/Graphics/Headless/Internal/Commander.h>
 #include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
-#include <Oxygen/Graphics/Headless/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
@@ -27,9 +26,6 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/)
 {
   // Install EngineShaders component so shader cache is stored in composition
   AddComponent<internal::EngineShaders>();
-
-  // Install QueueManager component to manage command queues
-  AddComponent<internal::QueueManager>();
 
   // Install Commander component to manage command recorder acquisition and
   // deferred submission.
@@ -64,35 +60,10 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
   return b;
 }
 
-auto Graphics::CreateCommandQueue(std::string_view /*queue_name*/,
-  QueueRole /*role*/, QueueAllocationPreference /*allocation_preference*/)
+auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
   -> std::shared_ptr<graphics::CommandQueue>
 {
-  // This is a no-op, because headless manages queues by itself in the
-  // QueueManager. See CreateCommandQueues().
-  ABORT_F("Headless: CreateCommandQueue should not be called");
-}
-
-// In headless the queue creation policy lives in internal::QueueManager; the
-// backend-level CreateCommandQueues is intentionally a no-op because queues
-// are created on demand (or by QueueManager strategies) rather than by the
-// base class initializer.
-auto Graphics::CreateCommandQueues(
-  const graphics::QueueStrategy& queue_strategy) -> void
-{
-  auto& qm = GetComponent<internal::QueueManager>();
-  qm.CreateQueues(queue_strategy);
-}
-
-// Flush headless command queues: ensure all pending submissions are processed
-// and queue-side recorded commands (signals/waits) are executed. This method
-// walks all known queues from the QueueManager and waits for their pending
-// submissions to complete, then invokes a queue flush operation if available.
-auto Graphics::FlushCommandQueues() -> void
-{
-  // Use the installed QueueManager component for queue enumeration.
-  auto& qm = GetComponent<internal::QueueManager>();
-  qm.ForEachQueue([](graphics::CommandQueue& q) { q.Flush(); });
+  return std::make_shared<CommandQueue>(queue_key.get(), role);
 }
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
@@ -117,7 +88,7 @@ auto Graphics::CreateCommandListImpl(QueueRole role,
   const auto name = command_list_name.empty()
     ? std::string_view("headless-cmdlist")
     : command_list_name;
-  return std::make_unique<headless::CommandList>(name, role);
+  return std::make_unique<CommandList>(name, role);
 }
 
 auto Graphics::CreateCommandRecorder(
@@ -125,15 +96,8 @@ auto Graphics::CreateCommandRecorder(
   observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
-  return std::make_unique<headless::CommandRecorder>(
+  return std::make_unique<CommandRecorder>(
     std::move(command_list), target_queue);
-}
-
-auto Graphics::GetCommandQueue(std::string_view name) const
-  -> std::shared_ptr<graphics::CommandQueue>
-{
-  auto& qm = GetComponent<internal::QueueManager>();
-  return qm.GetQueueByName(name);
 }
 
 auto Graphics::AcquireCommandRecorder(
