@@ -81,11 +81,6 @@ protected:
   OXGN_HDLS_NDAPI auto CreateCommandListImpl(
     QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList> override;
-
-private:
-  std::vector<std::shared_ptr<graphics::CommandList>> pending_cmd_lists_;
-  // Protects access to pending_cmd_lists_ in multithreaded scenarios.
-  mutable std::mutex pending_cmd_lists_mutex_;
 };
 
 } // namespace oxygen::graphics::headless

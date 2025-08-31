@@ -79,6 +79,7 @@ set(
   "Commands/CopyBufferCommand.cpp"
   "Graphics.cpp"
   "Internal/EngineShaders.cpp"
+  "Internal/Commander.cpp"
   "Internal/HeadlessModule.cpp"
   "Internal/QueueManager.cpp"
   "Internal/SerialExecutor.cpp"

@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/Graphics/Headless/Internal/Commander.h>
 #include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
 #include <Oxygen/Graphics/Headless/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
@@ -29,6 +30,10 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/)
 
   // Install QueueManager component to manage command queues
   AddComponent<internal::QueueManager>();
+
+  // Install Commander component to manage command recorder acquisition and
+  // deferred submission.
+  AddComponent<internal::Commander>();
 
   // Initialize global Bindless allocator at the device level
   {
@@ -137,105 +142,18 @@ auto Graphics::AcquireCommandRecorder(
   bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
   std::function<void(graphics::CommandRecorder*)>>
 {
-  // Create headless recorder via backend factory. We reuse the
-  // CreateCommandRecorder hook provided by the common Graphics interface; for
-  // headless this should produce a headless::CommandRecorder instance.
+  // Create backend recorder and forward to the Commander component which will
+  // wrap it with the appropriate deleter behavior.
   auto recorder
     = CreateCommandRecorder(command_list, observer_ptr { queue.get() });
-  if (!recorder) {
-    return nullptr;
-  }
-  recorder->Begin();
-
-  // The deleter will either submit immediately or capture the completed
-  // command list for deferred submission. We need to ensure thread-safe
-  // access to pending_cmd_lists_. The deleter captures a weak pointer to
-  // `this` to avoid dangling references if Graphics is destroyed.
-  auto self = this;
-  return {
-    recorder.release(),
-    [self, cmd_list = std::move(command_list), immediate_submission](
-      graphics::CommandRecorder* rec) mutable {
-      if (!rec) {
-        return;
-      }
-      try {
-        if (auto completed_cmd = rec->End(); completed_cmd != nullptr) {
-          auto target_queue = rec->GetTargetQueue();
-          DCHECK_NOTNULL_F(target_queue);
-          if (immediate_submission) {
-            LOG_F(INFO, "Immediate Submission -> calling rec->End()");
-            LOG_F(INFO, "Deleter: submitting the command list to the queue");
-            target_queue->Submit(*completed_cmd);
-            LOG_F(INFO, "Deleter: calling cmd_list->OnSubmitted()");
-            cmd_list->OnSubmitted();
-          } else {
-            // Deferred: store the completed command list so it can be
-            // submitted later by SubmitDeferredCommandLists(). Use the
-            // Graphics instance mutex to protect the pending list.
-            try {
-              std::lock_guard lk(self->pending_cmd_lists_mutex_);
-              self->pending_cmd_lists_.emplace_back(std::move(completed_cmd));
-            } catch (const std::exception& e) {
-              LOG_F(
-                ERROR, "Failed to store deferred command list: {}", e.what());
-            }
-          }
-        }
-      } catch (const std::exception& ex) {
-        LOG_F(ERROR, "Exception in headless recorder cleanup: {}", ex.what());
-      }
-      delete rec;
-    },
-  };
+  auto& cmdr = GetComponent<internal::Commander>();
+  return cmdr.PrepareCommandRecorder(
+    std::move(recorder), std::move(command_list), immediate_submission);
 }
 
 auto Graphics::SubmitDeferredCommandLists() -> void
 {
-  std::vector<std::shared_ptr<graphics::CommandList>> lists_to_submit;
-  {
-    std::lock_guard lk(pending_cmd_lists_mutex_);
-    if (pending_cmd_lists_.empty()) {
-      return;
-    }
-    lists_to_submit.swap(pending_cmd_lists_);
-  }
-
-  for (auto& cmd_list : lists_to_submit) {
-    if (!cmd_list) {
-      continue;
-    }
-    // Find the target queue via the queue manager or the common Graphics
-    // lookup. For headless the recorded command lists encode the queue role
-    // they should be submitted to; ask the QueueManager for an appropriate
-    // queue instance. We'll attempt to use the Graphics::GetCommandQueue by
-    // role name fallback; if not found, try to find any queue with matching
-    // role via the installed QueueManager.
-    bool submitted = false;
-    auto& qm = GetComponent<internal::QueueManager>();
-    qm.ForEachQueue([&](graphics::CommandQueue& q) {
-      if (submitted) {
-        return;
-      }
-      if (q.GetQueueRole() == cmd_list->GetQueueRole()) {
-        try {
-          q.Submit(*cmd_list);
-          cmd_list->OnSubmitted();
-        } catch (const std::exception& e) {
-          LOG_F(ERROR, "SubmitDeferredCommandLists: failed to submit: {}",
-            e.what());
-          throw;
-        }
-        submitted = true;
-      }
-    });
-
-    if (!submitted) {
-      LOG_F(WARNING,
-        "SubmitDeferredCommandLists: no matching queue for role={}",
-        nostd::to_string(cmd_list->GetQueueRole()));
-    }
-  }
+  GetComponent<internal::Commander>().SubmitDeferredCommandLists();
 }
 
 auto Graphics::CreateRendererImpl(std::string_view /*name*/,
