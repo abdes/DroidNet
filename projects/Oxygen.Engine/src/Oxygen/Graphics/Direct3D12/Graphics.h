@@ -81,8 +81,8 @@ protected:
   {
   }
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(std::string_view name,
-    QueueRole role, QueueAllocationPreference allocation_preference)
+  [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
+    const QueueKey& queue_key, QueueRole role)
     -> std::shared_ptr<graphics::CommandQueue> override;
 
   [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(std::string_view name,

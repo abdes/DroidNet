@@ -13,9 +13,9 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
@@ -166,7 +166,7 @@ namespace graphics {
      as the recorder is destroyed; otherwise, it is batched for later
      submission.
 
-     \param queue_name The name of the command queue to record commands to.
+     \param queue_key The name of the command queue to record commands to.
      \param command_list_name The name for the command list, used for
             debugging and tracking.
      \param immediate_submission If true, the command list is submitted
@@ -176,7 +176,7 @@ namespace graphics {
             for proper submission and cleanup.
     */
     [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandRecorder(
-      std::string_view queue_name, std::string_view command_list_name,
+      const QueueKey& queue_key, std::string_view command_list_name,
       bool immediate_submission = true) -> std::unique_ptr<CommandRecorder,
       std::function<void(CommandRecorder*)>>;
 

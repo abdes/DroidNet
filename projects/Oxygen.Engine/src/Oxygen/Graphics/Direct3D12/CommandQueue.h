@@ -27,13 +27,13 @@ public:
   [[nodiscard]] OXYGEN_D3D12_API auto GetQueueRole() const
     -> QueueRole override;
 
-  OXYGEN_D3D12_API void Signal(uint64_t value) const override;
+  OXYGEN_D3D12_API auto Signal(uint64_t value) const -> void override;
   [[nodiscard]] OXYGEN_D3D12_API auto Signal() const -> uint64_t override;
-  OXYGEN_D3D12_API void Wait(
-    uint64_t value, std::chrono::milliseconds timeout) const override;
-  OXYGEN_D3D12_API void Wait(uint64_t value) const override;
-  OXYGEN_D3D12_API void QueueSignalCommand(uint64_t value) override;
-  OXYGEN_D3D12_API void QueueWaitCommand(uint64_t value) const override;
+  OXYGEN_D3D12_API auto Wait(
+    uint64_t value, std::chrono::milliseconds timeout) const -> void override;
+  OXYGEN_D3D12_API auto Wait(uint64_t value) const -> void override;
+  OXYGEN_D3D12_API auto QueueSignalCommand(uint64_t value) -> void override;
+  OXYGEN_D3D12_API auto QueueWaitCommand(uint64_t value) const -> void override;
   [[nodiscard]] OXYGEN_D3D12_API auto GetCompletedValue() const
     -> uint64_t override;
   [[nodiscard]] OXYGEN_D3D12_API auto GetCurrentValue() const
@@ -42,11 +42,13 @@ public:
     return current_value_;
   }
 
-  OXYGEN_D3D12_API void Submit(graphics::CommandList& command_list) override;
-  OXYGEN_D3D12_API void Submit(
-    std::span<graphics::CommandList*> command_lists) override;
+  OXYGEN_D3D12_API auto Submit(graphics::CommandList& command_list)
+    -> void override;
+  OXYGEN_D3D12_API auto Submit(std::span<graphics::CommandList*> command_lists)
+    -> void override;
 
-  OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
+  OXYGEN_D3D12_API auto SetName(std::string_view name) noexcept
+    -> void override;
 
   [[nodiscard]] OXYGEN_D3D12_API auto GetCommandQueue() const
     -> dx::ICommandQueue*
@@ -61,10 +63,10 @@ public:
 
 private:
   auto CurrentDevice() const -> dx::IDevice*;
-  void CreateCommandQueue(QueueRole role, std::string_view queue_name);
-  void CreateFence(std::string_view fence_name, uint64_t initial_value);
-  void ReleaseCommandQueue() noexcept;
-  void ReleaseFence() noexcept;
+  auto CreateCommandQueue(QueueRole role, std::string_view queue_name) -> void;
+  auto CreateFence(std::string_view fence_name, uint64_t initial_value) -> void;
+  auto ReleaseCommandQueue() noexcept -> void;
+  auto ReleaseFence() noexcept -> void;
 
   QueueRole queue_role_; //<! The cached role of the command queue.
   const Graphics* gfx_ {

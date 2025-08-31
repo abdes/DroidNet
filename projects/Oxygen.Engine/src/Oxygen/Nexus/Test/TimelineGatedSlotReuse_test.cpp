@@ -29,33 +29,33 @@ namespace {
 // Tests follow the AAA pattern and use fixtures for shared setup.
 
 // Common matchers used by tests
-using ::testing::SizeIs;
-using ::testing::UnorderedElementsAreArray;
+using testing::SizeIs;
+using testing::UnorderedElementsAreArray;
 
 // Backend allocator/free mocks used by tests.
 struct AllocateBackend {
   std::atomic<uint32_t> next { 0 };
-  Handle operator()(DomainKey) { return Handle { next.fetch_add(1u) }; }
+  auto operator()(DomainKey) -> Handle { return Handle { next.fetch_add(1u) }; }
 };
 
 struct FreeBackend {
   std::vector<uint32_t> freed;
-  void operator()(DomainKey, Handle h) { freed.push_back(h.get()); }
+  auto operator()(DomainKey, Handle h) -> void { freed.push_back(h.get()); }
 };
 
 // Test-only CommandQueue implementation that derives from the real
 // `oxygen::graphics::CommandQueue`. This ensures pointer identity and
 // virtual dispatch match production code expectations.
-struct FakeCommandQueue : public oxygen::graphics::CommandQueue {
+struct FakeCommandQueue : oxygen::graphics::CommandQueue {
   mutable std::atomic<uint64_t> completed { 0 };
   mutable std::atomic<uint64_t> current { 0 };
 
   FakeCommandQueue()
-    : oxygen::graphics::CommandQueue("FakeCommandQueue")
+    : CommandQueue("FakeCommandQueue")
   {
   }
 
-  void Signal(uint64_t value) const override
+  auto Signal(uint64_t value) const -> void override
   {
     completed.store(value);
     current.store(value);
@@ -69,11 +69,14 @@ struct FakeCommandQueue : public oxygen::graphics::CommandQueue {
     return v;
   }
 
-  void Wait(uint64_t, std::chrono::milliseconds) const override { }
-  void Wait(uint64_t) const override { }
+  auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
+  auto Wait(uint64_t) const -> void override { }
 
-  void QueueSignalCommand(uint64_t value) override { completed.store(value); }
-  void QueueWaitCommand(uint64_t) const override { }
+  auto QueueSignalCommand(uint64_t value) -> void override
+  {
+    completed.store(value);
+  }
+  auto QueueWaitCommand(uint64_t) const -> void override { }
 
   auto GetCompletedValue() const -> uint64_t override
   {
@@ -81,23 +84,23 @@ struct FakeCommandQueue : public oxygen::graphics::CommandQueue {
   }
   auto GetCurrentValue() const -> uint64_t override { return current.load(); }
 
-  void Submit(oxygen::graphics::CommandList&) override { }
-  void Submit(std::span<oxygen::graphics::CommandList*>) override { }
+  auto Submit(oxygen::graphics::CommandList&) -> void override { }
+  auto Submit(std::span<oxygen::graphics::CommandList*>) -> void override { }
 
   auto GetQueueRole() const -> oxygen::graphics::QueueRole override
   {
-    return oxygen::graphics::QueueRole::kNone;
+    return oxygen::graphics::QueueRole::kGraphics;
   }
 };
 
 //! Test fixture providing common setup for TimelineGatedSlotReuse tests.
 class TimelineGatedSlotReuseTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     strategy_ = std::make_unique<oxygen::nexus::TimelineGatedSlotReuse>(
-      [this](DomainKey d) -> oxygen::bindless::Handle { return alloc_(d); },
-      [this](DomainKey d, oxygen::bindless::Handle h) { free_(d, h); });
+      [this](DomainKey d) -> Handle { return alloc_(d); },
+      [this](DomainKey d, Handle h) { free_(d, h); });
     domain_ = DomainKey { oxygen::graphics::ResourceViewType::kTexture_SRV,
       oxygen::graphics::DescriptorVisibility::kShaderVisible };
   }
@@ -107,20 +110,22 @@ protected:
   {
     return strategy_->Allocate(domain_);
   }
-  void Release(VersionedBindlessHandle h,
+  auto Release(VersionedBindlessHandle h,
     const std::shared_ptr<oxygen::graphics::CommandQueue>& q, uint64_t fence)
+    -> void
   {
     strategy_->Release(domain_, h, q, oxygen::graphics::FenceValue { fence });
   }
 
   // Helper: assert freed indices match expected set exactly (order-insensitive)
-  void ExpectFreedExactly(std::span<const uint32_t> expected)
+  auto ExpectFreedExactly(std::span<const uint32_t> expected) -> void
   {
     EXPECT_THAT(free_.freed, UnorderedElementsAreArray(expected));
   }
 
   // Helper: assert all handles in a collection are current
-  template <typename Collection> void ExpectAllCurrent(const Collection& items)
+  template <typename Collection>
+  auto ExpectAllCurrent(const Collection& items) -> void
   {
     for (const auto& kv : items) {
       EXPECT_TRUE(strategy_->IsHandleCurrent(kv.second));
@@ -128,7 +133,8 @@ protected:
   }
 
   // Helper: assert no handles in a collection are current
-  template <typename Collection> void ExpectNoneCurrent(const Collection& items)
+  template <typename Collection>
+  auto ExpectNoneCurrent(const Collection& items) -> void
   {
     for (const auto& kv : items) {
       EXPECT_FALSE(strategy_->IsHandleCurrent(kv.second));
@@ -161,7 +167,7 @@ NOLINT_TEST_F(TimelineGatedSlotReuseTest,
   auto q = std::make_shared<FakeCommandQueue>();
 
   // Act - release and process before fence reached
-  const uint64_t fence = 1;
+  constexpr uint64_t fence = 1;
   Release(h, q, fence);
   strategy_->ProcessFor(q);
 
@@ -198,7 +204,7 @@ NOLINT_TEST_F(TimelineGatedSlotReuseTest, Release_IgnoresDuplicates)
   // Arrange
   auto h = Allocate();
   auto q = std::make_shared<FakeCommandQueue>();
-  const uint64_t fence = 2;
+  constexpr uint64_t fence = 2;
 
   // Act
   Release(h, q, fence);
@@ -277,7 +283,7 @@ NOLINT_TEST_F(TimelineGatedSlotReuseTest, Release_HandlesMaxFence)
   // Arrange
   auto h = Allocate();
   auto q = std::make_shared<FakeCommandQueue>();
-  const uint64_t max_fence = std::numeric_limits<uint64_t>::max();
+  constexpr uint64_t max_fence = std::numeric_limits<uint64_t>::max();
 
   // Act
   Release(h, q, max_fence);
@@ -455,7 +461,7 @@ NOLINT_TEST_F(TimelineGatedSlotReuseTest, DomainIsolation_IndependentProcessing)
 
   // Arrange - create handles from different domains
   const DomainKey domain_a = domain_;
-  const DomainKey domain_b { graphics::ResourceViewType::kRawBuffer_SRV,
+  constexpr DomainKey domain_b { graphics::ResourceViewType::kRawBuffer_SRV,
     graphics::DescriptorVisibility::kShaderVisible };
   auto h_a = strategy_->Allocate(domain_a);
   auto h_b = strategy_->Allocate(domain_b);

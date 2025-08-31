@@ -47,7 +47,7 @@ using oxygen::graphics::d3d12::testing::MockPipelineState;
 using oxygen::graphics::d3d12::testing::MockRootSignature;
 namespace dx = oxygen::graphics::d3d12::dx;
 
-using ::testing::Return;
+using testing::Return;
 
 namespace {
 
@@ -57,28 +57,20 @@ class MockGraphics : public oxygen::graphics::d3d12::Graphics {
 public:
   explicit MockGraphics() = default;
 
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader,
-    (std::string_view), (const, override));
+  // NOLINTBEGIN
+  // clang-format off
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface,
-    (std::weak_ptr<oxygen::platform::Window>,
-      std::shared_ptr<oxygen::graphics::CommandQueue>),
-    (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>,
-    CreateCommandQueue,
-    (std::string_view, oxygen::graphics::QueueRole,
-      oxygen::graphics::QueueAllocationPreference),
-    (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>,
-    CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view),
-    (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>,
-    CreateRendererImpl,
-    (std::string_view, std::weak_ptr<oxygen::graphics::Surface>,
-      oxygen::frame::SlotCount),
-    (override));
-
-  // Add GetCurrentDevice method that D3D12 RenderController constructor calls
+    (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue,
+    (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl,
+    (oxygen::graphics::QueueRole, std::string_view), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl,
+    (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::frame::SlotCount), (override));
   MOCK_METHOD(dx::IDevice*, GetCurrentDevice, (), (const, override));
+  // clang-format on
+  // NOLINTEND
 };
 
 // Helper class to capture and validate root signature blob data
@@ -86,7 +78,7 @@ struct RootSignatureBlobCapture {
   std::vector<uint8_t> captured_blob;
   bool blob_captured = false;
 
-  void CaptureBlob(const void* data, const SIZE_T size)
+  auto CaptureBlob(const void* data, const SIZE_T size) -> void
   {
     captured_blob.resize(size);
     std::memcpy(captured_blob.data(), data, size);
@@ -106,8 +98,8 @@ struct RootSignatureBlobCapture {
 namespace reference_blobs {
 
   // Helper to serialize a root signature descriptor
-  std::vector<uint8_t> SerializeRootSignature(
-    const D3D12_ROOT_SIGNATURE_DESC& desc)
+  auto SerializeRootSignature(const D3D12_ROOT_SIGNATURE_DESC& desc)
+    -> std::vector<uint8_t>
   {
     Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
     const HRESULT hr = D3D12SerializeRootSignature(
@@ -282,16 +274,16 @@ namespace reference_blobs {
 } // namespace reference_blobs
 
 // Test fixture for PipelineStateCache root signature creation
-class PipelineStateCacheTest : public ::testing::Test {
+class PipelineStateCacheTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     using oxygen::graphics::IShaderByteCode;
-    using ::testing::_;
+    using testing::_;
 
     // Setup mock device to capture CreateRootSignature calls
     EXPECT_CALL(mock_device_, CreateRootSignature(_, _, _, _, _))
-      .Times(::testing::AnyNumber())
+      .Times(testing::AnyNumber())
       .WillRepeatedly([this](UINT /*node_mask*/, const void* blob_data,
                         const SIZE_T blob_length, REFIID /*riid*/,
                         void** ppv_root_signature) -> HRESULT {
@@ -305,7 +297,7 @@ protected:
 
     // Setup mock device for pipeline state creation
     EXPECT_CALL(mock_device_, CreateGraphicsPipelineState(_, _, _))
-      .Times(::testing::AnyNumber())
+      .Times(testing::AnyNumber())
       .WillRepeatedly([this](const D3D12_GRAPHICS_PIPELINE_STATE_DESC* /*desc*/,
                         REFIID /*riid*/, void** ppv_pipeline_state) -> HRESULT {
         // Return the mock pipeline state instance
@@ -314,7 +306,7 @@ protected:
       });
 
     EXPECT_CALL(mock_device_, CreateComputePipelineState(_, _, _))
-      .Times(::testing::AnyNumber())
+      .Times(testing::AnyNumber())
       .WillRepeatedly([this](const D3D12_COMPUTE_PIPELINE_STATE_DESC* /*desc*/,
                         REFIID /*riid*/, void** ppv_pipeline_state) -> HRESULT {
         // Return the mock pipeline state instance

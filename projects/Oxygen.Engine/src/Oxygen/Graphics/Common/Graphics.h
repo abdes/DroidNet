@@ -13,7 +13,8 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
@@ -37,7 +38,7 @@ namespace graphics {
   class Framebuffer;
   class IShaderByteCode;
   class NativeObject;
-  class QueueStrategy;
+  class QueuesStrategy;
   class ResourceRegistry;
   class RenderController;
   class Surface;
@@ -64,7 +65,7 @@ namespace imgui {
 
  - Device-scoped ownership of global bindless state (descriptor allocator and
    resource registry) with backend-provided installation.
- - Command queue creation via a configurable graphics::QueueStrategy and pooled
+ - Command queue creation via a configurable graphics::QueuesStrategy and pooled
    command list acquisition per queue role.
  - Creation/orchestration of graphics::RenderController instances bound to
    platform::Window-backed graphics::Surface objects.
@@ -102,7 +103,7 @@ namespace imgui {
  @warning The descriptor allocator must be installed exactly once by the backend
  after device creation; accessing bindless facilities before that is a contract
  violation and triggers debug assertions.
- @see graphics::RenderController, graphics::Surface, graphics::QueueStrategy,
+ @see graphics::RenderController, graphics::Surface, graphics::QueuesStrategy,
       graphics::DescriptorAllocator, graphics::ResourceRegistry, co::LiveObject
 */
 class Graphics : public Composition,
@@ -153,9 +154,13 @@ public:
   @param queue_strategy The strategy for initializing command queues.
   */
   [[nodiscard]] virtual OXYGEN_GFX_API auto CreateCommandQueues(
-    const graphics::QueueStrategy& queue_strategy) -> void;
+    const graphics::QueuesStrategy& queue_strategy) -> void;
 
-  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(std::string_view name) const
+  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(
+    const graphics::QueueKey& key) const
+    -> std::shared_ptr<graphics::CommandQueue>;
+
+  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(graphics::QueueRole role) const
     -> std::shared_ptr<graphics::CommandQueue>;
 
   OXYGEN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
@@ -232,16 +237,14 @@ protected:
 
   @param queue_name Debug name for the queue.
   @param role Engine queue role (graphics, compute, copy, etc.).
-  @param allocation_preference Preferred allocation behavior for the queue.
   @return Shared pointer to the created command queue.
   @throw std::runtime_error If the command queue cannot be created.
 
    Note: Typical callers use CreateCommandQueues() and GetCommandQueue();
    this method is for backend implementations.
   */
-  [[nodiscard]] virtual auto CreateCommandQueue(std::string_view queue_name,
-    graphics::QueueRole role,
-    graphics::QueueAllocationPreference allocation_preference)
+  [[nodiscard]] virtual auto CreateCommandQueue(
+    const graphics::QueueKey& queue_name, graphics::QueueRole role)
     -> std::shared_ptr<graphics::CommandQueue>
     = 0;
 
@@ -287,7 +290,7 @@ private:
 
   using CommandQueueSharedPtr = std::shared_ptr<graphics::CommandQueue>;
   //! The command queues created by the backend.
-  std::unordered_map<std::string, CommandQueueSharedPtr> command_queues_;
+  std::unordered_map<graphics::QueueKey, CommandQueueSharedPtr> command_queues_;
 
   using CommandListUniquePtr = std::unique_ptr<graphics::CommandList>;
   using CommandLists = std::vector<CommandListUniquePtr>;

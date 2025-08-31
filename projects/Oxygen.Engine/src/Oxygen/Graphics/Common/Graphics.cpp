@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/Bindless.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
+#include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -26,6 +27,7 @@
 
 using oxygen::Graphics;
 using oxygen::graphics::internal::Bindless;
+using oxygen::graphics::internal::QueueManager;
 
 Graphics::Graphics(const std::string_view name)
 {
@@ -33,6 +35,8 @@ Graphics::Graphics(const std::string_view name)
   // Create backend-agnostic Bindless component now; allocator will be set by
   // backend later after device is created.
   AddComponent<Bindless>();
+  // Install QueueManager component for common graphics queue management.
+  AddComponent<QueueManager>();
 }
 
 Graphics::~Graphics() = default;
@@ -43,14 +47,14 @@ auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
   return OpenNursery(nursery_, std::move(started));
 }
 
-void Graphics::Run()
+auto Graphics::Run() -> void
 {
   DLOG_F(INFO, "Starting Graphics backend async tasks...");
 }
 
 auto Graphics::IsRunning() const -> bool { return nursery_ != nullptr; }
 
-void Graphics::Stop()
+auto Graphics::Stop() -> void
 {
   // Flush all command queues
   FlushCommandQueues();
@@ -89,53 +93,48 @@ auto Graphics::SetDescriptorAllocator(
   GetComponent<Bindless>().SetAllocator(std::move(allocator));
 }
 
-void Graphics::CreateCommandQueues(
-  const graphics::QueueStrategy& queue_strategy)
+auto Graphics::CreateCommandQueues(
+  const graphics::QueuesStrategy& queue_strategy) -> void
 {
-  LOG_IF_F(INFO, !command_queues_.empty(),
-    "Re-creating command queues for the graphics backend");
+  // Delegate queue management to the installed QueueManager component which
+  // will call back to this backend's CreateCommandQueue hook when it needs to
+  // instantiate actual CommandQueue objects.
+  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  qm.CreateQueues(queue_strategy,
+    [this](const graphics::QueueKey& k,
+      graphics::QueueRole r) -> std::shared_ptr<graphics::CommandQueue> {
+      return this->CreateCommandQueue(k, r);
+    });
+  // Mirror the manager's name-based map into command_queues_ for backwards
+  // compatibility with existing code that inspects `command_queues_`.
   command_queues_.clear();
-
-  const auto queue_specs = queue_strategy.Specifications();
-  std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>>
-    temp_queues;
-
-  try {
-    for (const auto& spec : queue_specs) {
-      auto queue
-        = CreateCommandQueue(spec.name, spec.role, spec.allocation_preference);
-      // If CreateCommandQueue does not throw, queue is guaranteed to be not
-      // null.
-      temp_queues.emplace(spec.name, std::move(queue));
+  for (const auto& spec : queue_strategy.Specifications()) {
+    const auto q = qm.GetQueueByName(spec.key);
+    if (q) {
+      command_queues_.emplace(spec.key, q);
     }
-    command_queues_ = std::move(temp_queues);
-  } catch (...) {
-    // Destroy all previously created queues
-    temp_queues.clear();
-    throw;
   }
 }
 
-void Graphics::FlushCommandQueues()
+auto Graphics::FlushCommandQueues() -> void
 {
-  LOG_SCOPE_F(1, "Flushing all command queues");
-  for (const auto& queue : command_queues_ | std::views::values) {
-    DCHECK_NOTNULL_F(queue);
-    queue->Flush();
-  }
+  // Forward to the QueueManager which enumerates unique queues safely.
+  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  qm.ForEachQueue([](graphics::CommandQueue& q) { q.Flush(); });
 }
 
-auto Graphics::GetCommandQueue(const std::string_view name) const
+auto Graphics::GetCommandQueue(const graphics::QueueKey& key) const
   -> std::shared_ptr<graphics::CommandQueue>
 {
-  if (const auto it = std::ranges::find(
-        command_queues_, name, [](const auto& pair) { return pair.first; });
-    it != command_queues_.end()) {
-    return it->second;
-  }
+  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  return qm.GetQueueByName(key);
+}
 
-  LOG_F(WARNING, "Command queue '{}' not found", name);
-  return {};
+auto Graphics::GetCommandQueue(const graphics::QueueRole role) const
+  -> std::shared_ptr<graphics::CommandQueue>
+{
+  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  return qm.GetQueueByRole(role);
 }
 
 auto Graphics::CreateRenderController(const std::string_view name,

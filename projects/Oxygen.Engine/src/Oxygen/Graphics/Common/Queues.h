@@ -8,129 +8,166 @@
 
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 
 namespace oxygen::graphics {
 
-//! A specification of a queue for a certain role in the graphics system.
-/*!
- QueueSpecification defines the properties of a queue that the application
- requires. The backend implementation is responsible for mapping these
- specifications to API-specific queue types or families.
-*/
-struct QueueSpecification {
-  // A unique name to identify the queue in the application domain, and which
-  // will also be used to obtain the queue from the device at any time later.
-  std::string name;
+using QueueKey = NamedType<std::string,
+  // clang-format off
+  struct QueueKeyTag,
+  MethodCallable,
+  Comparable,
+  Hashable,
+  Printable>; // clang-format on
 
+constexpr auto to_string(const QueueKey& key) -> const auto&
+{
+  return key.get();
+}
+
+//! How command queues should be provisioned for specified roles.
+/*!
+ Encodes an allocation *preference* used by queue-management code and
+ higher-level strategies. This is an advisory hint; it does not guarantee a
+ particular hardware mapping. Backends or the manager may alias or fall back
+ depending on device capabilities.
+
+ @see QueueSpecification
+ */
+enum class QueueAllocationPreference : uint8_t {
+  //! Prefer using a single universal queue for all roles.
+  kAllInOne,
+
+  //! Prefer using distinct queues per logical role when possible.
+  kDedicated
+};
+
+OXYGEN_GFX_API auto to_string(QueueAllocationPreference value) -> const char*;
+
+//! How command queues should be provided when requested.
+/*!
+ Encodes a sharing *preference* used by queue-management code and higher-level
+ strategies. Indicates whether this command queue prefers to be returned only
+ when specifically requested by its QueueKey, or whether it can be used for
+ requests for a role it can satisfy.
+
+ @see QueueSpecification
+ */
+enum class QueueSharingPreference : uint8_t {
+  //! Can be returned for generic requests by role, as long as the requested
+  //! role is compatible with the queue roles.
+  kShared,
+
+  //! Prefers being returned only for specific requests by QueueKey.
+  kNamed
+};
+
+//! Convert a QueueSharingPreference value to a textual name.
+OXYGEN_GFX_API auto to_string(QueueSharingPreference value) -> const char*;
+
+//! Properties describing a command queue.
+/*!
+ Describes the application-visible properties of a command queue. Concrete
+ QueuesStrategy specify one or more QueueSpecification entries; backend
+ implementations consumes these to create or select CommandQueue instances.
+
+ @see QueuesStrategy, headless::internal::QueueManager
+ */
+struct QueueSpecification {
+  //! Application-visible name used for named lookup and reuse.
+  QueueKey key;
+
+  //! Logical role requested for this queue.
   QueueRole role;
+
+  //! Allocation preference for universal vs per-role provisioning.
   QueueAllocationPreference allocation_preference;
+
+  //! Advisory hint whether this spec should be shared or kept separate.
   QueueSharingPreference sharing_preference;
 };
 
-//! Abstract interface for queue selection strategies.
+//! Strategy interface that produces queue specifications and canonical keys for
+//! commonly used queues.
 /*!
- QueueStrategy defines how command queues are specified and selected for
- different roles (graphics, compute, transfer, present) in the graphics system.
- Implementations of this interface provide the set of queue specifications
- required by the application and map each operation type to a named queue. This
- abstraction decouples application code from the physical queue topology of the
- device and allows flexible queue management strategies.
+ Implementations of QueuesStrategy declare which queues the application requires
+ and provide canonical keys for each logical role. QueueManager consumes the
+ returned specifications and names to create or lookup CommandQueue instances.
 
- The backend implementation is responsible for mapping the requested queue roles
- and preferences to API-specific queue types, families, or indices.
-*/
-class QueueStrategy {
+ Implementations are expected to be copyable (Clone()) and lightweight. The
+ strategy separates policy (which queues the app wants) from backend mapping
+ (how to create or assign native queues).
+ */
+class QueuesStrategy {
 public:
-  QueueStrategy() = default;
-  virtual ~QueueStrategy() = default;
+  QueuesStrategy() = default;
 
-  OXYGEN_DEFAULT_COPYABLE(QueueStrategy);
-  OXYGEN_DEFAULT_MOVABLE(QueueStrategy);
+  OXYGEN_DEFAULT_COPYABLE(QueuesStrategy)
+  OXYGEN_DEFAULT_MOVABLE(QueuesStrategy)
 
-  /*!
-   Virtual clone for polymorphic copying of concrete strategies. Backends
-   can store a copy of the provided strategy via this interface.
-  */
-  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<QueueStrategy>
+  virtual ~QueuesStrategy() = default;
+
+  //! Clone the concrete strategy for polymorphic copying.
+  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<QueuesStrategy>
     = 0;
 
+  //! Return the list of QueueSpecification entries defined by this strategy.
   [[nodiscard]] virtual auto Specifications() const
     -> std::vector<QueueSpecification>
     = 0;
 
-  // Get the queue name for a certain type of operation from the queue
-  // strategy and then use it to request the corresponding queue from the
-  // device. This way, the application code is decoupled from the topology of
-  // queues and their roles, whether the physical device offers a single
-  // family or not or many queues per family or not.
-
-  [[nodiscard]] virtual auto GraphicsQueueName() const -> std::string_view = 0;
-  [[nodiscard]] virtual auto PresentQueueName() const -> std::string_view = 0;
-  [[nodiscard]] virtual auto ComputeQueueName() const -> std::string_view = 0;
-  [[nodiscard]] virtual auto TransferQueueName() const -> std::string_view = 0;
+  //! Canonical name to request for graphics submissions.
+  [[nodiscard]] virtual auto KeyFor(QueueRole role) const -> QueueKey = 0;
 };
 
-//! A queue strategy that provides a single queue from the all-in-one queue
-//! family. This is the default strategy for most devices and is the most common
-//! configuration for graphics applications.
+//! Simple strategy that requests a single universal graphics queue.
 /*!
- In practice, graphics implies compute support. Compute implies transfer
- support. Every device supports presenting from a graphics queue. In general
- there is no need to present from a dedicated queue unless you are trying to
- reach very high frame rate per second.
+ SingleQueueStrategy constructs a single QueueSpecification for an all-in-one,
+ sharable graphics queue with key "universal".
 
- The interface still abstracts this design choice through the use of the
- <Family>QueueName() methods. Using these methods to get a suitable queue for
- the operations that need to be submitted allows easy move to a different
- strategy later.
-*/
-class SingleQueueStrategy final : public QueueStrategy {
+ Use this strategy on platforms where a single graphics-capable queue should
+ service all workloads.
+ */
+class SingleQueueStrategy final : public QueuesStrategy {
 public:
   SingleQueueStrategy() = default;
-  ~SingleQueueStrategy() override = default;
 
-  OXYGEN_DEFAULT_COPYABLE(SingleQueueStrategy);
-  OXYGEN_DEFAULT_MOVABLE(SingleQueueStrategy);
+  OXYGEN_DEFAULT_COPYABLE(SingleQueueStrategy)
+  OXYGEN_DEFAULT_MOVABLE(SingleQueueStrategy)
+
+  ~SingleQueueStrategy() override = default;
 
   [[nodiscard]] auto Specifications() const
     -> std::vector<QueueSpecification> override
   {
-    return { {
-      .name = kSingleQueueName,
-      .role = QueueRole::kGraphics,
-      .allocation_preference = QueueAllocationPreference::kAllInOne,
-      .sharing_preference = QueueSharingPreference::kShared,
-    } };
-  }
-  [[nodiscard]] auto GraphicsQueueName() const -> std::string_view override
-  {
-    return kSingleQueueName;
-  }
-  [[nodiscard]] auto PresentQueueName() const -> std::string_view override
-  {
-    return kSingleQueueName;
-  }
-  [[nodiscard]] auto ComputeQueueName() const -> std::string_view override
-  {
-    return kSingleQueueName;
-  }
-  [[nodiscard]] auto TransferQueueName() const -> std::string_view override
-  {
-    return kSingleQueueName;
+    return {
+      QueueSpecification {
+        .key = QueueKey { kSingleQueueName },
+        .role = QueueRole::kGraphics,
+        .allocation_preference = QueueAllocationPreference::kAllInOne,
+        .sharing_preference = QueueSharingPreference::kShared,
+      },
+    };
   }
 
-  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueueStrategy> override
+  [[nodiscard]] auto KeyFor(const QueueRole role) const -> QueueKey override
+  {
+    // Returns the same key for all roles.
+    (void)role;
+    return QueueKey { kSingleQueueName };
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
   {
     return std::make_unique<SingleQueueStrategy>(*this);
   }
 
 private:
-  inline static constexpr const char* kSingleQueueName = "universal";
+  static constexpr auto kSingleQueueName = "universal";
 };
 
 } // namespace oxygen::graphics

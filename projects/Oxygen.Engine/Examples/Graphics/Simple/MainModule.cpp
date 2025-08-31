@@ -12,7 +12,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/quaternion.hpp>
 
 // Include first to avoid conflicts between winsock2(asio) and windows.h
 #include <Oxygen/Platform/Platform.h>
@@ -26,9 +25,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -40,13 +37,10 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
-
-// Detail component used for example controls (LOD/visibility/overrides)
-#include <Oxygen/Scene/Detail/RenderableComponent.h>
 
 #include "./MainModule.h"
 
@@ -75,11 +69,10 @@ struct ExampleState {
   oxygen::scene::SceneNode main_camera; // "MainCamera"
 };
 
-static ExampleState g_state;
+ExampleState g_state;
 
 // Build a 2-LOD sphere GeometryAsset (high and low tessellation)
-static auto BuildSphereLodAsset()
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
@@ -121,7 +114,7 @@ static auto BuildSphereLodAsset()
         .Build();
 
   // Use LOD0 bounds for asset bounds
-  oxygen::data::pak::GeometryAssetDesc geo_desc {};
+  GeometryAssetDesc geo_desc {};
   geo_desc.lod_count = 2;
   const glm::vec3 bb_min = mesh0->BoundingBoxMin();
   const glm::vec3 bb_max = mesh0->BoundingBoxMax();
@@ -133,13 +126,11 @@ static auto BuildSphereLodAsset()
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> {
-      std::move(mesh0), std::move(mesh1) });
+    std::vector<std::shared_ptr<Mesh>> { std::move(mesh0), std::move(mesh1) });
 }
 
 // Build a 1-LOD mesh with two submeshes (two triangles of a quad)
-static auto BuildTwoSubmeshQuadAsset()
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
@@ -147,12 +138,13 @@ static auto BuildTwoSubmeshQuadAsset()
   using oxygen::data::pak::MeshViewDesc;
 
   // Helper: make a solid-color material asset snapshot
-  auto MakeSolidColorMaterial = [](const char* name, const glm::vec4& rgba)
-    -> std::shared_ptr<const oxygen::data::MaterialAsset> {
+  auto MakeSolidColorMaterial
+    = [](const char* name,
+        const glm::vec4& rgba) -> std::shared_ptr<const MaterialAsset> {
     oxygen::data::pak::MaterialAssetDesc desc {};
     desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
     // Safe copy name
-    const std::size_t maxn = sizeof(desc.header.name) - 1;
+    constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
     const std::size_t n = (std::min)(maxn, std::strlen(name));
     std::memcpy(desc.header.name, name, n);
     desc.header.name[n] = '\0';
@@ -171,32 +163,32 @@ static auto BuildTwoSubmeshQuadAsset()
     desc.roughness = 0.9f;
     desc.ambient_occlusion = 1.0f;
     // Leave texture indices at default invalid (no textures)
-    return std::make_shared<const oxygen::data::MaterialAsset>(
+    return std::make_shared<const MaterialAsset>(
       desc, std::vector<oxygen::data::ShaderReference> {});
   };
 
   // Simple quad (XY plane), two triangles
-  std::vector<oxygen::data::Vertex> vertices;
+  std::vector<Vertex> vertices;
   vertices.reserve(4);
-  vertices.push_back(oxygen::data::Vertex { .position = { -1, -1, 0 },
+  vertices.push_back(Vertex { .position = { -1, -1, 0 },
     .normal = { 0, 0, 1 },
     .texcoord = { 0, 1 },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 } });
-  vertices.push_back(oxygen::data::Vertex { .position = { -1, 1, 0 },
+  vertices.push_back(Vertex { .position = { -1, 1, 0 },
     .normal = { 0, 0, 1 },
     .texcoord = { 0, 0 },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 } });
-  vertices.push_back(oxygen::data::Vertex { .position = { 1, -1, 0 },
+  vertices.push_back(Vertex { .position = { 1, -1, 0 },
     .normal = { 0, 0, 1 },
     .texcoord = { 1, 1 },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 } });
-  vertices.push_back(oxygen::data::Vertex { .position = { 1, 1, 0 },
+  vertices.push_back(Vertex { .position = { 1, 1, 0 },
     .normal = { 0, 0, 1 },
     .texcoord = { 1, 0 },
     .tangent = { 1, 0, 0 },
@@ -243,8 +235,8 @@ static auto BuildTwoSubmeshQuadAsset()
   geo_desc.bounding_box_max[0] = bb_max.x;
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
-  return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
 }
 
 // Ensure the example scene and two cubes exist; store persistent handles.
@@ -355,26 +347,26 @@ auto UpdateMainCameraPose(const glm::vec3& position, const glm::vec3& target,
 auto AnimateMainCamera(const float time_seconds) -> void
 {
   // Scene center between the two cubes (kept consistent with setup)
-  const glm::vec3 center(1.25F, 0.0F, 0.0F);
+  constexpr glm::vec3 center(1.25F, 0.0F, 0.0F);
 
   // Base parameters
-  const float base_radius = 6.0F;
-  const float base_height = 1.6F;
+  constexpr float base_radius = 6.0F;
+  constexpr float base_height = 1.6F;
 
   // Modulations for a more cinematic motion
   const float radius
     = base_radius + 1.25F * std::sin(0.35F * time_seconds); // slow dolly
   const float height
     = base_height + 0.45F * std::sin(0.8F * time_seconds + 0.7F); // bob
-  const float angular_speed = 0.35F; // radians/sec (slow orbit)
+  constexpr float angular_speed = 0.35F; // radians/sec (slow orbit)
   const float angle = angular_speed * time_seconds;
 
   // Orbit around center; keep negative Z bias to face the scene as in setup
   const glm::vec3 offset(
     radius * std::cos(angle), height, -radius * std::sin(angle));
   const glm::vec3 position = center + offset;
-  const glm::vec3 target = center;
-  const glm::vec3 up(0.0F, 1.0F, 0.0F);
+  constexpr glm::vec3 target = center;
+  constexpr glm::vec3 up(0.0F, 1.0F, 0.0F);
 
   UpdateMainCameraPose(position, target, up);
 }
@@ -398,7 +390,8 @@ MainModule::~MainModule()
   if (!gfx_weak_.expired()) {
     const auto gfx = gfx_weak_.lock();
     const graphics::SingleQueueStrategy queues;
-    gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
+    gfx->GetCommandQueue(queues.KeyFor(graphics::QueueRole::kGraphics))
+      ->Flush();
   }
 
   // Un-register the vertex buffer view if it's valid
@@ -463,8 +456,8 @@ auto MainModule::SetupSurface() -> void
   const auto gfx = gfx_weak_.lock();
 
   const graphics::SingleQueueStrategy queues;
-  surface_ = gfx->CreateSurface(
-    window_weak_, gfx->GetCommandQueue(queues.GraphicsQueueName()));
+  surface_ = gfx->CreateSurface(window_weak_,
+    gfx->GetCommandQueue(queues.KeyFor(graphics::QueueRole::kGraphics)));
   surface_->SetName("Main Window Surface");
   LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(),
     window_weak_.lock()->Id());
@@ -609,7 +602,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
   auto gfx = gfx_weak_.lock();
   const auto recorder = render_controller_->AcquireCommandRecorder(
-    graphics::SingleQueueStrategy().GraphicsQueueName(),
+    graphics::SingleQueueStrategy().KeyFor(graphics::QueueRole::kGraphics),
     "Main Window Command List");
 
   const auto fb = framebuffers_[render_controller_->CurrentFrameIndex().get()];
@@ -666,8 +659,7 @@ auto MainModule::RenderScene() -> co::Co<>
   if (g_state.multisubmesh.IsAlive()) {
     // Access RenderableComponent component
     if (auto obj = g_state.multisubmesh.GetObject()) {
-      auto& r
-        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+      auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
       constexpr std::size_t lod = 0;
       // Every 2 seconds, toggle submesh 0 visibility
       static int last_vis_toggle = -1;
@@ -686,21 +678,21 @@ auto MainModule::RenderScene() -> co::Co<>
         last_ovr_toggle = ovr_phase;
         const bool apply_override = (ovr_phase % 2) == 1;
         if (apply_override) {
-          oxygen::data::pak::MaterialAssetDesc desc {};
+          data::pak::MaterialAssetDesc desc {};
           desc.header.asset_type = 7;
-          const char* name = "BlueOverride";
-          const std::size_t maxn = sizeof(desc.header.name) - 1;
+          auto name = "BlueOverride";
+          constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
           const std::size_t n = (std::min)(maxn, std::strlen(name));
           std::memcpy(desc.header.name, name, n);
           desc.header.name[n] = '\0';
           desc.material_domain
-            = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+            = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
           desc.base_color[0] = 0.1f;
           desc.base_color[1] = 0.1f;
           desc.base_color[2] = 1.0f;
           desc.base_color[3] = 1.0f;
-          auto blue = std::make_shared<const oxygen::data::MaterialAsset>(
-            desc, std::vector<oxygen::data::ShaderReference> {});
+          auto blue = std::make_shared<const data::MaterialAsset>(
+            desc, std::vector<data::ShaderReference> {});
           r.SetMaterialOverride(lod, 1, blue);
         } else {
           r.ClearMaterialOverride(lod, 1);
@@ -712,7 +704,7 @@ auto MainModule::RenderScene() -> co::Co<>
   }
 
   if (renderer_) {
-    oxygen::engine::CameraView::Params cv {
+    engine::CameraView::Params cv {
       .camera_node = g_state.main_camera,
       // Let camera ActiveViewport drive; we already keep camera viewport in
       // sync
@@ -722,7 +714,7 @@ auto MainModule::RenderScene() -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     };
-    renderer_->BuildFrame(*g_state.scene, oxygen::engine::CameraView(cv));
+    renderer_->BuildFrame(*g_state.scene, engine::CameraView(cv));
   }
 
   // Assemble and run the render graph

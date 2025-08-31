@@ -722,7 +722,8 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   // Upload both buffers in a single command recorder scope.
   {
     const auto recorder = render_controller->AcquireCommandRecorder(
-      SingleQueueStrategy().GraphicsQueueName(), "MeshBufferUpload");
+      SingleQueueStrategy().KeyFor(graphics::QueueRole::kGraphics),
+      "MeshBufferUpload");
     UploadVertexBuffer(mesh, *render_controller, *vertex_buffer, *recorder);
     UploadIndexBuffer(mesh, *render_controller, *index_buffer, *recorder);
   }
