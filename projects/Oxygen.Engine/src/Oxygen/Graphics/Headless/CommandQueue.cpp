@@ -159,7 +159,7 @@ auto CommandQueue::Submit(
     }
 
     // One submission completed; signal the queue.
-    Signal();
+    (void)Signal();
   });
 
   LOG_F(INFO, "Headless Submit(span) enqueued pending submission (role={})",

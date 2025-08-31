@@ -20,6 +20,8 @@
 #include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearFramebufferCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/QueueSignalCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/QueueWaitCommand.h>
 #include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
@@ -151,16 +153,14 @@ auto CommandRecorder::RecordQueueSignal(uint64_t value) -> void
 {
   auto queue = GetTargetQueue();
   DCHECK_NOTNULL_F(queue);
-  QueueCommand(std::make_shared<LambdaCommand>(
-    [queue, value](CommandContext&) { queue->QueueSignalCommand(value); }));
+  QueueCommand(std::make_shared<QueueSignalCommand>(queue, value));
 }
 
 auto CommandRecorder::RecordQueueWait(uint64_t value) -> void
 {
   auto queue = GetTargetQueue();
   DCHECK_NOTNULL_F(queue);
-  QueueCommand(std::make_shared<LambdaCommand>(
-    [queue, value](CommandContext&) { queue->QueueWaitCommand(value); }));
+  QueueCommand(std::make_shared<QueueWaitCommand>(queue, value));
 }
 
 } // namespace oxygen::graphics::headless

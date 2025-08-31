@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <ostream>
 #include <utility>
@@ -23,17 +22,12 @@ public:
   virtual void Serialize(std::ostream& /*os*/) const { }
 };
 
-// Small helper command that wraps a callable.
-class LambdaCommand : public Command {
+// A simple no-op command useful for testing and sequencing.
+class NoopCommand : public Command {
 public:
-  explicit LambdaCommand(std::function<void(CommandContext&)> f)
-    : fn_(std::move(f))
-  {
-  }
-  void Execute(CommandContext& ctx) override { fn_(ctx); }
-
-private:
-  std::function<void(CommandContext&)> fn_;
+  NoopCommand() = default;
+  void Execute(CommandContext& /*ctx*/) override { }
+  void Serialize(std::ostream& /*os*/) const override { }
 };
 
 } // namespace oxygen::graphics::headless
