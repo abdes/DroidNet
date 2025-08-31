@@ -72,3 +72,4 @@ m_gtest_program(
   SOURCES
     "PerFrameResourceManager_test.cpp"
 )
+m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")

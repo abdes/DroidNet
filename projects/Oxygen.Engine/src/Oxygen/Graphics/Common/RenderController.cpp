@@ -24,7 +24,6 @@
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
-#include <Oxygen/OxCo/Co.h>
 
 using oxygen::graphics::RenderController;
 using oxygen::graphics::RenderPass;
@@ -107,7 +106,7 @@ auto RenderController::Submit(FrameRenderTask task) -> void
   GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
+auto RenderController::AcquireCommandRecorder(const QueueKey& queue_key,
   const std::string_view command_list_name, bool immediate_submission)
   -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
@@ -116,9 +115,9 @@ auto RenderController::AcquireCommandRecorder(const std::string_view queue_name,
     "valid");
   const auto gfx = gfx_weak_.lock();
 
-  const auto queue = gfx->GetCommandQueue(queue_name);
+  const auto queue = gfx->GetCommandQueue(queue_key);
   if (!queue) {
-    LOG_F(ERROR, "Command queue '{}' not found", queue_name);
+    LOG_F(ERROR, "Command queue '{}' not found", queue_key);
     return nullptr;
   }
 
@@ -183,8 +182,9 @@ auto RenderController::FlushPendingCommandLists() -> void
 {
   auto& [timeline_values, pending_command_lists]
     = frames_[CurrentFrameIndex().get()];
-  if (pending_command_lists.empty())
+  if (pending_command_lists.empty()) {
     return;
+  }
   if (!gfx_weak_.expired()) {
     auto it = pending_command_lists.begin();
     while (it != pending_command_lists.end()) {

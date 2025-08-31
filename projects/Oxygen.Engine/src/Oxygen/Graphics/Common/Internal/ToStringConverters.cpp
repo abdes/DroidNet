@@ -14,11 +14,12 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
-#include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -60,8 +61,8 @@ auto oxygen::graphics::to_string(const QueueRole value) -> const char*
     return "Transfer";
   case QueueRole::kPresent:
     return "Present";
-  case QueueRole::kNone:
-    return "Unknown";
+  case QueueRole::kMax:
+    return "Max";
   }
 
   return "__NotSupported__";
@@ -86,7 +87,7 @@ auto oxygen::graphics::to_string(const QueueSharingPreference value) -> const
   switch (value) {
   case QueueSharingPreference::kShared:
     return "Shared";
-  case QueueSharingPreference::kSeparate:
+  case QueueSharingPreference::kNamed:
     return "Separate";
   }
 

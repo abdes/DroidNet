@@ -360,8 +360,23 @@ message(STATUS "     CCache: ${OXYGEN_USE_CCACHE}")
 message(STATUS "")
 
 # ------------------------------------------------------------------------------
-# Project modules
+# Project modules and Solution Virtual Folders
 # ------------------------------------------------------------------------------
+
+# Show the repo .github folder inside the IDE under a virtual folder named
+# ".github".
+file(GLOB_RECURSE _github_files "${CMAKE_SOURCE_DIR}/.github/*")
+
+if(_github_files)
+  source_group(
+    TREE "${CMAKE_SOURCE_DIR}/.github"
+    PREFIX ".github"
+    FILES
+      ${_github_files}
+  )
+  # Convenience target listing them (keeps them in IDE but not part of build)
+  add_custom_target(GitHub SOURCES ${_github_files})
+endif()
 
 add_subdirectory("src")
 

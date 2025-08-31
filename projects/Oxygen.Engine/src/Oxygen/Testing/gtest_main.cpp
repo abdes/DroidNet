@@ -32,13 +32,18 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = false;
     loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
-    loguru::init(argc, argv);
 #if !defined(NDEBUG)
     loguru::g_stderr_verbosity = loguru::Verbosity_3;
 #else
     loguru::g_stderr_verbosity = loguru::Verbosity_0;
 #endif // !NDEBUG
+  }
+
+  if (!list_tests) {
+    // Optional, but useful to time-stamp the start of the log.
+    // Will also detect verbosity level on command line as -v.
+    loguru::init(argc, argv);
+    loguru::set_thread_name("main");
   }
 
   testing::InitGoogleTest(&argc, argv);

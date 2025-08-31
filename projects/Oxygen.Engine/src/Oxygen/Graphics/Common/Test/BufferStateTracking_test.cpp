@@ -31,7 +31,7 @@ class MinimalBuffer final : public Buffer {
 public:
   explicit MinimalBuffer(const uint64_t id)
     : Buffer("Test Buffer")
-    , native_ { id, Buffer::ClassTypeId() }
+    , native_ { id, ClassTypeId() }
   {
   }
   auto GetNativeResource() const -> NativeObject override { return native_; }
@@ -39,8 +39,9 @@ public:
   {
     return nullptr;
   }
-  void UnMap() override { }
-  void Update(const void* /*data*/, size_t /*size*/, size_t /*offset*/) override
+  auto UnMap() -> void override { }
+  auto Update(const void* /*data*/, size_t /*size*/, size_t /*offset*/)
+    -> void override
   {
   }
   auto GetSize() const noexcept -> size_t override { return 0; }
@@ -54,21 +55,21 @@ public:
   }
   auto IsMapped() const noexcept -> bool override { return false; }
   auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
-  void SetName(std::string_view /*name*/) noexcept override { }
-  NativeObject CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
-    const BufferRange& /*range*/ = {}) const override
+  auto SetName(std::string_view /*name*/) noexcept -> void override { }
+  auto CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
+    const BufferRange& /*range*/ = {}) const -> NativeObject override
   {
     return {};
   }
-  NativeObject CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
+  auto CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
     Format /*format*/, BufferRange /*range*/ = {},
-    uint32_t /*stride*/ = 0) const override
+    uint32_t /*stride*/ = 0) const -> NativeObject override
   {
     return {};
   }
-  NativeObject CreateUnorderedAccessView(
-    const DescriptorHandle& /*view_handle*/, Format /*format*/,
-    BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override
+  auto CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
+    Format /*format*/, BufferRange /*range*/ = {},
+    uint32_t /*stride*/ = 0) const -> NativeObject override
   {
     return {};
   }
@@ -84,7 +85,7 @@ private:
   NativeObject native_;
 };
 
-struct BufferStateTrackingTest : public ::testing::Test {
+struct BufferStateTrackingTest : testing::Test {
   ResourceStateTracker tracker;
   MinimalBuffer buffer1 { 1ULL }; // Use ULL suffix for uint64_t literals
   MinimalBuffer buffer2 { 2ULL }; // Use ULL suffix for uint64_t literals
@@ -294,38 +295,15 @@ NOLINT_TEST_F(BufferStateTrackingTest, PermanentState_BlocksFurtherStateChanges)
     std::runtime_error);
 }
 
-// --- Restore Initial State ---
-
-NOLINT_TEST_F(BufferStateTrackingTest,
-  RestoreInitialState_AfterNonPermanentTransition_AndKeepInitialStateTrue)
-{
-  // Begin tracking with keep_initial_state = true
-  tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon, true);
-  tracker.RequireResourceState(buffer1, ResourceStates::kUnorderedAccess);
-  // Simulate command list close (should restore to initial state)
-  tracker.OnCommandListClosed();
-  const auto& barriers = tracker.GetPendingBarriers();
-  // There should be two barriers: one for the transition to UAV, one for the
-  // restore
-  ASSERT_EQ(barriers.size(), 2);
-  // The last barrier should restore to initial state
-  const auto desc = std::get<BufferBarrierDesc>(barriers[1].GetDescriptor());
-  EXPECT_EQ(desc.before, ResourceStates::kUnorderedAccess);
-  EXPECT_EQ(desc.after, ResourceStates::kCommon);
-}
-
 NOLINT_TEST_F(
   BufferStateTrackingTest, NoRestoreInitialState_AfterPermanentTransition)
 {
   // Begin tracking with keep_initial_state = true
   tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon, true);
   tracker.RequireResourceStateFinal(buffer1, ResourceStates::kUnorderedAccess);
-  // Simulate command list close (should NOT restore to initial state)
-  tracker.OnCommandListClosed();
   const auto& barriers = tracker.GetPendingBarriers();
   // Only one barrier for the permanent transition
   ASSERT_EQ(barriers.size(), 1);
-  // The barrier should be to the permanent state
   const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
   EXPECT_EQ(desc.before, ResourceStates::kCommon);
   EXPECT_EQ(desc.after, ResourceStates::kUnorderedAccess);
@@ -337,7 +315,6 @@ NOLINT_TEST_F(
   // Begin tracking with keep_initial_state = false
   tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon, false);
   tracker.RequireResourceState(buffer1, ResourceStates::kUnorderedAccess);
-  tracker.OnCommandListClosed();
   const auto& barriers = tracker.GetPendingBarriers();
   // Only one barrier for the transition, no restore
   ASSERT_EQ(barriers.size(), 1);

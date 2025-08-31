@@ -11,7 +11,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -35,7 +35,7 @@ public:
 
   [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept
     -> std::string_view override;
-  OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
+  OXYGEN_GFX_API auto SetName(std::string_view name) noexcept -> void override;
 
   // State query methods
   [[nodiscard]] auto IsFree() const noexcept { return state_ == State::kFree; }
@@ -52,10 +52,10 @@ public:
     return state_ == State::kSubmitted;
   }
 
-  OXYGEN_GFX_API virtual void OnBeginRecording();
-  OXYGEN_GFX_API virtual void OnEndRecording();
-  OXYGEN_GFX_API virtual void OnSubmitted();
-  OXYGEN_GFX_API virtual void OnExecuted();
+  OXYGEN_GFX_API virtual auto OnBeginRecording() -> void;
+  OXYGEN_GFX_API virtual auto OnEndRecording() -> void;
+  OXYGEN_GFX_API virtual auto OnSubmitted() -> void;
+  OXYGEN_GFX_API virtual auto OnExecuted() -> void;
 
   enum class State : int8_t {
     kInvalid = -1, //<! Invalid state
@@ -68,7 +68,7 @@ public:
   [[nodiscard]] auto GetState() const { return state_; }
 
 private:
-  QueueRole type_ { QueueRole::kNone };
+  QueueRole type_;
   State state_ { State::kInvalid };
 };
 

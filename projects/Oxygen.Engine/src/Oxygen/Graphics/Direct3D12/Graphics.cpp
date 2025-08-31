@@ -108,20 +108,17 @@ Graphics::Graphics(const SerializedBackendConfig& config)
 
   // Initialize global Bindless allocator at the device level
   {
-    auto allocator
-      = std::make_unique<oxygen::graphics::d3d12::DescriptorAllocator>(
-        std::make_shared<oxygen::graphics::d3d12::D3D12HeapAllocationStrategy>(
-          GetCurrentDevice()),
-        GetCurrentDevice());
-    Base::SetDescriptorAllocator(std::move(allocator));
+    auto allocator = std::make_unique<DescriptorAllocator>(
+      std::make_shared<D3D12HeapAllocationStrategy>(GetCurrentDevice()),
+      GetCurrentDevice());
+    SetDescriptorAllocator(std::move(allocator));
   }
 }
 
-auto Graphics::CreateCommandQueue(std::string_view name, QueueRole role,
-  [[maybe_unused]] QueueAllocationPreference allocation_preference)
+auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
   -> std::shared_ptr<graphics::CommandQueue>
 {
-  return std::make_shared<CommandQueue>(name, role, this);
+  return std::make_shared<CommandQueue>(queue_key.get(), role, this);
 }
 
 auto Graphics::CreateRendererImpl(const std::string_view name,

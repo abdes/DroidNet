@@ -48,7 +48,7 @@ public:
   // MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (std::string_view, oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderController, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
@@ -104,7 +104,7 @@ auto FuncToRawPtr(Func* func) -> PlatformServices::RawFunctionPtr
   return converter.raw;
 }
 
-class GraphicsBackendLoaderTest : public ::testing::Test {
+class GraphicsBackendLoaderTest : public testing::Test {
 protected:
   // Mock backend implementation encapsulated in the test fixture
   class MockBackend {
@@ -162,7 +162,7 @@ protected:
     }
 
     // Static callback for DestroyBackend
-    static void DestroyBackendStatic()
+    static auto DestroyBackendStatic() -> void
     {
       auto& instance = GetInstance();
       instance.mock_graphics.reset();
@@ -172,7 +172,7 @@ protected:
     std::unique_ptr<MockGraphics> mock_graphics;
   };
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Create a new mock backend for each test
     mock_backend = std::make_unique<MockBackend>();
@@ -202,7 +202,7 @@ protected:
         testing::Return(reinterpret_cast<void*>(MODULE_HANDLE_VALUE)));
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     platform.reset();
     MockBackend::GetInstance().~MockBackend();
@@ -420,7 +420,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   ASSERT_NE(mock_graphics, nullptr);
 
   // Cast to MockGraphics to access our captured config
-  auto* captured_mock = static_cast<MockGraphics*>(mock_graphics);
+  auto* captured_mock = mock_graphics;
 
   // Convert the captured JSON to a string for inspection
   std::string json_str(captured_mock->GetJsonData());
