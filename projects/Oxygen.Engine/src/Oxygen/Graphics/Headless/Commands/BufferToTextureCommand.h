@@ -16,7 +16,13 @@ public:
   BufferToTextureCommand(const graphics::Buffer* src,
     const TextureUploadRegion& region, Texture* dst);
 
-  auto Execute(CommandContext& ctx) -> void override;
+  [[nodiscard]] auto GetName() const noexcept -> const char* override
+  {
+    return "BufferToTextureCommand";
+  }
+
+protected:
+  auto DoExecute(CommandContext& ctx) -> void override;
 
 private:
   const graphics::Buffer* src_;

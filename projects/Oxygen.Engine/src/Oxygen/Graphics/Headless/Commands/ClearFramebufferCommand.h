@@ -21,8 +21,14 @@ public:
     std::optional<float> depth_clear_value,
     std::optional<uint8_t> stencil_clear_value);
 
-  auto Execute(CommandContext& ctx) -> void override;
+  [[nodiscard]] auto GetName() const noexcept -> const char* override
+  {
+    return "ClearFramebufferCommand";
+  }
   auto Serialize(std::ostream& os) const -> void override;
+
+protected:
+  auto DoExecute(CommandContext& ctx) -> void override;
 
 private:
   const Framebuffer* framebuffer_ = nullptr;

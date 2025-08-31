@@ -88,8 +88,27 @@ bound resources.
 ### Resource state enforcement at execute time
 
 Consult recorded barriers or the `ResourceStateTracker` prior to execution.
-Either perform emulated transitions or emit validation errors when expectations
-don't match observed states.
+The headless backend advocates explicit barrier management. Recording-side
+APIs such as `CommandRecorder::RequireResourceState` (templated) populate the
+per-recording `detail::ResourceStateTracker` and `FlushBarriers()` / the
+protected backend `ExecuteBarriers()` hook are the places where the recorded
+pending barriers are processed.
+
+Important contract (explicit-only transitions):
+
+- Commands and the recorder must explicitly state required transitions using
+  `RequireResourceState` / `RequireResourceStateFinal` during recording.
+- The executor should consult `state_tracker->GetPendingBarriers()` (or call
+  the recorder's `FlushBarriers()`) and then call the backend's
+  `ExecuteBarriers()` implementation to apply/validate them. `ResourceBarrierCommand`
+  is the canonical command that represents in-stream transitions.
+- The executor MUST NOT invent or silently perform implicit transitions that
+  were not recorded. If a recorded 'before' state does not match the observed
+  state, prefer a clear validation error or deterministic fallback defined by
+  the backend (do not auto-promote states silently).
+
+This keeps the execution model deterministic and matches the project's
+philosophy: recording must express intent; execution validates and enforces it.
 
 ### Depth/stencil backing and DSV semantics
 
@@ -216,7 +235,7 @@ ResourceBarrierCommand / PipelineBarrier
 
 - Purpose: enforce resource transitions, memory visibility and ordering.
 - Mapping: D3D12 ResourceBarrier; vkCmdPipelineBarrier.
-- Headless semantics: validate recorded 'before' matches observed; update observed state to 'after'. Executor should enforce and optionally perform implicit transitions.
+- Headless semantics: validate recorded 'before' matches observed; update observed state to 'after'. The executor must enforce recorded transitions; it must not invent implicit transitions.
 - Minimal CommandContext needs: `ResourceStateTracker*` (required), `submission_id`.
 
 BeginRenderPass / EndRenderPass

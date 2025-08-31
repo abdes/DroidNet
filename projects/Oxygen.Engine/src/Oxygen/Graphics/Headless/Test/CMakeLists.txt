@@ -29,3 +29,4 @@ m_gtest_program(
     "Headless_Texture_test.cpp"
     "Headless_Submission_test.cpp"
 )
+m_gtest_program(Execution SOURCES "CommandExecution_test.cpp")

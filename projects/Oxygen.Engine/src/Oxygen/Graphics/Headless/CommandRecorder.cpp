@@ -22,70 +22,40 @@
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/QueueSignalCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/QueueWaitCommand.h>
-#include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
+#include <Oxygen/Graphics/Headless/Commands/ResourceBarrierCommand.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
 // Out-of-line destructor to ensure vtable emission in this translation unit.
-OXGN_HDLS_API CommandRecorder::~CommandRecorder() = default;
+CommandRecorder::~CommandRecorder() = default;
 
 // Basic barrier execution: log the barrier and perform simple validation.
 // The heavy lifting of tracking is done by the ResourceStateTracker in the
 // common CommandRecorder; here we only simulate execution and assert on
 // obviously invalid uses.
 
-OXGN_HDLS_API auto CommandRecorder::ExecuteBarriers(
-  std::span<const detail::Barrier> barriers) -> void
+auto CommandRecorder::ExecuteBarriers(std::span<const detail::Barrier> barriers)
+  -> void
 {
   if (barriers.empty()) {
     return;
   }
-  LOG_SCOPE_F(4, "Headless ExecuteBarriers: count={}", barriers.size());
 
-  for (const auto& b_const : barriers) {
-    // copy to mutable to call non-const accessors
-    auto b = b_const;
-    // Memory barriers are allowed but do not expose before/after states.
-    if (b.IsMemoryBarrier()) {
-      LOG_F(INFO, "Headless: memory barrier on {}", b.GetResource());
-      continue;
-    }
-
-    // For buffer/texture transitions, log the before/after states and
-    // perform validation against the headless state map.
-    const auto before = b.GetStateBefore();
-    const auto after = b.GetStateAfter();
-    const auto resource = b.GetResource();
-
-    LOG_F(INFO, "Headless barrier: resource={} before={} after={}", resource,
-      before, after);
-
-    // Validate 'after' is known
-    CHECK_F(after != ::oxygen::graphics::ResourceStates::kUnknown,
-      "Barrier has unknown 'after' state for resource {}", resource);
-
-    // Check against observed state. If we haven't seen this resource before,
-    // initialize the observed state from the tracker's 'before' value so the
-    // headless backend's simulated view matches the tracker's expectation.
-    const auto it = observed_states_.find(resource);
-    if (it == observed_states_.end()) {
-      observed_states_[resource] = before;
-      DLOG_F(4, "Headless: initializing observed state for {} -> {}", resource,
-        before);
-    } else {
-      if (it->second != before) {
-        LOG_F(WARNING,
-          "Headless barrier mismatch for {}: expected before={} but barrier "
-          "requests {}",
-          resource, it->second, before);
-        DCHECK_F(
-          it->second == before, "Resource state mismatch for {}", resource);
-      }
-    }
-
-    // Apply the transition in the headless simulated state model.
-    observed_states_[resource] = after;
+  // Package the pending barriers into an in-stream command. The command will
+  // be executed by the CommandQueue worker and is responsible for updating
+  // the execution-time observed state (CommandContext). The recorder must not
+  // perform execution-time validation here.
+  std::vector<::oxygen::graphics::detail::Barrier> v;
+  v.reserve(barriers.size());
+  for (const auto& b : barriers) {
+    v.push_back(b);
   }
+
+  LOG_F(INFO,
+    "CommandRecorder: packaging {} barriers into ResourceBarrierCommand",
+    v.size());
+
+  QueueCommand(std::make_shared<ResourceBarrierCommand>(std::move(v)));
 }
 
 inline auto CommandRecorder::QueueCommand(std::shared_ptr<Command> cmd) -> void

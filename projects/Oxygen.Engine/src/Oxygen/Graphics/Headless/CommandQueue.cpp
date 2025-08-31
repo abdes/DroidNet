@@ -14,7 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
-#include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
+#include <Oxygen/Graphics/Headless/Internal/CommandExecutor.h>
 
 namespace oxygen::graphics::headless {
 
@@ -88,16 +88,16 @@ auto CommandQueue::QueueWaitCommand(uint64_t value) const -> void
   return current_value_;
 }
 
-auto CommandQueue::Submit(::oxygen::graphics::CommandList& command_list) -> void
+auto CommandQueue::Submit(graphics::CommandList& command_list) -> void
 {
   // Forward to the span overload for a single command list using a tiny
   // array so std::span has a valid array reference.
-  ::oxygen::graphics::CommandList* arr[1] = { &command_list };
-  Submit(std::span<::oxygen::graphics::CommandList*> { arr });
+  graphics::CommandList* arr[1] = { &command_list };
+  Submit(std::span<graphics::CommandList*> { arr });
 }
 
-auto CommandQueue::Submit(
-  std::span<::oxygen::graphics::CommandList*> command_lists) -> void
+auto CommandQueue::Submit(std::span<graphics::CommandList*> command_lists)
+  -> void
 {
   // Support submission of one or more command lists. For each headless
   // command list we will steal its recorded commands and enqueue a submission
@@ -109,7 +109,7 @@ auto CommandQueue::Submit(
     // Lazy-initialize executor to avoid ordering issues during construction in
     // tests.
     if (!executor_) {
-      executor_ = new internal::SerialExecutor();
+      executor_ = new internal::CommandExecutor();
     }
     ++pending_submissions_;
   }
@@ -144,23 +144,17 @@ auto CommandQueue::Submit(
   // Enqueue a task that executes the stolen command deques in submission
   // order. The executor_ has been initialized above while holding mutex_
   // so we can call it directly.
-  executor_->Enqueue([this, stolen = std::move(stolen_per_list)]() mutable {
-    try {
-      CommandContext ctx;
-      for (auto& commands : stolen) {
-        for (auto& cmd : commands) {
-          if (cmd) {
-            cmd->Execute(ctx);
-          }
-        }
-      }
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "Error executing submission: {}", e.what());
+  // Flatten the stolen per-list deques into a single submission deque (preserve
+  // list order) and hand it off to the executor which will create a
+  // CommandContext, execute the commands, and signal the queue when done.
+  std::deque<std::shared_ptr<Command>> submission;
+  for (auto& lst : stolen_per_list) {
+    for (auto& c : lst) {
+      submission.push_back(std::move(c));
     }
+  }
 
-    // One submission completed; signal the queue.
-    (void)Signal();
-  });
+  const auto returned_id = executor_->ExecuteAsync(this, std::move(submission));
 
   LOG_F(INFO, "Headless Submit(span) enqueued pending submission (role={})",
     nostd::to_string(queue_role_));
