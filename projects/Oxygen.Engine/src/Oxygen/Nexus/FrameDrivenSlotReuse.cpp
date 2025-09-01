@@ -20,7 +20,7 @@ using oxygen::nexus::FrameDrivenSlotReuse;
                  the absolute handle index
  @param free Backend function that releases a bindless slot
  @param allocator DescriptorAllocator used for domain mapping initialization
- @param per_frame PerFrameResourceManager for deferred cleanup operations
+ @param per_frame DeferredReclaimer for deferred cleanup operations
 
  ### Performance Characteristics
 
@@ -45,11 +45,11 @@ using oxygen::nexus::FrameDrivenSlotReuse;
  @see Allocate, Release
 */
 FrameDrivenSlotReuse::FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
-  oxygen::graphics::detail::PerFrameResourceManager& per_frame)
+  graphics::detail::DeferredReclaimer& per_frame)
   : allocate_(std::move(allocate))
   , free_(std::move(free))
   , per_frame_(per_frame)
-  , generations_(oxygen::bindless::Capacity { 0 })
+  , generations_(bindless::Capacity { 0 })
 {
   // pending_flags_ will be lazily sized when we first allocate
 }
@@ -82,8 +82,7 @@ FrameDrivenSlotReuse::FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
        binding operations
  @see Release, IsHandleCurrent, EnsureCapacity_
 */
-auto FrameDrivenSlotReuse::Allocate(DomainKey domain)
-  -> oxygen::VersionedBindlessHandle
+auto FrameDrivenSlotReuse::Allocate(DomainKey domain) -> VersionedBindlessHandle
 {
   const auto idx = allocate_(domain);
   EnsureCapacity_(idx);
@@ -132,8 +131,8 @@ auto FrameDrivenSlotReuse::Allocate(DomainKey domain)
  @warning Once released, the handle should not be used for resource access
  @see Allocate, IsHandleCurrent, OnBeginFrame
 */
-void FrameDrivenSlotReuse::Release(
-  DomainKey domain, oxygen::VersionedBindlessHandle h)
+auto FrameDrivenSlotReuse::Release(DomainKey domain, VersionedBindlessHandle h)
+  -> void
 {
   if (!h.IsValid()) {
     return;
@@ -218,7 +217,7 @@ void FrameDrivenSlotReuse::Release(
  @see Allocate, Release, GenerationTracker::Load
 */
 auto FrameDrivenSlotReuse::IsHandleCurrent(
-  oxygen::VersionedBindlessHandle h) const noexcept -> bool
+  VersionedBindlessHandle h) const noexcept -> bool
 {
   if (!h.IsValid()) {
     return false;
@@ -229,7 +228,7 @@ auto FrameDrivenSlotReuse::IsHandleCurrent(
 }
 
 /*!
- Forward frame-begin event to the PerFrameResourceManager to execute
+ Forward frame-begin event to the DeferredReclaimer to execute
  deferred cleanup actions scheduled for the specified frame slot.
 
  @param fi Frame slot identifier passed to the per-frame manager
@@ -252,9 +251,9 @@ auto FrameDrivenSlotReuse::IsHandleCurrent(
 
  @note This triggers generation bumping and backend resource cleanup for
        handles released in previous frames
- @see Release, PerFrameResourceManager::OnBeginFrame
+ @see Release, DeferredReclaimer::OnBeginFrame
 */
-void FrameDrivenSlotReuse::OnBeginFrame(oxygen::frame::Slot fi)
+auto FrameDrivenSlotReuse::OnBeginFrame(frame::Slot fi) -> void
 {
   per_frame_.OnBeginFrame(fi);
 }
@@ -294,7 +293,7 @@ void FrameDrivenSlotReuse::OnBeginFrame(oxygen::frame::Slot fi)
        operations and flag access
  @see Allocate, Release
 */
-void FrameDrivenSlotReuse::EnsureCapacity_(oxygen::bindless::Handle idx)
+auto FrameDrivenSlotReuse::EnsureCapacity_(bindless::Handle idx) -> void
 {
   const auto needed = static_cast<std::size_t>(idx.get()) + 1u;
   if (pending_size_ >= needed) {
@@ -320,6 +319,6 @@ void FrameDrivenSlotReuse::EnsureCapacity_(oxygen::bindless::Handle idx)
     pending_size_ = new_size;
     // Grow generations to at least this index
     generations_.Resize(
-      oxygen::bindless::Capacity { static_cast<uint32_t>(pending_size_) });
+      bindless::Capacity { static_cast<uint32_t>(pending_size_) });
   }
 }

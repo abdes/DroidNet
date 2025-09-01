@@ -5,18 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 
-using oxygen::graphics::detail::PerFrameResourceManager;
+using oxygen::graphics::detail::DeferredReclaimer;
 
-void PerFrameResourceManager::OnBeginFrame(const frame::Slot frame_slot)
+auto DeferredReclaimer::OnBeginFrame(const frame::Slot frame_slot) -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   current_frame_slot_.store(frame_slot.get(), std::memory_order_release);
   ReleaseDeferredResources(frame_slot);
 }
 
-void PerFrameResourceManager::ProcessAllDeferredReleases()
+auto DeferredReclaimer::ProcessAllDeferredReleases() -> void
 {
   DLOG_F(INFO, "Releasing all deferred resource for all frames...");
   for (uint32_t i = 0; i < frame::kFramesInFlight.get(); ++i) {
@@ -24,13 +24,13 @@ void PerFrameResourceManager::ProcessAllDeferredReleases()
   }
 }
 
-void PerFrameResourceManager::OnRendererShutdown()
+auto DeferredReclaimer::OnRendererShutdown() -> void
 {
   ProcessAllDeferredReleases();
 }
 
-void PerFrameResourceManager::ReleaseDeferredResources(
-  const frame::Slot frame_slot)
+auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
+  -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   const auto u_frame_slot = frame_slot.get();
@@ -90,13 +90,11 @@ void PerFrameResourceManager::ReleaseDeferredResources(
 
  @see OnBeginFrame, ProcessAllDeferredReleases
 */
-void PerFrameResourceManager::RegisterDeferredAction(
-  std::function<void()> action)
+auto DeferredReclaimer::RegisterDeferredAction(std::function<void()> action)
+  -> void
 {
-  auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
+  const auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
   auto& bucket = deferred_releases_[frame_idx];
-  {
-    std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
-    bucket.emplace_back(std::move(action));
-  }
+  std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
+  bucket.emplace_back(std::move(action));
 }

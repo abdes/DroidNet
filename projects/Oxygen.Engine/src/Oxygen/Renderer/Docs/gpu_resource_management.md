@@ -29,7 +29,7 @@ accordingly.
    * Insert into map and notify eviction policy.
 
 Uploads keep staging buffers alive by `DeferredObjectRelease(upload_buffer,
-perFrameResourceManager)`.
+DeferredReclaimer)`.
 
 ## Eviction
 

@@ -13,7 +13,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
@@ -182,8 +182,8 @@ namespace graphics {
 
     [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_slot_; }
 
-    [[nodiscard]] auto GetPerFrameResourceManager() const
-      -> detail::PerFrameResourceManager&
+    [[nodiscard]] auto GetDeferredReclaimer() const
+      -> detail::DeferredReclaimer&
     {
       return per_frame_resource_manager_;
     }
@@ -219,7 +219,7 @@ namespace graphics {
     std::unique_ptr<Frame[]> frames_;
     frame::Slot current_frame_slot_ { 0 };
 
-    mutable detail::PerFrameResourceManager per_frame_resource_manager_;
+    mutable detail::DeferredReclaimer per_frame_resource_manager_;
   };
 
 } // namespace graphics

@@ -321,7 +321,7 @@ lifetime/generation, validation, and type safety.
 - [ ] Deferred slot reuse and generation increment policy
   - Status: Partial. The design requires that recycled slots carry a new
     generation so CPU-side handles can detect staleness. The codebase provides
-    `PerFrameResourceManager` to defer object destruction; allocator segments
+    `DeferredReclaimer` to defer object destruction; allocator segments
     currently recycle indices immediately (see `FixedDescriptorHeapSegment`).
   - Action: Define the authoritative transition point where a slot's generation
     is incremented (for example, on fence/frame completion). Then either delay
@@ -356,7 +356,7 @@ lifetime/generation, validation, and type safety.
         pending_fence, and appends (index, pending_fence) to a per-domain
         pending queue. Does not immediately push to segment free list.
     - Renderer::OnFenceCompleted(uint64_t completed_fence) /
-      PerFrameResourceManager::OnBeginFrame(frame_index)
+      DeferredReclaimer::OnBeginFrame(frame_index)
       - Iterate pending queues and for each entry where pending_fence_or_frame
         <= completed_fence, atomically increment slot.generation, clear
         pending_fence_or_frame, and insert index into allocator/segment free
@@ -369,7 +369,7 @@ lifetime/generation, validation, and type safety.
     - Incrementing generation must be atomic with respect to making the slot
       available; publish the new generation before any consumer may allocate the
       index and create a new VersionedBindlessHandle with that generation.
-    - Pair with `PerFrameResourceManager` to defer actual object destruction
+    - Pair with `DeferredReclaimer` to defer actual object destruction
       until the same completed_fence/frame has been observed; this prevents the
       native resource from being destroyed while GPU may still reference it.
 

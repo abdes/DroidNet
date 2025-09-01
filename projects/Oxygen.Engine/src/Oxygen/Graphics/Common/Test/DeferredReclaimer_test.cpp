@@ -1,5 +1,5 @@
 //===----------------------------------------------------------------------===//
-// Tests for PerFrameResourceManager Distributed under the 3-Clause BSD License.
+// Tests for DeferredReclaimer Distributed under the 3-Clause BSD License.
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
@@ -8,11 +8,11 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::graphics::detail;
-using ::testing::Test;
+using testing::Test;
 namespace frame = oxygen::frame;
 
 //===----------------------------------------------------------------------===//
@@ -22,16 +22,16 @@ namespace frame = oxygen::frame;
 namespace {
 
 //! Minimal test resource that exposes Release(), GetName(), and GetTypeName().
-struct TestResource : public std::enable_shared_from_this<TestResource> {
+struct TestResource : std::enable_shared_from_this<TestResource> {
   TestResource(std::string n)
     : name(std::move(n))
     , released(false)
   {
   }
-  void Release() { released = true; }
-  bool WasReleased() const { return released; }
-  std::string_view GetName() const { return name; }
-  std::string_view GetTypeName() const { return "TestResource"; }
+  auto Release() -> void { released = true; }
+  auto WasReleased() const -> bool { return released; }
+  auto GetName() const -> std::string_view { return name; }
+  auto GetTypeName() const -> std::string_view { return "TestResource"; }
 
   std::string name;
   std::atomic<bool> released { false };
@@ -45,30 +45,31 @@ struct NoReleaseResource {
   }
   ~NoReleaseResource()
   {
-    if (counter)
+    if (counter) {
       ++(*counter);
+    }
   }
   std::atomic<int>* counter { nullptr };
 };
 
-//! Test fixture for PerFrameResourceManager providing common setup and
+//! Test fixture for DeferredReclaimer providing common setup and
 //! teardown.
-class PerFrameResourceManagerTest : public Test {
+class DeferredReclaimerTest : public Test {
 protected:
   // Called once before any test in this fixture runs
-  static void SetUpTestSuite()
+  static auto SetUpTestSuite() -> void
   {
     loguru::g_stderr_verbosity = loguru::Verbosity_2;
   }
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    manager = std::make_unique<PerFrameResourceManager>();
+    manager = std::make_unique<DeferredReclaimer>();
   }
 
-  void TearDown() override { manager.reset(); }
+  auto TearDown() -> void override { manager.reset(); }
 
-  std::unique_ptr<PerFrameResourceManager> manager;
+  std::unique_ptr<DeferredReclaimer> manager;
 };
 
 } // namespace
@@ -85,7 +86,7 @@ protected:
  for deferred release, the Release() method is called when OnBeginFrame() is
  invoked for the corresponding frame slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_SharedPtrWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -106,7 +107,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  registered for deferred release, the destructor is properly invoked when
  OnBeginFrame() processes the deferred releases for that frame slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_SharedPtrWithoutRelease_CallsDestructorOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -130,7 +131,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  for deferred release, the Release() method is called when OnBeginFrame()
  processes the deferred releases for that frame slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_RawPointerWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -153,7 +154,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  properly executed when OnBeginFrame() processes the deferred actions for the
  corresponding frame slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredAction_LambdaFunction_ExecutesOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -177,7 +178,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  from all frame slots, not just the current one, ensuring complete cleanup
  during shutdown scenarios.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   ProcessAllDeferredReleases_MultipleFrames_ReleasesAllFrames) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -203,7 +204,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  releases across all frame slots, ensuring complete cleanup when the renderer is
  being shut down.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   OnRendererShutdown_WithPendingReleases_ProcessesAllDeferredReleases) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -226,7 +227,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  Verifies that registering a nullptr raw pointer for deferred release does not
  cause crashes or undefined behavior when frame processing occurs.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_NullRawPointer_DoesNotCrash) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -244,7 +245,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  within the same frame slot, all of them are properly processed when
  OnBeginFrame() is called for that slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_MultipleRegistrationsSameFrame_AllExecuted) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -271,7 +272,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  slot, they are executed in the same order they were registered, ensuring
  predictable execution sequence.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredAction_MultipleActionsPerFrame_PreservesRegistrationOrder) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -301,7 +302,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  deferred release, the custom deleter is invoked when OnBeginFrame() processes
  the release for that frame slot.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_SharedPtrWithCustomDeleter_InvokesDeleterOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -330,7 +331,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  concurrently without causing data races or crashes. This is a basic smoke test
  for thread safety.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   RegisterDeferredRelease_ConcurrentRegistrations_HandledSafely) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange
@@ -361,7 +362,7 @@ NOLINT_TEST_F(PerFrameResourceManagerTest,
  Verifies that passing an out-of-bounds frame slot to OnBeginFrame() triggers
  the debug assertion check, ensuring bounds validation is properly enforced.
 */
-NOLINT_TEST_F(PerFrameResourceManagerTest,
+NOLINT_TEST_F(DeferredReclaimerTest,
   OnBeginFrame_OutOfBoundsSlot_TriggersAssertion) // NOLINT_NEXT_LINE(readability-function-size)
 {
   // Arrange & Act & Assert CHECK should abort when an out-of-bounds slot is

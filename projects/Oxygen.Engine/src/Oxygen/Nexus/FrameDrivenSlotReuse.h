@@ -16,7 +16,7 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Nexus/Types/Domain.h>
@@ -31,7 +31,7 @@ namespace oxygen::nexus {
 
  ### Key Features
 
- - **Deferred Reclamation**: Slots are freed via PerFrameResourceManager to
+ - **Deferred Reclamation**: Slots are freed via DeferredReclaimer to
    avoid GPU synchronization issues
  - **Generation Tracking**: Each slot has a generation counter for CPU-side
    stale handle detection
@@ -50,42 +50,41 @@ namespace oxygen::nexus {
  allowing the graphics backend to control timing of descriptor heap operations
  while providing immediate feedback for invalid handles.
 
- @see VersionedBindlessHandle, PerFrameResourceManager, GenerationTracker
+ @see VersionedBindlessHandle, DeferredReclaimer, GenerationTracker
 */
 class FrameDrivenSlotReuse {
 public:
   //! Type-erased backend allocate function: returns absolute handle index.
-  using AllocateFn = std::function<oxygen::bindless::Handle(DomainKey)>;
+  using AllocateFn = std::function<bindless::Handle(DomainKey)>;
 
   //! Type-erased backend free function.
-  using FreeFn = std::function<void(DomainKey, oxygen::bindless::Handle)>;
+  using FreeFn = std::function<void(DomainKey, bindless::Handle)>;
 
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   OXGN_NXS_API explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
-    oxygen::graphics::detail::PerFrameResourceManager& per_frame);
+    graphics::detail::DeferredReclaimer& per_frame);
 
   //! Allocate a bindless slot in the specified domain.
-  OXGN_NXS_NDAPI auto Allocate(DomainKey domain)
-    -> oxygen::VersionedBindlessHandle;
+  OXGN_NXS_NDAPI auto Allocate(DomainKey domain) -> VersionedBindlessHandle;
 
   //! Release a previously allocated handle; reclamation is deferred.
-  OXGN_NXS_API void Release(
-    DomainKey domain, oxygen::VersionedBindlessHandle h);
+  OXGN_NXS_API auto Release(DomainKey domain, VersionedBindlessHandle h)
+    -> void;
 
   //! Returns true if the handle's generation matches the current slot state.
-  OXGN_NXS_NDAPI auto IsHandleCurrent(
-    oxygen::VersionedBindlessHandle h) const noexcept -> bool;
+  OXGN_NXS_NDAPI auto IsHandleCurrent(VersionedBindlessHandle h) const noexcept
+    -> bool;
 
   //! Forward the frame-begin event to the per-frame buckets.
-  OXGN_NXS_API void OnBeginFrame(oxygen::frame::Slot fi);
+  OXGN_NXS_API auto OnBeginFrame(frame::Slot fi) -> void;
 
 private:
   //! Ensure internal buffers have capacity for the provided bindless index.
-  void EnsureCapacity_(oxygen::bindless::Handle idx);
+  auto EnsureCapacity_(bindless::Handle idx) -> void;
 
   AllocateFn allocate_;
   FreeFn free_;
-  oxygen::graphics::detail::PerFrameResourceManager& per_frame_;
+  graphics::detail::DeferredReclaimer& per_frame_;
 
   // Generation tracking for stale-handle detection.
   mutable GenerationTracker generations_;

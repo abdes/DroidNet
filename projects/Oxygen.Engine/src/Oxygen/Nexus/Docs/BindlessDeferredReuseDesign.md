@@ -162,7 +162,7 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
 
 ### 2. Per‑frame infrastructure
 
-- ✅ PerFrameResourceManager augmentation
+- ✅ DeferredReclaimer augmentation
   - ✅ OnBeginFrame(oxygen::frame::Slot) already exists and executes
     frame-specific deferred actions
   - ✅ Underlying deferred action infrastructure exists via std::function<void()>
@@ -180,7 +180,7 @@ Legend: ✅ complete · 🟡 partial · ⬜ not started
 ### 3. Strategy A — FrameDrivenSlotReuse
 
 - ✅ Implement class skeleton (ctor takes AllocateFn, FreeFn,
-  DescriptorAllocator&, PerFrameResourceManager&)
+  DescriptorAllocator&, DeferredReclaimer&)
 - ✅ Hook Release() to per‑frame deferred actions; reclaim on
   OnBeginFrame(frameSlot): bump generation then free
 - ✅ IsHandleCurrent() using GenerationTracker for stale handle detection
@@ -305,7 +305,7 @@ public:
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
     oxygen::graphics::DescriptorAllocator& allocator,
-    oxygen::graphics::detail::PerFrameResourceManager& per_frame);
+    oxygen::graphics::detail::DeferredReclaimer& per_frame);
 
   //! Allocate a bindless slot in the specified domain.
   auto Allocate(DomainKey domain) -> oxygen::VersionedBindlessHandle;
@@ -324,7 +324,7 @@ public:
 ### Implementation outline (Strategy A)
 
 - Holds its own GenerationTracker and DomainIndexMapper.
-- Uses PerFrameResourceManager buckets keyed by frame index. Release enqueues a
+- Uses DeferredReclaimer buckets keyed by frame index. Release enqueues a
   lambda into the current frame’s bucket. On the next cycle of the same frame
   index, per-frame executes the lambda which:
   - generation.bump(absIndex) with release semantics; then
@@ -335,14 +335,14 @@ public:
 
 ### Threading and lifecycle (Strategy A)
 
-- Release is thread-safe via PerFrameResourceManager’s registration API.
+- Release is thread-safe via DeferredReclaimer’s registration API.
   Execution happens on the renderer thread during OnBeginFrame for the in-flight
   frame slot that is cycling in.
 - No explicit fences are used. Safety follows the RenderController guarantee:
   when BeginFrame(i) starts, GPU work from the previous render of i has
   completed.
 
-### PerFrameResourceManager requirements
+### DeferredReclaimer requirements
 
 - void RegisterDeferredAction(std::function<void()> action); // thread-safe
   (implemented)
@@ -583,7 +583,7 @@ rules, and tests are specified here.
 
 ### Interaction with per-frame lifecycle (Strategy B)
 
-- None. Strategy B does not interact with PerFrameResourceManager or the
+- None. Strategy B does not interact with DeferredReclaimer or the
   frame-index counter. The renderer may call Process() once per frame for
   scheduling convenience, but there is no coupling or cross-waiting between the
   two timelines.
@@ -672,7 +672,7 @@ Resource Manager (UGRM). This design choice provides:
   `CommandQueue::Signal()` / `GetCompletedValue()`.
 - Semantics: Fence is completely independent from frame index. The renderer
   calls TimelineGatedSlotReuse::Process(), which queries timelines and reclaims
-  accordingly. No calls to OnBeginFrame/PerFrameResourceManager are required.
+  accordingly. No calls to OnBeginFrame/DeferredReclaimer are required.
 
 ### Example usage aligned with MainModule flow
 
@@ -853,7 +853,7 @@ Edge cases handled
 | Types/ResourceViewType.h | src/Oxygen/Graphics/Common/Types/ | No change; part of Domain key | Low |
 | Types/DescriptorVisibility.h | src/Oxygen/Graphics/Common/Types/ | No change; part of Domain key | Low |
 | BindlessHandle.h | src/Oxygen/Core/Types/ | No change; handle and versioned handle types | Low |
-| PerFrameResourceManager.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | `RegisterDeferredAction(std::function<void()>)` added and thread-safe; OnBeginFrame already public | Low |
+| DeferredReclaimer.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | `RegisterDeferredAction(std::function<void()>)` added and thread-safe; OnBeginFrame already public | Low |
 | FrameDrivenSlotReuse (new) | src/Oxygen/Nexus/ | Frame-driven strategy implementing deferred frees and generation stamping via per-frame buckets | Medium |
 | TimelineGatedSlotReuse (new) | src/Oxygen/Nexus/ | Fence-driven strategy implementing deferred frees gated by explicit timelines | Medium |
 | GenerationTracker | src/Oxygen/Nexus/ | Utility to load/bump per-slot generation with proper memory order | Low |
