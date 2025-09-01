@@ -30,6 +30,6 @@ enum class QueueRole : uint8_t {
 };
 
 //! String representation of enum values in `QueueRole`.
-OXYGEN_GFX_API auto to_string(QueueRole value) -> const char*;
+OXGN_GFX_API auto to_string(QueueRole value) -> const char*;
 
 } // namespace oxygen::graphics

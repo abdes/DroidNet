@@ -243,7 +243,7 @@ private:
  The allocator is responsible for managing the lifecycle of descriptors but not
  the resources they describe (textures, buffers, etc.).
 */
-class OXYGEN_GFX_API DescriptorAllocator {
+class OXGN_GFX_API DescriptorAllocator {
 public:
   DescriptorAllocator() = default;
   virtual ~DescriptorAllocator() = default;
@@ -269,7 +269,7 @@ public:
    \param handle The handle to release. After this call, the handle will be
    invalidated.
   */
-  virtual void Release(DescriptorHandle& handle) = 0;
+  virtual auto Release(DescriptorHandle& handle) -> void = 0;
 
   //! Copies a descriptor from one visibility to another.
   /*!
@@ -280,8 +280,8 @@ public:
    different visibility spaces. Typically used to copy from CPU-only to
    shader-visible.
   */
-  virtual void CopyDescriptor(
-    const DescriptorHandle& source, const DescriptorHandle& destination)
+  virtual auto CopyDescriptor(
+    const DescriptorHandle& source, const DescriptorHandle& destination) -> void
     = 0;
 
   //! Returns the number of descriptors remaining of a specific view type in a

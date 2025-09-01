@@ -59,7 +59,7 @@ struct FramebufferAttachment {
            explicit clear color or the texture's clear value. If neither
            is provided, returns a default clear color of (0, 0, 0, 0).
   */
-  [[nodiscard]] OXYGEN_GFX_API auto ResolveClearColor(
+  OXGN_GFX_NDAPI auto ResolveClearColor(
     const std::optional<Color>& explicit_clear) const -> Color;
 
   //! Resolves the depth and stencil clear values for this attachment.
@@ -80,7 +80,7 @@ struct FramebufferAttachment {
    \param explicit_stencil Optional explicit stencil clear value.
    \return A pair containing the resolved depth and stencil clear values.
   */
-  [[nodiscard]] OXYGEN_GFX_API auto ResolveDepthStencil(
+  OXGN_GFX_NDAPI auto ResolveDepthStencil(
     const std::optional<float>& explicit_depth,
     const std::optional<uint8_t>& explicit_stencil) const
     -> std::pair<float, uint8_t>;
@@ -171,7 +171,7 @@ struct FramebufferDesc {
 */
 class FramebufferInfo {
 public:
-  OXYGEN_GFX_API explicit FramebufferInfo(const FramebufferDesc& desc);
+  OXGN_GFX_API explicit FramebufferInfo(const FramebufferDesc& desc);
 
   auto operator==(const FramebufferInfo& other) const
   {
@@ -253,13 +253,14 @@ public:
     -> const FramebufferInfo& = 0;
 
   // TODO: maybe this should go to the render pass?
-  OXYGEN_GFX_API virtual void PrepareForRender(CommandRecorder& crecorder) = 0;
+  OXGN_GFX_API virtual auto PrepareForRender(CommandRecorder& crecorder) -> void
+    = 0;
 
-  OXYGEN_GFX_NDAPI virtual auto GetRenderTargetViews() const
+  OXGN_GFX_NDAPI virtual auto GetRenderTargetViews() const
     -> std::span<const NativeObject>
     = 0;
 
-  OXYGEN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeObject = 0;
+  OXGN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeObject = 0;
 };
 
 } // namespace oxygen::graphics

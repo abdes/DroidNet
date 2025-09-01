@@ -28,7 +28,7 @@ namespace oxygen::graphics {
 
 class DescriptorHandle;
 
-OXYGEN_GFX_API auto to_string(TextureType value) -> const char*;
+OXGN_GFX_API auto to_string(TextureType value) -> const char*;
 
 struct TextureDesc {
   uint32_t width = 1;
@@ -132,8 +132,7 @@ struct TextureSlice {
    \param desc The base texture description. \return A new TextureSlice with all
    dimensions fully resolved to actual values.
    */
-  [[nodiscard]] OXYGEN_GFX_API auto Resolve(const TextureDesc& desc) const
-    -> TextureSlice;
+  OXGN_GFX_NDAPI auto Resolve(const TextureDesc& desc) const -> TextureSlice;
 };
 
 //! Defines a set of texture sub-resources across multiple mip levels and array
@@ -170,9 +169,9 @@ struct TextureSubResourceSet {
   static constexpr auto EntireTexture() -> TextureSubResourceSet
   {
     return { .base_mip_level = 0,
-      .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
+      .num_mip_levels = kAllMipLevels,
       .base_array_slice = 0,
-      .num_array_slices = TextureSubResourceSet::kAllArraySlices };
+      .num_array_slices = kAllArraySlices };
   }
 
   //! Resolves any special values to concrete ranges based on the texture
@@ -186,12 +185,11 @@ struct TextureSubResourceSet {
    forces the result to target only a single mip level. \return A new
    TextureSubResourceSet with all values resolved to concrete ranges.
    */
-  [[nodiscard]] OXYGEN_GFX_API auto Resolve(const TextureDesc& desc,
+  OXGN_GFX_NDAPI auto Resolve(const TextureDesc& desc,
     bool single_mip_level) const -> TextureSubResourceSet;
 
   //! Checks if this set references the entire texture (all mips and slices).
-  [[nodiscard]] OXYGEN_GFX_API auto IsEntireTexture(
-    const TextureDesc& desc) const -> bool;
+  OXGN_GFX_NDAPI auto IsEntireTexture(const TextureDesc& desc) const -> bool;
 
   auto operator==(const TextureSubResourceSet& other) const -> bool
   {
@@ -284,7 +282,7 @@ struct TextureUploadRegion {
 */
 template <> struct std::hash<oxygen::graphics::TextureSubResourceSet> {
   auto operator()(
-    oxygen::graphics::TextureSubResourceSet const& s) const noexcept
+    const oxygen::graphics::TextureSubResourceSet& s) const noexcept
     -> std::size_t
   {
     size_t hash = 0;
@@ -306,7 +304,7 @@ template <> struct std::hash<oxygen::graphics::TextureSubResourceSet> {
 */
 template <> struct std::hash<oxygen::graphics::TextureViewDescription> {
   auto operator()(
-    oxygen::graphics::TextureViewDescription const& s) const noexcept
+    const oxygen::graphics::TextureViewDescription& s) const noexcept
     -> std::size_t
   {
     size_t hash
@@ -333,7 +331,7 @@ public:
     AddComponent<ObjectMetaData>(name);
   }
 
-  OXYGEN_GFX_API ~Texture() override;
+  OXGN_GFX_API ~Texture() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Texture)
   OXYGEN_DEFAULT_MOVABLE(Texture)
@@ -343,8 +341,7 @@ public:
 
   //! Gets the native resource handle for the texture.
   [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
-  [[nodiscard]] OXYGEN_GFX_API auto GetNativeView(
-    const DescriptorHandle& view_handle,
+  OXGN_GFX_NDAPI auto GetNativeView(const DescriptorHandle& view_handle,
     const TextureViewDescription& view_desc) const -> NativeObject;
 
   //! Gets the name of the texture.
@@ -354,32 +351,32 @@ public:
   }
 
   //! Sets the name of the texture.
-  void SetName(const std::string_view name) noexcept override
+  auto SetName(const std::string_view name) noexcept -> void override
   {
     GetComponent<ObjectMetaData>().SetName(name);
   }
 
 protected:
   //! Gets a shader resource view for the texture.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto CreateShaderResourceView(
+  OXGN_GFX_NDAPI virtual auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
     TextureSubResourceSet sub_resources) const -> NativeObject
     = 0;
 
   //! Gets an unordered access view for the texture.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto CreateUnorderedAccessView(
+  OXGN_GFX_NDAPI virtual auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
     TextureSubResourceSet sub_resources) const -> NativeObject
     = 0;
 
   //! Gets a render target view for the texture.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto CreateRenderTargetView(
+  OXGN_GFX_NDAPI virtual auto CreateRenderTargetView(
     const DescriptorHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources) const -> NativeObject
     = 0;
 
   //! Gets a depth stencil view for the texture.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto CreateDepthStencilView(
+  OXGN_GFX_NDAPI virtual auto CreateDepthStencilView(
     const DescriptorHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources, bool is_read_only) const
     -> NativeObject
@@ -387,7 +384,7 @@ protected:
 };
 
 // Ensure Texture satisfies ResourceWithViews
-static_assert(oxygen::graphics::ResourceWithViews<oxygen::graphics::Texture>,
+static_assert(oxygen::graphics::ResourceWithViews<Texture>,
   "Texture must satisfy ResourceWithViews");
 
 } // namespace oxygen::graphics

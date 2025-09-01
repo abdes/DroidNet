@@ -164,17 +164,12 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Buffer)
 
   //! Returns the buffer descriptor.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto GetDescriptor() const noexcept
-    -> BufferDesc
-    = 0;
+  OXGN_GFX_NDAPI virtual auto GetDescriptor() const noexcept -> BufferDesc = 0;
 
   //! Returns the native backend resource handle.
-  [[nodiscard]] OXYGEN_GFX_API virtual auto GetNativeResource() const
-    -> NativeObject
-    = 0;
+  OXGN_GFX_NDAPI virtual auto GetNativeResource() const -> NativeObject = 0;
 
-  [[nodiscard]] OXYGEN_GFX_API virtual auto GetNativeView(
-    const DescriptorHandle& view_handle,
+  OXGN_GFX_NDAPI virtual auto GetNativeView(const DescriptorHandle& view_handle,
     const BufferViewDescription& view_desc) const -> NativeObject;
 
   //! Maps the buffer memory for CPU access.
@@ -185,14 +180,16 @@ public:
   virtual auto Map(uint64_t offset = 0, uint64_t size = 0) -> void* = 0;
 
   //! Un-maps the buffer memory from CPU access.
-  virtual void UnMap() = 0;
+  virtual auto UnMap() -> void = 0;
 
   //! Updates the buffer contents from CPU memory.
   /*! \param data Pointer to source data.
       \param size Number of bytes to copy.
       \param offset Byte offset in the buffer to update.
   */
-  virtual void Update(const void* data, uint64_t size, uint64_t offset = 0) = 0;
+  virtual auto Update(const void* data, uint64_t size, uint64_t offset = 0)
+    -> void
+    = 0;
 
   //! Returns the size of the buffer in bytes.
   [[nodiscard]] virtual auto GetSize() const noexcept -> uint64_t = 0;
@@ -213,13 +210,13 @@ public:
   }
 
   //! Sets the buffer's name.
-  void SetName(const std::string_view name) noexcept override
+  auto SetName(const std::string_view name) noexcept -> void override
   {
     GetComponent<ObjectMetaData>().SetName(name);
   }
 
   /// Returns the GPU virtual address of the buffer, if supported by the API
-  [[nodiscard]] virtual uint64_t GetGPUVirtualAddress() const = 0;
+  [[nodiscard]] virtual auto GetGPUVirtualAddress() const -> uint64_t = 0;
 
 protected:
   /**
@@ -252,7 +249,7 @@ protected:
 };
 
 // Ensure Buffer satisfies ResourceWithViews
-static_assert(oxygen::graphics::ResourceWithViews<oxygen::graphics::Buffer>,
+static_assert(oxygen::graphics::ResourceWithViews<Buffer>,
   "Buffer must satisfy ResourceWithViews");
 
 } // namespace oxygen::graphics

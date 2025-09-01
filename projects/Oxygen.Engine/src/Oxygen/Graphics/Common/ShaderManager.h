@@ -72,7 +72,7 @@ public:
     std::shared_ptr<ShaderCompiler> compiler;
   };
 
-  OXYGEN_GFX_API explicit ShaderManager(Config config)
+  OXGN_GFX_API explicit ShaderManager(Config config)
     : config_(std::move(config))
   {
     AddComponent<ObjectMetaData>(
@@ -80,42 +80,40 @@ public:
     Initialize();
   }
 
-  OXYGEN_GFX_API ~ShaderManager() override = default;
+  OXGN_GFX_API ~ShaderManager() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ShaderManager);
   OXYGEN_DEFAULT_MOVABLE(ShaderManager);
 
   // Core archive operations
   //! Loads shader bytecode and metadata from the archive file
-  OXYGEN_GFX_API void Load();
+  OXGN_GFX_API auto Load() -> void;
   //! Persists shader bytecode and metadata to the archive file
-  OXYGEN_GFX_API void Save() const;
+  OXGN_GFX_API auto Save() const -> void;
   //! Removes all shaders from the archive
-  OXYGEN_GFX_API void Clear() noexcept;
+  OXGN_GFX_API auto Clear() noexcept -> void;
 
   // Shader management
   //! Adds pre-compiled shader bytecode to the archive
-  [[nodiscard]] OXYGEN_GFX_API auto AddCompiledShader(CompiledShader shader)
-    -> bool;
+  OXGN_GFX_NDAPI auto AddCompiledShader(CompiledShader shader) -> bool;
   //! Retrieves compiled shader bytecode by name
-  [[nodiscard]] OXYGEN_GFX_API auto GetShaderBytecode(
-    std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>;
+  OXGN_GFX_NDAPI auto GetShaderBytecode(std::string_view unique_id) const
+    -> std::shared_ptr<IShaderByteCode>;
 
   // State queries
   //! Checks if a shader exists in the archive
-  [[nodiscard]] OXYGEN_GFX_API auto HasShader(
-    std::string_view unique_id) const noexcept -> bool;
+  OXGN_GFX_NDAPI auto HasShader(std::string_view unique_id) const noexcept
+    -> bool;
   //! Returns profiles of all shaders that need recompilation
-  [[nodiscard]] OXYGEN_GFX_API auto GetOutdatedShaders() const
-    -> std::vector<ShaderInfo>;
+  OXGN_GFX_NDAPI auto GetOutdatedShaders() const -> std::vector<ShaderInfo>;
   //! Returns the total number of shaders in the archive
-  [[nodiscard]] OXYGEN_GFX_API auto GetShaderCount() const noexcept -> size_t;
+  OXGN_GFX_NDAPI auto GetShaderCount() const noexcept -> size_t;
 
   // Update operations
   //! Compiles all shaders whose source files have changed
-  OXYGEN_GFX_API void UpdateOutdatedShaders();
+  OXGN_GFX_API auto UpdateOutdatedShaders() -> void;
   //! Forces recompilation of all shaders in the archive
-  [[nodiscard]] OXYGEN_GFX_API auto RecompileAll() -> bool;
+  OXGN_GFX_NDAPI auto RecompileAll() -> bool;
 
   [[nodiscard]] auto GetName() const noexcept
   {
@@ -125,7 +123,7 @@ public:
 private:
   //! Initialize tha shader manager by loading the archive file and checking if
   //! it is up-to-date with the source files, compiling them as needed.
-  OXYGEN_GFX_API void Initialize();
+  OXGN_GFX_API auto Initialize() -> void;
 
   //! Checks if a shader source file has been modified since last compilation
   [[nodiscard]] auto IsShaderOutdated(const ShaderInfo& shader) const -> bool;

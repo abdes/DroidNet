@@ -40,8 +40,8 @@ struct SamplerDesc {
   float min_lod = 0.0f;
   float max_lod = 1000.0f;
 
-  bool operator==(const SamplerDesc&) const = default;
-  [[nodiscard]] size_t GetHash() const noexcept;
+  auto operator==(const SamplerDesc&) const -> bool = default;
+  [[nodiscard]] auto GetHash() const noexcept -> size_t;
 };
 
 /**
@@ -59,7 +59,7 @@ public:
     AddComponent<ObjectMetaData>(name);
   }
 
-  OXYGEN_GFX_API virtual ~Sampler() override = default;
+  OXGN_GFX_API ~Sampler() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Sampler)
   OXYGEN_DEFAULT_MOVABLE(Sampler)
@@ -77,32 +77,32 @@ public:
   }
 
   //! Sets the name of the texture.
-  void SetName(const std::string_view name) noexcept override
+  auto SetName(const std::string_view name) noexcept -> void override
   {
     GetComponent<ObjectMetaData>().SetName(name);
   }
 };
 
 // Ensure Sampler satisfies ResourceWithViews
-static_assert(oxygen::graphics::SupportedResource<oxygen::graphics::Sampler>,
+static_assert(oxygen::graphics::SupportedResource<Sampler>,
   "Sampler must satisfy ResourceWithViews");
 
 // Common predefined samplers
 namespace Samplers {
   // Creates a point/nearest sampler with clamp address mode
-  [[nodiscard]] Sampler PointClamp();
+  [[nodiscard]] auto PointClamp() -> Sampler;
 
   // Creates a bilinear sampler with clamp address mode
-  [[nodiscard]] Sampler BilinearClamp();
+  [[nodiscard]] auto BilinearClamp() -> Sampler;
 
   // Creates a trilinear sampler with wrap address mode
-  [[nodiscard]] Sampler TrilinearWrap();
+  [[nodiscard]] auto TrilinearWrap() -> Sampler;
 
   // Creates an anisotropic sampler with wrap address mode
-  [[nodiscard]] Sampler AnisotropicWrap(uint32_t max_anisotropy = 16);
+  [[nodiscard]] auto AnisotropicWrap(uint32_t max_anisotropy = 16) -> Sampler;
 
   // Creates a shadow map comparison sampler
-  [[nodiscard]] Sampler ShadowComparison();
+  [[nodiscard]] auto ShadowComparison() -> Sampler;
 }
 
 } // namespace oxygen::graphics

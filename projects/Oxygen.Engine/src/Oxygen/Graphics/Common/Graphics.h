@@ -99,8 +99,8 @@ class Graphics : public Composition,
                  public co::LiveObject,
                  public std::enable_shared_from_this<Graphics> {
 public:
-  OXYGEN_GFX_API explicit Graphics(std::string_view name);
-  OXYGEN_GFX_API ~Graphics() override;
+  OXGN_GFX_API explicit Graphics(std::string_view name);
+  OXGN_GFX_API ~Graphics() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_DEFAULT_MOVABLE(Graphics)
@@ -112,14 +112,14 @@ public:
 
   //=== Async operations ===------------------------------------------------//
 
-  OXYGEN_GFX_NDAPI auto ActivateAsync(co::TaskStarted<> started)
+  OXGN_GFX_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
-  OXYGEN_GFX_API auto Run() -> void override;
+  OXGN_GFX_API auto Run() -> void override;
 
-  OXYGEN_GFX_NDAPI auto IsRunning() const -> bool override;
+  OXGN_GFX_NDAPI auto IsRunning() const -> bool override;
 
-  OXYGEN_GFX_API auto Stop() -> void override;
+  OXGN_GFX_API auto Stop() -> void override;
 
   auto OnRenderStart() { return render_.Park(); }
 
@@ -127,12 +127,12 @@ public:
 
   //=== Global & pooled objects ===-----------------------------------------//
 
-  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderController(
+  [[nodiscard]] virtual OXGN_GFX_API auto CreateRenderController(
     std::string_view name, std::weak_ptr<graphics::Surface> surface,
     frame::SlotCount frames_in_flight)
     -> std::shared_ptr<graphics::RenderController>;
 
-  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
+  [[nodiscard]] virtual OXGN_GFX_API auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     std::shared_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<graphics::Surface>
@@ -142,23 +142,23 @@ public:
   /*!
   @param queue_strategy The strategy for initializing command queues.
   */
-  OXYGEN_GFX_API virtual auto CreateCommandQueues(
+  OXGN_GFX_API virtual auto CreateCommandQueues(
     const graphics::QueuesStrategy& queue_strategy) -> void;
 
-  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(
+  OXGN_GFX_NDAPI virtual auto GetCommandQueue(
     const graphics::QueueKey& key) const
     -> std::shared_ptr<graphics::CommandQueue>;
 
-  OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(graphics::QueueRole role) const
+  OXGN_GFX_NDAPI virtual auto GetCommandQueue(graphics::QueueRole role) const
     -> std::shared_ptr<graphics::CommandQueue>;
 
-  OXYGEN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
+  OXGN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
 
-  OXYGEN_GFX_NDAPI auto AcquireCommandList(
+  OXGN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)
     -> std::shared_ptr<graphics::CommandList>;
 
-  [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(
+  [[nodiscard]] virtual OXGN_GFX_API auto GetShader(
     std::string_view unique_id) const
     -> std::shared_ptr<graphics::IShaderByteCode>
     = 0;
@@ -166,16 +166,16 @@ public:
   // Bindless global accessors (device-owned)
   virtual auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& = 0;
-  OXYGEN_GFX_NDAPI auto GetDescriptorAllocator()
+  OXGN_GFX_NDAPI auto GetDescriptorAllocator()
     -> graphics::DescriptorAllocator&;
 
-  OXYGEN_GFX_NDAPI auto GetResourceRegistry() const
+  OXGN_GFX_NDAPI auto GetResourceRegistry() const
     -> const graphics::ResourceRegistry&;
-  OXYGEN_GFX_NDAPI auto GetResourceRegistry() -> graphics::ResourceRegistry&;
+  OXGN_GFX_NDAPI auto GetResourceRegistry() -> graphics::ResourceRegistry&;
 
   //=== Rendering Resources factories ===-----------------------------------//
 
-  OXYGEN_GFX_NDAPI auto CreateFramebuffer(const graphics::FramebufferDesc& desc)
+  OXGN_GFX_NDAPI auto CreateFramebuffer(const graphics::FramebufferDesc& desc)
     -> std::shared_ptr<graphics::Framebuffer>;
 
   [[nodiscard]] virtual auto CreateTexture(

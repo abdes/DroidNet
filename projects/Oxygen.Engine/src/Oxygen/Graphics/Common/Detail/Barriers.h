@@ -23,12 +23,12 @@ namespace oxygen::graphics::detail {
  without requiring explicit state transitions.
 */
 struct MemoryBarrierDesc {
-    NativeObject resource;
+  NativeObject resource;
 
-    auto operator==(const MemoryBarrierDesc& other) const -> bool
-    {
-        return resource == other.resource;
-    }
+  auto operator==(const MemoryBarrierDesc& other) const -> bool
+  {
+    return resource == other.resource;
+  }
 };
 
 //! Barrier description for buffer state transitions.
@@ -37,15 +37,15 @@ struct MemoryBarrierDesc {
  between different GPU operations (e.g., from vertex buffer to UAV).
 */
 struct BufferBarrierDesc {
-    NativeObject resource;
-    ResourceStates before;
-    ResourceStates after;
+  NativeObject resource;
+  ResourceStates before;
+  ResourceStates after;
 
-    auto operator==(const BufferBarrierDesc& other) const -> bool
-    {
-        return resource == other.resource && before == other.before
-            && after == other.after;
-    }
+  auto operator==(const BufferBarrierDesc& other) const -> bool
+  {
+    return resource == other.resource && before == other.before
+      && after == other.after;
+  }
 };
 
 //! Barrier description for texture state transitions.
@@ -54,20 +54,22 @@ struct BufferBarrierDesc {
  between different GPU operations (rendering, sampling, copying, etc.).
 */
 struct TextureBarrierDesc {
-    NativeObject resource;
-    ResourceStates before;
-    ResourceStates after;
-    // Could add additional texture-specific fields like mip levels, array slices, etc.
+  NativeObject resource;
+  ResourceStates before;
+  ResourceStates after;
+  // Could add additional texture-specific fields like mip levels, array slices,
+  // etc.
 
-    auto operator==(const TextureBarrierDesc& other) const -> bool
-    {
-        return resource == other.resource && before == other.before
-            && after == other.after;
-    }
+  auto operator==(const TextureBarrierDesc& other) const -> bool
+  {
+    return resource == other.resource && before == other.before
+      && after == other.after;
+  }
 };
 
 //! A variant that can hold any type of barrier description
-using BarrierDesc = std::variant<BufferBarrierDesc, TextureBarrierDesc, MemoryBarrierDesc>;
+using BarrierDesc
+  = std::variant<BufferBarrierDesc, TextureBarrierDesc, MemoryBarrierDesc>;
 
 //! Unified interface for all types of resource barriers in the graphics system.
 /*!
@@ -78,86 +80,85 @@ using BarrierDesc = std::variant<BufferBarrierDesc, TextureBarrierDesc, MemoryBa
 */
 class Barrier final {
 public:
-    // Constructor with descriptor only (type deduced from descriptor)
-    explicit Barrier(BarrierDesc desc)
-        : descriptor_(std::move(desc)) // NOLINT(performance-move-const-arg)
-    {
-    }
+  // Constructor with descriptor only (type deduced from descriptor)
+  explicit Barrier(BarrierDesc desc)
+    : descriptor_(std::move(desc)) // NOLINT(performance-move-const-arg)
+  {
+  }
 
-    ~Barrier() = default;
+  ~Barrier() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(Barrier)
-    OXYGEN_DEFAULT_MOVABLE(Barrier)
+  OXYGEN_DEFAULT_COPYABLE(Barrier)
+  OXYGEN_DEFAULT_MOVABLE(Barrier)
 
-    [[nodiscard]] auto IsMemoryBarrier() const -> bool
-    {
-        return std::holds_alternative<MemoryBarrierDesc>(descriptor_);
-    }
+  [[nodiscard]] auto IsMemoryBarrier() const -> bool
+  {
+    return std::holds_alternative<MemoryBarrierDesc>(descriptor_);
+  }
 
-    [[nodiscard]] auto GetDescriptor() const -> const BarrierDesc&
-    {
-        return descriptor_;
-    }
+  [[nodiscard]] auto GetDescriptor() const -> const BarrierDesc&
+  {
+    return descriptor_;
+  }
 
-    [[nodiscard]] auto GetResource() const -> NativeObject
-    {
-        return std::visit(
-            [](auto&& desc) -> NativeObject { return desc.resource; },
-            descriptor_);
-    }
+  [[nodiscard]] auto GetResource() const -> NativeObject
+  {
+    return std::visit(
+      [](auto&& desc) -> NativeObject { return desc.resource; }, descriptor_);
+  }
 
-    auto GetStateBefore() -> ResourceStates
-    {
-        return std::visit(
-            Overloads {
-                [](const BufferBarrierDesc& desc) { return desc.before; },
-                [](const TextureBarrierDesc& desc) { return desc.before; },
-                [](const MemoryBarrierDesc&) {
-                    ABORT_F("Invalid use of GetStateBefore() for MemoryBarrierDesc");
-                    // ReSharper disable once CppDFAUnreachableCode
-                    return ResourceStates::kUnknown; // Unreachable
-                },
-            },
-            descriptor_);
-    }
+  auto GetStateBefore() -> ResourceStates
+  {
+    return std::visit(
+      Overloads {
+        [](const BufferBarrierDesc& desc) { return desc.before; },
+        [](const TextureBarrierDesc& desc) { return desc.before; },
+        [](const MemoryBarrierDesc&) {
+          ABORT_F("Invalid use of GetStateBefore() for MemoryBarrierDesc");
+          // ReSharper disable once CppDFAUnreachableCode
+          return ResourceStates::kUnknown; // Unreachable
+        },
+      },
+      descriptor_);
+  }
 
-    auto GetStateAfter() -> ResourceStates
-    {
-        return std::visit(
-            Overloads {
-                [](const BufferBarrierDesc& desc) { return desc.after; },
-                [](const TextureBarrierDesc& desc) { return desc.after; },
-                [](const MemoryBarrierDesc&) {
-                    ABORT_F("Invalid use of GetStateAfter() for MemoryBarrierDesc");
-                    // ReSharper disable once CppDFAUnreachableCode
-                    return ResourceStates::kUnknown; // Unreachable
-                },
-            },
-            descriptor_);
-    }
+  auto GetStateAfter() -> ResourceStates
+  {
+    return std::visit(
+      Overloads {
+        [](const BufferBarrierDesc& desc) { return desc.after; },
+        [](const TextureBarrierDesc& desc) { return desc.after; },
+        [](const MemoryBarrierDesc&) {
+          ABORT_F("Invalid use of GetStateAfter() for MemoryBarrierDesc");
+          // ReSharper disable once CppDFAUnreachableCode
+          return ResourceStates::kUnknown; // Unreachable
+        },
+      },
+      descriptor_);
+  }
 
-    //! Append the provided state to the barrier's 'after' state.
-    /*!
-     This method is used to accumulate multiple states for a resource in a
-     single barrier, reducing the number of barriers needed in a command list.
-    */
-    void AppendState(ResourceStates state)
-    {
-        std::visit(
-            Overloads {
-                [state](BufferBarrierDesc& desc) { desc.after |= state; },
-                [state](TextureBarrierDesc& desc) { desc.after |= state; },
-                [](const MemoryBarrierDesc&) {
-                    ABORT_F("Invalid use of AppendState() for MemoryBarrierDesc");
-                },
-            },
-            descriptor_);
-    }
+  //! Append the provided state to the barrier's 'after' state.
+  /*!
+   This method is used to accumulate multiple states for a resource in a
+   single barrier, reducing the number of barriers needed in a command list.
+  */
+  auto AppendState(ResourceStates state) -> void
+  {
+    std::visit(Overloads {
+                 [state](BufferBarrierDesc& desc) { desc.after |= state; },
+                 [state](TextureBarrierDesc& desc) { desc.after |= state; },
+                 [](const MemoryBarrierDesc&) {
+                   ABORT_F(
+                     "Invalid use of AppendState() for MemoryBarrierDesc");
+                 },
+               },
+      descriptor_);
+  }
 
 private:
-    BarrierDesc descriptor_;
+  BarrierDesc descriptor_;
 };
 
-OXYGEN_GFX_API auto to_string(const Barrier& barrier) -> std::string;
+OXGN_GFX_API auto to_string(const Barrier& barrier) -> std::string;
 
 } // namespace oxygen::graphics::detail

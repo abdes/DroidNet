@@ -14,54 +14,54 @@ namespace oxygen::graphics {
 
 //! The different types of bindings for resources.
 enum class ResourceViewType : uint8_t {
-    kNone, //!< No binding
+  kNone, //!< No binding
 
-    //! {@
-    //! Types used in bindless rendering descriptor tables.
+  //! {@
+  //! Types used in bindless rendering descriptor tables.
 
-    kTexture_SRV, //!< Shader Resource View for textures
-    kTexture_UAV, //!< Unordered Access View for textures
+  kTexture_SRV, //!< Shader Resource View for textures
+  kTexture_UAV, //!< Unordered Access View for textures
 
-    kTypedBuffer_SRV, //!< Shader Resource View for typed buffers
-    kTypedBuffer_UAV, //!< Unordered Access View for typed buffers
-    kStructuredBuffer_UAV, //!< Unordered Access View for structured buffers
-    kStructuredBuffer_SRV, //!< Shader Resource View for structured buffers
-    kRawBuffer_SRV, //!< Shader Resource View for raw buffers
-    kRawBuffer_UAV, //!< Unordered Access View for raw buffers
+  kTypedBuffer_SRV, //!< Shader Resource View for typed buffers
+  kTypedBuffer_UAV, //!< Unordered Access View for typed buffers
+  kStructuredBuffer_UAV, //!< Unordered Access View for structured buffers
+  kStructuredBuffer_SRV, //!< Shader Resource View for structured buffers
+  kRawBuffer_SRV, //!< Shader Resource View for raw buffers
+  kRawBuffer_UAV, //!< Unordered Access View for raw buffers
 
-    kConstantBuffer, //!< Constant buffer
+  kConstantBuffer, //!< Constant buffer
 
-    kSampler, //!< Sampler
-    kSamplerFeedbackTexture_UAV, //!< Sampler feedback texture UAV
+  kSampler, //!< Sampler
+  kSamplerFeedbackTexture_UAV, //!< Sampler feedback texture UAV
 
-    kRayTracingAccelStructure, //!< Ray tracing acceleration structure
+  kRayTracingAccelStructure, //!< Ray tracing acceleration structure
 
-    //! @}
+  //! @}
 
-    kTexture_DSV, //!< Depth Stencil View for textures
-    kTexture_RTV, //!< Render Target View for textures
+  kTexture_DSV, //!< Depth Stencil View for textures
+  kTexture_RTV, //!< Render Target View for textures
 
-    // Push constants are a special case that exists parallel to both
-    // traditional and bindless binding systems. They're directly passed to the
-    // shader through root constants (DX12) or push constants (Vulkan).
+  // Push constants are a special case that exists parallel to both
+  // traditional and bindless binding systems. They're directly passed to the
+  // shader through root constants (DX12) or push constants (Vulkan).
 
-    kMaxResourceViewType //!< Maximum value sentinel
+  kMaxResourceViewType //!< Maximum value sentinel
 };
 
 //! Check if the given resource view type is valid.
 constexpr auto IsValid(ResourceViewType type) noexcept
 {
-    return type > ResourceViewType::kNone
-        && type < ResourceViewType::kMaxResourceViewType;
+  return type > ResourceViewType::kNone
+    && type < ResourceViewType::kMaxResourceViewType;
 }
 
 //! Check if the given resource view type is undefined.
 constexpr auto IsUndefined(ResourceViewType type) noexcept
 {
-    return type == ResourceViewType::kNone;
+  return type == ResourceViewType::kNone;
 }
 
 //! String representation of enum values in `ResourceViewType`.
-OXYGEN_GFX_API auto to_string(ResourceViewType value) -> const char*;
+OXGN_GFX_API auto to_string(ResourceViewType value) -> const char*;
 
 } // namespace oxygen::graphics

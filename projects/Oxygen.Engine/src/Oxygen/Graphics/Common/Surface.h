@@ -41,7 +41,7 @@ class RenderController;
 */
 class Surface : public Composition, public Named {
 public:
-  OXYGEN_GFX_API ~Surface() override;
+  OXGN_GFX_API ~Surface() override;
 
   OXYGEN_DEFAULT_COPYABLE(Surface)
   OXYGEN_DEFAULT_MOVABLE(Surface)
@@ -110,15 +110,14 @@ namespace detail {
 
     [[nodiscard]] auto IsValid() const { return !window_.expired(); }
 
-    [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
-    [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;
+    OXGN_GFX_NDAPI auto Width() const -> uint32_t;
+    OXGN_GFX_NDAPI auto Height() const -> uint32_t;
 
-    [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const
-      -> platform::window::ExtentT;
+    OXGN_GFX_NDAPI auto FrameBufferSize() const -> platform::window::ExtentT;
 
-    [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
+    OXGN_GFX_NDAPI auto Native() const -> NativeHandles;
 
-    [[nodiscard]] OXYGEN_GFX_API auto GetWindowTitle() const -> std::string;
+    OXGN_GFX_NDAPI auto GetWindowTitle() const -> std::string;
 
   private:
     platform::WindowPtr window_;
@@ -127,7 +126,7 @@ namespace detail {
   //! Represents a surface associated with a window.
   class WindowSurface : public Surface {
   public:
-    OXYGEN_GFX_API ~WindowSurface() override = default;
+    OXGN_GFX_API ~WindowSurface() override = default;
 
     OXYGEN_DEFAULT_COPYABLE(WindowSurface)
     OXYGEN_DEFAULT_MOVABLE(WindowSurface)

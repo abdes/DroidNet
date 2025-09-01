@@ -36,7 +36,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_GFX_EXPORTS"
+      "OXGN_GFX_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -145,7 +145,7 @@ target_compile_definitions(
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_GFX_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_GFX_STATIC>
 )
 
 target_link_libraries(

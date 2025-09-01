@@ -17,18 +17,18 @@ namespace oxygen::graphics {
 
 //! Flags for clearing buffers in a render pass.
 enum class ClearFlags : uint8_t {
-    kNone = 0,
+  kNone = 0,
 
-    kColor = OXYGEN_FLAG(0),
-    kDepth = OXYGEN_FLAG(1),
-    kStencil = OXYGEN_FLAG(2),
+  kColor = OXYGEN_FLAG(0),
+  kDepth = OXYGEN_FLAG(1),
+  kStencil = OXYGEN_FLAG(2),
 
-    //! Sentinel maximum value for ClearFlags.
-    kMaxClearFlags = OXYGEN_FLAG(3),
+  //! Sentinel maximum value for ClearFlags.
+  kMaxClearFlags = OXYGEN_FLAG(3),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ClearFlags)
 
 //! String representation of enum values in `DescriptorVisibility`.
-OXYGEN_GFX_API auto to_string(ClearFlags value) -> std::string;
+OXGN_GFX_API auto to_string(ClearFlags value) -> std::string;
 
 } // namespace oxygen::graphics

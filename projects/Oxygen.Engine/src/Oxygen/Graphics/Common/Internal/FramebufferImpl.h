@@ -18,8 +18,8 @@ class Graphics;
 
 namespace oxygen::graphics::internal {
 
-class FramebufferImpl final : public graphics::Framebuffer {
-  using Base = graphics::Framebuffer;
+class FramebufferImpl final : public Framebuffer {
+  using Base = Framebuffer;
 
 public:
   FramebufferImpl(FramebufferDesc desc, std::weak_ptr<Graphics> gfx_weak);
@@ -36,7 +36,8 @@ public:
     -> const FramebufferInfo& override;
 
   // TODO: maybe this should go to the render pass?
-  OXYGEN_GFX_API void PrepareForRender(CommandRecorder& crecorder) override;
+  OXGN_GFX_API auto PrepareForRender(CommandRecorder& crecorder)
+    -> void override;
 
   [[nodiscard]] auto GetRenderTargetViews() const
     -> std::span<const NativeObject> override
@@ -53,8 +54,7 @@ private:
   FramebufferDesc desc_;
   std::weak_ptr<Graphics> gfx_weak_;
 
-  StaticVector<std::shared_ptr<graphics::Texture>, kMaxRenderTargets>
-    textures_ {};
+  StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets> textures_ {};
   StaticVector<NativeObject, kMaxRenderTargets> rtvs_ {};
   NativeObject dsv_ {};
 
