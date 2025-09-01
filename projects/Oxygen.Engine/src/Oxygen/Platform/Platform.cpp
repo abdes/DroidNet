@@ -14,50 +14,52 @@ using oxygen::platform::WindowManager;
 
 auto Platform::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
-    DLOG_F(INFO, "Platform Live Object activating...");
-    return GetComponent<platform::AsyncOps>().ActivateAsync(std::move(started));
+  DLOG_F(INFO, "Platform Live Object activating...");
+  return GetComponent<AsyncOps>().ActivateAsync(std::move(started));
 }
 
-void Platform::Run()
+auto Platform::Run() -> void
 {
-    DLOG_F(INFO, "Starting Platform async tasks...");
-    auto& n = GetComponent<AsyncOps>().Nursery();
+  DLOG_F(INFO, "Starting Platform async tasks...");
+  auto& n = GetComponent<AsyncOps>().Nursery();
 
-    if (HasComponent<EventPump>()) {
-        n.Start(&WindowManager::ProcessPlatformEvents, &GetComponent<WindowManager>());
-    }
-    if (HasComponent<InputEvents>()) {
-        n.Start(&InputEvents::ProcessPlatformEvents, &GetComponent<InputEvents>());
-    }
+  if (HasComponent<EventPump>()) {
+    n.Start(
+      &WindowManager::ProcessPlatformEvents, &GetComponent<WindowManager>());
+  }
+  if (HasComponent<InputEvents>()) {
+    n.Start(&InputEvents::ProcessPlatformEvents, &GetComponent<InputEvents>());
+  }
 }
 
-auto Platform::Platform::IsRunning() const -> bool
+auto Platform::IsRunning() const -> bool
 {
-    return GetComponent<platform::AsyncOps>().IsRunning();
+  return GetComponent<AsyncOps>().IsRunning();
 }
 
-void Platform::Stop()
+auto Platform::Stop() -> void
 {
-    GetComponent<platform::AsyncOps>().Stop();
-    DLOG_F(INFO, "Platform Live Object stopped");
+  GetComponent<AsyncOps>().Stop();
+  DLOG_F(INFO, "Platform Live Object stopped");
 }
 
-void Platform::Compose(const PlatformConfig& config)
+auto Platform::Compose(const PlatformConfig& config) -> void
 {
-    AddComponent<AsyncOps>();
+  AddComponent<AsyncOps>(config);
 
-    if (config.headless) {
-        LOG_F(INFO, "Platform is headless -> no input, no window");
-        return;
-    }
-    AddComponent<EventPump>();
-    AddComponent<WindowManager>();
-    AddComponent<InputEvents>();
+  if (config.headless) {
+    LOG_F(INFO, "Platform is headless -> no input, no window");
+    return;
+  }
+  AddComponent<EventPump>();
+  AddComponent<WindowManager>();
+  AddComponent<InputEvents>();
 }
 
-auto Platform::GetInputSlotForKey(const platform::Key key) -> platform::InputSlot
+auto Platform::GetInputSlotForKey(const platform::Key key)
+  -> platform::InputSlot
 {
-    return platform::InputSlots::GetInputSlotForKey(key);
+  return platform::InputSlots::GetInputSlotForKey(key);
 }
 
 #if 0

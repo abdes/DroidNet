@@ -25,6 +25,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Display.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
@@ -40,7 +41,7 @@ namespace platform {
   class AsyncOps final : public Component, public co::LiveObject {
     OXYGEN_COMPONENT(AsyncOps)
   public:
-    AsyncOps();
+    AsyncOps(const PlatformConfig& config);
     ~AsyncOps() override;
 
     //! A utility function, returning an awaitable suspending the caller for a
@@ -50,7 +51,14 @@ namespace platform {
       return co::SleepFor(io_, delay);
     }
 
-    auto PollOne() -> size_t { return io_.poll(); }
+    auto HasThreads() const { return threads_ != nullptr; }
+    auto Threads() -> co::ThreadPool&
+    {
+      CHECK_NOTNULL_F(threads_, "Platform not configured with a thread pool");
+      return *threads_;
+    }
+
+    OXYGEN_PLATFORM_API auto PollOne() -> size_t;
 
     auto Stop() -> void override;
 
@@ -75,6 +83,7 @@ namespace platform {
 
     asio::io_context io_;
     asio::signal_set signals_;
+    std::unique_ptr<co::ThreadPool> threads_;
     co::Event terminate_;
     co::Nursery* nursery_ { nullptr };
   };
@@ -220,6 +229,13 @@ public:
   {
     return GetComponent<platform::AsyncOps>();
   }
+  auto Async() const -> const platform::AsyncOps&
+  {
+    return GetComponent<platform::AsyncOps>();
+  }
+  auto HasThreads() const { return Async().HasThreads(); }
+  auto Threads() -> auto& { return Async().Threads(); }
+
   auto Events() -> platform::EventPump&
   {
     return GetComponent<platform::EventPump>();
