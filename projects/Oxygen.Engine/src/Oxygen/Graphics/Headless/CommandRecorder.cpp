@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
-#include <Oxygen/Graphics/Common/Internal/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
