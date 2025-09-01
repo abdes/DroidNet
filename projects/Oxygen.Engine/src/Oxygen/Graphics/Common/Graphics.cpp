@@ -79,8 +79,6 @@ auto Graphics::Stop() -> void
     command_list_pool_.clear();
   }
 
-  command_queues_.clear();
-
   DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
@@ -105,15 +103,6 @@ auto Graphics::CreateCommandQueues(
       graphics::QueueRole r) -> std::shared_ptr<graphics::CommandQueue> {
       return this->CreateCommandQueue(k, r);
     });
-  // Mirror the manager's name-based map into command_queues_ for backwards
-  // compatibility with existing code that inspects `command_queues_`.
-  command_queues_.clear();
-  for (const auto& spec : queue_strategy.Specifications()) {
-    const auto q = qm.GetQueueByName(spec.key);
-    if (q) {
-      command_queues_.emplace(spec.key, q);
-    }
-  }
 }
 
 auto Graphics::FlushCommandQueues() -> void

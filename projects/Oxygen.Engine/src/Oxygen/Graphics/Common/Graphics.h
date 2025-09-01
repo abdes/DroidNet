@@ -288,10 +288,6 @@ private:
   //! application layer).
   std::shared_ptr<Platform> platform_;
 
-  using CommandQueueSharedPtr = std::shared_ptr<graphics::CommandQueue>;
-  //! The command queues created by the backend.
-  std::unordered_map<graphics::QueueKey, CommandQueueSharedPtr> command_queues_;
-
   using CommandListUniquePtr = std::unique_ptr<graphics::CommandList>;
   using CommandLists = std::vector<CommandListUniquePtr>;
   //! Pool of available command lists by queue type.
