@@ -182,8 +182,8 @@ public:
       "RepeatableShared destroyed while not done");
     DLOG_IF_F(WARNING,
       event_slots_ && event_slots_->slot2
-        && !(event_slots_->slot1.GetAwaitable().Done()
-          || event_slots_->slot1.GetAwaitable().Closed()),
+        && !(event_slots_->slot2.GetAwaitable().Done()
+          || event_slots_->slot2.GetAwaitable().Closed()),
       "RepeatableShared destroyed while not done");
   }
 
@@ -315,13 +315,13 @@ private:
    it. Switches to the other slot and initializes it for the next
    iteration.
   */
-  void CompleteIteration()
+  auto CompleteIteration() -> void
   {
     current_slot_index_ ^= 1;
     NextSlot().Initialize(this);
   }
 
-  void MaybeBootstrap()
+  auto MaybeBootstrap() -> void
   {
     if (bootstrapped_) {
       return;
@@ -387,13 +387,13 @@ private:
      \param parent Pointer to owning RepeatableShared instance that manages
      iteration transitions and construction state
     */
-    void Initialize(RepeatableShared* parent)
+    auto Initialize(RepeatableShared* parent) -> void
     {
       if (initialized) {
         shared_awaitable.~Shared();
       }
       new (&shared_awaitable) Shared<WrappedValueProduce>(
-        [parent]() -> co::Co<ValueT> { co_return co_await parent->wrapper_; });
+        [parent]() -> Co<ValueT> { co_return co_await parent->wrapper_; });
       initialized = true;
     }
 
