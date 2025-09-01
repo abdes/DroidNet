@@ -27,12 +27,12 @@ oxyrun headall
 
 | Status | Item |
 |--------|------|
-| ⬜️ | Implement CommandExecutor and centralize execution logic (move lambda content from `CommandQueue::Submit`). |
-| ⬜️ | Extend `CommandContext` with runtime services (Graphics, queue, resolver, submission id). |
+| ✅ | Implement CommandExecutor and centralize execution logic (move lambda content from `CommandQueue::Submit`). |
+| ✅ | Extend `CommandContext` with runtime services (Graphics, queue, resolver, submission id). |
 | ⬜️ | Implement DrawCommand/DispatchCommand and route `SetPipelineState` into recorded PSO usage. |
 | ⬜️ | Add minimal PSO and ShaderStub to enable deterministic fallback draw output. |
 | ⬜️ | Implement Descriptor runtime resolver to map descriptors to `NativeObject` at execute-time. |
-| ⬜️ | Enforce resource state transitions at execute-time and improve `ExecuteBarriers` to integrate with executor. |
+| ✅ | Enforce resource state transitions at execute-time and improve `ExecuteBarriers` to integrate with executor. |
 | ⬜️ | Implement depth/stencil backing and update `ClearDepthStencilCommand` to mutate DSV backing. |
 | ⬜️ | Add headless `QueryPool` with timestamp/occlusion support. |
 | ⬜️ | Implement Present/Acquire semantics for `HeadlessSurface` and expose last-presented image for tests. |
@@ -147,10 +147,10 @@ implementation priority for making headless useful for testing and replay.
 |---:|:---:|---|---|---|
 | 1 | ✅ | CopyBuffer / CopyBufferCommand | CopyBufferRegion / vkCmdCopyBuffer | Buffer-to-buffer raw byte copies. Already implemented. |
 | 1 | ⬜️ | CopyTextureToBuffer / CopyTextureRegion | CopyTextureRegion / vkCmdCopyImageToBuffer | Texture->buffer readback (row/slice pitch, blocks). Important for readback tests. |
-| 1 | ⬜️ | ResourceBarrierCommand / PipelineBarrier | ResourceBarrier / vkCmdPipelineBarrier | Explicit resource transitions / memory barriers; executor must enforce recorded barriers. |
+| 1 | ✅ | ResourceBarrierCommand / PipelineBarrier | ResourceBarrier / vkCmdPipelineBarrier | Explicit resource transitions / memory barriers; executor enforces recorded barriers (implemented). |
 | 1 | ⬜️ | PresentCommand / Present emulation | Present (swapchain) / vkQueuePresentKHR | Surface acquire/present semantics; expose last-presented image for tests. |
 | 1 | ✅ | BufferToTextureCommand | CopyBufferRegion+subresource / vkCmdCopyBufferToImage | Buffer->texture uploads (implemented, supports block formats). |
-| 1 | ✅ | QueueSignalCommand / QueueWaitCommand | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores | Recorded queue-side signal/wait implemented via LambdaCommand today; consider explicit command types. |
+| 1 | ✅ | QueueSignalCommand / QueueWaitCommand | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores | Queue-side signal/wait implemented via `QueueSignalCommand`/`QueueWaitCommand` calling `CommandQueue` wait/signal. |
 | 2 | ⬜️ | CopyTextureToTexture | CopySubresourceRegion / vkCmdCopyImage | Image-to-image copy, mip/array-aware. |
 | 2 | ⬜️ | DispatchCommand | Dispatch / vkCmdDispatch | Compute dispatch path; validate bindings and optionally perform simple emulation. |
 | 2 | ⬜️ | CopyTextureRegion variants (row/align) | vkCmdCopyImage / CopyTextureRegion | Variants for pitched copies and block layouts. |
