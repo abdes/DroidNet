@@ -18,19 +18,19 @@ using namespace oxygen::core;
 using namespace oxygen::engine;
 using oxygen::co::testing::TestEventLoop;
 using namespace oxygen::co;
-using namespace oxygen::co::testing;
 
 // Test fixture that owns a ModuleManager and provides helpers built on the
 // public ModuleManager API. This demonstrates how tests can derive filtered
 // module lists from ModuleManager::GetModules() without adding special APIs
 // to ModuleManager.
+// ReSharper disable once CppRedundantQualifier
 class ModuleManagerTest : public ::testing::Test {
 protected:
   ModuleManager mgr_ { nullptr };
 
   // Return non-owning pointers to modules that support the given phase by
   // filtering the view returned by ModuleManager::GetModules().
-  auto GetModulesForPhase(PhaseId id) -> decltype(auto)
+  auto GetModulesForPhase(PhaseId id) const -> decltype(auto)
   {
     using std::views::filter;
     using std::views::transform;
@@ -56,9 +56,19 @@ public:
   {
   }
 
-  std::string_view GetName() const noexcept override { return name_; }
-  ModulePriority GetPriority() const noexcept override { return priority_; }
-  ModulePhaseMask GetSupportedPhases() const noexcept override { return mask_; }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  {
+    return name_;
+  }
+  [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
+  {
+    return priority_;
+  }
+  [[nodiscard]] auto GetSupportedPhases() const noexcept
+    -> ModulePhaseMask override
+  {
+    return mask_;
+  }
 
 private:
   std::string name_;
@@ -75,12 +85,24 @@ public:
     , mask_(mask)
   {
   }
-  std::string_view GetName() const noexcept override { return name_; }
-  ModulePriority GetPriority() const noexcept override { return priority_; }
-  ModulePhaseMask GetSupportedPhases() const noexcept override { return mask_; }
+  auto GetName() const noexcept -> std::string_view override { return name_; }
+  auto GetPriority() const noexcept -> ModulePriority override
+  {
+    return priority_;
+  }
+  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
+  {
+    return mask_;
+  }
 
-  void OnFrameStart(FrameContext&) override { calls.push_back("OnFrameStart"); }
-  void OnFrameEnd(FrameContext&) override { calls.push_back("OnFrameEnd"); }
+  auto OnFrameStart(FrameContext&) -> void override
+  {
+    calls.push_back("OnFrameStart");
+  }
+  auto OnFrameEnd(FrameContext&) -> void override
+  {
+    calls.push_back("OnFrameEnd");
+  }
 
   std::vector<std::string> calls;
 
@@ -99,16 +121,22 @@ public:
     , mask_(mask)
   {
   }
-  std::string_view GetName() const noexcept override { return name_; }
-  ModulePriority GetPriority() const noexcept override { return priority_; }
-  ModulePhaseMask GetSupportedPhases() const noexcept override { return mask_; }
+  auto GetName() const noexcept -> std::string_view override { return name_; }
+  auto GetPriority() const noexcept -> ModulePriority override
+  {
+    return priority_;
+  }
+  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
+  {
+    return mask_;
+  }
 
-  auto OnInput(FrameContext&) -> oxygen::co::Co<> override
+  auto OnInput(FrameContext&) -> Co<> override
   {
     calls.push_back("OnInput-start");
     // Await a zero-duration sleep on the provided test loop so the handler
     // actually suspends and resumes on the event loop.
-    co_await _dummy_loop->Sleep(std::chrono::milliseconds(0));
+    co_await _dummy_loop->Sleep(milliseconds(0));
     calls.push_back("OnInput-end");
     co_return;
   }
@@ -127,7 +155,7 @@ private:
 // functions can be properly instantiated by the compiler. We allow an
 // external atomic<int>* to be supplied so tests can observe lifecycle state
 // without keeping a pointer to the owned module instance.
-struct InitModule : public EngineModule {
+struct InitModule : EngineModule {
   InitModule(std::atomic<int>& external)
     : external_state(&external)
   {
@@ -135,22 +163,22 @@ struct InitModule : public EngineModule {
 
   std::atomic<int>* external_state { nullptr };
 
-  std::string_view GetName() const noexcept override { return "init"; }
-  ModulePriority GetPriority() const noexcept override
+  auto GetName() const noexcept -> std::string_view override { return "init"; }
+  auto GetPriority() const noexcept -> ModulePriority override
   {
     return ModulePriority { 100 };
   }
-  ModulePhaseMask GetSupportedPhases() const noexcept override
+  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
   {
     return MakeModuleMask<PhaseId::kInput>();
   }
-  auto OnAttached(oxygen::observer_ptr<oxygen::Engine> /*engine*/) noexcept
+  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> /*engine*/) noexcept
     -> bool override
   {
     *external_state = 1;
     return true;
   }
-  void OnShutdown() noexcept override { *external_state = 2; }
+  auto OnShutdown() noexcept -> void override { *external_state = 2; }
 };
 
 TEST_F(ModuleManagerTest, RegisterAndQuery)
@@ -198,7 +226,7 @@ TEST_F(ModuleManagerTest, TestCase_InitializeShutdownLifecycle)
   // InitModule with a pointer to that atomic so we don't hold a pointer to
   // the owned module instance (avoids dangling pointer after move).
   std::atomic<int> observed_state { 0 };
-  auto mod = std::make_unique<::InitModule>(observed_state);
+  auto mod = std::make_unique<InitModule>(observed_state);
 
   // Act: RegisterModule should call OnAttached and set the external state to 1.
   bool reg_result = mgr_.RegisterModule(std::move(mod));

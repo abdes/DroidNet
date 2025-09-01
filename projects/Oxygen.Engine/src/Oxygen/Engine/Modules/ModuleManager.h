@@ -19,6 +19,10 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
+namespace oxygen {
+class AsyncEngine;
+} // namespace oxygen
+
 namespace oxygen::engine {
 
 // Forward
@@ -28,7 +32,7 @@ class FrameContext;
 // outside of frame execution or be externally synchronized by the caller.
 class ModuleManager {
 public:
-  OXGN_NGIN_API explicit ModuleManager(observer_ptr<Engine> engine);
+  OXGN_NGIN_API explicit ModuleManager(observer_ptr<AsyncEngine> engine);
 
   OXYGEN_MAKE_NON_COPYABLE(ModuleManager)
   OXYGEN_MAKE_NON_MOVABLE(ModuleManager)
@@ -66,7 +70,7 @@ public:
   }
 
 private:
-  observer_ptr<Engine> engine_;
+  observer_ptr<AsyncEngine> engine_;
 
   std::vector<std::unique_ptr<EngineModule>> modules_;
 

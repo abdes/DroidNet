@@ -23,7 +23,8 @@ using oxygen::core::PhaseIndex;
 using oxygen::engine::EngineModule;
 using oxygen::engine::FrameContext;
 using oxygen::engine::ModuleManager;
-ModuleManager::ModuleManager(const observer_ptr<Engine> engine)
+
+ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
   : engine_(engine)
 {
 }

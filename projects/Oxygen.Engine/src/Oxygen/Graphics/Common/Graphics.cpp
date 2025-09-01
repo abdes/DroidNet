@@ -22,10 +22,12 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 using oxygen::Graphics;
+using oxygen::graphics::detail::DeferredReclaimer;
 using oxygen::graphics::internal::QueueManager;
 
 namespace {
@@ -57,6 +59,7 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<ObjectMetaData>(name);
   AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
+  AddComponent<DeferredReclaimer>();
 }
 
 Graphics::~Graphics() = default;
@@ -100,6 +103,34 @@ auto Graphics::Stop() -> void
   }
 
   DLOG_F(INFO, "Graphics Live Object stopped");
+}
+
+auto Graphics::BeginFrame(
+  frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
+{
+  auto& reclaimer = GetComponent<DeferredReclaimer>();
+  reclaimer.OnBeginFrame(frame_slot);
+}
+
+auto Graphics::EndFrame(
+  frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
+{
+  // TODO: Implement frame end logic
+}
+
+auto Graphics::PresentSurfaces(
+  const std::vector<std::shared_ptr<graphics::Surface>>& surfaces) -> void
+{
+  LOG_SCOPE_FUNCTION(0);
+
+  for (const auto& surface : surfaces) {
+    try {
+      surface->Present();
+    } catch (const std::exception& e) {
+      LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",
+        surface->GetName(), e.what());
+    }
+  }
 }
 
 auto Graphics::CreateCommandQueues(

@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -39,10 +40,12 @@ concept HasGetTypeName = requires(T t) {
 //! Tracks resources allocated during the rendering of a frame and releases
 //! them when no longer used by the GPU (i.e., at the beginning of the new
 //! render for that same frame index).
-class DeferredReclaimer {
+class DeferredReclaimer : public Component {
+  OXYGEN_COMPONENT(DeferredReclaimer)
+
 public:
   DeferredReclaimer() = default;
-  ~DeferredReclaimer() = default;
+  ~DeferredReclaimer() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(DeferredReclaimer)
   OXYGEN_MAKE_NON_MOVABLE(DeferredReclaimer)

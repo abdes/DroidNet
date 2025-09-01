@@ -110,7 +110,7 @@ public:
     return GetComponent<ObjectMetaData>().GetName();
   }
 
-  //=== Async operations ===------------------------------------------------//
+  //=== Async operations ===--------------------------------------------------//
 
   OXGN_GFX_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
@@ -124,6 +124,17 @@ public:
   auto OnRenderStart() { return render_.Park(); }
 
   auto Render() -> void { render_.UnParkAll(); }
+
+  //=== Engine frame loop interface ===---------------------------------------//
+
+  OXGN_GFX_API auto BeginFrame(
+    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void;
+
+  OXGN_GFX_API auto EndFrame(
+    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void;
+
+  OXGN_GFX_API auto PresentSurfaces(
+    const std::vector<std::shared_ptr<graphics::Surface>>& surfaces) -> void;
 
   //=== Global & pooled objects ===-----------------------------------------//
 

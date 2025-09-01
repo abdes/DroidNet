@@ -49,7 +49,10 @@ set_target_properties(
 set(
   OXYGEN_ENGINE_HEADERS
   "api_export.h"
+  "AsyncEngine.h"
   "Engine.h"
+  "EngineProps.h"
+  "EngineTag.h"
   "Epoch.h"
   "FrameContext.h"
   "System.h"
@@ -61,6 +64,7 @@ set(
 )
 set(
   OXYGEN_ENGINE_PRIVATE_SOURCES
+  "AsyncEngine.cpp"
   "Engine.cpp"
   "FrameContext.cpp"
   "Modules/ModuleManager.cpp"
@@ -78,6 +82,8 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES ${OXYGEN_ENGINE_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
