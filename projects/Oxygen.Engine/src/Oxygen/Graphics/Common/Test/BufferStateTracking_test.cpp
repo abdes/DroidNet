@@ -6,7 +6,7 @@
 
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Graphics/Common/Internal/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 
 #include <Oxygen/Testing/GTest.h>

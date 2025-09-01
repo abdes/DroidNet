@@ -9,7 +9,7 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Internal/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 
 using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
