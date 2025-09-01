@@ -7,23 +7,23 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
-#  ifdef OXYGEN_GFX_STATIC
-#    define OXYGEN_GFX_API
+#  ifdef OXGN_GFX_STATIC
+#    define OXGN_GFX_API
 #  else
-#    ifdef OXYGEN_GFX_EXPORTS
-#      define OXYGEN_GFX_API __declspec(dllexport)
+#    ifdef OXGN_GFX_EXPORTS
+#      define OXGN_GFX_API __declspec(dllexport)
 #    else
-#      define OXYGEN_GFX_API __declspec(dllimport)
+#      define OXGN_GFX_API __declspec(dllimport)
 #    endif
 #  endif
 #elif defined(__APPLE__) || defined(__linux__)
-#  ifdef OXYGEN_GFX_EXPORTS
-#    define OXYGEN_GFX_API __attribute__((visibility("default")))
+#  ifdef OXGN_GFX_EXPORTS
+#    define OXGN_GFX_API __attribute__((visibility("default")))
 #  else
-#    define OXYGEN_GFX_API
+#    define OXGN_GFX_API
 #  endif
 #else
-#  define OXYGEN_GFX_API
+#  define OXGN_GFX_API
 #endif
 
-#define OXYGEN_GFX_NDAPI [[nodiscard]] OXYGEN_GFX_API
+#define OXGN_GFX_NDAPI [[nodiscard]] OXGN_GFX_API

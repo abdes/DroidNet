@@ -17,15 +17,15 @@ namespace oxygen::graphics {
 
 //! Strong fence type wrapping the raw uint64_t returned by command queue
 //! Signal/GetCompletedValue operations.
-using FenceValue = oxygen::NamedType<uint64_t, struct FenceValueTag,
+using FenceValue = NamedType<uint64_t, struct FenceValueTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Convert a FenceValue to a human-readable string.
-OXYGEN_GFX_API auto to_string(FenceValue v) -> std::string;
+OXGN_GFX_API auto to_string(FenceValue v) -> std::string;
 
 //! Explicit namespace with concise aliases for fence-related strong types to
 //! improve ergonomic at use sites.

@@ -25,9 +25,9 @@ namespace oxygen::graphics {
 //! rendering.
 class ResourceRegistry {
 public:
-  OXYGEN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
+  OXGN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
 
-  OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
+  OXGN_GFX_API virtual ~ResourceRegistry() noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
   OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
@@ -45,7 +45,7 @@ public:
    \throws std::runtime_error if the resource is already registered.
   */
   template <SupportedResource Resource>
-  void Register(const std::shared_ptr<Resource>& resource)
+  auto Register(const std::shared_ptr<Resource>& resource) -> void
   {
     Register(std::static_pointer_cast<void>(resource), Resource::ClassTypeId());
   }
@@ -155,7 +155,8 @@ public:
   }
 
   template <SupportedResource Resource>
-  void UnRegisterView(const Resource& resource, const NativeObject& view)
+  auto UnRegisterView(const Resource& resource, const NativeObject& view)
+    -> void
   {
     UnRegisterView(NativeObject { const_cast<Resource*>(&resource),
                      Resource::ClassTypeId() },
@@ -163,7 +164,7 @@ public:
   }
 
   template <SupportedResource Resource>
-  void UnRegisterResource(const Resource& resource)
+  auto UnRegisterResource(const Resource& resource) -> void
   {
     UnRegisterResource(NativeObject {
       const_cast<Resource*>(&resource), Resource::ClassTypeId() });
@@ -171,37 +172,38 @@ public:
 
   //! Release all views for a resource
   template <SupportedResource Resource>
-  void UnRegisterViews(const Resource& resource)
+  auto UnRegisterViews(const Resource& resource) -> void
   {
     UnRegisterResourceViews(NativeObject {
       const_cast<Resource*>(&resource), Resource::ClassTypeId() });
   }
 
 private:
-  OXYGEN_GFX_API void Register(std::shared_ptr<void> resource, TypeId type_id);
+  OXGN_GFX_API auto Register(std::shared_ptr<void> resource, TypeId type_id)
+    -> void;
 
-  OXYGEN_GFX_API auto RegisterView(NativeObject resource, NativeObject view,
+  OXGN_GFX_API auto RegisterView(NativeObject resource, NativeObject view,
     DescriptorHandle view_handle, std::any view_description_for_cache,
     size_t key, ResourceViewType view_type, DescriptorVisibility visibility)
     -> NativeObject;
 
-  OXYGEN_GFX_API void UnRegisterView(
-    const NativeObject& resource, const NativeObject& view);
+  OXGN_GFX_API auto UnRegisterView(
+    const NativeObject& resource, const NativeObject& view) -> void;
 
-  OXYGEN_GFX_API void UnRegisterResource(const NativeObject& resource);
-  OXYGEN_GFX_API void UnRegisterResourceViews(const NativeObject& resource);
+  OXGN_GFX_API auto UnRegisterResource(const NativeObject& resource) -> void;
+  OXGN_GFX_API auto UnRegisterResourceViews(const NativeObject& resource)
+    -> void;
 
-  void UnRegisterViewNoLock(
-    const NativeObject& resource, const NativeObject& view);
-  void UnRegisterResourceViewsNoLock(const NativeObject& resource);
+  auto UnRegisterViewNoLock(
+    const NativeObject& resource, const NativeObject& view) -> void;
+  auto UnRegisterResourceViewsNoLock(const NativeObject& resource) -> void;
 
-  [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource) const
-    -> bool;
-  [[nodiscard]] OXYGEN_GFX_API auto Contains(
+  OXGN_GFX_NDAPI auto Contains(const NativeObject& resource) const -> bool;
+  OXGN_GFX_NDAPI auto Contains(
     const NativeObject& resource, size_t key_hash) const -> bool;
 
-  [[nodiscard]] OXYGEN_GFX_API auto Find(
-    const NativeObject& resource, size_t key_hash) const -> NativeObject;
+  OXGN_GFX_NDAPI auto Find(const NativeObject& resource, size_t key_hash) const
+    -> NativeObject;
 
   // TODO: consider deleting these methods as I cannot find a use case
   [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const
@@ -250,7 +252,7 @@ private:
     auto operator()(const CacheKey& k) const noexcept -> std::size_t
     {
       std::size_t result = std::hash<NativeObject> {}(k.resource);
-      oxygen::HashCombine(result, k.hash);
+      HashCombine(result, k.hash);
       return result;
     }
   };

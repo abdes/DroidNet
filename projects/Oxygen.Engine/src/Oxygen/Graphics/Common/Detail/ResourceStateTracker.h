@@ -65,8 +65,9 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ResourceStateTracker)
 
   template <Trackable T>
-  void BeginTrackingResourceState(const T& resource,
+  auto BeginTrackingResourceState(const T& resource,
     const ResourceStates initial_state, const bool keep_initial_state = false)
+    -> void
   {
     // Calling BeginTrackingResourceState on a resource that is already being
     // tracked will throw an exception.
@@ -87,14 +88,16 @@ public:
     }
   }
 
-  template <Trackable T> void EnableAutoMemoryBarriers(const T& resource)
+  template <Trackable T>
+  auto EnableAutoMemoryBarriers(const T& resource) -> void
   {
     auto& ti = GetTrackingInfo(resource.GetNativeResource());
     std::visit(
       [&](auto& info) { info.enable_auto_memory_barriers = true; }, ti);
   }
 
-  template <Trackable T> void DisableAutoMemoryBarriers(const T& resource)
+  template <Trackable T>
+  auto DisableAutoMemoryBarriers(const T& resource) -> void
   {
     auto& ti = GetTrackingInfo(resource.GetNativeResource());
     std::visit(
@@ -103,7 +106,8 @@ public:
 
   // Require a resource to be in a specific state (non-permanent)
   template <Trackable T>
-  void RequireResourceState(const T& resource, ResourceStates required_state)
+  auto RequireResourceState(const T& resource, ResourceStates required_state)
+    -> void
   {
     if constexpr (IsBuffer<T>) {
       RequireBufferState(resource, required_state, false);
@@ -117,8 +121,8 @@ public:
   // Require a resource to be in a specific state permanently (no further
   // changes allowed)
   template <Trackable T>
-  void RequireResourceStateFinal(
-    const T& resource, ResourceStates required_state)
+  auto RequireResourceStateFinal(
+    const T& resource, ResourceStates required_state) -> void
   {
     if constexpr (IsBuffer<T>) {
       RequireBufferState(resource, required_state, true);
@@ -140,12 +144,12 @@ public:
   }
 
   // Clear all tracking data
-  OXYGEN_GFX_API void Clear();
+  OXGN_GFX_API auto Clear() -> void;
 
   // Clear pending barriers
-  OXYGEN_GFX_API void ClearPendingBarriers();
+  OXGN_GFX_API auto ClearPendingBarriers() -> void;
 
-  OXYGEN_GFX_API void OnCommandListClosed();
+  OXGN_GFX_API auto OnCommandListClosed() -> void;
 
 private:
   struct BasicTrackingInfo {
@@ -180,7 +184,7 @@ private:
     }
   };
 
-  struct BufferTrackingInfo : public BasicTrackingInfo {
+  struct BufferTrackingInfo : BasicTrackingInfo {
     BufferTrackingInfo(
       const ResourceStates initial_state, const bool keep_initial_state)
     {
@@ -191,7 +195,7 @@ private:
     }
   };
 
-  struct TextureTrackingInfo : public BasicTrackingInfo {
+  struct TextureTrackingInfo : BasicTrackingInfo {
     TextureTrackingInfo(
       const ResourceStates initial_state, const bool keep_initial_state)
     {
@@ -206,12 +210,12 @@ private:
   // description
   using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
 
-  OXYGEN_GFX_API auto GetTrackingInfo(const NativeObject& resource)
+  OXGN_GFX_API auto GetTrackingInfo(const NativeObject& resource)
     -> TrackingInfo&;
-  OXYGEN_GFX_API void RequireBufferState(
-    const Buffer& buffer, ResourceStates required_state, bool is_permanent);
-  OXYGEN_GFX_API void RequireTextureState(
-    const Texture& texture, ResourceStates required_state, bool is_permanent);
+  OXGN_GFX_API auto RequireBufferState(const Buffer& buffer,
+    ResourceStates required_state, bool is_permanent) -> void;
+  OXGN_GFX_API auto RequireTextureState(const Texture& texture,
+    ResourceStates required_state, bool is_permanent) -> void;
 
   //! Validates state transition requests for resources that may have previously
   //! transitioned to a permanent state.

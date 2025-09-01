@@ -106,18 +106,18 @@ public:
   }
 
   //! Enqueue an arbitrary action to run when the observed frame slot cycles.
-  OXYGEN_GFX_API auto RegisterDeferredAction(std::function<void()> action)
+  OXGN_GFX_API auto RegisterDeferredAction(std::function<void()> action)
     -> void;
 
   //! Called at the beginning of a new frame to release resources from the
   //! last render of that same frame slot.
-  OXYGEN_GFX_API auto OnBeginFrame(frame::Slot frame_slot) -> void;
+  OXGN_GFX_API auto OnBeginFrame(frame::Slot frame_slot) -> void;
 
   //! Releases all deferred resources from all frames.
-  OXYGEN_GFX_API auto OnRendererShutdown() -> void;
+  OXGN_GFX_API auto OnRendererShutdown() -> void;
 
   //! Process all deferred releases for all frames.
-  OXYGEN_GFX_API auto ProcessAllDeferredReleases() -> void;
+  OXGN_GFX_API auto ProcessAllDeferredReleases() -> void;
 
 private:
   //! Releases all deferred resources from the previous render of the frame.

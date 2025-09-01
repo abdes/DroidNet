@@ -52,7 +52,7 @@ enum class ShaderStageFlags : uint32_t { // NOLINT(performance-enum-size)
 OXYGEN_DEFINE_FLAGS_OPERATORS(ShaderStageFlags)
 
 //! String representation of enum values in `ShaderStageFlags`.
-OXYGEN_GFX_API auto to_string(ShaderStageFlags value) -> std::string;
+OXGN_GFX_API auto to_string(ShaderStageFlags value) -> std::string;
 
 //! Information describing a shader for pipeline creation.
 /*!
@@ -74,7 +74,7 @@ struct ShaderInfo {
  \return A unique string identifier for the shader.
  \see MakeShaderIdentifier(const ShaderInfo&)
 */
-[[nodiscard]] OXYGEN_GFX_API auto MakeShaderIdentifier(
+OXGN_GFX_NDAPI auto MakeShaderIdentifier(
   ShaderType shader_type, const std::string& relative_path) -> std::string;
 
 //! Generates a unique identifier string for a shader using ShaderInfo.

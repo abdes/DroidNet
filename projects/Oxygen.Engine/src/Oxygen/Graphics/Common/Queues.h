@@ -46,7 +46,7 @@ enum class QueueAllocationPreference : uint8_t {
   kDedicated
 };
 
-OXYGEN_GFX_API auto to_string(QueueAllocationPreference value) -> const char*;
+OXGN_GFX_API auto to_string(QueueAllocationPreference value) -> const char*;
 
 //! How command queues should be provided when requested.
 /*!
@@ -67,7 +67,7 @@ enum class QueueSharingPreference : uint8_t {
 };
 
 //! Convert a QueueSharingPreference value to a textual name.
-OXYGEN_GFX_API auto to_string(QueueSharingPreference value) -> const char*;
+OXGN_GFX_API auto to_string(QueueSharingPreference value) -> const char*;
 
 //! Properties describing a command queue.
 /*!

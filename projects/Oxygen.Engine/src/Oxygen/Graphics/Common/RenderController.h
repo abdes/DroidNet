@@ -128,29 +128,29 @@ namespace graphics {
     : public Composition,
       public std::enable_shared_from_this<RenderController> {
   public:
-    OXYGEN_GFX_API RenderController(std::string_view name,
+    OXGN_GFX_API RenderController(std::string_view name,
       std::weak_ptr<Graphics> gfx_weak, std::weak_ptr<Surface> surface_weak,
       frame::SlotCount frames_in_flight = frame::kFramesInFlight);
 
-    OXYGEN_GFX_API ~RenderController() override;
+    OXGN_GFX_API ~RenderController() override;
 
     OXYGEN_MAKE_NON_COPYABLE(RenderController)
     OXYGEN_DEFAULT_MOVABLE(RenderController)
 
     // ReSharper disable once CppHiddenFunction - hidden in backend API
-    OXYGEN_GFX_API auto GetGraphics() -> Graphics&;
+    OXGN_GFX_API auto GetGraphics() -> Graphics&;
     // ReSharper disable once CppHiddenFunction - hidden in backend API
-    OXYGEN_GFX_API auto GetGraphics() const -> const Graphics&;
+    OXGN_GFX_API auto GetGraphics() const -> const Graphics&;
 
-    OXYGEN_GFX_API auto GetDescriptorAllocator() const
+    OXGN_GFX_API auto GetDescriptorAllocator() const
       -> const DescriptorAllocator&;
-    OXYGEN_GFX_API auto GetDescriptorAllocator() -> DescriptorAllocator&;
+    OXGN_GFX_API auto GetDescriptorAllocator() -> DescriptorAllocator&;
 
-    OXYGEN_GFX_API auto GetResourceRegistry() const -> const ResourceRegistry&;
-    OXYGEN_GFX_API auto GetResourceRegistry() -> ResourceRegistry&;
+    OXGN_GFX_API auto GetResourceRegistry() const -> const ResourceRegistry&;
+    OXGN_GFX_API auto GetResourceRegistry() -> ResourceRegistry&;
 
-    OXYGEN_GFX_API auto Submit(FrameRenderTask task) -> void;
-    OXYGEN_GFX_API auto Stop() -> void;
+    OXGN_GFX_API auto Submit(FrameRenderTask task) -> void;
+    OXGN_GFX_API auto Stop() -> void;
 
     //! Acquires a command recorder for recording rendering, compute, or
     //! copy commands.
@@ -175,10 +175,10 @@ namespace graphics {
      \return A unique pointer to a `CommandRecorder` with a custom deleter
             for proper submission and cleanup.
     */
-    [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandRecorder(
-      const QueueKey& queue_key, std::string_view command_list_name,
-      bool immediate_submission = true) -> std::unique_ptr<CommandRecorder,
-      std::function<void(CommandRecorder*)>>;
+    OXGN_GFX_NDAPI auto AcquireCommandRecorder(const QueueKey& queue_key,
+      std::string_view command_list_name, bool immediate_submission = true)
+      -> std::unique_ptr<CommandRecorder,
+        std::function<void(CommandRecorder*)>>;
 
     [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_slot_; }
 
@@ -188,7 +188,7 @@ namespace graphics {
       return per_frame_resource_manager_;
     }
 
-    OXYGEN_GFX_API virtual auto FlushPendingCommandLists() -> void;
+    OXGN_GFX_API virtual auto FlushPendingCommandLists() -> void;
 
   protected:
     [[nodiscard]] virtual auto CreateCommandRecorder(
@@ -197,8 +197,8 @@ namespace graphics {
       -> std::unique_ptr<CommandRecorder>
       = 0;
 
-    OXYGEN_GFX_API virtual auto BeginFrame() -> void;
-    OXYGEN_GFX_API virtual auto EndFrame() -> void;
+    OXGN_GFX_API virtual auto BeginFrame() -> void;
+    OXGN_GFX_API virtual auto EndFrame() -> void;
 
   private:
     auto HandleSurfaceResize(Surface& surface) -> void;

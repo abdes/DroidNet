@@ -18,7 +18,7 @@ namespace oxygen::graphics {
 
 class CommandList : public Composition, public Named {
 public:
-  OXYGEN_GFX_API CommandList(std::string_view name, QueueRole type);
+  OXGN_GFX_API CommandList(std::string_view name, QueueRole type);
 
   //! Destroys the command list after releasing all graphics resources it was
   //! using.
@@ -26,16 +26,15 @@ public:
    \note It is the responsibility of the user to ensure the command list (or
    its associated resources) are not in use by ongoing GPU operations.
   */
-  OXYGEN_GFX_API ~CommandList() override;
+  OXGN_GFX_API ~CommandList() override;
 
   OXYGEN_MAKE_NON_COPYABLE(CommandList)
   OXYGEN_MAKE_NON_MOVABLE(CommandList)
 
-  [[nodiscard]] OXYGEN_GFX_API auto GetQueueRole() const { return type_; }
+  OXGN_GFX_NDAPI auto GetQueueRole() const { return type_; }
 
-  [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept
-    -> std::string_view override;
-  OXYGEN_GFX_API auto SetName(std::string_view name) noexcept -> void override;
+  OXGN_GFX_NDAPI auto GetName() const noexcept -> std::string_view override;
+  OXGN_GFX_API auto SetName(std::string_view name) noexcept -> void override;
 
   // State query methods
   [[nodiscard]] auto IsFree() const noexcept { return state_ == State::kFree; }
@@ -52,10 +51,10 @@ public:
     return state_ == State::kSubmitted;
   }
 
-  OXYGEN_GFX_API virtual auto OnBeginRecording() -> void;
-  OXYGEN_GFX_API virtual auto OnEndRecording() -> void;
-  OXYGEN_GFX_API virtual auto OnSubmitted() -> void;
-  OXYGEN_GFX_API virtual auto OnExecuted() -> void;
+  OXGN_GFX_API virtual auto OnBeginRecording() -> void;
+  OXGN_GFX_API virtual auto OnEndRecording() -> void;
+  OXGN_GFX_API virtual auto OnSubmitted() -> void;
+  OXGN_GFX_API virtual auto OnExecuted() -> void;
 
   enum class State : int8_t {
     kInvalid = -1, //<! Invalid state

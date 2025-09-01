@@ -32,7 +32,7 @@ enum class FillMode : uint8_t {
 
   kMaxFillMode //!< Not a valid mode; sentinel for enum size.
 };
-OXYGEN_GFX_API auto to_string(FillMode mode) -> std::string;
+OXGN_GFX_API auto to_string(FillMode mode) -> std::string;
 
 //! Polygon face culling mode.
 enum class CullMode : uint8_t {
@@ -44,7 +44,7 @@ enum class CullMode : uint8_t {
   kMaxCullMode = OXYGEN_FLAG(2) //!< Not a valid mode; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(CullMode)
-OXYGEN_GFX_API auto to_string(CullMode value) -> std::string;
+OXGN_GFX_API auto to_string(CullMode value) -> std::string;
 
 //! Comparison operation for depth/stencil tests.
 enum class CompareOp : uint8_t {
@@ -59,7 +59,7 @@ enum class CompareOp : uint8_t {
 
   kMaxCompareOp //!< Not a valid op; sentinel for enum size.
 };
-OXYGEN_GFX_API auto to_string(CompareOp value) -> std::string;
+OXGN_GFX_API auto to_string(CompareOp value) -> std::string;
 
 //! Blend factor for color blending.
 enum class BlendFactor : uint8_t {
@@ -84,7 +84,7 @@ enum class BlendFactor : uint8_t {
 
   kMaxBlendValue //!< Not a valid value; sentinel for enum size.
 };
-OXYGEN_GFX_API auto to_string(BlendFactor value) -> std::string;
+OXGN_GFX_API auto to_string(BlendFactor value) -> std::string;
 
 //! Blend operation for color blending.
 enum class BlendOp : uint8_t {
@@ -96,7 +96,7 @@ enum class BlendOp : uint8_t {
 
   kMaxBlendOp //!< Not a valid op; sentinel for enum size.
 };
-OXYGEN_GFX_API auto to_string(BlendOp value) -> std::string;
+OXGN_GFX_API auto to_string(BlendOp value) -> std::string;
 
 //! Color write mask for render targets.
 enum class ColorWriteMask : uint8_t {
@@ -110,7 +110,7 @@ enum class ColorWriteMask : uint8_t {
   kMaxColorWriteMask = 0x10 //!< Not a valid mask; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ColorWriteMask)
-OXYGEN_GFX_API auto to_string(ColorWriteMask value) -> std::string;
+OXGN_GFX_API auto to_string(ColorWriteMask value) -> std::string;
 
 //! Primitive topology for input assembly.
 enum class PrimitiveType : uint8_t {
@@ -130,7 +130,7 @@ enum class PrimitiveType : uint8_t {
 
   kMaxPrimitiveType //!< Not a valid type; sentinel for enum size.
 };
-OXYGEN_GFX_API auto to_string(PrimitiveType value) -> std::string;
+OXGN_GFX_API auto to_string(PrimitiveType value) -> std::string;
 
 //! Describes a single programmable shader stage.
 struct ShaderStageDesc {
@@ -170,7 +170,7 @@ struct RasterizerStateDesc {
   auto operator==(const RasterizerStateDesc&) const -> bool = default;
 
   //! Static factory for no culling rasterizer state.
-  static RasterizerStateDesc NoCulling()
+  static auto NoCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .cull_mode = CullMode::kNone,
@@ -178,7 +178,7 @@ struct RasterizerStateDesc {
   }
 
   //! Static factory for back-face culling rasterizer state.
-  static RasterizerStateDesc BackFaceCulling()
+  static auto BackFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .cull_mode = CullMode::kBack,
@@ -186,7 +186,7 @@ struct RasterizerStateDesc {
   }
 
   //! Static factory for front-face culling rasterizer state.
-  static RasterizerStateDesc FrontFaceCulling()
+  static auto FrontFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .cull_mode = CullMode::kFront,
@@ -194,7 +194,7 @@ struct RasterizerStateDesc {
   }
 
   //! Static factory for wireframe rasterizer state, with no culling.
-  static RasterizerStateDesc WireframeNoCulling()
+  static auto WireframeNoCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .fill_mode = FillMode::kWireFrame,
@@ -203,7 +203,7 @@ struct RasterizerStateDesc {
   }
 
   //! Static factory for wireframe rasterizer state, with back-face culling.
-  static RasterizerStateDesc WireframeBackFaceCulling()
+  static auto WireframeBackFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .fill_mode = FillMode::kWireFrame,
@@ -212,7 +212,7 @@ struct RasterizerStateDesc {
   }
 
   //! Static factory for wireframe rasterizer state, with front-face culling.
-  static RasterizerStateDesc WireframeFrontFaceCulling()
+  static auto WireframeFrontFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
       .fill_mode = FillMode::kWireFrame,
@@ -236,7 +236,7 @@ struct DepthStencilStateDesc {
   auto operator==(const DepthStencilStateDesc&) const -> bool = default;
 
   //! Static factory for depth/stencil state with all operations disabled.
-  static DepthStencilStateDesc Disabled()
+  static auto Disabled() -> DepthStencilStateDesc
   {
     return DepthStencilStateDesc { .depth_test_enable = false,
       .depth_write_enable = false,
@@ -362,11 +362,12 @@ struct RootBindingItem {
   {
     return root_parameter_index_;
   }
-  void SetRootParameterIndex(const uint32_t idx)
+  auto SetRootParameterIndex(const uint32_t idx) -> void
   {
-    if (root_parameter_index_ != ~0u)
+    if (root_parameter_index_ != ~0u) {
       throw std::logic_error(
         "RootBindingItem: root_parameter_index already set");
+    }
     root_parameter_index_ = idx;
   }
 
@@ -386,13 +387,13 @@ namespace detail {
   public:
     RootBindingBuilderHelper() = default;
 
-    OXYGEN_GFX_API void SetRootBindings(std::vector<RootBindingItem>& dest,
-      std::span<const RootBindingItem> bindings);
+    OXGN_GFX_API auto SetRootBindings(std::vector<RootBindingItem>& dest,
+      std::span<const RootBindingItem> bindings) -> void;
 
-    OXYGEN_GFX_API void AddRootBinding(
-      std::vector<RootBindingItem>& dest, const RootBindingItem& binding);
+    OXGN_GFX_API auto AddRootBinding(std::vector<RootBindingItem>& dest,
+      const RootBindingItem& binding) -> void;
 
-    OXYGEN_GFX_API void Reset();
+    OXGN_GFX_API auto Reset() -> void;
 
   private:
     uint32_t next_root_param_index_ = 0;
@@ -792,9 +793,9 @@ private:
   detail::RootBindingBuilderHelper root_binding_helper_;
 };
 
-OXYGEN_GFX_API auto HashGraphicsPipelineDesc(
+OXGN_GFX_API auto HashGraphicsPipelineDesc(
   const GraphicsPipelineDesc& desc) noexcept -> size_t;
-OXYGEN_GFX_API auto HashComputePipelineDesc(
+OXGN_GFX_API auto HashComputePipelineDesc(
   const ComputePipelineDesc& desc) noexcept -> size_t;
 
 } // namespace oxygen::graphics

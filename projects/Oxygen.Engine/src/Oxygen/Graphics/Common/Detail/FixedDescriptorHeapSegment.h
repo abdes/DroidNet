@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -17,11 +16,11 @@ namespace oxygen::graphics::detail {
 
 class FixedDescriptorHeapSegment : public DescriptorHeapSegment {
 public:
-  OXYGEN_GFX_API FixedDescriptorHeapSegment(bindless::Capacity capacity,
+  OXGN_GFX_API FixedDescriptorHeapSegment(bindless::Capacity capacity,
     bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility);
 
-  OXYGEN_GFX_API ~FixedDescriptorHeapSegment() noexcept override;
+  OXGN_GFX_API ~FixedDescriptorHeapSegment() noexcept override;
 
   OXYGEN_MAKE_NON_COPYABLE(FixedDescriptorHeapSegment)
   OXYGEN_DEFAULT_MOVABLE(FixedDescriptorHeapSegment)
@@ -31,8 +30,7 @@ public:
            segment is full, or an error occurs. Errors are logged but not
            propagated.
   */
-  [[nodiscard]] OXYGEN_GFX_API auto Allocate() noexcept
-    -> bindless::Handle override;
+  OXGN_GFX_NDAPI auto Allocate() noexcept -> bindless::Handle override;
 
   //! Releases a descriptor index back to this segment.
   /*!
@@ -43,18 +41,18 @@ public:
    adds the released index to the free list for future reuse.
    Ensures the same descriptor cannot be released twice.
   */
-  OXYGEN_GFX_API auto Release(bindless::Handle index) noexcept -> bool override;
+  OXGN_GFX_API auto Release(bindless::Handle index) noexcept -> bool override;
 
   //! Returns the number of descriptors currently available in this segment.
-  [[nodiscard]] OXYGEN_GFX_API auto GetAvailableCount() const noexcept
+  OXGN_GFX_NDAPI auto GetAvailableCount() const noexcept
     -> bindless::Count override;
 
   //! Returns the current size (number of allocated descriptors) of this
   //! segment.
-  [[nodiscard]] OXYGEN_GFX_API auto GetAllocatedCount() const noexcept
+  OXGN_GFX_NDAPI auto GetAllocatedCount() const noexcept
     -> bindless::Count override;
 
-  [[nodiscard]] OXYGEN_GFX_API auto GetShaderVisibleIndex(
+  OXGN_GFX_NDAPI auto GetShaderVisibleIndex(
     const DescriptorHandle& handle) const noexcept -> bindless::Handle override;
 
   [[nodiscard]] auto GetCapacity() const noexcept -> bindless::Capacity override
@@ -69,7 +67,11 @@ public:
   {
     return view_type_;
   }
-  [[nodiscard]] auto GetVisibility() const noexcept { return visibility_; }
+  [[nodiscard]] auto GetVisibility() const noexcept
+    -> DescriptorVisibility override
+  {
+    return visibility_;
+  }
 
 protected:
   //! Releases all descriptors in this segment.
@@ -78,7 +80,7 @@ protected:
    state. Use with caution, as this will make all allocated indices, in use
    anywhere, invalid.
    */
-  OXYGEN_GFX_API void ReleaseAll();
+  OXGN_GFX_API auto ReleaseAll() -> void;
 
 private:
   [[nodiscard]] auto FreeListSize() const -> bindless::Count;

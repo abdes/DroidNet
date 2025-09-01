@@ -59,15 +59,15 @@ public:
   DescriptorHandle() noexcept = default;
 
   //! Destructor that automatically releases the descriptor if still valid.
-  OXYGEN_GFX_API ~DescriptorHandle();
+  OXGN_GFX_API ~DescriptorHandle();
 
   OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle)
 
   //! Move constructor transfers ownership of the descriptor.
-  OXYGEN_GFX_API DescriptorHandle(DescriptorHandle&& other) noexcept;
+  OXGN_GFX_API DescriptorHandle(DescriptorHandle&& other) noexcept;
 
   //! Move assignment transfers ownership of the descriptor.
-  OXYGEN_GFX_API auto operator=(DescriptorHandle&& other) noexcept
+  OXGN_GFX_API auto operator=(DescriptorHandle&& other) noexcept
     -> DescriptorHandle&;
 
   [[nodiscard]] constexpr auto operator==(
@@ -117,15 +117,15 @@ public:
 
   //! Explicitly releases the descriptor back to its allocator, and
   //! invalidates the handle.
-  OXYGEN_GFX_API void Release() noexcept;
+  OXGN_GFX_API auto Release() noexcept -> void;
 
   //! Invalidates this handle without releasing the descriptor.
-  OXYGEN_GFX_API void Invalidate() noexcept;
+  OXGN_GFX_API auto Invalidate() noexcept -> void;
 
 protected:
   //! No allocator constructor creates an invalid handle. Primarily useful for
   //! unit tests.
-  OXYGEN_GFX_API DescriptorHandle(bindless::Handle index,
+  OXGN_GFX_API DescriptorHandle(bindless::Handle index,
     ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
   //! Constructor that takes an allocator and index.
@@ -138,12 +138,12 @@ protected:
    context, while still allowing unit tests to create handles for testing
    purposes via derivation.
   */
-  OXYGEN_GFX_API DescriptorHandle(DescriptorAllocator* allocator,
+  OXGN_GFX_API DescriptorHandle(DescriptorAllocator* allocator,
     bindless::Handle index, ResourceViewType view_type,
     DescriptorVisibility visibility) noexcept;
 
 private:
-  OXYGEN_GFX_API void InvalidateInternal(bool moved) noexcept;
+  OXGN_GFX_API auto InvalidateInternal(bool moved) noexcept -> void;
 
   //! Back-reference to allocator for lifetime management.
   DescriptorAllocator* allocator_ { nullptr };
@@ -159,6 +159,6 @@ private:
 };
 
 //! Converts a `DescriptorHandle` to a string representation.
-OXYGEN_GFX_API auto to_string(const DescriptorHandle& handle) -> std::string;
+OXGN_GFX_API auto to_string(const DescriptorHandle& handle) -> std::string;
 
 } // namespace oxygen::graphics
