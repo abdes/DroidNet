@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Compilers.h> // needed for OXYGEN_UNREACHABLE_RETURN
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -56,15 +57,15 @@ public:
    Determines appropriate heap sizes based on device capabilities. If device
    is nullptr, uses conservative defaults.
   */
-  OXYGEN_D3D12_API explicit D3D12HeapAllocationStrategy(
+  OXGN_D3D12_API explicit D3D12HeapAllocationStrategy(
     dx::IDevice* device = nullptr);
 
   //! Constructor that initializes the strategy from a custom JSON provider.
   /*! Useful for tests or alternate configuration sources. */
-  OXYGEN_D3D12_API D3D12HeapAllocationStrategy(
+  OXGN_D3D12_API D3D12HeapAllocationStrategy(
     dx::IDevice* device, const ConfigProvider& provider);
 
-  OXYGEN_D3D12_API ~D3D12HeapAllocationStrategy() override = default;
+  OXGN_D3D12_API ~D3D12HeapAllocationStrategy() override = default;
 
   OXYGEN_DEFAULT_COPYABLE(D3D12HeapAllocationStrategy)
   OXYGEN_DEFAULT_MOVABLE(D3D12HeapAllocationStrategy)
@@ -77,14 +78,14 @@ public:
    \throws std::runtime_error if the view_type or visibility are invalid, or
            their combination is illegal.
   */
-  OXYGEN_D3D12_API auto GetHeapKey(ResourceViewType view_type,
+  OXGN_D3D12_API auto GetHeapKey(ResourceViewType view_type,
     DescriptorVisibility visibility) const -> std::string override;
 
   //! Returns the heap description for a given heap key.
   /*!
    \throws std::runtime_error if the key is invalid.
   */
-  OXYGEN_D3D12_API auto GetHeapDescription(const std::string& heap_key) const
+  OXGN_D3D12_API auto GetHeapDescription(const std::string& heap_key) const
     -> const HeapDescription& override;
 
   //! Returns the base index for descriptors in the heap.
@@ -92,8 +93,8 @@ public:
    \throws std::runtime_error if the view_type or visibility are invalid, or
            their combination is illegal.
   */
-  OXYGEN_D3D12_API auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> oxygen::bindless::Handle override;
+  OXGN_D3D12_API auto GetHeapBaseIndex(ResourceViewType view_type,
+    DescriptorVisibility visibility) const -> BindlessHandle override;
 
   //! Returns the D3D12 descriptor heap type for a given view type.
   /*!
@@ -101,7 +102,7 @@ public:
    corresponding D3D12 descriptor heap type. Caller must ensure that the
    view_type is valid and supported. The method will abort if not.
    */
-  static OXYGEN_D3D12_API auto GetHeapType(ResourceViewType view_type) noexcept
+  static OXGN_D3D12_API auto GetHeapType(ResourceViewType view_type) noexcept
     -> D3D12_DESCRIPTOR_HEAP_TYPE;
 
   //! Returns descriptor heap flags for a given visibility.
@@ -120,13 +121,13 @@ private:
     -> std::string;
 
   //! Initialize strategy from a JSON string (throws on invalid data)
-  void InitFromJson(std::string_view json);
+  auto InitFromJson(std::string_view json) -> void;
 
   //! Maps heap keys to their descriptions
   std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 
   //! Maps (view_type, visibility) pairs to their base indices
-  std::unordered_map<std::string, oxygen::bindless::Handle> heap_base_indices_;
+  std::unordered_map<std::string, BindlessHandle> heap_base_indices_;
 };
 
 } // namespace oxygen::graphics::d3d12

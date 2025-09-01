@@ -44,23 +44,23 @@ public:
    Initializes the allocator with the provided D3D12 device and heap strategy.
    The device must remain valid for the lifetime of the allocator.
   */
-  OXYGEN_D3D12_API explicit DescriptorAllocator(
+  OXGN_D3D12_API explicit DescriptorAllocator(
     std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
     dx::IDevice* device);
 
   //! Destructor.
-  OXYGEN_D3D12_API ~DescriptorAllocator() override;
+  OXGN_D3D12_API ~DescriptorAllocator() override;
 
   OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocator)
   OXYGEN_DEFAULT_MOVABLE(DescriptorAllocator)
 
   //! Gets the D3D12 CPU descriptor handle for a given descriptor handle.
-  [[nodiscard]] OXYGEN_D3D12_API auto GetCpuHandle(
-    const DescriptorHandle& handle) const -> D3D12_CPU_DESCRIPTOR_HANDLE;
+  OXGN_D3D12_NDAPI auto GetCpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
   //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
-  [[nodiscard]] OXYGEN_D3D12_API auto GetGpuHandle(
-    const DescriptorHandle& handle) const -> D3D12_GPU_DESCRIPTOR_HANDLE;
+  OXGN_D3D12_NDAPI auto GetGpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
   //! Copies a descriptor from source to destination.
   /*!
@@ -70,10 +70,10 @@ public:
    Copies the descriptor from source to destination using the appropriate
    D3D12 copying mechanism depending on the descriptor types.
   */
-  OXYGEN_D3D12_API void CopyDescriptor(
-    const DescriptorHandle& dst, const DescriptorHandle& src) override;
+  OXGN_D3D12_API auto CopyDescriptor(
+    const DescriptorHandle& dst, const DescriptorHandle& src) -> void override;
 
-  OXYGEN_D3D12_API auto GetShaderVisibleHeaps()
+  OXGN_D3D12_API auto GetShaderVisibleHeaps()
     -> std::span<const detail::ShaderVisibleHeapInfo>;
 
 protected:
@@ -85,7 +85,7 @@ protected:
    \param visibility The memory visibility for the new segment.
    \return A unique_ptr to the created segment, or nullptr on failure.
   */
-  OXYGEN_D3D12_API auto CreateHeapSegment(bindless::Capacity capacity,
+  OXGN_D3D12_API auto CreateHeapSegment(bindless::Capacity capacity,
     bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility)
     -> std::unique_ptr<graphics::detail::DescriptorHeapSegment> override;
@@ -103,7 +103,7 @@ private:
    we mark the needs_update_shader_visible_heaps_ flag and call this method
    when the Heaps() mutex is not held.
   */
-  void UpdateShaderVisibleHeapsSet() const;
+  auto UpdateShaderVisibleHeapsSet() const -> void;
 
   //! The D3D12 descriptor heaps that are shader visible.
   mutable std::vector<detail::ShaderVisibleHeapInfo> shader_visible_heaps_;

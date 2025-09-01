@@ -45,52 +45,54 @@ public:
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue);
 
-  OXYGEN_D3D12_API ~CommandRecorder() override;
+  OXGN_D3D12_API ~CommandRecorder() override;
 
   OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
   OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
 
-  void Begin() override;
+  auto Begin() -> void override;
 
-  void SetPipelineState(GraphicsPipelineDesc desc) override;
-  void SetPipelineState(ComputePipelineDesc desc) override;
-  void SetGraphicsRootConstantBufferView(
-    uint32_t root_parameter_index, uint64_t buffer_gpu_address) override;
+  auto SetPipelineState(GraphicsPipelineDesc desc) -> void override;
+  auto SetPipelineState(ComputePipelineDesc desc) -> void override;
+  auto SetGraphicsRootConstantBufferView(uint32_t root_parameter_index,
+    uint64_t buffer_gpu_address) -> void override;
 
-  void SetComputeRootConstantBufferView(
-    uint32_t root_parameter_index, uint64_t buffer_gpu_address) override;
+  auto SetComputeRootConstantBufferView(uint32_t root_parameter_index,
+    uint64_t buffer_gpu_address) -> void override;
 
-  void SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
-    uint32_t src_data, uint32_t dest_offset_in_32bit_values) override;
+  auto SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void override;
 
-  void SetComputeRoot32BitConstant(uint32_t root_parameter_index,
-    uint32_t src_data, uint32_t dest_offset_in_32bit_values) override;
+  auto SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void override;
 
-  OXYGEN_D3D12_API void SetRenderTargets(
-    std::span<NativeObject> rtvs, std::optional<NativeObject> dsv) override;
-  void SetViewport(const ViewPort& viewport) override;
-  void SetScissors(const Scissors& scissors) override;
+  OXGN_D3D12_API auto SetRenderTargets(std::span<NativeObject> rtvs,
+    std::optional<NativeObject> dsv) -> void override;
+  auto SetViewport(const ViewPort& viewport) -> void override;
+  auto SetScissors(const Scissors& scissors) -> void override;
 
-  void SetVertexBuffers(uint32_t num,
-    const std::shared_ptr<oxygen::graphics::Buffer>* vertex_buffers,
-    const uint32_t* strides) const override;
-  void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset,
-    uint32_t instance_offset) override;
-  void DrawIndexed(uint32_t index_count, uint32_t instance_count,
-    uint32_t first_index, int32_t vertex_offset,
-    uint32_t first_instance) override;
-  void Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y,
-    uint32_t thread_group_count_z) override;
+  auto SetVertexBuffers(uint32_t num,
+    // ReSharper disable once CppRedundantQualifier
+    const std::shared_ptr<graphics::Buffer>* vertex_buffers,
+    const uint32_t* strides) const -> void override;
+  auto Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset,
+    uint32_t instance_offset) -> void override;
+  auto DrawIndexed(uint32_t index_count, uint32_t instance_count,
+    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+    -> void override;
+  auto Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y,
+    uint32_t thread_group_count_z) -> void override;
 
-  void BindIndexBuffer(const graphics::Buffer& buffer, Format format) override;
+  // ReSharper disable once CppRedundantQualifier
+  auto BindIndexBuffer(const graphics::Buffer& buffer, Format format)
+    -> void override;
 
-  void BindFrameBuffer(
-    const oxygen::graphics::Framebuffer& framebuffer) override;
-  void ClearFramebuffer(const oxygen::graphics::Framebuffer& framebuffer,
+  auto BindFrameBuffer(const Framebuffer& framebuffer) -> void override;
+  auto ClearFramebuffer(const Framebuffer& framebuffer,
     std::optional<std::vector<std::optional<Color>>> color_clear_values
     = std::nullopt,
     std::optional<float> depth_clear_value = std::nullopt,
-    std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
+    std::optional<uint8_t> stencil_clear_value = std::nullopt) -> void override;
 
   //! Clears a depth-stencil view.
   /*!
@@ -99,35 +101,39 @@ public:
          set, the depth and stencil values will be ignored and the clear
          values, derived from the texture's format, will be used instead.
    */
-  void ClearDepthStencilView(const oxygen::graphics::Texture& texture,
-    const NativeObject& dsv, ClearFlags clear_flags, float depth,
-    uint8_t stencil) override;
+  auto ClearDepthStencilView(const Texture& texture, const NativeObject& dsv,
+    ClearFlags clear_flags, float depth, uint8_t stencil) -> void override;
 
-  void CopyBuffer(oxygen::graphics::Buffer& dst, size_t dst_offset,
-    const oxygen::graphics::Buffer& src, size_t src_offset,
-    size_t size) override;
+  auto CopyBuffer(
+    // ReSharper disable once CppRedundantQualifier
+    graphics::Buffer& dst, size_t dst_offset,
+    // ReSharper disable once CppRedundantQualifier
+    const graphics::Buffer& src, size_t src_offset, size_t size)
+    -> void override;
 
   // Copies from a (staging) buffer into a texture region using GPU copy
-  // commands. Currently supports whole-subresource uploads (tight-packed
+  // commands. Currently, supports whole-subresource uploads (tight-packed
   // subresource layout produced by GetCopyableFootprints). Partial-region
   // uploads or mismatching row-pitches are not fully supported and will
   // produce a warning.
-  void CopyBufferToTexture(const oxygen::graphics::Buffer& src,
-    const oxygen::graphics::TextureUploadRegion& region,
-    oxygen::graphics::Texture& dst) override;
+  auto CopyBufferToTexture(
+    // ReSharper disable once CppRedundantQualifier
+    const graphics::Buffer& src, const TextureUploadRegion& region,
+    Texture& dst) -> void override;
 
-  void CopyBufferToTexture(const oxygen::graphics::Buffer& src,
-    std::span<const oxygen::graphics::TextureUploadRegion> regions,
-    oxygen::graphics::Texture& dst) override;
+  auto CopyBufferToTexture(
+    // ReSharper disable once CppRedundantQualifier
+    const graphics::Buffer& src, std::span<const TextureUploadRegion> regions,
+    Texture& dst) -> void override;
 
   //! Binds the provided shader-visible descriptor heaps to the underlying
   //! D3D12 command list.
-  void SetupDescriptorTables(
-    std::span<const detail::ShaderVisibleHeapInfo> heaps) const;
+  auto SetupDescriptorTables(
+    std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void;
 
 protected:
-  void ExecuteBarriers(
-    std::span<const graphics::detail::Barrier> barriers) override;
+  auto ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers)
+    -> void override;
 
 private:
   [[nodiscard]] auto GetConcreteCommandList() const -> CommandList&;

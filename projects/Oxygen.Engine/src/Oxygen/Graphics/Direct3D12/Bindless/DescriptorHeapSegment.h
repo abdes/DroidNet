@@ -30,12 +30,12 @@ namespace d3d12 {
   class DescriptorHeapSegment final
     : public graphics::detail::FixedDescriptorHeapSegment {
   public:
-    OXYGEN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
+    OXGN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
       bindless::Capacity capacity, bindless::Handle base_index,
       ResourceViewType view_type, DescriptorVisibility visibility,
       std::string_view debug_name);
 
-    OXYGEN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
+    OXGN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
       const bindless::Capacity capacity, const bindless::Handle base_index,
       const ResourceViewType view_type, const DescriptorVisibility visibility)
       : DescriptorHeapSegment(
@@ -43,21 +43,19 @@ namespace d3d12 {
     {
     }
 
-    OXYGEN_D3D12_API ~DescriptorHeapSegment() override;
+    OXGN_D3D12_API ~DescriptorHeapSegment() override;
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
     OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
 
     //! Checks if this segment's heap is shader visible.
-    [[nodiscard]] OXYGEN_D3D12_API auto IsShaderVisible() const noexcept
-      -> bool;
+    OXGN_D3D12_NDAPI auto IsShaderVisible() const noexcept -> bool;
 
     //! Gets the underlying D3D12 descriptor heap.
-    [[nodiscard]] OXYGEN_D3D12_API auto GetHeap() const -> dx::IDescriptorHeap*;
+    OXGN_D3D12_NDAPI auto GetHeap() const -> dx::IDescriptorHeap*;
 
     //! Gets the D3D12 descriptor heap type for this segment.
-    [[nodiscard]] OXYGEN_D3D12_API auto GetHeapType() const
-      -> D3D12_DESCRIPTOR_HEAP_TYPE;
+    OXGN_D3D12_NDAPI auto GetHeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE;
 
     //! Gets the D3D12 CPU descriptor handle for a given descriptor handle.
     //! Available for all descriptor heaps.
@@ -66,8 +64,8 @@ namespace d3d12 {
      the device, such as creating views on resources or copying descriptor
      handles.
     */
-    [[nodiscard]] OXYGEN_D3D12_API auto GetCpuHandle(
-      const DescriptorHandle& handle) const -> D3D12_CPU_DESCRIPTOR_HANDLE;
+    OXGN_D3D12_NDAPI auto GetCpuHandle(const DescriptorHandle& handle) const
+      -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
     //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
     //! Available only for shader-visible heaps.
@@ -75,18 +73,18 @@ namespace d3d12 {
      GPU handles are used to access descriptors via methods on the command
      lists, and are only valid for shader-visible heaps.
     */
-    [[nodiscard]] OXYGEN_D3D12_API auto GetGpuHandle(
-      const DescriptorHandle& handle) const -> D3D12_GPU_DESCRIPTOR_HANDLE;
+    OXGN_D3D12_NDAPI auto GetGpuHandle(const DescriptorHandle& handle) const
+      -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
     //! Gets the GPU descriptor handle that represents the start of the heap.
     /*!
      \throws std::runtime_error if the heap is not shader-visible.
     */
-    [[nodiscard]] OXYGEN_D3D12_API auto GetGpuDescriptorTableStart() const
+    OXGN_D3D12_NDAPI auto GetGpuDescriptorTableStart() const
       -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
     //! Gets the CPU descriptor handle that represents the start of the heap.
-    [[nodiscard]] OXYGEN_D3D12_API auto GetCpuDescriptorTableStart() const
+    OXGN_D3D12_NDAPI auto GetCpuDescriptorTableStart() const
       -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
   private:

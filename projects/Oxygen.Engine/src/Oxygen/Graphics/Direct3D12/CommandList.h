@@ -18,38 +18,38 @@ class CommandRecorder;
 class Graphics;
 
 namespace detail {
-    class SynchronizedCommandQueue;
+  class SynchronizedCommandQueue;
 } // namespace detail
 
 class CommandList final : public graphics::CommandList {
-    using Base = graphics::CommandList;
+  using Base = graphics::CommandList;
 
 public:
-    CommandList(std::string_view name, QueueRole type, const Graphics* gfx);
+  CommandList(std::string_view name, QueueRole type, const Graphics* gfx);
 
-    ~CommandList() noexcept override;
+  ~CommandList() noexcept override;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandList)
-    OXYGEN_DEFAULT_MOVABLE(CommandList)
+  OXYGEN_MAKE_NON_COPYABLE(CommandList)
+  OXYGEN_DEFAULT_MOVABLE(CommandList)
 
-    [[nodiscard]] auto GetCommandList() const { return command_list_; }
+  [[nodiscard]] auto GetCommandList() const { return command_list_; }
 
-    void SetName(std::string_view name) noexcept override;
+  auto SetName(std::string_view name) noexcept -> void override;
 
 protected:
-    friend class detail::SynchronizedCommandQueue;
-    OXYGEN_D3D12_API void OnBeginRecording() override;
-    OXYGEN_D3D12_API void OnEndRecording() override;
+  friend class detail::SynchronizedCommandQueue;
+  OXGN_D3D12_API auto OnBeginRecording() -> void override;
+  OXGN_D3D12_API auto OnEndRecording() -> void override;
 
 private:
-    void ReleaseCommandList() noexcept;
+  auto ReleaseCommandList() noexcept -> void;
 
-    friend class CommandRecorder;
-    friend class CommandQueue;
-    friend class ImGuiModule;
+  friend class CommandRecorder;
+  friend class CommandQueue;
+  friend class ImGuiModule;
 
-    ID3D12GraphicsCommandList* command_list_ {};
-    ID3D12CommandAllocator* command_allocator_ {};
+  ID3D12GraphicsCommandList* command_list_ {};
+  ID3D12CommandAllocator* command_allocator_ {};
 };
 
 }

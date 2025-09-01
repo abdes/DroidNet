@@ -27,54 +27,49 @@ class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
 
 public:
-  OXYGEN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
+  OXGN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
 
-  OXYGEN_D3D12_API ~Graphics() override = default;
+  OXGN_D3D12_API ~Graphics() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_MAKE_NON_MOVABLE(Graphics)
 
-  OXYGEN_D3D12_NDAPI auto GetDescriptorAllocator() const
+  OXGN_D3D12_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override;
 
   //=== D3D12 specific factories ===----------------------------------------//
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
+  OXGN_D3D12_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     std::shared_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateTexture(
-    const TextureDesc& desc) const
+  OXGN_D3D12_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateTextureFromNativeObject(
+  OXGN_D3D12_NDAPI auto CreateTextureFromNativeObject(
     const TextureDesc& desc, const NativeObject& native) const
     -> std::shared_ptr<graphics::Texture> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateBuffer(const BufferDesc& desc) const
+  OXGN_D3D12_NDAPI auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto GetShader(
-    std::string_view unique_id) const
+  OXGN_D3D12_NDAPI auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
 
   //=== Device Manager Internal API ===-------------------------------------//
 
   //! @{
   //! Device Manager API (module internal)
-  [[nodiscard]] OXYGEN_D3D12_API virtual auto GetFactory() const
-    -> dx::IFactory*;
-  [[nodiscard]] OXYGEN_D3D12_API virtual auto GetCurrentDevice() const
-    -> dx::IDevice*;
-  [[nodiscard]] OXYGEN_D3D12_API virtual auto GetAllocator() const
-    -> D3D12MA::Allocator*;
+  OXGN_D3D12_NDAPI virtual auto GetFactory() const -> dx::IFactory*;
+  OXGN_D3D12_NDAPI virtual auto GetCurrentDevice() const -> dx::IDevice*;
+  OXGN_D3D12_NDAPI virtual auto GetAllocator() const -> D3D12MA::Allocator*;
   //! @}
 
   //=== D3D12 Helpers ===---------------------------------------------------//
 
-  [[nodiscard]] OXYGEN_D3D12_API auto GetFormatPlaneCount(
-    DXGI_FORMAT format) const -> uint8_t;
+  OXGN_D3D12_NDAPI auto GetFormatPlaneCount(DXGI_FORMAT format) const
+    -> uint8_t;
 
 protected:
   // Default constructor that does not initialize the backend. Used for testing
@@ -84,15 +79,14 @@ protected:
   {
   }
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
-    const QueueKey& queue_key, QueueRole role)
-    -> std::shared_ptr<graphics::CommandQueue> override;
+  OXGN_D3D12_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
+    QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(std::string_view name,
+  OXGN_D3D12_NDAPI auto CreateRendererImpl(std::string_view name,
     std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<graphics::RenderController> override;
 
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandListImpl(
+  OXGN_D3D12_NDAPI auto CreateCommandListImpl(
     QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList> override;
 
