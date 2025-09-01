@@ -33,15 +33,16 @@ using core::PhaseId;
 using namespace oxygen::engine;
 
 AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
-  std::weak_ptr<Graphics> graphics, co::ThreadPool& pool,
-  EngineProps props) noexcept
-  : pool_(pool)
-  , props_(std::move(props))
+  std::weak_ptr<Graphics> graphics, EngineProps props) noexcept
+  : props_(std::move(props))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
   , module_manager_(std::make_unique<ModuleManager>(observer_ptr { this }))
 {
-  DCHECK_F(!gfx_weak_.expired());
+  CHECK_F(platform_ != nullptr);
+  CHECK_F(!gfx_weak_.expired());
+  CHECK_F(
+    platform_->HasThreads(), "Platform must be configured with a thread pool");
 
   // Example synthetic parallel tasks (Category B)
   // parallel_specs_.push_back(
@@ -92,6 +93,14 @@ auto AsyncEngine::Run() -> void
   CHECK_F(nursery_ != nullptr,
     "Nursery must be opened via StartAsync before Run (call StartAsync first)");
   nursery_->Start([this]() -> co::Co<> { co_await FrameLoop(); });
+}
+
+auto AsyncEngine::Stop() -> void
+{
+  if (nursery_) {
+    nursery_->Cancel();
+  }
+  DLOG_F(INFO, "AsyncEngine Live Object stopped");
 }
 
 // Register a module (takes ownership). Modules are sorted by priority.
@@ -193,7 +202,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     co_await PhaseFrameEnd(context);
 
     // Yield control to thread pool
-    co_await pool_.Run([](co::ThreadPool::CancelToken) { });
+    co_await platform_->Threads().Run([](co::ThreadPool::CancelToken) { });
   }
 
   // This will shut down all modules
@@ -219,7 +228,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 
   context.SetFrameSequenceNumber(frame_number_, tag);
   context.SetFrameStartTime(frame_start_ts_, tag);
-  context.SetThreadPool(&pool_, tag);
+  context.SetThreadPool(&platform_->Threads(), tag);
   context.SetGraphicsBackend(gfx_weak_, tag);
 
   // Initialize graphics layer for this frame

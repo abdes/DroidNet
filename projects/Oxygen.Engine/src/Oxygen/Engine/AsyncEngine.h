@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "Oxygen/OxCo/LiveObject.h"
+
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -30,21 +32,30 @@ class Platform;
 class Graphics;
 
 //! Async engine simulator orchestrating frame phases.
-class AsyncEngine final {
+class AsyncEngine final : public co::LiveObject {
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> graphics, co::ThreadPool& pool,
-    engine::EngineProps props = {}) noexcept;
+    std::weak_ptr<Graphics> graphics, engine::EngineProps props = {}) noexcept;
 
-  OXGN_NGIN_API ~AsyncEngine();
+  OXGN_NGIN_API ~AsyncEngine() override;
 
   OXYGEN_MAKE_NON_COPYABLE(AsyncEngine)
   OXYGEN_MAKE_NON_MOVABLE(AsyncEngine)
 
-  auto StartAsync(co::TaskStarted<> started = {}) -> co::Co<>
+  auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> override
   {
     return OpenNursery(nursery_, std::move(started));
   }
+
+  //! Starts internal coroutine frame loop (returns immediately).
+  OXGN_NGIN_API auto Run() -> void override;
+
+  [[nodiscard]] auto IsRunning() const -> bool override
+  {
+    return nursery_ != nullptr;
+  }
+
+  OXGN_NGIN_API auto Stop() -> void override;
 
   //! Completion event that becomes triggered after the simulator finishes
   //! running the requested number of frames. Can be awaited or polled.
@@ -56,9 +67,6 @@ public:
   {
     return completed_.Triggered();
   }
-
-  //! Starts internal coroutine frame loop (returns immediately).
-  OXGN_NGIN_API auto Run() -> void;
 
   //! Graphics layer access
   [[nodiscard]] auto GetGraphics() noexcept -> std::weak_ptr<Graphics>
@@ -144,7 +152,6 @@ private:
   // std::mutex parallel_results_mutex_;
   // std::vector<AsyncJobState> async_jobs_ {};
 
-  co::ThreadPool& pool_;
   engine::EngineProps props_ {};
   co::Nursery* nursery_ { nullptr };
   frame::SequenceNumber frame_number_ { 0 };
