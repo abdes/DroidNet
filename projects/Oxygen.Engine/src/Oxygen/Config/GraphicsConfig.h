@@ -25,31 +25,31 @@ using DeviceId = int64_t;
 //! Graphics configuration data, serialized to JSON and used to configure the
 //! graphics backend module when being loaded.
 struct GraphicsConfig {
-    bool enable_debug { false }; //!< Enable the backend debug layer.
-    bool enable_validation { false }; //!< Enable GPU validation.
+  bool enable_debug { false }; //!< Enable the backend debug layer.
+  bool enable_validation { false }; //!< Enable GPU validation.
 
-    //! Device selection guidance.
-    /*!
-      The graphics backend will try to select the most suitable GPU based on its
-      capabilities, but the selection can be influenced by the following
-      properties.
+  //! Device selection guidance.
+  /*!
+    The graphics backend will try to select the most suitable GPU based on its
+    capabilities, but the selection can be influenced by the following
+    properties.
 
-      \note The properties are hints and if they cannot be satisfied, the
-      renderer will fall back to the default behavior.
+    \note The properties are hints and if they cannot be satisfied, the
+    renderer will fall back to the default behavior.
 
-      \note The `preferred_card_name` and `preferred_card_device_id` are
-      mutually exclusive.
-    */
-    //! @{
-    std::optional<std::string> preferred_card_name;
-    std::optional<DeviceId> preferred_card_device_id;
-    //! @}
+    \note The `preferred_card_name` and `preferred_card_device_id` are
+    mutually exclusive.
+  */
+  //! @{
+  std::optional<std::string> preferred_card_name {};
+  std::optional<DeviceId> preferred_card_device_id {};
+  //! @}
 
-    bool headless { false }; //!< Run the engine without a window.
-    bool enable_imgui { false }; //!< Enable ImGui integration.
+  bool headless { false }; //!< Run the engine without a window.
+  bool enable_imgui { false }; //!< Enable ImGui integration.
 
-    //! Backend-specific configuration as a JSON string.
-    std::string extra = "{}";
+  //! Backend-specific configuration as a JSON string.
+  std::string extra = "{}";
 };
 
 //! Configuration structure passed to backends during creation. A C-compatible
@@ -57,8 +57,8 @@ struct GraphicsConfig {
 //! `std::string_view`: its data is read-only, and the lifetime of the data will
 //! last only for the duration of the call.
 struct SerializedBackendConfig {
-    const char* json_data; //!< UTF-8 encoded JSON string with configuration
-    size_t size; //!< Length of the JSON data in bytes
+  const char* json_data; //!< UTF-8 encoded JSON string with configuration
+  size_t size; //!< Length of the JSON data in bytes
 };
 
 } // namespace oxygen
