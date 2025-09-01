@@ -14,7 +14,7 @@
 #define OXYGEN_DIAGNOSTIC_POP
 #define DECLARE_RESOURCE(scope, Name) using Name##Id = ResourceHandle; namespace scope { struct Descriptor; } using Name##Descriptor = scope##::Descriptor; class Name;
 #define MAKE_RESOURCE_TABLE(name, type, itemType) ResourceTable<type> name(oxygen::world::resources::k##itemType, 256);
-#define OXYGEN_D3D12_API
+#define OXGN_D3D12_API
 #define LOGURU_ANONYMOUS_NAMESPACE_BEGIN namespace {
 #define LOGURU_ANONYMOUS_NAMESPACE_BEGIN
 #define OXYGEN_MAKE_NON_COPYABLE(Type) Type(const Type &) = delete; auto operator=(const Type &)->Type & = delete;

@@ -32,8 +32,8 @@ namespace detail {
     OXYGEN_COMPONENT(PipelineStateCache)
 
   public:
-    OXYGEN_D3D12_API explicit PipelineStateCache(Graphics* gfx);
-    OXYGEN_D3D12_API ~PipelineStateCache() override;
+    OXGN_D3D12_API explicit PipelineStateCache(Graphics* gfx);
+    OXGN_D3D12_API ~PipelineStateCache() override;
 
     OXYGEN_MAKE_NON_COPYABLE(PipelineStateCache)
     OXYGEN_DEFAULT_MOVABLE(PipelineStateCache)
@@ -44,11 +44,11 @@ namespace detail {
     };
 
     // Create a root signature from a GraphicsPipelineDesc root bindings
-    OXYGEN_D3D12_API auto CreateRootSignature(
+    OXGN_D3D12_API auto CreateRootSignature(
       const GraphicsPipelineDesc& desc) const -> dx::IRootSignature*;
 
     // Create a root signature from a ComputePipelineDesc root bindings
-    OXYGEN_D3D12_API auto CreateRootSignature(
+    OXGN_D3D12_API auto CreateRootSignature(
       const ComputePipelineDesc& desc) const -> dx::IRootSignature*;
 
     //! Get or create a graphics pipeline state object (PSO) and root
@@ -94,15 +94,15 @@ namespace detail {
 
   private:
     // Main pipeline state creation methods
-    OXYGEN_D3D12_API auto GetOrCreateGraphicsPipeline(
+    OXGN_D3D12_API auto GetOrCreateGraphicsPipeline(
       GraphicsPipelineDesc desc, size_t hash) -> Entry;
-    OXYGEN_D3D12_API auto GetOrCreateComputePipeline(
+    OXGN_D3D12_API auto GetOrCreateComputePipeline(
       ComputePipelineDesc desc, size_t hash) -> Entry;
 
     // Cache access methods
-    OXYGEN_D3D12_API auto GetGraphicsPipelineDesc(size_t hash) const
+    OXGN_D3D12_API auto GetGraphicsPipelineDesc(size_t hash) const
       -> const GraphicsPipelineDesc&;
-    OXYGEN_D3D12_API auto GetComputePipelineDesc(size_t hash) const
+    OXGN_D3D12_API auto GetComputePipelineDesc(size_t hash) const
       -> const ComputePipelineDesc&;
 
     // Pipeline cache storage

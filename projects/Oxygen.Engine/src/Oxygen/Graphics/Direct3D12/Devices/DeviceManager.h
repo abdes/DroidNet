@@ -121,8 +121,8 @@ class DeviceManager final : public Component {
   OXYGEN_COMPONENT(DeviceManager)
 
 public:
-  OXYGEN_D3D12_API explicit DeviceManager(DeviceManagerDesc desc);
-  OXYGEN_D3D12_API ~DeviceManager() override;
+  OXGN_D3D12_API explicit DeviceManager(DeviceManagerDesc desc);
+  OXGN_D3D12_API ~DeviceManager() override;
 
   OXYGEN_MAKE_NON_COPYABLE(DeviceManager)
   OXYGEN_MAKE_NON_MOVABLE(DeviceManager)
@@ -235,7 +235,7 @@ private:
     OXYGEN_MAKE_NON_COPYABLE(Context)
     OXYGEN_DEFAULT_MOVABLE(Context)
 
-    [[nodiscard]] OXYGEN_D3D12_API auto IsActive() const -> bool;
+    OXGN_D3D12_NDAPI auto IsActive() const -> bool;
   };
 
   auto InitializeFactory() -> void;
@@ -277,12 +277,9 @@ private:
     return true;
   }
 
-  [[nodiscard]] OXYGEN_D3D12_API auto InitializeContext(Context& context) const
-    -> bool;
-  [[nodiscard]] OXYGEN_D3D12_API auto CheckForDeviceLoss(const Context& context)
-    -> bool;
-  [[nodiscard]] OXYGEN_D3D12_API auto RecoverFromDeviceLoss(Context& context)
-    -> bool;
+  OXGN_D3D12_NDAPI auto InitializeContext(Context& context) const -> bool;
+  OXGN_D3D12_NDAPI auto CheckForDeviceLoss(const Context& context) -> bool;
+  OXGN_D3D12_NDAPI auto RecoverFromDeviceLoss(Context& context) -> bool;
 
   DeviceManagerDesc props_;
 

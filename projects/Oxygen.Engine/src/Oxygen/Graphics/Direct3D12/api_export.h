@@ -7,23 +7,23 @@
 #pragma once
 
 #if defined(_WIN32) || defined(_WIN64)
-#  ifdef OXYGEN_D3D12_STATIC
-#    define OXYGEN_D3D12_API
+#  ifdef OXGN_D3D12_STATIC
+#    define OXGN_D3D12_API
 #  else
-#    ifdef OXYGEN_D3D12_EXPORTS
-#      define OXYGEN_D3D12_API __declspec(dllexport)
+#    ifdef OXGN_D3D12_EXPORTS
+#      define OXGN_D3D12_API __declspec(dllexport)
 #    else
-#      define OXYGEN_D3D12_API __declspec(dllimport)
+#      define OXGN_D3D12_API __declspec(dllimport)
 #    endif
 #  endif
 #elif defined(__APPLE__) || defined(__linux__)
-#  ifdef OXYGEN_D3D12_EXPORTS
-#    define OXYGEN_D3D12_API __attribute__((visibility("default")))
+#  ifdef OXGN_D3D12_EXPORTS
+#    define OXGN_D3D12_API __attribute__((visibility("default")))
 #  else
-#    define OXYGEN_D3D12_API
+#    define OXGN_D3D12_API
 #  endif
 #else
-#  define OXYGEN_D3D12_API
+#  define OXGN_D3D12_API
 #endif
 
-#define OXYGEN_D3D12_NDAPI [[nodiscard]] OXYGEN_D3D12_API
+#define OXGN_D3D12_NDAPI [[nodiscard]] OXGN_D3D12_API

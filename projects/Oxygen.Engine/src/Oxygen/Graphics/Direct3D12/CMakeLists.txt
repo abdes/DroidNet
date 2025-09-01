@@ -54,7 +54,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_D3D12_EXPORTS"
+      "OXGN_D3D12_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -65,61 +65,72 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_GFX_D3D12_HEADERS
+  "api_export.h"
+  "Allocator/D3D12MemAlloc.h"
+  "Buffer.h"
+  "CommandList.h"
+  "CommandQueue.h"
+  "CommandRecorder.h"
+  "Constants.h"
+  "Devices/DeviceManager.h"
+  "GraphicResource.h"
+  "Graphics.h"
+  "RenderController.h"
+  "Texture.h"
+  # "ImGui/ImGuiModule.h"
+)
+set(
+  OXYGEN_GFX_D3D12_PRIVATE_SOURCES
+  "Allocator/D3D12MemAlloc.cpp"
+  "Bindless/D3D12HeapAllocationStrategy.cpp"
+  "Bindless/D3D12HeapAllocationStrategy.h"
+  "Bindless/DescriptorAllocator.cpp"
+  "Bindless/DescriptorAllocator.h"
+  "Bindless/DescriptorHeapSegment.cpp"
+  "Bindless/DescriptorHeapSegment.h"
+  "Buffer.cpp"
+  "CommandList.cpp"
+  "CommandQueue.cpp"
+  "CommandRecorder.cpp"
+  "Detail/Converters.cpp"
+  "Detail/Converters.h"
+  "Detail/dx12_utils.h"
+  "Detail/FormatUtils.cpp"
+  "Detail/FormatUtils.h"
+  "Detail/PipelineStateCache.cpp"
+  "Detail/PipelineStateCache.h"
+  "Detail/SwapChain.cpp"
+  "Detail/SwapChain.h"
+  "Detail/Types.h"
+  "Detail/WindowSurface.h"
+  "Devices/DebugLayer.cpp"
+  "Devices/DebugLayer.h"
+  "Devices/DeviceManager.cpp"
+  "Graphics.cpp"
+  "ImGui/imgui_impl_dx12.h"
+  "RenderController.cpp"
+  "Shaders/EngineShaders.cpp"
+  "Shaders/EngineShaders.h"
+  "Shaders/ShaderCompiler.cpp"
+  "Shaders/ShaderCompiler.h"
+  "Texture.cpp"
+  # "ImGui/ImGuiModule.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Buffer.cpp"
-    "CommandList.cpp"
-    "CommandQueue.cpp"
-    "CommandRecorder.cpp"
-    "Graphics.cpp"
-    "RenderController.cpp"
-    "Texture.cpp"
-    "Allocator/D3D12MemAlloc.cpp"
-    "Detail/Converters.cpp"
-    "Detail/Converters.h"
-    "Detail/FormatUtils.cpp"
-    "Detail/FormatUtils.h"
-    "Detail/PipelineStateCache.h"
-    "Detail/PipelineStateCache.cpp"
-    "Detail/SwapChain.cpp"
-    "Detail/SwapChain.h"
-    "Detail/Types.h"
-    "Detail/WindowSurface.h"
-    "Detail/dx12_utils.h"
-    "Devices/DebugLayer.cpp"
-    "Devices/DebugLayer.h"
-    "Devices/DeviceManager.cpp"
-    # "ImGui/ImGuiModule.cpp"
-    "ImGui/imgui_impl_dx12.h"
-    "Shaders/EngineShaders.cpp"
-    "Shaders/EngineShaders.h"
-    "Shaders/ShaderCompiler.cpp"
-    "Shaders/ShaderCompiler.h"
-    "Bindless/D3D12HeapAllocationStrategy.h"
-    "Bindless/D3D12HeapAllocationStrategy.cpp"
-    "Bindless/DescriptorHeapSegment.h"
-    "Bindless/DescriptorHeapSegment.cpp"
-    "Bindless/DescriptorAllocator.h"
-    "Bindless/DescriptorAllocator.cpp"
+    ${OXYGEN_GFX_D3D12_PRIVATE_SOURCES}
+    ${OXYGEN_GFX_D3D12_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "Buffer.h"
-      "CommandList.h"
-      "CommandQueue.h"
-      "CommandRecorder.h"
-      "Constants.h"
-      "GraphicResource.h"
-      "Graphics.h"
-      "RenderController.h"
-      "Texture.h"
-      "Allocator/D3D12MemAlloc.h"
-      "Devices/DeviceManager.h"
-  # "ImGui/ImGuiModule.h"
+    FILES ${OXYGEN_GFX_D3D12_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 # Silence specific MSVC warnings for D3D12MemAlloc.cpp
 if(MSVC)
@@ -137,7 +148,7 @@ target_compile_definitions(
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_D3D12_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
 )
 
 target_include_directories(${META_MODULE_TARGET} PRIVATE "${dxc_inc_path}")

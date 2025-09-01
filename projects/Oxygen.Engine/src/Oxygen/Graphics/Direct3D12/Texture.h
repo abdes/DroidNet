@@ -30,67 +30,68 @@ namespace d3d12 {
     using Base = graphics::Texture;
 
   public:
-    OXYGEN_D3D12_API explicit Texture(TextureDesc desc, const Graphics* gfx);
+    OXGN_D3D12_API explicit Texture(TextureDesc desc, const Graphics* gfx);
 
-    OXYGEN_D3D12_API Texture(
+    OXGN_D3D12_API Texture(
       TextureDesc desc, const NativeObject& native, const Graphics* gfx);
 
-    OXYGEN_D3D12_API ~Texture() override;
+    OXGN_D3D12_API ~Texture() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Texture)
 
     Texture(Texture&& other) noexcept;
-    OXYGEN_D3D12_API auto operator=(Texture&& other) noexcept -> Texture&;
+    OXGN_D3D12_API auto operator=(Texture&& other) noexcept -> Texture&;
 
-    OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
+    OXGN_D3D12_API auto SetName(std::string_view name) noexcept
+      -> void override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto GetNativeResource() const
-      -> NativeObject override;
+    OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeObject override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto GetDescriptor() const
-      -> const TextureDesc& override
+    OXGN_D3D12_NDAPI auto GetDescriptor() const -> const TextureDesc& override
     {
       return desc_;
     }
 
   protected:
     // Abstract method implementations from base class
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateShaderResourceView(
+    OXGN_D3D12_NDAPI auto CreateShaderResourceView(
       const DescriptorHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
       -> NativeObject override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateUnorderedAccessView(
+    OXGN_D3D12_NDAPI auto CreateUnorderedAccessView(
       const DescriptorHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
       -> NativeObject override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateRenderTargetView(
+    OXGN_D3D12_NDAPI auto CreateRenderTargetView(
       const DescriptorHandle& view_handle, Format format,
       TextureSubResourceSet sub_resources) const -> NativeObject override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateDepthStencilView(
+    OXGN_D3D12_NDAPI auto CreateDepthStencilView(
       const DescriptorHandle& view_handle, Format format,
       TextureSubResourceSet sub_resources, bool is_read_only) const
       -> NativeObject override;
 
   private:
     // Abstract method implementations from base class
-    OXYGEN_D3D12_API void CreateShaderResourceView(
+    OXGN_D3D12_API auto CreateShaderResourceView(
       D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
-      TextureType texture_type, TextureSubResourceSet sub_resources) const;
+      TextureType texture_type, TextureSubResourceSet sub_resources) const
+      -> void;
 
-    OXYGEN_D3D12_API void CreateUnorderedAccessView(
+    OXGN_D3D12_API auto CreateUnorderedAccessView(
       D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
-      TextureType texture_type, TextureSubResourceSet sub_resources) const;
+      TextureType texture_type, TextureSubResourceSet sub_resources) const
+      -> void;
 
-    OXYGEN_D3D12_API void CreateRenderTargetView(
+    OXGN_D3D12_API auto CreateRenderTargetView(
       D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
-      TextureSubResourceSet sub_resources) const;
+      TextureSubResourceSet sub_resources) const -> void;
 
-    OXYGEN_D3D12_API void CreateDepthStencilView(
+    OXGN_D3D12_API auto CreateDepthStencilView(
       D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
-      TextureSubResourceSet sub_resources, bool is_read_only) const;
+      TextureSubResourceSet sub_resources, bool is_read_only) const -> void;
 
     auto CurrentDevice() const -> dx::IDevice*;
 

@@ -28,7 +28,7 @@ class RenderController final : public graphics::RenderController {
   using Base = graphics::RenderController;
 
 public:
-  OXYGEN_D3D12_API RenderController(
+  OXGN_D3D12_API RenderController(
     const std::weak_ptr<oxygen::Graphics>& gfx_weak,
     std::weak_ptr<oxygen::graphics::Surface> surface,
     const frame::SlotCount frames_in_flight = frame::kFramesInFlight)
@@ -38,12 +38,12 @@ public:
   }
 
   //! Default constructor, sets the object name.
-  OXYGEN_D3D12_API RenderController(std::string_view name,
+  OXGN_D3D12_API RenderController(std::string_view name,
     const std::weak_ptr<oxygen::Graphics>& gfx_weak,
     std::weak_ptr<oxygen::graphics::Surface> surface_weak,
     frame::SlotCount frames_in_flight = frame::kFramesInFlight);
 
-  OXYGEN_D3D12_API ~RenderController() override = default;
+  OXGN_D3D12_API ~RenderController() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(RenderController)
   OXYGEN_MAKE_NON_MOVABLE(RenderController)
@@ -62,7 +62,7 @@ public:
     ComputePipelineDesc desc, size_t hash) -> detail::PipelineStateCache::Entry;
 
 protected:
-  [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(
+  OXGN_D3D12_NDAPI auto CreateCommandRecorder(
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue)
     -> std::unique_ptr<graphics::CommandRecorder> override;
