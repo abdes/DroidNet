@@ -58,8 +58,7 @@ namespace nt_detail {
 //! Provides prefix increment operator (++x) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PreIncrementable : Crtp<T, PreIncrementable> {
-  [[nodiscard]] constexpr T& operator++() noexcept(
-    noexcept(++this->underlying().get()))
+  constexpr T& operator++() noexcept(noexcept(++this->underlying().get()))
   {
     ++this->underlying().get();
     return this->underlying();
@@ -69,8 +68,7 @@ struct OXYGEN_EBCO PreIncrementable : Crtp<T, PreIncrementable> {
 //! Provides postfix increment operator (x++) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PostIncrementable : Crtp<T, PostIncrementable> {
-  [[nodiscard]] constexpr T operator++(int) noexcept(
-    noexcept(this->underlying().get()++))
+  constexpr T operator++(int) noexcept(noexcept(this->underlying().get()++))
   {
     return T(this->underlying().get()++);
   }
