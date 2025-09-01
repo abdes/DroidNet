@@ -11,7 +11,7 @@
 
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 
@@ -35,11 +35,11 @@ struct FakeAllocator : oxygen::graphics::DescriptorAllocator {
   auto Allocate(RVT, Vis) -> oxygen::graphics::DescriptorHandle override
   {
     return CreateDescriptorHandle(
-      oxygen::bindless::Handle { 0 }, RVT::kTexture_SRV, Vis::kShaderVisible);
+      Handle { 0 }, RVT::kTexture_SRV, Vis::kShaderVisible);
   }
-  void Release(oxygen::graphics::DescriptorHandle&) override { }
-  void CopyDescriptor(const oxygen::graphics::DescriptorHandle&,
-    const oxygen::graphics::DescriptorHandle&) override
+  auto Release(oxygen::graphics::DescriptorHandle&) -> void override { }
+  auto CopyDescriptor(const oxygen::graphics::DescriptorHandle&,
+    const oxygen::graphics::DescriptorHandle&) -> void override
   {
   }
 
@@ -48,12 +48,12 @@ struct FakeAllocator : oxygen::graphics::DescriptorAllocator {
   {
     return oxygen::bindless::Count { 0 };
   }
-  auto GetDomainBaseIndex(RVT, Vis) const -> oxygen::bindless::Handle override
+  auto GetDomainBaseIndex(RVT, Vis) const -> Handle override
   {
-    return oxygen::bindless::Handle { 0 };
+    return Handle { 0 };
   }
   auto Reserve(RVT, Vis, oxygen::bindless::Count)
-    -> std::optional<oxygen::bindless::Handle> override
+    -> std::optional<Handle> override
   {
     return std::nullopt;
   }
@@ -68,10 +68,9 @@ struct FakeAllocator : oxygen::graphics::DescriptorAllocator {
     return oxygen::bindless::Count { 0 };
   }
   auto GetShaderVisibleIndex(
-    const oxygen::graphics::DescriptorHandle&) const noexcept
-    -> oxygen::bindless::Handle override
+    const oxygen::graphics::DescriptorHandle&) const noexcept -> Handle override
   {
-    return oxygen::bindless::Handle { 0 };
+    return Handle { 0 };
   }
 };
 
@@ -80,7 +79,7 @@ struct AllocateBackend {
   std::vector<uint32_t> free_list;
   std::atomic<int> alloc_count { 0 };
 
-  Handle operator()(DomainKey)
+  auto operator()(DomainKey) -> Handle
   {
     ++alloc_count;
     if (!free_list.empty()) {
@@ -96,7 +95,7 @@ struct AllocateBackend {
 //! Backend free function mock that records freed handle indices.
 struct FreeBackend {
   std::vector<uint32_t> freed;
-  void operator()(DomainKey, Handle h) { freed.push_back(h.get()); }
+  auto operator()(DomainKey, Handle h) -> void { freed.push_back(h.get()); }
 };
 
 //===----------------------------------------------------------------------===//
@@ -117,7 +116,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   AllocateBackend do_alloc;
   FreeBackend do_free;
 
@@ -125,8 +124,8 @@ NOLINT_TEST(FrameDrivenSlotReuse,
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   // Act - Allocate initial handle
   auto h1 = reuse.Allocate(domain);
@@ -143,7 +142,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
     << "Must not reuse before frame cycle";
 
   // Act - Complete frame cycle and enable reuse
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
   do_alloc.free_list.push_back(idx.get());
   auto h2 = reuse.Allocate(domain);
 
@@ -164,7 +163,7 @@ NOLINT_TEST(
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -173,8 +172,8 @@ NOLINT_TEST(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   // Act - Allocate handle and verify it's current
   auto h = reuse.Allocate(domain);
@@ -189,7 +188,7 @@ NOLINT_TEST(
   reuse.Release(domain, h); // Double release should be ignored
 
   // Act - Complete frame cycle and reuse slot
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
   do_alloc.free_list.push_back(idx.get());
   auto h_new = reuse.Allocate(domain);
 
@@ -215,7 +214,7 @@ NOLINT_TEST(
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -224,8 +223,8 @@ NOLINT_TEST(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   constexpr int kCount = 256;
   std::vector<VersionedBindlessHandle> handles;
@@ -241,9 +240,8 @@ NOLINT_TEST(
   for (int t = 0; t < 4; ++t) {
     workers.emplace_back([t, &reuse, &handles, kCount]() {
       for (int i = t; i < kCount; i += 4) {
-        reuse.Release(
-          DomainKey { oxygen::graphics::ResourceViewType::kTexture_SRV,
-            oxygen::graphics::DescriptorVisibility::kShaderVisible },
+        reuse.Release(DomainKey { graphics::ResourceViewType::kTexture_SRV,
+                        graphics::DescriptorVisibility::kShaderVisible },
           handles[i]);
       }
     });
@@ -254,10 +252,10 @@ NOLINT_TEST(
   }
 
   // Act - Trigger reclamation
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
 
   // Act - Setup for reuse verification
-  for (auto const& idx_val : do_free.freed) {
+  for (const auto& idx_val : do_free.freed) {
     do_alloc.free_list.push_back(idx_val);
   }
 
@@ -281,7 +279,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, Release_InvalidHandle_IsNoOp)
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -290,14 +288,14 @@ NOLINT_TEST(FrameDrivenSlotReuse, Release_InvalidHandle_IsNoOp)
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   // Act - Release an explicitly invalid handle
   reuse.Release(domain, {});
 
   // Act - Advance frame
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
 
   // Assert - Nothing should have been freed
   EXPECT_TRUE(do_free.freed.empty());
@@ -314,7 +312,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, IsHandleCurrent_InvalidHandle_ReturnsFalse)
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -339,7 +337,7 @@ NOLINT_TEST(
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
 
   // Custom allocator that starts with large indices
@@ -350,7 +348,7 @@ NOLINT_TEST(
       : next(start)
     {
     }
-    Handle operator()(DomainKey)
+    auto operator()(DomainKey) -> Handle
     {
       if (!free_list.empty()) {
         auto idx = free_list.back();
@@ -367,8 +365,8 @@ NOLINT_TEST(
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   // Act - Allocate large-index handle forcing EnsureCapacity_ growth
   auto h1 = reuse.Allocate(domain);
@@ -385,7 +383,7 @@ NOLINT_TEST(
     << "Must not reuse before frame cycle (large-index case)";
 
   // Act - Complete frame cycle and enable reuse
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
   do_alloc.free_list.push_back(idx.get());
   auto h2 = reuse.Allocate(domain);
 
@@ -406,7 +404,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -415,8 +413,8 @@ NOLINT_TEST(FrameDrivenSlotReuse,
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   // Act - Allocate single handle
   auto h = reuse.Allocate(domain);
@@ -437,11 +435,12 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   }
 
   start.store(true, std::memory_order_release);
-  for (auto& w : workers)
+  for (auto& w : workers) {
     w.join();
+  }
 
   // Act - Process deferred frees
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
 
   // Assert - Only one deferred free should have been scheduled
   ASSERT_EQ(do_free.freed.size(), 1u);
@@ -460,7 +459,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   using namespace oxygen;
 
   // Arrange
-  oxygen::graphics::detail::PerFrameResourceManager per_frame;
+  graphics::detail::DeferredReclaimer per_frame;
   FakeAllocator allocator;
   AllocateBackend do_alloc;
   FreeBackend do_free;
@@ -469,8 +468,8 @@ NOLINT_TEST(FrameDrivenSlotReuse,
     [&do_alloc](DomainKey d) { return do_alloc(d); },
     [&do_free](DomainKey d, Handle h) { do_free(d, h); }, per_frame);
 
-  DomainKey domain { oxygen::graphics::ResourceViewType::kTexture_SRV,
-    oxygen::graphics::DescriptorVisibility::kShaderVisible };
+  DomainKey domain { graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible };
 
   constexpr int kThreads = 8;
   constexpr int kPerThread = 512;
@@ -489,11 +488,12 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   }
 
   start.store(true, std::memory_order_release);
-  for (auto& w : workers)
+  for (auto& w : workers) {
     w.join();
+  }
 
   // Act - Process deferred frees
-  per_frame.OnBeginFrame(oxygen::frame::Slot { 0 });
+  per_frame.OnBeginFrame(frame::Slot { 0 });
 
   // Assert - All releases should be processed
   EXPECT_EQ(do_free.freed.size(), static_cast<size_t>(kThreads * kPerThread));

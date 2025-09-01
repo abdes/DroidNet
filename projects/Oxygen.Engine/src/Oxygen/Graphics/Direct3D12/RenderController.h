@@ -21,7 +21,7 @@ class Graphics;
 
 namespace detail {
   class DescriptorHeap;
-  class PerFrameResourceManager;
+  class DeferredReclaimer;
 } // namespace detail
 
 class RenderController final : public graphics::RenderController {

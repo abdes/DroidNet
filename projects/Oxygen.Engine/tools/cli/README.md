@@ -147,7 +147,7 @@ oxybuild.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-DryRun
 | `base` | `oxygen-base` | Substring matching |
 | `lish` | `LightCulling_shader` | Sequential character matching (Li + sh) |
 | `oxsct` | `Oxygen.Scene.LinkTest` | Non-boundary abbreviation (Ox + Sc + T) |
-| `ogcpf` | `Oxygen.Graphics.Common.PerFrameResourceManager.Tests` | 5-char pattern for 5 segments |
+| `ogcpf` | `Oxygen.Graphics.Common.DeferredReclaimer.Tests` | 5-char pattern for 5 segments |
 | `gr-common` | `oxygen-graphics-common` | Component matching |
 | `asyncsim` | `oxygen-asyncengine-simulator` | Traditional abbreviation matching |
 | `graphics` | *Interactive menu* | Multiple matches |

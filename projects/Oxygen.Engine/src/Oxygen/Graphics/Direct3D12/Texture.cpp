@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/logging.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
@@ -211,7 +211,7 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
 }
 // ReSharper enable CppClangTidyBugproneUseAfterMove
 
-void Texture::SetName(const std::string_view name) noexcept
+auto Texture::SetName(const std::string_view name) noexcept -> void
 {
   Base::SetName(name);
   GetComponent<GraphicResource>().SetName(name);
@@ -285,9 +285,9 @@ auto Texture::CreateDepthStencilView(const DescriptorHandle& view_handle,
   return { cpu_handle.ptr, ClassTypeId() };
 }
 
-void Texture::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
+auto Texture::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   Format format, TextureType dimension,
-  TextureSubResourceSet sub_resources) const
+  TextureSubResourceSet sub_resources) const -> void
 {
   auto constexpr kNumArraySlicesInCube = 6;
 
@@ -370,9 +370,9 @@ void Texture::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh_cpu);
 }
 
-void Texture::CreateUnorderedAccessView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
+auto Texture::CreateUnorderedAccessView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   Format format, TextureType dimension,
-  TextureSubResourceSet sub_resources) const
+  TextureSubResourceSet sub_resources) const -> void
 {
   sub_resources = sub_resources.Resolve(desc_, true);
 
@@ -431,8 +431,8 @@ void Texture::CreateUnorderedAccessView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     dh_cpu);
 }
 
-void Texture::CreateRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
-  Format format, TextureSubResourceSet sub_resources) const
+auto Texture::CreateRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
+  Format format, TextureSubResourceSet sub_resources) const -> void
 {
   sub_resources = sub_resources.Resolve(desc_, true);
 
@@ -491,8 +491,9 @@ void Texture::CreateRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh_cpu);
 }
 
-void Texture::CreateDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
+auto Texture::CreateDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   Format format, TextureSubResourceSet sub_resources, bool is_read_only) const
+  -> void
 {
   sub_resources = sub_resources.Resolve(desc_, true);
 

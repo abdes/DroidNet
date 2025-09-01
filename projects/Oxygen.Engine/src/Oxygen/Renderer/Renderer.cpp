@@ -456,7 +456,7 @@ auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
 
   // Keep the upload buffer alive until the command list is executed
   DeferredObjectRelease(
-    upload_buffer, render_controller.GetPerFrameResourceManager());
+    upload_buffer, render_controller.GetDeferredReclaimer());
 }
 
 auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
@@ -500,7 +500,7 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
 
   // Keep the upload buffer alive until the command list is executed
   DeferredObjectRelease(
-    upload_buffer, render_controller.GetPerFrameResourceManager());
+    upload_buffer, render_controller.GetDeferredReclaimer());
 }
 
 // Create a StructuredBuffer SRV for a vertex buffer and register it.
