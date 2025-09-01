@@ -94,8 +94,14 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Engine/EngineTag.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Renderer/Types/View.h>
+
+namespace oxygen {
+class Graphics;
+} // namespace oxygen
 
 // Forward declaration for ThreadPool from the OxCo module
 namespace oxygen::co {
@@ -113,7 +119,6 @@ struct ResourceIntegrationData;
 struct FrameProfiler;
 struct EntityCommandBuffer;
 struct PhysicsWorldState;
-class GraphicsLayerIntegration;
 struct ResourceRegistry;
 class RenderGraphBuilder;
 
@@ -248,27 +253,6 @@ struct EngineProps;
 //   Whether this nav mesh is valid for queries
 // };
 
-// Temporary until we do proper graphics integration
-using Graphics = GraphicsLayerIntegration;
-
-// EngineTag is a capability token that only engine-internal code can
-// construct. The engine exposes a class-based factory in the `internal`
-// namespace to avoid accidental ADL of free functions.
-namespace internal {
-  struct EngineTagFactory;
-} // namespace internal
-
-class EngineTag {
-  friend struct internal::EngineTagFactory;
-  EngineTag() noexcept = default;
-};
-
-namespace internal {
-  struct EngineTagFactory {
-    static auto Get() noexcept -> EngineTag;
-  };
-} // namespace internal
-
 //! Lightweight per-frame snapshot passed to parallel tasks.
 //! Contains engine-level coordination data and efficient read-only views into
 //! heavy data structures organized for parallel task consumption (SoA layout,
@@ -276,7 +260,7 @@ namespace internal {
 //! context and efficient views into game data.
 struct FrameSnapshot {
   // Basic frame identification and timing
-  uint64_t frame_index { 0 };
+  frame::SequenceNumber frame_index { 0 };
   uint64_t epoch { 0 };
   std::chrono::steady_clock::time_point frame_start_time;
   std::chrono::microseconds frame_budget { 16667 }; // ~60 FPS default
@@ -702,17 +686,16 @@ public:
   // move these values forward monotonically.
 
   //! Get the current frame index (monotonic counter).
-  auto GetFrameIndex() const noexcept { return frameIndex_; }
+  auto GetFrameSequenceNumber() const noexcept { return frameIndex_; }
 
   //! Get the current epoch value (for resource lifecycle management).
   auto GetEpoch() const noexcept { return engine_state_.epoch; }
 
-  // Engine-only monotonic advances. Only the engine/coordinator with an
-  // EngineTag may call these. They always move the counters forward by one
-  // (no direct jumps allowed) to make progression explicit and avoid
-  // accidental large skips.
-  //! Engine-only: Advance frame index by one. Requires EngineTag capability.
-  auto AdvanceFrameIndex(EngineTag) noexcept -> void { ++frameIndex_; }
+  auto SetFrameSequenceNumber(
+    frame::SequenceNumber frameNumber, EngineTag) noexcept -> void
+  {
+    frameIndex_ = frameNumber;
+  }
 
   //! Engine-only: Advance epoch by one. Requires EngineTag capability.
   auto AdvanceEpoch(EngineTag) noexcept -> void { ++engine_state_.epoch; }
@@ -1577,9 +1560,7 @@ private:
   // Private data members with controlled access
   //------------------------------------------------------------------------
 
-  // Private monotonic counters: use AdvanceFrameIndex/AdvanceEpoch to update
-  uint64_t frameIndex_ = 0; // monotonic
-  // Recorded frame start time set by the engine coordinator at FrameStart
+  frame::SequenceNumber frameIndex_ { 0 };
   std::chrono::steady_clock::time_point frameStartTime_ {};
 
   // Immutable dependencies provided at construction and valid for app lifetime

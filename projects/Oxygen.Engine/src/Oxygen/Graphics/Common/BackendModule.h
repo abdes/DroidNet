@@ -19,6 +19,7 @@ namespace oxygen::graphics {
 enum class BackendType : uint8_t {
   kDirect3D12 = 0, //!< Direct3D12 backend.
   kVulkan = 1, //!< Vulkan backend.
+  kHeadless = 2, //!< Headless backend.
 };
 
 constexpr auto kGetGraphicsModuleApi = "GetGraphicsModuleApi";
@@ -92,6 +93,8 @@ constexpr auto to_string(const BackendType value) -> std::string
     return "Direct3D12";
   case BackendType::kVulkan:
     return "Vulkan 1.3";
+  case BackendType::kHeadless:
+    return "Headless";
   }
   OXYGEN_UNREACHABLE_RETURN("_UNKNOWN_");
 }

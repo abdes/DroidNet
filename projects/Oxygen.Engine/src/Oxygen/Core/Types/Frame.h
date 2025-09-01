@@ -17,27 +17,27 @@ namespace oxygen {
 
 //! Strong type representing the index of an in-flight frame slot used by the
 //! renderer (e.g. frames-in-flight index).
-using FrameSlotNumber = oxygen::NamedType<uint32_t, struct FrameSlotNumberTag,
+using FrameSlotNumber = NamedType<uint32_t, struct FrameSlotNumberTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::PreIncrementable,
-  oxygen::PostIncrementable,
-  oxygen::Addable,
-  oxygen::Subtractable,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  PreIncrementable,
+  PostIncrementable,
+  Addable,
+  Subtractable,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Convert a FrameSlotNumber to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(FrameSlotNumber s) -> std::string;
 
 // Strong type representing a count of frame slots (engine-level type).
-using FrameSlotCount = oxygen::NamedType<uint32_t, struct FrameSlotCountTag,
+using FrameSlotCount = NamedType<uint32_t, struct FrameSlotCountTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Convert a FrameSlotCount to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(FrameSlotCount sc) -> std::string;
@@ -66,17 +66,16 @@ namespace frame {
  intended to be a global, ever-increasing counter. Use a 64-bit underlying type
  to avoid wraparound in long-running processes.
 */
-using FrameSequenceNumber = oxygen::NamedType<uint64_t,
-  struct FrameSequenceNumberTag,
+using FrameSequenceNumber = NamedType<uint64_t, struct FrameSequenceNumberTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::PreIncrementable,
-  oxygen::PostIncrementable,
-  oxygen::Addable,
-  oxygen::Subtractable,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  PreIncrementable,
+  PostIncrementable,
+  Addable,
+  Subtractable,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Convert a FrameSequenceNumber to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(FrameSequenceNumber seq) -> std::string;
