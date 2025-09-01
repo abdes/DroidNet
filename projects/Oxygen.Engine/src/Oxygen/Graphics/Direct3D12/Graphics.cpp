@@ -22,10 +22,9 @@
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
-using oxygen::graphics::FramebufferDesc;
-
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
+//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -55,6 +54,7 @@ auto DestroyBackend() -> void
 
 //===----------------------------------------------------------------------===//
 // Public implementation of the graphics backend API.
+//===----------------------------------------------------------------------===//
 
 extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 {
@@ -65,7 +65,51 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 }
 
 //===----------------------------------------------------------------------===//
+// DescriptorAllocator Component
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class DescriptorAllocatorComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(DescriptorAllocatorComponent)
+  OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::d3d12::DeviceManager)
+
+public:
+  explicit DescriptorAllocatorComponent() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocatorComponent)
+  OXYGEN_DEFAULT_MOVABLE(DescriptorAllocatorComponent)
+
+  ~DescriptorAllocatorComponent() override = default;
+
+  [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+
+protected:
+  auto UpdateDependencies(
+    const std::function<Component&(oxygen::TypeId)>& get_component) noexcept
+    -> void override
+  {
+    using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
+    using oxygen::graphics::d3d12::DescriptorAllocator;
+    using oxygen::graphics::d3d12::DeviceManager;
+
+    const auto& dm = static_cast<DeviceManager&>(
+      get_component(DeviceManager::ClassTypeId()));
+    auto* device = dm.Device();
+    DCHECK_NOTNULL_F(device, "DeviceManager not properly initialized");
+    allocator_ = std::make_unique<DescriptorAllocator>(
+      std::make_shared<D3D12HeapAllocationStrategy>(device), device);
+  }
+
+private:
+  std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // The Graphics class methods
+//===----------------------------------------------------------------------===//
 
 using oxygen::graphics::d3d12::Graphics;
 
@@ -74,6 +118,12 @@ auto Graphics::GetFactory() const -> dx::IFactory*
   auto* factory = GetComponent<DeviceManager>().Factory();
   CHECK_NOTNULL_F(factory, "graphics backend not properly initialized");
   return factory;
+}
+
+auto Graphics::GetDescriptorAllocator() const
+  -> const graphics::DescriptorAllocator&
+{
+  return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
 }
 
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*
@@ -105,14 +155,7 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   }
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>();
-
-  // Initialize global Bindless allocator at the device level
-  {
-    auto allocator = std::make_unique<DescriptorAllocator>(
-      std::make_shared<D3D12HeapAllocationStrategy>(GetCurrentDevice()),
-      GetCurrentDevice());
-    SetDescriptorAllocator(std::move(allocator));
-  }
+  AddComponent<DescriptorAllocatorComponent>();
 }
 
 auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)

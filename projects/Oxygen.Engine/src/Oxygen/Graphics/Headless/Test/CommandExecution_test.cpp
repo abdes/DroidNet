@@ -81,8 +81,7 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
       return QueueKey { "__invalid__" };
     }
 
-    [[nodiscard]] auto Clone() const
-      -> std::unique_ptr<oxygen::graphics::QueuesStrategy> override
+    [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
     {
       return std::make_unique<LocalMultiNamedStrategy>(*this);
     }
@@ -109,8 +108,9 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder = headless->AcquireCommandRecorder(
-      queue, cmd_list, /*immediate_submission=*/true);
+    auto recorder
+      = headless->AcquireCommandRecorder(oxygen::observer_ptr { queue.get() },
+        cmd_list, /*immediate_submission=*/true);
     ASSERT_NE(recorder, nullptr);
 
     // Register and begin tracking the buffer with the recorder.

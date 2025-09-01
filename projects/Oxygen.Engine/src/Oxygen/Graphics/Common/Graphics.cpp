@@ -12,11 +12,11 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Internal/Bindless.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -26,16 +26,36 @@
 #include <Oxygen/OxCo/Nursery.h>
 
 using oxygen::Graphics;
-using oxygen::graphics::internal::Bindless;
 using oxygen::graphics::internal::QueueManager;
+
+namespace {
+
+class ResourceRegistryComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(ResourceRegistryComponent)
+
+public:
+  explicit ResourceRegistryComponent(std::string_view name)
+    : registry_(std::make_unique<oxygen::graphics::ResourceRegistry>(name))
+  {
+  }
+
+  [[nodiscard]] auto GetRegistry() const -> const auto& { return *registry_; }
+
+  OXYGEN_MAKE_NON_COPYABLE(ResourceRegistryComponent)
+  OXYGEN_DEFAULT_MOVABLE(ResourceRegistryComponent)
+
+  ~ResourceRegistryComponent() override = default;
+
+private:
+  std::unique_ptr<oxygen::graphics::ResourceRegistry> registry_ {};
+};
+
+} // namespace
 
 Graphics::Graphics(const std::string_view name)
 {
   AddComponent<ObjectMetaData>(name);
-  // Create backend-agnostic Bindless component now; allocator will be set by
-  // backend later after device is created.
-  AddComponent<Bindless>();
-  // Install QueueManager component for common graphics queue management.
+  AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
 }
 
@@ -82,47 +102,38 @@ auto Graphics::Stop() -> void
   DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
-auto Graphics::SetDescriptorAllocator(
-  std::unique_ptr<graphics::DescriptorAllocator> allocator) -> void
-{
-  CHECK_NOTNULL_F(allocator);
-  DCHECK_F(HasComponent<Bindless>(),
-    "Bindless component must exist on Graphics before setting allocator");
-  GetComponent<Bindless>().SetAllocator(std::move(allocator));
-}
-
 auto Graphics::CreateCommandQueues(
   const graphics::QueuesStrategy& queue_strategy) -> void
 {
   // Delegate queue management to the installed QueueManager component which
   // will call back to this backend's CreateCommandQueue hook when it needs to
   // instantiate actual CommandQueue objects.
-  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  auto& qm = GetComponent<QueueManager>();
   qm.CreateQueues(queue_strategy,
-    [this](const graphics::QueueKey& k,
-      graphics::QueueRole r) -> std::shared_ptr<graphics::CommandQueue> {
-      return this->CreateCommandQueue(k, r);
+    [this](const graphics::QueueKey& key, const graphics::QueueRole role)
+      -> std::shared_ptr<graphics::CommandQueue> {
+      return this->CreateCommandQueue(key, role);
     });
 }
 
 auto Graphics::FlushCommandQueues() -> void
 {
   // Forward to the QueueManager which enumerates unique queues safely.
-  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
-  qm.ForEachQueue([](graphics::CommandQueue& q) { q.Flush(); });
+  auto& qm = GetComponent<QueueManager>();
+  qm.ForEachQueue([](const graphics::CommandQueue& q) { q.Flush(); });
 }
 
 auto Graphics::GetCommandQueue(const graphics::QueueKey& key) const
   -> std::shared_ptr<graphics::CommandQueue>
 {
-  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByName(key);
 }
 
 auto Graphics::GetCommandQueue(const graphics::QueueRole role) const
   -> std::shared_ptr<graphics::CommandQueue>
 {
-  auto& qm = GetComponent<oxygen::graphics::internal::QueueManager>();
+  auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByRole(role);
 }
 
@@ -198,12 +209,6 @@ auto Graphics::AcquireCommandList(
   // returned shared_ptr is destroyed
 }
 
-auto Graphics::GetDescriptorAllocator() const
-  -> const graphics::DescriptorAllocator&
-{
-  return GetComponent<Bindless>().GetAllocator();
-}
-
 auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
 {
   return const_cast<graphics::DescriptorAllocator&>(
@@ -212,7 +217,7 @@ auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
 
 auto Graphics::GetResourceRegistry() const -> const graphics::ResourceRegistry&
 {
-  return GetComponent<Bindless>().GetRegistry();
+  return GetComponent<ResourceRegistryComponent>().GetRegistry();
 }
 
 auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&

@@ -34,6 +34,9 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_MAKE_NON_MOVABLE(Graphics)
 
+  OXYGEN_D3D12_NDAPI auto GetDescriptorAllocator() const
+    -> const graphics::DescriptorAllocator& override;
+
   //=== D3D12 specific factories ===----------------------------------------//
 
   [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(

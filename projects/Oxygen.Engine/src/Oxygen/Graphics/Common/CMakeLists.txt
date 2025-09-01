@@ -111,7 +111,6 @@ set(
   "Detail/ResourceStateTracker.cpp"
   "Framebuffer.cpp"
   "Graphics.cpp"
-  "Internal/Bindless.h"
   "Internal/FramebufferImpl.cpp"
   "Internal/FramebufferImpl.h"
   "Internal/QueueManager.cpp"

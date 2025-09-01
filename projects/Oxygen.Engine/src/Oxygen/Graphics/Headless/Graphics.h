@@ -7,9 +7,8 @@
 #pragma once
 
 #include <memory>
-#include <string>
-#include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -19,7 +18,14 @@ namespace oxygen::graphics::headless {
 class Graphics final : public oxygen::Graphics {
 public:
   explicit Graphics(const SerializedBackendConfig& config);
+
+  OXYGEN_MAKE_NON_COPYABLE(Graphics)
+  OXYGEN_MAKE_NON_MOVABLE(Graphics)
+
   ~Graphics() override = default;
+
+  OXGN_HDLS_NDAPI auto GetDescriptorAllocator() const
+    -> const DescriptorAllocator& override;
 
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override;
@@ -42,7 +48,7 @@ public:
     -> std::shared_ptr<IShaderByteCode> override;
 
   OXGN_HDLS_NDAPI auto AcquireCommandRecorder(
-    std::shared_ptr<graphics::CommandQueue> queue,
+    observer_ptr<graphics::CommandQueue> queue,
     std::shared_ptr<graphics::CommandList> command_list,
     bool immediate_submission = true)
     -> std::unique_ptr<graphics::CommandRecorder,

@@ -76,19 +76,8 @@ namespace imgui {
 
  - Applications instantiate a backend-derived Graphics (e.g., D3D12, Vulkan),
    then call ActivateAsync() and Run() on a separate thread.
- - Backends must, during initialization, call the protected
-   SetDescriptorAllocator() exactly once after creating the native device and
-   before creating any graphics::RenderController.
  - Upper layers request renderers via CreateRenderController() and use
    OnRenderStart()/Render() to synchronize frame starts.
-
- ```cpp
- // Pseudocode
- auto gfx = std::make_shared<MyBackendGraphics>("My Device");
- co::spawn(gfx->ActivateAsync(co::TaskStarted<>{}));
- std::jthread run_thread([gfx]{ gfx->Run(); });
- // Later: create surfaces, controllers, and drive frames
- ```
 
  ### Architecture Notes
 
@@ -153,7 +142,7 @@ public:
   /*!
   @param queue_strategy The strategy for initializing command queues.
   */
-  [[nodiscard]] virtual OXYGEN_GFX_API auto CreateCommandQueues(
+  OXYGEN_GFX_API virtual auto CreateCommandQueues(
     const graphics::QueuesStrategy& queue_strategy) -> void;
 
   OXYGEN_GFX_NDAPI virtual auto GetCommandQueue(
@@ -175,8 +164,8 @@ public:
     = 0;
 
   // Bindless global accessors (device-owned)
-  OXYGEN_GFX_NDAPI auto GetDescriptorAllocator() const
-    -> const graphics::DescriptorAllocator&;
+  virtual auto GetDescriptorAllocator() const
+    -> const graphics::DescriptorAllocator& = 0;
   OXYGEN_GFX_NDAPI auto GetDescriptorAllocator()
     -> graphics::DescriptorAllocator&;
 
@@ -205,31 +194,6 @@ public:
     = 0;
 
 protected:
-  //! Install the backend descriptor allocator and initialize device bindless.
-  /*!
-   Installs the device-scoped descriptor allocator used by the bindless system
-   and completes initialization of the backend-agnostic Bindless component.
-
-   Call exactly once per device, after the native graphics device is created
-   and before creating any RenderController or performing descriptor
-   allocations. Not thread-safe; invoke during single-threaded initialization.
-
-   Preconditions
-   - allocator != nullptr
-   - No allocator has been installed yet
-
-   Postconditions
-   - GetDescriptorAllocator() and GetResourceRegistry() become valid
-
-   Error model
-   - Violations trigger debug checks in debug builds; no exceptions are thrown
-
-  @param allocator Backend-specific descriptor allocator. Ownership is
-              transferred to Graphics.
-  */
-  OXYGEN_GFX_API auto SetDescriptorAllocator(
-    std::unique_ptr<graphics::DescriptorAllocator> allocator) -> void;
-
   //! Create a command queue for the given role and allocation preference.
   /*!
    Backend hook to construct an API-specific command queue mapped from the
