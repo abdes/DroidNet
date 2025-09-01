@@ -107,8 +107,9 @@ NOLINT_TEST_F(HeadlessSubmissionTest, DeferredBasic)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder = headless->AcquireCommandRecorder(
-      queue, cmd_list, /*immediate_submission=*/false);
+    auto recorder
+      = headless->AcquireCommandRecorder(oxygen::observer_ptr { queue.get() },
+        cmd_list, /*immediate_submission=*/false);
     ASSERT_NE(recorder, nullptr);
 
     // Begin tracking nothing heavy; just record a queue signal and exit

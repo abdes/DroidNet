@@ -93,6 +93,8 @@ public:
   MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue,
     (const QueueKey&, QueueRole), (override));
   // Other methods we don't care about
+  MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (),
+    (const, override));
   MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface,
     (std::weak_ptr<Window>, std::shared_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view),

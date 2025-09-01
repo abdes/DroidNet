@@ -25,3 +25,5 @@
 #else
 #  define OXYGEN_D3D12_API
 #endif
+
+#define OXYGEN_D3D12_NDAPI [[nodiscard]] OXYGEN_D3D12_API

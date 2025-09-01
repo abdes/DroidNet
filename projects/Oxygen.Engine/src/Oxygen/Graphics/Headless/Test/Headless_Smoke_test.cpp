@@ -189,8 +189,9 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder = headless->AcquireCommandRecorder(
-      queue, cmd_list, /*immediate_submission=*/true);
+    auto recorder
+      = headless->AcquireCommandRecorder(oxygen::observer_ptr { queue.get() },
+        cmd_list, /*immediate_submission=*/true);
     ASSERT_NE(recorder, nullptr);
 
     // Track initial states for both resources: register them with the

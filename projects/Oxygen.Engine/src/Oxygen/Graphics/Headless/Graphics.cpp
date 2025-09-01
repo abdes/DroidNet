@@ -19,26 +19,56 @@
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
+//===----------------------------------------------------------------------===//
+// DescriptorAllocator Component
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+namespace hb = oxygen::graphics::headless::bindless;
+
+class DescriptorAllocatorComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(DescriptorAllocatorComponent)
+
+public:
+  explicit DescriptorAllocatorComponent()
+    : allocator_(std::make_unique<hb::DescriptorAllocator>(
+        std::make_shared<hb::AllocationStrategy>()))
+  {
+  }
+
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocatorComponent)
+  OXYGEN_DEFAULT_MOVABLE(DescriptorAllocatorComponent)
+
+  ~DescriptorAllocatorComponent() override = default;
+
+  [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+
+private:
+  std::unique_ptr<hb::DescriptorAllocator> allocator_ {};
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Graphics implementation
+//===----------------------------------------------------------------------===//
+
 namespace oxygen::graphics::headless {
 
 Graphics::Graphics(const SerializedBackendConfig& /*config*/)
   : oxygen::Graphics("HeadlessGraphics")
 {
-  // Install EngineShaders component so shader cache is stored in composition
   AddComponent<internal::EngineShaders>();
-
-  // Install Commander component to manage command recorder acquisition and
-  // deferred submission.
   AddComponent<internal::Commander>();
-
-  // Initialize global Bindless allocator at the device level
-  {
-    auto allocator = std::make_unique<bindless::DescriptorAllocator>(
-      std::make_shared<bindless::AllocationStrategy>());
-    SetDescriptorAllocator(std::move(allocator));
-  }
+  AddComponent<DescriptorAllocatorComponent>();
 
   LOG_F(INFO, "Headless Graphics instance created");
+}
+
+auto Graphics::GetDescriptorAllocator() const -> const DescriptorAllocator&
+{
+  return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const
@@ -86,7 +116,7 @@ auto Graphics::CreateCommandListImpl(QueueRole role,
   LOG_F(INFO, "Headless CreateCommandList requested: role={} name={}",
     nostd::to_string(role), command_list_name);
   const auto name = command_list_name.empty()
-    ? std::string_view("headless-cmdlist")
+    ? std::string_view("headless-cmd-list")
     : command_list_name;
   return std::make_unique<CommandList>(name, role);
 }
@@ -101,15 +131,14 @@ auto Graphics::CreateCommandRecorder(
 }
 
 auto Graphics::AcquireCommandRecorder(
-  std::shared_ptr<graphics::CommandQueue> queue,
+  const observer_ptr<graphics::CommandQueue> queue,
   std::shared_ptr<graphics::CommandList> command_list,
-  bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
+  const bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
   std::function<void(graphics::CommandRecorder*)>>
 {
   // Create backend recorder and forward to the Commander component which will
   // wrap it with the appropriate deleter behavior.
-  auto recorder
-    = CreateCommandRecorder(command_list, observer_ptr { queue.get() });
+  auto recorder = CreateCommandRecorder(command_list, queue);
   auto& cmdr = GetComponent<internal::Commander>();
   return cmdr.PrepareCommandRecorder(
     std::move(recorder), std::move(command_list), immediate_submission);
