@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -34,6 +35,7 @@ namespace graphics {
   class Buffer;
   class CommandList;
   class CommandQueue;
+  class CommandRecorder;
   struct FramebufferDesc;
   class Framebuffer;
   class IShaderByteCode;
@@ -165,6 +167,18 @@ public:
 
   OXGN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
 
+  OXGN_GFX_NDAPI virtual auto AcquireCommandRecorder(
+    observer_ptr<graphics::CommandQueue> queue,
+    std::shared_ptr<graphics::CommandList> command_list,
+    bool immediate_submission = true)
+    -> std::unique_ptr<graphics::CommandRecorder,
+      std::function<void(graphics::CommandRecorder*)>>;
+
+  // Submit any command lists that were recorded with deferred submission.
+  // This will submit them to their associated target queues and call
+  // OnSubmitted() on each command list after successful submission.
+  OXGN_GFX_NDAPI auto SubmitDeferredCommandLists() -> void;
+
   OXGN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)
     -> std::shared_ptr<graphics::CommandList>;
@@ -235,6 +249,12 @@ protected:
   [[nodiscard]] virtual auto CreateCommandListImpl(
     graphics::QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList>
+    = 0;
+
+  [[nodiscard]] virtual auto CreateCommandRecorder(
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue)
+    -> std::unique_ptr<graphics::CommandRecorder>
     = 0;
 
   [[nodiscard]] auto Nursery() const -> co::Nursery&

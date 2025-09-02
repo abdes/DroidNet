@@ -111,6 +111,8 @@ set(
   "Detail/ResourceStateTracker.cpp"
   "Framebuffer.cpp"
   "Graphics.cpp"
+  "Internal/Commander.cpp"
+  "Internal/Commander.h"
   "Internal/CommandListPool.cpp"
   "Internal/CommandListPool.h"
   "Internal/FramebufferImpl.cpp"

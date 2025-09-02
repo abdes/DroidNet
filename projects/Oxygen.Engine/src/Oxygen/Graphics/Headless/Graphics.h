@@ -9,6 +9,7 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -47,27 +48,15 @@ public:
   [[nodiscard]] auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
 
-  OXGN_HDLS_NDAPI virtual auto AcquireCommandRecorder(
-    observer_ptr<graphics::CommandQueue> queue,
-    std::shared_ptr<graphics::CommandList> command_list,
-    bool immediate_submission = true)
-    -> std::unique_ptr<graphics::CommandRecorder,
-      std::function<void(graphics::CommandRecorder*)>>;
-
-  // Submit any command lists that were recorded with deferred submission.
-  // This will submit them to their associated target queues and call
-  // OnSubmitted() on each command list after successful submission.
-  OXGN_HDLS_NDAPI auto SubmitDeferredCommandLists() -> void;
-
   [[nodiscard]] auto CreateRendererImpl(std::string_view name,
     std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
     -> std::unique_ptr<RenderController> override;
 
 protected:
-  [[nodiscard]] OXGN_HDLS_NDAPI auto CreateCommandRecorder(
+  OXGN_HDLS_NDAPI auto CreateCommandRecorder(
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue)
-    -> std::unique_ptr<graphics::CommandRecorder>;
+    -> std::unique_ptr<graphics::CommandRecorder> override;
 
   OXGN_HDLS_NDAPI auto CreateCommandListImpl(
     QueueRole role, std::string_view command_list_name)

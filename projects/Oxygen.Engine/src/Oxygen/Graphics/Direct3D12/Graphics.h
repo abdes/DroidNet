@@ -90,6 +90,11 @@ protected:
     QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList> override;
 
+  OXGN_D3D12_NDAPI auto CreateCommandRecorder(
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue)
+    -> std::unique_ptr<graphics::CommandRecorder> override;
+
 private:
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_ {};

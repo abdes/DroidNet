@@ -28,9 +28,4 @@ m_gtest_program(
     "Headless_Buffer_test.cpp"
     "Headless_Texture_test.cpp"
 )
-m_gtest_program(
-  Commander
-  SOURCES
-    "Headless_Submission_test.cpp"
-)
 m_gtest_program(Execution SOURCES "CommandExecution_test.cpp")

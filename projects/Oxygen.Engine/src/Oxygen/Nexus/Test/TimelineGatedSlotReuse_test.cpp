@@ -84,8 +84,13 @@ struct FakeCommandQueue : oxygen::graphics::CommandQueue {
   }
   auto GetCurrentValue() const -> uint64_t override { return current.load(); }
 
-  auto Submit(oxygen::graphics::CommandList&) -> void override { }
-  auto Submit(std::span<oxygen::graphics::CommandList*>) -> void override { }
+  auto Submit(std::shared_ptr<oxygen::graphics::CommandList>) -> void override
+  {
+  }
+  auto Submit(std::span<std::shared_ptr<oxygen::graphics::CommandList>>)
+    -> void override
+  {
+  }
 
   auto GetQueueRole() const -> oxygen::graphics::QueueRole override
   {

@@ -8,8 +8,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
@@ -32,6 +34,7 @@ using Share = oxygen::graphics::QueueSharingPreference;
 using Role = oxygen::graphics::QueueRole;
 
 using namespace oxygen::graphics;
+using oxygen::observer_ptr;
 using oxygen::platform::Window;
 
 // -----------------------------------------------------------------------------
@@ -61,8 +64,8 @@ public:
     return 0;
   }
   [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return 0; }
-  auto Submit(CommandList&) -> void override { }
-  auto Submit(std::span<CommandList*>) -> void override { }
+  auto Submit(std::shared_ptr<CommandList>) -> void override { }
+  auto Submit(std::span<std::shared_ptr<CommandList>>) -> void override { }
   auto Flush() const -> void override
   {
     flush_count_.fetch_add(1, std::memory_order_relaxed);
@@ -89,28 +92,21 @@ public:
   {
   }
 
+  // clang-format off
   // NOLINTBEGIN
-  MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue,
-    (const QueueKey&, QueueRole), (override));
+  MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue, (const QueueKey&, QueueRole), (override));
   // Other methods we don't care about
-  MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (),
-    (const, override));
-  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface,
-    (std::weak_ptr<Window>, std::shared_ptr<CommandQueue>), (const, override));
-  MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view),
-    (const, override));
-  MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&),
-    (const, override));
-  MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject,
-    (const TextureDesc&, const NativeObject&), (const, override));
-  MOCK_METHOD((std::shared_ptr<Buffer>), CreateBuffer, (const BufferDesc&),
-    (const, override));
-  MOCK_METHOD((std::unique_ptr<CommandList>), CreateCommandListImpl,
-    (QueueRole, std::string_view), (override));
-  MOCK_METHOD((std::unique_ptr<RenderController>), CreateRendererImpl,
-    (std::string_view, std::weak_ptr<Surface>, oxygen::frame::SlotCount),
-    (override));
+  MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
+  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, std::shared_ptr<CommandQueue>), (const, override));
+  MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view), (const, override));
+  MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
+  MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeObject&), (const, override));
+  MOCK_METHOD((std::shared_ptr<Buffer>), CreateBuffer, (const BufferDesc&), (const, override));
+  MOCK_METHOD((std::unique_ptr<CommandList>), CreateCommandListImpl, (QueueRole, std::string_view), (override));
+  MOCK_METHOD((std::unique_ptr<CommandRecorder>), CreateCommandRecorder, (std::shared_ptr<CommandList>, observer_ptr<CommandQueue>), (override));
+  MOCK_METHOD((std::unique_ptr<RenderController>), CreateRendererImpl, (std::string_view, std::weak_ptr<Surface>, oxygen::frame::SlotCount), (override));
   // NOLINTEND
+  // clang-format on
 };
 
 // -----------------------------------------------------------------------------
