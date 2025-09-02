@@ -13,6 +13,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <fmt/format.h>
 
 using oxygen::Component;
 using oxygen::Composition;
@@ -241,7 +242,22 @@ auto Composition::EnsureDependencies(const TypeId comp_id,
       || std::ranges::any_of(local_components_,
         [&](const auto& c) { return c && c->GetTypeId() == dep; });
     if (!found) {
-      throw ComponentError("Missing dependency component");
+      // Build a helpful diagnostic message with type ids and pretty names
+      std::string dep_name;
+      std::string comp_name;
+      try {
+        dep_name = oxygen::TypeRegistry::Get().GetTypeNamePretty(dep);
+      } catch (...) {
+        dep_name = "<unknown>";
+      }
+      try {
+        comp_name = oxygen::TypeRegistry::Get().GetTypeNamePretty(comp_id);
+      } catch (...) {
+        comp_name = "<unknown>";
+      }
+      throw ComponentError(fmt::format(
+        "Missing dependency component: required {} ({}) for {} ({})",
+        dep, dep_name, comp_id, comp_name));
     }
   }
 }
