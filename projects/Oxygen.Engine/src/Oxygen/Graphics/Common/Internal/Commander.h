@@ -12,11 +12,13 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Headless/api_export.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
-namespace oxygen::graphics::headless {
+namespace oxygen::graphics {
 
 class Graphics;
 
@@ -36,13 +38,13 @@ namespace internal {
     OXYGEN_DEFAULT_COPYABLE(Commander)
     OXYGEN_DEFAULT_MOVABLE(Commander)
 
-    OXGN_HDLS_NDAPI auto PrepareCommandRecorder(
+    OXGN_GFX_NDAPI auto PrepareCommandRecorder(
       std::unique_ptr<graphics::CommandRecorder> recorder,
       std::shared_ptr<graphics::CommandList> command_list,
       bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>>;
 
-    OXGN_HDLS_API auto SubmitDeferredCommandLists() -> void;
+    OXGN_GFX_API auto SubmitDeferredCommandLists() -> void;
 
   private:
     // Register a deferred reclaimer action that will call OnExecuted() on
@@ -60,7 +62,7 @@ namespace internal {
 
   protected:
     // Resolve component dependencies after construction
-    OXGN_HDLS_API auto UpdateDependencies(
+    OXGN_GFX_API auto UpdateDependencies(
       const std::function<oxygen::Component&(oxygen::TypeId)>&
         get_component) noexcept -> void override;
 
@@ -89,4 +91,4 @@ namespace internal {
   };
 
 } // namespace internal
-} // namespace oxygen::graphics::headless
+} // namespace oxygen::graphics

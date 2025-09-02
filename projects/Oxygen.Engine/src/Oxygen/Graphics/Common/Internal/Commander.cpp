@@ -4,19 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
-#include <Oxygen/Graphics/Headless/Internal/Commander.h>
 #include <algorithm>
 #include <format>
 #include <map>
 #include <ranges>
 #include <stdexcept>
 
-namespace oxygen::graphics::headless::internal {
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Internal/Commander.h>
+
+namespace oxygen::graphics::internal {
 
 auto Commander::PrepareCommandRecorder(
   std::unique_ptr<graphics::CommandRecorder> recorder,
@@ -194,4 +194,4 @@ auto Commander::RegisterDeferredOnExecute(
   });
 }
 
-} // namespace oxygen::graphics::headless::internal
+} // namespace oxygen::graphics::internal

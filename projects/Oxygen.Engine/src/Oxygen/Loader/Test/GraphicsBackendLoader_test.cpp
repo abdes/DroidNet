@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -51,6 +52,7 @@ public:
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (std::shared_ptr<oxygen::graphics::CommandList>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderController, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (const oxygen::graphics::TextureDesc&), (const, override));

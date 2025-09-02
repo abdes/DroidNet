@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
+#include <Oxygen/Graphics/Common/Internal/Commander.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -29,6 +30,7 @@
 
 using oxygen::Graphics;
 using oxygen::graphics::detail::DeferredReclaimer;
+using oxygen::graphics::internal::Commander;
 using oxygen::graphics::internal::CommandListPool;
 using oxygen::graphics::internal::QueueManager;
 
@@ -61,6 +63,7 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<ObjectMetaData>(name);
   AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
+  AddComponent<Commander>();
   AddComponent<CommandListPool>(
     [this](graphics::QueueRole role,
       std::string_view name) -> std::unique_ptr<graphics::CommandList> {
@@ -207,6 +210,25 @@ auto Graphics::CreateRenderController(const std::string_view name,
   renderers_.emplace_back(renderer_with_deleter);
 
   return renderer_with_deleter;
+}
+
+auto Graphics::AcquireCommandRecorder(
+  const observer_ptr<graphics::CommandQueue> queue,
+  std::shared_ptr<graphics::CommandList> command_list,
+  const bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
+  std::function<void(graphics::CommandRecorder*)>>
+{
+  // Create backend recorder and forward to the Commander component which will
+  // wrap it with the appropriate deleter behavior.
+  auto recorder = CreateCommandRecorder(command_list, queue);
+  auto& cmdr = GetComponent<Commander>();
+  return cmdr.PrepareCommandRecorder(
+    std::move(recorder), std::move(command_list), immediate_submission);
+}
+
+auto Graphics::SubmitDeferredCommandLists() -> void
+{
+  GetComponent<Commander>().SubmitDeferredCommandLists();
 }
 
 auto Graphics::AcquireCommandList(

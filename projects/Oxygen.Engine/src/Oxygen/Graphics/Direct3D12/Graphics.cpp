@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
@@ -176,6 +177,21 @@ auto Graphics::CreateCommandListImpl(QueueRole role,
   std::string_view command_list_name) -> std::unique_ptr<graphics::CommandList>
 {
   return std::make_unique<CommandList>(command_list_name, role, this);
+}
+
+auto Graphics::CreateCommandRecorder(
+  std::shared_ptr<graphics::CommandList> command_list,
+  observer_ptr<graphics::CommandQueue> target_queue)
+  -> std::unique_ptr<graphics::CommandRecorder>
+{
+  // FIXME: change this after RenderController disappears
+  // return std::make_unique<CommandRecorder>(
+  //   std::move(command_list), target_queue);
+  // D3D12 CommandRecorder requires a RenderController, so this method should
+  // not be used directly. Use RenderController::CreateCommandRecorder instead.
+  throw std::runtime_error(
+    "D3D12 Graphics::CreateCommandRecorder not supported. "
+    "Use RenderController::CreateCommandRecorder instead.");
 }
 
 auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t

@@ -83,8 +83,6 @@ set(
   "Commands/ResourceBarrierCommand.cpp"
   "Commands/ResourceBarrierCommand.h"
   "Graphics.cpp"
-  "Internal/Commander.cpp"
-  "Internal/Commander.h"
   "Internal/CommandExecutor.cpp"
   "Internal/CommandExecutor.h"
   "Internal/EngineShaders.cpp"

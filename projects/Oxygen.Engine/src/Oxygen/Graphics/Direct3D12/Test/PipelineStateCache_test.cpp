@@ -14,6 +14,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -60,14 +61,11 @@ public:
   // NOLINTBEGIN
   // clang-format off
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface,
-    (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue,
-    (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl,
-    (oxygen::graphics::QueueRole, std::string_view), (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl,
-    (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::frame::SlotCount), (override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (std::shared_ptr<oxygen::graphics::CommandList>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::frame::SlotCount), (override));
   MOCK_METHOD(dx::IDevice*, GetCurrentDevice, (), (const, override));
   // clang-format on
   // NOLINTEND

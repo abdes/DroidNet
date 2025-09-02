@@ -14,7 +14,7 @@
 
 namespace oxygen {
 class Graphics;
-} // namespace oxygen::graphics
+} // namespace oxygen
 
 namespace oxygen::graphics::internal {
 
@@ -22,7 +22,8 @@ class FramebufferImpl final : public Framebuffer {
   using Base = Framebuffer;
 
 public:
-  FramebufferImpl(FramebufferDesc desc, std::weak_ptr<Graphics> gfx_weak);
+  FramebufferImpl(
+    FramebufferDesc desc, std::weak_ptr<oxygen::Graphics> gfx_weak);
   ~FramebufferImpl() override;
 
   OXYGEN_MAKE_NON_COPYABLE(FramebufferImpl)

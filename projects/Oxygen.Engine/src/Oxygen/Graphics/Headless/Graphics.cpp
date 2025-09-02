@@ -14,7 +14,6 @@
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
-#include <Oxygen/Graphics/Headless/Internal/Commander.h>
 #include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
@@ -60,7 +59,6 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/)
   : oxygen::Graphics("HeadlessGraphics")
 {
   AddComponent<internal::EngineShaders>();
-  AddComponent<internal::Commander>();
   AddComponent<DescriptorAllocatorComponent>();
 
   LOG_F(INFO, "Headless Graphics instance created");
@@ -128,25 +126,6 @@ auto Graphics::CreateCommandRecorder(
 {
   return std::make_unique<CommandRecorder>(
     std::move(command_list), target_queue);
-}
-
-auto Graphics::AcquireCommandRecorder(
-  const observer_ptr<graphics::CommandQueue> queue,
-  std::shared_ptr<graphics::CommandList> command_list,
-  const bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
-  std::function<void(graphics::CommandRecorder*)>>
-{
-  // Create backend recorder and forward to the Commander component which will
-  // wrap it with the appropriate deleter behavior.
-  auto recorder = CreateCommandRecorder(command_list, queue);
-  auto& cmdr = GetComponent<internal::Commander>();
-  return cmdr.PrepareCommandRecorder(
-    std::move(recorder), std::move(command_list), immediate_submission);
-}
-
-auto Graphics::SubmitDeferredCommandLists() -> void
-{
-  GetComponent<internal::Commander>().SubmitDeferredCommandLists();
 }
 
 auto Graphics::CreateRendererImpl(std::string_view /*name*/,
