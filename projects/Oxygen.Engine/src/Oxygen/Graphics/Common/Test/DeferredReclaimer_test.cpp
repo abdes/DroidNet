@@ -87,7 +87,7 @@ protected:
  invoked for the corresponding frame slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_SharedPtrWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_SharedPtrWithRelease_CallsReleaseOnFrameCycle)
 {
   // Arrange
   auto res = std::make_shared<TestResource>("res1");
@@ -108,7 +108,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  OnBeginFrame() processes the deferred releases for that frame slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_SharedPtrWithoutRelease_CallsDestructorOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_SharedPtrWithoutRelease_CallsDestructorOnFrameCycle)
 {
   // Arrange
   std::atomic<int> destructor_count { 0 };
@@ -132,7 +132,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  processes the deferred releases for that frame slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_RawPointerWithRelease_CallsReleaseOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_RawPointerWithRelease_CallsReleaseOnFrameCycle)
 {
   // Arrange
   auto res = new TestResource("raw");
@@ -155,7 +155,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  corresponding frame slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredAction_LambdaFunction_ExecutesOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredAction_LambdaFunction_ExecutesOnFrameCycle)
 {
   // Arrange
   std::atomic<bool> ran { false };
@@ -179,7 +179,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  during shutdown scenarios.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  ProcessAllDeferredReleases_MultipleFrames_ReleasesAllFrames) // NOLINT_NEXT_LINE(readability-function-size)
+  ProcessAllDeferredReleases_MultipleFrames_ReleasesAllFrames)
 {
   // Arrange
   auto r0 = std::make_shared<TestResource>("r0");
@@ -205,7 +205,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  being shut down.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  OnRendererShutdown_WithPendingReleases_ProcessesAllDeferredReleases) // NOLINT_NEXT_LINE(readability-function-size)
+  OnRendererShutdown_WithPendingReleases_ProcessesAllDeferredReleases)
 {
   // Arrange
   auto r0 = std::make_shared<TestResource>("r0");
@@ -227,8 +227,8 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  Verifies that registering a nullptr raw pointer for deferred release does not
  cause crashes or undefined behavior when frame processing occurs.
 */
-NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_NullRawPointer_DoesNotCrash) // NOLINT_NEXT_LINE(readability-function-size)
+NOLINT_TEST_F(
+  DeferredReclaimerTest, RegisterDeferredRelease_NullRawPointer_DoesNotCrash)
 {
   // Arrange
   TestResource* nullres = nullptr;
@@ -246,7 +246,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  OnBeginFrame() is called for that slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_MultipleRegistrationsSameFrame_AllExecuted) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_MultipleRegistrationsSameFrame_AllExecuted)
 {
   // Arrange
   auto a = std::make_shared<TestResource>("a");
@@ -273,7 +273,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  predictable execution sequence.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredAction_MultipleActionsPerFrame_PreservesRegistrationOrder) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredAction_MultipleActionsPerFrame_PreservesRegistrationOrder)
 {
   // Arrange
   std::vector<int> order;
@@ -303,7 +303,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  the release for that frame slot.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_SharedPtrWithCustomDeleter_InvokesDeleterOnFrameCycle) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_SharedPtrWithCustomDeleter_InvokesDeleterOnFrameCycle)
 {
   // Arrange
   std::atomic<bool> deleter_ran { false };
@@ -332,7 +332,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  for thread safety.
 */
 NOLINT_TEST_F(DeferredReclaimerTest,
-  RegisterDeferredRelease_ConcurrentRegistrations_HandledSafely) // NOLINT_NEXT_LINE(readability-function-size)
+  RegisterDeferredRelease_ConcurrentRegistrations_HandledSafely)
 {
   // Arrange
   std::vector<std::thread> threads;
@@ -362,8 +362,8 @@ NOLINT_TEST_F(DeferredReclaimerTest,
  Verifies that passing an out-of-bounds frame slot to OnBeginFrame() triggers
  the debug assertion check, ensuring bounds validation is properly enforced.
 */
-NOLINT_TEST_F(DeferredReclaimerTest,
-  OnBeginFrame_OutOfBoundsSlot_TriggersAssertion) // NOLINT_NEXT_LINE(readability-function-size)
+NOLINT_TEST_F(
+  DeferredReclaimerTest, OnBeginFrame_OutOfBoundsSlot_TriggersAssertion)
 {
   // Arrange & Act & Assert CHECK should abort when an out-of-bounds slot is
   // provided

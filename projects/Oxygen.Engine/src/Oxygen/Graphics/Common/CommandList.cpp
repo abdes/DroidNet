@@ -56,6 +56,7 @@ void CommandList::OnSubmitted()
     throw std::runtime_error("CommandList is not in a Recorded state");
   }
   state_ = State::kSubmitted;
+  DLOG_F(3, "'{}' submitted", GetName());
 }
 
 void CommandList::OnExecuted()

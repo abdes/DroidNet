@@ -263,12 +263,6 @@ private:
   //! application layer).
   std::shared_ptr<Platform> platform_;
 
-  using CommandListUniquePtr = std::unique_ptr<graphics::CommandList>;
-  using CommandLists = std::vector<CommandListUniquePtr>;
-  //! Pool of available command lists by queue type.
-  std::unordered_map<graphics::QueueRole, CommandLists> command_list_pool_;
-  std::mutex command_list_pool_mutex_;
-
   using RendererWeakPtr = std::weak_ptr<graphics::RenderController>;
   //! Active renderers managed by this Graphics instance.
   /*!
