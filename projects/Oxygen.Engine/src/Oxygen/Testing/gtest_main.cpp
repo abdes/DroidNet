@@ -30,7 +30,7 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_verbose = false;
     loguru::g_preamble_time = false;
     loguru::g_preamble_uptime = false;
-    loguru::g_preamble_thread = false;
+    loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
 #if !defined(NDEBUG)
     loguru::g_stderr_verbosity = loguru::Verbosity_3;
