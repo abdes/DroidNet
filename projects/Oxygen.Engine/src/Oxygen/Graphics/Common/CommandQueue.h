@@ -77,8 +77,10 @@ public:
   //! \return  The last value signaled by the CPU.
   [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
 
-  virtual auto Submit(CommandList& command_list) -> void = 0;
-  virtual auto Submit(std::span<CommandList*> command_lists) -> void = 0;
+  virtual auto Submit(std::shared_ptr<CommandList> command_list) -> void = 0;
+  virtual auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
+    -> void
+    = 0;
 
   virtual OXGN_GFX_API auto Flush() const -> void;
 

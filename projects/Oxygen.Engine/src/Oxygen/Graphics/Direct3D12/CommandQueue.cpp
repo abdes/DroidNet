@@ -213,21 +213,23 @@ auto CommandQueue::GetCompletedValue() const -> uint64_t
   return fence_->GetCompletedValue();
 }
 
-void CommandQueue::Submit(graphics::CommandList& command_list)
+void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
 {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto* d3d12_command_list = static_cast<CommandList*>(&command_list);
+  const auto* d3d12_command_list
+    = static_cast<CommandList*>(command_list.get());
   ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
   command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 }
 
-void CommandQueue::Submit(const std::span<graphics::CommandList*> command_lists)
+void CommandQueue::Submit(
+  const std::span<std::shared_ptr<graphics::CommandList>> command_lists)
 {
   std::vector<ID3D12CommandList*> d3d12_lists;
   d3d12_lists.reserve(command_lists.size());
-  for (auto* cl : command_lists) {
+  for (const auto& cl : command_lists) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    const auto* d3d12_command_list = static_cast<CommandList*>(cl);
+    const auto* d3d12_command_list = static_cast<CommandList*>(cl.get());
     d3d12_lists.push_back(d3d12_command_list->GetCommandList());
   }
   if (!d3d12_lists.empty()) {

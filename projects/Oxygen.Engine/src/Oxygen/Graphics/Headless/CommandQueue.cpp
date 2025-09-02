@@ -88,16 +88,17 @@ auto CommandQueue::QueueWaitCommand(uint64_t value) const -> void
   return current_value_;
 }
 
-auto CommandQueue::Submit(graphics::CommandList& command_list) -> void
+auto CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
+  -> void
 {
   // Forward to the span overload for a single command list using a tiny
   // array so std::span has a valid array reference.
-  graphics::CommandList* arr[1] = { &command_list };
-  Submit(std::span<graphics::CommandList*> { arr });
+  std::array arr = { command_list };
+  Submit(std::span<std::shared_ptr<graphics::CommandList>> { arr });
 }
 
-auto CommandQueue::Submit(std::span<graphics::CommandList*> command_lists)
-  -> void
+auto CommandQueue::Submit(
+  std::span<std::shared_ptr<graphics::CommandList>> command_lists) -> void
 {
   // Support submission of one or more command lists. For each headless
   // command list we will steal its recorded commands and enqueue a submission
@@ -119,7 +120,7 @@ auto CommandQueue::Submit(std::span<graphics::CommandList*> command_lists)
   // submitter thread so that when Submit() returns the lists are empty.
   std::vector<std::deque<std::shared_ptr<Command>>> stolen_per_list;
   stolen_per_list.reserve(command_lists.size());
-  for (auto* base_ptr : command_lists) {
+  for (const auto& base_ptr : command_lists) {
     if (!base_ptr) {
       stolen_per_list.emplace_back();
       continue;
@@ -132,7 +133,7 @@ auto CommandQueue::Submit(std::span<graphics::CommandList*> command_lists)
       continue;
     }
 
-    auto* hdls = static_cast<CommandList*>(base_ptr);
+    auto* hdls = static_cast<CommandList*>(base_ptr.get());
     try {
       stolen_per_list.emplace_back(hdls->StealCommands());
     } catch (const std::exception& e) {

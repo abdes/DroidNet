@@ -152,7 +152,7 @@ auto RenderController::AcquireCommandRecorder(const QueueKey& queue_key,
           if (auto completed_cmd = rec->End(); completed_cmd != nullptr) {
             auto target_queue = rec->GetTargetQueue();
             DCHECK_NOTNULL_F(target_queue);
-            target_queue->Submit(*completed_cmd);
+            target_queue->Submit(completed_cmd);
             completed_cmd->OnSubmitted();
             const uint64_t timeline_value = target_queue->Signal();
             const uint32_t frame_idx = renderer->CurrentFrameIndex().get();
@@ -189,21 +189,22 @@ auto RenderController::FlushPendingCommandLists() -> void
     auto it = pending_command_lists.begin();
     while (it != pending_command_lists.end()) {
       CommandQueue* current_queue = it->second;
-      std::vector<CommandList*> batch;
+      std::vector<std::shared_ptr<CommandList>> batch;
       auto batch_start = it;
       // Collect contiguous command lists for the same queue, only if closed and
       // not submitted
       while (it != pending_command_lists.end() && it->second == current_queue) {
         if (it->first && it->first->IsClosed() && !it->first->IsSubmitted()) {
-          batch.push_back(it->first.get());
+          batch.push_back(it->first);
         }
         ++it;
       }
       if (!batch.empty()) {
-        current_queue->Submit(std::span<CommandList*> { batch });
+        current_queue->Submit(
+          std::span<std::shared_ptr<CommandList>> { batch });
         uint64_t timeline_value = current_queue->Signal();
         timeline_values[current_queue] = timeline_value;
-        for (auto* cmd_list : batch) {
+        for (auto& cmd_list : batch) {
           cmd_list->OnSubmitted();
         }
       }
