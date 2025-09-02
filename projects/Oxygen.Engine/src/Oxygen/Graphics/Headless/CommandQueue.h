@@ -45,8 +45,10 @@ public:
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override;
   [[nodiscard]] auto GetCurrentValue() const -> uint64_t override;
 
-  auto Submit(graphics::CommandList& command_list) -> void override;
-  auto Submit(std::span<graphics::CommandList*> command_lists) -> void override;
+  auto Submit(std::shared_ptr<graphics::CommandList> command_list)
+    -> void override;
+  auto Submit(std::span<std::shared_ptr<graphics::CommandList>> command_lists)
+    -> void override;
 
   // Override the base Flush to provide headless-specific flush behavior.
   auto Flush() const -> void override;

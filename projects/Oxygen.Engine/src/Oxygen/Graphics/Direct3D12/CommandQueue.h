@@ -39,9 +39,10 @@ public:
     return current_value_;
   }
 
-  OXGN_D3D12_API auto Submit(graphics::CommandList& command_list)
-    -> void override;
-  OXGN_D3D12_API auto Submit(std::span<graphics::CommandList*> command_lists)
+  OXGN_D3D12_API auto Submit(
+    std::shared_ptr<graphics::CommandList> command_list) -> void override;
+  OXGN_D3D12_API auto Submit(
+    std::span<std::shared_ptr<graphics::CommandList>> command_lists)
     -> void override;
 
   OXGN_D3D12_API auto SetName(std::string_view name) noexcept -> void override;
