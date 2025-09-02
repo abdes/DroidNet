@@ -6,7 +6,7 @@
 - [Quick contract](#quick-contract-inputs--outputs--success)
 - [Core classes you must implement](#core-classes-you-must-implement)
 - [Descriptor Allocation Strategy](#descriptor-allocation-strategy)
-- [Queue Management Strategy](#queue-management-strategy)
+- [Commander Component and Command Coordination](#commander-component-and-command-coordination)
 - [Optional / advanced](#optional--advanced)
 - [Important invariants & engine expectations](#important-invariants--engine-expectations)
 - [Practical tips and gotchas](#practical-tips-and-gotchas)
@@ -29,12 +29,14 @@ steps, important invariants, and practical tips to build a working backend.
 - Outputs: a concrete `Graphics`-derived device, backend-specific
   `CommandQueue`/`CommandList`/`CommandRecorder`, concrete
   `Buffer`/`Texture`/`Sampler` implementations, a `DescriptorAllocator` and
-  `ResourceRegistry` integration, and a working `RenderController` that can
-  record & submit GPU work.
+  `ResourceRegistry` integration, a working `Commander` component for command
+  coordination, and a working `RenderController` that can record & submit GPU
+  work with both immediate and deferred submission modes.
 - Success criteria: the backend compiles, creates a `Graphics` instance, creates
-  resources, records commands via `CommandRecorder`, submits work to
-  `CommandQueue` and presents (for surface-backed surfaces). Unit tests in
-  `Graphics/Common/Test` should pass (where backend-specific tests exist).
+  resources, records commands via `CommandRecorder` with flexible submission
+  modes, submits work to `CommandQueue` and presents (for surface-backed
+  surfaces). Unit tests in `Graphics/Common/Test` should pass (where
+  backend-specific tests exist).
 
 ## Core classes you must implement
 
@@ -48,7 +50,9 @@ Implement concrete, backend-specific subclasses for at least the following
   - Implement factory hooks: `CreateSurface()`, `CreateTexture()`,
     `CreateTextureFromNativeObject()`, `CreateBuffer()`,
     `CreateRenderController()`, `CreateCommandQueue()`,
-    `CreateCommandListImpl()`.
+    `CreateCommandListImpl()`, `CreateCommandRecorder()`.
+  - The `Commander` component is automatically added and handles command
+    recording coordination and deferred submission.
 
 - `CommandQueue` (`src/.../CommandQueue.h`)
   - Implement signaling, waiting, GPU-side signal/waits, `Submit()` overloads
@@ -60,6 +64,8 @@ Implement concrete, backend-specific subclasses for at least the following
     recording API and must translate the engine's commands (`SetPipelineState`,
     `Draw`, `Dispatch`, `SetViewport`, `BindFrameBuffer`, resource barriers,
     etc.) into native API calls. Implement `ExecuteBarriers()`.
+  - Command recorders now support flexible submission modes (immediate vs
+    deferred) managed by the `Commander` component.
 
 - `DescriptorAllocator` (`src/.../DescriptorAllocator.h`) and allocation
   strategy
@@ -170,6 +176,86 @@ base indices.
   - return an error/throw, or
   - expand a software-backed table that emulates larger index spaces.
 
+## Commander Component and Command Coordination
+
+The `Commander` component is a central addition to the graphics backend
+architecture that manages command recording coordination and submission
+strategies.
+
+### Key Features
+
+- **Automatic Integration**: The `Commander` component is automatically added to
+  the `Graphics` composition during construction. No manual setup required.
+- **Flexible Submission Modes**: Supports both immediate and deferred command
+  submission through `AcquireCommandRecorder()`.
+- **Resource Lifecycle Management**: Integrates with `DeferredReclaimer` to
+  ensure proper command list lifecycle transitions and resource cleanup.
+- **Thread-Safe Coordination**: Provides thread-safe management of pending
+  command submissions across multiple threads.
+
+### New Graphics APIs
+
+Backend implementations must provide the following new APIs:
+
+#### `AcquireCommandRecorder()`
+
+```cpp
+virtual auto AcquireCommandRecorder(
+  observer_ptr<graphics::CommandQueue> queue,
+  std::shared_ptr<graphics::CommandList> command_list,
+  bool immediate_submission = true)
+-> std::unique_ptr<graphics::CommandRecorder,
+   std::function<void(graphics::CommandRecorder*)>>;
+```
+
+Creates a command recorder with automatic submission coordination:
+
+- **Immediate mode** (`immediate_submission = true`): Commands are submitted to
+  the GPU immediately when the recorder is destroyed.
+- **Deferred mode** (`immediate_submission = false`): Commands are batched and
+  submitted later via `SubmitDeferredCommandLists()`.
+
+#### `SubmitDeferredCommandLists()`
+
+```cpp
+auto SubmitDeferredCommandLists() -> void;
+```
+
+Submits all pending deferred command lists to their respective queues. Provides
+efficient batching for scenarios where multiple command lists need coordinated
+submission.
+
+#### `CreateCommandRecorder()` (Pure Virtual)
+
+```cpp
+virtual auto CreateCommandRecorder(
+  std::shared_ptr<graphics::CommandList> command_list,
+  observer_ptr<graphics::CommandQueue> target_queue)
+-> std::unique_ptr<graphics::CommandRecorder> = 0;
+```
+
+Backend factory method that creates a native command recorder. The `Commander`
+component wraps this with appropriate lifecycle management.
+
+### Usage Patterns
+
+- Use **immediate submission** for simple command sequences that should execute
+  right away.
+- Use **deferred submission** when you need to batch multiple command lists for
+  optimized submission or when coordinating complex multi-queue operations.
+- Call `SubmitDeferredCommandLists()` at frame boundaries or other strategic
+  points to flush pending work.
+
+### Implementation Notes
+
+- The `Commander` relies on `DeferredReclaimer` for proper resource lifecycle
+  management, ensuring `OnExecuted()` callbacks are called at appropriate frame
+  boundaries.
+- Backends should focus on implementing `CreateCommandRecorder()` rather than
+  managing submission logic directly.
+- The component handles all synchronization and error handling for command
+  submission coordination.
+
 ## Optional / advanced
 
 - `IMemoryBlock` / memory allocator: implement `IMemoryBlock` and a memory
@@ -179,6 +265,9 @@ base indices.
   design docs in `design/BindlessRenderingDesign.md`.
 - PSO caching: implement backend pipeline state object caching keyed by
   `PipelineState` descriptions.
+- Custom `Commander` extensions: while the base `Commander` component is
+  automatically provided, backends can extend command coordination behavior if
+  needed for specialized submission strategies.
 
 ## Important invariants & engine expectations
 
@@ -195,6 +284,12 @@ base indices.
   on the render controller's thread). Follow the `SubmissionMode` semantics.
 - `Framebuffer` must provide native RTV/DSV lists compatible with the pipeline's
   `FramebufferInfo`.
+- The `Commander` component manages command recorder lifecycle and submission
+  coordination automatically. Backend implementations should focus on the
+  `CreateCommandRecorder()` factory method rather than manual submission logic.
+- Command recorders support both immediate and deferred submission modes.
+  Backends must implement `CreateCommandRecorder()` to return recorders that
+  work with the `Commander`'s submission coordination.
 
 ## Practical tips and gotchas
 
@@ -211,6 +306,13 @@ base indices.
 - Debugging: provide helpful debug-name support for native objects (use the name
   from `ObjectMetaData`), and validate descriptor and view compatibility early
   with asserts.
+- Command submission modes: the new `AcquireCommandRecorder()` API supports both
+  immediate and deferred submission. Use immediate mode for simple command
+  sequences and deferred mode when you need to batch multiple command lists for
+  optimized submission.
+- Commander integration: the `Commander` component automatically handles command
+  recorder lifecycle and deferred submission coordination. Don't manually manage
+  command list submission unless you have specific requirements.
 
 ## Build / integration checklist
 
@@ -220,6 +322,12 @@ base indices.
   `BackendModule.h`).
 - Backend should call `Graphics::SetDescriptorAllocator()` after creating the
   native device and before creating any controllers.
+- Implement the `CreateCommandRecorder()` pure virtual method to return
+  backend-specific command recorders that work with the `Commander` component's
+  submission coordination.
+- The `Commander` component is automatically added to the `Graphics` composition
+  and handles command recording lifecycle and deferred submission. No manual
+  setup required.
 - Register your backend in the engine loader so tests/examples can instantiate
   it using config.
 
@@ -228,12 +336,15 @@ base indices.
 - Start with small smoke tests:
   - Create a `Graphics` instance, call `CreateBuffer`/`CreateTexture`, allocate
     descriptors, and create simple SRV/UAV/RTV views.
-  - Create a `CommandRecorder`, record a trivial clear/draw, submit it to a
-    `CommandQueue`, and wait for completion.
+  - Create a `CommandRecorder` using `AcquireCommandRecorder()`, record a
+    trivial clear/draw, and verify both immediate and deferred submission modes
+    work correctly.
+  - Test `SubmitDeferredCommandLists()` functionality to ensure batched
+    submission works as expected.
   - Create a `Surface` + `RenderController` and present a cleared backbuffer.
 - Run unit tests under `Graphics/Common/Test` where applicable and add
-  backend-specific tests to validate native views, descriptor copying, and
-  barrier behavior.
+  backend-specific tests to validate native views, descriptor copying, barrier
+  behavior, and command submission modes.
 
 ## Next steps / further reading
 
