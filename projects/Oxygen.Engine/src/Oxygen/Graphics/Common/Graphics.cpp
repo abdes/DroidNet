@@ -63,13 +63,16 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<ObjectMetaData>(name);
   AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
-  AddComponent<Commander>();
+  // CommandListPool before DeferredReclaimer
   AddComponent<CommandListPool>(
     [this](graphics::QueueRole role,
       std::string_view name) -> std::unique_ptr<graphics::CommandList> {
       return this->CreateCommandListImpl(role, name);
     });
+  // DeferredReclaimer must be created before Commander because Commander
+  // depends on oxygen::graphics::detail::DeferredReclaimer.
   AddComponent<DeferredReclaimer>();
+  AddComponent<Commander>();
 }
 
 Graphics::~Graphics() = default;
