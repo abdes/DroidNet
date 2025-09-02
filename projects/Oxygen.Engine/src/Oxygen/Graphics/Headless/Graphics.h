@@ -47,7 +47,7 @@ public:
   [[nodiscard]] auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
 
-  OXGN_HDLS_NDAPI auto AcquireCommandRecorder(
+  OXGN_HDLS_NDAPI virtual auto AcquireCommandRecorder(
     observer_ptr<graphics::CommandQueue> queue,
     std::shared_ptr<graphics::CommandList> command_list,
     bool immediate_submission = true)
