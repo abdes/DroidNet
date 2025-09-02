@@ -58,11 +58,7 @@ auto Composition::PooledEntry::GetComponent() const -> Component*
 
 // --- Composition ---
 
-Composition::~Composition() noexcept
-{
-  LOG_SCOPE_FUNCTION(3);
-  DestroyComponents();
-}
+Composition::~Composition() noexcept { DestroyComponents(); }
 
 auto Composition::HasComponents() const noexcept -> bool
 {
@@ -144,10 +140,14 @@ auto Composition::DestroyComponents() noexcept -> void
         [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
       DCHECK_NE_F(local_it, local_components_.end());
       if (local_it->use_count() == 1) {
-        DLOG_F(1, "Destroying local component(t={}/{})",
-          (*local_it)->GetTypeId(), (*local_it)->GetTypeNamePretty());
+        LOG_SCOPE_F(
+          INFO, fmt::format("{}", (*local_it)->GetTypeNamePretty()).c_str());
+        DLOG_F(2, "type id: {}", (*local_it)->GetTypeId());
+        local_components_.erase(local_it);
+      } else {
+        // No log scope if use_count > 1
+        local_components_.erase(local_it);
       }
-      local_components_.erase(local_it);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Exception while destroying component (type_id={}): {}",
         type_id, ex.what());
