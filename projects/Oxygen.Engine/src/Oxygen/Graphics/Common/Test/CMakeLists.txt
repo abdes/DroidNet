@@ -68,4 +68,5 @@ m_gtest_program(
 m_gtest_program(ResourceRegistry SOURCES "ResourceRegistry_test.cpp")
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
+m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
 m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")

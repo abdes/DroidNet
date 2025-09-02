@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -28,6 +29,7 @@
 
 using oxygen::Graphics;
 using oxygen::graphics::detail::DeferredReclaimer;
+using oxygen::graphics::internal::CommandListPool;
 using oxygen::graphics::internal::QueueManager;
 
 namespace {
@@ -59,6 +61,11 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<ObjectMetaData>(name);
   AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
+  AddComponent<CommandListPool>(
+    [this](graphics::QueueRole role,
+      std::string_view name) -> std::unique_ptr<graphics::CommandList> {
+      return this->CreateCommandListImpl(role, name);
+    });
   AddComponent<DeferredReclaimer>();
 }
 
@@ -92,14 +99,16 @@ auto Graphics::Stop() -> void
   }
   renderers_.clear();
 
+  // Process All deferred releases
+  auto& reclaimer = GetComponent<DeferredReclaimer>();
+  reclaimer.ProcessAllDeferredReleases();
+
+  // Clear the CommandList pool
+  auto& command_list_pool = GetComponent<CommandListPool>();
+  command_list_pool.Clear();
+
   if (nursery_ != nullptr) {
     nursery_->Cancel();
-  }
-
-  // Clear command list pool
-  {
-    std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-    command_list_pool_.clear();
   }
 
   DLOG_F(INFO, "Graphics Live Object stopped");
@@ -204,40 +213,8 @@ auto Graphics::AcquireCommandList(
   graphics::QueueRole queue_role, const std::string_view command_list_name)
   -> std::shared_ptr<graphics::CommandList>
 {
-  // Acquire or create a command list
-  std::unique_ptr<graphics::CommandList> cmd_list;
-  {
-    std::lock_guard lock(command_list_pool_mutex_);
-
-    if (auto& pool = command_list_pool_[queue_role]; pool.empty()) {
-      // Create a new command list if pool is empty
-      cmd_list = CreateCommandListImpl(queue_role, command_list_name);
-    } else {
-      // Take one from the pool
-      cmd_list = std::move(pool.back());
-      pool.pop_back();
-      cmd_list->SetName(command_list_name);
-    }
-  }
-
-  // Create a shared_ptr with custom deleter that returns the command list to
-  // the pool
-  return { cmd_list.get(),
-    [this, queue_role, cmd_list_raw = cmd_list.release()](
-      graphics::CommandList*) mutable {
-      cmd_list_raw->SetName("Recycled Command List");
-      // Create a new unique_ptr that owns the command list
-      auto recycled_cmd_list
-        = std::unique_ptr<graphics::CommandList>(cmd_list_raw);
-
-      // Return to pool
-      std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-      command_list_pool_[queue_role].push_back(std::move(recycled_cmd_list));
-    } };
-
-  // The Original shared_ptr will be destroyed, but the command list is now
-  // managed by the custom deleter and will be returned to the pool when the
-  // returned shared_ptr is destroyed
+  auto& command_list_pool = GetComponent<CommandListPool>();
+  return command_list_pool.AcquireCommandList(queue_role, command_list_name);
 }
 
 auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&

@@ -9,6 +9,16 @@
 
 using oxygen::graphics::detail::DeferredReclaimer;
 
+DeferredReclaimer::~DeferredReclaimer()
+{
+  if (!std::all_of(deferred_releases_.begin(), deferred_releases_.end(),
+        [](const auto& vec) { return vec.empty(); })) {
+    LOG_F(
+      WARNING, "DeferredReclaimer destroyed with pending deferred releases");
+    ProcessAllDeferredReleases();
+  }
+}
+
 auto DeferredReclaimer::OnBeginFrame(const frame::Slot frame_slot) -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
