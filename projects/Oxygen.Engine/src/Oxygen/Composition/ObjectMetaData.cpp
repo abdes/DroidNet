@@ -12,7 +12,7 @@ using oxygen::ObjectMetaData;
 ObjectMetaData::ObjectMetaData(const std::string_view name)
   : name_(name)
 {
-  DLOG_F(2, "object '{}' created", name);
+  DLOG_F(2, "object name: '{}'", name_);
 }
 
-ObjectMetaData::~ObjectMetaData() { DLOG_F(2, "object '{}' destroyed", name_); }
+ObjectMetaData::~ObjectMetaData() { DLOG_F(2, "object name: '{}'", name_); }
