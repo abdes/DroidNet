@@ -6,8 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Engine/Modules/ModuleManager.h>
+#include <Oxygen/Engine/Test/ModuleManager_helpers.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -16,6 +18,7 @@ namespace {
 
 using namespace oxygen::core;
 using namespace oxygen::engine;
+using namespace oxygen::engine::test;
 using oxygen::co::testing::TestEventLoop;
 using namespace oxygen::co;
 
@@ -24,7 +27,7 @@ using namespace oxygen::co;
 // module lists from ModuleManager::GetModules() without adding special APIs
 // to ModuleManager.
 // ReSharper disable once CppRedundantQualifier
-class ModuleManagerTest : public ::testing::Test {
+class ModuleManagerBasicTest : public ::testing::Test {
 protected:
   ModuleManager mgr_ { nullptr };
 
@@ -47,141 +50,7 @@ protected:
   }
 };
 
-class DummyModule : public EngineModule {
-public:
-  DummyModule(std::string_view name, ModulePriority p, ModulePhaseMask mask)
-    : name_(std::string { name })
-    , priority_(p)
-    , mask_(mask)
-  {
-  }
-
-  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-  {
-    return name_;
-  }
-  [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
-  {
-    return priority_;
-  }
-  [[nodiscard]] auto GetSupportedPhases() const noexcept
-    -> ModulePhaseMask override
-  {
-    return mask_;
-  }
-
-private:
-  std::string name_;
-  ModulePriority priority_;
-  ModulePhaseMask mask_;
-};
-
-// Simple dummy synchronous module used for ordered phases
-class SyncModule : public EngineModule {
-public:
-  SyncModule(std::string name, ModulePriority p, ModulePhaseMask mask)
-    : name_(std::move(name))
-    , priority_(p)
-    , mask_(mask)
-  {
-  }
-  auto GetName() const noexcept -> std::string_view override { return name_; }
-  auto GetPriority() const noexcept -> ModulePriority override
-  {
-    return priority_;
-  }
-  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
-  {
-    return mask_;
-  }
-
-  auto OnFrameStart(FrameContext&) -> void override
-  {
-    calls.push_back("OnFrameStart");
-  }
-  auto OnFrameEnd(FrameContext&) -> void override
-  {
-    calls.push_back("OnFrameEnd");
-  }
-
-  std::vector<std::string> calls;
-
-private:
-  std::string name_;
-  ModulePriority priority_;
-  ModulePhaseMask mask_;
-};
-
-// Async module that records coroutine handlers executed
-class AsyncModule : public EngineModule {
-public:
-  AsyncModule(std::string name, ModulePriority p, ModulePhaseMask mask)
-    : name_(std::move(name))
-    , priority_(p)
-    , mask_(mask)
-  {
-  }
-  auto GetName() const noexcept -> std::string_view override { return name_; }
-  auto GetPriority() const noexcept -> ModulePriority override
-  {
-    return priority_;
-  }
-  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
-  {
-    return mask_;
-  }
-
-  auto OnInput(FrameContext&) -> Co<> override
-  {
-    calls.push_back("OnInput-start");
-    // Await a zero-duration sleep on the provided test loop so the handler
-    // actually suspends and resumes on the event loop.
-    co_await _dummy_loop->Sleep(milliseconds(0));
-    calls.push_back("OnInput-end");
-    co_return;
-  }
-
-  // We set this externally for the test so the module can await on it.
-  TestEventLoop* _dummy_loop = nullptr;
-  std::vector<std::string> calls;
-
-private:
-  std::string name_;
-  ModulePriority priority_;
-  ModulePhaseMask mask_;
-};
-
-// Initialization test module must be a non-local type so coroutine member
-// functions can be properly instantiated by the compiler. We allow an
-// external atomic<int>* to be supplied so tests can observe lifecycle state
-// without keeping a pointer to the owned module instance.
-struct InitModule : EngineModule {
-  InitModule(std::atomic<int>& external)
-    : external_state(&external)
-  {
-  }
-
-  std::atomic<int>* external_state { nullptr };
-
-  auto GetName() const noexcept -> std::string_view override { return "init"; }
-  auto GetPriority() const noexcept -> ModulePriority override
-  {
-    return ModulePriority { 100 };
-  }
-  auto GetSupportedPhases() const noexcept -> ModulePhaseMask override
-  {
-    return MakeModuleMask<PhaseId::kInput>();
-  }
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> /*engine*/) noexcept
-    -> bool override
-  {
-    *external_state = 1;
-    return true;
-  }
-  auto OnShutdown() noexcept -> void override { *external_state = 2; }
-};
-
-TEST_F(ModuleManagerTest, RegisterAndQuery)
+TEST_F(ModuleManagerBasicTest, RegisterMultipleModules_CountAndQueryWork)
 {
   // Arrange
   mgr_.RegisterModule(std::make_unique<DummyModule>(
@@ -198,9 +67,9 @@ TEST_F(ModuleManagerTest, RegisterAndQuery)
   EXPECT_GE(list.size(), 2u);
 }
 
-//! TestCase_RegisterAndOrder: verifies modules register and are sorted by
-//! priority
-TEST_F(ModuleManagerTest, TestCase_RegisterAndOrder)
+//! Verify modules are automatically sorted by priority order during
+//! registration
+TEST_F(ModuleManagerBasicTest, RegisterModulesOutOfOrder_AutoSortsByPriority)
 {
   // Arrange
   mgr_.RegisterModule(std::make_unique<SyncModule>(
@@ -217,9 +86,9 @@ TEST_F(ModuleManagerTest, TestCase_RegisterAndOrder)
   EXPECT_EQ(list[1]->GetPriority().get(), 200u);
 }
 
-//! TestCase_InitializeShutdownLifecycle: ensures Initialize/Shutdown are
-//! awaited
-TEST_F(ModuleManagerTest, TestCase_InitializeShutdownLifecycle)
+//! Verify module lifecycle callbacks are invoked during registration and
+//! unregistration
+TEST_F(ModuleManagerBasicTest, ModuleLifecycle_OnAttachedAndOnShutdownCalled)
 {
   // Arrange
   // Create an external atomic to observe lifecycle state. Construct the
@@ -244,12 +113,13 @@ TEST_F(ModuleManagerTest, TestCase_InitializeShutdownLifecycle)
   EXPECT_FALSE(mgr_.GetModule("init").has_value());
 }
 
-//! TestCase_BarrieredConcurrency_ExecutesAll: ensures barriered phases gather
-//! tasks
-TEST_F(ModuleManagerTest, TestCase_BarrieredConcurrency_ExecutesAll)
+//! Verify barriered async phase execution gathers all module tasks and awaits
+//! completion
+TEST_F(ModuleManagerBasicTest, AsyncPhaseExecution_BarrieredConcurrency)
 {
   // Arrange
   TestEventLoop loop;
+  FrameContext ctx; // Need real FrameContext for error handling
 
   auto am = std::make_unique<AsyncModule>(
     "async", ModulePriority { 100 }, MakeModuleMask<PhaseId::kInput>());
@@ -259,8 +129,7 @@ TEST_F(ModuleManagerTest, TestCase_BarrieredConcurrency_ExecutesAll)
 
   // Act: run ExecutePhase for Input which is BarrieredConcurrency
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(
-      PhaseId::kInput, *reinterpret_cast<FrameContext*>(nullptr));
+    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx);
     co_return;
   });
 
@@ -270,9 +139,9 @@ TEST_F(ModuleManagerTest, TestCase_BarrieredConcurrency_ExecutesAll)
   EXPECT_EQ(am_ptr->calls.back(), "OnInput-end");
 }
 
-//! TestCase_UnregisterModule: ensures UnregisterModule removes module from
-//! manager and phase lists
-TEST_F(ModuleManagerTest, TestCase_UnregisterModule)
+//! Verify unregistering modules removes them from manager and rebuilds phase
+//! cache
+TEST_F(ModuleManagerBasicTest, UnregisterModule_RemovesFromManagerAndPhaseCache)
 {
   // Arrange
   mgr_.RegisterModule(std::make_unique<DummyModule>(
@@ -294,8 +163,8 @@ TEST_F(ModuleManagerTest, TestCase_UnregisterModule)
   EXPECT_EQ(after.size(), before.size() - 1);
 }
 
-//! TestCase_PriorityTieBreak: equal priorities preserve registration order
-TEST_F(ModuleManagerTest, TestCase_PriorityTieBreak)
+//! Verify modules with equal priority maintain registration order (stable sort)
+TEST_F(ModuleManagerBasicTest, EqualPriorities_PreserveRegistrationOrder)
 {
   // Arrange
   mgr_.RegisterModule(std::make_unique<SyncModule>(
@@ -312,11 +181,11 @@ TEST_F(ModuleManagerTest, TestCase_PriorityTieBreak)
   EXPECT_EQ(list[1]->GetName(), std::string_view("second"));
 }
 
-//! TestCase_OrderedPhaseExecution: ordered phases run synchronous handlers in
-//! priority order
-TEST_F(ModuleManagerTest, TestCase_OrderedPhaseExecution)
+//! Verify ordered sync phases execute modules sequentially in priority order
+TEST_F(ModuleManagerBasicTest, SyncPhaseExecution_OrderedByPriority)
 {
   // Arrange
+  FrameContext ctx; // Need real FrameContext for error handling
   auto m1 = std::make_unique<SyncModule>(
     "high", ModulePriority { 10 }, MakeModuleMask<PhaseId::kFrameStart>());
   auto m2 = std::make_unique<SyncModule>(
@@ -331,8 +200,7 @@ TEST_F(ModuleManagerTest, TestCase_OrderedPhaseExecution)
   // synchronous handlers were invoked.
   TestEventLoop loop;
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(
-      PhaseId::kFrameStart, *reinterpret_cast<FrameContext*>(nullptr));
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx);
     co_return;
   });
 
@@ -344,11 +212,13 @@ TEST_F(ModuleManagerTest, TestCase_OrderedPhaseExecution)
   EXPECT_EQ(p2->calls.front(), "OnFrameStart");
 }
 
-//! TestCase_MultipleAsyncBarriered: multiple async modules run and complete
-TEST_F(ModuleManagerTest, TestCase_MultipleAsyncBarriered)
+//! Verify multiple async modules run concurrently and all complete in barriered
+//! phase
+TEST_F(ModuleManagerBasicTest, MultipleAsyncModules_ConcurrentExecution)
 {
   // Arrange
   TestEventLoop loop;
+  FrameContext ctx; // Need real FrameContext for error handling
 
   auto a1 = std::make_unique<AsyncModule>(
     "a1", ModulePriority { 100 }, MakeModuleMask<PhaseId::kInput>());
@@ -363,8 +233,7 @@ TEST_F(ModuleManagerTest, TestCase_MultipleAsyncBarriered)
 
   // Act: run ExecutePhase on Input which should await both coroutine handlers
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(
-      PhaseId::kInput, *reinterpret_cast<FrameContext*>(nullptr));
+    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx);
     co_return;
   });
 
@@ -377,9 +246,8 @@ TEST_F(ModuleManagerTest, TestCase_MultipleAsyncBarriered)
   EXPECT_EQ(p2->calls.back(), "OnInput-end");
 }
 
-//! TestCase_GetModuleOptional: GetModule returns optional and reflects
-//! unregistering
-TEST_F(ModuleManagerTest, TestCase_GetModuleOptional)
+//! Verify GetModule returns optional that reflects module registration state
+TEST_F(ModuleManagerBasicTest, GetModuleOptional_ReflectsRegistrationState)
 {
   // Arrange
   mgr_.RegisterModule(std::make_unique<DummyModule>(

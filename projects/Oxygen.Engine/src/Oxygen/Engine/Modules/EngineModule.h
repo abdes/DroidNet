@@ -11,7 +11,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
@@ -20,7 +22,6 @@ class AsyncEngine;
 
 namespace oxygen::engine {
 
-class FrameContext;
 struct FrameSnapshot;
 
 // Strong type for module execution priority (lower values = higher priority)
@@ -40,7 +41,7 @@ consteval auto MakeModuleMask() -> ModulePhaseMask
 // Module-facing interface. Module authors implement this interface and
 // override only the phase handlers they need. Default implementations are
 // no-ops. Lifecycle methods are present so modules can perform init/shutdown.
-class EngineModule {
+class EngineModule : public Object {
 public:
   EngineModule() = default;
   virtual ~EngineModule() = default;
@@ -54,6 +55,10 @@ public:
   [[nodiscard]] virtual auto GetSupportedPhases() const noexcept
     -> ModulePhaseMask
     = 0;
+  [[nodiscard]] virtual auto IsCritical() const noexcept -> bool
+  {
+    return false;
+  }
 
   // Lifecycle management
 
@@ -134,6 +139,24 @@ public:
   virtual auto OnDetachedService(FrameContext& /*context*/) -> co::Co<>
   {
     co_return;
+  }
+
+protected:
+  //! Report an error with this module's name automatically set as the source
+  //! key
+  /*!
+   This helper ensures that modules always report errors with proper
+   attribution. All modules should use this method instead of calling
+   FrameContext::ReportError directly.
+
+   @param context The frame context to report the error to
+   @param message The error message to report
+   */
+  auto ReportError(FrameContext& context, std::string_view message) const
+    -> void
+  {
+    context.ReportError(
+      GetTypeId(), std::string { message }, std::string { GetName() });
   }
 };
 
