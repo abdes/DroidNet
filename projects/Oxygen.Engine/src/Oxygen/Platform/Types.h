@@ -16,20 +16,20 @@ using PlatformPtr = std::shared_ptr<Platform>;
 
 namespace platform {
 
-    class Display;
-    class Window;
-    class InputEvent;
-    class KeyEvent;
-    class MouseButtonEvent;
-    class MouseWheelEvent;
-    class MouseMotionEvent;
-    class InputSlot;
-    class InputSlots;
+  class Display;
+  class Window;
+  class InputEvent;
+  class KeyEvent;
+  class MouseButtonEvent;
+  class MouseWheelEvent;
+  class MouseMotionEvent;
+  class InputSlot;
+  class InputSlots;
 
-    using WindowPtr = std::weak_ptr<Window>;
+  using WindowPtr = std::weak_ptr<Window>;
 
-    using WindowIdType = uint32_t;
-    constexpr WindowIdType kInvalidWindowId = 0;
+  using WindowIdType = uint32_t;
+  constexpr WindowIdType kInvalidWindowId = 0;
 
 } // namespace platform
 

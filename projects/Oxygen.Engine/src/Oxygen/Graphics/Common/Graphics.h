@@ -49,6 +49,7 @@ namespace graphics {
 
   namespace detail {
     class RenderThread;
+    class DeferredReclaimer; // TODO: this needs to become public
   } // namespace detail
 } // namespace graphics
 
@@ -122,10 +123,7 @@ public:
   OXGN_GFX_NDAPI auto IsRunning() const -> bool override;
 
   OXGN_GFX_API auto Stop() -> void override;
-
-  auto OnRenderStart() { return render_.Park(); }
-
-  auto Render() -> void { render_.UnParkAll(); }
+  OXGN_GFX_API auto Shutdown() -> void;
 
   //=== Engine frame loop interface ===---------------------------------------//
 
@@ -140,14 +138,9 @@ public:
 
   //=== Global & pooled objects ===-----------------------------------------//
 
-  [[nodiscard]] virtual OXGN_GFX_API auto CreateRenderController(
-    std::string_view name, std::weak_ptr<graphics::Surface> surface,
-    frame::SlotCount frames_in_flight)
-    -> std::shared_ptr<graphics::RenderController>;
-
   [[nodiscard]] virtual OXGN_GFX_API auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
-    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<graphics::Surface>
     = 0;
 
@@ -160,16 +153,15 @@ public:
 
   OXGN_GFX_NDAPI virtual auto GetCommandQueue(
     const graphics::QueueKey& key) const
-    -> std::shared_ptr<graphics::CommandQueue>;
+    -> observer_ptr<graphics::CommandQueue>;
 
   OXGN_GFX_NDAPI virtual auto GetCommandQueue(graphics::QueueRole role) const
-    -> std::shared_ptr<graphics::CommandQueue>;
+    -> observer_ptr<graphics::CommandQueue>;
 
   OXGN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
 
   OXGN_GFX_NDAPI virtual auto AcquireCommandRecorder(
-    observer_ptr<graphics::CommandQueue> queue,
-    std::shared_ptr<graphics::CommandList> command_list,
+    const graphics::QueueKey& queue_key, std::string_view command_list_name,
     bool immediate_submission = true)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>>;
@@ -197,6 +189,9 @@ public:
   OXGN_GFX_NDAPI auto GetResourceRegistry() const
     -> const graphics::ResourceRegistry&;
   OXGN_GFX_NDAPI auto GetResourceRegistry() -> graphics::ResourceRegistry&;
+
+  OXGN_GFX_NDAPI auto GetDeferredReclaimer()
+    -> graphics::detail::DeferredReclaimer&;
 
   //=== Rendering Resources factories ===-----------------------------------//
 
@@ -263,42 +258,13 @@ protected:
     return *nursery_;
   }
 
-  //! Create the backend renderer/controller for the given surface.
-  /*!
-   Constructs a backend-specific RenderController bound to the provided surface
-   and configured for the requested frames-in-flight.
-
-  @param name Debug name for the renderer.
-  @param surface The target surface (typically backed by a platform window).
-  @param frames_in_flight Number of frame slots to pipeline.
-  @return Newly created renderer/controller instance.
-  */
-  [[nodiscard]] virtual auto CreateRendererImpl(std::string_view name,
-    std::weak_ptr<graphics::Surface> surface, frame::SlotCount frames_in_flight)
-    -> std::unique_ptr<graphics::RenderController>
-    = 0;
-
 private:
   //! The platform abstraction layer. Provided by the upper layers (e.g., the
   //! application layer).
   std::shared_ptr<Platform> platform_;
 
-  using RendererWeakPtr = std::weak_ptr<graphics::RenderController>;
-  //! Active renderers managed by this Graphics instance.
-  /*!
-   We consider that the RenderingController is created and owned by the upper
-   layers (e.g., the application layer). Its lifetime is tied to the lifetime of
-   the application and the associated rendering context. At the graphics level,
-   we only care about the renderers while they are still alive. When they are
-   not, we just forget about them.
-  */
-  std::vector<RendererWeakPtr> renderers_;
-
   //! The nursery for running graphics related coroutines.
   co::Nursery* nursery_ { nullptr };
-  //! A synchronization parking lot for rendering controllers to wait for the
-  //! start of the next frame rendering cycle.
-  co::ParkingLot render_ {};
 };
 
 } // namespace oxygen

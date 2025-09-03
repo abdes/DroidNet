@@ -95,7 +95,7 @@ auto QueueManager::CreateQueues(const QueuesStrategy& queue_strategy,
  otherwise an empty `shared_ptr`.
 */
 auto QueueManager::GetQueueByName(const QueueKey& key) const
-  -> std::shared_ptr<graphics::CommandQueue>
+  -> observer_ptr<graphics::CommandQueue>
 {
   std::lock_guard lk(queue_cache_mutex_);
   if (key.get().empty()) {
@@ -104,7 +104,7 @@ auto QueueManager::GetQueueByName(const QueueKey& key) const
   }
   const auto it = queues_by_key_.find(key);
   if (it != queues_by_key_.end()) {
-    return it->second.second;
+    return observer_ptr { it->second.second.get() };
   }
   return {};
 }
@@ -124,7 +124,7 @@ auto QueueManager::GetQueueByName(const QueueKey& key) const
  @return A `shared_ptr` to a suitable `CommandQueue`, or empty if none match.
 */
 auto QueueManager::GetQueueByRole(QueueRole role) const
-  -> std::shared_ptr<graphics::CommandQueue>
+  -> observer_ptr<graphics::CommandQueue>
 {
   std::lock_guard lk(queue_cache_mutex_);
   DCHECK_LT_F(role, QueueRole::kMax);
@@ -135,7 +135,7 @@ auto QueueManager::GetQueueByRole(QueueRole role) const
   }
   // Scan all created queues. Prefer dedicated over all-in-one. Do NOT return
   // queues that were marked kNamed unless requested by key.
-  std::shared_ptr<graphics::CommandQueue> allinone_candidate;
+  observer_ptr<graphics::CommandQueue> allinone_candidate;
   for (const auto& kv : queues_by_key_) {
     const auto& spec = kv.second.first;
     const auto& queue = kv.second.second;
@@ -146,11 +146,11 @@ auto QueueManager::GetQueueByRole(QueueRole role) const
       continue;
     }
     if (spec.allocation_preference == QueueAllocationPreference::kDedicated) {
-      return queue; // dedicated preferred
+      return observer_ptr { queue.get() }; // dedicated preferred
     }
     // remember first all-in-one candidate
     if (!allinone_candidate) {
-      allinone_candidate = queue;
+      allinone_candidate = observer_ptr { queue.get() };
     }
   }
   return allinone_candidate;

@@ -11,11 +11,13 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -112,6 +114,8 @@ private:
 // The Graphics class methods
 //===----------------------------------------------------------------------===//
 
+using oxygen::graphics::ComputePipelineDesc;
+using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::d3d12::Graphics;
 
 auto Graphics::GetFactory() const -> dx::IFactory*
@@ -154,23 +158,22 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   if (jsonConfig.contains("enable_debug")) {
     desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
   }
+  if (jsonConfig.contains("enable_vsync")) {
+    enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
+  }
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>();
   AddComponent<DescriptorAllocatorComponent>();
+  // TODO: ASYNCENGINE MIGRATION - Move PipelineStateCache from RenderController
+  // to Graphics This enables direct pipeline state management without requiring
+  // RenderController
+  AddComponent<detail::PipelineStateCache>(this);
 }
 
 auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
   -> std::shared_ptr<graphics::CommandQueue>
 {
   return std::make_shared<CommandQueue>(queue_key.get(), role, this);
-}
-
-auto Graphics::CreateRendererImpl(const std::string_view name,
-  std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
-  -> std::unique_ptr<graphics::RenderController>
-{
-  return std::make_unique<RenderController>(
-    name, weak_from_this(), std::move(surface), frames_in_flight);
 }
 
 auto Graphics::CreateCommandListImpl(QueueRole role,
@@ -184,14 +187,12 @@ auto Graphics::CreateCommandRecorder(
   observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
-  // FIXME: change this after RenderController disappears
-  // return std::make_unique<CommandRecorder>(
-  //   std::move(command_list), target_queue);
-  // D3D12 CommandRecorder requires a RenderController, so this method should
-  // not be used directly. Use RenderController::CreateCommandRecorder instead.
-  throw std::runtime_error(
-    "D3D12 Graphics::CreateCommandRecorder not supported. "
-    "Use RenderController::CreateCommandRecorder instead.");
+  // TODO: ASYNC_ENGINE_MIGRATION - Implement direct CommandRecorder creation
+  // This replaces the previous RenderController dependency
+  auto this_shared = shared_from_this();
+  auto d3d12_graphics = std::static_pointer_cast<Graphics>(this_shared);
+  return std::make_unique<CommandRecorder>(
+    d3d12_graphics, std::move(command_list), target_queue);
 }
 
 auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
@@ -224,7 +225,7 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
 // }
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
-  const std::shared_ptr<graphics::CommandQueue> command_queue) const
+  const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::shared_ptr<Surface>
 {
   DCHECK_F(!window_weak.expired());
@@ -236,7 +237,7 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   const auto surface = std::make_shared<detail::WindowSurface>(
-    window_weak, queue->GetCommandQueue());
+    window_weak, queue->GetCommandQueue(), this);
   CHECK_NOTNULL_F(surface, "Failed to create surface");
   return std::static_pointer_cast<Surface>(surface);
 }
@@ -263,4 +264,25 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
   -> std::shared_ptr<graphics::Buffer>
 {
   return std::make_shared<Buffer>(desc, this);
+}
+
+// TODO: ASYNCENGINE MIGRATION - Pipeline state methods moved from
+// RenderController These enable direct pipeline management without requiring
+// RenderController
+auto Graphics::GetOrCreateGraphicsPipeline(
+  oxygen::graphics::GraphicsPipelineDesc desc, const size_t hash)
+  -> detail::PipelineStateCache::Entry
+{
+  auto& cache = GetComponent<detail::PipelineStateCache>();
+  return cache.GetOrCreatePipeline<oxygen::graphics::GraphicsPipelineDesc>(
+    std::move(desc), hash);
+}
+
+auto Graphics::GetOrCreateComputePipeline(
+  oxygen::graphics::ComputePipelineDesc desc, const size_t hash)
+  -> detail::PipelineStateCache::Entry
+{
+  auto& cache = GetComponent<detail::PipelineStateCache>();
+  return cache.GetOrCreatePipeline<oxygen::graphics::ComputePipelineDesc>(
+    std::move(desc), hash);
 }

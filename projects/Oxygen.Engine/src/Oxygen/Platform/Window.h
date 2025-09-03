@@ -99,53 +99,49 @@ class Window : public Composition {
   class ManagerInterfaceImpl; //!< Component, window management functionality.
 
 public:
-  OXYGEN_PLATFORM_API explicit Window(const window::Properties& props);
+  OXGN_PLAT_API explicit Window(const window::Properties& props);
 
-  OXYGEN_PLATFORM_API ~Window() override;
+  OXGN_PLAT_API ~Window() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Window)
   OXYGEN_MAKE_NON_MOVABLE(Window)
 
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Id() const -> WindowIdType;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Native() const
-    -> window::NativeHandles;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Valid() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Size() const -> window::ExtentT;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto FrameBufferSize() const
-    -> window::ExtentT;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto FullScreen() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Maximized() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Minimized() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Resizable() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto BorderLess() const -> bool;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Position() const -> window::PositionT;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto Title() const -> std::string;
+  OXGN_PLAT_NDAPI auto Id() const -> WindowIdType;
+  OXGN_PLAT_NDAPI auto Native() const -> window::NativeHandles;
+  OXGN_PLAT_NDAPI auto Valid() const -> bool;
+  OXGN_PLAT_NDAPI auto Size() const -> window::ExtentT;
+  OXGN_PLAT_NDAPI auto FrameBufferSize() const -> window::ExtentT;
+  OXGN_PLAT_NDAPI auto FullScreen() const -> bool;
+  OXGN_PLAT_NDAPI auto Maximized() const -> bool;
+  OXGN_PLAT_NDAPI auto Minimized() const -> bool;
+  OXGN_PLAT_NDAPI auto Resizable() const -> bool;
+  OXGN_PLAT_NDAPI auto BorderLess() const -> bool;
+  OXGN_PLAT_NDAPI auto Position() const -> window::PositionT;
+  OXGN_PLAT_NDAPI auto Title() const -> std::string;
 
-  OXYGEN_PLATFORM_API auto Show() const -> void;
-  OXYGEN_PLATFORM_API auto Hide() const -> void;
-  OXYGEN_PLATFORM_API auto EnterFullScreen() const -> void;
-  OXYGEN_PLATFORM_API auto ExitFullScreen() const -> void;
-  OXYGEN_PLATFORM_API auto Minimize() const -> void;
-  OXYGEN_PLATFORM_API auto Maximize() const -> void;
-  OXYGEN_PLATFORM_API auto Restore() const -> void;
-  OXYGEN_PLATFORM_API auto SetMinimumSize(const window::ExtentT& extent) const
+  OXGN_PLAT_API auto Show() const -> void;
+  OXGN_PLAT_API auto Hide() const -> void;
+  OXGN_PLAT_API auto EnterFullScreen() const -> void;
+  OXGN_PLAT_API auto ExitFullScreen() const -> void;
+  OXGN_PLAT_API auto Minimize() const -> void;
+  OXGN_PLAT_API auto Maximize() const -> void;
+  OXGN_PLAT_API auto Restore() const -> void;
+  OXGN_PLAT_API auto SetMinimumSize(const window::ExtentT& extent) const
     -> void;
-  OXYGEN_PLATFORM_API auto SetMaximumSize(const window::ExtentT& extent) const
+  OXGN_PLAT_API auto SetMaximumSize(const window::ExtentT& extent) const
     -> void;
-  OXYGEN_PLATFORM_API auto EnableResizing() const -> void;
-  OXYGEN_PLATFORM_API auto DisableResizing() const -> void;
-  OXYGEN_PLATFORM_API auto Resize(const window::ExtentT& extent) const -> void;
-  OXYGEN_PLATFORM_API auto MoveTo(const window::PositionT& position) const
-    -> void;
-  OXYGEN_PLATFORM_API auto SetTitle(const std::string& title) const -> void;
-  OXYGEN_PLATFORM_API auto Activate() const -> void;
-  OXYGEN_PLATFORM_API auto KeepAlwaysOnTop(bool always_on_top = true) const
-    -> void;
+  OXGN_PLAT_API auto EnableResizing() const -> void;
+  OXGN_PLAT_API auto DisableResizing() const -> void;
+  OXGN_PLAT_API auto Resize(const window::ExtentT& extent) const -> void;
+  OXGN_PLAT_API auto MoveTo(const window::PositionT& position) const -> void;
+  OXGN_PLAT_API auto SetTitle(const std::string& title) const -> void;
+  OXGN_PLAT_API auto Activate() const -> void;
+  OXGN_PLAT_API auto KeepAlwaysOnTop(bool always_on_top = true) const -> void;
 
   // Application initiated close
-  OXYGEN_PLATFORM_API auto RequestClose(bool force = false) const -> void;
-  OXYGEN_PLATFORM_API auto VoteNotToClose() const -> void;
-  OXYGEN_PLATFORM_API auto VoteToClose() const -> void;
+  OXGN_PLAT_API auto RequestClose(bool force = false) const -> void;
+  OXGN_PLAT_API auto VoteNotToClose() const -> void;
+  OXGN_PLAT_API auto VoteToClose() const -> void;
 
   //! Returns an awaitable that when `co_await`ed, suspends the caller until a
   //! close request for the window is made.
@@ -157,7 +153,7 @@ public:
 
    \see RequestClose(), VoteNotToClose(), VoteToClose()
   */
-  OXYGEN_PLATFORM_API auto CloseRequested() -> co::ParkingLot::Awaiter;
+  OXGN_PLAT_API auto CloseRequested() -> co::ParkingLot::Awaiter;
 
   //! Returns an awaitable `Value` that contains the last window event to
   //! occur. When `co_await`ed, it suspends the caller until the next event
@@ -169,7 +165,7 @@ public:
    \see `oxygen::co::Value` for all the possible condition.
   */
   [[nodiscard]]
-  OXYGEN_PLATFORM_API auto Events() const -> co::Value<window::Event>&;
+  OXGN_PLAT_API auto Events() const -> co::Value<window::Event>&;
 
   //! Get an immutable reference to this window management interface. For
   //! internal use only, hence, its symbol should not be exported.

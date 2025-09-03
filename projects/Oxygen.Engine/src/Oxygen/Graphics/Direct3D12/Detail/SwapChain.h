@@ -35,10 +35,14 @@ namespace detail {
     OXYGEN_COMPONENT(SwapChain)
     OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
   public:
-    SwapChain(dx::ICommandQueue* command_queue, const DXGI_FORMAT format)
+    SwapChain(dx::ICommandQueue* command_queue, const DXGI_FORMAT format,
+      const Graphics* graphics)
       : format_(format)
       , command_queue_(command_queue)
+      , graphics_(graphics)
     {
+      // SwapChain will be created when window component is available via
+      // UpdateDependencies
     }
 
     ~SwapChain() noexcept override;
@@ -47,10 +51,6 @@ namespace detail {
     OXYGEN_DEFAULT_MOVABLE(SwapChain)
 
     [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
-
-    auto AttachRenderer(std::shared_ptr<graphics::RenderController> renderer)
-      -> void;
-    auto DetachRenderer() -> void;
 
     // Present the current frame to the screen.
     auto Present() const -> void;
@@ -100,7 +100,7 @@ namespace detail {
       render_targets_ {};
 
     graphics::detail::WindowComponent* window_ { nullptr };
-    std::shared_ptr<RenderController> renderer_;
+    const Graphics* graphics_;
   };
 
 } // namespace detail

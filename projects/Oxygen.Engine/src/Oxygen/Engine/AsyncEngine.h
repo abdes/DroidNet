@@ -87,6 +87,8 @@ public:
   OXGN_NGIN_API auto UnregisterModule(std::string_view name) noexcept -> void;
 
 private:
+  auto Shutdown() -> co::Co<>;
+
   // Ordered phases (Category A) - now with module integration
   auto PhaseFrameStart(engine::FrameContext& context) -> co::Co<>; // synchrnous
   auto PhaseInput(engine::FrameContext& context)

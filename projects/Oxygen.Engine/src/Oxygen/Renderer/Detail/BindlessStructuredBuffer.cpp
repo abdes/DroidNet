@@ -12,7 +12,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
@@ -24,14 +23,13 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::BufferViewDescription;
 using oxygen::graphics::DescriptorVisibility;
-using oxygen::graphics::RenderController;
 using oxygen::graphics::ResourceViewType;
 
 // Explicit instantiation requires a complete type
 
 template <typename DataType>
 auto BindlessStructuredBuffer<DataType>::EnsureAndUpload(
-  RenderController& rc, const std::string& debug_name) -> bool
+  oxygen::Graphics& graphics, const std::string& debug_name) -> bool
 {
   if (!HasData()) {
     return false; // No data to upload this frame
@@ -46,8 +44,8 @@ auto BindlessStructuredBuffer<DataType>::EnsureAndUpload(
   bool slot_changed = false;
 
   if (need_recreate) {
-    CreateOrResizeBuffer(rc, debug_name, size_bytes);
-    RegisterStructuredBufferSrv(rc);
+    CreateOrResizeBuffer(graphics, debug_name, size_bytes);
+    RegisterStructuredBufferSrv(graphics);
     slot_changed = true;
   }
 
@@ -61,10 +59,9 @@ auto BindlessStructuredBuffer<DataType>::EnsureAndUpload(
 
 template <typename DataType>
 auto BindlessStructuredBuffer<DataType>::CreateOrResizeBuffer(
-  RenderController& rc, const std::string& debug_name,
+  oxygen::Graphics& graphics, const std::string& debug_name,
   const std::size_t size_bytes) -> void
 {
-  const auto& graphics = rc.GetGraphics();
   const BufferDesc desc {
     .size_bytes = size_bytes,
     .usage = BufferUsage::kConstant,
@@ -74,7 +71,7 @@ auto BindlessStructuredBuffer<DataType>::CreateOrResizeBuffer(
 
   buffer_ = graphics.CreateBuffer(desc);
   buffer_->SetName(debug_name);
-  rc.GetResourceRegistry().Register(buffer_);
+  graphics.GetResourceRegistry().Register(buffer_);
 
   // Reset heap slot since we're creating a new buffer
   heap_slot_ = kInvalidHeapSlot;
@@ -82,9 +79,9 @@ auto BindlessStructuredBuffer<DataType>::CreateOrResizeBuffer(
 
 template <typename DataType>
 auto BindlessStructuredBuffer<DataType>::RegisterStructuredBufferSrv(
-  RenderController& rc) -> void
+  oxygen::Graphics& graphics) -> void
 {
-  auto& descriptor_allocator = rc.GetDescriptorAllocator();
+  auto& descriptor_allocator = graphics.GetDescriptorAllocator();
   const BufferViewDescription srv_view_desc {
     .view_type = ResourceViewType::kStructuredBuffer_SRV,
     .visibility = DescriptorVisibility::kShaderVisible,
@@ -105,7 +102,7 @@ auto BindlessStructuredBuffer<DataType>::RegisterStructuredBufferSrv(
   const auto view = buffer_->GetNativeView(srv_handle, srv_view_desc);
   heap_slot_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle).get();
 
-  rc.GetResourceRegistry().RegisterView(
+  graphics.GetResourceRegistry().RegisterView(
     *buffer_, view, std::move(srv_handle), srv_view_desc);
 
   LOG_F(INFO, "{} structured buffer SRV registered at heap index {}",

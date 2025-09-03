@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -84,13 +85,13 @@ public:
 
   //! Get a previously-created queue by application-visible name.
   auto GetQueueByName(const QueueKey& key) const
-    -> std::shared_ptr<graphics::CommandQueue>;
+    -> observer_ptr<graphics::CommandQueue>;
 
   //! Get a previously-created queue by role. Prefers dedicated then all-in-one
   //! (shared). Does not return queues that were marked kNamed in the strategy;
   //! those are only returned by GetQueueByName.
   auto GetQueueByRole(QueueRole role) const
-    -> std::shared_ptr<graphics::CommandQueue>;
+    -> observer_ptr<graphics::CommandQueue>;
 
   //! Invoke a callable for every unique CommandQueue.
   template <std::invocable<graphics::CommandQueue&> Fn>

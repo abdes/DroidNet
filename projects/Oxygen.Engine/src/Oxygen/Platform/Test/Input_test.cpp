@@ -20,53 +20,54 @@ using testing::IsTrue;
 // NOLINTNEXTLINE
 TEST(InputSlots, KeySlotProperties)
 {
-    InputSlots::Initialize();
-    const auto& slot = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kH);
-    EXPECT_THAT(slot.IsKeyboardKey(), IsTrue());
-    EXPECT_THAT(slot.IsModifierKey(), IsFalse());
-    EXPECT_THAT(slot.IsAxis1D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis2D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis3D(), IsFalse());
-    EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kKeyCategoryName));
+  InputSlots::Initialize();
+  const auto& slot = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kH);
+  EXPECT_THAT(slot.IsKeyboardKey(), IsTrue());
+  EXPECT_THAT(slot.IsModifierKey(), IsFalse());
+  EXPECT_THAT(slot.IsAxis1D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis2D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis3D(), IsFalse());
+  EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kKeyCategoryName));
 }
 
 // NOLINTNEXTLINE
 TEST(InputSlots, ModifierKeySlotProperties)
 {
-    InputSlots::Initialize();
-    const auto& slot = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kLeftAlt);
-    EXPECT_THAT(slot.IsKeyboardKey(), IsTrue());
-    EXPECT_THAT(slot.IsModifierKey(), IsTrue());
-    EXPECT_THAT(slot.IsAxis1D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis2D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis3D(), IsFalse());
-    EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kKeyCategoryName));
+  InputSlots::Initialize();
+  const auto& slot
+    = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kLeftAlt);
+  EXPECT_THAT(slot.IsKeyboardKey(), IsTrue());
+  EXPECT_THAT(slot.IsModifierKey(), IsTrue());
+  EXPECT_THAT(slot.IsAxis1D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis2D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis3D(), IsFalse());
+  EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kKeyCategoryName));
 }
 
 // NOLINTNEXTLINE
 TEST(InputSlots, MouseButtonSlotProperties)
 {
-    InputSlots::Initialize();
-    const auto& slot = InputSlots::LeftMouseButton;
-    EXPECT_THAT(slot.IsKeyboardKey(), IsFalse());
-    EXPECT_THAT(slot.IsModifierKey(), IsFalse());
-    EXPECT_THAT(slot.IsMouseButton(), IsTrue());
-    EXPECT_THAT(slot.IsAxis1D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis2D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis3D(), IsFalse());
-    EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kMouseCategoryName));
+  InputSlots::Initialize();
+  const auto& slot = InputSlots::LeftMouseButton;
+  EXPECT_THAT(slot.IsKeyboardKey(), IsFalse());
+  EXPECT_THAT(slot.IsModifierKey(), IsFalse());
+  EXPECT_THAT(slot.IsMouseButton(), IsTrue());
+  EXPECT_THAT(slot.IsAxis1D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis2D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis3D(), IsFalse());
+  EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kMouseCategoryName));
 }
 
 // NOLINTNEXTLINE
 TEST(InputSlots, MouseButtonAxisSlotProperties)
 {
-    InputSlots::Initialize();
-    const auto& slot = InputSlots::MouseX;
-    EXPECT_THAT(slot.IsKeyboardKey(), IsFalse());
-    EXPECT_THAT(slot.IsModifierKey(), IsFalse());
-    EXPECT_THAT(slot.IsMouseButton(), IsTrue());
-    EXPECT_THAT(slot.IsAxis1D(), IsTrue());
-    EXPECT_THAT(slot.IsAxis2D(), IsFalse());
-    EXPECT_THAT(slot.IsAxis3D(), IsFalse());
-    EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kMouseCategoryName));
+  InputSlots::Initialize();
+  const auto& slot = InputSlots::MouseX;
+  EXPECT_THAT(slot.IsKeyboardKey(), IsFalse());
+  EXPECT_THAT(slot.IsModifierKey(), IsFalse());
+  EXPECT_THAT(slot.IsMouseButton(), IsTrue());
+  EXPECT_THAT(slot.IsAxis1D(), IsTrue());
+  EXPECT_THAT(slot.IsAxis2D(), IsFalse());
+  EXPECT_THAT(slot.IsAxis3D(), IsFalse());
+  EXPECT_THAT(slot.GetInputCategoryName(), Eq(InputSlots::kMouseCategoryName));
 }

@@ -49,12 +49,10 @@ public:
   // MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
   MOCK_METHOD((const oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (std::shared_ptr<oxygen::graphics::CommandList>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderController, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
-  MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, oxygen::FrameSlotCount frames_in_flight), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (const oxygen::graphics::TextureDesc&), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeObject&), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Buffer>, CreateBuffer, (const oxygen::graphics::BufferDesc&), (const, override));
@@ -73,8 +71,7 @@ private:
 };
 
 // Use proper sized constants for pointer values
-constexpr uintptr_t MODULE_HANDLE_VALUE = 0x1234567890ABCDEF;
-constexpr uintptr_t RETURN_ADDRESS_VALUE = 0xFEDCBA0987654321;
+constexpr uintptr_t kModuleHandleValue = 0x1234567890ABCDEF;
 
 class MockPlatformServices : public PlatformServices {
 public:
@@ -141,13 +138,13 @@ protected:
     }
 
     // Getter for the current mock graphics object
-    [[nodiscard]] auto GetMockGraphics() const
+    [[nodiscard]] static auto GetMockGraphics()
     {
       return GetInstance().mock_graphics.get();
     }
 
     // Raw function pointer for GetGraphicsModuleApi
-    [[nodiscard]] auto GetApiFunction() const
+    [[nodiscard]] static auto GetApiFunction()
     {
       return FuncToRawPtr(&MockBackend::GetGraphicsModuleApiStatic);
     }
@@ -189,20 +186,20 @@ protected:
 
     ON_CALL(*platform, LoadModule(testing::_))
       // NOLINTNEXTLINE
-      .WillByDefault(
-        testing::Return(reinterpret_cast<void*>(MODULE_HANDLE_VALUE)));
+      .WillByDefault(testing::Return(reinterpret_cast<void*>(
+        kModuleHandleValue))); // NOLINT(performance-no-int-to-ptr)
 
     // Use the encapsulated mock backend
     ON_CALL(*platform, GetRawFunctionAddress(testing::_, kGetGraphicsModuleApi))
-      .WillByDefault(testing::Return(mock_backend->GetApiFunction()));
+      .WillByDefault(testing::Return(MockBackend::GetApiFunction()));
 
     ON_CALL(*platform, IsMainExecutableModule(testing::_))
       .WillByDefault(testing::Return(true));
 
     ON_CALL(*platform, GetModuleHandleFromReturnAddress(testing::_))
       // NOLINTNEXTLINE
-      .WillByDefault(
-        testing::Return(reinterpret_cast<void*>(MODULE_HANDLE_VALUE)));
+      .WillByDefault(testing::Return(reinterpret_cast<void*>(
+        kModuleHandleValue))); // NOLINT(performance-no-int-to-ptr)
   }
 
   auto TearDown() -> void override
@@ -419,7 +416,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   EXPECT_FALSE(backend.expired());
 
   // Get access to the MockGraphics to verify the serialized config
-  auto* mock_graphics = mock_backend->GetMockGraphics();
+  auto* mock_graphics = MockBackend::GetMockGraphics();
   ASSERT_NE(mock_graphics, nullptr);
 
   // Cast to MockGraphics to access our captured config

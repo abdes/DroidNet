@@ -17,6 +17,10 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Platform/Types.h>
 
+namespace oxygen::graphics::d3d12 {
+class Graphics;
+}
+
 namespace oxygen::graphics::d3d12::detail {
 
 //! Represents a surface associated with a window.
@@ -31,61 +35,51 @@ namespace oxygen::graphics::d3d12::detail {
  resize for the swapchain when needed.
 */
 
-class WindowSurface
-    : public graphics::detail::WindowSurface {
+class WindowSurface : public graphics::detail::WindowSurface {
 
 public:
-    WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue, DXGI_FORMAT format)
-        : graphics::detail::WindowSurface(std::move(window))
-    {
-        AddComponent<SwapChain>(command_queue, format);
-    }
+  WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue,
+    DXGI_FORMAT format, const Graphics* graphics)
+    : graphics::detail::WindowSurface(std::move(window))
+  {
+    AddComponent<SwapChain>(command_queue, format, graphics);
+  }
 
-    WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue)
-        : graphics::detail::WindowSurface(std::move(window))
-    {
-        AddComponent<SwapChain>(command_queue, kDefaultBackBufferFormat);
-    }
+  WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue,
+    const Graphics* graphics)
+    : graphics::detail::WindowSurface(std::move(window))
+  {
+    AddComponent<SwapChain>(command_queue, kDefaultBackBufferFormat, graphics);
+  }
 
-    ~WindowSurface() override = default;
+  ~WindowSurface() override = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
-    OXYGEN_DEFAULT_MOVABLE(WindowSurface);
+  OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
+  OXYGEN_DEFAULT_MOVABLE(WindowSurface);
 
-    void AttachRenderer(const std::shared_ptr<graphics::RenderController> renderer) override
-    {
-        GetComponent<SwapChain>().AttachRenderer(renderer);
-    }
+  auto GetCurrentBackBufferIndex() const -> uint32_t override
+  {
+    return GetComponent<SwapChain>().GetCurrentBackBufferIndex();
+  }
 
-    void DetachRenderer() override
-    {
-        GetComponent<SwapChain>().DetachRenderer();
-    }
+  auto GetCurrentBackBuffer() const
+    -> std::shared_ptr<graphics::Texture> override
+  {
+    return GetComponent<SwapChain>().GetCurrentBackBuffer();
+  }
+  auto GetBackBuffer(uint32_t index) const
+    -> std::shared_ptr<graphics::Texture> override
+  {
+    return GetComponent<SwapChain>().GetBackBuffer(index);
+  }
 
-    auto GetCurrentBackBufferIndex() const -> uint32_t override
-    {
-        return GetComponent<SwapChain>().GetCurrentBackBufferIndex();
-    }
+  void Present() const override { GetComponent<SwapChain>().Present(); }
 
-    auto GetCurrentBackBuffer() const -> std::shared_ptr<graphics::Texture> override
-    {
-        return GetComponent<SwapChain>().GetCurrentBackBuffer();
-    }
-    auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<graphics::Texture> override
-    {
-        return GetComponent<SwapChain>().GetBackBuffer(index);
-    }
-
-    void Present() const override
-    {
-        GetComponent<SwapChain>().Present();
-    }
-
-    void Resize() override
-    {
-        GetComponent<SwapChain>().Resize();
-        ShouldResize(false);
-    }
+  void Resize() override
+  {
+    GetComponent<SwapChain>().Resize();
+    ShouldResize(false);
+  }
 };
 
 } // namespace oxygen::graphics::d3d12::detail

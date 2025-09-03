@@ -16,6 +16,16 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
+// Forward declarations for pipeline management
+namespace oxygen::graphics {
+class GraphicsPipelineDesc;
+class ComputePipelineDesc;
+} // namespace oxygen::graphics
+
+namespace oxygen::graphics::d3d12::detail {
+class PipelineStateCache;
+} // namespace oxygen::graphics::d3d12::detail
+
 // ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 class Allocator;
@@ -37,11 +47,17 @@ public:
   OXGN_D3D12_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override;
 
+  //! Get the V-Sync setting.
+  [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool
+  {
+    return enable_vsync_;
+  }
+
   //=== D3D12 specific factories ===----------------------------------------//
 
   OXGN_D3D12_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
-    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
   OXGN_D3D12_NDAPI auto CreateTexture(const TextureDesc& desc) const
@@ -71,7 +87,25 @@ public:
   OXGN_D3D12_NDAPI auto GetFormatPlaneCount(DXGI_FORMAT format) const
     -> uint8_t;
 
+  //=== Pipeline State Management ===--------------------------------------//
+  // TODO: ASYNCENGINE MIGRATION - Pipeline state methods moved from
+  // RenderController These enable direct pipeline management without requiring
+  // RenderController
+
+  OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(
+    oxygen::graphics::GraphicsPipelineDesc desc, size_t hash)
+    -> detail::PipelineStateCache::Entry;
+
+  OXGN_D3D12_NDAPI auto GetOrCreateComputePipeline(
+    oxygen::graphics::ComputePipelineDesc desc, size_t hash)
+    -> detail::PipelineStateCache::Entry;
+
 protected:
+  OXGN_D3D12_NDAPI auto CreateCommandRecorder(
+    std::shared_ptr<graphics::CommandList> command_list,
+    observer_ptr<graphics::CommandQueue> target_queue)
+    -> std::unique_ptr<graphics::CommandRecorder> override;
+
   // Default constructor that does not initialize the backend. Used for testing
   // purposes.
   Graphics()
@@ -82,22 +116,14 @@ protected:
   OXGN_D3D12_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
     QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
 
-  OXGN_D3D12_NDAPI auto CreateRendererImpl(std::string_view name,
-    std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
-    -> std::unique_ptr<graphics::RenderController> override;
-
   OXGN_D3D12_NDAPI auto CreateCommandListImpl(
     QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList> override;
 
-  OXGN_D3D12_NDAPI auto CreateCommandRecorder(
-    std::shared_ptr<graphics::CommandList> command_list,
-    observer_ptr<graphics::CommandQueue> target_queue)
-    -> std::unique_ptr<graphics::CommandRecorder> override;
-
 private:
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_ {};
+  bool enable_vsync_ { true };
 };
 
 }

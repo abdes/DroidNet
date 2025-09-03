@@ -77,18 +77,18 @@ public:
   //! needed. Returns true if any changes were made that might affect scene
   //! constants.
   OXGN_RNDR_API auto EnsureAndUpload(
-    graphics::RenderController& rc, const std::string& debug_name) -> bool;
+    oxygen::Graphics& graphics, const std::string& debug_name) -> bool;
 
   //! Returns true if CPU data vector contains elements.
   [[nodiscard]] auto HasData() const -> bool { return !cpu_data_.empty(); }
 
 private:
   //! Creates or resizes the GPU structured buffer if needed.
-  auto CreateOrResizeBuffer(graphics::RenderController& rc,
+  auto CreateOrResizeBuffer(oxygen::Graphics& graphics,
     const std::string& debug_name, std::size_t size_bytes) -> void;
 
   //! Registers structured buffer SRV and caches heap slot.
-  auto RegisterStructuredBufferSrv(graphics::RenderController& rc) -> void;
+  auto RegisterStructuredBufferSrv(oxygen::Graphics& graphics) -> void;
 
   //! Uploads CPU data to GPU structured buffer.
   auto UploadData() -> void;

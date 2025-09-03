@@ -11,26 +11,26 @@
 
 namespace oxygen {
 namespace co {
-    class Nursery;
+  class Nursery;
 } // namespace co
 
 namespace platform::window {
 
-    class ManagerInterface {
-    public:
-        ManagerInterface() = default;
-        virtual ~ManagerInterface() = default;
-        OXYGEN_MAKE_NON_COPYABLE(ManagerInterface)
-        OXYGEN_MAKE_NON_MOVABLE(ManagerInterface)
+  class ManagerInterface {
+  public:
+    ManagerInterface() = default;
+    virtual ~ManagerInterface() = default;
+    OXYGEN_MAKE_NON_COPYABLE(ManagerInterface)
+    OXYGEN_MAKE_NON_MOVABLE(ManagerInterface)
 
-        virtual void DoRestore() const = 0;
-        virtual void DoMaximize() const = 0;
-        virtual void DoResize(const ExtentT& extent) const = 0;
-        virtual void DoPosition(const PositionT& position) const = 0;
+    virtual auto DoRestore() const -> void = 0;
+    virtual auto DoMaximize() const -> void = 0;
+    virtual auto DoResize(const ExtentT& extent) const -> void = 0;
+    virtual auto DoPosition(const PositionT& position) const -> void = 0;
 
-        virtual void DispatchEvent(Event event) const = 0;
-        virtual void InitiateClose(co::Nursery& n) = 0;
-    };
+    virtual auto DispatchEvent(Event event) const -> void = 0;
+    virtual auto InitiateClose(co::Nursery& n) -> void = 0;
+  };
 
 } // namespace platform::window
 } // namespace oxygen

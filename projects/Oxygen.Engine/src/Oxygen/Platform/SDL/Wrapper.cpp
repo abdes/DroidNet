@@ -19,62 +19,70 @@ namespace {
 template <typename... Flags>
 auto CheckMutuallyExclusiveFlags(std::convertible_to<bool> auto... flags)
 {
-    return ((0 + ... + flags) <= 1);
+  return ((0 + ... + flags) <= 1);
 }
 
-void TranslateFlagsToProperties(
-    const SDL_PropertiesID props,
-    const oxygen::platform::window::InitialFlags& flags)
+auto TranslateFlagsToProperties(const SDL_PropertiesID props,
+  const oxygen::platform::window::InitialFlags& flags) -> void
 {
-    // Check for mutually exclusive flags
-    DCHECK_F(CheckMutuallyExclusiveFlags(flags.full_screen, flags.maximized, flags.minimized), "some flags are mutually exclusive");
-    DCHECK_F(CheckMutuallyExclusiveFlags(flags.resizable, flags.borderless), "some flags are mutually exclusive");
-    DCHECK_F(CheckMutuallyExclusiveFlags(flags.full_screen, flags.borderless), "some flags are mutually exclusive");
+  // Check for mutually exclusive flags
+  DCHECK_F(CheckMutuallyExclusiveFlags(
+             flags.full_screen, flags.maximized, flags.minimized),
+    "some flags are mutually exclusive");
+  DCHECK_F(CheckMutuallyExclusiveFlags(flags.resizable, flags.borderless),
+    "some flags are mutually exclusive");
+  DCHECK_F(CheckMutuallyExclusiveFlags(flags.full_screen, flags.borderless),
+    "some flags are mutually exclusive");
 
-    // Set always-on flags
-    // TODO: Vulkan support in SDL should be made configurable
-    // SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
+  // Set always-on flags
+  // TODO: Vulkan support in SDL should be made configurable
+  // SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
 
-    // Translate provided flags into SDL flags
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, flags.hidden);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_ALWAYS_ON_TOP_BOOLEAN, flags.always_on_top);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, flags.full_screen);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_MAXIMIZED_BOOLEAN, flags.maximized);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_MINIMIZED_BOOLEAN, flags.minimized);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, flags.resizable);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, flags.borderless);
+  // Translate provided flags into SDL flags
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, flags.hidden);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_ALWAYS_ON_TOP_BOOLEAN, flags.always_on_top);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, flags.full_screen);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_MAXIMIZED_BOOLEAN, flags.maximized);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_MINIMIZED_BOOLEAN, flags.minimized);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, flags.resizable);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, flags.borderless);
 }
 
 } // namespace
 
-void oxygen::platform::sdl::SdlCheck(const bool status)
+auto oxygen::platform::sdl::SdlCheck(const bool status) -> void
 {
-    // zero indicates success
-    if (status) {
-        return;
-    }
+  // zero indicates success
+  if (status) {
+    return;
+  }
 
-    const auto* error_message = SDL_GetError();
-    throw std::runtime_error(error_message);
+  const auto* error_message = SDL_GetError();
+  throw std::runtime_error(error_message);
 }
 
-auto oxygen::platform::sdl::MakeWindow(
-    const char* title,
-    const uint32_t pos_x, const uint32_t pos_y,
-    const uint32_t width, const uint32_t height,
-    const window::InitialFlags& flags)
-    -> SDL_Window*
+auto oxygen::platform::sdl::MakeWindow(const char* title, const uint32_t pos_x,
+  const uint32_t pos_y, const uint32_t width, const uint32_t height,
+  const window::InitialFlags& flags) -> SDL_Window*
 {
-    const SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, pos_x);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, pos_y);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
-    TranslateFlagsToProperties(props, flags);
-    auto* sdl_window = SDL_CreateWindowWithProperties(props);
-    SDL_DestroyProperties(props);
-    SdlCheck(sdl_window != nullptr);
-    return sdl_window;
+  const SDL_PropertiesID props = SDL_CreateProperties();
+  SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, pos_x);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, pos_y);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
+  SDL_SetBooleanProperty(
+    props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
+  TranslateFlagsToProperties(props, flags);
+  auto* sdl_window = SDL_CreateWindowWithProperties(props);
+  SDL_DestroyProperties(props);
+  SdlCheck(sdl_window != nullptr);
+  return sdl_window;
 }

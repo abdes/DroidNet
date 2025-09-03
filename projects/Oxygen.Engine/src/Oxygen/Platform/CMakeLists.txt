@@ -36,7 +36,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_PLATFORM_EXPORTS"
+      "OXGN_PLAT_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -47,46 +47,53 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-target_sources(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    "Detail/Window_ManagerInterface.h"
-    "SDL/Wrapper.h"
-    "SDL/Wrapper.cpp"
-    "SDL/Window.cpp"
-    "SDL/Display.cpp"
-    "SDL/EventPump.cpp"
-    "SDL/WindowManager.cpp"
-    "SDL/InputEvents.cpp"
-    "SDL/Init.cpp"
-    "SDL/SdlEventUtils.cpp"
+set(
+  OXYGEN_PLATFORM_HEADERS
+  "Display.h"
+  "Input.h"
+  "InputEvent.h"
+  "Platform.h"
+  "PlatformEvent.h"
+  "Types.h"
+  "Window.h"
+  "api_export.h"
+)
+set(
+  OXYGEN_PLATFORM_PRIVATE_SOURCES
+  "AsyncOps.cpp"
+  "Detail/Window_ManagerInterface.h"
+  "Input.cpp"
+  "Platform.cpp"
+  # SDL Specific
+  "SDL/Wrapper.h"
+  "SDL/Wrapper.cpp"
+  "SDL/Window.cpp"
+  "SDL/Display.cpp"
+  "SDL/EventPump.cpp"
+  "SDL/WindowManager.cpp"
+  "SDL/InputEvents.cpp"
+  "SDL/Init.cpp"
+  "SDL/SdlEventUtils.cpp"
 )
 
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "AsyncOps.cpp"
-    "Input.cpp"
-    "Platform.cpp"
+    ${OXYGEN_PLATFORM_PRIVATE_SOURCES}
+    ${OXYGEN_PLATFORM_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "Platform.h"
-      "Display.h"
-      "Input.h"
-      "InputEvent.h"
-      "PlatformEvent.h"
-      "Window.h"
-      "Types.h"
-      "api_export.h"
+    FILES ${OXYGEN_PLATFORM_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_PLATFORM_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_PLAT_STATIC>
 )
 
 target_link_libraries(

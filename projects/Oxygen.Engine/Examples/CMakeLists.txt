@@ -9,7 +9,7 @@ set(OXYGEN_EXAMPLES_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # add_subdirectory("AsyncEngine")
 add_subdirectory("Platform")
 add_subdirectory("Devices")
-add_subdirectory("Graphics")
+# add_subdirectory("Graphics")
 add_subdirectory("Async")
 
 # OxCo Examples

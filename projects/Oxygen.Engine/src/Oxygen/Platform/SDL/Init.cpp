@@ -13,18 +13,18 @@ using oxygen::Platform;
 
 Platform::Platform(const PlatformConfig& config)
 {
-    LOG_SCOPE_F(INFO, "Platform (SDL3) Init");
+  LOG_SCOPE_F(INFO, "Platform (SDL3) Init");
 
-    Compose(config);
+  Compose(config);
 
-    platform::sdl::Init(SDL_INIT_VIDEO);
-    platform::sdl::SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+  platform::sdl::Init(SDL_INIT_VIDEO);
+  platform::sdl::SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
 }
 
 Platform::~Platform()
 {
-    LOG_F(INFO, "Platform/SDL3 destroyed");
+  LOG_SCOPE_FUNCTION(1);
 
-    // ->Final<- thing to do is to terminate SDL3.
-    platform::sdl::Terminate();
+  // ->Final<- thing to do is to terminate SDL3.
+  platform::sdl::Terminate();
 }

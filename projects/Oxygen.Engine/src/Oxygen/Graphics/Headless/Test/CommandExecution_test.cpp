@@ -88,12 +88,14 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
   } queue_strategy;
 
   headless->CreateCommandQueues(queue_strategy);
-  auto queue
-    = headless->GetCommandQueue(queue_strategy.KeyFor(Role::kGraphics));
+
+  auto q_key = queue_strategy.KeyFor(Role::kGraphics);
+  auto cmd_list_name = "test-cmd-list";
+  auto queue = headless->GetCommandQueue(q_key);
   ASSERT_NE(queue, nullptr);
 
   auto cmd_list
-    = headless->AcquireCommandList(queue->GetQueueRole(), "test-cmd-list");
+    = headless->AcquireCommandList(queue->GetQueueRole(), cmd_list_name);
   ASSERT_NE(cmd_list, nullptr);
 
   // Create a buffer and keep it alive for the duration of the test (like the
@@ -108,9 +110,8 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder
-      = headless->AcquireCommandRecorder(oxygen::observer_ptr { queue.get() },
-        cmd_list, /*immediate_submission=*/true);
+    auto recorder = headless->AcquireCommandRecorder(
+      q_key, cmd_list_name, /*immediate_submission=*/true);
     ASSERT_NE(recorder, nullptr);
 
     // Register and begin tracking the buffer with the recorder.

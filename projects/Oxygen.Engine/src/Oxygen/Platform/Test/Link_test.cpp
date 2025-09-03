@@ -12,7 +12,8 @@ using oxygen::platform::InputSlots;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    InputSlots::Initialize();
-    const auto input_slot = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kHash);
-    std::cout << "Input slot: " << input_slot.GetName() << "\n";
+  InputSlots::Initialize();
+  const auto input_slot
+    = InputSlots::GetInputSlotForKey(oxygen::platform::Key::kHash);
+  std::cout << "Input slot: " << input_slot.GetName() << "\n";
 }

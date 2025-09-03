@@ -16,6 +16,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/RenderItem.h>
@@ -27,13 +28,16 @@
 // Bindless structured buffer helper for per-draw arrays
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 
+namespace oxygen {
+class Graphics;
+}
+
 namespace oxygen::scene {
 class Scene;
 }
 
 namespace oxygen::graphics {
 class Buffer;
-class RenderController;
 } // namespace oxygen::graphics
 
 namespace oxygen::data {
@@ -80,8 +84,7 @@ public:
 //! eviction.
 class Renderer {
 public:
-  OXGN_RNDR_API explicit Renderer(
-    std::weak_ptr<graphics::RenderController> render_controller,
+  OXGN_RNDR_API explicit Renderer(std::weak_ptr<oxygen::Graphics> graphics,
     std::shared_ptr<EvictionPolicy> eviction_policy = nullptr);
 
   OXGN_RNDR_API ~Renderer();
@@ -112,10 +115,11 @@ public:
 
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
-  auto ExecuteRenderGraph(
-    RenderGraphCoroutine&& graph_coroutine, RenderContext& context) -> co::Co<>
+  auto ExecuteRenderGraph(RenderGraphCoroutine&& graph_coroutine,
+    RenderContext& context, const oxygen::engine::FrameContext& frame_context)
+    -> co::Co<>
   {
-    PreExecute(context);
+    PreExecute(context, frame_context);
     co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(context);
     PostExecute(context);
   }
@@ -127,6 +131,9 @@ public:
   {
     return opaque_items_.Items();
   }
+
+  //! Returns the Graphics system used by this renderer.
+  OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<oxygen::Graphics>;
 
   //! Modify scene constants in-place via a user-provided mutator.
   /*!
@@ -149,21 +156,24 @@ public:
 
   //! Build the frame draw list from a scene and a view.
   /*! Populates opaque items using CPU culling and updates scene constants. */
-  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene, const View& view)
-    -> std::size_t;
+  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene, const View& view,
+    const oxygen::engine::FrameContext& frame_context) -> std::size_t;
 
   //! Build the frame draw list from a scene and a camera view descriptor.
   /*! Ensures transforms are updated, resolves a per-frame View snapshot from
       the camera, then populates opaque items and updates scene constants. */
-  OXGN_RNDR_API auto BuildFrame(
-    oxygen::scene::Scene& scene, const CameraView& camera_view) -> std::size_t;
+  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene,
+    const CameraView& camera_view,
+    const oxygen::engine::FrameContext& frame_context) -> std::size_t;
 
 private:
-  OXGN_RNDR_API auto PreExecute(RenderContext& context) -> void;
+  OXGN_RNDR_API auto PreExecute(RenderContext& context,
+    const oxygen::engine::FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
-  auto MaybeUpdateSceneConstants() -> void;
+  auto MaybeUpdateSceneConstants(
+    const oxygen::engine::FrameContext& frame_context) -> void;
 
   auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
   auto UpdateBindlessWorldsSlotIfChanged() -> void;
@@ -176,7 +186,7 @@ private:
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
 
-  std::weak_ptr<graphics::RenderController> render_controller_;
+  std::weak_ptr<oxygen::Graphics> graphics_; // New AsyncEngine path
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
 
@@ -199,7 +209,7 @@ private:
   // Per-draw world matrices buffer (StructuredBuffer<float4x4>)
   oxygen::engine::detail::BindlessStructuredBuffer<glm::mat4> world_transforms_;
 
-  // TODO: temporary - this should move out to the engine core
+  // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
 };
 

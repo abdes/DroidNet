@@ -47,6 +47,7 @@ struct GraphicsConfig {
 
   bool headless { false }; //!< Run the engine without a window.
   bool enable_imgui { false }; //!< Enable ImGui integration.
+  bool enable_vsync { true }; //!< Enable vertical synchronization.
 
   //! Backend-specific configuration as a JSON string.
   std::string extra = "{}";

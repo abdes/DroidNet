@@ -57,7 +57,7 @@ public:
   ~Data() override
   {
     if (sdl_window_ != nullptr) {
-      LOG_F(INFO, "SDL3 Window[{}] destroyed", id_);
+      LOG_F(2, "SDL3 Window[{}] destroyed", id_);
       sdl::DestroyWindow(sdl_window_);
     }
   }

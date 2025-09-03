@@ -21,68 +21,66 @@ namespace oxygen::platform::detail {
 
 class InputSlotDetails {
 public:
-    enum class Flags {
-        kNone = 0,
+  enum class Flags {
+    kNone = 0,
 
-        kMouseButton = 1 << 0,
-        kKeyboardKey = 1 << 1,
-        kModifierKey = 1 << 2,
+    kMouseButton = 1 << 0,
+    kKeyboardKey = 1 << 1,
+    kModifierKey = 1 << 2,
 
-        kAxis1D = 1 << 16,
-        kAxis2D = 1 << 17,
-        kAxis3D = 1 << 18,
-    };
+    kAxis1D = 1 << 16,
+    kAxis2D = 1 << 17,
+    kAxis3D = 1 << 18,
+  };
 
-    InputSlotDetails(const InputSlot& slot,
-        std::string_view display_string,
-        Flags flags = Flags::kNone,
-        std::string_view category_name = {});
-    ~InputSlotDetails() = default;
-    // Non-copyable
-    InputSlotDetails(const InputSlotDetails&) = default;
-    auto operator=(const InputSlotDetails&) -> InputSlotDetails& = delete;
+  InputSlotDetails(const InputSlot& slot, std::string_view display_string,
+    Flags flags = Flags::kNone, std::string_view category_name = {});
+  ~InputSlotDetails() = default;
+  // Non-copyable
+  InputSlotDetails(const InputSlotDetails&) = default;
+  auto operator=(const InputSlotDetails&) -> InputSlotDetails& = delete;
 
-    // Non-Movable
-    InputSlotDetails(InputSlotDetails&& other) noexcept = default;
-    auto operator=(InputSlotDetails&& other) noexcept
-        -> InputSlotDetails& = delete;
+  // Non-Movable
+  InputSlotDetails(InputSlotDetails&& other) noexcept = default;
+  auto operator=(InputSlotDetails&& other) noexcept
+    -> InputSlotDetails& = delete;
 
-    [[nodiscard]] auto GetSlot() const -> const auto& { return slot_; }
+  [[nodiscard]] auto GetSlot() const -> const auto& { return slot_; }
 
-    // Informational details about the input slot, will be used in the editor for
-    // a user-friendly presentation of the different slots and slot categories.
-    // Should not be used at runtime where it is preferred to rely on the input
-    // event type to obtain the relevant embedded values in the event.
+  // Informational details about the input slot, will be used in the editor for
+  // a user-friendly presentation of the different slots and slot categories.
+  // Should not be used at runtime where it is preferred to rely on the input
+  // event type to obtain the relevant embedded values in the event.
 
-    [[nodiscard]] auto GetDisplayString() const { return display_string_; }
+  [[nodiscard]] auto GetDisplayString() const { return display_string_; }
 
-    [[nodiscard]] auto GetInputCategoryName() const { return category_name_; }
-    [[nodiscard]] auto IsMouseButton() const { return is_mouse_button_ != 0; }
-    [[nodiscard]] auto IsKeyboardKey() const { return is_keyboard_key_ != 0; }
-    [[nodiscard]] auto IsModifierKey() const { return is_modifier_key_ != 0; }
+  [[nodiscard]] auto GetInputCategoryName() const { return category_name_; }
+  [[nodiscard]] auto IsMouseButton() const { return is_mouse_button_ != 0; }
+  [[nodiscard]] auto IsKeyboardKey() const { return is_keyboard_key_ != 0; }
+  [[nodiscard]] auto IsModifierKey() const { return is_modifier_key_ != 0; }
 
-    [[nodiscard]] auto IsAxis1D() const { return is_axis_1d_ != 0; }
-    [[nodiscard]] auto IsAxis2D() const { return is_axis_2d_ != 0; }
-    [[nodiscard]] auto IsAxis3D() const { return is_axis_3d_ != 0; }
+  [[nodiscard]] auto IsAxis1D() const { return is_axis_1d_ != 0; }
+  [[nodiscard]] auto IsAxis2D() const { return is_axis_2d_ != 0; }
+  [[nodiscard]] auto IsAxis3D() const { return is_axis_3d_ != 0; }
 
-    friend InputSlots;
+  friend InputSlots;
 
 private:
-    // The slots are all initialized and owned globally by the platform. Only
-    // references to the pre-initialized slots are used, which will always be
-    // valid.
-    const InputSlot& slot_; // NOLINT(*-avoid-const-or-ref-data-members)
+  // The slots are all initialized and owned globally by the platform. Only
+  // references to the pre-initialized slots are used, which will always be
+  // valid.
+  const InputSlot& slot_; // NOLINT(*-avoid-const-or-ref-data-members)
 
-    std::string_view display_string_;
-    std::string_view category_name_;
+  std::string_view display_string_;
+  std::string_view category_name_;
 
-    uint8_t is_keyboard_key_ : 1 { 0 };
-    uint8_t is_modifier_key_ : 1 { 0 };
-    uint8_t is_mouse_button_ : 1 { 0 };
+  uint8_t is_keyboard_key_ : 1 { 0 };
+  uint8_t is_modifier_key_ : 1 { 0 };
+  uint8_t is_mouse_button_ : 1 { 0 };
 
-    uint8_t is_axis_1d_ : 1 { 0 };
-    uint8_t is_axis_2d_ : 1 { 0 };
-    uint8_t is_axis_3d_ : 1 { 0 };
+  uint8_t is_axis_1d_ : 1 { 0 };
+  uint8_t is_axis_2d_ : 1 { 0 };
+  uint8_t is_axis_3d_ : 1 { 0 };
 };
 
 } // namespace oxygen::platform::detail
@@ -90,31 +88,31 @@ private:
 namespace {
 using oxygen::platform::detail::InputSlotDetails;
 
-[[maybe_unused]] constexpr auto operator|=(InputSlotDetails::Flags& mods,
-    const InputSlotDetails::Flags other) -> auto&
+[[maybe_unused]] constexpr auto operator|=(
+  InputSlotDetails::Flags& mods, const InputSlotDetails::Flags other) -> auto&
 {
-    mods = static_cast<InputSlotDetails::Flags>(
-        static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(mods)
-        | static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(other));
-    return mods;
+  mods = static_cast<InputSlotDetails::Flags>(
+    static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(mods)
+    | static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(other));
+  return mods;
 }
 
-constexpr auto operator|(const InputSlotDetails::Flags left,
-    const InputSlotDetails::Flags right)
+constexpr auto operator|(
+  const InputSlotDetails::Flags left, const InputSlotDetails::Flags right)
 {
-    const auto mods = static_cast<InputSlotDetails::Flags>(
-        static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(left)
-        | static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(right));
-    return mods;
+  const auto mods = static_cast<InputSlotDetails::Flags>(
+    static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(left)
+    | static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(right));
+  return mods;
 }
 
-constexpr auto operator&(const InputSlotDetails::Flags left,
-    const InputSlotDetails::Flags right)
+constexpr auto operator&(
+  const InputSlotDetails::Flags left, const InputSlotDetails::Flags right)
 {
-    const auto mods = static_cast<InputSlotDetails::Flags>(
-        static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(left)
-        & static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(right));
-    return mods;
+  const auto mods = static_cast<InputSlotDetails::Flags>(
+    static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(left)
+    & static_cast<std::underlying_type_t<InputSlotDetails::Flags>>(right));
+  return mods;
 }
 } // namespace
 
@@ -278,86 +276,85 @@ const InputSlot InputSlots::Menu("Menu");
 // NOLINTEND
 // End - Keyboard slots
 
-void InputSlot::UpdateDetailsIfNotUpdated() const
+auto InputSlot::UpdateDetailsIfNotUpdated() const -> void
 {
-    if (!details_) {
-        details_ = InputSlots::GetInputSlotDetails(*this);
-    }
+  if (!details_) {
+    details_ = InputSlots::GetInputSlotDetails(*this);
+  }
 }
 
 auto InputSlot::IsModifierKey() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsModifierKey();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsModifierKey();
 }
 
 auto InputSlot::IsKeyboardKey() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsKeyboardKey();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsKeyboardKey();
 }
 
 auto InputSlot::IsMouseButton() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsMouseButton();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsMouseButton();
 }
 
 auto InputSlot::IsAxis1D() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsAxis1D();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsAxis1D();
 }
 
 auto InputSlot::IsAxis2D() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsAxis2D();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsAxis2D();
 }
 
 auto InputSlot::IsAxis3D() const -> bool
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->IsAxis3D();
+  UpdateDetailsIfNotUpdated();
+  return details_->IsAxis3D();
 }
 
 auto InputSlot::GetDisplayString() const -> std::string_view
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->GetDisplayString();
+  UpdateDetailsIfNotUpdated();
+  return details_->GetDisplayString();
 }
 
 auto InputSlot::GetInputCategoryName() const -> std::string_view
 {
-    UpdateDetailsIfNotUpdated();
-    return details_->GetInputCategoryName();
+  UpdateDetailsIfNotUpdated();
+  return details_->GetInputCategoryName();
 }
 
 InputSlotDetails::InputSlotDetails(const InputSlot& slot,
-    const std::string_view display_string,
-    const Flags flags,
-    const std::string_view category_name)
-    : slot_(slot)
-    , display_string_(display_string)
+  const std::string_view display_string, const Flags flags,
+  const std::string_view category_name)
+  : slot_(slot)
+  , display_string_(display_string)
 {
-    if ((flags & Flags::kMouseButton) != Flags::kNone) {
-        is_mouse_button_ = true;
-        is_keyboard_key_ = false;
-    }
-    is_modifier_key_ = (flags & Flags::kModifierKey) != Flags::kNone;
+  if ((flags & Flags::kMouseButton) != Flags::kNone) {
+    is_mouse_button_ = true;
+    is_keyboard_key_ = false;
+  }
+  is_modifier_key_ = (flags & Flags::kModifierKey) != Flags::kNone;
 
-    is_axis_1d_ = (flags & Flags::kAxis1D) != Flags::kNone;
-    is_axis_2d_ = (flags & Flags::kAxis2D) != Flags::kNone;
-    is_axis_3d_ = (flags & Flags::kAxis3D) != Flags::kNone;
+  is_axis_1d_ = (flags & Flags::kAxis1D) != Flags::kNone;
+  is_axis_2d_ = (flags & Flags::kAxis2D) != Flags::kNone;
+  is_axis_3d_ = (flags & Flags::kAxis3D) != Flags::kNone;
 
-    // Set up default menu categories
-    if (category_name.empty()) {
-        if (IsMouseButton()) {
-            category_name_ = InputSlots::kMouseCategoryName;
-        } else {
-            category_name_ = InputSlots::kKeyCategoryName;
-        }
+  // Set up default menu categories
+  if (category_name.empty()) {
+    if (IsMouseButton()) {
+      category_name_ = InputSlots::kMouseCategoryName;
+    } else {
+      category_name_ = InputSlots::kKeyCategoryName;
     }
+  }
 }
 
 // NOLINTBEGIN
@@ -366,50 +363,50 @@ std::map<oxygen::platform::Key, InputSlot> InputSlots::key_slots_;
 std::map<std::string_view, InputSlots::CategoryInfo> InputSlots::categories_;
 // NOLINTEND
 
-void InputSlots::AddCategory(const std::string_view category_name,
-    const std::string_view display_string)
+auto InputSlots::AddCategory(const std::string_view category_name,
+  const std::string_view display_string) -> void
 {
-    if (categories_.contains(category_name)) {
-        DLOG_F(WARNING,
-            "Category with name [{}] has already been added.",
-            category_name);
-    }
-    categories_[category_name] = CategoryInfo { .display_string = display_string };
+  if (categories_.contains(category_name)) {
+    DLOG_F(WARNING, "Category with name [{}] has already been added.",
+      category_name);
+  }
+  categories_[category_name]
+    = CategoryInfo { .display_string = display_string };
 }
 
-void InputSlots::AddInputSlot(const InputSlotDetails& details)
+auto InputSlots::AddInputSlot(const InputSlotDetails& details) -> void
 {
-    const InputSlot& slot = details.GetSlot();
-    assert(!slots_.contains(slot) && "slot already added");
-    slot.details_ = std::make_shared<InputSlotDetails>(details);
-    slots_[slot] = slot.details_;
+  const InputSlot& slot = details.GetSlot();
+  assert(!slots_.contains(slot) && "slot already added");
+  slot.details_ = std::make_shared<InputSlotDetails>(details);
+  slots_[slot] = slot.details_;
 }
 
-void InputSlots::AddKeyInputSlot(Key key_code,
-    const InputSlotDetails& details)
+auto InputSlots::AddKeyInputSlot(Key key_code, const InputSlotDetails& details)
+  -> void
 {
-    assert(!key_slots_.contains(key_code) && "key code already mapped");
-    const InputSlot& slot = details.GetSlot();
-    assert(!slots_.contains(slot) && "slot already added");
-    key_slots_.insert({ key_code, slot });
-    slot.details_ = std::make_shared<InputSlotDetails>(details);
-    slot.details_->is_keyboard_key_ = true;
-    slot.details_->category_name_ = kKeyCategoryName;
-    slots_[slot] = slot.details_;
+  assert(!key_slots_.contains(key_code) && "key code already mapped");
+  const InputSlot& slot = details.GetSlot();
+  assert(!slots_.contains(slot) && "slot already added");
+  key_slots_.insert({ key_code, slot });
+  slot.details_ = std::make_shared<InputSlotDetails>(details);
+  slot.details_->is_keyboard_key_ = true;
+  slot.details_->category_name_ = kKeyCategoryName;
+  slots_[slot] = slot.details_;
 }
 
-void InputSlots::Initialize()
+auto InputSlots::Initialize() -> void
 {
-    static bool initialized { false };
+  static bool initialized { false };
 
-    if (initialized) {
-        return;
-    }
-    initialized = true;
+  if (initialized) {
+    return;
+  }
+  initialized = true;
 
-    LOG_F(INFO, "Initializing the input slots");
+  LOG_F(INFO, "Initializing the input slots");
 
-    // clang-format off
+  // clang-format off
     AddCategory(kKeyCategoryName, "Mouse");
     AddCategory(kMouseCategoryName, "Keyboard");
 
@@ -563,44 +560,44 @@ void InputSlots::Initialize()
     AddKeyInputSlot(Key::kPrint, InputSlotDetails(Print, "Print Screen"));
     AddKeyInputSlot(Key::kSysReq, InputSlotDetails(SysReq, "Sys Req"));
     AddKeyInputSlot(Key::kMenu, InputSlotDetails(Menu, "Menu"));
-    // clang-format on
+  // clang-format on
 }
 
-void InputSlots::GetAllInputSlots(std::vector<InputSlot>& out_keys)
+auto InputSlots::GetAllInputSlots(std::vector<InputSlot>& out_keys) -> void
 {
-    out_keys.clear();
-    out_keys.reserve(slots_.size());
-    for (const auto& key : slots_ | std::views::keys) {
-        out_keys.push_back(key);
-    }
+  out_keys.clear();
+  out_keys.reserve(slots_.size());
+  for (const auto& key : slots_ | std::views::keys) {
+    out_keys.push_back(key);
+  }
 }
 
 auto InputSlots::GetInputSlotForKey(const Key key) -> InputSlot
 {
-    const auto found = key_slots_.find(key);
-    // We normally have a slot for every value defined in the Key enum
-    if (found == key_slots_.cend()) {
-        LOG_F(
-            FATAL,
-            "We normally have a slot for every value defined in the Key enum, but "
-            "key: {} does not have a corresponding slot.",
-            static_cast<std::underlying_type_t<Key>>(key));
-    }
-    return found->second;
+  const auto found = key_slots_.find(key);
+  // We normally have a slot for every value defined in the Key enum
+  if (found == key_slots_.cend()) {
+    LOG_F(FATAL,
+      "We normally have a slot for every value defined in the Key enum, but "
+      "key: {} does not have a corresponding slot.",
+      static_cast<std::underlying_type_t<Key>>(key));
+  }
+  return found->second;
 }
 
 auto InputSlots::GetInputSlotDetails(const InputSlot& slot)
-    -> std::shared_ptr<InputSlotDetails>
+  -> std::shared_ptr<InputSlotDetails>
 {
-    const auto found = slots_.find(slot);
-    return (found != slots_.end()) ? found->second
-                                   : std::shared_ptr<InputSlotDetails> {};
+  const auto found = slots_.find(slot);
+  return (found != slots_.end()) ? found->second
+                                 : std::shared_ptr<InputSlotDetails> {};
 }
 
 auto InputSlots::GetCategoryDisplayName(const std::string_view category_name)
-    -> std::string_view
+  -> std::string_view
 {
-    const auto found = categories_.find(category_name);
-    return (found != categories_.cend()) ? found->second.display_string
-                                         : std::string_view { "UNKNOWN_CATEGORY" };
+  const auto found = categories_.find(category_name);
+  return (found != categories_.cend())
+    ? found->second.display_string
+    : std::string_view { "UNKNOWN_CATEGORY" };
 }
