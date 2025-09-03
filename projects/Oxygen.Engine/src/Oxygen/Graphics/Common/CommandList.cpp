@@ -15,13 +15,13 @@ CommandList::CommandList(std::string_view name, const QueueRole type)
   , state_(State::kFree)
 {
   AddComponent<ObjectMetaData>(name);
-  DLOG_F(INFO, "CommandList created: {}", name);
+  DLOG_F(1, "CommandList created: {}", name);
 }
 
 CommandList::~CommandList()
 {
-  DLOG_F(INFO, "CommandList destroyed: {}",
-    GetComponent<ObjectMetaData>().GetName());
+  DLOG_F(
+    1, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
 }
 
 auto CommandList::GetName() const noexcept -> std::string_view

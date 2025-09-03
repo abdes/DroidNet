@@ -62,11 +62,8 @@ DescriptorHeapSegment::DescriptorHeapSegment(dx::IDevice* device,
   }
 
   // Log heap segment creation
-  DLOG_F(INFO,
-    "Created D3D12 descriptor heap segment: type={}, flags={}, capacity={}, "
-    "base_index={}{}",
-    static_cast<int>(desc.Type), static_cast<int>(desc.Flags), capacity,
-    base_index, !debug_name.empty() ? fmt::format(" ({})", debug_name) : "");
+  DLOG_F(1, "flags      : {}", static_cast<int>(desc.Flags));
+  DLOG_F(1, "debug name : {}", debug_name);
 }
 
 DescriptorHeapSegment::~DescriptorHeapSegment() { ObjectRelease(heap_); }

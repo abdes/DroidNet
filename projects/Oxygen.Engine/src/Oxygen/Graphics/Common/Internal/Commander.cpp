@@ -27,7 +27,7 @@ auto Commander::PrepareCommandRecorder(
   CHECK_NOTNULL_F(recorder);
   CHECK_NOTNULL_F(command_list);
 
-  LOG_SCOPE_F(INFO, "CommandRecorder");
+  LOG_SCOPE_F(1, "CommandRecorder");
   DLOG_F(2, "command list : '{}'", command_list->GetName());
   DLOG_F(2, "target queue : '{}'", recorder->GetTargetQueue()->GetName());
   DLOG_F(2, "mode         : {}", immediate ? "immediate" : "deferred");
@@ -39,7 +39,7 @@ auto Commander::PrepareCommandRecorder(
   return { recorder.release(),
     [this, cmd_list = std::move(command_list), immediate](
       graphics::CommandRecorder* rec) mutable {
-      DLOG_SCOPE_F(INFO, "~CommandRecorder()");
+      DLOG_SCOPE_F(1, "~CommandRecorder()");
       if (!rec) {
         DLOG_F(WARNING, "deleter invoked with null pointer");
         return;
@@ -166,7 +166,7 @@ auto Commander::RegisterDeferredOnExecute(
   std::vector<std::shared_ptr<graphics::CommandList>> lists) -> void
 {
   reclaimer_->RegisterDeferredAction([moved = std::move(lists)]() mutable {
-    DLOG_SCOPE_F(INFO, "->OnExecuted() Deferred Action");
+    DLOG_SCOPE_F(2, "->OnExecuted() Deferred Action");
     for (auto& l : moved) {
       DLOG_F(2, "command list: {}", l->GetName());
       try {
@@ -183,7 +183,7 @@ auto Commander::RegisterDeferredOnExecute(
   std::shared_ptr<graphics::CommandList> list) -> void
 {
   reclaimer_->RegisterDeferredAction([l = std::move(list)]() mutable {
-    DLOG_SCOPE_F(INFO, "->OnExecuted() Deferred Action");
+    DLOG_SCOPE_F(2, "->OnExecuted() Deferred Action");
     DLOG_F(2, "command list: {}", l->GetName());
     try {
       DCHECK_NOTNULL_F(l);
