@@ -60,7 +60,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
     co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
     platform->Run();
 
-    WindowProps props("Oxygen Window Playground");
+    WindowProps props("Oxygen Window Playground - Interactive Controls");
     props.extent = { .width = 800, .height = 600 };
     props.flags = { .hidden = false,
       .always_on_top = false,
@@ -72,6 +72,14 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
     const auto window_weak = platform->Windows().MakeWindow(props);
     if (const auto window = window_weak.lock()) {
       LOG_F(INFO, "My window {} is created", window->Id());
+      LOG_F(INFO, "=== Interactive Keyboard Controls ===");
+      LOG_F(INFO, "Arrow Keys: Move window position");
+      LOG_F(INFO, "X: Maximize | M: Minimize | R: Restore");
+      LOG_F(INFO, "F: Enter Fullscreen | G: Exit Fullscreen");
+      LOG_F(INFO,
+        "Q: Request Close | A: Request Close (rejected) | Z: Force Close");
+      LOG_F(INFO, "Y: Confirm window close when prompted");
+      LOG_F(INFO, "=====================================");
     }
 
     n.Start([window_weak]() -> oxygen::co::Co<> {
@@ -121,6 +129,133 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
       }
     });
 
+    // Async keyboard input handler for window manipulation
+    n.Start([window_weak, platform, &n]() -> oxygen::co::Co<> {
+      while (!window_weak.expired()) {
+        auto& event = co_await platform->Events().NextEvent();
+        auto _ = co_await platform->Events().Lock();
+        auto sdl_event = event.NativeEventAs<SDL_Event>();
+
+        if (sdl_event->type == SDL_EVENT_KEY_DOWN) {
+          const auto window = window_weak.lock();
+          if (!window)
+            continue;
+
+          constexpr int translate_by = 10;
+
+          switch (sdl_event->key.key) {
+          // Arrow keys - Move window position
+          case SDLK_LEFT: {
+            if (window->Maximized()) {
+              window->Restore();
+            }
+            const auto [pos_x, pos_y] = window->Position();
+            window->MoveTo({ pos_x - translate_by, pos_y });
+          } break;
+
+          case SDLK_RIGHT: {
+            if (window->Maximized()) {
+              window->Restore();
+            }
+            const auto [pos_x, pos_y] = window->Position();
+            window->MoveTo({ pos_x + translate_by, pos_y });
+          } break;
+
+          case SDLK_UP: {
+            if (window->Maximized()) {
+              window->Restore();
+            }
+            const auto [pos_x, pos_y] = window->Position();
+            window->MoveTo({ pos_x, pos_y - translate_by });
+          } break;
+
+          case SDLK_DOWN: {
+            if (window->Maximized()) {
+              window->Restore();
+            }
+            const auto [pos_x, pos_y] = window->Position();
+            window->MoveTo({ pos_x, pos_y + translate_by });
+          } break;
+
+          // Window state controls
+          case SDLK_X: {
+            LOG_F(INFO, "Maximize()");
+            window->Maximize();
+          } break;
+
+          case SDLK_M: {
+            LOG_F(INFO, "Minimize()");
+            window->Minimize();
+          } break;
+
+          case SDLK_R: {
+            LOG_F(INFO, "Restore()");
+            window->Restore();
+          } break;
+
+          // Fullscreen controls
+          case SDLK_F: {
+            LOG_F(INFO, "EnterFullScreen()");
+            window->EnterFullScreen();
+          } break;
+
+          case SDLK_G: {
+            LOG_F(INFO, "ExitFullScreen()");
+            window->ExitFullScreen();
+          } break;
+
+          // Close operations
+          case SDLK_Q: {
+            LOG_F(INFO, "RequestClose(force=false)");
+            window->RequestClose(false);
+          } break;
+
+          case SDLK_A: {
+            LOG_F(INFO, "RequestClose(force=false) rejected");
+            // Start a task that will automatically vote against closing
+            n.Start([window_weak]() -> oxygen::co::Co<> {
+              if (auto window = window_weak.lock()) {
+                co_await window->CloseRequested();
+                LOG_F(INFO, "Auto-rejecting close request (A key behavior)");
+                window->VoteNotToClose();
+              }
+            });
+            window->RequestClose(false);
+          } break;
+
+          case SDLK_Z: {
+            LOG_F(
+              INFO, "RequestClose(force=true) rejected - should still close");
+            // Start a task that will vote against closing, but force=true
+            // should override it
+            n.Start([window_weak]() -> oxygen::co::Co<> {
+              if (auto window = window_weak.lock()) {
+                co_await window->CloseRequested();
+                LOG_F(INFO,
+                  "Auto-rejecting close request (Z key behavior) - but "
+                  "force=true should override");
+                window->VoteNotToClose();
+              }
+            });
+            window->RequestClose(
+              true); // force=true should close despite rejection
+          } break;
+
+          default:
+            break;
+          }
+
+          // Log current window state after any operation
+          if (window) {
+            const auto size = window->Size();
+            const auto position = window->Position();
+            LOG_F(INFO, "  Size: {}x{} | Position: {},{}", size.width,
+              size.height, position.x, position.y);
+          }
+        }
+      }
+    });
+
     n.Start([&platform, &n]() -> oxygen::co::Co<> {
       co_await platform->Windows().LastWindowClosed();
       LOG_F(INFO, "Last window is closed -> wrapping up");
@@ -146,124 +281,3 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
   // Explicit destruction order due to dependencies.
   platform.reset();
 }
-
-#if 0
-        bool continue_running = true;
-        // platform->OnLastWindowClosed().connect(
-        //     [&continue_running]() { continue_running = false; });
-
-        while (continue_running) {
-            if (const auto event = platform->PollEvent()) {
-                if (event->GetType() == oxygen::platform::InputEventType::kKeyEvent) {
-                    const auto& key_event = dynamic_cast<const oxygen::platform::KeyEvent&>(*event);
-                    if (key_event.GetButtonState() == oxygen::platform::ButtonState::kPressed) {
-
-                        constexpr int translate_by = 10;
-
-                        switch (key_event.GetKeyCode()) {
-                        case oxygen::platform::Key::kLeftArrow: {
-                            if (const auto window = window_weak.lock()) {
-                                if (window->IsMaximized()) {
-                                    window->Restore();
-                                }
-                                const auto [pos_x, pos_y] = window->Position();
-                                window->Position({ pos_x - translate_by, pos_y });
-                            }
-                        } break;
-                        case oxygen::platform::Key::kRightArrow: {
-                            if (const auto window = window_weak.lock()) {
-                                if (window->IsMaximized()) {
-                                    window->Restore();
-                                }
-                                const auto [pos_x, pos_y] = window->Position();
-                                window->Position({ pos_x + translate_by, pos_y });
-                            }
-                        } break;
-                        case oxygen::platform::Key::kUpArrow: {
-                            if (const auto window = window_weak.lock()) {
-                                if (window->IsMaximized()) {
-                                    window->Restore();
-                                }
-                                const auto [pos_x, pos_y] = window->Position();
-                                window->Position({ pos_x, pos_y - translate_by });
-                            }
-                        } break;
-                        case oxygen::platform::Key::kDownArrow: {
-                            if (const auto window = window_weak.lock()) {
-                                if (window->IsMaximized()) {
-                                    window->Restore();
-                                }
-                                const auto [pos_x, pos_y] = window->Position();
-                                window->Position({ pos_x, pos_y + translate_by });
-                            }
-                        } break;
-                        case oxygen::platform::Key::kX: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "Maximize()");
-                                window->Maximize();
-                            }
-                        } break;
-                        case oxygen::platform::Key::kM: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "Minimize()");
-                                window->Minimize();
-                            }
-                        } break;
-                        case oxygen::platform::Key::kR: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "Restore()");
-                                window->Restore();
-                            }
-                        } break;
-                        case oxygen::platform::Key::kF: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "FullScreen(true)");
-                                window->FullScreen(true);
-                            }
-                        } break;
-                        case oxygen::platform::Key::kG: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "FullScreen(false)");
-                                window->FullScreen(false);
-                            }
-                        } break;
-                        case oxygen::platform::Key::kQ: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "RequestClose(force=false)");
-                                window->RequestClose(false);
-                            }
-                        } break;
-                        case oxygen::platform::Key::kA: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO, "RequestClose(force=false) rejected");
-                                auto connection = window->OnCloseRequested().connect(
-                                    [&window](bool) { window->RequestNotToClose(); });
-                                window->RequestClose(false);
-                                window->OnCloseRequested().disconnect(connection);
-                            }
-                        } break;
-                        case oxygen::platform::Key::kZ: {
-                            if (const auto window = window_weak.lock()) {
-                                LOG_F(INFO,
-                                    "RequestClose(force=true) rejected - should still close");
-                                auto connection = window->OnCloseRequested().connect(
-                                    [&window](bool) { window->RequestNotToClose(); });
-                                window->RequestClose(true);
-                                window->OnCloseRequested().disconnect(connection);
-                            }
-                        } break;
-                        default:
-                            break;
-                        }
-                        if (const auto window = window_weak.lock()) {
-                            LOG_F(INFO, "  {} | {}", nostd::to_string(window->Size()),
-                                nostd::to_string(window->Position()));
-                        }
-                    }
-                }
-            }
-
-            constexpr auto wait_for = std::chrono::milliseconds(10);
-            std::this_thread::sleep_for(wait_for);
-        }
-#endif
