@@ -21,7 +21,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
@@ -164,9 +163,6 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>();
   AddComponent<DescriptorAllocatorComponent>();
-  // TODO: ASYNCENGINE MIGRATION - Move PipelineStateCache from RenderController
-  // to Graphics This enables direct pipeline state management without requiring
-  // RenderController
   AddComponent<detail::PipelineStateCache>(this);
 }
 
@@ -187,8 +183,6 @@ auto Graphics::CreateCommandRecorder(
   observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
-  // TODO: ASYNC_ENGINE_MIGRATION - Implement direct CommandRecorder creation
-  // This replaces the previous RenderController dependency
   auto this_shared = shared_from_this();
   auto d3d12_graphics = std::static_pointer_cast<Graphics>(this_shared);
   return std::make_unique<CommandRecorder>(
@@ -266,9 +260,6 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
   return std::make_shared<Buffer>(desc, this);
 }
 
-// TODO: ASYNCENGINE MIGRATION - Pipeline state methods moved from
-// RenderController These enable direct pipeline management without requiring
-// RenderController
 auto Graphics::GetOrCreateGraphicsPipeline(
   oxygen::graphics::GraphicsPipelineDesc desc, const size_t hash)
   -> detail::PipelineStateCache::Entry

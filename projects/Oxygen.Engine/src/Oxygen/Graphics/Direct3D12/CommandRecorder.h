@@ -35,14 +35,10 @@ namespace detail {
 
 } // namespace detail
 
-class RenderController;
-
 class CommandRecorder final : public graphics::CommandRecorder {
   using Base = graphics::CommandRecorder;
 
 public:
-  // TODO: ASYNC_ENGINE_MIGRATION - Updated constructor to use Graphics instead
-  // of RenderController
   CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue);
@@ -142,8 +138,6 @@ protected:
 private:
   [[nodiscard]] auto GetConcreteCommandList() const -> CommandList&;
 
-  // TODO: ASYNC_ENGINE_MIGRATION - Replaced RenderController* with Graphics
-  // weak_ptr
   std::weak_ptr<Graphics> graphics_weak_;
 
   size_t graphics_pipeline_hash_ = 0;

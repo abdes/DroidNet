@@ -42,13 +42,11 @@ namespace graphics {
   class NativeObject;
   class QueuesStrategy;
   class ResourceRegistry;
-  class RenderController;
   class Surface;
   struct TextureDesc;
   class Texture;
 
   namespace detail {
-    class RenderThread;
     class DeferredReclaimer; // TODO: this needs to become public
   } // namespace detail
 } // namespace graphics
@@ -70,8 +68,6 @@ namespace imgui {
    resource registry) with backend-provided installation.
  - Command queue creation via a configurable graphics::QueuesStrategy and pooled
    command list acquisition per queue role.
- - Creation/orchestration of graphics::RenderController instances bound to
-   platform::Window-backed graphics::Surface objects.
  - Coroutine-driven activation and run loop (see co::LiveObject), with a
    per-frame parking lot to start rendering cycles.
 
@@ -79,8 +75,6 @@ namespace imgui {
 
  - Applications instantiate a backend-derived Graphics (e.g., D3D12, Vulkan),
    then call ActivateAsync() and Run() on a separate thread.
- - Upper layers request renderers via CreateRenderController() and use
-   OnRenderStart()/Render() to synchronize frame starts.
 
  ### Architecture Notes
 
@@ -95,7 +89,7 @@ namespace imgui {
  @warning The descriptor allocator must be installed exactly once by the backend
  after device creation; accessing bindless facilities before that is a contract
  violation and triggers debug assertions.
- @see graphics::RenderController, graphics::Surface, graphics::QueuesStrategy,
+ @see graphics::Surface, graphics::QueuesStrategy,
       graphics::DescriptorAllocator, graphics::ResourceRegistry, co::LiveObject
 */
 class Graphics : public Composition,
@@ -166,9 +160,9 @@ public:
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>>;
 
-  // Submit any command lists that were recorded with deferred submission.
-  // This will submit them to their associated target queues and call
-  // OnSubmitted() on each command list after successful submission.
+  // Submit any command lists that were recorded with deferred submission. This
+  // will submit them to their associated target queues and call OnSubmitted()
+  // on each command list after successful submission.
   OXGN_GFX_NDAPI auto SubmitDeferredCommandLists() -> void;
 
   OXGN_GFX_NDAPI auto AcquireCommandList(
@@ -224,8 +218,8 @@ protected:
   @return Shared pointer to the created command queue.
   @throw std::runtime_error If the command queue cannot be created.
 
-   Note: Typical callers use CreateCommandQueues() and GetCommandQueue();
-   this method is for backend implementations.
+   Note: Typical callers use CreateCommandQueues() and GetCommandQueue(); this
+   method is for backend implementations.
   */
   [[nodiscard]] virtual auto CreateCommandQueue(
     const graphics::QueueKey& queue_name, graphics::QueueRole role)

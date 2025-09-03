@@ -41,7 +41,6 @@ class CommandQueue;
 class IShaderByteCode;
 class Buffer;
 class Texture;
-class RenderController;
 class Framebuffer;
 class NativeObject;
 

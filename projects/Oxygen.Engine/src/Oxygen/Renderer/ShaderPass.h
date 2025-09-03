@@ -17,7 +17,6 @@
 namespace oxygen::graphics {
 class Framebuffer;
 class Buffer;
-class RenderController;
 class CommandRecorder;
 class Texture;
 class GraphicsPipelineDesc;

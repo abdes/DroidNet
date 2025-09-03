@@ -22,7 +22,6 @@
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/OxCo/Co.h>

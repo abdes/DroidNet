@@ -59,7 +59,7 @@ manipulates:
   - Ad-hoc components: stored directly in the composition, allocated on the
     heap, and do not require a Resource Type Id
 - Examples: `ObjectMetadata` (pooled), `TransformComponent` (pooled),
-  `RenderThread` (non pooled)
+  `DeferredReclaimer` (non pooled)
 
 ```cpp
 namespace oxygen {

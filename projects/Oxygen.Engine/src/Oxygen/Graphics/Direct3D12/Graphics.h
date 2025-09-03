@@ -13,8 +13,8 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
-#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 // Forward declarations for pipeline management
 namespace oxygen::graphics {
@@ -88,9 +88,6 @@ public:
     -> uint8_t;
 
   //=== Pipeline State Management ===--------------------------------------//
-  // TODO: ASYNCENGINE MIGRATION - Pipeline state methods moved from
-  // RenderController These enable direct pipeline management without requiring
-  // RenderController
 
   OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(
     oxygen::graphics::GraphicsPipelineDesc desc, size_t hash)

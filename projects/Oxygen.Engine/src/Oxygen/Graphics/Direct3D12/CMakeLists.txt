@@ -77,7 +77,6 @@ set(
   "Devices/DeviceManager.h"
   "GraphicResource.h"
   "Graphics.h"
-  "RenderController.h"
   "Texture.h"
   # "ImGui/ImGuiModule.h"
 )
@@ -110,7 +109,6 @@ set(
   "Devices/DeviceManager.cpp"
   "Graphics.cpp"
   "ImGui/imgui_impl_dx12.h"
-  "RenderController.cpp"
   "Shaders/EngineShaders.cpp"
   "Shaders/EngineShaders.h"
   "Shaders/ShaderCompiler.cpp"
