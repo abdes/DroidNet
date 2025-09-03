@@ -4,6 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+//
+// ModuleManager - Module Execution and Error Handling
+//
+// ERROR HANDLING BEHAVIOR:
+// 1. Synchronous phases (FrameStart, FrameEnd):
+//    - Errors are handled immediately as each module executes
+//    - Failed modules are processed right after the exception is caught
+//
+// 2. Concurrent phases (Input, Gameplay, FrameGraph, etc.):
+//    - Module execution happens in parallel using AllOf()
+//    - Errors are collected during execution but NOT processed immediately
+//    - After AllOf() completes, all errors are processed together
+//    - This ensures we don't modify the module list while coroutines are
+//    running
+//
+// 3. Module failure handling:
+//    - Non-critical modules: Removed from ModuleManager, errors cleared
+//    - Critical modules: Kept in ModuleManager, errors remain for engine
+//    handling
+//    - Phase cache is rebuilt when modules are removed
+//
+// 4. Module handlers are NOT noexcept:
+//    - Handlers can throw exceptions which are caught by RunHandlerImpl
+//    - Exceptions are converted to error reports in FrameContext
+//    - This allows modules to use standard exception handling patterns
+//
+
 #include <concepts>
 #include <type_traits>
 #include <utility>
@@ -124,17 +151,111 @@ auto ModuleManager::RebuildPhaseCache() noexcept -> void
   }
 }
 
+auto ModuleManager::FindModuleByTypeId(TypeId type_id) const noexcept
+  -> EngineModule*
+{
+  auto it = std::ranges::find_if(modules_,
+    [type_id](const auto& module) { return module->GetTypeId() == type_id; });
+  return (it != modules_.end()) ? it->get() : nullptr;
+}
+
+auto ModuleManager::HandleModuleErrors(
+  FrameContext& ctx, core::PhaseId /*phase*/) noexcept -> void
+{
+  const auto& errors = ctx.GetErrors();
+  if (errors.empty()) {
+    return;
+  }
+
+  // Normalize module errors: find modules by key or type_id and set proper
+  // source_key
+  auto normalized_errors = errors
+    | std::views::transform([this](auto error) { // Copy error to modify it
+        EngineModule* module = nullptr;
+
+        if (error.source_key.has_value()) {
+          // Has key - find module by name
+          auto module_opt = GetModule(error.source_key.value());
+          module = module_opt.has_value()
+            ? const_cast<EngineModule*>(&module_opt.value().get())
+            : nullptr;
+        } else {
+          // No key - try to find by type_id and normalize as bad module
+          module = FindModuleByTypeId(error.source_type_id);
+          if (module) {
+            // Normalize bad module with special key
+            error.source_key = "__bad_module__";
+            error.message = fmt::format("CRITICAL: Module '{}' reported error "
+                                        "without proper attribution: {}",
+              module->GetName(), error.message);
+          }
+        }
+
+        return std::make_pair(error, module);
+      })
+    | std::views::filter([](const auto& pair) {
+        return pair.second != nullptr; // Only process module errors
+      })
+    | std::ranges::to<std::vector>();
+
+  // Handle bad module errors: clear original and report as critical
+  std::ranges::for_each(normalized_errors, [this, &ctx](const auto& pair) {
+    const auto& [error, module] = pair;
+    if (error.source_key.has_value()
+      && error.source_key.value() == "__bad_module__") {
+      // Clear the original badly reported error
+      ctx.ClearErrorsFromSource(error.source_type_id);
+      // Report normalized critical error
+      ctx.ReportError(
+        TypeId {}, error.message); // Already formatted as critical
+    }
+  });
+
+  // Single pipeline: collect non-critical modules to remove (exclude bad
+  // modules)
+  auto modules_to_remove = normalized_errors
+    | std::views::filter([](const auto& pair) {
+        const auto& [error, module] = pair;
+        return error.source_key.has_value()
+          && error.source_key.value()
+          != "__bad_module__" // Don't remove bad modules
+          && !module->IsCritical();
+      })
+    | std::ranges::to<std::vector>();
+
+  // Remove non-critical modules and clear their errors
+  std::ranges::for_each(modules_to_remove, [this, &ctx](const auto& pair) {
+    const auto& [error, module] = pair;
+    const auto& module_name = error.source_key.value();
+    const auto module_type_id = error.source_type_id;
+    UnregisterModule(module_name);
+
+    // Clear only errors from this specific module (by TypeId AND source_key)
+    ctx.ClearErrorsFromSource(module_type_id, error.source_key);
+  });
+}
+
 // Lightweight RunHandler: accept a callable that either returns co::Co<> or is
 // synchronous void. We adapt synchronous calls into coroutines.
 namespace {
-auto RunHandlerImpl(oxygen::co::Co<> awaitable) -> oxygen::co::Co<>
+
+auto RunHandlerImpl(oxygen::co::Co<> awaitable, EngineModule* module,
+  FrameContext& ctx) -> oxygen::co::Co<>
 {
   try {
     co_await std::move(awaitable);
   } catch (const std::exception& e) {
-    LOG_F(ERROR, "Module handler threw: {}", e.what());
+    const auto error_message = fmt::format(
+      "Module '{}' handler threw: {}", module->GetName(), e.what());
+    LOG_F(ERROR, "{}", error_message);
+    ctx.ReportError(
+      module->GetTypeId(), error_message, std::string { module->GetName() });
   } catch (...) {
-    LOG_F(ERROR, "Module handler threw unknown exception");
+    const auto error_message = fmt::format(
+      "Module '{}' handler threw unknown exception", module->GetName());
+    LOG_F(ERROR, "{}", error_message);
+    ctx.ReportError(
+      module->GetTypeId(), error_message, std::string { module->GetName() });
   }
   co_return;
 }
@@ -144,11 +265,13 @@ auto RunHandlerImpl(oxygen::co::Co<> awaitable) -> oxygen::co::Co<>
 // overload above; otherwise just invoke it (synchronous handlers).
 template <typename F, typename... Args>
   requires std::invocable<F, Args...>
-auto RunHandlerImpl(F&& f, Args&&... args) -> oxygen::co::Co<>
+auto RunHandlerImpl(F&& f, EngineModule* module, FrameContext& ctx,
+  Args&&... args) -> oxygen::co::Co<>
 {
   using Ret = std::invoke_result_t<F, Args...>;
   static_assert(!oxygen::co::Awaitable<Ret>,
     "This overload should not be used for coroutines");
+
   try {
     if constexpr (std::same_as<Ret, void>) {
       std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
@@ -157,9 +280,17 @@ auto RunHandlerImpl(F&& f, Args&&... args) -> oxygen::co::Co<>
       (void)std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
     }
   } catch (const std::exception& e) {
-    LOG_F(ERROR, "Module handler threw: {}", e.what());
+    const auto error_message = fmt::format(
+      "Module '{}' handler threw: {}", module->GetName(), e.what());
+    LOG_F(ERROR, "{}", error_message);
+    ctx.ReportError(
+      module->GetTypeId(), error_message, std::string { module->GetName() });
   } catch (...) {
-    LOG_F(ERROR, "Module handler threw unknown exception");
+    const auto error_message = fmt::format(
+      "Module '{}' handler threw unknown exception", module->GetName());
+    LOG_F(ERROR, "{}", error_message);
+    ctx.ReportError(
+      module->GetTypeId(), error_message, std::string { module->GetName() });
   }
   co_return;
 }
@@ -174,17 +305,19 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
     switch (phase) { // NOLINT(clang-diagnostic-switch-enum)
     case PhaseId::kFrameStart:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, FrameContext& c) { mm.OnFrameStart(c); },
+        [](EngineModule& mm, FrameContext& c) { mm.OnFrameStart(c); }, m, ctx,
         std::ref(*m), std::ref(ctx));
       break;
     case PhaseId::kFrameEnd:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, FrameContext& c) { mm.OnFrameEnd(c); },
+        [](EngineModule& mm, FrameContext& c) { mm.OnFrameEnd(c); }, m, ctx,
         std::ref(*m), std::ref(ctx));
       break;
     default:
       ABORT_F("Check consistency with ExecutePhase() implementation");
     }
+    // Note: Synchronous handlers report errors immediately, so no deferred
+    // processing needed
   }
   co_return;
 }
@@ -208,44 +341,47 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
     }
     switch (phase) { // NOLINT(clang-diagnostic-switch-enum)
     case PhaseId::kInput:
-      tasks.emplace_back(RunHandlerImpl(m->OnInput(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnInput(ctx), m, ctx));
       break;
     case PhaseId::kFixedSimulation:
-      tasks.emplace_back(RunHandlerImpl(m->OnFixedSimulation(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnFixedSimulation(ctx), m, ctx));
       break;
     case PhaseId::kGameplay:
-      tasks.emplace_back(RunHandlerImpl(m->OnGameplay(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnGameplay(ctx), m, ctx));
       break;
     case PhaseId::kSceneMutation:
-      tasks.emplace_back(RunHandlerImpl(m->OnSceneMutation(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnSceneMutation(ctx), m, ctx));
       break;
     case PhaseId::kTransformPropagation:
-      tasks.emplace_back(RunHandlerImpl(m->OnTransformPropagation(ctx)));
+      tasks.emplace_back(
+        RunHandlerImpl(m->OnTransformPropagation(ctx), m, ctx));
       break;
     case PhaseId::kPostParallel:
-      tasks.emplace_back(RunHandlerImpl(m->OnPostParallel(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnPostParallel(ctx), m, ctx));
       break;
     case PhaseId::kFrameGraph:
-      tasks.emplace_back(RunHandlerImpl(m->OnFrameGraph(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnFrameGraph(ctx), m, ctx));
       break;
     case PhaseId::kCommandRecord:
-      tasks.emplace_back(RunHandlerImpl(m->OnCommandRecord(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnCommandRecord(ctx), m, ctx));
       break;
     case PhaseId::kAsyncPoll:
-      tasks.emplace_back(RunHandlerImpl(m->OnAsyncPoll(ctx)));
+      tasks.emplace_back(RunHandlerImpl(m->OnAsyncPoll(ctx), m, ctx));
       break;
     default:
       ABORT_F("Check consistency with ExecutePhase() implementation");
     }
   }
+
   if (!tasks.empty()) {
+    // Wait for all tasks to complete
     co_await oxygen::co::AllOf(std::move(tasks));
   }
   co_return;
 }
 
-auto ExecuteDeferredPipelinesPhase(const std::vector<EngineModule*>& list,
-  const FrameContext& ctx) -> oxygen::co::Co<>
+auto ExecuteDeferredPipelinesPhase(
+  const std::vector<EngineModule*>& list, FrameContext& ctx) -> oxygen::co::Co<>
 {
   const auto* frame = ctx.GetFrameSnapshot();
   if (!frame) {
@@ -261,9 +397,11 @@ auto ExecuteDeferredPipelinesPhase(const std::vector<EngineModule*>& list,
     if (!m) {
       continue;
     }
-    tasks.emplace_back(RunHandlerImpl(m->OnParallelTasks(*frame)));
+    tasks.emplace_back(RunHandlerImpl(m->OnParallelTasks(*frame), m, ctx));
   }
+
   if (!tasks.empty()) {
+    // Wait for all tasks to complete
     co_await oxygen::co::AllOf(std::move(tasks));
   }
   co_return;
@@ -288,7 +426,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
       || desc.category == ExecutionModel::kEngineInternal) {
       co_await ExecuteSynchronousPhase(list, phase, ctx);
     }
-    co_return;
+    break;
   }
 
   case PhaseId::kInput:
@@ -304,7 +442,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
     if (desc.category == ExecutionModel::kBarrieredConcurrency) {
       co_await ExecuteBarrieredConcurrencyPhase(list, phase, ctx);
     }
-    co_return;
+    break;
   }
 
   case PhaseId::kParallelTasks: {
@@ -312,12 +450,12 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
     if (desc.category == ExecutionModel::kDeferredPipelines) {
       co_await ExecuteDeferredPipelinesPhase(list, ctx);
     }
-    co_return;
+    break;
   }
 
   case PhaseId::kDetachedServices: {
     // Detached services are expected to be started elsewhere.
-    co_return;
+    break;
   }
 
   case PhaseId::kNetworkReconciliation:
@@ -326,10 +464,16 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   case PhaseId::kPresent:
   case PhaseId::kBudgetAdapt:
     // No modules participate in these engine-only phases.
-    co_return;
+    break;
 
   case PhaseId::kCount:
     ABORT_F(
       "kCount is not supposed to be used as a PhaseId for module execution");
   }
+
+  // Handle module errors - remove non-critical failed modules, report critical
+  // failures
+  HandleModuleErrors(ctx, phase);
+
+  co_return;
 }

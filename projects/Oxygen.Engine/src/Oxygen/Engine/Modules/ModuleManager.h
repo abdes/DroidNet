@@ -13,6 +13,8 @@
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Engine/api_export.h>
@@ -30,7 +32,9 @@ class FrameContext;
 
 // Modern, lean ModuleManager. Minimal thread-safety: registration must happen
 // outside of frame execution or be externally synchronized by the caller.
-class ModuleManager {
+class ModuleManager : public Object {
+  OXYGEN_TYPED(ModuleManager)
+
 public:
   OXGN_NGIN_API explicit ModuleManager(observer_ptr<AsyncEngine> engine);
 
@@ -80,6 +84,14 @@ private:
 
   // Rebuild the phase cache. Called after registration changes.
   auto RebuildPhaseCache() noexcept -> void;
+
+  // Find module by TypeId for error handling
+  auto FindModuleByTypeId(TypeId type_id) const noexcept -> EngineModule*;
+
+  // Handle module errors - remove non-critical failed modules, report critical
+  // failures
+  auto HandleModuleErrors(FrameContext& ctx, core::PhaseId phase) noexcept
+    -> void;
 };
 
 } // namespace oxygen::engine

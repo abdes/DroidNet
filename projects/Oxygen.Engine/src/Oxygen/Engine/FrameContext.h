@@ -86,6 +86,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <span>
 #include <string>
@@ -93,6 +94,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Engine/EngineTag.h>
@@ -123,6 +125,40 @@ struct ResourceRegistry;
 class RenderGraphBuilder;
 
 struct EngineProps;
+
+//=== Error Reporting System ===----------------------------------------------//
+
+//! Frame error information for module error reporting.
+/*!
+ Simple error structure containing source module type information and
+ human-readable message. Used for basic error propagation from modules
+ to the engine frame loop without exceptions.
+
+ ### Key Features
+
+ - **Typed Source**: Uses TypeId for compile-time and runtime type safety
+ - **Simple Message**: Human-readable error description
+
+ ### Usage Examples
+
+ ```cpp
+ // Report error from typed module
+ context.ReportError<MyModule>("Failed to initialize graphics");
+
+ // Clear errors from specific module type
+ context.ClearErrorsFromSource<MyModule>();
+ ```
+
+ @see FrameContext::ReportError, FrameContext::HasErrors
+*/
+struct FrameError {
+  TypeId source_type_id { kInvalidTypeId }; //!< Source module type identifier
+  std::string message; //!< Human-readable error message
+  std::optional<std::string>
+    source_key; //!< Optional unique identifier for error source
+};
+
+//===-------------------------------------------------------------------------//
 
 //! Draw batch for render graph execution
 /*!
@@ -688,6 +724,9 @@ public:
   //! Get the current frame index (monotonic counter).
   auto GetFrameSequenceNumber() const noexcept { return frameIndex_; }
 
+  //! Get the current frame slot (for multi-buffered resources).
+  auto GetFrameSlot() const noexcept { return frameSlot_; }
+
   //! Get the current epoch value (for resource lifecycle management).
   auto GetEpoch() const noexcept { return engine_state_.epoch; }
 
@@ -695,6 +734,12 @@ public:
     frame::SequenceNumber frameNumber, EngineTag) noexcept -> void
   {
     frameIndex_ = frameNumber;
+  }
+
+  //! Engine-only: Set the current frame slot. Requires EngineTag capability.
+  auto SetFrameSlot(frame::Slot slot, EngineTag) noexcept -> void
+  {
+    frameSlot_ = slot;
   }
 
   //! Engine-only: Advance epoch by one. Requires EngineTag capability.
@@ -1539,6 +1584,230 @@ public:
     return engine_state_.graphics.lock();
   }
 
+  //=== Error Reporting Interface ===-----------------------------------------//
+
+  //! Report an error from a typed module source.
+  /*!
+   Reports an error with compile-time type safety. The source module type
+   is automatically determined from the template parameter.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) for insertion
+   - Memory: Allocates string storage for message
+   - Optimization: Thread-safe using shared_mutex
+
+   ### Usage Examples
+
+   ```cpp
+   // Report error from ModuleManager
+   context.ReportError<ModuleManager>("Module initialization failed");
+
+   // Report error from GraphicsModule
+   context.ReportError<GraphicsModule>("Failed to create render target");
+   ```
+
+   @tparam SourceType Module type reporting the error (must satisfy IsTyped)
+   @param message Human-readable error description
+   @note Thread-safe for concurrent access
+   @see HasErrors, GetErrors, ClearErrorsFromSource
+  */
+  template <IsTyped SourceType>
+  auto ReportError(std::string message,
+    std::optional<std::string> source_key = std::nullopt) noexcept -> void
+  {
+    std::unique_lock lock { error_mutex_ };
+    frame_errors_.emplace_back(FrameError {
+      .source_type_id = SourceType::ClassTypeId(),
+      .message = std::move(message),
+      .source_key = std::move(source_key),
+    });
+  }
+
+  //! Report an error using a TypeId directly
+  /*!
+   Reports an error to the frame context using the specified TypeId as the
+   source. This is useful when reporting errors on behalf of other objects.
+
+   @param source_type_id The TypeId of the source that caused the error
+   @param message Descriptive error message
+
+   ### Usage Examples
+
+   ```cpp
+   context.ReportError(module->GetTypeId(), "Module failed during execution");
+   ```
+
+   @see HasErrors, GetErrors, ClearErrorsFromSource
+  */
+  auto ReportError(TypeId source_type_id, std::string message,
+    std::optional<std::string> source_key = std::nullopt) noexcept -> void
+  {
+    std::unique_lock lock { error_mutex_ };
+    frame_errors_.emplace_back(FrameError {
+      .source_type_id = source_type_id,
+      .message = std::move(message),
+      .source_key = std::move(source_key),
+    });
+  }
+
+  //! Check if any errors have been reported this frame.
+  /*!
+   Returns true if any module has reported errors during the current frame.
+
+   ### Usage Examples
+
+   ```cpp
+   if (context.HasErrors()) {
+     // Handle error condition
+     auto errors = context.GetErrors();
+     for (const auto& error : errors) {
+       // Process error
+     }
+   }
+   ```
+
+   @return True if errors exist, false otherwise
+   @note Thread-safe for concurrent access
+   @see GetErrors, ReportError
+  */
+  [[nodiscard]] auto HasErrors() const noexcept -> bool
+  {
+    std::shared_lock lock { error_mutex_ };
+    return !frame_errors_.empty();
+  }
+
+  //! Get a thread-safe copy of all reported errors.
+  /*!
+   Returns a copy of all errors reported during the current frame.
+   Safe for concurrent access and processing.
+
+   ### Usage Examples
+
+   ```cpp
+   auto errors = context.GetErrors();
+   for (const auto& error : errors) {
+     LOG_ERROR("Module error: {}", error.message);
+   }
+   ```
+
+   @return Vector containing copies of all frame errors
+   @note Thread-safe via copy, no live references to internal data
+   @see HasErrors, ClearErrors
+  */
+  [[nodiscard]] auto GetErrors() const noexcept -> std::vector<FrameError>
+  {
+    std::shared_lock lock { error_mutex_ };
+    return frame_errors_;
+  }
+
+  //! Clear errors from a specific typed module source.
+  /*!
+   Removes all errors reported by the specified module type using
+   compile-time type safety.
+
+   ### Usage Examples
+
+   ```cpp
+   // Clear errors from ModuleManager
+   context.ClearErrorsFromSource<ModuleManager>();
+
+   // Clear errors from specific module type
+   context.ClearErrorsFromSource<GraphicsModule>();
+   ```
+
+   @tparam SourceType Module type to clear errors from (must satisfy IsTyped)
+   @note Thread-safe for concurrent access
+   @see ClearErrorsFromSource(TypeId), ClearAllErrors
+  */
+  template <IsTyped SourceType> auto ClearErrorsFromSource() noexcept -> void
+  {
+    ClearErrorsFromSource(SourceType::ClassTypeId());
+  }
+
+  //! Clear errors from a specific module source by TypeId.
+  /*!
+   Removes all errors reported by the specified module type using
+   runtime TypeId. Useful for ModuleManager when working with
+   dynamic module collections.
+
+   ### Usage Examples
+
+   ```cpp
+   // Clear errors from runtime module type
+   auto module_type_id = module.GetTypeId();
+   context.ClearErrorsFromSource(module_type_id);
+   ```
+
+   @param source_type_id TypeId of the module type to clear errors from
+   @note Thread-safe for concurrent access
+   @see ClearErrorsFromSource<SourceType>(), ClearAllErrors
+  */
+  auto ClearErrorsFromSource(TypeId source_type_id) noexcept -> void
+  {
+    std::unique_lock lock { error_mutex_ };
+    frame_errors_.erase(
+      std::remove_if(frame_errors_.begin(), frame_errors_.end(),
+        [source_type_id](const FrameError& error) {
+          return error.source_type_id == source_type_id;
+        }),
+      frame_errors_.end());
+  }
+
+  //! Clear errors from a specific module source by TypeId and source key.
+  /*!
+   Removes all errors reported by the specified module type that also
+   match the given source key. Provides granular error clearing for
+   cases where multiple modules of the same type exist.
+
+   ### Usage Examples
+
+   ```cpp
+   // Clear errors from specific module instance
+   auto module_type_id = module.GetTypeId();
+   auto module_name = module.GetName();
+   context.ClearErrorsFromSource(module_type_id, module_name);
+   ```
+
+   @param source_type_id TypeId of the module type to clear errors from
+   @param source_key Optional source key to match for granular clearing
+   @note Thread-safe for concurrent access
+   @see ClearErrorsFromSource(TypeId), ClearAllErrors
+  */
+  auto ClearErrorsFromSource(TypeId source_type_id,
+    const std::optional<std::string>& source_key) noexcept -> void
+  {
+    std::unique_lock lock { error_mutex_ };
+    frame_errors_.erase(
+      std::remove_if(frame_errors_.begin(), frame_errors_.end(),
+        [source_type_id, &source_key](const FrameError& error) {
+          return error.source_type_id == source_type_id
+            && error.source_key == source_key;
+        }),
+      frame_errors_.end());
+  }
+
+  //! Clear all reported errors.
+  /*!
+   Removes all errors reported during the current frame from all sources.
+   Typically called at frame start to reset error state.
+
+   ### Usage Examples
+
+   ```cpp
+   // Clear all errors at frame start
+   context.ClearAllErrors();
+   ```
+
+   @note Thread-safe for concurrent access
+   @see ClearErrorsFromSource, HasErrors
+  */
+  auto ClearAllErrors() noexcept -> void
+  {
+    std::unique_lock lock { error_mutex_ };
+    frame_errors_.clear();
+  }
+
 private:
   //------------------------------------------------------------------------
   // Private helper methods
@@ -1561,6 +1830,7 @@ private:
   //------------------------------------------------------------------------
 
   frame::SequenceNumber frameIndex_ { 0 };
+  frame::Slot frameSlot_ { 0 };
   std::chrono::steady_clock::time_point frameStartTime_ {};
 
   // Immutable dependencies provided at construction and valid for app lifetime
@@ -1643,6 +1913,10 @@ private:
 
   // Lock-free input snapshot pointer (written once per frame by coordinator)
   std::atomic<std::shared_ptr<const InputSnapshot>> atomicInputSnapshot_;
+
+  // Error reporting system state
+  mutable std::shared_mutex error_mutex_;
+  std::vector<FrameError> frame_errors_;
 };
 
 } // namespace oxygen::engine
