@@ -274,14 +274,14 @@ VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
   DCHECK_NOTNULL_F(entry_ref.visited_node.node_impl);
 
   DLOG_SCOPE_FUNCTION(2);
-  DLOG_F(2, "node : {}", entry_ref.visited_node.node_impl->GetName());
+  DLOG_F(3, "node : {}", entry_ref.visited_node.node_impl->GetName());
 
   VisitResult visit_result;
   if (dry_run) {
     DLOG_SCOPE_F(2, "Dry-Run");
 
     visit_result = visitor(entry_ref.visited_node, dry_run);
-    DLOG_F(2, "result: {}", nostd::to_string(visit_result));
+    DLOG_F(3, "result: {}", nostd::to_string(visit_result));
 
     if (visit_result == VisitResult::kContinue) [[likely]] {
       return visit_result; // Continue traversal
@@ -296,7 +296,7 @@ VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
   auto entry = Traits::pop(container); // Do not use node_ref - invalidated
 
   visit_result = visitor(entry.visited_node, false);
-  DLOG_F(2, "-> {}", nostd::to_string(visit_result));
+  DLOG_F(3, "-> {}", nostd::to_string(visit_result));
   ++result.nodes_visited;
 
   if (visit_result == VisitResult::kStop) [[unlikely]] {
@@ -465,8 +465,8 @@ std::size_t SceneTraversal<SceneT>::UpdateTransforms()
 
       DCHECK_NOTNULL_F(node.node_impl);
       LOG_SCOPE_F(2, "For Node");
-      LOG_F(2, "name = {}", node.node_impl->GetName());
-      LOG_F(2, "is root: {}", node.node_impl->AsGraphNode().IsRoot());
+      LOG_F(3, "name = {}", node.node_impl->GetName());
+      LOG_F(3, "is root: {}", node.node_impl->AsGraphNode().IsRoot());
 
       node.node_impl->UpdateTransforms(GetScene());
       ++updated_count;

@@ -62,7 +62,7 @@ void CommandRecorder::FlushBarriers()
     return;
   }
 
-  LOG_SCOPE_F(4, "Flushing barriers");
+  LOG_SCOPE_F(2, "Flushing barriers");
 
   // Execute the pending barriers by calling an abstract method to be
   // implemented by the backend-specific Commander

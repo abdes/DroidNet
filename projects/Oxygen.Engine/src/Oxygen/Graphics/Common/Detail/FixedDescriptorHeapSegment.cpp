@@ -20,8 +20,11 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
   , next_index_ { bindless::Handle { 0 } }
   , released_flags_(capacity.get(), false)
 {
-  DLOG_F(1, "constructed: heap segment ({} / {}, base index: {}, capacity: {})",
-    view_type_, visibility_, base_index_, capacity_);
+  // Log heap segment creation
+  DLOG_F(1, "type       : {}", view_type);
+  DLOG_F(1, "visibility : {}", visibility);
+  DLOG_F(1, "capacity   : {}", capacity);
+  DLOG_F(1, "base index : {}", base_index);
 }
 
 //! Converts a global descriptor index to a local index within the segment.

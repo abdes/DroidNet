@@ -14,7 +14,7 @@ using oxygen::graphics::ResourceRegistry;
 ResourceRegistry::ResourceRegistry(std::string_view debug_name)
   : debug_name_(debug_name)
 {
-  DLOG_F(INFO, "ResourceRegistry `{}` created.", debug_name_);
+  DLOG_F(1, "ResourceRegistry `{}` created.", debug_name_);
 }
 
 ResourceRegistry::~ResourceRegistry() noexcept
@@ -37,12 +37,12 @@ ResourceRegistry::~ResourceRegistry() noexcept
       return;
     }
 
-    DLOG_F(INFO, "{} resource{} still registered", resource_count,
+    DLOG_F(1, "{} resource{} still registered", resource_count,
       resource_count == 1 ? "" : "s");
     {
       for (auto& [resource, entry] : resources_) {
         auto view_count = entry.descriptors.size();
-        DLOG_F(INFO, "resource `{}` with {} view{}", nostd::to_string(resource),
+        DLOG_F(1, "resource `{}` with {} view{}", nostd::to_string(resource),
           view_count, view_count == 1 ? "" : "s");
         if (view_count > 0) {
           LOG_SCOPE_F(4, "releasing resource descriptors");
@@ -70,7 +70,7 @@ void ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
 
   std::lock_guard lock(registry_mutex_);
 
-  LOG_SCOPE_F(INFO, "Register resource");
+  LOG_SCOPE_F(1, "Register resource");
   DLOG_F(3, "resource: {}, type id: {}", fmt::ptr(resource.get()),
     nostd::to_string(type_id));
 
@@ -106,10 +106,10 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
 
   std::lock_guard lock(registry_mutex_);
 
-  LOG_SCOPE_F(INFO, "Register view");
-  DLOG_F(INFO, "resource: {}", nostd::to_string(resource));
-  DLOG_F(INFO, "view: {}", nostd::to_string(view));
-  DLOG_F(INFO, "view handle: {}", nostd::to_string(view_handle));
+  LOG_SCOPE_F(1, "Register view");
+  DLOG_F(1, "resource: {}", nostd::to_string(resource));
+  DLOG_F(1, "view: {}", nostd::to_string(view));
+  DLOG_F(1, "view handle: {}", nostd::to_string(view_handle));
   DLOG_F(3, "view type: {}, visibility: {}", nostd::to_string(view_type),
     nostd::to_string(visibility));
   DLOG_F(3, "key hash: {}", key_hash);

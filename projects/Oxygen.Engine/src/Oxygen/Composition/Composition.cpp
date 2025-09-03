@@ -39,11 +39,11 @@ Composition::PooledEntry::~PooledEntry() noexcept
     return;
   }
   try {
-    DLOG_SCOPE_F(1, "Destroy Pooled Component");
+    DLOG_SCOPE_F(2, "Destroy Pooled Component");
 #if !defined(NDEBUG)
     if (const auto* comp = pool_ptr->GetUntyped(handle)) {
-      DLOG_F(1, "{}/{}", comp->GetTypeId(), comp->GetTypeNamePretty());
-      DLOG_F(1, "{}", oxygen::to_string_compact(handle));
+      DLOG_F(2, "{}/{}", comp->GetTypeId(), comp->GetTypeNamePretty());
+      DLOG_F(2, "{}", oxygen::to_string_compact(handle));
     }
 #endif
     pool_ptr->Deallocate(handle);
@@ -142,8 +142,8 @@ auto Composition::DestroyComponents() noexcept -> void
         [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
       DCHECK_NE_F(local_it, local_components_.end());
       if (local_it->use_count() == 1) {
-        DLOG_SCOPE_F(1, "Destroy Component");
-        DLOG_F(1, "{}/{}", (*local_it)->GetTypeId(),
+        DLOG_SCOPE_F(2, "Destroy Component");
+        DLOG_F(2, "{}/{}", (*local_it)->GetTypeId(),
           (*local_it)->GetTypeNamePretty());
         local_components_.erase(local_it);
       } else {
@@ -256,8 +256,8 @@ auto Composition::EnsureDependencies(const TypeId comp_id,
         comp_name = "<unknown>";
       }
       throw ComponentError(fmt::format(
-        "Missing dependency component: required {} ({}) for {} ({})",
-        dep, dep_name, comp_id, comp_name));
+        "Missing dependency component: required {} ({}) for {} ({})", dep,
+        dep_name, comp_id, comp_name));
     }
   }
 }

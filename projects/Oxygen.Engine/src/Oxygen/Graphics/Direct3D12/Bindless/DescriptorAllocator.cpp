@@ -156,6 +156,7 @@ auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
     static_cast<int>(D3D12HeapAllocationStrategy::GetHeapFlags(visibility)),
     base_index.get());
 
+  LOG_SCOPE_F(1, "New D3D12 DescriptorHeapSegment");
   auto segment = std::make_unique<DescriptorHeapSegment>(
     device_, capacity, base_index, view_type, visibility, heap_name.c_str());
 

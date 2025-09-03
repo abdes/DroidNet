@@ -76,7 +76,7 @@ auto ResourceStateTracker::TryMergeWithExistingTransition(
             pending_barrier.GetDescriptor())) {
         pending_barrier.AppendState(required_state);
         current_state = pending_barrier.GetStateAfter();
-        DLOG_F(4, "Merged with existing transition: {} -> {}",
+        DLOG_F(2, "Merged with existing transition: {} -> {}",
           nostd::to_string(pending_barrier.GetStateBefore()),
           nostd::to_string(pending_barrier.GetStateAfter()));
         return true; // Successfully merged
@@ -114,7 +114,7 @@ void ResourceStateTracker::RequireBufferState(const Buffer& buffer,
   const ResourceStates required_state, const bool is_permanent)
 {
   const NativeObject native_object = buffer.GetNativeResource();
-  LOG_F(4, "buffer: require state 0x{:X} = {} {}",
+  LOG_F(2, "buffer: require state 0x{:X} = {} {}",
     reinterpret_cast<uintptr_t>(native_object.AsPointer<void>()),
     nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
   auto& tracking_info = GetTrackingInfo(native_object);
@@ -152,7 +152,7 @@ void ResourceStateTracker::RequireTextureState(
 {
   const NativeObject native_object = texture.GetNativeResource();
 
-  LOG_F(4, "texture: require state {} = {} {}", nostd::to_string(native_object),
+  LOG_F(2, "texture: require state {} = {} {}", nostd::to_string(native_object),
     nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
 
   auto& tracking_info = GetTrackingInfo(native_object);
@@ -195,7 +195,7 @@ void ResourceStateTracker::RequireTextureState(
 
 void ResourceStateTracker::Clear()
 {
-  LOG_F(4, " => clearing all tracking");
+  LOG_F(2, " => clearing all tracking");
   if (!pending_barriers_.empty()) {
     pending_barriers_.clear();
   }
@@ -204,13 +204,13 @@ void ResourceStateTracker::Clear()
 
 void ResourceStateTracker::ClearPendingBarriers()
 {
-  LOG_F(4, "clearing pending barriers");
+  LOG_F(2, "clearing pending barriers");
   pending_barriers_.clear();
 }
 
 void ResourceStateTracker::OnCommandListClosed()
 {
-  LOG_F(4, "cmd list closed => restore initial states if needed");
+  LOG_F(2, "cmd list closed => restore initial states if needed");
   for (auto& [native_object, tracking] : tracking_) {
     // Visit the tracking info using `constexpr` rather than the `Overloads`
     // pattern to avoid code duplication as all supported barrier types
@@ -238,7 +238,4 @@ void ResourceStateTracker::OnCommandListClosed()
       },
       tracking);
   }
-
-  LOG_F(4, "resource tracker reset");
-  Clear();
 }
