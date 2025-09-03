@@ -68,7 +68,7 @@ public:
   SDL_Window* sdl_window_ { nullptr };
   WindowIdType id_ { kInvalidWindowId };
   mutable bool should_close_ { false };
-  bool forced_close_ { false };
+  mutable bool forced_close_ { false };
 };
 
 class Window::ManagerInterfaceImpl final : public Component,
@@ -377,6 +377,10 @@ auto Window::RequestClose(const bool force) const -> void
   }
   LOG_F(INFO, "Window [id = {}] requested to close(force={}) from code", Id(),
     force);
+
+  // Set the forced_close flag when force=true to bypass voting mechanism
+  GetComponent<Data>().forced_close_ = force;
+
   SDL_Event event {
     .window {
       .type = SDL_EVENT_WINDOW_CLOSE_REQUESTED,
