@@ -40,40 +40,28 @@ struct GraphicsModuleApi {
 
   //! Create the backend instance.
   /*!
-    This function will be called by the loader once to create a backend
-    instance, and will not be called again until the backend is destroyed.
+   This function will be called by the loader once to create a backend instance,
+   and will not be called again until the backend is destroyed.
 
-    A backend implementation will typically make the backend instance available
-    as a shared pointer, suitable for use inside and outside of the module.
+   A backend implementation will typically make the backend instance available
+   as a shared pointer, suitable for use inside and outside of the module.
 
-    The loader offers a public and easy way to get the backend instance as a
-    smart pointer by calling GetBackend(), which is the recommended way to keep
-    a reference to a loaded.
-   */
+   The loader offers a public and easy way to get the backend instance as a
+   smart pointer by calling GetBackend(), which is the recommended way to keep a
+   reference to a loaded.
+  */
   CreateBackendFunc CreateBackend;
 
   //! Destroy the backend instance.
   /*!
-    This function is called by the loader to destroy the backend instance
-    created through `CreateRenderController`. The backend is eventually shutdown
-    if it has not been before this function is called.
+   This function is called by the loader to destroy the backend instance created
+   through `CreateBackend`. The backend is eventually shutdown if it has not
+   been before this function is called.
 
-    \note It is required that after a call to this function, all shared pointers
-    referring to the backend instance are invalidated.
-   */
+   @note It is required that after a call to this function, all shared pointers
+   referring to the backend instance are invalidated.
+  */
   DestroyBackendFunc DestroyBackend;
-
-  ////! Initialize the graphics backend module.
-  ///*!
-  // Typically involves the discovery of available adapters, displays, and other
-  // hardware devices, as well as the initialization of the graphics API. It
-  // should not create a renderer instance yet, which is done through
-  // CreateRenderController.
-  // */
-  // InitializeFunc Initialize;
-
-  ////! Shutdown the graphics backend module.
-  // InitializeFunc Shutdown;
 
   // ReSharper restore CppInconsistentNaming
 };
@@ -82,8 +70,8 @@ struct GraphicsModuleApi {
 
 //! Convert GraphicsBackendType to string.
 /**
-  \param value The GraphicsBackendType value to convert.
-  \return A string representation of the GraphicsBackendType value.
+  \param value The GraphicsBackendType value to convert. \return A string
+  representation of the GraphicsBackendType value.
  */
 [[nodiscard]]
 constexpr auto to_string(const BackendType value) -> std::string

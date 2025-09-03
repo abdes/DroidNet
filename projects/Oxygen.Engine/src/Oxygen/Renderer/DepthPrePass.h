@@ -28,7 +28,6 @@ class CommandRecorder;
 class Framebuffer;
 class PipelineState;
 class Texture;
-class RenderController;
 class Buffer;
 
 } // namespace oxygen::graphics

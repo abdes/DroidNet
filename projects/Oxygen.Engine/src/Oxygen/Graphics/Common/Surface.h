@@ -20,7 +20,6 @@
 namespace oxygen::graphics {
 
 class Texture;
-class RenderController;
 
 //! Represents a rendering surface, such as a window or off-screen target.
 /*

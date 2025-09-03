@@ -30,8 +30,8 @@ steps, important invariants, and practical tips to build a working backend.
   `CommandQueue`/`CommandList`/`CommandRecorder`, concrete
   `Buffer`/`Texture`/`Sampler` implementations, a `DescriptorAllocator` and
   `ResourceRegistry` integration, a working `Commander` component for command
-  coordination, and a working `RenderController` that can record & submit GPU
-  work with both immediate and deferred submission modes.
+  coordination, that can record & submit GPU work with both immediate and
+  deferred submission modes.
 - Success criteria: the backend compiles, creates a `Graphics` instance, creates
   resources, records commands via `CommandRecorder` with flexible submission
   modes, submits work to `CommandQueue` and presents (for surface-backed
@@ -48,8 +48,7 @@ Implement concrete, backend-specific subclasses for at least the following
   - Implement `SetDescriptorAllocator()` usage and install a backend
     `DescriptorAllocator`.
   - Implement factory hooks: `CreateSurface()`, `CreateTexture()`,
-    `CreateTextureFromNativeObject()`, `CreateBuffer()`,
-    `CreateRenderController()`, `CreateCommandQueue()`,
+    `CreateTextureFromNativeObject()`, `CreateBuffer()`, `CreateCommandQueue()`,
     `CreateCommandListImpl()`, `CreateCommandRecorder()`.
   - The `Commander` component is automatically added and handles command
     recording coordination and deferred submission.
@@ -93,11 +92,6 @@ Implement concrete, backend-specific subclasses for at least the following
     queries. Ensure deferred per-renderer allocation behavior described in
     `Framebuffer` comments is respected (create swapchain views only when a
     renderer attaches).
-
-- `RenderController` (`RenderController.h`)
-  - Implement `CreateCommandRecorder()` factory that returns backend
-    `CommandRecorder` instances. Coordinate command list submission, per-frame
-    resource management, and presentation.
 
 ## Descriptor Allocation Strategy
 
@@ -341,7 +335,7 @@ component wraps this with appropriate lifecycle management.
     work correctly.
   - Test `SubmitDeferredCommandLists()` functionality to ensure batched
     submission works as expected.
-  - Create a `Surface` + `RenderController` and present a cleared backbuffer.
+  - Create a `Surface` and present a cleared backbuffer.
 - Run unit tests under `Graphics/Common/Test` where applicable and add
   backend-specific tests to validate native views, descriptor copying, barrier
   behavior, and command submission modes.

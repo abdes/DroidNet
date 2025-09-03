@@ -14,7 +14,6 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 // Required for direct access to the QueueManager component in tests
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <unordered_set>

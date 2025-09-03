@@ -6,7 +6,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>

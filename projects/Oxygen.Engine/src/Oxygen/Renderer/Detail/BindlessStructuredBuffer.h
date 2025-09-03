@@ -16,10 +16,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/api_export.h>
 
-namespace oxygen::graphics {
-class RenderController;
-} // namespace oxygen::graphics
-
 namespace oxygen::engine::detail {
 
 //! Invalid descriptor heap slot constant for bindless rendering.

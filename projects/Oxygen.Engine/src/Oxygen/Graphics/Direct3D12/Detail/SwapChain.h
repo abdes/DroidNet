@@ -25,8 +25,6 @@
 
 namespace oxygen::graphics::d3d12 {
 
-class RenderController;
-
 namespace detail {
   class WindowSurface;
 

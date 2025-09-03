@@ -19,8 +19,6 @@ using GraphicsPtr = std::weak_ptr<Graphics>;
 
 namespace graphics {
 
-  class RenderController;
-
   class Buffer;
   class CommandList;
   class CommandQueue;
@@ -35,7 +33,6 @@ namespace graphics {
   using BufferPtr = std::shared_ptr<Buffer>;
   using CommandListPtr = std::unique_ptr<CommandList>;
   using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
-  using RendererPtr = std::weak_ptr<RenderController>;
   using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
 
   using CommandLists = std::vector<CommandListPtr>;

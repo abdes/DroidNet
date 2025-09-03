@@ -25,10 +25,6 @@ namespace oxygen::engine::extraction {
 struct RenderItemData;
 } // namespace oxygen::engine::extraction
 
-namespace oxygen::graphics {
-class RenderController;
-} // namespace oxygen::graphics
-
 namespace oxygen::scene {
 class Scene;
 } // namespace oxygen::scene
