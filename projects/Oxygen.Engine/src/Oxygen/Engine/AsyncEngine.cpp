@@ -90,9 +90,30 @@ auto AsyncEngine::Run() -> void
   }
   // TODO: Register engine own modules
 
-  CHECK_F(nursery_ != nullptr,
-    "Nursery must be opened via StartAsync before Run (call StartAsync first)");
-  nursery_->Start([this]() -> co::Co<> { co_await FrameLoop(); });
+  CHECK_NOTNULL_F(
+    nursery_, "Nursery must be opened via ActivateAsync before Run");
+
+  nursery_->Start([this]() -> co::Co<> {
+    co_await FrameLoop();
+    // Signal completion once the frame loop has finished executing.
+    LOG_F(INFO, "Engine completed after {} frames", frame_number_);
+    co_await Shutdown();
+    completed_.Trigger();
+  });
+}
+
+auto AsyncEngine::Shutdown() -> co::Co<>
+{
+  // Ensure work is done and deferred reclaims are processed
+  if (!gfx_weak_.expired()) {
+    gfx_weak_.lock()->Shutdown();
+  }
+
+  // Shutdown the platform event pump and processing loops
+  co_await platform_->Shutdown();
+
+  // This will shut down all modules
+  module_manager_.reset();
 }
 
 auto AsyncEngine::Stop() -> void
@@ -119,8 +140,8 @@ auto AsyncEngine::UnregisterModule(std::string_view name) noexcept -> void
 auto AsyncEngine::NextFrame() -> bool
 {
   ++frame_number_;
-  frame_slot_
-    = frame::Slot { (frame_slot_.get() + 1) % frame::kFramesInFlight.get() };
+  frame_slot_ = frame::Slot { static_cast<frame::Slot::UnderlyingType>(
+    (frame_number_.get() - 1ULL) % frame::kFramesInFlight.get()) };
 
   if (props_.frame_count > 0 && frame_number_.get() > props_.frame_count) {
     return false; // Completed requested number of frames
@@ -138,6 +159,8 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
   while (true) {
     if (!NextFrame()) {
+      // Cancel that last increment
+      frame_number_ = frame::SequenceNumber { frame_number_.get() - 1ULL };
       break;
     }
 
@@ -203,16 +226,14 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
     // Yield control to thread pool
     co_await platform_->Threads().Run([](co::ThreadPool::CancelToken) { });
+
+    // Check for termination requets
+    if (platform_->Async().OnTerminate().Triggered()
+      || platform_->Windows().LastWindowClosed().Triggered()) {
+      LOG_F(INFO, "Termination requested, stopping frame loop...");
+      break;
+    }
   }
-
-  // This will shut down all modules
-  module_manager_.reset();
-
-  // Signal completion once the frame loop has finished executing.
-  LOG_F(INFO,
-    "Simulation complete after {} frames. Triggering completion event.",
-    props_.frame_count);
-  completed_.Trigger();
   co_return;
 }
 
@@ -227,6 +248,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
   // TODO: setup all the properties of context that need to be set
 
   context.SetFrameSequenceNumber(frame_number_, tag);
+  context.SetFrameSlot(frame_slot_, tag);
   context.SetFrameStartTime(frame_start_ts_, tag);
   context.SetThreadPool(&platform_->Threads(), tag);
   context.SetGraphicsBackend(gfx_weak_, tag);
@@ -484,8 +506,8 @@ auto AsyncEngine::PhaseBudgetAdapt() -> void
   // Monitor CPU frame time, GPU idle %, and queue depths
   // Degrade/defer tasks when over budget (IK refinement, particle collisions,
   // GI updates) Upgrade tasks when under budget (extra probe updates, higher
-  // LOD, prefetch assets) Provide hysteresis to avoid oscillation (time-window
-  // averaging)
+  // LOD, prefetch assets) Provide hysteresis to avoid oscillation
+  // (time-window averaging)
 }
 
 auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
@@ -563,8 +585,10 @@ auto AsyncEngine::ParallelTasks(FrameContext& context) -> co::Co<>
 
   // // Create each coroutine directly like in the MuxRange tests
   // for (const auto& spec : parallel_specs_) {
-  //   // Create coroutine with proper parameter capture using immediate lambda
-  //   // invocation. Parallel tasks operate on immutable snapshot (Category B):
+  //   // Create coroutine with proper parameter capture using immediate
+  //   lambda
+  //   // invocation. Parallel tasks operate on immutable snapshot (Category
+  //   B):
   //   // - Animation: pose evaluation on immutable skeleton data
   //   // - IK: Inverse Kinematics solving separate from animation
   //   // - BlendShapes: morph target weights calculation
@@ -575,7 +599,8 @@ auto AsyncEngine::ParallelTasks(FrameContext& context) -> co::Co<>
   //   // - AIBatch: batch evaluation & pathfinding queries (read-only world)
   //   // - LightClustering: tiled/clustered light culling (CPU portion)
   //   // - MaterialBaking: dynamic parameter baking / uniform block packing
-  //   // - GPUUploadStaging: population (writes into reserved sub-allocations)
+  //   // - GPUUploadStaging: population (writes into reserved
+  //   sub-allocations)
   //   // - OcclusionQuery: reduction from prior frame
   //   jobs.push_back([this](std::string task_name,
   //                    std::chrono::microseconds task_cost) -> co::Co<> {
@@ -587,7 +612,8 @@ auto AsyncEngine::ParallelTasks(FrameContext& context) -> co::Co<>
   //     auto end = std::chrono::steady_clock::now();
 
   //     ParallelResult r { task_name,
-  //       std::chrono::duration_cast<std::chrono::microseconds>(end - start) };
+  //       std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+  //       };
   //     {
   //       std::scoped_lock lk(parallel_results_mutex_);
   //       parallel_results_.push_back(r);

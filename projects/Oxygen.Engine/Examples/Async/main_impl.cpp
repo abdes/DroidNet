@@ -35,6 +35,8 @@
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
 
+#include "MainModule.h"
+
 using namespace oxygen;
 using namespace oxygen::engine;
 using namespace oxygen::graphics;
@@ -107,12 +109,7 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> co::Co<int>
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    const auto user_termination = [&]() -> co::Co<> {
-      co_await app.platform->Async().OnTerminate();
-      LOG_F(INFO, "Termination event received, stopping event loop...");
-    };
-
-    co_await oxygen::co::AnyOf(user_termination(), app.engine->Completed());
+    co_await app.engine->Completed();
 
     co_return co::kCancel;
   };
@@ -126,8 +123,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   using namespace oxygen::clap; // NOLINT
 
   uint32_t frames = 0U;
-  uint32_t target_fps = 60U; // desired frame pacing
+  uint32_t target_fps = 100U; // desired frame pacing
   bool headless = false;
+  bool fullscreen = false;
+  bool enable_vsync = true;
 
   try {
     CommandBuilder default_command(Command::DEFAULT);
@@ -156,6 +155,25 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("headless")
         .StoreTo(&headless)
         .Build());
+    default_command.WithOption(Option::WithKey("fullscreen")
+        .About("Run the application in full-screen mode")
+        .Short("F")
+        .Long("fullscreen")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("fullscreen")
+        .StoreTo(&fullscreen)
+        .Build());
+    default_command.WithOption(Option::WithKey("vsync")
+        .About("Enable vertical synchronization (limits FPS to monitor refresh "
+               "rate)")
+        .Short("s")
+        .Long("vsync")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("vsync")
+        .StoreTo(&enable_vsync)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("async-sim")
@@ -177,6 +195,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     LOG_F(INFO, "Parsed frames option = {}", frames);
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
+    LOG_F(INFO, "Parsed fullscreen option = {}", fullscreen);
+    LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
 
@@ -194,6 +214,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_validation = false,
       .preferred_card_name = std::nullopt,
       .headless = headless,
+      .enable_vsync = enable_vsync,
       .extra = {},
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
@@ -215,11 +236,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     // Register engine modules
     LOG_F(INFO, "Registering engine modules...");
 
-    // // Console module (priority: Normal=500 - development console commands)
-    // engine.GetModuleManager().RegisterModule(std::make_unique<ConsoleModule>());
+    // Graphics main module (replaces RenderController/RenderThread pattern)
+    app.engine->RegisterModule(
+      std::make_unique<oxygen::examples::async::MainModule>(
+        app.platform, app.gfx_weak, fullscreen));
 
-    // LOG_F(INFO, "Registered {} modules",
-    //   engine.GetModuleManager().GetModuleCount());
+    LOG_F(INFO, "Registered {} modules",
+      1); // TODO: Use actual module count when available
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 
@@ -232,7 +255,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     app.platform->Stop();
     app.platform.reset();
 
-    LOG_F(INFO, "Engine execution completed rc={}", rc);
+    LOG_F(INFO, "exit code: {}", rc);
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
   } catch (const std::exception& e) {

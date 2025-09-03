@@ -46,11 +46,6 @@ public:
   OXYGEN_DEFAULT_COPYABLE(Surface)
   OXYGEN_DEFAULT_MOVABLE(Surface)
 
-  virtual auto AttachRenderer(std::shared_ptr<RenderController> renderer)
-    -> void
-    = 0;
-  virtual auto DetachRenderer() -> void = 0;
-
   auto ShouldResize(const bool flag) -> void { should_resize_ = flag; }
   auto ShouldResize() const -> bool { return should_resize_; }
 

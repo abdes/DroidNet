@@ -16,8 +16,8 @@
 
 using oxygen::platform::AsyncOps;
 
-auto AsyncOps::HandleSignal(const std::error_code& error, int signal_number)
-  -> void
+auto AsyncOps::HandleSignal(
+  const std::error_code& error, const int signal_number) -> void
 {
   if (error) {
     LOG_F(ERROR, "Signal handler error: {}", error.message());
@@ -36,7 +36,7 @@ auto AsyncOps::HandleSignal(const std::error_code& error, int signal_number)
   default:
     LOG_F(1, "Received signal `{}` (unhandled)", signal_number);
     signals_.async_wait(
-      [this](const std::error_code& error, int signal_number) {
+      [this](const std::error_code& error, const int signal_number) {
         HandleSignal(error, signal_number);
       });
     return;
@@ -47,8 +47,7 @@ auto AsyncOps::HandleSignal(const std::error_code& error, int signal_number)
 }
 
 AsyncOps::AsyncOps(const PlatformConfig& config)
-  : io_()
-  , signals_(io_, SIGINT, SIGTERM)
+  : signals_(io_, SIGINT, SIGTERM)
 {
   if (config.thread_pool_size > 0) {
     threads_ = std::make_unique<co::ThreadPool>(io_,
@@ -62,16 +61,14 @@ AsyncOps::~AsyncOps()
   DLOG_IF_F(WARNING, (nursery_ != nullptr),
     "LiveObject destructor called while nursery is still open. "
     "Did you forget to call Stop() on the LiveObject?");
-
-  threads_.reset();
-  io_.stop();
 }
 
 auto AsyncOps::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
-  signals_.async_wait([this](const std::error_code& error, int signal_number) {
-    HandleSignal(error, signal_number);
-  });
+  signals_.async_wait(
+    [this](const std::error_code& error, const int signal_number) {
+      HandleSignal(error, signal_number);
+    });
 
   return OpenNursery(nursery_, std::move(started));
 }

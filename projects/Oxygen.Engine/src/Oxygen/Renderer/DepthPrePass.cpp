@@ -19,7 +19,6 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -230,9 +229,9 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
   using graphics::DescriptorVisibility;
   using graphics::TextureViewDescription;
 
-  auto& render_controller = Context().GetRenderController();
-  auto& registry = render_controller.GetResourceRegistry();
-  auto& allocator = render_controller.GetDescriptorAllocator();
+  auto& graphics = Context().GetGraphics();
+  auto& registry = graphics.GetResourceRegistry();
+  auto& allocator = graphics.GetDescriptorAllocator();
 
   // 1. Prepare TextureViewDescription
   const auto& depth_tex_desc = depth_texture_ref.GetDescriptor();

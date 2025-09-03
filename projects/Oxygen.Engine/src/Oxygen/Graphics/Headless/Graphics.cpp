@@ -95,7 +95,7 @@ auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
 }
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
-  std::shared_ptr<graphics::CommandQueue> /*command_queue*/) const
+  observer_ptr<graphics::CommandQueue> /*command_queue*/) const
   -> std::shared_ptr<Surface>
 {
   return std::make_shared<HeadlessSurface>("headless-surface");
@@ -126,13 +126,6 @@ auto Graphics::CreateCommandRecorder(
 {
   return std::make_unique<CommandRecorder>(
     std::move(command_list), target_queue);
-}
-
-auto Graphics::CreateRendererImpl(std::string_view /*name*/,
-  std::weak_ptr<Surface> /*surface*/, frame::SlotCount /*frames_in_flight*/)
-  -> std::unique_ptr<RenderController>
-{
-  return nullptr;
 }
 
 } // namespace oxygen::graphics::headless

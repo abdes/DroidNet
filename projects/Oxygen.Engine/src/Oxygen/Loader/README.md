@@ -46,7 +46,8 @@ auto graphics = oxygen::GraphicsBackendLoader::Instance().LoadBackend(
 );
 ```
 
-When this data is passed to the Loader, it gets serialized into a JSON format, producing an equivalent string as following:
+When this data is passed to the Loader, it gets serialized into a JSON format,
+producing an equivalent string as following:
 
 ```json
 {
@@ -60,7 +61,10 @@ When this data is passed to the Loader, it gets serialized into a JSON format, p
 }
 ```
 
-That serialized config data is then passed to the dynamically loaded backend using the `CreateBackend` entry point in the loaded module. Implementation of that entry point should parse the serialized string and use it as appropriate to setup the graphics backend:
+That serialized config data is then passed to the dynamically loaded backend
+using the `CreateBackend` entry point in the loaded module. Implementation of
+that entry point should parse the serialized string and use it as appropriate to
+setup the graphics backend:
 
 ```cpp
 void* CreateBackend(const SerializedBackendConfig& config) {

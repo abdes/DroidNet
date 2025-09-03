@@ -12,7 +12,6 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 namespace {
 
@@ -43,7 +42,9 @@ SwapChain::~SwapChain() noexcept
 void SwapChain::Present() const
 {
   DCHECK_NOTNULL_F(swap_chain_);
-  ThrowOnFailed(swap_chain_->Present(1, 0));
+  // Use sync_interval of 1 for V-Sync enabled, 0 for V-Sync disabled
+  const UINT sync_interval = graphics_->IsVSyncEnabled() ? 1U : 0U;
+  ThrowOnFailed(swap_chain_->Present(sync_interval, 0));
   current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
@@ -53,6 +54,12 @@ void SwapChain::UpdateDependencies(
   using WindowComponent = graphics::detail::WindowComponent;
   window_ = &static_cast<WindowComponent&>(
     get_component(WindowComponent::ClassTypeId()));
+
+  // Initialize SwapChain now that window is available
+  if (window_ && !swap_chain_) {
+    CreateSwapChain();
+    CreateRenderTargets();
+  }
 }
 
 void SwapChain::CreateSwapChain()
@@ -82,17 +89,15 @@ void SwapChain::CreateSwapChain()
   auto* const window_handle
     = static_cast<HWND>(window_->Native().window_handle);
   try {
-    const auto& gfx = renderer_->GetGraphics();
-
     // NB: Misleading argument name for CreateSwapChainForHwnd().
     // For Direct3D 11, and earlier versions of Direct3D, the first argument
     // is a pointer to the Direct3D device for the swap chain. For Direct3D
     // 12 this is a pointer to a direct command queue (refer to
     // ID3D12CommandQueue). This parameter cannot be NULL.
-    ThrowOnFailed(gfx.GetFactory()->CreateSwapChainForHwnd(
+    ThrowOnFailed(graphics_->GetFactory()->CreateSwapChainForHwnd(
       command_queue_, // Yes, the command queue, for D3D12
       window_handle, &swap_chain_desc, nullptr, nullptr, &swap_chain));
-    ThrowOnFailed(gfx.GetFactory()->MakeWindowAssociation(
+    ThrowOnFailed(graphics_->GetFactory()->MakeWindowAssociation(
       window_handle, DXGI_MWA_NO_ALT_ENTER));
     ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
   } catch (const std::exception& e) {
@@ -109,28 +114,9 @@ void SwapChain::ReleaseSwapChain()
   ObjectRelease(swap_chain_);
 }
 
-void SwapChain::AttachRenderer(
-  std::shared_ptr<graphics::RenderController> renderer)
-{
-  CHECK_F(!renderer_, "A renderer is already attached to the swap chain");
-  renderer_ = std::static_pointer_cast<RenderController>(std::move(renderer));
-  CreateSwapChain();
-  CreateRenderTargets();
-}
-
-void SwapChain::DetachRenderer()
-{
-  if (!renderer_) {
-    return;
-  }
-
-  ReleaseRenderTargets();
-  renderer_.reset();
-}
-
 void SwapChain::Resize()
 {
-  DCHECK_NOTNULL_F(renderer_);
+  DCHECK_NOTNULL_F(graphics_);
   DCHECK_NOTNULL_F(swap_chain_);
 
   DLOG_F(
@@ -177,7 +163,7 @@ void SwapChain::CreateRenderTargets()
         .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
         .initial_state = ResourceStates::kPresent,
       },
-      NativeObject(back_buffer, ClassTypeId()), &renderer_->GetGraphics());
+      NativeObject(back_buffer, ClassTypeId()), graphics_);
   }
 }
 

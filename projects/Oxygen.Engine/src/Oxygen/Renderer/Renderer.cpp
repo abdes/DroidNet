@@ -18,6 +18,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
@@ -25,7 +26,6 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Extraction/RenderListBuilder.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -34,6 +34,7 @@
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Scene/Scene.h>
 
+using oxygen::Graphics;
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
 using oxygen::engine::EvictionPolicy;
@@ -45,7 +46,6 @@ using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
-using oxygen::graphics::RenderController;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
@@ -133,15 +133,24 @@ auto MakeLruEvictionPolicy(std::size_t max_age_frames
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
 
-Renderer::Renderer(std::weak_ptr<RenderController> render_controller,
+Renderer::Renderer(std::weak_ptr<oxygen::Graphics> graphics,
   std::shared_ptr<EvictionPolicy> eviction_policy)
-  : render_controller_(std::move(render_controller))
+  : graphics_(std::move(graphics))
   , eviction_policy_(
       eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
 {
 }
 
 Renderer::~Renderer() = default;
+
+auto Renderer::GetGraphics() -> std::shared_ptr<oxygen::Graphics>
+{
+  auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    throw std::runtime_error("Graphics expired in Renderer::GetGraphics");
+  }
+  return graphics_ptr;
+}
 
 auto Renderer::GetVertexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
 {
@@ -178,7 +187,8 @@ auto Renderer::EvictUnusedMeshResources(const std::size_t current_frame) -> void
   }
 }
 
-auto Renderer::PreExecute(RenderContext& context) -> void
+auto Renderer::PreExecute(
+  RenderContext& context, const engine::FrameContext& frame_context) -> void
 {
   // Contract checks (kept inline per style preference)
   DCHECK_F(!context.scene_constants,
@@ -205,7 +215,7 @@ auto Renderer::PreExecute(RenderContext& context) -> void
   EnsureAndUploadMaterialConstants();
   UpdateBindlessMaterialConstantsSlotIfChanged();
 
-  MaybeUpdateSceneConstants();
+  MaybeUpdateSceneConstants(frame_context);
 
   WireContext(context);
 }
@@ -228,16 +238,16 @@ auto Renderer::EnsureAndUploadDrawMetaDataBuffer() -> void
   if (!draw_metadata_.HasData()) {
     return; // optional feature not used this frame
   }
-  const auto rc_ptr = render_controller_.lock();
-  if (!rc_ptr) {
-    LOG_F(
-      ERROR, "RenderController expired while ensuring draw metadata buffer");
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    LOG_F(ERROR, "Graphics expired while ensuring draw metadata buffer");
     return;
   }
-  auto& rc = *rc_ptr;
+  auto& graphics = *graphics_ptr;
   // Ensure SRV exists and upload CPU snapshot if dirty; returns true if slot
   // changed
-  static_cast<void>(draw_metadata_.EnsureAndUpload(rc, "DrawResourceIndices"));
+  static_cast<void>(
+    draw_metadata_.EnsureAndUpload(graphics, "DrawResourceIndices"));
 }
 
 // Removed legacy draw-metadata helpers; lifecycle now handled by
@@ -252,15 +262,20 @@ auto Renderer::UpdateDrawMetaDataSlotIfChanged() -> void
   scene_const_cpu_.SetBindlessIndicesSlot(new_slot, SceneConstants::kRenderer);
 }
 
-auto Renderer::MaybeUpdateSceneConstants() -> void
+auto Renderer::MaybeUpdateSceneConstants(
+  const engine::FrameContext& frame_context) -> void
 {
   // Ensure renderer-managed fields are refreshed for this frame prior to
   // snapshot/upload. This also bumps the version when they change.
-  if (const auto rc_ptr_local = render_controller_.lock()) {
-    const auto fr = rc_ptr_local->CurrentFrameIndex();
-    scene_const_cpu_.SetFrameSlot(
-      rc_ptr_local->CurrentFrameIndex(), SceneConstants::kRenderer);
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    LOG_F(ERROR, "Graphics expired while updating scene constants");
+    return;
   }
+
+  // Set frame information from FrameContext
+  scene_const_cpu_.SetFrameSlot(
+    frame_context.GetFrameSlot(), SceneConstants::kRenderer);
   scene_const_cpu_.SetFrameSequenceNumber(
     frame_seq_num, SceneConstants::kRenderer);
   const auto current_version = scene_const_cpu_.GetVersion();
@@ -269,13 +284,8 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
     DLOG_F(2, "MaybeUpdateSceneConstants: skipping upload (up-to-date)");
     return; // up-to-date
   }
-  const auto rc_ptr = render_controller_.lock();
-  if (!rc_ptr) {
-    LOG_F(ERROR, "RenderController expired while updating scene constants");
-    return;
-  }
-  auto& rc = *rc_ptr;
-  const auto& graphics = rc.GetGraphics();
+
+  auto& graphics = *graphics_ptr;
   constexpr auto size_bytes = sizeof(SceneConstants::GpuData);
   if (!scene_const_buffer_) {
     const BufferDesc desc {
@@ -286,7 +296,7 @@ auto Renderer::MaybeUpdateSceneConstants() -> void
     };
     scene_const_buffer_ = graphics.CreateBuffer(desc);
     scene_const_buffer_->SetName(desc.debug_name);
-    rc.GetResourceRegistry().Register(scene_const_buffer_);
+    graphics.GetResourceRegistry().Register(scene_const_buffer_);
   }
   const auto& snapshot = scene_const_cpu_.GetSnapshot();
   void* mapped = scene_const_buffer_->Map();
@@ -299,7 +309,11 @@ auto Renderer::WireContext(RenderContext& context) -> void
 {
   context.scene_constants = scene_const_buffer_;
   // Material constants are now accessed through bindless table, not direct CBV
-  context.SetRenderer(this, render_controller_.lock().get());
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    throw std::runtime_error("Graphics expired in Renderer::WireContext");
+  }
+  context.SetRenderer(this, graphics_ptr.get());
 }
 
 auto Renderer::UpdateBindlessWorldsSlotIfChanged() -> void
@@ -336,10 +350,11 @@ auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
   return cpu.front();
 }
 
-auto Renderer::BuildFrame(scene::Scene& scene, const View& view) -> std::size_t
+auto Renderer::BuildFrame(scene::Scene& scene, const View& view,
+  const engine::FrameContext& frame_context) -> std::size_t
 {
-  // TODO: temporary - this should move out to the engine core
-  (void)frame_seq_num++;
+  // Store frame sequence number from FrameContext
+  frame_seq_num = frame_context.GetFrameSequenceNumber();
 
   // Reset draw list for this frame
   opaque_items_.Clear();
@@ -366,8 +381,8 @@ auto Renderer::BuildFrame(scene::Scene& scene, const View& view) -> std::size_t
   return inserted_count;
 }
 
-auto Renderer::BuildFrame(scene::Scene& scene, const CameraView& camera_view)
-  -> std::size_t
+auto Renderer::BuildFrame(scene::Scene& scene, const CameraView& camera_view,
+  const engine::FrameContext& frame_context) -> std::size_t
 {
   // Ensure transforms are up-to-date for this frame. SceneExtraction also
   // calls scene.Update(), but doing it here makes the sequencing explicit
@@ -375,16 +390,15 @@ auto Renderer::BuildFrame(scene::Scene& scene, const CameraView& camera_view)
   scene.Update();
 
   const auto view = camera_view.Resolve();
-  return BuildFrame(scene, view);
+  return BuildFrame(scene, view, frame_context);
 }
 
 namespace {
-auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
+auto CreateVertexBuffer(const Mesh& mesh, Graphics& graphics)
   -> std::shared_ptr<Buffer>
 {
   DLOG_F(2, "Create vertex buffer");
 
-  const auto& graphics = render_controller.GetGraphics();
   const auto vertices = mesh.Vertices();
   const BufferDesc vb_desc {
     .size_bytes = vertices.size() * sizeof(oxygen::data::Vertex),
@@ -394,16 +408,15 @@ auto CreateVertexBuffer(const Mesh& mesh, RenderController& render_controller)
   };
   auto vertex_buffer = graphics.CreateBuffer(vb_desc);
   vertex_buffer->SetName(vb_desc.debug_name);
-  render_controller.GetResourceRegistry().Register(vertex_buffer);
+  graphics.GetResourceRegistry().Register(vertex_buffer);
   return vertex_buffer;
 }
 
-auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
+auto CreateIndexBuffer(const Mesh& mesh, Graphics& graphics)
   -> std::shared_ptr<Buffer>
 {
   DLOG_F(2, "Create index buffer");
 
-  const auto& graphics = render_controller.GetGraphics();
   const auto indices_view = mesh.IndexBuffer();
   std::size_t element_size = 0U;
   if (indices_view.type == IndexType::kUInt16) {
@@ -420,16 +433,15 @@ auto CreateIndexBuffer(const Mesh& mesh, RenderController& render_controller)
   };
   auto index_buffer = graphics.CreateBuffer(ib_desc);
   index_buffer->SetName(ib_desc.debug_name);
-  render_controller.GetResourceRegistry().Register(index_buffer);
+  graphics.GetResourceRegistry().Register(index_buffer);
   return index_buffer;
 }
 
-auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
+auto UploadVertexBuffer(const Mesh& mesh, Graphics& graphics,
   Buffer& vertex_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
 {
   DLOG_F(2, "Upload vertex buffer");
 
-  const auto& graphics = render_controller.GetGraphics();
   const auto vertices = mesh.Vertices();
   if (vertices.empty()) {
     return;
@@ -455,16 +467,14 @@ auto UploadVertexBuffer(const Mesh& mesh, RenderController& render_controller,
   recorder.FlushBarriers();
 
   // Keep the upload buffer alive until the command list is executed
-  DeferredObjectRelease(
-    upload_buffer, render_controller.GetDeferredReclaimer());
+  DeferredObjectRelease(upload_buffer, graphics.GetDeferredReclaimer());
 }
 
-auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
+auto UploadIndexBuffer(const Mesh& mesh, Graphics& graphics,
   Buffer& index_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
 {
   DLOG_F(2, "Upload index buffer");
 
-  const auto& graphics = render_controller.GetGraphics();
   const auto indices_view = mesh.IndexBuffer();
   if (indices_view.Count() == 0) {
     return;
@@ -499,12 +509,11 @@ auto UploadIndexBuffer(const Mesh& mesh, RenderController& render_controller,
   recorder.FlushBarriers();
 
   // Keep the upload buffer alive until the command list is executed
-  DeferredObjectRelease(
-    upload_buffer, render_controller.GetDeferredReclaimer());
+  DeferredObjectRelease(upload_buffer, graphics.GetDeferredReclaimer());
 }
 
 // Create a StructuredBuffer SRV for a vertex buffer and register it.
-auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
+auto CreateAndRegisterVertexSrv(Graphics& graphics, Buffer& vertex_buffer)
   -> uint32_t
 {
   using oxygen::Format;
@@ -513,8 +522,8 @@ auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
   using oxygen::graphics::DescriptorVisibility;
   using oxygen::graphics::ResourceViewType;
 
-  auto& descriptor_allocator = rc.GetDescriptorAllocator();
-  auto& registry = rc.GetResourceRegistry();
+  auto& descriptor_allocator = graphics.GetDescriptorAllocator();
+  auto& registry = graphics.GetResourceRegistry();
 
   constexpr BufferViewDescription srv_desc {
     .view_type = ResourceViewType::kStructuredBuffer_SRV,
@@ -537,7 +546,7 @@ auto CreateAndRegisterVertexSrv(RenderController& rc, Buffer& vertex_buffer)
 }
 
 // Create a typed SRV for an index buffer (R16/R32) and register it.
-auto CreateAndRegisterIndexSrv(RenderController& rc, Buffer& index_buffer,
+auto CreateAndRegisterIndexSrv(Graphics& graphics, Buffer& index_buffer,
   const IndexType index_type) -> uint32_t
 {
   using oxygen::Format;
@@ -545,8 +554,8 @@ auto CreateAndRegisterIndexSrv(RenderController& rc, Buffer& index_buffer,
   using oxygen::graphics::DescriptorVisibility;
   using oxygen::graphics::ResourceViewType;
 
-  auto& descriptor_allocator = rc.GetDescriptorAllocator();
-  auto& registry = rc.GetResourceRegistry();
+  auto& descriptor_allocator = graphics.GetDescriptorAllocator();
+  auto& registry = graphics.GetResourceRegistry();
 
   const auto typed_format
     = index_type == IndexType::kUInt16 ? Format::kR16UInt : Format::kR32UInt;
@@ -654,13 +663,14 @@ auto Renderer::EnsureAndUploadWorldTransforms() -> void
   if (!world_transforms_.HasData()) {
     return;
   }
-  const auto rc_ptr = render_controller_.lock();
-  if (!rc_ptr) {
-    LOG_F(ERROR, "RenderController expired while ensuring world transforms");
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    LOG_F(ERROR, "Graphics expired while ensuring world transforms");
     return;
   }
-  auto& rc = *rc_ptr;
-  static_cast<void>(world_transforms_.EnsureAndUpload(rc, "WorldTransforms"));
+  auto& graphics = *graphics_ptr;
+  static_cast<void>(
+    world_transforms_.EnsureAndUpload(graphics, "WorldTransforms"));
 }
 
 auto Renderer::EnsureAndUploadMaterialConstants() -> void
@@ -668,14 +678,14 @@ auto Renderer::EnsureAndUploadMaterialConstants() -> void
   if (!material_constants_.HasData()) {
     return; // optional feature not used this frame
   }
-  const auto rc_ptr = render_controller_.lock();
-  if (!rc_ptr) {
-    LOG_F(ERROR, "RenderController expired while ensuring material constants");
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
+    LOG_F(ERROR, "Graphics expired while ensuring material constants");
     return;
   }
-  auto& rc = *rc_ptr;
+  auto& graphics = *graphics_ptr;
   static_cast<void>(
-    material_constants_.EnsureAndUpload(rc, "MaterialConstants"));
+    material_constants_.EnsureAndUpload(graphics, "MaterialConstants"));
 }
 
 // Removed legacy material constants SRV registration; handled by helper
@@ -710,22 +720,22 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
     return it->second; // cache hit
   }
 
-  const auto render_controller = render_controller_.lock();
-  if (!render_controller) {
+  const auto graphics_ptr = graphics_.lock();
+  if (!graphics_ptr) {
     throw std::runtime_error(
-      "RenderController expired in Renderer::EnsureMeshResources");
+      "Graphics expired in Renderer::EnsureMeshResources");
   }
 
-  const auto vertex_buffer = CreateVertexBuffer(mesh, *render_controller);
-  const auto index_buffer = CreateIndexBuffer(mesh, *render_controller);
+  const auto vertex_buffer = CreateVertexBuffer(mesh, *graphics_ptr);
+  const auto index_buffer = CreateIndexBuffer(mesh, *graphics_ptr);
 
   // Upload both buffers in a single command recorder scope.
   {
-    const auto recorder = render_controller->AcquireCommandRecorder(
+    const auto recorder = graphics_ptr->AcquireCommandRecorder(
       SingleQueueStrategy().KeyFor(graphics::QueueRole::kGraphics),
       "MeshBufferUpload");
-    UploadVertexBuffer(mesh, *render_controller, *vertex_buffer, *recorder);
-    UploadIndexBuffer(mesh, *render_controller, *index_buffer, *recorder);
+    UploadVertexBuffer(mesh, *graphics_ptr, *vertex_buffer, *recorder);
+    UploadIndexBuffer(mesh, *graphics_ptr, *index_buffer, *recorder);
   }
 
   MeshGpuResources gpu;
@@ -734,9 +744,9 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 
   // Create SRVs and register to obtain shader-visible indices
   gpu.vertex_srv_index
-    = CreateAndRegisterVertexSrv(*render_controller, *vertex_buffer);
+    = CreateAndRegisterVertexSrv(*graphics_ptr, *vertex_buffer);
   gpu.index_srv_index = CreateAndRegisterIndexSrv(
-    *render_controller, *index_buffer, mesh.IndexBuffer().type);
+    *graphics_ptr, *index_buffer, mesh.IndexBuffer().type);
 
   auto [iter, _] = mesh_resources_.emplace(id, std::move(gpu));
   if (eviction_policy_) {

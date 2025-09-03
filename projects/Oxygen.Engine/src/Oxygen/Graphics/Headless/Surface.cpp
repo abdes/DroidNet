@@ -15,19 +15,7 @@ namespace oxygen::graphics::headless {
 HeadlessSurface::HeadlessSurface(std::string_view name)
   : Surface(name)
 {
-  // initially backbuffers are empty; entries will be created when a renderer
-  // attaches
-  for (auto& b : backbuffers_) {
-    b.reset();
-  }
-}
-
-auto HeadlessSurface::AttachRenderer(
-  std::shared_ptr<RenderController> /*renderer*/) -> void
-{
-  LOG_F(INFO, "HeadlessSurface attached to renderer");
-  // Create a set of backbuffers using the engine constant for frames-in-flight
-  // (don't query the renderer here; rendering architecture will be overhauled).
+  // Create backbuffers immediately in constructor (RAII)
   constexpr uint32_t frames_in_flight = frame::kFramesInFlight.get();
   for (uint32_t i = 0; i < frames_in_flight; ++i) {
     TextureDesc desc;
@@ -35,14 +23,6 @@ auto HeadlessSurface::AttachRenderer(
     desc.height = height_;
     desc.format = Format::kRGBA8UNorm;
     backbuffers_[i] = std::make_shared<Texture>(desc);
-  }
-}
-
-auto HeadlessSurface::DetachRenderer() -> void
-{
-  LOG_F(INFO, "HeadlessSurface detached from renderer");
-  for (auto& b : backbuffers_) {
-    b.reset();
   }
 }
 

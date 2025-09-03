@@ -75,7 +75,12 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<Commander>();
 }
 
-Graphics::~Graphics() = default;
+Graphics::~Graphics()
+{
+  // Clear the CommandList pool
+  auto& command_list_pool = GetComponent<CommandListPool>();
+  command_list_pool.Clear();
+}
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
@@ -90,39 +95,34 @@ auto Graphics::Run() -> void
 
 auto Graphics::IsRunning() const -> bool { return nursery_ != nullptr; }
 
-auto Graphics::Stop() -> void
+auto Graphics::Shutdown() -> void
 {
+  DLOG_SCOPE_F(1, "Graphics::Shutdown");
   // Flush all command queues
   FlushCommandQueues();
-
-  // Stop all valid renderers
-  auto it = renderers_.begin();
-  while (it != renderers_.end()) {
-    if (const auto renderer = it->lock()) {
-      renderer->Stop();
-      ++it;
-    }
-  }
-  renderers_.clear();
 
   // Process All deferred releases
   auto& reclaimer = GetComponent<DeferredReclaimer>();
   reclaimer.ProcessAllDeferredReleases();
+}
 
-  // Clear the CommandList pool
-  auto& command_list_pool = GetComponent<CommandListPool>();
-  command_list_pool.Clear();
-
-  if (nursery_ != nullptr) {
-    nursery_->Cancel();
+auto Graphics::Stop() -> void
+{
+  if (!IsRunning()) {
+    return;
   }
 
+  nursery_->Cancel();
   DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
 auto Graphics::BeginFrame(
   frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
 {
+  // Flush all command queues to ensure GPU work is submitted before releasing
+  // resources
+  FlushCommandQueues();
+
   auto& reclaimer = GetComponent<DeferredReclaimer>();
   reclaimer.OnBeginFrame(frame_slot);
 }
@@ -170,57 +170,33 @@ auto Graphics::FlushCommandQueues() -> void
 }
 
 auto Graphics::GetCommandQueue(const graphics::QueueKey& key) const
-  -> std::shared_ptr<graphics::CommandQueue>
+  -> observer_ptr<graphics::CommandQueue>
 {
   auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByName(key);
 }
 
 auto Graphics::GetCommandQueue(const graphics::QueueRole role) const
-  -> std::shared_ptr<graphics::CommandQueue>
+  -> observer_ptr<graphics::CommandQueue>
 {
   auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByRole(role);
 }
 
-auto Graphics::CreateRenderController(const std::string_view name,
-  std::weak_ptr<graphics::Surface> surface,
-  const frame::SlotCount frames_in_flight)
-  -> std::shared_ptr<graphics::RenderController>
+auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
+  const std::string_view command_list_name, const bool immediate_submission)
+  -> std::unique_ptr<graphics::CommandRecorder,
+    std::function<void(graphics::CommandRecorder*)>>
 {
-  // Create the RenderController object
-  auto renderer
-    = CreateRendererImpl(name, std::move(surface), frames_in_flight);
-  CHECK_NOTNULL_F(renderer, "Failed to create renderer");
+  // Get the command queue from the queue key
+  auto queue = GetCommandQueue(queue_key);
+  DCHECK_NOTNULL_F(queue, "Failed to get command queue for key");
 
-  // Wrap the RenderController in a shared_ptr with a custom deleter
-  auto renderer_with_deleter = std::shared_ptr<graphics::RenderController>(
-    renderer.release(), [this](graphics::RenderController* ptr) {
-      // Remove the RenderController from the renderers_ collection
-      const auto it = std::ranges::remove_if(renderers_,
-        [ptr](const std::weak_ptr<graphics::RenderController>& weak_renderer) {
-          const auto shared_renderer = weak_renderer.lock();
-          return !shared_renderer || shared_renderer.get() == ptr;
-        }).begin();
-      renderers_.erase(it, renderers_.end());
+  // Acquire a command list
+  auto command_list
+    = AcquireCommandList(queue->GetQueueRole(), command_list_name);
+  DCHECK_NOTNULL_F(command_list, "Failed to acquire command list");
 
-      // Delete the RenderController
-      LOG_SCOPE_F(INFO, "Destroy RenderController");
-      delete ptr;
-    });
-
-  // Add a weak_ptr to the renderers_ collection
-  renderers_.emplace_back(renderer_with_deleter);
-
-  return renderer_with_deleter;
-}
-
-auto Graphics::AcquireCommandRecorder(
-  const observer_ptr<graphics::CommandQueue> queue,
-  std::shared_ptr<graphics::CommandList> command_list,
-  const bool immediate_submission) -> std::unique_ptr<graphics::CommandRecorder,
-  std::function<void(graphics::CommandRecorder*)>>
-{
   // Create backend recorder and forward to the Commander component which will
   // wrap it with the appropriate deleter behavior.
   auto recorder = CreateCommandRecorder(command_list, queue);
@@ -257,6 +233,10 @@ auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
 {
   return const_cast<graphics::ResourceRegistry&>(
     std::as_const(*this).GetResourceRegistry());
+}
+auto Graphics::GetDeferredReclaimer() -> graphics::detail::DeferredReclaimer&
+{
+  return GetComponent<graphics::detail::DeferredReclaimer>();
 }
 
 auto Graphics::CreateFramebuffer(const graphics::FramebufferDesc& desc)

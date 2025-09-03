@@ -23,9 +23,6 @@ public:
     std::string_view name = "Headless Surface");
   OXGN_HDLS_API ~HeadlessSurface() override = default;
 
-  OXGN_HDLS_API auto AttachRenderer(std::shared_ptr<RenderController> renderer)
-    -> void override;
-  OXGN_HDLS_API auto DetachRenderer() -> void override;
   OXGN_HDLS_API auto Resize() -> void override;
   // Headless-only helper to update the desired surface size. Use strong type
   // PixelExtent to avoid argument confusion between width and height.

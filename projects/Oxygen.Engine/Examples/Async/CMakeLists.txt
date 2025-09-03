@@ -8,10 +8,7 @@
 # Meta information about this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "Simple example using AsyncEngine."
-)
+set(description "Simple example using AsyncEngine.")
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.Async"
@@ -34,6 +31,7 @@ find_package(asio CONFIG REQUIRED)
 add_executable(
   ${META_MODULE_TARGET}
   "main_impl.cpp"
+  "MainModule.cpp"
   "../main.cpp"
 )
 
@@ -68,8 +66,12 @@ target_link_libraries(
     oxygen::platform
     oxygen::loader
     oxygen::graphics-headless
+    oxygen::graphics-common
+    oxygen::graphics-direct3d12
     oxygen::renderer
     oxygen::engine
+    oxygen::data
+    oxygen::scene
 )
 
 # ------------------------------------------------------------------------------

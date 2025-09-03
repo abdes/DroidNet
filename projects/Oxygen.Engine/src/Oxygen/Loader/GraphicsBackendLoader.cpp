@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include <fmt/format.h>
 
@@ -19,9 +22,6 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <exception>
-#include <memory>
-#include <type_traits>
 
 using oxygen::GraphicsBackendLoader;
 using oxygen::GraphicsConfig;
@@ -34,6 +34,23 @@ using oxygen::loader::detail::PlatformServices;
 
 namespace {
 
+//! Gets the DLL filename for a graphics backend module.
+/*!
+ Constructs the appropriate DLL filename based on the backend type. The filename
+ includes debug suffix for debug builds and uses the standard Oxygen.Graphics
+ module naming convention.
+
+ @param backend The backend type to get the module name for.
+ @return The DLL filename for the specified backend.
+ @throw std::runtime_error if the backend type is not yet implemented.
+
+ ### Usage Examples
+
+ ```cpp
+ auto dll_name = GetBackendModuleDllName(BackendType::kDirect3D12);
+ // Returns "Oxygen.Graphics.Direct3D12-d.dll" in debug builds
+ ```
+*/
 auto GetBackendModuleDllName(const BackendType backend) -> std::string
 {
   std::string engine_name;
@@ -55,6 +72,25 @@ auto GetBackendModuleDllName(const BackendType backend) -> std::string
     ".dll";
 }
 
+//! Serializes graphics configuration to JSON format for backend initialization.
+/*!
+ Converts a GraphicsConfig struct and backend type into a JSON string that can
+ be passed to the backend module for initialization. Handles optional fields and
+ merges extra configuration JSON properly.
+
+ @param config The graphics configuration to serialize.
+ @param backend_type The backend type to include in the JSON.
+ @return A JSON string representation of the configuration.
+
+ ### Usage Examples
+
+ ```cpp
+ GraphicsConfig config{};
+ config.enable_debug = true;
+ auto json = SerializeConfigToJson(config, BackendType::kDirect3D12);
+ // Returns properly formatted JSON for backend initialization
+ ```
+*/
 auto SerializeConfigToJson(
   const GraphicsConfig& config, BackendType backend_type) -> std::string
 {
@@ -73,6 +109,8 @@ auto SerializeConfigToJson(
     + ",\n";
   json += "  \"enable_imgui\": "
     + std::string(config.enable_imgui ? "true" : "false") + ",\n";
+  json += "  \"enable_vsync\": "
+    + std::string(config.enable_vsync ? "true" : "false") + ",\n";
 
   // Add optional card name if present
   if (config.preferred_card_name.has_value()) {
@@ -169,16 +207,15 @@ public:
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to load graphics backend: {}", ex.what());
       backend_instance.reset();
-      // NB: Do not close the module here as it may still be required
-      // until the exception handling frames are complete. The module, if
-      // opened, will be reused for subsequent calls to `LoadBackend` or
-      // will be unloaded if a call to `UnloadBackend` is made, or when
-      // the loader is destroyed.
+      // NB: Do not close the module here as it may still be required until the
+      // exception handling frames are complete. The module, if opened, will be
+      // reused for subsequent calls to `LoadBackend` or will be unloaded if a
+      // call to `UnloadBackend` is made, or when the loader is destroyed.
       throw;
     }
   }
 
-  void UnloadBackend() noexcept
+  auto UnloadBackend() noexcept -> void
   {
     if (backend_module == nullptr) {
       DCHECK_EQ_F(backend_instance, nullptr);
@@ -196,7 +233,7 @@ public:
     }
   }
 
-  [[nodiscard]] auto GetBackend() noexcept -> std::weak_ptr<oxygen::Graphics>
+  [[nodiscard]] auto GetBackend() noexcept -> std::weak_ptr<Graphics>
   {
     CHECK_NOTNULL_F(backend_instance,
       "No graphics backend instance has been created; call LoadBackend() "
@@ -212,20 +249,21 @@ public:
   }
 
 private:
-  void CreateBackendInstance(GraphicsModuleApi* backend_api,
-    BackendType backend_type, const GraphicsConfig& config)
+  auto CreateBackendInstance(GraphicsModuleApi* backend_api,
+    const BackendType backend_type, const GraphicsConfig& config) -> void
   {
     if (!backend_instance) {
       // Create the JSON configuration
-      std::string configJson = SerializeConfigToJson(config, backend_type);
+      const std::string config_json
+        = SerializeConfigToJson(config, backend_type);
 
       // Create the configuration struct
-      SerializedBackendConfig serializedConfig {};
-      serializedConfig.json_data = configJson.c_str();
-      serializedConfig.size = configJson.length();
+      SerializedBackendConfig serialized_config;
+      serialized_config.json_data = config_json.c_str();
+      serialized_config.size = config_json.length();
 
       // Call the backend create function with the configuration
-      void* instance = backend_api->CreateBackend(serializedConfig);
+      void* instance = backend_api->CreateBackend(serialized_config);
 
       if (instance == nullptr) {
         throw std::runtime_error("Failed to create backend instance");
@@ -233,10 +271,9 @@ private:
 
       // Store the instance with a custom deleter that will call the destroy
       // function
-      backend_instance = std::shared_ptr<oxygen::Graphics>(
-        static_cast<oxygen::Graphics*>(instance),
-        [destroyFunc = backend_api->DestroyBackend](
-          const oxygen::Graphics* instance) {
+      backend_instance = std::shared_ptr<Graphics>(
+        static_cast<Graphics*>(instance),
+        [destroyFunc = backend_api->DestroyBackend](const Graphics* instance) {
           if (instance != nullptr) {
             destroyFunc();
           }
@@ -245,16 +282,41 @@ private:
   }
 
   // Member variables
-  std::shared_ptr<oxygen::Graphics> backend_instance;
+  std::shared_ptr<Graphics> backend_instance;
   PlatformServices::ModuleHandle backend_module { nullptr };
   std::shared_ptr<PlatformServices> platform_services;
 };
 
 namespace {
 
-inline void EnforceMainModuleRestriction(
+//! Enforces the restriction that certain functions can only be called from the
+//! main module.
+/*!
+ Validates that the calling function is executing from the main executable
+ module and not from a dynamically loaded module. This is used to ensure
+ singleton integrity across module boundaries.
+
+ @param platform_services The platform services instance to use for validation.
+ @param functionName The name of the function being called (for error messages).
+ @param returnAddress The return address to check the module for.
+ @throw InvalidOperationError if the call originates from a non-main module.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) - single module lookup
+ - Memory: No allocation
+ - Optimization: Uses fast platform-specific module resolution
+
+ ### Usage Examples
+
+ ```cpp
+ EnforceMainModuleRestriction(services, "LoadBackend",
+                              oxygen::ReturnAddress<>());
+ ```
+*/
+auto EnforceMainModuleRestriction(
   const std::shared_ptr<PlatformServices>& platform_services,
-  const char* functionName, void* returnAddress)
+  const char* functionName, void* returnAddress) -> void
 {
   PlatformServices::ModuleHandle moduleHandle
     = platform_services->GetModuleHandleFromReturnAddress(returnAddress);
@@ -267,10 +329,43 @@ inline void EnforceMainModuleRestriction(
 
 } // namespace
 
-// Singleton implementation with injected services
+/*!
+ Gets the singleton instance of the graphics backend loader with optional
+ platform services injection. This method enforces the restriction that it must
+ first be called from the main executable module to ensure singleton integrity
+ across module boundaries.
+
+ @param platform_services An optional custom platform services implementation to
+                          use. When not provided, the default platform services
+                          implementation will be used. Can be used to reset the
+                          loader for testing purposes.
+ @return A reference to the singleton GraphicsBackendLoader instance.
+ @throw InvalidOperationError if called from a non-main module before first
+                              initialization from the main module, or if trying
+                              to reset from a non-main module.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) - static initialization on first call
+ - Memory: Single static instance allocation
+ - Optimization: Uses static local variables for thread-safe initialization
+
+ ### Usage Examples
+
+ ```cpp
+ // First call from main module
+ auto& loader = GraphicsBackendLoader::GetInstance();
+
+ // Testing with custom services
+ auto mock_services = std::make_shared<MockPlatformServices>();
+ auto& test_loader = GraphicsBackendLoader::GetInstance(mock_services);
+ ```
+
+ @note This method allows resetting the platform services for testing, but only
+       when called from the main executable module.
+*/
 auto GraphicsBackendLoader::GetInstance(
-  std::shared_ptr<loader::detail::PlatformServices> platform_services)
-  -> GraphicsBackendLoader&
+  std::shared_ptr<PlatformServices> platform_services) -> GraphicsBackendLoader&
 {
   static bool first_call = true;
   static std::shared_ptr<PlatformServices> services = platform_services
@@ -318,15 +413,65 @@ auto GraphicsBackendLoader::GetInstance(
   return *instance;
 }
 
+/*!
+ Private constructor that initializes the GraphicsBackendLoader with the
+ specified platform services. Creates the internal implementation (pimpl) with
+ the provided services.
+
+ @param platform_services The platform services implementation to use for module
+                          loading and management.
+*/
 GraphicsBackendLoader::GraphicsBackendLoader(
-  std::shared_ptr<loader::detail::PlatformServices> platform_services)
+  std::shared_ptr<PlatformServices> platform_services)
   : pimpl_(std::make_unique<Impl>(std::move(platform_services)))
 {
 }
 
+/*!
+ Destructor that properly cleans up the graphics backend loader. The pimpl
+ destructor will automatically unload any loaded backend and release all
+ resources.
+*/
 GraphicsBackendLoader::~GraphicsBackendLoader() = default;
 
-auto GraphicsBackendLoader::LoadBackend(const graphics::BackendType backend,
+/*!
+ Loads the specified graphics backend from a dynamically loadable module and
+ constructs an instance using the provided configuration. Enforces main module
+ restriction and ensures only one backend instance is loaded at a time.
+
+ @param backend The type of graphics backend to load (Direct3D12,...).
+ @param config The configuration to use for initializing the backend.
+ @return A weak pointer to the loaded graphics backend. If the backend could not
+         be loaded, the returned pointer will be empty. If at any point the
+         backend is unloaded, the returned pointer will expire and become
+         unusable.
+ @throw std::runtime_error if the backend module could not be loaded or
+                           initialized.
+ @throw InvalidOperationError if called from a non-main module.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(n) where n is module loading time plus dependencies
+ - Memory: Allocates backend instance and module resources
+ - Optimization: Reuses already-loaded modules, caches backend instances
+
+ ### Usage Examples
+
+ ```cpp
+ auto& loader = GraphicsBackendLoader::GetInstance();
+ GraphicsConfig config{};
+ config.enable_debug = true;
+
+ auto backend = loader.LoadBackend(BackendType::kDirect3D12, config);
+ if (auto graphics = backend.lock()) {
+     // Use the graphics backend
+ }
+ ```
+
+ @note Only one backend instance can be loaded at a time. Subsequent calls will
+       return the existing instance if already loaded.
+*/
+auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
   const GraphicsConfig& config) const -> std::weak_ptr<Graphics>
 {
   EnforceMainModuleRestriction(
@@ -334,7 +479,30 @@ auto GraphicsBackendLoader::LoadBackend(const graphics::BackendType backend,
   return pimpl_->LoadBackend(backend, config);
 }
 
-void GraphicsBackendLoader::UnloadBackend() const noexcept
+/*!
+ Unloads the currently loaded graphics backend, destroying its instance and
+ rendering all weak pointers to it unusable. The module's reference count is
+ decremented, and if it is no longer referenced, it is automatically unloaded.
+ This method enforces main module restriction but handles all exceptions to
+ maintain noexcept guarantee.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) for the call, O(n) if module destructors run
+ - Memory: Releases backend instance and may free module memory
+ - Optimization: Uses reference counting to avoid premature module unloading
+
+ ### Usage Examples
+
+ ```cpp
+ auto& loader = GraphicsBackendLoader::GetInstance();
+ loader.UnloadBackend(); // Safe to call even if no backend is loaded
+ ```
+
+ @note This method is noexcept and will silently handle any errors that occur
+       during unloading, logging them appropriately.
+*/
+auto GraphicsBackendLoader::UnloadBackend() const noexcept -> void
 {
   try {
     EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "UnloadBackend",
@@ -346,6 +514,38 @@ void GraphicsBackendLoader::UnloadBackend() const noexcept
   }
 }
 
+/*!
+ Gets the backend instance if one is currently loaded. Returns a weak pointer to
+ allow safe access to the backend while preventing circular dependencies and
+ allowing the backend to be unloaded independently.
+
+ @return A weak pointer to the currently loaded graphics backend, or an empty
+         pointer if no backend is loaded. The pointer will expire if the backend
+         is unloaded at a later time.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) - direct pointer access
+ - Memory: No allocation
+ - Optimization: Returns weak_ptr for safe lifetime management
+
+ ### Usage Examples
+
+ ```cpp
+ auto& loader = GraphicsBackendLoader::GetInstance();
+ auto backend = loader.GetBackend();
+
+ if (auto graphics = backend.lock()) {
+     // Backend is available, use it
+     graphics->Present();
+ } else {
+     // No backend loaded or backend was unloaded
+ }
+ ```
+
+ @note This method does not enforce main module restriction since it's a
+       read-only operation that doesn't affect singleton state.
+*/
 auto GraphicsBackendLoader::GetBackend() const noexcept
   -> std::weak_ptr<Graphics>
 {

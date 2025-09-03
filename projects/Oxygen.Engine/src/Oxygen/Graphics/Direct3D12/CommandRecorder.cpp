@@ -22,7 +22,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
 
 using oxygen::Overloads;
@@ -189,18 +188,18 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 
 } // anonymous namespace
 
-CommandRecorder::CommandRecorder(RenderController* renderer,
+CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
   std::shared_ptr<graphics::CommandList> command_list,
   observer_ptr<graphics::CommandQueue> target_queue)
   : Base(command_list, target_queue)
-  , renderer_(renderer)
+  , graphics_weak_(std::move(graphics_weak))
 {
-  DCHECK_NOTNULL_F(renderer, "RenderController cannot be null");
+  DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
 }
 
 CommandRecorder::~CommandRecorder()
 {
-  DCHECK_NOTNULL_F(renderer_, "RenderController cannot be null");
+  DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
 }
 
 void CommandRecorder::Begin() { graphics::CommandRecorder::Begin(); }
@@ -388,16 +387,18 @@ void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
     thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
-void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
+void CommandRecorder::SetPipelineState(
+  oxygen::graphics::GraphicsPipelineDesc desc)
 {
-  DCHECK_NOTNULL_F(renderer_);
+  auto graphics = graphics_weak_.lock();
+  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto debug_name = desc.GetName(); // Save before moving desc
-  graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
+  graphics_pipeline_hash_
+    = std::hash<oxygen::graphics::GraphicsPipelineDesc> {}(desc);
 
-  auto [pipeline_state, root_signature]
-    = renderer_->GetOrCreateGraphicsPipeline(
-      std::move(desc), graphics_pipeline_hash_);
+  auto [pipeline_state, root_signature] = graphics->GetOrCreateGraphicsPipeline(
+    std::move(desc), graphics_pipeline_hash_);
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
 
@@ -406,21 +407,25 @@ void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
 
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto& allocator
-    = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
+  auto& allocator = static_cast<DescriptorAllocator&>(
+    const_cast<graphics::DescriptorAllocator&>(
+      graphics->GetDescriptorAllocator()));
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }
 
-void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
+void CommandRecorder::SetPipelineState(
+  oxygen::graphics::ComputePipelineDesc desc)
 {
-  DCHECK_NOTNULL_F(renderer_);
+  auto graphics = graphics_weak_.lock();
+  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto debug_name = desc.GetName(); // Save before moving desc
-  compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
+  compute_pipeline_hash_
+    = std::hash<oxygen::graphics::ComputePipelineDesc> {}(desc);
 
-  auto [pipeline_state, root_signature] = renderer_->GetOrCreateComputePipeline(
+  auto [pipeline_state, root_signature] = graphics->GetOrCreateComputePipeline(
     std::move(desc), compute_pipeline_hash_);
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
@@ -430,8 +435,9 @@ void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
 
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto& allocator
-    = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
+  auto& allocator = static_cast<DescriptorAllocator&>(
+    const_cast<graphics::DescriptorAllocator&>(
+      graphics->GetDescriptorAllocator()));
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
 
   // Name them for debugging
@@ -747,7 +753,9 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   DCHECK_NOTNULL_F(dst_native);
 
   // Use device to compute copyable footprints
-  auto* device = renderer_->GetGraphics().GetCurrentDevice();
+  auto graphics = graphics_weak_.lock();
+  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
+  auto* device = graphics->GetCurrentDevice();
   const auto& desc = dst.GetDescriptor();
 
   for (const auto& region : regions) {

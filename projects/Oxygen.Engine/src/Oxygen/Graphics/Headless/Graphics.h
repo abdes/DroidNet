@@ -42,15 +42,11 @@ public:
 
   OXGN_HDLS_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
-    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
   [[nodiscard]] auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
-
-  [[nodiscard]] auto CreateRendererImpl(std::string_view name,
-    std::weak_ptr<Surface> surface, frame::SlotCount frames_in_flight)
-    -> std::unique_ptr<RenderController> override;
 
 protected:
   OXGN_HDLS_NDAPI auto CreateCommandRecorder(

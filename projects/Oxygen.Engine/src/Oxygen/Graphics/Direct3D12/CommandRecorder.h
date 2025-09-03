@@ -41,7 +41,9 @@ class CommandRecorder final : public graphics::CommandRecorder {
   using Base = graphics::CommandRecorder;
 
 public:
-  CommandRecorder(RenderController* renderer,
+  // TODO: ASYNC_ENGINE_MIGRATION - Updated constructor to use Graphics instead
+  // of RenderController
+  CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue);
 
@@ -52,8 +54,10 @@ public:
 
   auto Begin() -> void override;
 
-  auto SetPipelineState(GraphicsPipelineDesc desc) -> void override;
-  auto SetPipelineState(ComputePipelineDesc desc) -> void override;
+  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc desc)
+    -> void override;
+  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc desc)
+    -> void override;
   auto SetGraphicsRootConstantBufferView(uint32_t root_parameter_index,
     uint64_t buffer_gpu_address) -> void override;
 
@@ -138,7 +142,9 @@ protected:
 private:
   [[nodiscard]] auto GetConcreteCommandList() const -> CommandList&;
 
-  RenderController* renderer_;
+  // TODO: ASYNC_ENGINE_MIGRATION - Replaced RenderController* with Graphics
+  // weak_ptr
+  std::weak_ptr<Graphics> graphics_weak_;
 
   size_t graphics_pipeline_hash_ = 0;
   size_t compute_pipeline_hash_ = 0;

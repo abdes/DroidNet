@@ -13,8 +13,8 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -169,9 +169,9 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
 auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 {
   // Prepare render target view(s)
-  auto& render_controller = Context().GetRenderController();
-  auto& registry = render_controller.GetResourceRegistry();
-  auto& allocator = render_controller.GetDescriptorAllocator();
+  auto& graphics = Context().GetGraphics();
+  auto& registry = graphics.GetResourceRegistry();
+  auto& allocator = graphics.GetDescriptorAllocator();
   auto& color_texture = const_cast<Texture&>(GetColorTexture());
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);

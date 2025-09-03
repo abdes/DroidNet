@@ -107,8 +107,9 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   } queue_strategy;
 
   headless->CreateCommandQueues(queue_strategy);
-  auto queue
-    = headless->GetCommandQueue(queue_strategy.KeyFor(Role::kGraphics));
+
+  auto q_key = queue_strategy.KeyFor(Role::kGraphics);
+  auto queue = headless->GetCommandQueue(q_key);
   ASSERT_NE(queue, nullptr);
 
   // Also exercise HeadlessSurface behaviors: create a surface, set size,
@@ -125,12 +126,6 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     // Use a strong PixelExtent type for SetSize.
     oxygen::PixelExtent new_size { .width = 16u, .height = 8u };
     headless_surface->SetSize(new_size);
-
-    // Attach a (possibly null) renderer so the surface allocates its
-    // per-slot backbuffers. Passing a null shared_ptr is acceptable for
-    // headless tests.
-    headless_surface->AttachRenderer(
-      std::shared_ptr<oxygen::graphics::RenderController> {});
 
     // Force a resize and validate that backbuffers are recreated.
     headless_surface->Resize();
@@ -182,16 +177,16 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   // behavior (for example, falling back to a QueueManager). This keeps the
   // higher-level contract clean and allows backend-specific policies.
 
+  auto cmd_list_name = "test-cmd-list";
   auto cmd_list
-    = headless->AcquireCommandList(queue->GetQueueRole(), "test-cmd-list");
+    = headless->AcquireCommandList(queue->GetQueueRole(), cmd_list_name);
   ASSERT_NE(cmd_list, nullptr);
 
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder
-      = headless->AcquireCommandRecorder(oxygen::observer_ptr { queue.get() },
-        cmd_list, /*immediate_submission=*/true);
+    auto recorder = headless->AcquireCommandRecorder(
+      q_key, cmd_list_name, /*immediate_submission=*/true);
     ASSERT_NE(recorder, nullptr);
 
     // Track initial states for both resources: register them with the

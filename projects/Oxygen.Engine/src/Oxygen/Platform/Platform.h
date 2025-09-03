@@ -7,13 +7,12 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <vector>
 
 #include <asio/signal_set.hpp>
-
-#include <Oxygen/OxCo/asio.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
@@ -26,6 +25,7 @@
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Display.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
@@ -58,7 +58,7 @@ namespace platform {
       return *threads_;
     }
 
-    OXYGEN_PLATFORM_API auto PollOne() -> size_t;
+    OXGN_PLAT_API auto PollOne() -> size_t;
 
     auto Stop() -> void override;
 
@@ -90,6 +90,7 @@ namespace platform {
 
   class EventPump final : public Component {
     OXYGEN_COMPONENT(EventPump)
+    OXYGEN_COMPONENT_REQUIRES(AsyncOps)
   public:
     EventPump();
 
@@ -104,7 +105,7 @@ namespace platform {
            parties should await the awaitable appropriate for the event type
            they are interested in.
     */
-    OXYGEN_PLATFORM_API auto PollOne() -> bool;
+    OXGN_PLAT_API auto PollOne() -> bool;
 
     //! Suspends the caller until a platform event is available.
     /*!
@@ -139,9 +140,31 @@ namespace platform {
     */
     auto Lock() { return event_source_.Lock(); }
 
+    //! Shuts down the event pump, causing all future NextEvent() calls to
+    //! complete immediately rather than suspending.
+    /*!
+     This method should be called during shutdown to prevent coroutines from
+     waiting indefinitely on events that will never come. Once shut down,
+     the EventPump cannot be restarted.
+    */
+    auto Shutdown() -> void;
+
+    //! Checks if the EventPump is currently running and processing events.
+    /*!
+     \return true if the EventPump is running, false if it has been shut down.
+
+     Coroutines processing events should check this in their loop conditions
+     to gracefully exit when the EventPump is no longer active.
+    */
+    [[nodiscard]] auto IsRunning() const -> bool
+    {
+      return !shutdown_requested_.load();
+    }
+
   private:
     co::RepeatableShared<PlatformEvent> event_source_;
     co::ParkingLot poll_;
+    std::atomic<bool> shutdown_requested_ { false };
   };
 
   class InputEvents final : public Component {
@@ -162,7 +185,11 @@ namespace platform {
 
   private:
     friend Platform;
-    [[nodiscard]] auto ProcessPlatformEvents() const -> co::Co<>;
+    [[nodiscard]] auto ProcessPlatformEvents() -> co::Co<>;
+    [[nodiscard]] auto IsRunning() const
+    {
+      return event_pump_ != nullptr && event_pump_->IsRunning();
+    };
 
     co::BroadcastChannel<InputEvent> channel_ { 8 };
     // NOLINTNEXTLINE(*-avoid-const-or-ref-data-members) - lifetime is linked to
@@ -178,7 +205,7 @@ namespace platform {
     OXYGEN_COMPONENT(WindowManager)
     OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
   public:
-    OXYGEN_PLATFORM_API auto MakeWindow(const window::Properties& props)
+    OXGN_PLAT_API auto MakeWindow(const window::Properties& props)
       -> std::weak_ptr<Window>;
 
     [[nodiscard]] auto LastWindowClosed() -> co::Event&
@@ -200,7 +227,18 @@ namespace platform {
     friend Platform;
     [[nodiscard]] auto ProcessPlatformEvents() -> co::Co<>;
 
+    [[nodiscard]] auto IsRunning() const
+    {
+      return event_pump_ != nullptr && event_pump_->IsRunning();
+    };
+
     [[nodiscard]] auto WindowFromId(WindowIdType window_id) const -> Window&;
+
+    auto ReleaseAllWindows() -> void
+    {
+      LOG_SCOPE_FUNCTION(1);
+      windows_.clear();
+    }
 
     AsyncOps* async_ { nullptr };
     EventPump* event_pump_ { nullptr };
@@ -213,17 +251,19 @@ namespace platform {
 
 class Platform final : public Composition, public co::LiveObject {
 public:
-  OXYGEN_PLATFORM_API explicit Platform(const PlatformConfig& config);
-  OXYGEN_PLATFORM_API ~Platform() override;
+  OXGN_PLAT_API explicit Platform(const PlatformConfig& config);
+  OXGN_PLAT_API ~Platform() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Platform)
   OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-  [[nodiscard]] OXYGEN_PLATFORM_API auto ActivateAsync(
-    co::TaskStarted<> started = {}) -> co::Co<> override;
-  OXYGEN_PLATFORM_API auto Run() -> void override;
-  [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool override;
-  OXYGEN_PLATFORM_API auto Stop() -> void override;
+  OXGN_PLAT_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+    -> co::Co<> override;
+  OXGN_PLAT_API auto Run() -> void override;
+  OXGN_PLAT_NDAPI auto IsRunning() const -> bool override;
+  OXGN_PLAT_API auto Stop() -> void override;
+
+  OXGN_PLAT_API auto Shutdown() -> co::Co<>;
 
   auto Async() -> platform::AsyncOps&
   {
@@ -249,7 +289,7 @@ public:
     return GetComponent<platform::WindowManager>();
   }
 
-  static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key)
+  static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key)
     -> platform::InputSlot;
 
 private:
@@ -263,7 +303,7 @@ namespace imgui {
 
 class PlatformBase {
 public:
-    OXYGEN_PLATFORM_API PlatformBase();
+    OXGN_PLAT_API PlatformBase();
     virtual ~PlatformBase() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(PlatformBase)
@@ -355,7 +395,7 @@ public:
     }
 
     static void GetAllInputSlots(std::vector<platform::InputSlot>& out_keys);
-    static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
+    static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
 
     auto GetInputCategoryDisplayName(std::string_view category_name) -> std::string_view;
 

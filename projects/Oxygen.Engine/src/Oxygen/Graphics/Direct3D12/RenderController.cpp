@@ -52,7 +52,10 @@ auto RenderController::CreateCommandRecorder(
   observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
-  return std::make_unique<CommandRecorder>(this, command_list, target_queue);
+  // TODO: ASYNC_ENGINE_MIGRATION - RenderController is deprecated and will be
+  // deleted Use Graphics directly instead of going through RenderController
+  throw std::runtime_error("RenderController::CreateCommandRecorder is "
+                           "deprecated. Use Graphics directly.");
 }
 
 auto RenderController::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,

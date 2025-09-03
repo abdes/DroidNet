@@ -15,11 +15,14 @@
 
 #include <Oxygen/Renderer/RenderItem.h>
 
+namespace oxygen {
+class Graphics;
+}
+
 namespace oxygen::graphics {
 class Framebuffer;
 class Buffer;
 class CommandRecorder;
-class RenderController;
 } // namespace oxygen::graphics
 
 namespace oxygen::scene {
@@ -126,15 +129,15 @@ struct RenderContext {
   */
   std::shared_ptr<const graphics::Buffer> material_constants;
 
-  //=== Renderer / RenderController ===---------------------------------------//
+  //=== Renderer / Graphics ===-----------------------------------------------//
 
   //! The renderer executing the render graph. Guaranteed to be non-null during
   //! the render graph execution.
   auto GetRenderer() const -> auto& { return *renderer; }
 
-  //! The render controller managing the frame rendering process. Guaranteed to
+  //! The graphics system managing the frame rendering process. Guaranteed to
   //! be non-null during the render graph execution.
-  auto GetRenderController() const -> auto& { return *render_controller; }
+  auto GetGraphics() const -> auto& { return *graphics; }
 
   //=== Pass Management ===---------------------------------------------------//
 
@@ -185,12 +188,11 @@ struct RenderContext {
 private:
   friend class Renderer;
 
-  //! Sets the renderer and render controller for the current render graph run.
-  auto SetRenderer(Renderer* the_renderer,
-    graphics::RenderController* the_render_controller) const
+  //! Sets the renderer and graphics for the current render graph run.
+  auto SetRenderer(Renderer* the_renderer, oxygen::Graphics* the_graphics) const
   {
     renderer = the_renderer;
-    render_controller = the_render_controller;
+    graphics = the_graphics;
   }
 
   //! Resets the render context for a new graph run.
@@ -201,7 +203,7 @@ private:
    application-populated value semantics (the application is expected to
    repopulate them each frame as needed):
    - Clears the pass pointer registry.
-   - Resets the renderer and render controller pointers to null.
+   - Resets the renderer and graphics pointers to null.
   - Clears scene_constants and material_constants (renderer-owned snapshots).
    - Does NOT touch persistent configuration fields the application may add
      in the future (only engine-injected per-frame pointers are cleared).
@@ -210,13 +212,13 @@ private:
   {
     std::ranges::fill(known_passes, nullptr);
     renderer = nullptr;
-    render_controller = nullptr;
+    graphics = nullptr;
     scene_constants.reset();
     material_constants.reset();
   }
 
   mutable Renderer* renderer { nullptr };
-  mutable graphics::RenderController* render_controller { nullptr };
+  mutable oxygen::Graphics* graphics { nullptr };
 
   //! Pass pointer registry for pass-to-pass data flow (O(1) array,
   //! type-indexed). Non-null if the pass has been registered in the current
