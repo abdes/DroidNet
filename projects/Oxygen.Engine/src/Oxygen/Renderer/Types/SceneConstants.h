@@ -100,7 +100,7 @@ struct MonotonicVersion {
 
  Multiple mutations per frame are allowed; the implementation is "last-wins" for
  values. Note that world/object transforms are intentionally NOT included here:
- per-item transforms remain part of per-draw data (RenderItem.world_transform)
+ per-item transforms now accessed via stable TransformHandle indirection
  and will be bound/consumed downstream.
 
  Fields contained in the GPU snapshot include:

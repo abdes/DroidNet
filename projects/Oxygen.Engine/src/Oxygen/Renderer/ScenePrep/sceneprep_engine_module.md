@@ -28,7 +28,6 @@ Status Legend:
 struct PreparedSceneFrame {
 	uint64_t frame_seq;                       // Monotonic frame sequence
 	std::vector<CollectedItem> items;         // One per visible submesh (immutable snapshot of collection outputs)
-	std::vector<glm::mat4> world_transforms;  // SoA world matrices (deduped if policy decides)
 	std::vector<MaterialHandle> materials;    // Logical handles aligned with items ordering
 	std::vector<GeometryHandle> geometries;   // Logical geometry buffer pair indices (no bindless yet)
 	std::vector<PassMask> pass_masks;         // Per-item pass participation bitset

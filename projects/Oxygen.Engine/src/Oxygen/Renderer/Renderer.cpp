@@ -381,11 +381,13 @@ auto Renderer::BuildFrame(
   auto& scene = ResolveScene(frame_context);
   InitializeFrameSequence(frame_context);
 
-  namespace sp = oxygen::engine::sceneprep;
-  sp::ScenePrepState prep_state;
+  // Reset per-frame state but retain persistent caches
+  // (transform/material/geometry)
+  scene_prep_state_.ResetFrameData();
+  scene_prep_state_.transform_mgr.BeginFrame();
   const auto cfg = PrepareScenePrepCollectionConfig();
-  CollectScenePrep(scene, view, prep_state, cfg);
-  FinalizeScenePrepPhase(prep_state);
+  CollectScenePrep(scene, view, scene_prep_state_, cfg);
+  FinalizeScenePrepPhase(scene_prep_state_);
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
@@ -402,13 +404,16 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
   const auto& filtered = ResolveFilteredIndices(prep_state);
-  const auto count = filtered.size();
-  ReserveMatrixStorage(count);
+  const auto unique_transform_count
+    = prep_state.transform_mgr.GetUniqueTransformCount();
+  // Allocate storage sized to number of unique transforms (handle id space)
+  ReserveMatrixStorage(unique_transform_count);
+  // Populate (or update) per-handle world/normal matrices using cached data.
   PopulateMatrices(filtered, prep_state);
   GenerateDrawMetadataAndMaterials(filtered, prep_state);
-  UploadWorldTransforms(count); // copy SoA matrices into bindless buffer
+  UploadWorldTransforms(unique_transform_count); // upload unique transforms
   BuildSortingAndPartitions();
-  PublishPreparedFrameSpans(count);
+  PublishPreparedFrameSpans(unique_transform_count);
   UploadDrawMetadataBindless();
   UpdateFinalizeStatistics(prep_state, filtered.size(), t_begin);
 }
@@ -418,9 +423,10 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
 //=== Improvement Opportunities (SoA Finalization)
 //-----------------------------//
 // 1. Matrix Computation Caching:
-//    Normal matrices are recomputed every frame from world matrices. Cache
-//    inverse-transpose per node (dirty flag on transform change) inside
-//    ScenePrep to avoid O(N) glm::inverse each frame.
+//    (Partially Addressed) World & normal matrices now sourced from
+//    TransformManager cache (allocated during collection). We still duplicate
+//    them into per-frame SoA arrays. Next: alias cached storage directly and
+//    map DrawMetadata.transform_index to global handle indices.
 // 2. Parallelization:
 //    PopulateMatrices + GenerateDrawMetadataAndMaterials are independent of
 //    sorting; could be partitioned across worker threads (job system) using
@@ -491,23 +497,43 @@ auto Renderer::ReserveMatrixStorage(std::size_t count) -> void
 auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
   const sceneprep::ScenePrepState& prep_state) -> void
 {
-  for (size_t i = 0; i < filtered.size(); ++i) {
-    const auto src_index = filtered[i];
+  // Transform caching path: fetch world & cached normal matrix via handle.
+  const auto& tm = prep_state.transform_mgr;
+  const auto unique_count = tm.GetUniqueTransformCount();
+  if (unique_count == 0) {
+    return;
+  }
+  const bool alias_world = alias_world_matrices_;
+  const bool alias_normal = alias_normal_matrices_;
+  std::vector<uint8_t> written;
+  written.resize(unique_count, 0u);
+  for (size_t fi = 0; fi < filtered.size(); ++fi) {
+    const auto src_index = filtered[fi];
     if (src_index >= prep_state.collected_items.size()) {
-      continue; // defensive; should not happen
+      continue; // defensive
     }
-    const auto& it = prep_state.collected_items[src_index];
-    std::memcpy(
-      &world_matrices_cpu_[i * 16u], &it.world_transform, sizeof(float) * 16u);
-    glm::mat3 upper3x3 { it.world_transform };
-    const glm::mat3 normal3 = glm::transpose(glm::inverse(upper3x3));
-    glm::mat4 normal4 { 1.0f };
-    for (int r = 0; r < 3; ++r) {
-      for (int c = 0; c < 3; ++c) {
-        normal4[c][r] = normal3[r][c];
-      }
+    const auto& item = prep_state.collected_items[src_index];
+    const auto handle = item.transform_handle;
+    const auto h = handle.get();
+    if (h >= unique_count) {
+      continue; // invalid handle (should not happen)
     }
-    std::memcpy(&normal_matrices_cpu_[i * 16u], &normal4, sizeof(float) * 16u);
+    if (written[h]) {
+      continue; // already populated
+    }
+    written[h] = 1u;
+    glm::mat4 world { 1.0f };
+    glm::mat4 normal { 1.0f };
+    if (tm.IsValidHandle(handle)) {
+      world = tm.GetTransform(handle);
+      normal = tm.GetNormalMatrix(handle); // now stored natively as mat4
+    }
+    if (!alias_world) {
+      std::memcpy(&world_matrices_cpu_[h * 16u], &world, sizeof(float) * 16u);
+    }
+    if (!alias_normal) {
+      std::memcpy(&normal_matrices_cpu_[h * 16u], &normal, sizeof(float) * 16u);
+    }
   }
 }
 
@@ -641,12 +667,15 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
         material_index = material_default_index;
       }
       dm.material_index = material_index;
-      dm.transform_index = static_cast<uint32_t>(i);
+      // Use stable TransformHandle id instead of filtered order index.
+      const auto handle = item.transform_handle;
+      dm.transform_index = handle.get();
       dm.instance_metadata_buffer_index = 0;
       dm.instance_metadata_offset = 0;
       dm.flags = ClassifyMaterialPassMask(item.material.get());
-      DCHECK_F(dm.transform_index < filtered.size(),
-        "transform_index out of range while generating DrawMetadata");
+      DCHECK_F(prep_state.transform_mgr.IsValidHandle(handle),
+        "Invalid transform handle (id={}) while generating DrawMetadata",
+        dm.transform_index);
       DCHECK_F(dm.material_index < material_constants_cpu_soa_.size(),
         "material_index out of range ({} >= {}): logic error in "
         "dedupe/population",
@@ -674,11 +703,13 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     }
   }
   // Post population validation
+  const auto unique_transform_count
+    = prep_state.transform_mgr.GetUniqueTransformCount();
   for (std::size_t s = 0; s < draw_metadata_cpu_soa_.size(); ++s) {
     const auto& d = draw_metadata_cpu_soa_[s];
-    DCHECK_F(d.transform_index < filtered.size(),
-      "Post population: transform_index {} out of range count {}",
-      d.transform_index, filtered.size());
+    DCHECK_F(d.transform_index < unique_transform_count,
+      "Post population: transform_index {} >= unique_transform_count {}",
+      d.transform_index, unique_transform_count);
     DCHECK_F(d.material_index < material_constants_cpu_soa_.size(),
       "Post population: material_index {} out of range materials {}",
       d.material_index, material_constants_cpu_soa_.size());
@@ -696,7 +727,42 @@ auto Renderer::UploadWorldTransforms(std::size_t count) -> void
   auto& gpu_worlds = world_transforms_.GetCpuData();
   const auto* src_mats
     = reinterpret_cast<const glm::mat4*>(world_matrices_cpu_.data());
-  gpu_worlds.assign(src_mats, src_mats + count);
+
+  // First frame or size change -> full upload path.
+  const bool size_mismatch = gpu_worlds.size() != count;
+  if (size_mismatch) {
+    if (alias_world_matrices_) {
+      const auto& tm_span
+        = scene_prep_state_.transform_mgr.GetWorldMatricesSpan();
+      gpu_worlds.assign(tm_span.begin(), tm_span.end());
+    } else {
+      gpu_worlds.assign(src_mats, src_mats + count);
+    }
+    world_transforms_.MarkDirty();
+    return;
+  }
+  // Sparse update path using TransformManager dirty indices.
+  const auto& tm = scene_prep_state_.transform_mgr;
+  const auto& dirty = tm.GetDirtyIndices();
+  if (dirty.empty()) {
+    return; // nothing changed
+  }
+  // Ensure gpu_worlds already sized (otherwise size_mismatch branch would run)
+  if (alias_world_matrices_) {
+    const auto& tm_span
+      = scene_prep_state_.transform_mgr.GetWorldMatricesSpan();
+    for (auto idx : dirty) {
+      if (idx >= count)
+        continue;
+      gpu_worlds[idx] = tm_span[idx];
+    }
+  } else {
+    for (auto idx : dirty) {
+      if (idx >= count)
+        continue;
+      gpu_worlds[idx] = src_mats[idx];
+    }
+  }
   world_transforms_.MarkDirty();
 }
 
@@ -792,17 +858,36 @@ auto Renderer::BuildSortingAndPartitions() -> void
 
 auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
 {
-  prepared_frame_.world_matrices = std::span<const float>(
-    world_matrices_cpu_.data(), world_matrices_cpu_.size());
-  prepared_frame_.normal_matrices = std::span<const float>(
-    normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
+  const auto& tm = scene_prep_state_.transform_mgr;
+  if (alias_world_matrices_) {
+    const auto world_span = tm.GetWorldMatricesSpan();
+    prepared_frame_.world_matrices = std::span<const float>(
+      reinterpret_cast<const float*>(world_span.data()),
+      world_span.size() * 16u);
+  } else {
+    prepared_frame_.world_matrices = std::span<const float>(
+      world_matrices_cpu_.data(), world_matrices_cpu_.size());
+  }
+  if (alias_normal_matrices_) {
+    const auto normal_span = tm.GetNormalMatricesSpan();
+    prepared_frame_.normal_matrices = std::span<const float>(
+      reinterpret_cast<const float*>(normal_span.data()),
+      normal_span.size() * 16u);
+  } else {
+    prepared_frame_.normal_matrices = std::span<const float>(
+      normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
+  }
   prepared_frame_.draw_metadata_bytes = std::span<const std::byte>(
     reinterpret_cast<const std::byte*>(draw_metadata_cpu_soa_.data()),
     draw_metadata_cpu_soa_.size() * sizeof(DrawMetadata));
-  DCHECK_F(world_matrices_cpu_.size() == transform_count * 16u,
-    "World matrices size mismatch (expected count*16)");
-  DCHECK_F(normal_matrices_cpu_.size() == transform_count * 16u,
-    "Normal matrices size mismatch (expected count*16)");
+  if (!alias_world_matrices_) {
+    DCHECK_F(world_matrices_cpu_.size() == transform_count * 16u,
+      "World matrices size mismatch (unique_count * 16)");
+  }
+  if (!alias_normal_matrices_) {
+    DCHECK_F(normal_matrices_cpu_.size() == transform_count * 16u,
+      "Normal matrices size mismatch (unique_count * 16)");
+  }
 }
 
 auto Renderer::UploadDrawMetadataBindless() -> void

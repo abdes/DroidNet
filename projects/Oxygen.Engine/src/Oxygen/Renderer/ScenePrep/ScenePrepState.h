@@ -14,7 +14,6 @@
 #include <Oxygen/Renderer/ScenePrep/State/GeometryResidencyCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialUploadCache.h>
-#include <Oxygen/Renderer/ScenePrep/State/TransformBatchCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -43,9 +42,6 @@ struct ScenePrepState {
   // === Transform Management ===
   //! Persistent transform deduplication and GPU buffer management.
   TransformManager transform_mgr;
-
-  //! Per-frame cache mapping item indices to transform handles.
-  TransformBatchCache transform_cache;
 
   // === Material Management ===
   //! Persistent material registry with deduplication.

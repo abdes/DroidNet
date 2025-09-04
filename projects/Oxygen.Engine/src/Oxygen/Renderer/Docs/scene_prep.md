@@ -83,7 +83,7 @@ passes accept ScenePrep outputs directly.
 
 ## Implemented collection extractors
 
-- ExtractionPreFilter: Seeds visibility/shadow flags, world transform, and geometry; drops invisible nodes.
+- ExtractionPreFilter: Seeds visibility/shadow flags, geometry, and transform handle; drops invisible nodes.
 - MeshResolver: Selects active LOD (distance/SSE policies) and resolves the mesh.
 - SubMeshVisibilityFilter: Computes visible submesh indices using node visibility masks and per-submesh frustum culling (AABB preferred, world-sphere fallback).
 - EmitPerVisibleSubmesh: Emits one `RenderItemData` per visible submesh, resolving material per submesh (override → mesh submesh → default).
@@ -121,8 +121,8 @@ struct BasicScenePrepConfig {
     // Batch upload transforms for items at the given indices
     for (auto idx : indices) {
       const auto& item = all_items[idx];
-      auto handle = state.transform_mgr.GetOrCreateHandle(item.world_transform);
-      state.transform_cache.SetHandle(idx, handle);
+      // Item already carries a TransformHandle populated during collection.
+      state.transform_cache.SetHandle(idx, item.transform_handle);
     }
   };
     struct RenderItemData; struct RenderItem; struct MeshView; struct DrawMetadata;
@@ -331,7 +331,8 @@ struct BasicTransformUploader {
                   const ScenePrepContext& ctx, ScenePrepState& state) -> void {
     // Collect unique transforms and assign indices
     for (auto idx : indices) {
-      const auto& transform = all_items[idx].world_transform;
+  // Access transform via transform_handle indirection (example placeholder)
+  // const auto handle = all_items[idx].transform_handle;
       auto handle = state.transform_mgr.GetOrAllocate(transform);
       state.transform_cache.MapItemToHandle(idx, handle);
     }
@@ -444,7 +445,7 @@ struct ScenePrepState {
   TransformManager transform_mgr;      // persistent
   TransformBatchCache transform_cache; // per-frame
   MaterialRegistry material_registry;  // persistent
-  MaterialUploadCache material_cache;  // per-frame
+  // (material_cache removed)
   GeometryRegistry geometry_registry;  // persistent
   GeometryResidencyCache geometry_cache; // per-frame
   // ... plus logging, etc.
@@ -481,24 +482,40 @@ private:
 // Persistent material registry with deduplication
 class MaterialRegistry {
 public:
+  // Deprecated: use GetOrRegisterMaterial (kept temporarily)
   auto RegisterMaterial(std::shared_ptr<const MaterialAsset> material) -> MaterialHandle;
+
+  // Idempotent registration; nullptr returns sentinel handle (0)
+  auto GetOrRegisterMaterial(std::shared_ptr<const MaterialAsset> material) -> MaterialHandle;
+
+  // Lookup existing handle without side effects
+  auto LookupMaterialHandle(const MaterialAsset* material) const -> std::optional<MaterialHandle>;
+
+  // Existing API
   auto GetHandle(const MaterialAsset* material) const -> std::optional<MaterialHandle>;
+
+  // Access by handle
+  auto GetMaterial(MaterialHandle handle) const -> std::shared_ptr<const MaterialAsset>;
+
+  // Validation helpers
+  static constexpr bool IsSentinelHandle(MaterialHandle h) { return h == MaterialHandle{0}; }
+  bool IsValidHandle(MaterialHandle h) const; // Non-sentinel and registered
 
 private:
   std::unordered_map<const MaterialAsset*, MaterialHandle> material_to_handle_;
+  std::vector<std::shared_ptr<const MaterialAsset>> materials_; // index = handle value
   MaterialHandle next_handle_{0};
 };
 
-// Per-frame material upload cache
-class MaterialUploadCache {
-public:
-  auto RecordMaterialIndex(std::size_t item_idx, MaterialHandle handle) -> void;
-  auto GetMaterialHandle(std::size_t item_idx) const -> std::optional<MaterialHandle>;
-  auto Reset() -> void;
+// Sentinel Semantics:
+// - Handle value 0 is reserved as "null material" (no material / unassigned)
+// - Emission code must treat sentinel as absence; no GPU table lookup.
+// - LookupMaterialHandle never creates new entries; use GetOrRegisterMaterial
+//   to allocate a stable handle.
 
-private:
-  std::vector<MaterialHandle> item_to_material_; // Indexed by item index
-};
+// MaterialUploadCache removed: materials now registered at emission.
+// Each RenderItemData stores both the shared_ptr material and a stable
+// MaterialHandle (for future bindless/material table usage).
 
 // Persistent geometry registry with residency tracking
 class GeometryRegistry {
@@ -568,7 +585,7 @@ TEST(ScenePrepTest, TransformUploaderBatches) {
   std::vector<RenderItemData> items(100);
   glm::mat4 shared_transform = glm::mat4(1.0f);
   for (auto& item : items) {
-    item.world_transform = shared_transform;
+  // Item transform now deduplicated via TransformManager; handle assigned during collection
   }
 
   std::vector<std::size_t> indices(100);
@@ -636,7 +653,7 @@ TEST(ScenePrepTest, FlexibleConfigurationSkipsStages) {
 
   // Verify stages were skipped gracefully
   EXPECT_TRUE(state.transform_cache.IsEmpty()); // Transform uploader was skipped
-  EXPECT_TRUE(state.material_cache.IsEmpty());  // Material uploader was skipped
+  // material_cache removed; no per-frame material cache assertions
 }
 
 TEST(ScenePrepTest, PartialConfigurationWorks) {
@@ -729,7 +746,7 @@ function ScenePrep(collected_items, ctx, state, outputs)
   // 1) Batch preparation on filtered set (GPU uploads happen here)
   // Process items by index to avoid data copies
   TransformUploader(collected_items, filtered_indices, ctx, state)  // [GPU] -> writes state.transform_cache
-  MaterialUploader(collected_items, filtered_indices, ctx, state)   // [GPU] -> writes state.material_cache
+  MaterialUploader(collected_items, filtered_indices, ctx, state)   // [GPU] (now writes material handles inline)
   GeometryUploader(collected_items, filtered_indices, ctx, state)   // [GPU] -> writes state.geometry_cache
 
   // 2) Sorting/partitioning once (CPU) - work with indices directly
@@ -746,7 +763,7 @@ function ScenePrep(collected_items, ctx, state, outputs)
     d = collected_items[idx]
     item = RenderItem{}
     GeometryAssembler(d, ctx, state, item)   // reads state.geometry_cache/registry
-    MaterialAssembler(d, ctx, state, item)   // reads state.material_cache/registry
+  MaterialAssembler(d, ctx, state, item)   // reads material_registry
     TransformAssembler(d, ctx, state, item)  // reads state.transform_cache/manager
     FlagsAssembler(d, ctx, state, item)      // pure CPU
     item.pass_mask = pass_mask[k]
@@ -843,7 +860,7 @@ public:
 };
 
 struct CachedItemData {
-  glm::mat4 world_transform;
+  TransformHandle transform_handle; // world transform accessed via manager
   MaterialId material_id;
   GeometryId geometry_id;
   std::uint64_t last_frame;
@@ -928,7 +945,7 @@ struct ScenePrepState {
   TransformManager transform_mgr;
   TransformBatchCache transform_cache;
   MaterialRegistry material_registry;
-  MaterialUploadCache material_cache;
+  // material_cache removed
   GeometryRegistry geometry_registry;
   GeometryResidencyCache geometry_cache;
 
@@ -938,7 +955,7 @@ struct ScenePrepState {
     filtered_indices.clear();
     pass_masks.clear();
     transform_cache.Reset();
-    material_cache.Reset();
+  // material_cache removed
     geometry_cache.Reset();
   }
 };
@@ -1039,7 +1056,7 @@ auto CreateBasicCollectionConfig() {
 
   auto transform_extractor = [](RenderItemProto& item, const ScenePrepContext& ctx) -> void {
     // Populate proto fields from facades; exact fields live on the RenderItemProto
-    // For example: item.proto.world_transform = item.Transform().GetWorldMatrix();
+  // Example: handle = transform_manager.GetOrCreate(item.Transform().GetWorldMatrix());
   };
 
   auto mesh_resolver = [](RenderItemProto& item, const ScenePrepContext& ctx) -> void {
@@ -1085,7 +1102,7 @@ auto CreateBasicScenePrepConfig() {
                                std::span<const std::size_t> indices,
                                const ScenePrepContext& ctx, ScenePrepState& state) -> void {
     for (auto idx : indices) {
-      const auto& transform = all_items[idx].world_transform;
+  // Transform resolved from handle; not stored per-item inline anymore
       auto handle = state.transform_mgr.GetOrAllocate(transform);
       state.transform_cache.MapItemToHandle(idx, handle);
     }
@@ -1123,7 +1140,7 @@ auto CreateBasicScenePrepConfig() {
   auto mock_producer = [](const RenderItemProto& item, const ScenePrepContext& ctx,
                           std::vector<RenderItemData>& output) -> void {
     auto& render_item = output.emplace_back();
-    render_item.world_transform = glm::mat4(1.0f); // Identity for testing
+  render_item.transform_handle = TransformHandle { 1 }; // Example assigned handle
     render_item.submesh_index = 0;
     render_item.lod_index = 0;
     // Minimal setup for testing
