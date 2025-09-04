@@ -158,7 +158,7 @@ target_link_libraries(
     oxygen::platform
     oxygen::core
     oxygen::graphics-common
-    oxygen::imgui
+    # oxygen::imgui
     glm::glm
     nlohmann_json::nlohmann_json
     dxcompiler

@@ -23,7 +23,7 @@ Platform::Platform(const PlatformConfig& config)
 
 Platform::~Platform()
 {
-  LOG_SCOPE_FUNCTION(1);
+  LOG_SCOPE_FUNCTION(INFO);
 
   // ->Final<- thing to do is to terminate SDL3.
   platform::sdl::Terminate();
