@@ -142,8 +142,6 @@ private:
    be rendered in the main shading pass. Consistent geometry and transformations
    between this pass and the main shading pass are crucial.
   */
-  [[nodiscard]] auto GetDrawList() const
-    -> std::span<const RenderItem> override;
 
   //! Provides const access to the framebuffer specified in the configuration,
   //! if any.
@@ -159,6 +157,8 @@ private:
     const graphics::NativeObject& dsv) const -> void;
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
+
+  // Draw submission uses base RenderPass::IssueDrawCalls (SoA path).
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;

@@ -55,10 +55,9 @@ set(
   "Detail/BindlessStructuredBuffer.h"
   "RenderContext.h"
   "Renderer.h"
-  "RenderItem.h"
-  "RenderItemsList.h"
   "RenderPass.h"
   "ShaderPass.h"
+  "PreparedSceneFrame.h"
   "Modules/TransformsModule.h"
   "ScenePrep/CollectionConfig.h"
   "Types/DrawMetaData.h"
@@ -76,10 +75,9 @@ set(
   "Detail/RootParamToBindings.h"
   "Internal/RenderScope.h"
   "Renderer.cpp"
-  "RenderItem.cpp"
-  "RenderItemsList.cpp"
   "RenderPass.cpp"
   "Modules/TransformsModule.cpp"
+  "PreparedSceneFrame.cpp"
   "ScenePrep/Concepts.h"
   "ScenePrep/Extractors.h"
   "ScenePrep/RenderItemData.h"
@@ -118,6 +116,7 @@ target_sources(
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
+target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}

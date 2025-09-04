@@ -259,6 +259,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 
+    loguru::g_stderr_verbosity = 0; // FIXME temporary to reduce tail logs
+
     app.engine->Stop();
     app.engine.reset();
     if (!app.gfx_weak.expired()) {

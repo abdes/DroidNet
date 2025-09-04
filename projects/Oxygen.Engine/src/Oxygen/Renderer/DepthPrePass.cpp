@@ -26,7 +26,6 @@
 #include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 using oxygen::Scissors;
@@ -100,11 +99,6 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
   clear_color_.emplace(color);
 }
 
-auto DepthPrePass::GetDrawList() const -> std::span<const RenderItem>
-{
-  // FIXME: For now, always use the opaque_draw_list from the context.
-  return Context().opaque_draw_list;
-}
 auto DepthPrePass::GetFramebuffer() const -> const Framebuffer*
 {
   return Context().framebuffer.get();
@@ -208,15 +202,31 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
+  if (auto psf = Context().prepared_frame; psf && psf->IsValid()) {
+    DLOG_F(3,
+      "DepthPrePass: PreparedSceneFrame matrices: world_floats={} "
+      "normal_floats={}",
+      psf->world_matrices.size(), psf->normal_matrices.size());
+  }
+
   const auto dsv = PrepareDepthStencilView(GetDepthTexture());
   DCHECK_F(dsv.IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
   ClearDepthStencilView(recorder, dsv);
   SetupRenderTargets(recorder, dsv);
-  IssueDrawCalls(recorder);
-  Context().RegisterPass(this);
 
+  // Issue draws from PreparedSceneFrame metadata (explicit indexed vs
+  // non-indexed branches).
+  const bool emitted = IssueDrawCalls(recorder);
+
+  // At this stage of migration we expect all depth draws to come from the
+  // PreparedSceneFrame path. If nothing was emitted it's a logic error.
+  DCHECK_F(emitted,
+    "DepthPrePass expected to emit draws from PreparedSceneFrame (SoA path) at "
+    "this migration stage");
+
+  Context().RegisterPass(this);
   co_return;
 }
 

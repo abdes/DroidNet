@@ -27,17 +27,6 @@ namespace oxygen::engine {
 inline constexpr uint32_t kInvalidDescriptorSlot
   = (std::numeric_limits<uint32_t>::max)();
 
-struct BindlessIndicesSlot {
-  uint32_t value;
-  explicit constexpr BindlessIndicesSlot(
-    const uint32_t v = kInvalidDescriptorSlot)
-    : value(v)
-  {
-  }
-  constexpr auto operator<=>(const BindlessIndicesSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value; }
-};
-
 struct BindlessDrawMetadataSlot {
   uint32_t value;
   explicit constexpr BindlessDrawMetadataSlot(
@@ -119,8 +108,6 @@ struct MonotonicVersion {
    - camera_position: World-space camera origin.
    - time_seconds: Accumulated time (seconds) for temporal effects.
    - frame_index: Monotonic frame counter wrapped in a strong type (FrameIndex).
-   - bindless_indices_slot: Shader-visible descriptor slot wrapped in a strong
-     type (BindlessIndicesSlot); use kInvalidDescriptorSlot when unavailable.
    - bindless_draw_metadata_slot: Shader-visible descriptor slot for
  DrawMetadata structured buffer (BindlessDrawMetadataSlot); use
  kInvalidDescriptorSlot when unavailable.
@@ -144,7 +131,6 @@ public:
     float time_seconds { 0.0f };
     frame::Slot::UnderlyingType frame_slot { 0 };
     frame::SequenceNumber::UnderlyingType frame_seq_num { 0 };
-    uint32_t bindless_indices_slot { kInvalidDescriptorSlot };
     uint32_t bindless_draw_metadata_slot { kInvalidDescriptorSlot };
     uint32_t bindless_transforms_slot { kInvalidDescriptorSlot };
     uint32_t bindless_material_constants_slot { kInvalidDescriptorSlot };
@@ -220,16 +206,6 @@ public:
     return *this;
   }
 
-  auto SetBindlessIndicesSlot(
-    const BindlessIndicesSlot slot, RendererTag) noexcept -> SceneConstants&
-  {
-    if (bindless_indices_slot_ != slot) {
-      bindless_indices_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
-
   auto SetBindlessDrawMetadataSlot(const BindlessDrawMetadataSlot slot,
     RendererTag) noexcept -> SceneConstants&
   {
@@ -280,14 +256,6 @@ public:
     return frame_slot_;
   }
 
-  //! Shader-visible descriptor heap slot of DrawResourceIndices structured
-  //! buffer SRV (dynamic; kInvalidDescriptorSlot when unavailable). Shaders
-  //! must read and branch rather than assuming slot 0.
-  [[nodiscard]] constexpr auto GetBindlessIndicesSlot() const noexcept
-  {
-    return bindless_indices_slot_;
-  }
-
   [[nodiscard]] constexpr auto GetBindlessDrawMetadataSlot() const noexcept
   {
     return bindless_draw_metadata_slot_;
@@ -327,7 +295,6 @@ private:
       .time_seconds = time_seconds_,
       .frame_slot = frame_slot_.get(),
       .frame_seq_num = frame_seq_num_.get(),
-      .bindless_indices_slot = bindless_indices_slot_.value,
       .bindless_draw_metadata_slot = bindless_draw_metadata_slot_.value,
       .bindless_transforms_slot = bindless_transforms_slot_.value,
       .bindless_material_constants_slot
@@ -344,7 +311,6 @@ private:
   float time_seconds_ { 0.0f };
   frame::Slot frame_slot_ {};
   frame::SequenceNumber frame_seq_num_ {};
-  BindlessIndicesSlot bindless_indices_slot_ {};
   BindlessDrawMetadataSlot bindless_draw_metadata_slot_ {};
   BindlessWorldsSlot bindless_transforms_slot_ {};
   BindlessMaterialConstantsSlot bindless_material_constants_slot_ {};

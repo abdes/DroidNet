@@ -361,21 +361,6 @@ void CommandRecorder::Draw(const uint32_t vertex_num,
     vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
-void CommandRecorder::DrawIndexed(uint32_t index_count, uint32_t instance_count,
-  uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
-{
-  const auto& command_list = GetConcreteCommandList();
-  DCHECK_EQ_F(
-    command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
-
-  // Prepare for DrawIndexed
-  command_list.GetCommandList()->IASetPrimitiveTopology(
-    D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-  command_list.GetCommandList()->DrawIndexedInstanced(
-    index_count, instance_count, first_index, vertex_offset, first_instance);
-}
-
 void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
   uint32_t thread_group_count_y, uint32_t thread_group_count_z)
 {

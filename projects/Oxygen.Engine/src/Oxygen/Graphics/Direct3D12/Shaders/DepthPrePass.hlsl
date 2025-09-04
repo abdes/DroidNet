@@ -9,7 +9,7 @@
 // - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
 // - Resources are intermixed in the heap (structured indirection + geometry buffers).
 // - DrawMetadata structured buffer occupies a dynamic heap slot; its slot
-//   is published each frame via SceneConstants.bindless_indices_slot.
+//   is published each frame via SceneConstants.bindless_draw_meta_data_slot.
 // - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
@@ -26,23 +26,24 @@ struct VertexData
 
 // Structured buffer for per-draw metadata (matches C++ DrawMetadata)
 struct DrawMetadata {
+    // --- Geometry buffers ---
     uint vertex_buffer_index;            // Bindless index into vertex buffer table
     uint index_buffer_index;             // Bindless index into index buffer table
+    uint first_index;                    // Start index within index buffer
+    int  base_vertex;                    // Base vertex offset
+
+    // --- Draw configuration ---
     uint is_indexed;                     // 0 = non-indexed, 1 = indexed
-    uint instance_count;                 // Number of instances to draw
-
-    uint transform_offset;               // Offset into transform buffer for this draw
-
+    uint instance_count;                 // Number of instances
+    uint index_count;                    // Number of indices (undefined if non-indexed)
+    uint vertex_count;                   // Number of vertices (undefined if indexed)
     uint material_index;                 // Index into material constants buffer
 
+    // --- Transform & instance indirection ---
+    uint transform_index;                // Index into transform arrays
     uint instance_metadata_buffer_index; // Bindless index into instance metadata buffer
     uint instance_metadata_offset;       // Offset into instance metadata buffer
-    uint flags;                          // Bitfield: visibility, pass ID, etc.
-
-    // Per-view geometry slice
-    uint first_index;
-    int  base_vertex;
-    uint _pad0; // Padding for alignment
+    uint flags;                          // Bitfield: visibility, pass mask, etc.
 };
 
 
@@ -59,8 +60,7 @@ cbuffer SceneConstants : register(b1) {
     float time_seconds;
     uint frame_slot;
     uint64_t frame_seq_num;
-    uint bindless_indices_slot; // dynamic slot (0xFFFFFFFF when absent)
-    uint bindless_draw_meta_data_slot; // dynamic slot for per-draw metadata
+    uint bindless_draw_metadata_slot; // dynamic slot for per-draw metadata
     uint bindless_transforms_slot; // dynamic slot for per-draw world matrices
     uint bindless_material_constants_slot; // dynamic slot for material constants
     uint _pad0; // Padding for alignment
@@ -88,12 +88,12 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     VS_OUTPUT_DEPTH output;
 
     // Access the DrawMetadata buffer using the dynamic slot from scene constants.
-    if (bindless_indices_slot == 0xFFFFFFFFu) {
+    if (bindless_draw_metadata_slot == 0xFFFFFFFFu) {
         // No geometry bound; output position safely (could early return). Use vertexID as trivial position.
         output.clipSpacePosition = float4(0,0,0,1);
         return output;
     }
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_indices_slot];
+    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
     // Use the draw index from the root constant to index into the DrawMetadata array
     DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
@@ -119,7 +119,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     if (bindless_transforms_slot != 0xFFFFFFFFu) {
         StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[bindless_transforms_slot];
         // Use explicit offset provided in per-draw metadata
-        world_matrix = worlds[meta.transform_offset];
+    world_matrix = worlds[meta.transform_index];
     } else {
         world_matrix = float4x4(1,0,0,0,
                                 0,1,0,0,

@@ -13,7 +13,7 @@
 #include <span>
 #include <unordered_map>
 
-#include <Oxygen/Renderer/RenderItem.h>
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen {
 class Graphics;
@@ -91,10 +91,8 @@ struct RenderContext {
   // Scene constants (lighting environment, fog, global exposure, etc.)
   // Add your scene constant struct or fields here as needed
 
-  // Render item lists
-  std::span<const RenderItem> opaque_draw_list;
-  std::span<const RenderItem> transparent_draw_list;
-  // ... add more lists for decals, particles, etc. as needed ...
+  // Legacy AoS RenderItem lists removed. Passes now consume PreparedSceneFrame
+  // (prepared_frame) for per-draw data.
 
   // TODO: Light lists
   // std::vector<scene::Light> light_list;
@@ -129,15 +127,23 @@ struct RenderContext {
   */
   std::shared_ptr<const graphics::Buffer> material_constants;
 
+  //=== SoA Prepared Frame (Renderer Finalization Output) ===-----------------
+  // Non-owning pointer to the renderer's immutable per-frame finalized SoA
+  // snapshot. Set by Renderer::PreExecute after
+  // BuildFrame/FinalizeScenePrepSoA. Nullptr until the renderer wires it;
+  // passes must gracefully handle null (legacy path) during the migration
+  // phase. Will become mandatory once AoS is fully removed.
+  observer_ptr<const struct PreparedSceneFrame> prepared_frame { nullptr };
+
   //=== Renderer / Graphics ===-----------------------------------------------//
 
   //! The renderer executing the render graph. Guaranteed to be non-null during
   //! the render graph execution.
-  auto GetRenderer() const -> auto& { return *renderer; }
+  auto GetRenderer() const -> auto& { return *renderer_; }
 
   //! The graphics system managing the frame rendering process. Guaranteed to
   //! be non-null during the render graph execution.
-  auto GetGraphics() const -> auto& { return *graphics; }
+  auto GetGraphics() const -> auto& { return *graphics_; }
 
   //=== Pass Management ===---------------------------------------------------//
 
@@ -162,7 +168,7 @@ struct RenderContext {
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    return static_cast<PassT*>(known_passes[idx]);
+    return static_cast<PassT*>(known_passes_[idx].get());
   }
 
   /*!
@@ -182,7 +188,7 @@ struct RenderContext {
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    known_passes[idx] = pass;
+    known_passes_[idx].reset(pass);
   }
 
 private:
@@ -191,8 +197,8 @@ private:
   //! Sets the renderer and graphics for the current render graph run.
   auto SetRenderer(Renderer* the_renderer, oxygen::Graphics* the_graphics) const
   {
-    renderer = the_renderer;
-    graphics = the_graphics;
+    renderer_.reset(the_renderer);
+    graphics_.reset(the_graphics);
   }
 
   //! Resets the render context for a new graph run.
@@ -210,20 +216,19 @@ private:
   */
   auto Reset() -> void
   {
-    std::ranges::fill(known_passes, nullptr);
-    renderer = nullptr;
-    graphics = nullptr;
+    for (auto& p : known_passes_) {
+      p.reset(nullptr);
+    }
+    renderer_.reset(nullptr);
+    graphics_.reset(nullptr);
     scene_constants.reset();
     material_constants.reset();
   }
-
-  mutable Renderer* renderer { nullptr };
-  mutable oxygen::Graphics* graphics { nullptr };
-
-  //! Pass pointer registry for pass-to-pass data flow (O(1) array,
-  //! type-indexed). Non-null if the pass has been registered in the current
-  //! graph run.
-  mutable std::array<RenderPass*, kNumPassTypes> known_passes { { nullptr } };
+  mutable observer_ptr<Renderer> renderer_ { nullptr };
+  mutable observer_ptr<oxygen::Graphics> graphics_ { nullptr };
+  mutable std::array<observer_ptr<RenderPass>, kNumPassTypes> known_passes_ {
+    { nullptr }
+  };
 };
 
 } // namespace oxygen::engine

@@ -28,7 +28,7 @@
 //   }
 //   uint vIdx = BX_ResolveVertexIndex(meta, SV_VertexID);
 //   BX_VERTEX_TYPE v = BX_LoadVertex(meta.vertex_buffer_index, vIdx);
-//   float4x4 world = BX_LoadWorldMatrix(transforms_buffer_slot, meta.transform_offset);
+//   float4x4 world = BX_LoadWorldMatrix(transforms_buffer_slot, meta.transform_index);
 //   BX_MATERIAL_TYPE mat = BX_LoadMaterial(materials_buffer_slot, meta.material_index);
 //
 //   // Sample a texture via SM 6.6 descriptor heap (example)
@@ -116,7 +116,7 @@ static inline BX_VERTEX_TYPE BX_LoadVertex(uint vertexBufferIndex, uint vertexIn
 }
 
 // Load a world matrix from a transforms buffer slot (returns identity if invalid)
-static inline float4x4 BX_LoadWorldMatrix(uint transformsSlot, uint transformOffset)
+static inline float4x4 BX_LoadWorldMatrix(uint transformsSlot, uint transformIndex)
 {
     if (BX_IsValidSlot(transformsSlot)) {
         StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[transformsSlot];
