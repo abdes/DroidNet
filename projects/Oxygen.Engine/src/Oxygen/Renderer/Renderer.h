@@ -163,6 +163,25 @@ public:
   OXGN_RNDR_API auto BuildFrame(const CameraView& camera_view,
     const oxygen::engine::FrameContext& frame_context) -> std::size_t;
 
+  //! Configure zero-copy matrix aliasing.
+  /*!
+   Enables or disables zero-copy aliasing for world and normal matrices.
+   When aliasing is enabled for a matrix class, the prepared frame's span
+   will reference TransformManager's persistent storage directly instead of
+   copying into the renderer's per-frame CPU vectors. Disabling aliasing
+   forces a conservative copy path on the next frame build. Safe to call
+   mid-run; changes take effect on subsequent BuildFrame.
+
+   @param world  Enable aliasing for world matrices (glm::mat4).
+   @param normal Enable aliasing for normal matrices (glm::mat3 promoted to
+                 mat4 layout) if true; otherwise copy into per-frame buffer.
+  */
+  OXGN_RNDR_API auto SetMatrixAliasing(bool world, bool normal) -> void
+  {
+    alias_world_matrices_ = world;
+    alias_normal_matrices_ = normal;
+  }
+
 private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context,
     const oxygen::engine::FrameContext& frame_context) -> void;
@@ -303,6 +322,21 @@ private:
   // Populates SoA arrays from ScenePrep outputs (initial minimal subset).
   auto FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
     -> void;
+
+  // Configuration: when true, publish world matrix spans directly over
+  // TransformManager storage (zero-copy) instead of copying into
+  // world_matrices_cpu_. Disabled by default until validated.
+  bool alias_world_matrices_ { true };
+  // Configuration: when true, publish normal matrix spans directly over
+  // TransformManager cached normal matrices (now natively stored as glm::mat4
+  // like world matrices). Enabled by default after validation of storage
+  // refactor eliminating per-frame promotion overhead.
+  bool alias_normal_matrices_ { true };
+
+  // Persistent ScenePrep state (caches transforms/materials/geometry across
+  // frames). ResetFrameData() is invoked each BuildFrame while retaining
+  // deduplicated caches inside contained managers.
+  sceneprep::ScenePrepState scene_prep_state_;
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };

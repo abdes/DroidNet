@@ -119,80 +119,109 @@ History Log (Chronological)
 2025-09-05T00:15Z  Sample Scene Simplification: Reworked `Examples/Async` scene for deterministic visual validation. Replaced animated orbit camera with fixed 45° pitched camera looking at origin (stabilizes depth relationships). Centered multi-submesh quad at origin facing +Z (no rotation) to ensure consistent front-face culling & alpha evaluation. Added sphere orbital animation around origin on XZ plane (radius=4) to exercise changing overlap against quad for transparency correctness. Removed quad rotation & camera animation variables (`quad_rotation_angle_`, `AnimateMainCamera`). Added helper `SetupFixedCamera` (one-time) and `AnimateSphereOrbit` (per-frame). Intent: stable baseline for future transparent ordering work (back-to-front/OIT) and partition map multi-range validation. No pass or renderer logic modified; purely scene graph adjustments. Next related step: implement transparent draw ordering strategy once partition maps include transparent range with >1 overlapping depth surfaces.
 2025-09-05T00:30Z  Multi-Range Partitions Activated: With transparent classification and `TransparentPass` live, frames containing transparent draws now produce ≥2 partition ranges (opaque, transparent). Deterministic ordering verified (opaque range precedes transparent via pass_mask sort key). Removes blocker for closing Task 10 (all derived passes adapted) and Task 11 (multi-range partition map). Added deferred design TODO for transparent ordering/OIT.
 
-Focused Next Steps (Revised @2025-09-05T00:30Z)
-------------------------------------------------
+2025-09-05T10:40Z  Normal Matrix Storage Refactor: TransformManager now stores normal
+				   matrices natively as glm::mat4 alongside world matrices (no
+				   per-frame promotion). Renderer updated (`PopulateMatrices`,
+				   `PublishPreparedFrameSpans`) to treat normals identically to
+				   worlds with zero-copy aliasing when enabled. Enabled
+				   `alias_normal_matrices_` by default (previously false) and
+				   removed temporary promotion buffer logic. This satisfies the
+				   Transform Manager integration requirement for matrix
+				   caching & aliasing.
+2025-09-05T10:42Z  Normal Aliasing Documentation: Added integration notes blocks to
+				   `FullScreenTriangle.hlsl` and `DepthPrePass.hlsl` detailing
+				   how to bind and consume normal matrices in future lighting /
+				   shading stages (slot addition pattern, cast to float3x3,
+				   avoiding inverse-transpose in shader). No functional shader
+				   changes required yet (passes currently unlit). Marks shader
+				   struct sync (Task 25) partially progressed (docs present,
+				   no new fields required today).
+2025-09-05T10:45Z  Status Consolidation: With three SoA-driven passes (Depth,
+				   Shader, Transparent) and multi-range partitions active, SoA
+				   pipeline core (Task 6) considered COMPLETE. Remaining prior
+				   sub-items (indirect draw args prototype, advanced
+				   transparent ordering/OIT, material registry) explicitly
+				   deferred to focused next steps. Updated task table; removed
+				   obsolete "Short Horizon" & remaining Task 6 sub-step lists.
+				   Open Question Q1 (normal matrices exposure) RESOLVED: we
+				   expose & cache normal matrices (glm::mat4). Q2 transparency
+				   ordering still deferred (classification done). Q3 transform
+				   dedupe epsilon remains exact equality (acceptable baseline).
+
+Focused Next Steps (Post Normal-Matrix Refactor @2025-09-05T10:45Z)
+-------------------------------------------------------------------
 DONE N1: Non-indexed draw support (explicit `vertex_count`).
-DONE N2a: Basic pass mask bit (opaque) populated.
-DONE N2b: Multi-range partition exercised (opaque + transparent).
-DONE N3: Pointer-based material dedup (will evolve to stable registry / Task 13).
+DONE N2a: Pass mask bit (opaque) populated.
+DONE N2b: Multi-range partitions (opaque + transparent) active.
+DONE N3: Pointer-based material dedup (interim).
 DONE N4: Validation asserts (transform/material indices, flags non-zero).
-OPEN N5: Indirect draw args design note (author before prototype – pending).
+DONE N5: Indirect draw args DESIGN NOTE authored (prototype deferred).
+DONE N6: Normal matrices native mat4 storage + default aliasing.
 
-Short Horizon (doc & design only before sleep):
-1. Write indirect draw args DESIGN NOTE (layout, alignment, migration toggle) – pending.
-2. Draft transparent ordering/OIT design (TODO added below) – done.
-3. Mark Tasks 10 & 11 Done (multi-pass + partitions active) – done.
-4. Prepare test plan outline for partitions & ordering hash (no implementation yet).
+NEXT (Design / Implementation):
+1. Indirect draw args prototype (flagged) + metrics (deferred but high value).
+2. Transparent ordering strategy (depth sort vs weighted OIT) design finalize & initial implementation.
+3. Material registry (stable hashed indices) replacing pointer map; update DrawMetadata.material_index semantics.
+4. Test suite: unit (partition coverage, ordering determinism hash, transform aliasing), integration (multi-pass render parity), death/assert tests.
+5. Performance & memory baselines across draw count tiers (capture sort_time_us, finalize_time_us, alloc high-water, submission cost with vs without indirect).
+6. Documentation scrub: remove residual AoS mentions, consolidate bindless slot conventions, add normal matrix aliasing rationale.
+7. Optional: Prepare indirect args buffer schema for GPU culling (flags bit usage doc) ahead of prototype.
 
-Deferred (implementation):
-- Indirect args prototype & perf comparison.
-- Back-to-front transparent sort or OIT implementation.
-- Material registry (stable hashed indices) replacing pointer map.
-- Performance & memory baselines across draw count tiers.
+Deferred (Explicit):
+- Advanced transparent OIT (beyond simple back-to-front) until artifact evidence.
+- GPU-driven culling & args compaction until indirect baseline stabilized.
+- Instancing support (no representative content yet).
 
-Cleanup Batch (later):
-- AoS legacy tests removal & new SoA tests addition.
-- Namespace/include/macro hygiene & changelog.
+Test Plan Outline (Draft):
+- Partition Coverage: ensure union of ranges == draw_count, no overlap.
+- Ordering Determinism: render hash stable across 100 frames with static scene.
+- Transform Aliasing: modify subset; verify only dirty world upload regions (future metrics hook) & normal matrices remain consistent.
+- Pass Mask Validation: opaque + transparent counts consistent with material classification rules.
 
-Revised Task 6 Exit Criteria (remaining to close Task 6):
- - Multi-range partition (≥2 masks) implemented & validated by tests.
- - Indirect draw args prototype gated & validated (optional for exit if deferred explicitly).
- - Third geometry-relevant pass migrated OR explicitly documented that only two are required for current sample set.
- - All AoS artifacts removed (DONE) and docs reflect SoA-only pipeline (pending doc scrub).
-
-Remaining Task 6 Sub-Steps Tracking:
- - 6.b Partition map expansion (multi-range) → IP.
- - 6.d Extended parity asserts for any new fields (defer until indirect args integration decision).
- - 6.f Timing metrics DONE.
+Cleanup Batch (Queued):
+- Remove legacy test artifacts & create SoA-focused tests.
+- Macro / include hygiene & clang-tidy sweep.
+- Changelog & migration note summarizing AoS removal & matrix aliasing.
 
 Deferral Notes
 --------------
-- Partition map & sorting (Tasks 11 & 16) intentionally delayed until at least one pass fully SoA to avoid churn in ordering assumptions.
-- Material / geometry integration (Tasks 13/14) waits on DrawMetadata serialization pattern being locked.
+- Indirect draw args intentionally deferred until baseline performance metrics captured.
+- Transparent ordering / OIT deferred (current scenes low overlap complexity).
+- Material registry (Task 13) deferred until after indirect args decision (avoid churn in indexing scheme).
 
-Updated Task Status Summary (Snapshot @2025-09-05T00:30Z)
-----------------------------------------------------------
+Updated Task Status Summary (Snapshot @2025-09-05T10:45Z)
+---------------------------------------------------------
  1 D  PreparedSceneFrame type (in active use)
  2 D  DrawMetadata layout extension (vertex_count + index_count, 52-byte packed)
  3 D  Remove RenderItem structs
  4 D  Remove RenderItemsList container
  5 D  Purge bridge conversion
- 6 IP Finalize SoA pipeline (remaining: indirect args decision/prototype, optional transparent ordering impl, material registry)
+ 6 D  Finalize SoA pipeline (core complete; indirect args & ordering deferred)
  7 D  Renderer integration
  8 D  RenderContext update
  9 D  RenderPass interface refactor (shared SoA draw helper)
 10 D  Adapt all derived passes (DepthPrePass, ShaderPass, TransparentPass migrated)
 11 D  Partition map + pass mask computation (multi-range operational: opaque + transparent)
-12 NS Transform manager integration
+12 D  Transform manager integration (stable handles, world & normal aliasing)
 13 NS Material registry integration (stable indices pending)
 14 NS Geometry residency integration (beyond EnsureMeshResources caching)
 15 D  MeshView expansion
 16 D  Sorting strategy implementation (stable sort + hashes + timing)
-17 IP Buffer upload plumbing (indirect args prototype outstanding)
+17 IP Buffer upload plumbing (world sparse dirty uploads + normal aliasing; indirect args outstanding)
 18 D  Static layout validation
 19 NS Unit tests finalization core
 20 NS Integration tests passes
 21 NS Delete legacy tests (AoS tests pending removal)
-22 IP Documentation update (slot cleanup & SoA-only docs pending)
+22 IP Documentation update (slot cleanup done; shader normal docs added; broader scrub pending)
 23 NS CMake maintenance
 24 NS Include cleanup (post-doc scrub)
-25 IP Shader struct sync (future fields e.g., pass/material tables)
+25 IP Shader struct sync (normal matrix usage documented; future fields pending)
 26 NS Performance baseline (post multi-range & indirect args)
 27 NS Memory reuse strategy (formal metrics emission)
 28 NS Error handling & logging consolidation
 29 D  Remove recompute logic (RenderItem methods eliminated with AoS)
 30 NS Add debug frame dump
-31 IP SceneConstants adjustments (slot harmonized; potential pass-mask indices)
+31 IP SceneConstants adjustments (slots harmonized; potential future pass-mask indices)
 32 NS Pass iteration helpers
 33 NS Remove unused macros
 34 NS CI/presets verification

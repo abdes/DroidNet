@@ -16,7 +16,6 @@ auto ScenePrepState::ResetFrameData() -> void
   pass_masks.clear();
 
   // Reset per-frame caches while preserving persistent data
-  transform_cache.Reset();
   material_cache.Reset();
   geometry_cache.Reset();
 }

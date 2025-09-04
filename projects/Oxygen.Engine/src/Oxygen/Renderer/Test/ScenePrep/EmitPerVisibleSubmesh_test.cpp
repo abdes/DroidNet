@@ -233,7 +233,6 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmitsAllVisible_WithExpectedFields)
     EXPECT_EQ(items[i].lod_index, Proto().ResolvedMeshIndex());
     EXPECT_EQ(items[i].submesh_index, i);
     EXPECT_EQ(items[i].geometry.get(), Proto().Geometry().get());
-    EXPECT_EQ(items[i].world_transform, Proto().GetWorldTransform());
     EXPECT_EQ(items[i].world_bounding_sphere,
       Node().GetRenderable().GetWorldBoundingSphere());
     EXPECT_EQ(items[i].cast_shadows, Proto().CastsShadows());

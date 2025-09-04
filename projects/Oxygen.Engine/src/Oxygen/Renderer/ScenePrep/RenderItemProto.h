@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -250,6 +251,12 @@ public:
     return world_transform;
   }
 
+  void SetTransformHandle(TransformHandle h) noexcept { transform_handle_ = h; }
+  [[nodiscard]] auto GetTransformHandle() const noexcept -> TransformHandle
+  {
+    return transform_handle_;
+  }
+
   void ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> mesh, uint32_t lod)
   {
     mesh_ = std::move(mesh);
@@ -295,6 +302,7 @@ private:
 
   // Transform and bounds
   glm::mat4 world_transform { 1.0f };
+  TransformHandle transform_handle_ { 0U };
 
   // Dense list of indices of visible submeshes in the resolved parent mesh.
   std::vector<uint32_t> visible_submeshes_;

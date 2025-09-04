@@ -67,6 +67,12 @@ public:
             continue;
           }
         }
+        if constexpr (CollectionCfg::has_transform_resolve) {
+          collection_.transform_resolve(ctx, state, item);
+          if (item.IsDropped()) {
+            continue;
+          }
+        }
         if constexpr (CollectionCfg::has_mesh_resolver) {
           collection_.mesh_resolver(ctx, state, item);
           if (item.IsDropped()) {

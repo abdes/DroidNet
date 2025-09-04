@@ -100,6 +100,30 @@ struct VSOutput {
     float3 color : COLOR;
 };
 
+// -----------------------------------------------------------------------------
+// Normal Matrix Integration Notes
+// -----------------------------------------------------------------------------
+// The CPU side now publishes both world and normal matrices as float4x4 arrays
+// (normal matrices stored natively as 4x4 with the unused row/column forming an
+// identity extension of the 3x3 inverse-transpose). Currently this fullscreen
+// triangle shader does not consume normals. If/when lighting or surface
+// re-orientation is added here (e.g. screen-space effects needing reconstructed
+// normals), prefer the following pattern:
+//   1. Add a SceneConstants slot for bindless_normal_matrices_slot (if not
+//      already present globally). Alternatively re-use bindless_transforms_slot
+//      when the normal matrix is derivable in-shader (costly if many draws).
+//   2. Fetch the normal matrix similarly to world_matrix:
+//         StructuredBuffer<float4x4> normals =
+//             ResourceDescriptorHeap[bindless_normal_matrices_slot];
+//         float3x3 normal_mat = (float3x3)normals[meta.transform_index];
+//   3. Apply to per-vertex/object-space normals: normalized(mul(normal_mat, n)).
+//   4. Avoid recomputing inverse-transpose in shader; CPU cache guarantees it
+//      is already correct even under non-uniform scale.
+//   5. When adding the extra slot, keep existing order of SceneConstants fields
+//      stable for binary compatibility; append new uint after existing dynamic
+//      slots plus padding, adjusting padding usage accordingly.
+// No code changes are required here until normals are needed.
+
 
 [shader("vertex")]
 VSOutput VS(uint vertexID : SV_VertexID) {

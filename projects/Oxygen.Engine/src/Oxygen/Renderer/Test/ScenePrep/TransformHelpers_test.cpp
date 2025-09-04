@@ -7,7 +7,6 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
-#include <Oxygen/Renderer/ScenePrep/State/TransformBatchCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 
 #include <glm/glm.hpp>
@@ -49,36 +48,6 @@ NOLINT_TEST(TransformHelpers, TransformManager_DeduplicatesAndFlushes)
   // Flush should be a no-op from API perspective (no crash, counts preserved)
   mgr.FlushPendingUploads();
   EXPECT_EQ(mgr.GetUniqueTransformCount(), 2u);
-}
-
-NOLINT_TEST(TransformHelpers, TransformBatchCache_MapGetReset)
-{
-  TransformBatchCache cache;
-
-  // Initially empty
-  EXPECT_TRUE(cache.IsEmpty());
-  EXPECT_EQ(cache.GetMappedItemCount(), 0u);
-  EXPECT_FALSE(cache.GetHandle(0).has_value());
-
-  // Map some items
-  TransformHandle hA { 1U };
-  TransformHandle hB { 2U };
-  cache.MapItemToHandle(5, hA);
-  cache.MapItemToHandle(0, hB);
-
-  EXPECT_FALSE(cache.IsEmpty());
-  EXPECT_EQ(cache.GetMappedItemCount(), 2u);
-  ASSERT_TRUE(cache.GetHandle(5).has_value());
-  EXPECT_EQ(cache.GetHandle(5)->get(), hA.get());
-  ASSERT_TRUE(cache.GetHandle(0).has_value());
-  EXPECT_EQ(cache.GetHandle(0)->get(), hB.get());
-  EXPECT_FALSE(cache.GetHandle(1).has_value());
-
-  // Reset clears mappings
-  cache.Reset();
-  EXPECT_TRUE(cache.IsEmpty());
-  EXPECT_EQ(cache.GetMappedItemCount(), 0u);
-  EXPECT_FALSE(cache.GetHandle(5).has_value());
 }
 
 } // namespace

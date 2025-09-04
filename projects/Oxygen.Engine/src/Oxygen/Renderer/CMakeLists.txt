@@ -96,8 +96,6 @@ set(
   "ScenePrep/State/MaterialRegistry.h"
   "ScenePrep/State/MaterialUploadCache.cpp"
   "ScenePrep/State/MaterialUploadCache.h"
-  "ScenePrep/State/TransformBatchCache.cpp"
-  "ScenePrep/State/TransformBatchCache.h"
   "ScenePrep/State/TransformManager.cpp"
   "ScenePrep/State/TransformManager.h"
   "ScenePrep/Types.h"

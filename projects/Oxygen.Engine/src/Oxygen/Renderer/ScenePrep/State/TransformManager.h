@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -44,6 +45,13 @@ public:
   OXGN_RNDR_API auto GetOrAllocate(const glm::mat4& transform)
     -> TransformHandle;
 
+  //! Update an existing handle's transform (marks dirty & updates normal).
+  OXGN_RNDR_API auto Update(TransformHandle handle, const glm::mat4& transform)
+    -> void;
+
+  //! Begin a new frame (resets per-frame dirty tracking epoch).
+  OXGN_RNDR_API auto BeginFrame() -> void;
+
   //! Upload all pending transforms to GPU buffer.
   /*!
    Batches all transforms that have been allocated since the last flush
@@ -62,6 +70,32 @@ public:
    */
   OXGN_RNDR_NDAPI auto GetTransform(TransformHandle handle) const -> glm::mat4;
 
+  //! Get the (cached) normal matrix for a given handle (stored as mat4).
+  OXGN_RNDR_NDAPI auto GetNormalMatrix(TransformHandle handle) const
+    -> glm::mat4;
+
+  //! Bulk access (const) to internal world matrices for zero-copy aliasing.
+  OXGN_RNDR_NDAPI auto GetWorldMatricesSpan() const noexcept
+    -> std::span<const glm::mat4>
+  {
+    return std::span<const glm::mat4>(transforms_.data(), transforms_.size());
+  }
+
+  //! Bulk access (const) to cached normal matrices (mat4 array).
+  OXGN_RNDR_NDAPI auto GetNormalMatricesSpan() const noexcept
+    -> std::span<const glm::mat4>
+  {
+    return std::span<const glm::mat4>(
+      normal_matrices_.data(), normal_matrices_.size());
+  }
+
+  //! Indices (handles) of transforms dirtied/added this frame.
+  OXGN_RNDR_NDAPI auto GetDirtyIndices() const noexcept
+    -> const std::vector<std::uint32_t>&
+  {
+    return dirty_indices_;
+  }
+
   //! Check if a handle is valid.
   OXGN_RNDR_NDAPI auto IsValidHandle(TransformHandle handle) const -> bool;
 
@@ -74,7 +108,15 @@ private:
   // stored `transforms_` entries.
   std::unordered_map<std::uint64_t, TransformHandle> transform_key_to_handle_;
   std::vector<glm::mat4> transforms_;
+  std::vector<glm::mat4> normal_matrices_;
   std::vector<glm::mat4> pending_uploads_;
+  std::vector<std::uint32_t> world_versions_;
+  std::vector<std::uint32_t> normal_versions_;
+  std::uint32_t global_version_ { 0U };
+  // Per-frame dirty tracking using epoch tagging to avoid duplicates.
+  std::vector<std::uint32_t> dirty_epoch_;
+  std::vector<std::uint32_t> dirty_indices_;
+  std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
   TransformHandle next_handle_ { 0U };
 
   // Compute a quantized 64-bit key for the matrix. Quantization reduces

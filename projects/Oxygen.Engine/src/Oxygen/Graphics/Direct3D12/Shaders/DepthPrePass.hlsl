@@ -79,6 +79,25 @@ struct VS_OUTPUT_DEPTH {
     float4 clipSpacePosition : SV_POSITION;
 };
 
+// -----------------------------------------------------------------------------
+// Normal Matrix Integration Notes
+// -----------------------------------------------------------------------------
+// Depth pre-pass currently ignores vertex normals. With future features such as
+// alpha-tested foliage or per-vertex displacement needing geometric normal
+// adjustment, consider binding a normal matrix buffer parallel to world
+// matrices. CPU now provides normal matrices as float4x4 (inverse-transpose of
+// world upper 3x3) allowing direct StructuredBuffer<float4x4> consumption.
+// Recommended steps for future integration:
+//   1. Introduce `uint bindless_normal_matrices_slot;` in SceneConstants after
+//      existing dynamic slots (update C++ side packing & padding comments).
+//   2. Fetch: `StructuredBuffer<float4x4> normals =
+//         ResourceDescriptorHeap[bindless_normal_matrices_slot];`
+//   3. Derive normal3x3: `(float3x3)normals[meta.transform_index];`
+//   4. Use for any operations needing correct normal orientation (e.g., alpha
+//      test using normal mapped geometry or conservative depth adjustments).
+// Avoid recomputing inverse/transpose in shader to save ALU; rely on CPU cache.
+// Until such features are introduced, no shader changes are required.
+
 
 // Vertex Shader: DepthOnlyVS
 // Transforms vertices to clip space for depth buffer population.

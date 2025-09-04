@@ -13,6 +13,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::data {
@@ -29,10 +30,15 @@ struct RenderItemData {
   // Asset references (immutable, shareable)
   std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
   std::shared_ptr<const oxygen::data::MaterialAsset> material;
+  // Stable registry handle (preferred going forward). Populated during
+  // emission; pointer retained temporarily for transition (will migrate
+  // downstream users to handle-based access / bindless indirection).
+  MaterialHandle material_handle { 0U };
 
   // Cached scene state
   glm::vec4 world_bounding_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
-  glm::mat4 world_transform { 1.0f };
+  // Stable reference into TransformManager
+  TransformHandle transform_handle { 0U };
 
   // Rendering flags
   bool cast_shadows = true;

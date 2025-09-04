@@ -137,19 +137,21 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
         .geometry = it.Geometry(),
         .material = oxygen::data::MaterialAsset::CreateDefault(),
         .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
-        .world_transform = it.GetWorldTransform(),
         .cast_shadows = it.CastsShadows(),
         .receive_shadows = it.ReceivesShadows(),
       });
     }
   };
 
-  ScenePrepPipelineCollection pipeline {
-    CollectionConfig { .pre_filter = pre,
-      .mesh_resolver = resolve,
-      .visibility_filter = vis,
-      .producer = prod },
+  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
+    decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
+    .mesh_resolver = resolve,
+    .visibility_filter = vis,
+    .producer = prod,
   };
+  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -180,10 +182,15 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
     ++prod_called;
   };
-  ScenePrepPipelineCollection pipeline { CollectionConfig { .pre_filter = pre,
+  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
+    decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
-    .producer = prod } };
+    .producer = prod,
+  };
+  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -217,10 +224,15 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
     ++prod_called;
   };
-  ScenePrepPipelineCollection pipeline { CollectionConfig { .pre_filter = pre,
+  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
+    decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
-    .producer = prod } };
+    .producer = prod,
+  };
+  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -256,10 +268,15 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
     ++prod_called;
   };
-  ScenePrepPipelineCollection pipeline { CollectionConfig { .pre_filter = pre,
+  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
+    decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
-    .producer = prod } };
+    .producer = prod,
+  };
+  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 

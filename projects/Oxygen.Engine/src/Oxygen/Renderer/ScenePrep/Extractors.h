@@ -12,6 +12,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/Concepts.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/View.h>
 
@@ -60,6 +61,22 @@ inline void ExtractionPreFilter(const ScenePrepContext& /*ctx*/,
   item.SetWorldTransform(item.Transform().GetWorldMatrix());
 }
 static_assert(RenderItemDataExtractor<decltype(ExtractionPreFilter)>);
+
+//! Resolve or allocate stable transform handle (after pre-filter flags).
+/*! Allocates a stable handle in TransformManager for the item's world
+    transform and stores it on the prototype for downstream use. */
+inline void TransformResolveStage(const ScenePrepContext& /*ctx*/,
+  ScenePrepState& state, RenderItemProto& item) noexcept
+{
+  if (item.IsDropped()) {
+    return;
+  }
+  // Acquire handle from state's transform manager (assumed exposed).
+  auto& tm = state.transform_mgr; // NOTE: requires member to exist.
+  const auto handle = tm.GetOrAllocate(item.GetWorldTransform());
+  item.SetTransformHandle(handle);
+}
+static_assert(RenderItemDataExtractor<decltype(TransformResolveStage)>);
 
 //! Resolve active mesh LOD and mesh resource
 /*!
@@ -235,7 +252,7 @@ inline void EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
       .geometry = item.Geometry(),
       .material = resolve_material(),
       .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),
-      .world_transform = item.GetWorldTransform(),
+      .transform_handle = item.GetTransformHandle(),
       .cast_shadows = item.CastsShadows(),
       .receive_shadows = item.ReceivesShadows(),
     });

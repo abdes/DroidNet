@@ -34,17 +34,31 @@ namespace oxygen::engine::sceneprep {
  - May mutate `RenderItemProto` and `ScenePrepState`
  - May mark proto as dropped to skip downstream stages
  */
-template <typename PreFilterT = void, typename MeshResolverT = void,
-  typename VisibilityFilterT = void, typename ProducerT = void>
+template <typename PreFilterT = void, typename TransformResolveT = void,
+  typename MeshResolverT = void, typename VisibilityFilterT = void,
+  typename ProducerT = void>
 struct CollectionConfig {
-  // Optional stages (use `void` to omit)
-  [[no_unique_address]] PreFilterT pre_filter {};
-  [[no_unique_address]] MeshResolverT mesh_resolver {};
-  [[no_unique_address]] VisibilityFilterT visibility_filter {};
-  [[no_unique_address]] ProducerT producer {};
+  struct _DummyStage {
+    template <typename... Args>
+    constexpr void operator()(Args&&...) const noexcept
+    {
+    }
+  };
+  template <typename T>
+  using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
+
+  // Optional stages (use `void` to omit) – wrapped so that `void` parameters
+  // do not declare invalid members yet presence booleans still reflect intent.
+  [[no_unique_address]] StageOrDummy<PreFilterT> pre_filter {};
+  [[no_unique_address]] StageOrDummy<TransformResolveT> transform_resolve {};
+  [[no_unique_address]] StageOrDummy<MeshResolverT> mesh_resolver {};
+  [[no_unique_address]] StageOrDummy<VisibilityFilterT> visibility_filter {};
+  [[no_unique_address]] StageOrDummy<ProducerT> producer {};
 
   // Presence checks for `if constexpr`
   static constexpr bool has_pre_filter = !std::is_void_v<PreFilterT>;
+  static constexpr bool has_transform_resolve
+    = !std::is_void_v<TransformResolveT>;
   static constexpr bool has_mesh_resolver = !std::is_void_v<MeshResolverT>;
   static constexpr bool has_visibility_filter
     = !std::is_void_v<VisibilityFilterT>;
@@ -62,17 +76,20 @@ struct CollectionConfig {
  All stages satisfy `RenderItemDataExtractor`.
  */
 inline auto CreateBasicCollectionConfig()
-  -> CollectionConfig<decltype(&ExtractionPreFilter), decltype(&MeshResolver),
+  -> CollectionConfig<decltype(&ExtractionPreFilter),
+    decltype(&TransformResolveStage), decltype(&MeshResolver),
     decltype(&SubMeshVisibilityFilter), decltype(&EmitPerVisibleSubmesh)>
 {
   // Concept checks (callables must qualify as collection extractors)
   static_assert(RenderItemDataExtractor<decltype(ExtractionPreFilter)>);
+  static_assert(RenderItemDataExtractor<decltype(TransformResolveStage)>);
   static_assert(RenderItemDataExtractor<decltype(MeshResolver)>);
   static_assert(RenderItemDataExtractor<decltype(SubMeshVisibilityFilter)>);
   static_assert(RenderItemDataExtractor<decltype(EmitPerVisibleSubmesh)>);
 
   return {
     .pre_filter = &ExtractionPreFilter,
+    .transform_resolve = &TransformResolveStage,
     .mesh_resolver = &MeshResolver,
     .visibility_filter = &SubMeshVisibilityFilter,
     .producer = &EmitPerVisibleSubmesh,
