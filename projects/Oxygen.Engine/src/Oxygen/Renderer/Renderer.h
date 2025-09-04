@@ -203,8 +203,7 @@ private:
   auto CollectScenePrep(scene::Scene& scene, const View& view,
     sceneprep::ScenePrepState& prep_state, const CollectionCfg& cfg) -> void;
   //! Finalize SoA (wrapper around existing FinalizeScenePrepSoA) and log.
-  auto FinalizeScenePrepPhase(const sceneprep::ScenePrepState& prep_state)
-    -> void;
+  auto FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state) -> void;
   //! Update scene constants from resolved view matrices & camera state.
   auto UpdateSceneConstantsFromView(const View& view) -> void;
   //! Compute current finalized draw count (post-sort) from prepared frame.
@@ -223,7 +222,8 @@ private:
   //! Generate DrawMetadata & material constant arrays with dedupe + validate.
   auto GenerateDrawMetadataAndMaterials(
     const std::vector<std::size_t>& filtered,
-    const sceneprep::ScenePrepState& prep_state) -> void;
+    sceneprep::ScenePrepState& prep_state)
+    -> void; // non-const: may register new materials (stable handle allocation)
   //! Mirror finalized world matrices into bindless StructuredBuffer.
   auto UploadWorldTransforms(std::size_t count) -> void;
   //! Build sorting keys, stable-sort, and construct partition ranges.
@@ -296,7 +296,9 @@ private:
   // placeholders) to ensure stable deterministic ordering hash.
   struct DrawSortingKey {
     uint32_t pass_mask { 0 }; // from DrawMetadata.flags
-    uint32_t material_index { 0 }; // DrawMetadata.material_index
+    uint32_t material_index {
+      0
+    }; // DrawMetadata.material_handle (stable MaterialHandle)
     uint32_t geometry_vertex_srv { 0 }; // DrawMetadata.vertex_buffer_index
     uint32_t geometry_index_srv { 0 }; // DrawMetadata.index_buffer_index
   };
@@ -320,8 +322,7 @@ private:
   std::chrono::microseconds last_sort_time_ { 0 };
 
   // Populates SoA arrays from ScenePrep outputs (initial minimal subset).
-  auto FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
-    -> void;
+  auto FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state) -> void;
 
   // Configuration: when true, publish world matrix spans directly over
   // TransformManager storage (zero-copy) instead of copying into

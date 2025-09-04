@@ -62,7 +62,7 @@ protected:
     proto_.emplace(node_.GetObject()->get());
 
     ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
-  ctx_.emplace(0, view_, *scene_);
+    ctx_.emplace(0, view_, *scene_);
   }
 
   void TearDown() override { scene_.reset(); }

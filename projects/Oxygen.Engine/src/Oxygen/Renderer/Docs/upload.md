@@ -602,7 +602,7 @@ conventions used in the engine:
 
       // Read material constants for this draw
       StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
-      MaterialConstants mat = materials[meta.material_index];
+  MaterialConstants mat = materials[meta.material_handle];
 
       // Simple unlit shading: vertex color modulated by material base color
       float3 base_rgb = mat.base_color.rgb;

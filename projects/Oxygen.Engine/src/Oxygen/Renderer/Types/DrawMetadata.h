@@ -40,8 +40,8 @@ struct DrawMetadata {
                         // non-indexed)
   uint32_t vertex_count; // Number of vertices for non-indexed draws (undefined
                          // for indexed)
-  uint32_t material_index; // Index into material constants buffer (CPU owned)
-                           // (future Task 13)
+  uint32_t material_handle; // Stable MaterialRegistry handle (0 sentinel)
+                            // Formerly material_index (breaking rename)
 
   // --- Transform & instance indirection ---
   uint32_t transform_index; // Index into world/normal transform arrays

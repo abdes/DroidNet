@@ -37,7 +37,7 @@ struct DrawMetadata {
     uint instance_count;                 // Number of instances
     uint index_count;                    // Number of indices (undefined if non-indexed)
     uint vertex_count;                   // Number of vertices (undefined if indexed)
-    uint material_index;                 // Index into material constants buffer
+    uint material_handle;                // Stable material handle (registry)
 
     // --- Transform & instance indirection ---
     uint transform_index;                // Index into transform arrays

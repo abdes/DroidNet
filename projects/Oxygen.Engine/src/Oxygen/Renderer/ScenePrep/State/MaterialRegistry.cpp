@@ -13,8 +13,18 @@ namespace oxygen::engine::sceneprep {
 auto MaterialRegistry::RegisterMaterial(
   std::shared_ptr<const data::MaterialAsset> material) -> MaterialHandle
 {
+  return GetOrRegisterMaterial(std::move(material));
+}
+
+auto MaterialRegistry::GetOrRegisterMaterial(
+  std::shared_ptr<const data::MaterialAsset> material) -> MaterialHandle
+{
   if (!material) {
     return MaterialHandle { 0U };
+  }
+  // Ensure slot 0 is reserved for sentinel/null. This is a one-time cost.
+  if (materials_.empty()) {
+    materials_.resize(1U); // index 0 left nullptr
   }
   const auto raw = material.get();
   if (const auto it = material_to_handle_.find(raw);
@@ -22,7 +32,6 @@ auto MaterialRegistry::RegisterMaterial(
     return it->second;
   }
   const auto handle = next_handle_;
-  // Ensure materials_ vector can be indexed by handle value
   if (materials_.size() <= static_cast<std::size_t>(handle.get())) {
     materials_.resize(static_cast<std::size_t>(handle.get()) + 1U);
   }
@@ -43,6 +52,12 @@ auto MaterialRegistry::GetHandle(const data::MaterialAsset* material) const
     return it->second;
   }
   return std::nullopt;
+}
+
+auto MaterialRegistry::LookupMaterialHandle(
+  const data::MaterialAsset* material) const -> std::optional<MaterialHandle>
+{
+  return GetHandle(material);
 }
 
 auto MaterialRegistry::GetMaterial(MaterialHandle handle) const
