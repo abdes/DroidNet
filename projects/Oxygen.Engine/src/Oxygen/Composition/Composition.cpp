@@ -304,7 +304,17 @@ auto Composition::GetComponentImpl(TypeId type_id) const -> const Component&
   const auto it = std::ranges::find_if(local_components_,
     [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
   if (it == local_components_.end()) {
-    throw ComponentError("Missing dependency component");
+    // Provide richer diagnostics (similar to EnsureDependencies) so callers
+    // can identify which component lookup failed. This is especially helpful
+    // when a migration removes the code that previously created a component.
+    std::string type_name;
+    try {
+      type_name = oxygen::TypeRegistry::Get().GetTypeNamePretty(type_id);
+    } catch (...) {
+      type_name = "<unknown>";
+    }
+    throw ComponentError(fmt::format(
+      "Missing dependency component: requested {} ({})", type_id, type_name));
   }
   return **it;
 }
