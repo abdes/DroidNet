@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <limits>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
@@ -24,8 +27,16 @@ namespace oxygen::engine {
 
 struct FrameSnapshot;
 
-// Strong type for module execution priority (lower values = higher priority)
+//! Strong type for module execution priority (lower values = higher priority)
 using ModulePriority = NamedType<std::uint32_t, struct ModulePriorityTag>;
+
+constexpr ModulePriority kModulePriorityLowest { // Executes last
+  (std::numeric_limits<std::uint32_t>::max)()
+};
+
+constexpr ModulePriority kModulePriorityHighest { // Executes first
+  0U
+};
 
 // Alias the canonical PhaseMask from the phase registry for semantic clarity.
 using ModulePhaseMask = core::PhaseMask;

@@ -381,9 +381,14 @@ auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
   return cpu.front();
 }
 
-auto Renderer::BuildFrame(scene::Scene& scene, const View& view,
-  const engine::FrameContext& frame_context) -> std::size_t
+auto Renderer::BuildFrame(
+  const View& view, const engine::FrameContext& frame_context) -> std::size_t
 {
+  auto scene_ptr = frame_context.GetScene();
+  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
+  // FIXME: temporary until everything uses the frame context
+  auto& scene = *scene_ptr;
+
   // Store frame sequence number from FrameContext
   frame_seq_num = frame_context.GetFrameSequenceNumber();
 
@@ -426,16 +431,11 @@ auto Renderer::BuildFrame(scene::Scene& scene, const View& view,
   return inserted_count;
 }
 
-auto Renderer::BuildFrame(scene::Scene& scene, const CameraView& camera_view,
+auto Renderer::BuildFrame(const CameraView& camera_view,
   const engine::FrameContext& frame_context) -> std::size_t
 {
-  // Ensure transforms are up-to-date for this frame. SceneExtraction also
-  // calls scene.Update(), but doing it here makes the sequencing explicit
-  // before resolving the camera pose.
-  scene.Update();
-
   const auto view = camera_view.Resolve();
-  return BuildFrame(scene, view, frame_context);
+  return BuildFrame(view, frame_context);
 }
 
 namespace {

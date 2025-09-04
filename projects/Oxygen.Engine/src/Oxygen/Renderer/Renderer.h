@@ -154,16 +154,10 @@ public:
     -> void;
   OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
 
-  //! Build the frame draw list from a scene and a view.
-  /*! Populates opaque items using CPU culling and updates scene constants. */
-  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene, const View& view,
+  OXGN_RNDR_API auto BuildFrame(const View& view,
     const oxygen::engine::FrameContext& frame_context) -> std::size_t;
 
-  //! Build the frame draw list from a scene and a camera view descriptor.
-  /*! Ensures transforms are updated, resolves a per-frame View snapshot from
-      the camera, then populates opaque items and updates scene constants. */
-  OXGN_RNDR_API auto BuildFrame(oxygen::scene::Scene& scene,
-    const CameraView& camera_view,
+  OXGN_RNDR_API auto BuildFrame(const CameraView& camera_view,
     const oxygen::engine::FrameContext& frame_context) -> std::size_t;
 
 private:
