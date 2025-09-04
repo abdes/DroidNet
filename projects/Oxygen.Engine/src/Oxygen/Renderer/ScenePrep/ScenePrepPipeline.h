@@ -16,6 +16,7 @@
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
+#include <stdexcept>
 
 namespace oxygen::engine::sceneprep {
 
@@ -46,9 +47,9 @@ public:
    @param state ScenePrep working state and output buffers
   */
   auto Collect(scene::Scene& scene, const View& view, uint64_t frame_id,
-    RenderContext& render_context, ScenePrepState& state) const -> void
+    ScenePrepState& state) const -> void
   {
-    ScenePrepContext ctx { frame_id, view, scene, render_context };
+    ScenePrepContext ctx { frame_id, view, scene };
     state.ResetFrameData();
 
     const auto& node_table = scene.GetNodes();
@@ -57,28 +58,32 @@ public:
     state.collected_items.reserve(state.collected_items.size() + items.size());
 
     for (const auto& node_impl : items) {
-      RenderItemProto item { node_impl };
+      try {
+        RenderItemProto item { node_impl };
 
-      if constexpr (CollectionCfg::has_pre_filter) {
-        collection_.pre_filter(ctx, state, item);
-        if (item.IsDropped()) {
-          continue;
+        if constexpr (CollectionCfg::has_pre_filter) {
+          collection_.pre_filter(ctx, state, item);
+          if (item.IsDropped()) {
+            continue;
+          }
         }
-      }
-      if constexpr (CollectionCfg::has_mesh_resolver) {
-        collection_.mesh_resolver(ctx, state, item);
-        if (item.IsDropped()) {
-          continue;
+        if constexpr (CollectionCfg::has_mesh_resolver) {
+          collection_.mesh_resolver(ctx, state, item);
+          if (item.IsDropped()) {
+            continue;
+          }
         }
-      }
-      if constexpr (CollectionCfg::has_visibility_filter) {
-        collection_.visibility_filter(ctx, state, item);
-        if (item.IsDropped()) {
-          continue;
+        if constexpr (CollectionCfg::has_visibility_filter) {
+          collection_.visibility_filter(ctx, state, item);
+          if (item.IsDropped()) {
+            continue;
+          }
         }
-      }
-      if constexpr (CollectionCfg::has_producer) {
-        collection_.producer(ctx, state, item);
+        if constexpr (CollectionCfg::has_producer) {
+          collection_.producer(ctx, state, item);
+        }
+      } catch (const std::exception&) {
+        // Skip node if RenderItemProto construction fails (missing components)
       }
     }
   }

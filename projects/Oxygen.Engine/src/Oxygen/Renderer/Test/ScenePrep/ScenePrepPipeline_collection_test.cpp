@@ -10,7 +10,6 @@
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/Types/View.h>
@@ -29,7 +28,7 @@ namespace {
 
 // Shared test fixture that builds a scene with two roots and a child under the
 // first root. All nodes get minimal geometry (1 LOD, 1 submesh). Also provides
-// a default View, RenderContext, and per-test ScenePrepState.
+// a default View and per-test ScenePrepState.
 class ScenePrepPipelineFixture : public ::testing::Test {
 protected:
   void SetUp() override
@@ -84,7 +83,6 @@ protected:
   // Accessors for convenience
   auto SceneRef() -> Scene& { return *scene_; }
   auto ViewRef() -> View& { return view_; }
-  auto RcRef() -> RenderContext& { return rc_; }
   auto StateRef() -> ScenePrepState& { return state_; }
 
   // Nodes
@@ -100,7 +98,6 @@ private:
   SceneNode root_b_ {};
   SceneNode child_of_a_ {};
   View view_ { View::Params {} };
-  RenderContext rc_ {};
   ScenePrepState state_ {};
 };
 
@@ -154,7 +151,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
       .producer = prod },
   };
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, RcRef(), StateRef());
+  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
   ASSERT_EQ(
     StateRef().collected_items.size(), ScenePrepPipelineFixture::kNodeCount);
@@ -188,7 +185,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod } };
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, RcRef(), StateRef());
+  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
   EXPECT_TRUE(StateRef().collected_items.empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
@@ -225,7 +222,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod } };
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, RcRef(), StateRef());
+  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
   EXPECT_TRUE(StateRef().collected_items.empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
@@ -264,7 +261,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod } };
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, RcRef(), StateRef());
+  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
   EXPECT_TRUE(StateRef().collected_items.empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));

@@ -27,9 +27,11 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/Extraction/RenderListBuilder.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
+#include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
+#include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Scene/Scene.h>
@@ -126,6 +128,35 @@ auto MakeLruEvictionPolicy(std::size_t max_age_frames
   = LruEvictionPolicy::kDefaultLruAge) -> std::shared_ptr<EvictionPolicy>
 {
   return std::make_shared<LruEvictionPolicy>(max_age_frames);
+}
+
+// Convert collected ScenePrep items to RenderItemsList (legacy AoS path).
+static void BuildRenderItemsFromScenePrep(
+  std::span<const oxygen::engine::sceneprep::RenderItemData> collected,
+  oxygen::engine::RenderItemsList& output)
+{
+  using oxygen::engine::RenderItem;
+  output.Clear();
+  output.Reserve(collected.size());
+  for (const auto& d : collected) {
+    RenderItem it {};
+    if (d.geometry) {
+      try {
+        auto mesh_ptr = d.geometry->MeshAt(d.lod_index);
+        it.mesh = mesh_ptr;
+      } catch (...) {
+        it.mesh = nullptr;
+      }
+    }
+    it.material = d.material;
+    it.submesh_index = d.submesh_index;
+    it.cast_shadows = d.cast_shadows;
+    it.receive_shadows = d.receive_shadows;
+    it.world_transform = d.world_transform;
+    // Recompute derived bounds / normal matrix.
+    it.UpdatedTransformedProperties();
+    output.Add(std::move(it));
+  }
 }
 } // namespace
 
@@ -358,15 +389,29 @@ auto Renderer::BuildFrame(scene::Scene& scene, const View& view,
 
   // Reset draw list for this frame
   opaque_items_.Clear();
-
-  // Extract items via the new two-phase builder (Collect -> Finalize)
-  using extraction::RenderListBuilder;
-  RenderListBuilder builder;
-  const auto collected = builder.Collect(scene, view, frame_seq_num);
-  // Finalize directly into the renderer-managed output list.
-  // RenderContext is not required by Finalize currently; pass a local.
-  RenderContext dummy_context;
-  builder.Finalize(collected, dummy_context, opaque_items_);
+  // === ScenePrep collection (temporary bridge path) ===
+  // TODO(oxygen-renderer): Remove legacy AoS RenderItemsList path once
+  // downstream passes (DepthPrePass, Forward, etc.) are refactored to consume
+  // ScenePrep outputs directly (SoA / bindless friendly). For now we
+  // translate collected RenderItemData -> RenderItemsList for compatibility.
+  // FIXME(perf): Avoid per-frame allocations by pooling ScenePrepState or
+  // reusing internal vectors (requires clear ownership strategy & lifetime).
+  namespace sp = oxygen::engine::sceneprep;
+  sp::ScenePrepState prep_state;
+  auto cfg = sp::CreateBasicCollectionConfig(); // TODO: pass policy/config from
+                                                // renderer settings
+  sp::ScenePrepPipelineCollection pipeline {
+    cfg
+  }; // TODO: cache pipeline if config immutable
+  // NOTE: StrongType frame_seq_num unwrapped for ScenePrep API.
+  pipeline.Collect(scene, view, frame_seq_num.get(), prep_state);
+  DLOG_F(1, "ScenePrep collected {} items (nodes={})",
+    prep_state.collected_items.size(), scene.GetNodes().Items().size());
+  BuildRenderItemsFromScenePrep(prep_state.collected_items,
+    opaque_items_); // TODO: remove after passes consume ScenePrep SoA
+  DLOG_F(1,
+    "Renderer BuildFrame converted {} collected items to {} RenderItems",
+    prep_state.collected_items.size(), opaque_items_.Items().size());
 
   // Update scene constants from the provided view snapshot
   ModifySceneConstants([&](SceneConstants& sc) {
