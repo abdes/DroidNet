@@ -10,7 +10,6 @@
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
@@ -22,7 +21,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-using oxygen::engine::RenderContext;
 using oxygen::engine::View;
 using oxygen::engine::sceneprep::ExtractionPreFilter;
 using oxygen::engine::sceneprep::RenderItemProto;
@@ -59,8 +57,7 @@ protected:
     AddGeometry();
     proto_.emplace(node_.GetObject()->get());
 
-    ctx_.emplace(0, *(static_cast<View*>(nullptr)), *scene_,
-      *(static_cast<RenderContext*>(nullptr)));
+    ctx_.emplace(0, *(static_cast<View*>(nullptr)), *scene_);
   }
 
   void TearDown() override

@@ -30,9 +30,8 @@ class Scene;
 } // namespace oxygen::scene
 
 namespace oxygen::engine {
-struct RenderContext;
 class View;
-} // namespace oxygen::engine
+}
 
 namespace oxygen::engine::sceneprep {
 
@@ -134,12 +133,10 @@ struct DrawMetadata {
 class ScenePrepContext {
 public:
   //! Construct a ScenePrepContext that borrows the provided references.
-  ScenePrepContext(uint64_t fid, const View& v, const scene::Scene& s,
-    RenderContext& rc) noexcept
+  ScenePrepContext(uint64_t fid, const View& v, const scene::Scene& s) noexcept
     : frame_id { fid }
     , view { std::ref(v) }
     , scene { std::ref(s) }
-    , render_context { std::ref(rc) }
   {
   }
 
@@ -151,14 +148,7 @@ public:
   [[nodiscard]] auto GetFrameId() const noexcept { return frame_id; }
   [[nodiscard]] auto& GetView() const noexcept { return view.get(); }
   [[nodiscard]] auto& GetScene() const noexcept { return scene.get(); }
-  [[nodiscard]] auto& GetRenderContext() const noexcept
-  {
-    return render_context.get();
-  }
-  [[nodiscard]] auto& GetRenderContext() noexcept
-  {
-    return render_context.get();
-  }
+  // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
 
 private:
   //! Current frame identifier for temporal coherency optimizations.
@@ -170,8 +160,7 @@ private:
   //! Scene graph being processed.
   std::reference_wrapper<const scene::Scene> scene;
 
-  //! Render context providing GPU resource access.
-  std::reference_wrapper<RenderContext> render_context;
+  // (RenderContext placeholder removed)
 };
 
 } // namespace oxygen::engine::sceneprep

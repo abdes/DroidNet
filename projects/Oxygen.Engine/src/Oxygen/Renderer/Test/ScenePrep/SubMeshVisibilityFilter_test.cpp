@@ -14,7 +14,6 @@
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
@@ -23,7 +22,6 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-using oxygen::engine::RenderContext;
 using oxygen::engine::View;
 using oxygen::engine::sceneprep::MeshResolver;
 using oxygen::engine::sceneprep::RenderItemProto;
@@ -63,7 +61,7 @@ protected:
     // Proto seeded with node; proto geometry/visibility set per test explicitly
     proto_.emplace(node_.GetObject()->get());
 
-    ctx_.emplace(0, view_, *scene_, *(static_cast<RenderContext*>(nullptr)));
+  ctx_.emplace(0, view_, *scene_);
   }
 
   void TearDown() override { scene_.reset(); }
@@ -73,7 +71,7 @@ protected:
   void SetView(const View& view)
   {
     view_ = view;
-    ctx_.emplace(0, view_, *scene_, *(static_cast<RenderContext*>(nullptr)));
+  ctx_.emplace(0, view_, *scene_);
   }
 
   void SeedVisibilityAndTransform()
