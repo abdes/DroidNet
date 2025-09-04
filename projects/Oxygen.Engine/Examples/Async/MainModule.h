@@ -16,6 +16,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
 #include <Oxygen/Renderer/ShaderPass.h>
+#include <Oxygen/Renderer/TransparentPass.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen {
@@ -161,6 +162,8 @@ namespace examples::async {
     std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config_;
     std::shared_ptr<engine::ShaderPass> shader_pass_;
     std::shared_ptr<engine::ShaderPassConfig> shader_pass_config_;
+    std::shared_ptr<engine::TransparentPass> transparent_pass_;
+    std::shared_ptr<engine::TransparentPass::Config> transparent_pass_config_;
 
     //! State tracking.
     bool initialized_ { false };
@@ -171,8 +174,7 @@ namespace examples::async {
     scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
     scene::SceneNode main_camera_; // "MainCamera"
 
-    //! Animation state.
-    float quad_rotation_angle_ { 0.0f };
+    //! Animation state (quad rotation removed; sphere orbits, camera fixed).
     int last_vis_toggle_ { -1 };
     int last_ovr_toggle_ { -1 };
   };

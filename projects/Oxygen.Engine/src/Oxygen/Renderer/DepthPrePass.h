@@ -159,6 +159,10 @@ private:
     graphics::CommandRecorder& command_recorder) const -> void;
 
   // Draw submission uses base RenderPass::IssueDrawCalls (SoA path).
+  // NOTE: DepthPrePass supplies a predicate excluding
+  // PassMaskFlags::kTransparent records to avoid writing depth for blended
+  // geometry (prevents inversion artifacts where transparent depth occludes
+  // later color blending).
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;

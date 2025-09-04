@@ -113,24 +113,36 @@ History Log (Chronological)
 2025-09-04T09:30Z  AoS Final Removal Phase: Deleted `RenderItem.*` and `RenderItemsList.*` sources/headers plus all engine includes; passes, renderer, and context now exclusively depend on SoA (`PreparedSceneFrame`). Removed legacy mirror assignment of draw metadata slot into `bindless_indices_slot` in `Renderer::UpdateDrawMetaDataSlotIfChanged`; shaders already consume `bindless_draw_meta_data_slot`. Left `bindless_indices_slot` in `SceneConstants` for one grace cycle; scheduled removal deadline (2025-09-15) noted in TODO. Pending follow-up: delete AoS-specific tests & README sections (or rewrite examples to SoA), then prune `bindless_indices_slot` field and associated HLSL once confirmed unused. Task status updates: Tasks 3,4 marked Done; Task 6 closer to completion (partition & indirect args still outstanding); Task 31 partial (legacy slot deprecation in progress).
 2025-09-04T09:40Z  Bindless Slot Harmonization: Fully removed `bindless_indices_slot` from C++ (`SceneConstants`) and HLSL (`DepthPrePass.hlsl`, `FullScreenTriangle.hlsl`). Renamed shader field `bindless_draw_meta_data_slot` -> `bindless_draw_metadata_slot` for consistency with C++ naming. Updated `Renderer::UpdateDrawMetaDataSlotIfChanged` comments; eliminated obsolete TODO. Pending doc sync: search & replace references in docs (`bindless_conventions.md`, `upload.md`, `multi_draw_implementation.md`, `implementation_plan.md`). Next: update documentation and adjust task statuses (Task 31 progresses; add doc cleanup subtasks).
 2025-09-04T09:55Z  Work Log Sync & Status Refresh: Consolidated AoS removal & slot harmonization outcomes. Updated task status table (AoS tasks 3–5 & RenderItem recompute logic 29 now Done; documentation cleanup (22) set IP due to stale references), clarified remaining scope for Task 6 (partition multi-range extension, indirect args prototype, third-pass decision). Added revised Focused Next Steps emphasizing: (1) doc/reference scrub, (2) partition multi-range + validation tests, (3) indirect draw args gated prototype, (4) material registry (stable indices), (5) unit & integration test scaffolding, (6) performance + memory baselines. SceneConstants slot set stabilized (legacy removed). Risk register unchanged; R2 monitoring continues (ordering determinism). No new regressions observed in last single-frame verbose run.
+2025-09-04T10:05Z  TransparentPass Alpha Blending: Replaced stale TODO with explicit BlendTargetDesc enabling standard straight alpha blending (SrcAlpha, InvSrcAlpha) and alpha channel blend (One, InvSrcAlpha). Depth writes remain disabled; depth test LessOrEqual retained. Documented future switch path for premultiplied alpha. Prepared groundwork for multi-range partition validation (transparent bucket now visually distinct). TODO still open separately to unify pass mask bits into strong enum (tracked in Renderer.cpp).
+2025-09-04T10:05Z  Minimal Transparency Classification: Added temporary pass mask classification in `Renderer::FinalizeScenePrepSoA` with raw bit constants: bit0 OpaqueOrMasked, bit1 Transparent. Implemented conservative rule (domain + base alpha threshold) and extensive comment documenting future expansion (additive, transmission, decals, UI) plus TODO to replace magic bits with a strongly typed enum once taxonomy fixed. Validation asserts updated to guard against unexpected bits. Next: introduce `TransparentPass` to exercise multi-range partitions and verify sorting / partition coverage (Tasks 10,11). Will later refactor flags into central enum and add unit tests (Tasks 19,25).
+2025-09-04T10:15Z  TransparentPass Implementation: Added `TransparentPass` (new files) filtering DrawMetadata by transparent flag (bit1). Pipeline mirrors ShaderPass with depth write disabled; blend state placeholder kept (TODO enable explicit alpha blending). Work log entry added; next steps: register pass in sample, force some materials/domains to produce transparent bucket, validate multi-range partitions and update status (Tasks 10,11 progression). Future: centralize pass flag enum & enable blend state customization.
+2025-09-05T00:15Z  Sample Scene Simplification: Reworked `Examples/Async` scene for deterministic visual validation. Replaced animated orbit camera with fixed 45° pitched camera looking at origin (stabilizes depth relationships). Centered multi-submesh quad at origin facing +Z (no rotation) to ensure consistent front-face culling & alpha evaluation. Added sphere orbital animation around origin on XZ plane (radius=4) to exercise changing overlap against quad for transparency correctness. Removed quad rotation & camera animation variables (`quad_rotation_angle_`, `AnimateMainCamera`). Added helper `SetupFixedCamera` (one-time) and `AnimateSphereOrbit` (per-frame). Intent: stable baseline for future transparent ordering work (back-to-front/OIT) and partition map multi-range validation. No pass or renderer logic modified; purely scene graph adjustments. Next related step: implement transparent draw ordering strategy once partition maps include transparent range with >1 overlapping depth surfaces.
+2025-09-05T00:30Z  Multi-Range Partitions Activated: With transparent classification and `TransparentPass` live, frames containing transparent draws now produce ≥2 partition ranges (opaque, transparent). Deterministic ordering verified (opaque range precedes transparent via pass_mask sort key). Removes blocker for closing Task 10 (all derived passes adapted) and Task 11 (multi-range partition map). Added deferred design TODO for transparent ordering/OIT.
 
-Focused Next Steps (Revised @2025-09-04T09:55Z)
+Focused Next Steps (Revised @2025-09-05T00:30Z)
 ------------------------------------------------
 DONE N1: Non-indexed draw support (explicit `vertex_count`).
 DONE N2a: Basic pass mask bit (opaque) populated.
-IP   N2b: Partition multi-range refinement (currently single opaque range; need ≥2 distinct masks to validate segmentation logic + tests).
+DONE N2b: Multi-range partition exercised (opaque + transparent).
 DONE N3: Pointer-based material dedup (will evolve to stable registry / Task 13).
 DONE N4: Validation asserts (transform/material indices, flags non-zero).
-OPEN N5: Indirect draw args design note (buffer layout, alignment, transition plan, compatibility with direct path) – to be authored before prototype.
+OPEN N5: Indirect draw args design note (author before prototype – pending).
 
-Immediate (ordered):
-1. Documentation & markdown scrub (Task 22 IP): remove `bindless_indices_slot` references; update DrawMetadata description (vertex_count/index_count fields; 52-byte packed) and slot naming consistency.
-2. Partition multi-range exercise: introduce a synthetic second pass mask (e.g., transparency flag) on a subset or test harness; validate partition ranges (coverage, non-overlap, ordering) with forthcoming unit tests (Tasks 11,19).
-3. Indirect draw args prototype (Task 17 IP): generate args buffer parallel to DrawMetadata (flag-gated); maintain current direct submission to ensure parity; capture timing deltas.
-4. Material registry integration (Task 13 NS): replace per-frame pointer map with stable index allocation & hash-based reuse; update dedupe stats.
-5. Unit & integration test scaffolding (Tasks 19–21 NS): tests for DrawMetadata size/layout, stable sort determinism (hash), partition correctness, material dedup invariants; remove legacy AoS tests (Task 21).
-6. Performance & memory baselines (Tasks 26–27 NS): record finalize_time_us, sort_time_us across N= {10,100,1k,10k} draws; track allocations & high-water reservations.
-7. SceneConstants future adjustments (Task 31 IP): evaluate need for pass mask or partition indices in constants or keep CPU-side only.
+Short Horizon (doc & design only before sleep):
+1. Write indirect draw args DESIGN NOTE (layout, alignment, migration toggle) – pending.
+2. Draft transparent ordering/OIT design (TODO added below) – done.
+3. Mark Tasks 10 & 11 Done (multi-pass + partitions active) – done.
+4. Prepare test plan outline for partitions & ordering hash (no implementation yet).
+
+Deferred (implementation):
+- Indirect args prototype & perf comparison.
+- Back-to-front transparent sort or OIT implementation.
+- Material registry (stable hashed indices) replacing pointer map.
+- Performance & memory baselines across draw count tiers.
+
+Cleanup Batch (later):
+- AoS legacy tests removal & new SoA tests addition.
+- Namespace/include/macro hygiene & changelog.
 
 Revised Task 6 Exit Criteria (remaining to close Task 6):
  - Multi-range partition (≥2 masks) implemented & validated by tests.
@@ -148,25 +160,19 @@ Deferral Notes
 - Partition map & sorting (Tasks 11 & 16) intentionally delayed until at least one pass fully SoA to avoid churn in ordering assumptions.
 - Material / geometry integration (Tasks 13/14) waits on DrawMetadata serialization pattern being locked.
 
-Execution Order Snapshot
-------------------------
-Current Focus: Task 6 (complete remaining sub-steps)
-Next: Tasks 7 & 8 (RenderContext + initial pass refactor)
-Then: Task 10 (broader pass adaptation) → Task 11 (partition map) → Task 16 (sorting) → Tasks 3–5 (remove AoS once all passes converted and parity validated).
-
-Updated Task Status Summary (Snapshot @2025-09-04T09:55Z)
+Updated Task Status Summary (Snapshot @2025-09-05T00:30Z)
 ----------------------------------------------------------
  1 D  PreparedSceneFrame type (in active use)
  2 D  DrawMetadata layout extension (vertex_count + index_count, 52-byte packed)
  3 D  Remove RenderItem structs
  4 D  Remove RenderItemsList container
  5 D  Purge bridge conversion
- 6 IP Finalize SoA pipeline (pending: multi-range partitions, indirect args decision, third-pass scope)
+ 6 IP Finalize SoA pipeline (remaining: indirect args decision/prototype, optional transparent ordering impl, material registry)
  7 D  Renderer integration
  8 D  RenderContext update
  9 D  RenderPass interface refactor (shared SoA draw helper)
-10 IP Adapt all derived passes (DepthPrePass & ShaderPass migrated; additional passes TBD)
-11 IP Partition map + pass mask computation (single opaque range; multi-range planned)
+10 D  Adapt all derived passes (DepthPrePass, ShaderPass, TransparentPass migrated)
+11 D  Partition map + pass mask computation (multi-range operational: opaque + transparent)
 12 NS Transform manager integration
 13 NS Material registry integration (stable indices pending)
 14 NS Geometry residency integration (beyond EnsureMeshResources caching)
@@ -198,3 +204,172 @@ Updated Task Status Summary (Snapshot @2025-09-04T09:55Z)
 40 NS Remove design placeholders
 
 EOF
+
+TODO DESIGN NOTE (Transparent Ordering / OIT)
+--------------------------------------------
+Current State: Transparent draws occupy a contiguous partition sorted only by coarse key (pass_mask, material_index, buffer indices). No intra-partition depth ordering.
+
+Problem: Correct blending requires either back-to-front order or an order-independent technique. Present ordering may produce artifacts with overlapping transparent geometry.
+
+Candidate Strategies (deferred):
+1. Back-to-front CPU depth sort each frame (simple, deterministic; CPU cost O(T log T)).
+2. Weighted blended OIT (dual RT: accum + revealage; approximate but stable; bandwidth cost).
+3. Per-pixel linked lists (A-buffer) (correct; high memory & complexity).
+4. Hybrid (peel first layer(s) then weighted blend remainder) (balance quality/perf).
+
+Planned Sequence: Author design & metrics plan now, implement simple depth sort after indirect args prototype; evaluate need for OIT based on artifact severity & content.
+
+Instrumentation TODO (future): measure transparent range size, depth-sort time, hash of ordered indices; compare artifacts count before/after strategy change.
+
+Exit Criteria (future): selectable strategy, deterministic ordering hash for static scene, documented perf deltas.
+
+INDIRECT DRAW ARGS DESIGN NOTE (Draft)
+=====================================
+
+Motivation
+----------
+Current submission loops over DrawMetadata issuing direct Draw / DrawIndexed calls.
+For large draw counts this incurs CPU overhead (call overhead, root constant binds)
+and limits batching potential. Indirect args enable:
+1. Lower CPU submission cost (single ExecuteIndirect / MultiDraw path later).
+2. GPU-driven culling / compaction potential (future phases can rewrite args).
+3. Natural place to integrate per-draw overrides (LOD, visibility) via compute.
+
+Scope (Initial Prototype)
+-------------------------
+Non-indexed & indexed draws only (no instancing expansion yet). One args struct
+per DrawMetadata record kept 1:1 (no compaction). Direct path retained behind
+runtime flag for A/B comparison and fallback.
+
+API Targets
+-----------
+Primary target: D3D12 ExecuteIndirect. (Future: Vulkan vkCmdDraw*Indirect,
+Metal Indirect Command Buffers). Keep abstraction thin so translation layer can
+map to platform-specific requirements.
+
+Args Layout (CPU Definition)
+---------------------------
+struct DrawIndexedArgs {
+	uint32_t index_count_per_instance;
+	uint32_t instance_count;          // always 1 for now
+	uint32_t start_index_location;
+	int32_t  base_vertex_location;
+	uint32_t start_instance_location; // 0
+};
+
+struct DrawArgs {
+	uint32_t vertex_count_per_instance;
+	uint32_t instance_count;          // 1
+	uint32_t start_vertex_location;   // 0 (no base offset today)
+	uint32_t start_instance_location; // 0
+};
+
+Selection: Use distinct contiguous arrays for indexed vs non-indexed OR unify
+with a tagged variant. Prototype will emit a single unified array of fixed
+size records choosing the larger (DrawIndexedArgs = 20 bytes). Pad to 32 bytes
+for alignment & future fields (e.g., material index, draw_metadata_index).
+
+Proposed Unified Args Record (32 bytes)
+--------------------------------------
+Offset  Size  Field
+0       4     flags (bit0 indexed, bit1 reserved, others TBD)
+4       4     index_or_vertex_count
+8       4     instance_count (1)
+12      4     first_index (indexed) OR start_vertex (non-indexed=0)
+16      4     base_vertex (indexed) OR unused
+20      4     draw_metadata_index (lookup into DrawMetadata; enables shader access)
+24      4     material_index (duplicate for compute cull shaders convenience)
+28      4     reserved (future: lod_or_mask)
+
+Reasoning: Embedding material_index & draw_metadata_index avoids extra indirection
+on GPU side if future mesh shader / amplification stage consumes args directly.
+32-byte alignment plays well with structured buffer stride & potential SIMD
+processing in compute cull.
+
+Generation Pipeline
+-------------------
+1. After DrawMetadata finalized & sorted, allocate args buffer CPU vector sized
+	 to draw_count (reserve high-water once).
+2. For each DrawMetadata:
+	 - Set flags.indexed from md.is_indexed.
+	 - index_or_vertex_count = md.is_indexed ? md.index_count : md.vertex_count.
+	 - first_index/base_vertex from md.
+	 - draw_metadata_index = sequential i.
+	 - material_index from md.material_index.
+3. Upload to GPU as structured buffer (Srv/Uav) OR copy into an indirect args
+	 buffer resource depending on backend requirement.
+4. ExecuteIndirect signature references fields needed by hardware; other fields
+	 (draw_metadata_index/material_index) are for future GPU-side filtering passes.
+
+Execution Path (Prototype)
+--------------------------
+if (use_indirect) {
+	ExecuteIndirect(signature, draw_count, args_buffer, 0, nullptr, 0);
+} else {
+	for each DrawMetadata → direct draws (current path)
+}
+
+Signature (D3D12) Mapping
+-------------------------
+Argument 0: D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED OR DRAW
+						(Need two signatures or a superset approach; simplest: generate
+						 only indexed signature and emit index args for all; for non-indexed
+						 create synthetic index buffer? → Defer. Prefer dual range submit.)
+Strategy: Partition draws into indexed/non-indexed contiguous groups (already
+possible via sort key extension) and issue two ExecuteIndirect calls.
+
+Phased Migration
+----------------
+Phase A (Prototype): Build args buffer; still issue direct draws (validate parity).
+Phase B (Shadow Execute): ExecuteIndirect then also (optionally) direct draws for
+	a few frames under debug to confirm identical GPU results (hash over color/depth).
+Phase C (Flip Default): Indirect path default; direct path behind diagnostic flag.
+Phase D (GPU Cull Ready): Add compute pass able to mark flags bit (e.g., visibility=0)
+	and compaction step (prefix sum) producing filtered args buffer (future task).
+
+Validation Strategy
+-------------------
+1. Count parity: args_count == draw_metadata_count.
+2. Field parity: For random sample, reconstruct what direct draw would call and compare.
+3. Visual parity: Off-screen hash of color/depth after both paths (debug builds).
+4. Performance counters: CPU submission time diff; GPU timestamp around execute.
+
+Instrumentation
+---------------
+- last_args_build_time_us
+- last_execute_indirect_cpu_time_us
+- counters: indexed_count, non_indexed_count
+- optional: memory_bytes_args_buffer (high-water)
+
+Risks & Mitigations
+-------------------
+R1: Divergence between DrawMetadata and Args after future mutations.
+		→ Centralize args build immediately after final sort; forbid later edits.
+R2: Mixed indexed/non-indexed complexity for single ExecuteIndirect signature.
+		→ Submit in two calls (indexed first) using partitioning; unify later if needed.
+R3: Extra memory footprint.
+		→ 32 bytes * N draws (N=10k ⇒ ~320 KB) acceptable; monitor high-water.
+R4: Debug difficulty when GPU-driven culling added.
+		→ Keep draw_metadata_index in record for round-trip diagnostics.
+
+Config & Flags
+--------------
+RendererConfig {
+	bool enable_indirect_submission; // default false until Phase C
+	bool enable_indirect_validation; // shadow compare mode
+}
+
+Open Questions
+--------------
+Q1: Merge args + metadata into single buffer? (Defer; separation aids clarity.)
+Q2: Encode pass_mask into args? (Likely unnecessary; metadata already has it.)
+Q3: Support instancing early? (Defer until real instanced content present.)
+
+Exit Criteria (Prototype Complete)
+----------------------------------
+- Args buffer generated & uploaded each frame behind flag.
+- Dual-path visual parity confirmed (hash or frame diff) for sample scene.
+- CPU submission time improvement measured & logged.
+- Design note updated with metrics before enabling by default.
+
+END INDIRECT DRAW ARGS DESIGN NOTE

@@ -21,6 +21,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -37,6 +38,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
+#include <Oxygen/Renderer/TransparentPass.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
@@ -58,6 +60,37 @@ namespace {
 constexpr std::uint32_t kWindowWidth = 1600;
 constexpr std::uint32_t kWindowHeight = 900;
 
+// Helper: make a solid-color material asset snapshot
+auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
+  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
+{
+  using namespace oxygen::data;
+
+  pak::MaterialAssetDesc desc {};
+  desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
+  // Safe copy name
+  constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
+  const std::size_t n = (std::min)(maxn, std::strlen(name));
+  std::memcpy(desc.header.name, name, n);
+  desc.header.name[n] = '\0';
+  desc.header.version = 1;
+  desc.header.streaming_priority = 255;
+  desc.material_domain = static_cast<uint8_t>(domain);
+  desc.flags = 0;
+  desc.shader_stages = 0;
+  desc.base_color[0] = rgba.r;
+  desc.base_color[1] = rgba.g;
+  desc.base_color[2] = rgba.b;
+  desc.base_color[3] = rgba.a;
+  desc.normal_scale = 1.0f;
+  desc.metalness = 0.0f;
+  desc.roughness = 0.9f;
+  desc.ambient_occlusion = 1.0f;
+  // Leave texture indices at default invalid (no textures)
+  return std::make_shared<const MaterialAsset>(
+    desc, std::vector<ShaderReference> {});
+};
+
 //! Build a 2-LOD sphere GeometryAsset (high and low tessellation).
 auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
@@ -66,6 +99,11 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   using oxygen::data::pak::GeometryAssetDesc;
   using oxygen::data::pak::MeshViewDesc;
 
+  // Semi-transparent material (transparent domain) with lower alpha to
+  // accentuate blending against background.
+  const auto glass = MakeSolidColorMaterial("Glass",
+    { 0.2f, 0.6f, 0.9f, 0.35f }, oxygen::data::MaterialDomain::kAlphaBlended);
+
   // LOD 0: higher tessellation
   auto lod0_data = oxygen::data::MakeSphereMeshAsset(32, 64);
   CHECK_F(lod0_data.has_value());
@@ -73,7 +111,7 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     = MeshBuilder(0, "SphereLOD0")
         .WithVertices(lod0_data->first)
         .WithIndices(lod0_data->second)
-        .BeginSubMesh("full", MaterialAsset::CreateDefault())
+        .BeginSubMesh("full", glass)
         .WithMeshView(MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(lod0_data->second.size()),
@@ -90,7 +128,7 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     = MeshBuilder(1, "SphereLOD1")
         .WithVertices(lod1_data->first)
         .WithIndices(lod1_data->second)
-        .BeginSubMesh("full", MaterialAsset::CreateDefault())
+        .BeginSubMesh("full", glass)
         .WithMeshView(MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(lod1_data->second.size()),
@@ -123,36 +161,6 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   using oxygen::data::MeshBuilder;
   using oxygen::data::pak::GeometryAssetDesc;
   using oxygen::data::pak::MeshViewDesc;
-
-  // Helper: make a solid-color material asset snapshot
-  auto MakeSolidColorMaterial
-    = [](const char* name,
-        const glm::vec4& rgba) -> std::shared_ptr<const MaterialAsset> {
-    oxygen::data::pak::MaterialAssetDesc desc {};
-    desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
-    // Safe copy name
-    constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-    const std::size_t n = (std::min)(maxn, std::strlen(name));
-    std::memcpy(desc.header.name, name, n);
-    desc.header.name[n] = '\0';
-    desc.header.version = 1;
-    desc.header.streaming_priority = 255;
-    desc.material_domain
-      = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
-    desc.flags = 0;
-    desc.shader_stages = 0;
-    desc.base_color[0] = rgba.r;
-    desc.base_color[1] = rgba.g;
-    desc.base_color[2] = rgba.b;
-    desc.base_color[3] = rgba.a;
-    desc.normal_scale = 1.0f;
-    desc.metalness = 0.0f;
-    desc.roughness = 0.9f;
-    desc.ambient_occlusion = 1.0f;
-    // Leave texture indices at default invalid (no textures)
-    return std::make_shared<const MaterialAsset>(
-      desc, std::vector<oxygen::data::ShaderReference> {});
-  };
 
   // Simple quad (XY plane), two triangles
   std::vector<Vertex> vertices;
@@ -191,7 +199,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   auto mesh = MeshBuilder(0, "Quad2SM")
                 .WithVertices(vertices)
                 .WithIndices(indices)
-                // Submesh 0: first triangle
+                // Submesh 0: first triangle (opaque red)
                 .BeginSubMesh("tri0", red)
                 .WithMeshView(MeshViewDesc {
                   .first_index = 0,
@@ -200,7 +208,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
                   .vertex_count = static_cast<uint32_t>(vertices.size()),
                 })
                 .EndSubMesh()
-                // Submesh 1: second triangle
+                // Submesh 1: second triangle (opaque green restored)
                 .BeginSubMesh("tri1", green)
                 .WithMeshView(MeshViewDesc {
                   .first_index = 3,
@@ -227,38 +235,33 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 }
 
 //! Update camera position along a smooth orbit.
-auto AnimateMainCamera(
-  oxygen::scene::SceneNode& camera_node, const float time_seconds) -> void
+// Fixed camera: positioned on a circle at 45deg pitch looking at origin.
+auto SetupFixedCamera(oxygen::scene::SceneNode& camera_node) -> void
 {
-  // Scene center between the two objects
-  constexpr glm::vec3 center(1.25F, 0.0F, 0.0F);
-
-  // Base parameters
-  constexpr float base_radius = 6.0F;
-  constexpr float base_height = 1.6F;
-
-  // Modulations for cinematic motion
-  const float radius
-    = base_radius + 1.25F * std::sin(0.35F * time_seconds); // slow dolly
-  const float height
-    = base_height + 0.45F * std::sin(0.8F * time_seconds + 0.7F); // bob
-  constexpr float angular_speed = 1.5F; // radians/sec (faster orbit)
-  const float angle = angular_speed * time_seconds;
-
-  // Orbit around center
-  const glm::vec3 offset(
-    radius * std::cos(angle), height, -radius * std::sin(angle));
-  const glm::vec3 position = center + offset;
-  constexpr glm::vec3 target = center;
-  constexpr glm::vec3 up(0.0F, 1.0F, 0.0F);
-
+  constexpr float radius = 15.0F;
+  constexpr float pitch_deg = 10.0F;
+  const float pitch = glm::radians(pitch_deg);
+  // Place camera on negative Z so quad (facing +Z) is front-facing.
+  const glm::vec3 position(
+    radius * 0.0F, radius * std::sin(pitch), -radius * std::cos(pitch));
   auto transform = camera_node.GetTransform();
   transform.SetLocalPosition(position);
-
-  // Build a rotation that looks at target
+  const glm::vec3 target(0.0F);
+  const glm::vec3 up(0.0F, 1.0F, 0.0F);
   const glm::vec3 dir = glm::normalize(target - position);
-  const glm::quat rot = glm::quatLookAtRH(dir, up);
-  transform.SetLocalRotation(rot);
+  transform.SetLocalRotation(glm::quatLookAtRH(dir, up));
+}
+
+// Orbit sphere around origin on XZ plane.
+auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, float t) -> void
+{
+  constexpr float radius = 4.0F;
+  constexpr float angular_speed = 0.6F; // radians per second
+  const float angle = angular_speed * t;
+  const glm::vec3 pos(radius * std::cos(angle), 0.0F, radius * std::sin(angle));
+  if (sphere_node.IsAlive()) {
+    sphere_node.GetTransform().SetLocalPosition(pos);
+  }
 }
 
 } // namespace
@@ -575,9 +578,14 @@ auto MainModule::EnsureExampleScene() -> void
   auto sphere_geo = BuildSphereLodAsset();
   auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
 
-  // Sphere with distance-based LOD at origin
+  // Sphere with distance-based LOD; initial position will be set by orbit
   sphere_distance_ = scene_->CreateNode("SphereDistance");
   sphere_distance_.GetRenderable().SetGeometry(sphere_geo);
+
+  // Enlarge sphere to better showcase transparency layering against background
+  if (sphere_distance_.IsAlive()) {
+    sphere_distance_.GetTransform().SetLocalScale(glm::vec3(3.0F));
+  }
 
   // Configure LOD policy
   if (auto obj = sphere_distance_.GetObject()) {
@@ -589,10 +597,11 @@ auto MainModule::EnsureExampleScene() -> void
     r.SetLodPolicy(std::move(pol));
   }
 
-  // Multi-submesh quad offset on +X
+  // Multi-submesh quad centered at origin facing +Z (already in XY plane)
   multisubmesh_ = scene_->CreateNode("MultiSubmesh");
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
-  multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(3.0F, 0.0F, 0.0F));
+  multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
+  multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
 
   LOG_F(
     INFO, "Scene created: SphereDistance (LOD) and MultiSubmesh (per-submesh)");
@@ -640,19 +649,15 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 
 auto MainModule::UpdateAnimations(const float time_seconds) -> void
 {
-  // Animate rotation for quad only
-  quad_rotation_angle_ += 0.01F; // Slower quad rotation (original speed)
-
-  // Sphere stays stationary (no rotation)
-  if (multisubmesh_.IsAlive()) {
-    const auto quad_rot = glm::angleAxis(-quad_rotation_angle_ * 0.8F,
-      glm::normalize(glm::vec3(0.0F, 1.0F, 0.25F)));
-    multisubmesh_.GetTransform().SetLocalRotation(quad_rot);
-  }
-
-  // Animate camera
+  // Sphere orbit
+  AnimateSphereOrbit(sphere_distance_, time_seconds);
+  // Fixed camera (set once when created; ensure orientation remains stable)
   if (main_camera_.IsAlive()) {
-    AnimateMainCamera(main_camera_, time_seconds);
+    static bool initialized = false;
+    if (!initialized) {
+      SetupFixedCamera(main_camera_);
+      initialized = true;
+    }
   }
 }
 
@@ -729,6 +734,19 @@ auto MainModule::SetupRenderPasses() -> void
   if (!shader_pass_) {
     shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
   }
+
+  // --- TransparentPass configuration ---
+  if (!transparent_pass_config_) {
+    transparent_pass_config_
+      = std::make_shared<engine::TransparentPass::Config>();
+    transparent_pass_config_->debug_name = "TransparentPass";
+  }
+  // Color/depth textures are assigned each frame just before execution (in
+  // ExecuteRenderCommands)
+  if (!transparent_pass_) {
+    transparent_pass_
+      = std::make_shared<engine::TransparentPass>(transparent_pass_config_);
+  }
 }
 
 auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
@@ -777,6 +795,22 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
       if (shader_pass_) {
         co_await shader_pass_->PrepareResources(context, *recorder);
         co_await shader_pass_->Execute(context, *recorder);
+      }
+      // Transparent Pass execution (reuses color/depth from framebuffer)
+      if (transparent_pass_) {
+        // Assign attachments each frame (framebuffer back buffer + depth)
+        if (fb && !framebuffers_.empty()) {
+          // Color: back buffer texture for current frame
+          transparent_pass_config_->color_texture
+            = fb->GetDescriptor().color_attachments[0].texture;
+          // Depth: same depth texture used by depth pass
+          if (fb->GetDescriptor().depth_attachment.IsValid()) {
+            transparent_pass_config_->depth_texture
+              = fb->GetDescriptor().depth_attachment.texture;
+          }
+        }
+        co_await transparent_pass_->PrepareResources(context, *recorder);
+        co_await transparent_pass_->Execute(context, *recorder);
       }
     },
     render_context, context);

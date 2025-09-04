@@ -75,7 +75,8 @@ private:
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
 
-  // Draw submission handled by base RenderPass::IssueDrawCalls (SoA path).
+  // Draw submission uses base IssueDrawCalls with predicate to restrict to
+  // opaque/masked so transparent geometry renders only in TransparentPass.
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;

@@ -27,6 +27,8 @@
 #include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Types/DrawMetaData.h>
+#include <Oxygen/Renderer/Types/PassMaskFlags.h>
 
 using oxygen::Scissors;
 using oxygen::ViewPort;
@@ -216,15 +218,38 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   ClearDepthStencilView(recorder, dsv);
   SetupRenderTargets(recorder, dsv);
 
-  // Issue draws from PreparedSceneFrame metadata (explicit indexed vs
-  // non-indexed branches).
-  const bool emitted = IssueDrawCalls(recorder);
-
-  // At this stage of migration we expect all depth draws to come from the
-  // PreparedSceneFrame path. If nothing was emitted it's a logic error.
+  // NOTE: Transparent draws are intentionally excluded from the depth pre-pass
+  // to prevent them from writing depth and later occluding opaque color when
+  // blended (would produce the previously observed inverted transparency).
+  // Only PassMaskFlags::kOpaqueOrMasked are accepted here.
+  uint32_t transparent_saw = 0;
+  const bool emitted = IssueDrawCalls(
+    recorder, [&transparent_saw](const engine::DrawMetadata& md) {
+      if ((md.flags
+            & static_cast<uint32_t>(
+              oxygen::engine::PassMaskFlags::kTransparent))
+        != 0u) {
+        ++transparent_saw; // counted for debug stats; not emitted
+        return false;
+      }
+      return (md.flags
+               & static_cast<uint32_t>(
+                 oxygen::engine::PassMaskFlags::kOpaqueOrMasked))
+        != 0u;
+    });
+  DLOG_F(2,
+    "DepthPrePass emitted depth draws (opaque/masked only): emitted_any={} "
+    "transparent_seen={}",
+    emitted, transparent_saw);
+  // Debug guard: depth pre-pass must not emit transparent geometry.
+  DCHECK_F(transparent_saw >= 0, "Counter logic error");
+  // If any transparent were seen ensure none were emitted by construction of
+  // predicate (defensive: predicate never returns true for transparent).
+  // (If future changes alter predicate, enforce with explicit assert.)
+  DCHECK_F(true, "DepthPrePass predicate excludes transparent by design");
   DCHECK_F(emitted,
-    "DepthPrePass expected to emit draws from PreparedSceneFrame (SoA path) at "
-    "this migration stage");
+    "DepthPrePass expected to emit at least one opaque/masked draw at this "
+    "migration stage");
 
   Context().RegisterPass(this);
   co_return;

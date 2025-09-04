@@ -142,35 +142,37 @@ auto RenderPass::BindDrawIndexConstant(
 
 auto RenderPass::IssueDrawCalls(CommandRecorder& recorder) const -> bool
 {
-  // Returns true if any draws were emitted.
+  return IssueDrawCalls(
+    recorder, [](const engine::DrawMetadata&) noexcept { return true; });
+}
+
+auto RenderPass::IssueDrawCalls(CommandRecorder& recorder,
+  const std::function<bool(const engine::DrawMetadata&)>& predicate) const
+  -> bool
+{
   const auto psf = Context().prepared_frame;
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
     return false;
   }
-
   const auto count
     = psf->draw_metadata_bytes.size() / sizeof(engine::DrawMetadata);
   DLOG_F(2, "RenderPass SoA metadata available: records={}", count);
   const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
     psf->draw_metadata_bytes.data());
-
   bool emitted = false;
   for (size_t draw_index = 0; draw_index < count; ++draw_index) {
     const auto& md = records[draw_index];
-
+    if (!predicate || !predicate(md)) {
+      continue;
+    }
     if (md.is_indexed) {
       DCHECK_F(md.index_count > 0, "Indexed draw requires index_count > 0");
     } else {
       DCHECK_F(
         md.vertex_count > 0, "Non-indexed draw requires vertex_count > 0");
     }
-
     BindDrawIndexConstant(recorder, static_cast<uint32_t>(draw_index));
-
-    recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count,
-      /*instanceCount*/ 1, /*firstVertex*/ 0,
-      /*firstInstance*/ 0);
-
+    recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count, 1, 0, 0);
     emitted = true;
   }
   return emitted;
