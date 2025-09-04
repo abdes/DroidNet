@@ -92,16 +92,6 @@ struct GeometryHandle {
   uint32_t index_buffer = 0;
 };
 
-//! Partition map for organizing items by render pass.
-/*!
- Maps pass_id -> [begin, end) ranges over a sorted item array. Ranges
- are half-open and index into the arrays produced during collection.
-*/
-// TODO: make the return type strongly typed once we know what exactly is the
-// underlying type of the range
-using PartitionMap
-  = std::unordered_map<uint32_t, std::pair<std::size_t, std::size_t>>;
-
 //! Draw metadata for GPU command generation.
 /*!
  Minimal set of parameters required to emit a draw call. Fields are
