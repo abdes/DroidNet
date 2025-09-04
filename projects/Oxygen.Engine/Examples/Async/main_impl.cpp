@@ -34,6 +34,7 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Renderer/Modules/TransformsModule.h>
 
 #include "MainModule.h"
 
@@ -236,13 +237,25 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     // Register engine modules
     LOG_F(INFO, "Registering engine modules...");
 
-    // Graphics main module (replaces RenderController/RenderThread pattern)
-    app.engine->RegisterModule(
-      std::make_unique<oxygen::examples::async::MainModule>(
-        app.platform, app.gfx_weak, fullscreen));
+    // Helper lambda to register modules with error checking
+    auto register_module = [&](auto&& module) {
+      const bool registered
+        = app.engine->RegisterModule(std::forward<decltype(module)>(module));
+      if (!registered) {
+        LOG_F(ERROR, "Failed to register module");
+        throw std::runtime_error("Module registration failed");
+      }
+    };
 
-    LOG_F(INFO, "Registered {} modules",
-      1); // TODO: Use actual module count when available
+    // Register built-in engine modules (one-time)
+    {
+      // TransformsModule: performs Scene::Update() during kTransformPropagation
+      register_module(std::make_unique<engine::TransformsModule>());
+
+      // Graphics main module (replaces RenderController/RenderThread pattern)
+      register_module(std::make_unique<oxygen::examples::async::MainModule>(
+        app.platform, app.gfx_weak, fullscreen));
+    }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 

@@ -104,6 +104,11 @@ namespace examples::async {
     [[nodiscard]] auto GetSupportedPhases() const noexcept
       -> engine::ModulePhaseMask override;
 
+    [[nodiscard]] auto IsCritical() const noexcept -> bool override
+    {
+      return true; // Critical module
+    }
+
     //! Execute phase-specific work.
     auto OnFrameStart(engine::FrameContext& context) -> void override;
     auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;

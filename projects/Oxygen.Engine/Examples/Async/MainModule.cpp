@@ -321,25 +321,41 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
     start_time_ = std::chrono::duration<float>(epoch).count();
   }
 
+  // Check if window is closed
+  if (window_weak_.expired()) {
+    // Window expired, reset surface
+    LOG_F(WARNING, "Window expired, resetting surface");
+    surface_.reset();
+    return;
+  }
+
   // Add our surface to the FrameContext every frame (part of module contract)
   // NOTE: FrameContext is recreated each frame, so we must populate it every
   // time
-  if (surface_) {
-    context.AddSurface(surface_);
-    LOG_F(
-      2, "Surface '{}' added to FrameContext for frame", surface_->GetName());
-  }
+  DCHECK_NOTNULL_F(surface_);
+  context.AddSurface(surface_);
+  LOG_F(2, "Surface '{}' added to FrameContext for frame", surface_->GetName());
+
+  // Ensure scene and camera are set up
+  EnsureExampleScene();
+  context.SetScene(observer_ptr { scene_.get() });
 }
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(2, "MainModule::OnSceneMutation");
-
-  // Ensure scene and camera are set up
-  EnsureExampleScene();
-  if (surface_) {
-    EnsureMainCamera(static_cast<int>(surface_->Width()),
-      static_cast<int>(surface_->Height()));
+  try {
+    if (surface_) {
+      EnsureMainCamera(static_cast<int>(surface_->Width()),
+        static_cast<int>(surface_->Height()));
+    }
+  } catch (const std::exception& ex) {
+    if (window_weak_.expired()) {
+      LOG_F(ERROR, "window is no longer valid: {}", ex.what());
+      surface_.reset();
+      context.RemoveSurfaceAt(0); // FIXME: find our surface index
+    }
+    co_return;
   }
 
   // Handle scene mutations (material overrides, visibility changes)
@@ -387,7 +403,7 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     };
-    renderer_->BuildFrame(*scene_, engine::CameraView(cv), context);
+    renderer_->BuildFrame(engine::CameraView(cv), context);
   }
 
   co_return;

@@ -101,6 +101,10 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Renderer/Types/View.h>
 
+namespace oxygen::scene {
+class Scene;
+}
+
 namespace oxygen {
 class Graphics;
 } // namespace oxygen
@@ -800,6 +804,16 @@ public:
 
   auto GetProfiler() const noexcept { return engine_state_.profiler; }
 
+  // Scene pointer (engine-managed). Provided for modules like TransformsModule
+  // and ScenePrep. Lifetime managed externally; FrameContext only observes.
+  // Scene is module-managed (not EngineState); no EngineTag required.
+  auto SetScene(observer_ptr<scene::Scene> s) noexcept -> void { scene_ = s; }
+
+  [[nodiscard]] auto GetScene() const noexcept -> observer_ptr<scene::Scene>
+  {
+    return scene_;
+  }
+
   // Phase-aware GameState accessors
   // RATIONALE: GameState mutation is only allowed during ordered phases.
   // Parallel phases must use CreateSnapshot() to get immutable data.
@@ -1384,6 +1398,9 @@ public:
     engine_state_.presentable_flags.push_back(0);
   }
 
+  // TODO: think if we want to allow removing surfaces directly using the
+  // original pointer, or if we want to manage surface changesets and only
+  // allow removal by index.
   auto RemoveSurfaceAt(size_t index) noexcept
   {
     std::unique_lock lock(snapshotLock_);
@@ -1897,6 +1914,12 @@ private:
 
   // Per-frame performance metrics (timing and budget stats)
   Metrics metrics_ {};
+
+  // Active scene (non-owning, may be null). Not part of GameData because the
+  // high level scene is manipulated early in the frame render cycle, uses its
+  // own optimized component storage, and is too different from what will be
+  // snapshotted and finally passed for rendering.
+  observer_ptr<scene::Scene> scene_ { nullptr }; // active scene (non-owning)
 
   // Atomic snapshot publication using private unified structure
   // RATIONALE: Keep GameStateSnapshot and FrameSnapshot separate for clean APIs
