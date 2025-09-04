@@ -28,7 +28,12 @@ target_compile_options(
   PRIVATE
     ${OXYGEN_COMMON_CXX_FLAGS}
 )
-target_link_libraries("Oxygen.Engine.LinkTest" PRIVATE oxygen::engine)
+target_link_libraries(
+  "Oxygen.Engine.LinkTest"
+  PRIVATE
+    oxygen::engine
+    oxygen::loader
+)
 add_test(NAME "Oxygen.Engine.LinkTest" COMMAND "Oxygen.Engine.LinkTest")
 
 # -- GTest Test Programs -------------------------------------------------------
@@ -38,4 +43,10 @@ include(GTestHelpers)
 m_gtest_program(System SOURCES "System_test.cpp")
 m_gtest_program(InputHandler SOURCES "InputHandler_test.cpp")
 m_gtest_program(EngineModule SOURCES "EngineModule_test.cpp")
-m_gtest_program(ModuleManager SOURCES "ModuleManager_helpers.h" "ModuleManager_test.cpp" "ModuleManager_error_test.cpp")
+m_gtest_program(
+  ModuleManager
+  SOURCES
+    "ModuleManager_helpers.h"
+    "ModuleManager_test.cpp"
+    "ModuleManager_error_test.cpp"
+)
