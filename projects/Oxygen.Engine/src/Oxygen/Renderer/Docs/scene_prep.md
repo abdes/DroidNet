@@ -1,37 +1,42 @@
 # ScenePrep Pipeline
 
-This document outlines the ScenePrep system that transforms scene data into
-GPU-ready render items. It encompasses both Collection (scene traversal and data
-extraction) and Finalization (GPU preparation and organization) phases while
-remaining multi-pass friendly.
+This document describes the current ScenePrep system which (as of Sept 2025)
+implements the **Collection phase** of scene preparation and feeds existing
+render passes through a temporary conversion bridge. The planned **Finalization
+phase** (GPU uploads, draw metadata assembly, sorting / partitioning) is
+specified here for forward work but not yet implemented.
+
+Legacy "Extraction" code has been fully removed; ScenePrep is now the canonical
+path. Any mention of copying or migrating from the Extraction module has been
+eliminated. Remaining legacy render passes still consume an `RenderItemsList`
+produced through a temporary SoA→AoS bridge inside `Renderer::BuildFrame`.
 
 ---
 
-## Implementation Task List
+## Implementation Task List (Revised)
 
-| Status | Task | Description | Dependencies |
-|--------|------|-------------|--------------|
-| ✅ | **1. Define Core Types and Concepts** | Implement `ScenePrepContext`, `ScenePrepState`, `PassMask`, and C++20 concepts (`FinalizationItemFilter`, `ScenePrepUploader`, `RenderItemDataExtractor`, etc.) | `src/Oxygen/Renderer/ScenePrep/Types.h`, `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`, `src/Oxygen/Renderer/ScenePrep/Concepts.h` |
-| ✅ | **2. Copy and Refactor Extraction Classes** | Copy existing `RenderItemProto`, `RenderItemData` classes from Extraction module and adapt to ScenePrep design | Task 1 |
-| ✅ | **3. Copy and Refactor Extractors** | Implement collection extractors: `ExtractionPreFilter`, `MeshResolver`, `SubMeshVisibilityFilter` (with per-submesh frustum culling), and `EmitPerVisibleSubmesh`, adapted to the new concept-based ScenePrep design | Task 2 |
-| ✅ | **4a. Implement Transform Helper State** | Create `TransformManager` (persistent) and `TransformBatchCache` (per-frame) classes | Task 1 |
-| ⏳ | **4b. Implement Material Helper State** | Create `MaterialRegistry` (persistent) and `MaterialUploadCache` (per-frame) classes | Task 1 |
-| ⏳ | **4c. Implement Geometry Helper State** | Create `GeometryRegistry` (persistent) and `GeometryResidencyCache` (per-frame) classes | Task 1 |
-| ✅ | **5. Create Collection Configuration System** | Implement template-based `CollectionConfig` with `if constexpr` stage detection and factory functions | Task 1 |
-| ⏳ | **6. Implement Unified GPU Buffer Manager** | Design and implement a shared GPU buffer upload/residency system used by all helpers (staging, incremental vs full re-upload, growth/compaction, synchronization) | Task 1, 4a–4c |
-| ⏳ | **7. Create Finalization Configuration System** | Implement template-based `FinalizationConfig` with `if constexpr` stage detection and factory functions | Task 1 |
-| ⏳ | **8. Implement Production Algorithms** | Implement full production-ready `PassFilter`, `TransformUploader`, `MaterialUploader`, `GeometryUploader`, `GeometryAssembler` etc. for the engine | Task 3, 4a–4c, 5, 6, 7 |
-| 🔄 | **9. Implement ScenePrepPipeline** | Create main `ScenePrepPipeline` class with Collection and Finalization orchestration using `if constexpr` (Collection phase implemented) | Task 5, 6, 7, 8 |
-| ⏳ | **10. Copy and Refactor RenderListBuilder** | Copy existing `RenderListBuilder` to ScenePrep module and refactor to use new `ScenePrepPipeline` internally | Task 9 |
-| ⏳ | **11. Add Unit Tests** | Create comprehensive test suite for individual algorithms and configuration flexibility | Task 8, 9 |
-| ⏳ | **12. Implement Mock Configurations** | Create GPU-independent test configurations and integration test examples | Task 9, 11 |
-| ⏳ | **13. Add Performance Optimizations** | Implement batching, deduplication, and memory pool allocators for production performance | Task 10 |
-| ⏳ | **14. Implement Draw Metadata System** | Add mesh-view draw command generation and metadata creation | Task 13 |
-| ⏳ | **15. Add Sorting and Partitioning** | Implement depth sorting, material grouping, and render pass partitioning algorithms | Task 14 |
-| ⏳ | **16. Integration Testing** | Create end-to-end tests with real scenes and validate performance vs existing system | Task 15 |
-| ⏳ | **17. Documentation and Examples** | Update API documentation, add usage examples, and create migration guide | Task 16 |
-| ⏳ | **18. Wire ScenePrep to Renderer** | Update Renderer to use new ScenePrep module instead of old Extraction module | Task 17 |
-| ⏳ | **19. Remove Legacy Extraction Code** | Delete old `Extraction` module files after successful migration and testing | Task 18 |
+| Status | ID | Task | Description |
+|--------|----|------|-------------|
+| ✅ | 1 | Core Types | `ScenePrepContext`, `ScenePrepState`, `PassMask`, basic handles implemented. |
+| ✅ | 2 | Proto/Data Types | `RenderItemProto`, `RenderItemData` established as canonical (no legacy dependency). |
+| ✅ | 3 | Collection Extractors | `ExtractionPreFilter`, `MeshResolver`, `SubMeshVisibilityFilter`, `EmitPerVisibleSubmesh` operational. |
+| ✅ | 4 | Collection Config | `CollectionConfig` template with stage detection (`CreateBasicCollectionConfig`). |
+| 🔄 | 5 | Pipeline Orchestration | `ScenePrepPipelineCollection` (collection only). Finalization orchestration pending. |
+| 🔄 | 6 | Helper State (Transforms) | Transform helper scaffolding present (manager/cache). GPU upload integration TBD. |
+| ⏳ | 7 | Helper State (Materials) | Material registry + per-frame cache (design present; implementation minimal). |
+| ⏳ | 8 | Helper State (Geometry) | Geometry residency + handles (design present; partial). |
+| ⏳ | 9 | Unified GPU Buffer Manager | Shared growth / residency / upload strategy. |
+| ⏳ | 10 | Finalization Config & Roles | `FinalizationConfig`, uploader/assembler/filter roles implementation. |
+| ⏳ | 11 | Draw Metadata System | MeshView expansion + `DrawMetadata` emission (currently still handled in passes). |
+| ⏳ | 12 | Sorting & Partitioning | Stable sort + partition map generation. |
+| ⏳ | 13 | Performance Optimizations | Batching, dedupe, pooling, temporal reuse. |
+| ⏳ | 14 | Expanded Test Coverage | More unit tests (current tests cover collection only). |
+| ✅ | 15 | Renderer Integration | Renderer uses ScenePrep (collection) with SoA→AoS bridge. |
+| ✅ | 16 | Legacy Removal | Former Extraction module fully removed from build. |
+| ⏳ | 17 | Bridge Retirement | Remove temporary SoA→AoS conversion once passes consume ScenePrep directly. |
+| ⏳ | 18 | Documentation Refresh | Align remaining renderer docs with ScenePrep terminology. |
+
+Legend: ✅ complete, 🔄 in progress, ⏳ pending.
 
 ### Status Legend
 
@@ -50,41 +55,33 @@ remaining multi-pass friendly.
 
 ## Overview
 
-ScenePrep transforms scene data through two phases:
+ScenePrep is architected as a two-phase system, but currently only the
+**Collection Phase** is implemented:
 
-**Collection Phase:**
+### Implemented: Collection Phase
 
-- Scene graph traversal and filtering
-- Data extraction (transforms, materials, geometry)
-- LOD selection and frustum culling
-- Production of RenderItemData[]
+- Scene graph traversal & eligibility filtering
+- LOD selection (distance / screen-space error policies)
+- Per-submesh frustum & visibility filtering
+- Emission of one `RenderItemData` per visible submesh (SoA)
 
-**Finalization Phase:**
+### Planned: Finalization Phase (not yet implemented)
 
-- GPU resource preparation and uploads
-- Draw metadata generation and organization
-- Sorting and partitioning for render passes
-- Production of GPU-ready RenderItemsList
+- GPU residency checks & batched uploads (transforms, materials, geometry)
+- Draw metadata expansion (per MeshView) and ordering
+- Pass mask computation, sorting & partitioning
+- Direct publication of SoA / draw metadata to passes (eliminating AoS list)
 
-The system produces:
+### Temporary Bridge
 
-- A stable, ordered RenderItemsList ready for submission
-- Per-draw metadata (e.g., mesh view ranges, indices) compatible with bindless
-- Ensured residency of geometry and textures
-- Uploaded/managed transform data (persistent indices where applicable)
-- Material constants prepared and deduplicated
-- Sorting/partitioning suitable for multiple passes from a single run
-
-It is designed as a single finalize run per frame/view to feed multiple passes
-(e.g., depth-prepass, forward, shadows). To support this, filtering/routing is
-explicit and the resulting artifacts are structured for reuse.
-
-**Note**: Frustum culling is performed during the Collection phase in
-`SubMeshVisibilityFilter`, so finalization operates on pre-culled items.
+Collected `RenderItemData` is converted to legacy AoS `RenderItemsList` inside
+`Renderer::BuildFrame` (`BuildRenderItemsFromScenePrep`) strictly to preserve
+existing pass code. This bridge is tracked by Task 17 and will be removed when
+passes accept ScenePrep outputs directly.
 
 ---
 
-## Implemented collection extractors (current)
+## Implemented collection extractors
 
 - ExtractionPreFilter: Seeds visibility/shadow flags, world transform, and geometry; drops invisible nodes.
 - MeshResolver: Selects active LOD (distance/SSE policies) and resolves the mesh.
@@ -142,29 +139,25 @@ auto result = ScenePrep(collected_items, ctx, state, config.filter,
 
 ---
 
-## Goals (expected outputs)
+## Future Finalization Phase Goals
 
-After ScenePrep completes, we expect:
+When Finalization is implemented it should produce:
 
-- RenderItemsList containing immutable, GPU-ready items
-- DrawMetadata arrays aligned with draw submission order (one entry per issued
-  mesh-view draw)
-- Geometry resources resident and bindless indices resolved
-- Transform data uploaded and indexed (or matrices embedded, per mode)
-- Material constants uploaded/deduped; texture residency ensured
-- Items sorted/partitioned for efficient batching across passes
-- Per-item/pass routing data available for downstream passes (e.g., domain or
-  pass-mask)
+- Stable ordering & partition map (per pass / domain)
+- Draw metadata (one record per MeshView draw)
+- Batched transform/material/geometry uploads with residency tracking
+- Compact pass masks enabling multi-pass reuse
+- Zero AoS conversion (passes consume SoA directly)
 
 ---
 
-## ScenePrep Algorithms (single-run, multi-pass friendly)
+## Planned Finalization Algorithms (multi-pass friendly)
 
 The ScenePrep pipeline is a composition of algorithms operating over input items
 and explicit context/state. No inheritance is required; state may include
 stateful classes like TransformManager.
 
-### Transform finalizers
+### Transform Finalization
 
 TransformUploader (Uploader)
 
@@ -184,7 +177,7 @@ Fallback/error policy:
 - No transform component → use identity matrices.
 - Slot exhaustion → temporarily embed matrices this frame or reuse LRU slot.
 
-### Material finalizers
+### Material Finalization
 
 MaterialUploader (Uploader)
 
@@ -206,7 +199,7 @@ Fallback/error policy:
 - Failed constants upload → reuse previous-frame index if valid; otherwise
   defaults.
 
-### Geometry finalizers
+### Geometry Finalization
 
 GeometryUploader (Uploader)
 
@@ -227,7 +220,7 @@ Fallback/error policy:
 - Missing residency/handle → schedule upload for next frame; reuse prior handle
   if valid or drop.
 
-### Item filter / routing finalizer (Filter, required)
+### Item Filter / Routing
 
 - CPU: single-run pipeline must compute per-pass participation without
   re-finalizing.
@@ -243,7 +236,7 @@ Contract:
   runs).
 - Pure CPU: must not trigger resource uploads or GPU queries.
 
-### Sort / partition finalizer
+### Sort / Partition
 
 - CPU: compute stable keys (e.g., domain, material, pipeline, mesh) and sort;
   partition for passes/domains where useful.
@@ -256,13 +249,13 @@ Contract:
 - Returns `partitions`: a map pass_id → [begin, end) ranges over `order`.
 - Sorting keys derive only from CPU state and cached/bindless indices.
 
-### Flags assembler (Assembler)
+### Flags Assembly
 
 - CPU: compute and attach engine flags/domains/per-item options (non-pass
   routing).
 - Output: updated item flags.
 
-### Draw metadata maker (Assembler)
+### Draw Metadata Assembly
 
 - CPU: for each MeshView, emit one DrawMetadata with ranges
   (first_index/base_vertex or first_vertex/vertex_count) and any required
@@ -277,7 +270,7 @@ DrawMetadata fields (minimum):
 
 ---
 
-## Categories and C++20 concept interfaces
+## Concept Interfaces (Planned)
 
 ScenePrep algorithms are grouped by role. A single algorithm can satisfy multiple roles by
 providing multiple functions. The orchestrator wires them by concept.
@@ -312,7 +305,7 @@ Notes:
   batch updaters run before sorting; item updaters run during assembly.
 - Assembler role pairs with DrawMetadataMaker to emit mesh-view ranges.
 
-### Concrete Implementation Examples
+### Example Patterns (Illustrative / Not Yet Wired)
 
 Here are minimal working examples of each ScenePrep algorithm type to guide implementation:
 
@@ -414,7 +407,7 @@ struct BasicDepthSort {
 
 ---
 
-## Helper state classes (cross-stage data)
+## Helper State (Design & Partial Implementation)
 
 Single-responsibility algorithms that participate in multiple phases (e.g.,
 Uploader then Assembler) must not hide cross-stage data in static/thread-local
@@ -545,7 +538,7 @@ these helpers or the global state where it truly belongs.
 
 ---
 
-## Testing Strategy
+## Testing Strategy (Current & Planned)
 
 ### Unit Testing Individual ScenePrep Algorithms
 
@@ -672,7 +665,7 @@ TEST(ScenePrepTest, PartialConfigurationWorks) {
 }
 ```
 
-## Performance Considerations
+## Performance Considerations (Targets)
 
 ### Expected Performance Characteristics
 
@@ -714,7 +707,7 @@ struct BadTransformCache {
 
 ---
 
-## Pseudocode: single-run ScenePrep pipeline
+## Pseudocode: Future Full (Collection + Finalization) Pipeline
 
 Note: ScenePrep intentionally does not reuse the tuple-based
 `Extraction::Pipeline`. Filter and assembly are invoked directly to keep phase
@@ -892,18 +885,19 @@ processing, making parallel work more effective.
 
 ---
 
-## Integrated ScenePrep Module Refactoring
+## Unified Orchestration (Planned)
 
-To create a unified Collection + Finalization system with consistent design patterns, we propose refactoring the existing `RenderListBuilder` into a more modular, concept-based architecture.
+Earlier sections referenced refactoring an older builder. That legacy path has
+been removed. This section now only captures the intended unified design for
+*future* Collection + Finalization orchestration.
 
-### Current Issues with Existing Design
+### Current Status
 
-1. **Inconsistent Patterns**: Collection uses tuple-based Pipeline, Finalization uses direct concept invocation
-2. **Hard-coded Pipeline**: Collection pipeline is compile-time fixed, not configurable
-3. **Split State Management**: Collection state is implicit, Finalization state is explicit
-4. **API Inconsistency**: Different calling conventions and configuration approaches
+- Collection orchestrator exists (`ScenePrepPipelineCollection`).
+- Finalization orchestrator not yet implemented.
+- No tuple-based pipelines remain; design is already concept-oriented.
 
-### Proposed Unified Architecture
+### Proposed Unified Architecture (Forward Looking)
 
 ```cpp
 namespace oxygen::engine::renderer::sceneprep {
@@ -1348,94 +1342,17 @@ using ConfiguredScenePrepPipeline = ScenePrepPipeline<ScenePrepConfig<Collection
 }
 ```
 
-### Refactored RenderListBuilder Interface
+### Removed Legacy Builder
 
-```cpp
-namespace oxygen::engine::extraction {
+All references to the prior `RenderListBuilder` have been removed from code. No
+further migration steps are required.
 
-//! Modernized RenderListBuilder with configurable extraction pipeline
-class RenderListBuilder {
-public:
-  //! Configuration-based constructor
-  template<typename Config>
-  explicit RenderListBuilder(Config config)
-    : pipeline_(std::make_unique<ExtractionPipeline<Config>>(std::move(config)))
-    , state_(std::make_unique<ExtractionState>()) {}
+### Migration Strategy Status
 
-  //! Default constructor with basic configuration
-  RenderListBuilder() : RenderListBuilder(CreateDefaultConfig()) {}
+Legacy migration is complete. Remaining migration work concerns *internal pass
+consumers* (eliminating the SoA→AoS bridge) rather than Extraction removal.
 
-  OXYGEN_MAKE_NON_COPYABLE(RenderListBuilder)
-  OXYGEN_DEFAULT_MOVABLE(RenderListBuilder)
-
-  //! Single-call extraction (recommended)
-  auto Extract(scene::Scene& scene, const View& view, std::uint64_t frame_id,
-               RenderContext& render_context) -> ExtractionResult {
-    return pipeline_->Extract(scene, view, frame_id, render_context, *state_);
-  }
-
-  //! Legacy split-phase interface (for compatibility)
-  auto Collect(scene::Scene& scene, const View& view, std::uint64_t frame_id)
-    -> std::vector<RenderItemData> {
-    pipeline_->CollectOnly(scene, view, frame_id, *state_);
-    return state_->collected_items; // Copy for compatibility
-  }
-
-  auto Finalize(std::span<const RenderItemData> collected_items,
-                RenderContext& render_context, RenderItemsList& output) -> void {
-    // Handle external collected_items vs internal state
-    if (collected_items.data() != state_->collected_items.data()) {
-      state_->collected_items.assign(collected_items.begin(), collected_items.end());
-    }
-
-    auto result = pipeline_->FinalizeOnly(/*view=*/GetCachedView(),
-                                          /*frame_id=*/GetCachedFrameId(),
-                                          render_context, *state_);
-
-    // Copy to legacy interface
-    output.Clear();
-    output.Reserve(result.items.size());
-    for (auto&& item : result.items) {
-      output.Add(std::move(item));
-    }
-  }
-
-  auto EvictStaleResources(RenderContext& render_context,
-                           std::uint64_t current_frame_id,
-                           std::uint32_t keep_frame_count = 3) -> void {
-    // Implement using persistent state managers
-    state_->transform_mgr.EvictStaleTransforms(current_frame_id, keep_frame_count);
-    state_->material_registry.EvictStaleMaterials(current_frame_id, keep_frame_count);
-    state_->geometry_registry.EvictStaleGeometry(current_frame_id, keep_frame_count);
-  }
-
-private:
-  std::unique_ptr<ExtractionPipelineBase> pipeline_; // Type-erased
-  std::unique_ptr<ExtractionState> state_;
-
-  // Cache for legacy interface
-  View cached_view_;
-  std::uint64_t cached_frame_id_ = 0;
-
-  static auto CreateDefaultConfig() -> auto {
-    return ExtractionConfig{
-      .collection = BasicCollectionConfig{},
-      .finalization = BasicFinalizationConfig{}
-    };
-  }
-};
-}
-```
-
-### Migration Strategy
-
-1. **Phase 1**: Add new unified interfaces alongside existing ones
-2. **Phase 2**: Migrate internal implementation to use concept-based pipeline
-3. **Phase 3**: Update clients to use new `Extract()` interface
-4. **Phase 4**: Deprecate legacy `Collect()`/`Finalize()` split-phase interface
-5. **Phase 5**: Remove legacy interfaces and old Pipeline.h implementation
-
-### Benefits of Unified Design
+### Benefits of Unified Design (Anticipated)
 
 1. **Consistency**: Both phases use same concept-based configuration pattern
 2. **Flexibility**: Collection pipeline becomes configurable like finalization
@@ -1446,7 +1363,7 @@ private:
 
 This refactoring creates a cohesive extraction module that maintains backward compatibility while providing a much cleaner, more flexible architecture for future development.
 
-### Input Requirements
+### Input Requirements (Planned Finalization)
 
 The finalization system expects:
 
@@ -1470,7 +1387,7 @@ FinalizeState state {
 };
 ```
 
-### Output Integration
+### Output Integration (Planned)
 
 ```cpp
 // Outputs ready for renderer
@@ -1496,7 +1413,7 @@ void Renderer::SubmitFrame(const FinalizeOutput& output) {
 }
 ```
 
-### Error Handling Details
+### Error Handling Details (Planned)
 
 Common failure modes and recovery strategies:
 
@@ -1532,7 +1449,7 @@ auto ValidateOutput(const FinalizeOutput& output) -> bool {
 }
 ```
 
-### Thread Safety
+### Thread Safety (Planned Emphasis)
 
 - **FinalizeState**: Not thread-safe, use one instance per rendering thread
 - **Persistent Registries**: Must be thread-safe for multi-view rendering
