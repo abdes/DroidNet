@@ -74,8 +74,12 @@ auto TransformsModule::OnTransformPropagation(FrameContext& context) -> co::Co<>
     co_return; // Nothing to update
   }
 
+  auto saved = loguru::g_stderr_verbosity;
+  loguru::g_stderr_verbosity
+    = 0; // FIXME: Suppress noisy logs from Scene::Update
   // Perform hierarchy propagation & world matrix updates.
   scene_ptr->Update();
+  loguru::g_stderr_verbosity = saved; // Restore original verbosity
   co_return;
 }
 

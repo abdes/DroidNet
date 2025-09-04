@@ -108,7 +108,6 @@ public:
   MOCK_METHOD(void, SetViewport, (const oxygen::ViewPort&), (override));
   MOCK_METHOD(void, SetScissors, (const oxygen::Scissors&), (override));
   MOCK_METHOD(void, Draw, (std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t), (override));
-  MOCK_METHOD(void, DrawIndexed, (std::uint32_t, std::uint32_t, std::uint32_t, std::int32_t, std::uint32_t), (override));
   MOCK_METHOD(void, Dispatch, (std::uint32_t, std::uint32_t, std::uint32_t), (override));
   MOCK_METHOD(void, SetVertexBuffers, (std::uint32_t, const std::shared_ptr<oxygen::graphics::Buffer>*, const std::uint32_t*), (const, override));
   MOCK_METHOD(void, BindIndexBuffer, (const oxygen::graphics::Buffer&, oxygen::Format), (override));

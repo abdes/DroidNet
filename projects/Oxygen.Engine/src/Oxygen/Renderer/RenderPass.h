@@ -122,9 +122,11 @@ protected:
   virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc = 0;
   virtual auto NeedRebuildPipelineState() const -> bool = 0;
 
-  virtual auto GetDrawList() const -> std::span<const RenderItem> = 0;
-  virtual auto IssueDrawCalls(graphics::CommandRecorder& command_recorder) const
-    -> void;
+  // Legacy AoS draw list path removed. Derived passes now implement
+  // IssueDrawCalls to emit draws; default helpers rely on PreparedSceneFrame.
+  // Issue draws using PreparedSceneFrame SoA DrawMetadata records. Returns
+  // true if any draws were emitted. Single unified path (legacy AoS removed).
+  auto IssueDrawCalls(graphics::CommandRecorder& recorder) const -> bool;
 
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;

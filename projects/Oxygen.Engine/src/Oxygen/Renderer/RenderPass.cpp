@@ -11,9 +11,9 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Renderer/Internal/RenderScope.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/RenderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Types/DrawMetaData.h>
 
 using oxygen::engine::RenderPass;
 using oxygen::graphics::CommandRecorder;
@@ -140,79 +140,38 @@ auto RenderPass::BindDrawIndexConstant(
     0); // offset within the constant (0 for single 32-bit value)
 }
 
-auto RenderPass::IssueDrawCalls(CommandRecorder& command_recorder) const -> void
+auto RenderPass::IssueDrawCalls(CommandRecorder& recorder) const -> bool
 {
-  using data::Vertex;
-  using graphics::Buffer;
-
-  // Note on D3D12 Upload Heap Resource States:
-  //
-  // Buffers created on D3D12_HEAP_TYPE_UPLOAD (like these temporary vertex
-  // buffers) are typically implicitly in a state
-  // (D3D12_RESOURCE_STATE_GENERIC_READ) that allows them to be read by the GPU
-  // after CPU writes without explicit state transition barriers. Thus, explicit
-  // CommandRecorder::RequireResourceState calls are often not strictly needed
-  // for these specific transient resources on D3D12.
-
-  const auto& context = Context();
-  const auto& draw_list = GetDrawList();
-  LOG_F(3, "DEBUG: Processing {} items in draw list", draw_list.size());
-
-  uint32_t draw_index = 0;
-  for (const auto& item : draw_list) {
-    LOG_F(3, "DEBUG: Processing item {} with mesh: {}", draw_index,
-      item.mesh ? "valid" : "null");
-    if (!item.mesh || item.mesh->VertexCount() == 0) {
-      LOG_F(3, "Skipping RenderItem with no mesh or no vertices.");
-      continue;
-    }
-
-    // Use cached vertex buffer from renderer for each individual mesh
-    const auto vertex_buffer
-      = context.GetRenderer().GetVertexBuffer(*item.mesh);
-    if (!vertex_buffer) {
-      LOG_F(WARNING, "Could not get the vertex buffer for mesh {}. Skipping.",
-        item.mesh.get()->GetName());
-      continue;
-    }
-
-    // Per-submesh per-view draws: iterate the selected submesh's MeshViews
-    const auto& submeshes = item.mesh->SubMeshes();
-    const auto sm_idx = static_cast<std::size_t>(item.submesh_index);
-    if (sm_idx >= submeshes.size()) {
-      LOG_F(WARNING, "RenderItem submesh_index {} out of range ({}). Skipping.",
-        sm_idx, submeshes.size());
-      continue;
-    }
-    const auto& submesh = submeshes[sm_idx];
-    const auto views = submesh.MeshViews();
-    if (views.empty()) {
-      LOG_F(WARNING, "Submesh {} has no MeshViews. Skipping.", sm_idx);
-      continue;
-    }
-
-    for (const auto& view : views) {
-      // Bind the draw index for this specific view draw
-      BindDrawIndexConstant(command_recorder, draw_index);
-
-      // Decide indexed vs non-indexed per underlying mesh
-      if (item.mesh->IsIndexed()) {
-        // Use Draw with the number of indices; VS fetches actual indices via
-        // bindless
-        const uint32_t index_count = view.IndexCount();
-        LOG_F(3, "Draw {} (indexed view): indices={}, drawIndex={}", draw_index,
-          index_count, draw_index);
-        command_recorder.Draw(index_count, 1, 0, 0);
-      } else {
-        // Non-indexed: Draw with vertex_count; VS uses SV_VertexID +
-        // base_vertex
-        const uint32_t vertex_count = view.VertexCount();
-        LOG_F(3, "Draw {} (non-indexed view): vertices={}, drawIndex={}",
-          draw_index, vertex_count, draw_index);
-        command_recorder.Draw(vertex_count, 1, 0, 0);
-      }
-
-      ++draw_index;
-    }
+  // Returns true if any draws were emitted.
+  const auto psf = Context().prepared_frame;
+  if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
+    return false;
   }
+
+  const auto count
+    = psf->draw_metadata_bytes.size() / sizeof(engine::DrawMetadata);
+  DLOG_F(2, "RenderPass SoA metadata available: records={}", count);
+  const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
+    psf->draw_metadata_bytes.data());
+
+  bool emitted = false;
+  for (size_t draw_index = 0; draw_index < count; ++draw_index) {
+    const auto& md = records[draw_index];
+
+    if (md.is_indexed) {
+      DCHECK_F(md.index_count > 0, "Indexed draw requires index_count > 0");
+    } else {
+      DCHECK_F(
+        md.vertex_count > 0, "Non-indexed draw requires vertex_count > 0");
+    }
+
+    BindDrawIndexConstant(recorder, static_cast<uint32_t>(draw_index));
+
+    recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count,
+      /*instanceCount*/ 1, /*firstVertex*/ 0,
+      /*firstInstance*/ 0);
+
+    emitted = true;
+  }
+  return emitted;
 }

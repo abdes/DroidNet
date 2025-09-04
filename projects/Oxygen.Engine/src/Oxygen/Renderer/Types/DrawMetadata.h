@@ -26,33 +26,35 @@ namespace oxygen::engine {
  @see RenderableBinding
  @see SceneConstants
 */
-struct alignas(16) DrawMetadata {
+struct DrawMetadata {
+  // --- Geometry buffers ---
   uint32_t vertex_buffer_index; // Bindless index into vertex buffer table
   uint32_t index_buffer_index; // Bindless index into index buffer table
+  uint32_t first_index; // Start index within the mesh index buffer
+  int32_t base_vertex; // Base vertex offset (can be negative)
+
+  // --- Draw configuration ---
   uint32_t is_indexed; // 0 = non-indexed, 1 = indexed
-  uint32_t instance_count; // Number of instances to draw
+  uint32_t instance_count; // Number of instances (>=1)
+  uint32_t index_count; // Number of indices for indexed draws (undefined for
+                        // non-indexed)
+  uint32_t vertex_count; // Number of vertices for non-indexed draws (undefined
+                         // for indexed)
+  uint32_t material_index; // Index into material constants buffer (CPU owned)
+                           // (future Task 13)
 
-  uint32_t transform_offset; // Offset into transform buffer for this draw
-
-  uint32_t material_index; // Index into material constants buffer for this draw
-
+  // --- Transform & instance indirection ---
+  uint32_t transform_index; // Index into world/normal transform arrays
   uint32_t instance_metadata_buffer_index; // Bindless index into instance
                                            // metadata buffer
   uint32_t instance_metadata_offset; // Offset into instance metadata buffer
-  uint32_t flags; // Bitfield: visibility, pass ID, etc.
-
-  // Per-view geometry slice (used by shaders to index correct ranges)
-  uint32_t first_index; // Start index within the mesh index buffer (indexed)
-  int32_t base_vertex; // Base vertex offset to add to indices / SV_VertexID
-  uint32_t padding; // Reserved for alignment
+  uint32_t flags; // Bitfield: visibility, pass mask, etc.
 };
 
-// Expected packed size in bytes (12 x uint32_t) as required by shaders.
-static_assert(sizeof(DrawMetadata) == 12U * sizeof(uint32_t),
-  "Unexpected DrawMetadata size (packing change?)");
-
-// Ensure 16-byte alignment for GPU constant buffer requirements.
-static_assert(alignof(DrawMetadata) >= 16,
-  "DrawMetadata must be 16-byte aligned for GPU usage");
+// Logical field bytes: 13 x 4 = 52. We intentionally use tight packing to
+// keep StructuredBuffer stride small; HLSL struct must mirror EXACT order.
+static_assert(sizeof(DrawMetadata) == 52,
+  "Unexpected DrawMetadata size (expected 52); update HLSL DrawMetadata layout "
+  "accordingly");
 
 } // namespace oxygen::engine

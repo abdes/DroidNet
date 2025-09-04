@@ -22,7 +22,6 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 
@@ -204,7 +203,7 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
-  IssueDrawCalls(recorder);
+  IssueDrawCalls(recorder); // unified SoA draw submission
   Context().RegisterPass(this);
 
   co_return;
@@ -221,12 +220,6 @@ auto ShaderPass::GetColorTexture() const -> const Texture&
     return *fb->GetDescriptor().color_attachments[0].texture;
   }
   throw std::runtime_error("ShaderPass: No valid color texture found.");
-}
-
-auto ShaderPass::GetDrawList() const -> std::span<const RenderItem>
-{
-  // FIXME: For now, always use the opaque_draw_list from the context.
-  return Context().opaque_draw_list;
 }
 
 auto ShaderPass::GetFramebuffer() const -> const Framebuffer*
@@ -248,8 +241,8 @@ auto ShaderPass::HasDepth() const -> bool
   return fb && fb->GetDescriptor().depth_attachment.IsValid();
 }
 
-auto ShaderPass::SetupViewPortAndScissors(
-  CommandRecorder& command_recorder) const -> void
+auto ShaderPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
+  -> void
 {
   const auto& common_tex_desc = GetColorTexture().GetDescriptor();
   const auto width = common_tex_desc.width;
@@ -261,13 +254,13 @@ auto ShaderPass::SetupViewPortAndScissors(
     .height = static_cast<float>(height),
     .min_depth = 0.0f,
     .max_depth = 1.0f };
-  command_recorder.SetViewport(viewport);
+  recorder.SetViewport(viewport);
 
   const Scissors scissors { .left = 0,
     .top = 0,
     .right = static_cast<int32_t>(width),
     .bottom = static_cast<int32_t>(height) };
-  command_recorder.SetScissors(scissors);
+  recorder.SetScissors(scissors);
 }
 
 // --- Pipeline setup for ShaderPass ---
@@ -350,6 +343,17 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   auto generated_bindings
     = oxygen::graphics::BuildRootBindingItemsFromGenerated();
 
+  // NOTE: The engine currently ships only a single general-purpose VS/PS pair
+  // named FullScreenTriangle.hlsl. Despite the name, the HLSL file already
+  // contains logic to fetch vertex & index data via bindless descriptors and
+  // perform standard mesh vertex transforms. The previous change attempted to
+  // switch to a non-existent "Mesh.hlsl" believing the fullscreen shader was a
+  // placeholder; that was incorrect and caused a runtime "Shader not found"
+  // error (VS@Mesh.hlsl). We revert to the existing shader identifiers here.
+  //
+  // Future improvement: consider renaming FullScreenTriangle.hlsl to a more
+  // representative name (e.g. BindlessMesh.hlsl) or splitting the fullscreen
+  // utility path and mesh path if they diverge.
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })

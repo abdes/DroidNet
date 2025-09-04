@@ -10,7 +10,6 @@
 #include <optional>
 #include <string>
 
-#include <Oxygen/Renderer/RenderItem.h>
 #include <Oxygen/Renderer/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -65,10 +64,6 @@ private:
   //! color attachment of the framebuffer in the RenderContext if not set.
   [[nodiscard]] auto GetColorTexture() const -> const graphics::Texture&;
 
-  //! Convenience method to get the draw list specified in the context.
-  [[nodiscard]] auto GetDrawList() const
-    -> std::span<const RenderItem> override;
-
   //! Convenience method to get the framebuffer specified in the context.
   [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
 
@@ -79,6 +74,8 @@ private:
 
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
+
+  // Draw submission handled by base RenderPass::IssueDrawCalls (SoA path).
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;

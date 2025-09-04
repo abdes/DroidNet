@@ -227,6 +227,9 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Yield control to thread pool
     co_await platform_->Threads().Run([](co::ThreadPool::CancelToken) { });
 
+    // Always give a chance to detetct platform events and termination requests.
+    co_await platform_->Async().SleepFor(1ms);
+
     // Check for termination requets
     if (platform_->Async().OnTerminate().Triggered()
       || platform_->Windows().LastWindowClosed().Triggered()) {

@@ -75,11 +75,10 @@ public:
     // ReSharper disable once CppRedundantQualifier
     const std::shared_ptr<graphics::Buffer>* vertex_buffers,
     const uint32_t* strides) const -> void override;
+
   auto Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset,
     uint32_t instance_offset) -> void override;
-  auto DrawIndexed(uint32_t index_count, uint32_t instance_count,
-    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
-    -> void override;
+
   auto Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y,
     uint32_t thread_group_count_z) -> void override;
 

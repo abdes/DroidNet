@@ -52,10 +52,7 @@ public:
 
   // Draw / dispatch
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
-  auto DrawIndexed(uint32_t, uint32_t, uint32_t, int32_t, uint32_t)
-    -> void override
-  {
-  }
+
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<graphics::Buffer>*,
     const uint32_t*) const -> void override
