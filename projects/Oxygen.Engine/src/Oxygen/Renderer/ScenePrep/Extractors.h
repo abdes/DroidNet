@@ -246,11 +246,15 @@ inline void EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
       return oxygen::data::MaterialAsset::CreateDefault();
     };
 
+    auto mat_ptr = resolve_material();
+    const auto mat_handle
+      = state.material_registry.GetOrRegisterMaterial(mat_ptr);
     state.collected_items.push_back(RenderItemData {
       .lod_index = lod,
       .submesh_index = index,
       .geometry = item.Geometry(),
-      .material = resolve_material(),
+      .material = std::move(mat_ptr),
+      .material_handle = mat_handle,
       .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),
       .transform_handle = item.GetTransformHandle(),
       .cast_shadows = item.CastsShadows(),

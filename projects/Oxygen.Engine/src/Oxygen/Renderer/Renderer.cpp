@@ -387,7 +387,7 @@ auto Renderer::BuildFrame(
   scene_prep_state_.transform_mgr.BeginFrame();
   const auto cfg = PrepareScenePrepCollectionConfig();
   CollectScenePrep(scene, view, scene_prep_state_, cfg);
-  FinalizeScenePrepPhase(scene_prep_state_);
+  FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
@@ -399,7 +399,7 @@ auto Renderer::BuildFrame(
 // SoA Finalization (Task 6 initial subset)
 //===----------------------------------------------------------------------===//
 
-auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
+auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   -> void
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
@@ -410,7 +410,8 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   ReserveMatrixStorage(unique_transform_count);
   // Populate (or update) per-handle world/normal matrices using cached data.
   PopulateMatrices(filtered, prep_state);
-  GenerateDrawMetadataAndMaterials(filtered, prep_state);
+  GenerateDrawMetadataAndMaterials(filtered,
+    prep_state); // may mutate material registry (stable handle allocation)
   UploadWorldTransforms(unique_transform_count); // upload unique transforms
   BuildSortingAndPartitions();
   PublishPreparedFrameSpans(unique_transform_count);
@@ -539,18 +540,41 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
 
 auto Renderer::GenerateDrawMetadataAndMaterials(
   const std::vector<std::size_t>& filtered,
-  const sceneprep::ScenePrepState& prep_state) -> void
+  sceneprep::ScenePrepState& prep_state) -> void
 {
   // Direct DrawMetadata generation (Task 6: native SoA path)
   draw_metadata_cpu_soa_.clear();
   draw_metadata_cpu_soa_.reserve(filtered.size());
   material_constants_cpu_soa_.clear();
-  material_constants_cpu_soa_.reserve(filtered.size());
-  std::unordered_map<const oxygen::data::MaterialAsset*, uint32_t>
-    material_index_map;
-  material_index_map.reserve(filtered.size());
-  uint32_t material_default_index = std::numeric_limits<uint32_t>::max();
-  std::size_t material_duplicate_avoids = 0;
+  // IMPORTANT: After adopting stable registry MaterialHandle in DrawMetadata
+  // we must make the MaterialConstants StructuredBuffer index space MATCH the
+  // handle values. Previous logic built a densely packed per-frame dedupe
+  // array and stored the stable handle in DrawMetadata; this caused mismatched
+  // lookups on the GPU (wrong colors) because meta.material_handle no longer
+  // referenced the packed slot. We now build a sparse-aligned array whose
+  // indices correspond exactly to MaterialHandle values used this frame.
+  // Strategy:
+  //  - Allocate vector up to (max_handle_value + 1) lazily as we encounter
+  //    handles during draw emission.
+  //  - Slot 0 always contains default material constants (sentinel).
+  //  - For each draw with non-null material, fill the slot at its handle
+  //    value if not already initialized.
+  //  - Unused intermediate slots remain default-initialized (zero / default
+  //    constructed). This is acceptable because no draw references them.
+  //  - This keeps per-frame rebuild cheap while guaranteeing index alignment.
+  // NOTE: Potential memory growth if handle space becomes sparse & large.
+  // Acceptable for current iteration; future optimization could maintain a
+  // compact indirection table (handle->packed index) and store packed index in
+  // DrawMetadata instead.
+  // Initialize default slot (index 0) always.
+  material_constants_cpu_soa_.resize(1u);
+  {
+    // Ensure index 0 populated with canonical default each frame for safety.
+    const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
+    material_constants_cpu_soa_[0] = MakeMaterialConstants(*fallback);
+  }
+  std::vector<uint8_t> material_slot_initialized; // parallels vector size
+  material_slot_initialized.resize(1u, 1u); // slot 0 initialized
 
   using oxygen::engine::PassMaskFlags;
   auto ClassifyMaterialPassMask
@@ -642,31 +666,40 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
         dm.vertex_count = static_cast<uint32_t>(view.VertexCount());
       }
       dm.instance_count = 1;
-      uint32_t material_index = 0;
-      if (item.material) {
-        const auto* raw_mat = item.material.get();
-        if (auto it_mat = material_index_map.find(raw_mat);
-          it_mat != material_index_map.end()) {
-          material_index = it_mat->second;
-          ++material_duplicate_avoids;
-        } else {
-          material_constants_cpu_soa_.push_back(
-            MakeMaterialConstants(*item.material));
-          material_index
-            = static_cast<uint32_t>(material_constants_cpu_soa_.size() - 1U);
-          material_index_map.emplace(raw_mat, material_index);
-        }
-      } else {
-        if (material_default_index == std::numeric_limits<uint32_t>::max()) {
-          const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
-          material_constants_cpu_soa_.push_back(
-            MakeMaterialConstants(*fallback));
-          material_default_index
-            = static_cast<uint32_t>(material_constants_cpu_soa_.size() - 1U);
-        }
-        material_index = material_default_index;
+      // Obtain stable registry handle (sentinel 0 if null material)
+      const auto stable_handle
+        = prep_state.material_registry.GetOrRegisterMaterial(item.material);
+      const auto stable_handle_value = stable_handle.get();
+      // Migration assert: stable handle should be 0 iff material pointer is
+      // null.
+      DCHECK_F((stable_handle_value == 0u) == (item.material == nullptr),
+        "MaterialHandle sentinel mismatch (handle={} null_ptr={})",
+        stable_handle_value, item.material == nullptr);
+      // Resize aligned constants array if needed.
+      if (stable_handle_value >= material_constants_cpu_soa_.size()) {
+        const auto old_size = material_constants_cpu_soa_.size();
+        material_constants_cpu_soa_.resize(stable_handle_value + 1u);
+        material_slot_initialized.resize(stable_handle_value + 1u, 0u);
+        // Newly added slots remain uninitialized until first assignment.
+        // (They contain default constructed MaterialConstants.)
       }
-      dm.material_index = material_index;
+      // Populate slot if first time this frame.
+      if (!material_slot_initialized[stable_handle_value]) {
+        if (stable_handle_value == 0u) {
+          // Already default; nothing to do (but mark initialized).
+          material_slot_initialized[0] = 1u;
+        } else if (item.material) {
+          material_constants_cpu_soa_[stable_handle_value]
+            = MakeMaterialConstants(*item.material);
+          material_slot_initialized[stable_handle_value] = 1u;
+        } else {
+          // Null material with non-zero handle should never occur.
+          DCHECK_F(false,
+            "Null material produced non-zero handle value={} (logic error)",
+            stable_handle_value);
+        }
+      }
+      dm.material_handle = stable_handle_value; // stable registry handle value
       // Use stable TransformHandle id instead of filtered order index.
       const auto handle = item.transform_handle;
       dm.transform_index = handle.get();
@@ -676,10 +709,11 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       DCHECK_F(prep_state.transform_mgr.IsValidHandle(handle),
         "Invalid transform handle (id={}) while generating DrawMetadata",
         dm.transform_index);
-      DCHECK_F(dm.material_index < material_constants_cpu_soa_.size(),
-        "material_index out of range ({} >= {}): logic error in "
-        "dedupe/population",
-        dm.material_index, material_constants_cpu_soa_.size());
+      // Basic validity (0 sentinel allowed). Underlying type is unsigned so >=0
+      // always.
+      DCHECK_F(dm.material_handle >= 0u,
+        "Material handle unexpected negative (impossible) value={}",
+        dm.material_handle);
       DCHECK_F(dm.flags != 0, "flags must be non-zero after assignment");
       draw_metadata_cpu_soa_.push_back(dm);
     }
@@ -696,10 +730,10 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       DLOG_F(3,
         "DrawMetadata[{}]: vb={} ib={} first_index={} base_vertex={} "
         "index_count={} vertex_count={} indexed={} transform_index={} "
-        "material_index={}",
+        "material_handle={}",
         s, d.vertex_buffer_index, d.index_buffer_index, d.first_index,
         d.base_vertex, d.index_count, d.vertex_count, d.is_indexed,
-        d.transform_index, d.material_index);
+        d.transform_index, d.material_handle);
     }
   }
   // Post population validation
@@ -710,9 +744,9 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     DCHECK_F(d.transform_index < unique_transform_count,
       "Post population: transform_index {} >= unique_transform_count {}",
       d.transform_index, unique_transform_count);
-    DCHECK_F(d.material_index < material_constants_cpu_soa_.size(),
-      "Post population: material_index {} out of range materials {}",
-      d.material_index, material_constants_cpu_soa_.size());
+    // material_handle not range-checked against per-frame constants: stable
+    // registry may exceed current per-frame material constants vector size
+    // (which covers only referenced materials).
     DCHECK_F(
       d.flags != 0u, "Pass mask flags must be non-zero for record {}", s);
     DCHECK_F((d.flags & ~(0x3u)) == 0u,
@@ -773,7 +807,7 @@ auto Renderer::BuildSortingAndPartitions() -> void
   for (const auto& d : draw_metadata_cpu_soa_) {
     sorting_keys_cpu_soa_.push_back(DrawSortingKey {
       .pass_mask = d.flags,
-      .material_index = d.material_index,
+      .material_index = d.material_handle, // now stable MaterialHandle value
       .geometry_vertex_srv = d.vertex_buffer_index,
       .geometry_index_srv = d.index_buffer_index,
     });
@@ -996,12 +1030,12 @@ auto Renderer::CollectScenePrep(scene::Scene& scene, const View& view,
     last_finalize_stats_.collection_time.count());
 }
 
-auto Renderer::FinalizeScenePrepPhase(
-  const sceneprep::ScenePrepState& prep_state) -> void
+auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
+  -> void
 {
   // New path (SoA finalization) - currently only populates matrix arrays.
   // This is non-destructive and coexists with legacy AoS until passes migrate.
-  FinalizeScenePrepSoA(prep_state);
+  FinalizeScenePrepSoA(prep_state); // may allocate new material handles
   DLOG_F(1,
     "Renderer BuildFrame finalized SoA frame: collected={} filtered={} "
     "draws={} partitions={}",

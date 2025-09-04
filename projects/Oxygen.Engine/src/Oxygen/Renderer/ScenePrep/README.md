@@ -49,7 +49,6 @@ contains:
 
 * geometry (`shared_ptr<GeometryAsset>`)
 * material (`shared_ptr<MaterialAsset>`)
-* world_transform (glm::mat4)
 * lod_index
 * submesh_index
 * visibility & shadow flags

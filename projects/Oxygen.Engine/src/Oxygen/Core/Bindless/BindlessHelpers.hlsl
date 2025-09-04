@@ -29,7 +29,7 @@
 //   uint vIdx = BX_ResolveVertexIndex(meta, SV_VertexID);
 //   BX_VERTEX_TYPE v = BX_LoadVertex(meta.vertex_buffer_index, vIdx);
 //   float4x4 world = BX_LoadWorldMatrix(transforms_buffer_slot, meta.transform_index);
-//   BX_MATERIAL_TYPE mat = BX_LoadMaterial(materials_buffer_slot, meta.material_index);
+//   BX_MATERIAL_TYPE mat = BX_LoadMaterial(materials_buffer_slot, meta.material_handle);
 //
 //   // Sample a texture via SM 6.6 descriptor heap (example)
 //   // Indices provided by the engine are already global within the descriptor table.

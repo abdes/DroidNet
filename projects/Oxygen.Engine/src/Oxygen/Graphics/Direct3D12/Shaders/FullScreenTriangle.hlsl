@@ -38,7 +38,7 @@ struct DrawMetadata {
     uint instance_count;                 // Number of instances
     uint index_count;                    // Number of indices (undefined if non-indexed)
     uint vertex_count;                   // Number of vertices (undefined if indexed)
-    uint material_index;                 // Index into material constants buffer
+    uint material_handle;                // Stable material handle (registry)
 
     // --- Transform & instance indirection ---
     uint transform_index;                // Index into transform arrays
@@ -93,7 +93,7 @@ cbuffer DrawIndexConstant : register(b2) {
 // No resource declarations needed - ResourceDescriptorHeap provides direct access
 
 // Note: Materials are provided via a bindless StructuredBuffer<MaterialConstants>.
-// We'll fetch the material for this draw using DrawMetadata.material_index in PS.
+// We'll fetch the material for this draw using DrawMetadata.material_handle in PS.
 
 struct VSOutput {
     float4 position : SV_POSITION;
@@ -190,7 +190,7 @@ float4 PS(VSOutput input) : SV_Target0 {
 
         // Read material constants for this draw
         StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
-        MaterialConstants mat = materials[meta.material_index];
+    MaterialConstants mat = materials[meta.material_handle];
 
         // Simple unlit shading: vertex color modulated by material base color
         float3 base_rgb = mat.base_color.rgb;

@@ -13,7 +13,6 @@
 #include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/GeometryResidencyCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
-#include <Oxygen/Renderer/ScenePrep/State/MaterialUploadCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -46,9 +45,6 @@ struct ScenePrepState {
   // === Material Management ===
   //! Persistent material registry with deduplication.
   MaterialRegistry material_registry;
-
-  //! Per-frame material upload cache.
-  MaterialUploadCache material_cache;
 
   // === Geometry Management ===
   //! Persistent geometry registry with residency tracking.
