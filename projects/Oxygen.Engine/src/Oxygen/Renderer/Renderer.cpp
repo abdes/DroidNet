@@ -34,6 +34,7 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/PassMaskFlags.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -607,12 +608,105 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
       dm.transform_index = static_cast<uint32_t>(i); // matches matrix slots
       dm.instance_metadata_buffer_index = 0; // unused placeholder
       dm.instance_metadata_offset = 0; // unused placeholder
-      // Pass mask flags (initial): bit 0 = opaque (placeholder until real
-      // material transparency or pass classification logic). All current
-      // collected items are treated as opaque. Additional bits will be
-      // populated by Task 11 when partition map & full mask logic added.
-      constexpr uint32_t kPassFlagOpaque = 1u << 0;
-      dm.flags = kPassFlagOpaque;
+      // Pass mask flags classification (minimal rule, 2025-09-04):
+      // ------------------------------------------------------------------
+      // We derive the render bucket from material properties using a
+      // deliberately conservative rule to maximize early-Z usage while
+      // enabling a transparent partition for ordering / blending work.
+      //
+      // Current bit assignments (subject to future expansion):
+      //   bit 0 : OpaqueOrMasked  (depth write ON)
+      //   bit 1 : Transparent     (depth write OFF, needs back-to-front or OIT)
+      //
+      // Minimal rule adopted now:
+      //   If material.domain == kOpaque AND base_color.a >= 0.999 AND no
+      //     obvious transparency feature flags -> OpaqueOrMasked (bit0)
+      //   Else if material.domain == kMasked -> OpaqueOrMasked (alpha test)
+      //   Else -> Transparent (bit1)
+      //
+      // Rationale:
+      //  * Masked (cutout) materials still benefit from early-Z & are written
+      //    into the main depth buffer (alpha clip in shader) so we group them
+      //    with opaque for now; a later refinement may use a distinct bit for
+      //    specialized sorting or separate depth pre-pass behavior.
+      //  * We intentionally do NOT attempt fine-grained heuristic detection
+      //    beyond the material domain + base alpha threshold to avoid
+      //    misclassification until a stable material system/flags contract is
+      //    finalized (future: texture alpha sampling prepass, transmission,
+      //    clearcoat, additive emissive categories, order-independent
+      //    transparency (OIT)).
+      //  * Keeping the rule simple allows deterministic partition tests and
+      //    isolates sorting behavior from evolving material feature sets.
+      //
+      // Future expansion (documented for design continuity):
+      //   - bit 2 : Additive / EmissiveOnly (no depth test order dependency)
+      //   - bit 3 : Transmission/Refraction (special shader path)
+      //   - bit 4 : Decal (projected layering, depth read only)
+      //   - bit 5 : UI (orthographic, late pass)
+      //   - Optional separate Masked bit if batching/shader divergence costly.
+      //
+      // Implementation details:
+      //   * Domain read via MaterialAsset::GetMaterialDomain().
+      //   * Base alpha obtained from fallback base_color; if a texture with
+      //     alpha is present it will NOT yet force transparency (pending
+      //     texture sampling classification path). When that feature is
+      //     added, presence of base_color_texture + known alpha usage flag
+      //     would flip classification unless domain explicitly forces Opaque.
+      //   * 'has_transparency_feature' placeholder currently always false;
+      //     future: inspect MaterialFlags (once defined) for transmission,
+      //     blend, or emissive-additive indicators.
+      using oxygen::engine::PassMaskFlags;
+
+      // TODO(SoA-RenderPassFlags): This classification currently uses raw
+      // bit constants defined locally. Replace with a centralized strongly
+      // typed enum (e.g. enum class PassMaskFlags : uint32_t { ... }) in a
+      // shared header once the full pass taxonomy (opaque, masked, transparent,
+      // additive, decal, ui, transmission) is finalized. Update DrawSortingKey,
+      // partition construction, validation asserts, and shader-side decoding
+      // to consume the enum instead of magic numbers. Ensure static asserts
+      // cover size/layout if serialized to GPU buffers.
+
+      auto ClassifyMaterialPassMask
+        = [&](const oxygen::data::MaterialAsset* mat) -> uint32_t {
+        if (!mat) {
+          // Fallback material assumed fully opaque neutral surface
+          return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+        }
+        const auto domain = mat->GetMaterialDomain();
+        const auto base = mat->GetBaseColor();
+        const float alpha = base[3];
+        const bool has_transparency_feature = false; // placeholder hook
+        const bool is_opaque_domain
+          = (domain == oxygen::data::MaterialDomain::kOpaque);
+        const bool is_masked_domain
+          = (domain == oxygen::data::MaterialDomain::kMasked);
+
+        // Debug classification logging (verbosity 4+) for non-opaque domains
+        // to verify expected mapping of MaterialDomain -> PassMaskFlags.
+        DLOG_F(2,
+          "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
+          "is_masked={}",
+          mat->GetAssetName(), static_cast<int>(domain), alpha,
+          is_opaque_domain, is_masked_domain);
+
+        if (is_opaque_domain && alpha >= 0.999f && !has_transparency_feature) {
+          return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+        }
+        if (is_masked_domain) {
+          return static_cast<uint32_t>(
+            PassMaskFlags::kOpaqueOrMasked); // alpha test path grouped with
+                                             // opaque
+        }
+        // All other domains currently treated as blended / transparent
+        DLOG_F(2,
+          " -> classified as Transparent (flags=0x{:X}) due to domain {} and "
+          "alpha={:.3f}",
+          static_cast<uint32_t>(PassMaskFlags::kTransparent),
+          static_cast<int>(domain), alpha);
+        return static_cast<uint32_t>(PassMaskFlags::kTransparent);
+      };
+
+      dm.flags = ClassifyMaterialPassMask(item.material.get());
 
       // Debug validation (will be extended later): ensure indices within
       // provisional ranges *before* pushing to vector so any failure leaves
@@ -674,7 +768,12 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
     DCHECK_F(d.material_index < material_constants_cpu_soa_.size(),
       "Post population: material_index {} out of range materials {}",
       d.material_index, material_constants_cpu_soa_.size());
-    DCHECK_F(d.flags & 0x1u, "Opaque bit not set in flags for record {}", s);
+    // Ensure at least one classification bit set and only currently supported
+    // bits (0 or 1) are present (defensive against future expansion bugs).
+    DCHECK_F(
+      d.flags != 0u, "Pass mask flags must be non-zero for record {}", s);
+    DCHECK_F((d.flags & ~(0x3u)) == 0u,
+      "Unexpected future pass bits set prematurely (flags=0x{:X})", d.flags);
   }
 
   // Update PreparedSceneFrame spans (draw metadata not yet produced here).
@@ -861,8 +960,10 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   if (!partitions_cpu_soa_.empty()) {
     for (std::size_t i = 0; i < partitions_cpu_soa_.size(); ++i) {
       const auto& pr = partitions_cpu_soa_[i];
-      DLOG_F(3, "Partition[{}]: mask=0x{:X} range=[{},{}] (count={})", i,
-        pr.pass_mask, pr.begin, pr.end, (pr.end - pr.begin));
+      DLOG_F(3, "Partition[{}]: mask=0x{:X} ({}) range=[{},{}] (count={})", i,
+        pr.pass_mask,
+        oxygen::engine::PassMaskFlagsToString(pr.pass_mask).c_str(), pr.begin,
+        pr.end, (pr.end - pr.begin));
     }
   } else {
     DLOG_F(3, "Partition map empty (no draws)");

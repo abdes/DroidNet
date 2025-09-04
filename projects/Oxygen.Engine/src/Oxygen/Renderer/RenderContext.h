@@ -42,6 +42,9 @@ template <typename... Ts> struct PassTypeList {
 
 template <typename T, typename List> struct PassIndexOf;
 
+// Base case: searching in an empty list is ill-formed; provide a sentinel to
+// improve diagnostic clarity instead of incomplete type errors.
+
 template <typename T, typename... Ts>
 struct PassIndexOf<T, PassTypeList<T, Ts...>>
   : std::integral_constant<std::size_t, 0> { };
@@ -51,16 +54,23 @@ struct PassIndexOf<T, PassTypeList<U, Ts...>>
   : std::integral_constant<std::size_t,
       1 + PassIndexOf<T, PassTypeList<Ts...>>::value> { };
 
+// Provide explicit specialization when the searched-for type does not exist to
+// break recursion with clearer error message.
+template <typename T> struct PassIndexOf<T, PassTypeList<>> {
+  static_assert(sizeof(T) == 0, "Pass type not found in KnownPassTypes");
+};
+
 // Forward declare the know pass classes here.
 class DepthPrePass;
 class ShaderPass;
+class TransparentPass; // newly added transparent geometry pass
 
 /*!
  Defines the list of all known render pass types for the current render graph.
  The order of types determines their index. Only append new types to maintain
  binary compatibility. Update this list as new passes are added.
 */
-using KnownPassTypes = PassTypeList<DepthPrePass, ShaderPass>;
+using KnownPassTypes = PassTypeList<DepthPrePass, ShaderPass, TransparentPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

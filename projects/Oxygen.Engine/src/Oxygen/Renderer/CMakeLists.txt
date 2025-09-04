@@ -56,6 +56,7 @@ set(
   "RenderContext.h"
   "Renderer.h"
   "RenderPass.h"
+  "TransparentPass.h"
   "ShaderPass.h"
   "PreparedSceneFrame.h"
   "Modules/TransformsModule.h"
@@ -63,6 +64,7 @@ set(
   "Types/DrawMetaData.h"
   "Types/Frustum.h"
   "Types/MaterialConstants.h"
+  "Types/PassMaskFlags.h"
   "Types/SceneConstants.h"
   "Types/View.h"
 )
@@ -76,6 +78,7 @@ set(
   "Internal/RenderScope.h"
   "Renderer.cpp"
   "RenderPass.cpp"
+  "TransparentPass.cpp"
   "Modules/TransformsModule.cpp"
   "PreparedSceneFrame.cpp"
   "ScenePrep/Concepts.h"

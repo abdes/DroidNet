@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string_view>
 
 #include <Oxygen/Composition/Composition.h>
@@ -27,6 +28,7 @@ namespace oxygen::engine {
 
 struct RenderContext;
 struct RenderItem;
+struct DrawMetadata; // forward declaration for predicate signature
 
 //! Abstract base class for a modular, coroutine-based render pass.
 /*!
@@ -127,6 +129,19 @@ protected:
   // Issue draws using PreparedSceneFrame SoA DrawMetadata records. Returns
   // true if any draws were emitted. Single unified path (legacy AoS removed).
   auto IssueDrawCalls(graphics::CommandRecorder& recorder) const -> bool;
+
+  //! Issue filtered draw calls using a predicate on DrawMetadata.
+  /*! Overload that iterates PreparedSceneFrame draw metadata and issues only
+      draws whose metadata satisfies the supplied predicate. Uses type-erased
+      std::function to keep implementation in translation unit (no template
+      bloat / linker issues for lambdas in multiple passes).
+
+      @param recorder Command recorder.
+      @param predicate bool(const DrawMetadata&) deciding inclusion.
+      @return true if >=1 draw emitted.
+  */
+  auto IssueDrawCalls(graphics::CommandRecorder& recorder,
+    const std::function<bool(const DrawMetadata&)>& predicate) const -> bool;
 
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
