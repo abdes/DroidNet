@@ -33,6 +33,7 @@
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/PassMaskFlags.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
@@ -639,19 +640,25 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     if (views_span.empty()) {
       continue;
     }
-    MeshGpuResources* ensured_mesh_resources = nullptr;
+    oxygen::engine::sceneprep::GeometryHandle mesh_handle { 0, 0 };
     if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-      ensured_mesh_resources = &EnsureMeshResources(*lod_mesh_ptr);
+      // Register or lookup stable geometry buffer indices via geometry
+      // registry.
+      // TODO(geometry-resource): Move EnsureMeshResources upload + eviction
+      // logic into a dedicated MeshResourceManager so this call becomes purely
+      // logical.
+      mesh_handle = scene_prep_state_.geometry_registry.GetOrRegisterMesh(
+        lod_mesh_ptr.get(), [this, &lod_mesh_ptr]() {
+          auto& res = EnsureMeshResources(*lod_mesh_ptr);
+          return oxygen::engine::sceneprep::GeometryRegistry::
+            GeometryProvisionResult { res.vertex_srv_index,
+              res.index_srv_index };
+        });
     }
     for (const auto& view : views_span) {
       DrawMetadata dm {};
-      if (ensured_mesh_resources) {
-        dm.vertex_buffer_index = ensured_mesh_resources->vertex_srv_index;
-        dm.index_buffer_index = ensured_mesh_resources->index_srv_index;
-      } else {
-        dm.vertex_buffer_index = 0;
-        dm.index_buffer_index = 0;
-      }
+      dm.vertex_buffer_index = mesh_handle.vertex_buffer;
+      dm.index_buffer_index = mesh_handle.index_buffer;
       const auto index_view = view.IndexBuffer();
       const bool has_indices = index_view.Count() > 0;
       if (has_indices) {
@@ -677,7 +684,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
         stable_handle_value, item.material == nullptr);
       // Resize aligned constants array if needed.
       if (stable_handle_value >= material_constants_cpu_soa_.size()) {
-        const auto old_size = material_constants_cpu_soa_.size();
         material_constants_cpu_soa_.resize(stable_handle_value + 1u);
         material_slot_initialized.resize(stable_handle_value + 1u, 0u);
         // Newly added slots remain uninitialized until first assignment.

@@ -10,26 +10,25 @@
 
 namespace oxygen::engine::sceneprep {
 
-auto GeometryRegistry::EnsureResident(const data::GeometryAsset* geometry)
-  -> GeometryHandle
+auto GeometryRegistry::GetOrRegisterGeometry(
+  const data::GeometryAsset* geometry) -> GeometryHandle
 {
   if (geometry == nullptr) {
-    return GeometryHandle {}; // invalid handle
+    return GeometryHandle {}; // sentinel {0,0}
   }
-
   if (const auto it = geometry_to_handle_.find(geometry);
     it != geometry_to_handle_.end()) {
     return it->second;
   }
-
-  // Allocate new handles (simple monotonically increasing indices).
   GeometryHandle handle { next_vertex_buffer_handle_++,
     next_index_buffer_handle_++ };
-
   geometry_to_handle_.emplace(geometry, handle);
   handle_to_geometry_.emplace(MakeHandleKey(handle), geometry);
   return handle;
 }
+
+// Mesh-based template methods implemented in header (inline) to avoid linker
+// issues.
 
 auto GeometryRegistry::IsResident(const data::GeometryAsset* geometry) const
   -> bool
@@ -64,6 +63,15 @@ auto GeometryRegistry::GetGeometry(const GeometryHandle& handle) const
 auto GeometryRegistry::GetRegisteredGeometryCount() const -> std::size_t
 {
   return geometry_to_handle_.size();
+}
+
+auto GeometryRegistry::IsValidHandle(const GeometryHandle& handle) const -> bool
+{
+  if (IsSentinelHandle(handle)) {
+    return false;
+  }
+  const auto key = MakeHandleKey(handle);
+  return handle_to_geometry_.find(key) != handle_to_geometry_.end();
 }
 
 auto GeometryRegistry::MakeHandleKey(const GeometryHandle& handle) const

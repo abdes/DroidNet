@@ -11,7 +11,6 @@
 
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
-#include <Oxygen/Renderer/ScenePrep/State/GeometryResidencyCache.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
@@ -49,9 +48,6 @@ struct ScenePrepState {
   // === Geometry Management ===
   //! Persistent geometry registry with residency tracking.
   GeometryRegistry geometry_registry;
-
-  //! Per-frame geometry cache.
-  GeometryResidencyCache geometry_cache;
 
   //! Reset per-frame data while preserving persistent caches.
   OXGN_RNDR_API auto ResetFrameData() -> void;

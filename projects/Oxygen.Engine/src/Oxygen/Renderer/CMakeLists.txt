@@ -90,8 +90,6 @@ set(
   "ScenePrep/ScenePrepState.h"
   "ScenePrep/State/GeometryRegistry.cpp"
   "ScenePrep/State/GeometryRegistry.h"
-  "ScenePrep/State/GeometryResidencyCache.cpp"
-  "ScenePrep/State/GeometryResidencyCache.h"
   "ScenePrep/State/MaterialRegistry.cpp"
   "ScenePrep/State/MaterialRegistry.h"
   "ScenePrep/State/TransformManager.cpp"
