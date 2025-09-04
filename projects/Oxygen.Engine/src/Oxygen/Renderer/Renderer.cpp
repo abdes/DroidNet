@@ -371,53 +371,24 @@ auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
 auto Renderer::BuildFrame(
   const View& view, const engine::FrameContext& frame_context) -> std::size_t
 {
-  auto scene_ptr = frame_context.GetScene();
-  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
-  // FIXME: temporary until everything uses the frame context
-  auto& scene = *scene_ptr;
+  // Phase Mapping: This function orchestrates PhaseId::kFrameGraph duties:
+  //  * sequence number init
+  //  * scene prep collection
+  //  * SoA finalization (DrawMetadata, materials, partitions, sorting)
+  //  * view/scenec constants update
+  // Command recording happens later (PhaseId::kCommandRecord).
 
-  // Store frame sequence number from FrameContext
-  frame_seq_num = frame_context.GetFrameSequenceNumber();
-  // === ScenePrep collection ===
-  // Legacy AoS translation step removed; we now directly finalize into SoA
-  // arrays (matrices, draw metadata, materials, partitions, sorting keys).
-  // FIXME(perf): Avoid per-frame allocations by pooling ScenePrepState or
-  // reusing internal vectors (requires clear ownership strategy & lifetime).
+  auto& scene = ResolveScene(frame_context);
+  InitializeFrameSequence(frame_context);
+
   namespace sp = oxygen::engine::sceneprep;
   sp::ScenePrepState prep_state;
-  auto cfg = sp::CreateBasicCollectionConfig(); // TODO: pass policy/config from
-                                                // renderer settings
-  sp::ScenePrepPipelineCollection pipeline { cfg };
-  // NOTE: StrongType frame_seq_num unwrapped for ScenePrep API.
-  const auto t_collect0 = std::chrono::high_resolution_clock::now();
-  pipeline.Collect(scene, view, frame_seq_num.get(), prep_state);
-  const auto t_collect1 = std::chrono::high_resolution_clock::now();
-  last_finalize_stats_.collection_time
-    = std::chrono::duration_cast<std::chrono::microseconds>(
-      t_collect1 - t_collect0);
-  DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
-    prep_state.collected_items.size(), scene.GetNodes().Items().size(),
-    last_finalize_stats_.collection_time.count());
-  // New path (SoA finalization) - currently only populates matrix arrays.
-  // This is non-destructive and coexists with legacy AoS until passes migrate.
-  FinalizeScenePrepSoA(prep_state);
-  DLOG_F(1,
-    "Renderer BuildFrame finalized SoA frame: collected={} filtered={} "
-    "draws={} partitions={}",
-    last_finalize_stats_.collected, last_finalize_stats_.filtered,
-    prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata),
-    prepared_frame_.partitions.size());
+  const auto cfg = PrepareScenePrepCollectionConfig();
+  CollectScenePrep(scene, view, prep_state, cfg);
+  FinalizeScenePrepPhase(prep_state);
+  UpdateSceneConstantsFromView(view);
 
-  // Update scene constants from the provided view snapshot
-  ModifySceneConstants([&](SceneConstants& sc) {
-    sc.SetViewMatrix(view.ViewMatrix())
-      .SetProjectionMatrix(view.ProjectionMatrix())
-      .SetCameraPosition(view.CameraPosition());
-  });
-
-  // Return number of finalized draw records (post-sort order)
-  const auto draw_count
-    = prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata);
+  const auto draw_count = CurrentDrawCount();
   DLOG_F(2, "BuildFrame: finalized {} draws (SoA only)", draw_count);
   return draw_count;
 }
@@ -429,28 +400,84 @@ auto Renderer::BuildFrame(
 auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   -> void
 {
-  // For Task 6 we only materialize world & normal matrix arrays using the
-  // collected_items vector. Later tasks will consume filtered_indices,
-  // per-submesh expansion, sorting, partition maps and material/geometry
-  // indirection. This keeps the first step low risk while exercising the
-  // per-frame storage and PreparedSceneFrame lifetime contract.
+  const auto t_begin = std::chrono::high_resolution_clock::now();
+  const auto& filtered = ResolveFilteredIndices(prep_state);
+  const auto count = filtered.size();
+  ReserveMatrixStorage(count);
+  PopulateMatrices(filtered, prep_state);
+  GenerateDrawMetadataAndMaterials(filtered, prep_state);
+  UploadWorldTransforms(count); // copy SoA matrices into bindless buffer
+  BuildSortingAndPartitions();
+  PublishPreparedFrameSpans(count);
+  UploadDrawMetadataBindless();
+  UpdateFinalizeStatistics(prep_state, filtered.size(), t_begin);
+}
 
-  const auto& filtered = prep_state.filtered_indices.empty()
-    ? [&]() -> const std::vector<std::size_t>& {
-    // Fallback: if filtering not yet producing output, synthesize full sequence
+//=== SoA Finalization helper implementations =============================//
+
+//=== Improvement Opportunities (SoA Finalization)
+//-----------------------------//
+// 1. Matrix Computation Caching:
+//    Normal matrices are recomputed every frame from world matrices. Cache
+//    inverse-transpose per node (dirty flag on transform change) inside
+//    ScenePrep to avoid O(N) glm::inverse each frame.
+// 2. Parallelization:
+//    PopulateMatrices + GenerateDrawMetadataAndMaterials are independent of
+//    sorting; could be partitioned across worker threads (job system) using
+//    chunked ranges. Care: material dedupe map would need thread-safe
+//    combining (e.g. per-thread maps + merge phase) to keep deterministic
+//    ordering.
+// 3. Memory Pooling:
+//    Replace std::vector high-water reserves with a ring-buffer or slab
+//    allocator to retain pages and reduce potential fragmentation for large
+//    scenes. Track peak separately per frame graph stage.
+// 4. Sorting Key Optimization:
+//    Current stable_sort builds permutation then copies vectors. Could switch
+//    to radix / timsort adaptation over array-of-struct keys, or store keys
+//    interleaved in DrawMetadata to reduce cache misses.
+// 5. Pass Mask Expansion:
+//    Future additional bits (additive, decals, ui, transmission) require
+//    adjusting partition build to group by composite classes (e.g. depth pre-
+//    pass eligibility) rather than raw flag value order.
+// 6. Indirect Draw Args:
+//    Once unified 32-byte indirect arg struct is implemented, generate and
+//    upload alongside DrawMetadata to avoid CPU re-walk for multi-pass issue
+//    (see work log indirect args note).
+// 7. GPU-driven Culling Path:
+//    Insert compute stage after collection to perform frustum/occlusion
+//    culling on compressed instance data; filter masks before sorting to
+//    shrink sort workload.
+// 8. Material Dedupe Hashing:
+//    Replace pointer-map with content hash (pipeline-affecting fields) to
+//    enable merging identical materials originating from distinct assets.
+// 9. Telemetry:
+//    Add counters for per-stage time (populate, materials, sort, partition)
+//    instead of aggregated finalize_time for finer regressions.
+// 10. Validation Mode:
+//    Optional expensive checks (mesh SRV indices valid, no NaN in matrices)
+//    gated by a debug flag to keep hot path clean in release.
+//----------------------------------------------------------------------------//
+
+auto Renderer::ResolveFilteredIndices(
+  const sceneprep::ScenePrepState& prep_state)
+  -> const std::vector<std::size_t>&
+{
+  // Fallback: if filtering not yet producing output, synthesize full sequence.
+  if (prep_state.filtered_indices.empty()) {
     static std::vector<std::size_t> synth;
     synth.resize(prep_state.collected_items.size());
     std::iota(synth.begin(), synth.end(), 0ULL);
     return synth;
-  }()
-    : prep_state.filtered_indices;
-  const auto count = filtered.size();
+  }
+  return prep_state.filtered_indices;
+}
+
+auto Renderer::ReserveMatrixStorage(std::size_t count) -> void
+{
   if (count > max_finalized_count_) {
     max_finalized_count_ = count; // grow monotonic
   }
-
-  // High-water reservation (monotonic grow) to reduce realloc thrash.
-  const auto needed_floats = count * 16u;
+  const auto needed_floats = count * 16u; // 4x4 per transform
   if (world_matrices_cpu_.capacity() < needed_floats) {
     world_matrices_cpu_.reserve(needed_floats);
   }
@@ -459,23 +486,21 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   }
   world_matrices_cpu_.resize(needed_floats);
   normal_matrices_cpu_.resize(needed_floats);
+}
 
-  const auto t0 = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < count; ++i) {
+auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
+  const sceneprep::ScenePrepState& prep_state) -> void
+{
+  for (size_t i = 0; i < filtered.size(); ++i) {
     const auto src_index = filtered[i];
     if (src_index >= prep_state.collected_items.size()) {
       continue; // defensive; should not happen
     }
     const auto& it = prep_state.collected_items[src_index];
-    // World matrix
     std::memcpy(
       &world_matrices_cpu_[i * 16u], &it.world_transform, sizeof(float) * 16u);
-    // Normal matrix (inverse transpose of upper-left 3x3). Use existing logic
-    // from legacy RenderItem path by recomputing here (cheap for small counts;
-    // will be optimized later by caching inside ScenePrep).
     glm::mat3 upper3x3 { it.world_transform };
     const glm::mat3 normal3 = glm::transpose(glm::inverse(upper3x3));
-    // Store as full 4x4 with last row/col identity to simplify shader usage.
     glm::mat4 normal4 { 1.0f };
     for (int r = 0; r < 3; ++r) {
       for (int c = 0; c < 3; ++c) {
@@ -484,101 +509,113 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
     }
     std::memcpy(&normal_matrices_cpu_[i * 16u], &normal4, sizeof(float) * 16u);
   }
+}
 
+auto Renderer::GenerateDrawMetadataAndMaterials(
+  const std::vector<std::size_t>& filtered,
+  const sceneprep::ScenePrepState& prep_state) -> void
+{
   // Direct DrawMetadata generation (Task 6: native SoA path)
-  // Expand each filtered collected item into its submesh mesh views and
-  // construct an engine::DrawMetadata record per mesh view. This replaces the
-  // previous parity copy of the legacy draw_metadata_ structured buffer.
   draw_metadata_cpu_soa_.clear();
-  draw_metadata_cpu_soa_.reserve(count); // minimum; may grow if multiple views
+  draw_metadata_cpu_soa_.reserve(filtered.size());
   material_constants_cpu_soa_.clear();
-  material_constants_cpu_soa_.reserve(count); // worst case (no dedupe)
-  // Material deduplication support: pointer map (raw MaterialAsset*) -> index
+  material_constants_cpu_soa_.reserve(filtered.size());
   std::unordered_map<const oxygen::data::MaterialAsset*, uint32_t>
     material_index_map;
-  material_index_map.reserve(count);
+  material_index_map.reserve(filtered.size());
   uint32_t material_default_index = std::numeric_limits<uint32_t>::max();
   std::size_t material_duplicate_avoids = 0;
 
-  // NOTE: We currently do not perform material indirection or bindless buffer
-  // index resolution here; placeholders (0) are used where data is not yet
-  // surfaced by ScenePrep. Deterministic ordering: iterate filtered indices
-  // in order, then submeshes, then mesh views in their declared order.
-  for (size_t i = 0; i < count; ++i) {
+  using oxygen::engine::PassMaskFlags;
+  auto ClassifyMaterialPassMask
+    = [&](const oxygen::data::MaterialAsset* mat) -> uint32_t {
+    if (!mat) {
+      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+    }
+    const auto domain = mat->GetMaterialDomain();
+    const auto base = mat->GetBaseColor();
+    const float alpha = base[3];
+    const bool has_transparency_feature = false; // placeholder hook
+    const bool is_opaque_domain
+      = (domain == oxygen::data::MaterialDomain::kOpaque);
+    const bool is_masked_domain
+      = (domain == oxygen::data::MaterialDomain::kMasked);
+    DLOG_F(2,
+      "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
+      "is_masked={}",
+      mat->GetAssetName(), static_cast<int>(domain), alpha, is_opaque_domain,
+      is_masked_domain);
+    if (is_opaque_domain && alpha >= 0.999f && !has_transparency_feature) {
+      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+    }
+    if (is_masked_domain) {
+      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+    }
+    DLOG_F(2,
+      " -> classified as Transparent (flags=0x{:X}) due to domain {} and "
+      "alpha={:.3f}",
+      static_cast<uint32_t>(PassMaskFlags::kTransparent),
+      static_cast<int>(domain), alpha);
+    return static_cast<uint32_t>(PassMaskFlags::kTransparent);
+  };
+
+  for (size_t i = 0; i < filtered.size(); ++i) {
     const auto src_index = filtered[i];
     if (src_index >= prep_state.collected_items.size()) {
-      continue; // defensive
+      continue;
     }
     const auto& item = prep_state.collected_items[src_index];
     if (!item.geometry) {
-      continue; // skip incomplete entries
+      continue;
     }
-
-    // Resolve LOD & submesh; tolerate out-of-range by skipping.
     const auto lod_index = item.lod_index;
     const auto submesh_index = item.submesh_index;
-    const auto& geom = *item.geometry; // shared_ptr already validated
-
-    // GeometryAsset API: Meshes() -> span of shared_ptr<Mesh>; each Mesh has
-    // SubMeshes(); each SubMesh exposes MeshViews(). We read only slice
-    // parameters to populate DrawMetadata. (Corrected from previous LODs()).
+    const auto& geom = *item.geometry;
     auto meshes_span = geom.Meshes();
     if (lod_index >= meshes_span.size()) {
-      continue; // invalid LOD index
+      continue;
     }
     const auto& lod_mesh_ptr = meshes_span[lod_index];
     if (!lod_mesh_ptr) {
-      continue; // null mesh pointer
+      continue;
     }
     const auto& lod = *lod_mesh_ptr;
     auto submeshes_span = lod.SubMeshes();
     if (submesh_index >= submeshes_span.size()) {
-      continue; // invalid submesh
+      continue;
     }
     const auto& submesh = submeshes_span[submesh_index];
     auto views_span = submesh.MeshViews();
     if (views_span.empty()) {
-      continue; // nothing to draw
+      continue;
     }
-
-    // For now we generate one DrawMetadata per MeshView. Resolve (or create)
-    // mesh GPU resources once per collected item.
     MeshGpuResources* ensured_mesh_resources = nullptr;
     if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-      // Note: EnsureMeshResources operates on Mesh (not GeometryAsset). Mesh
-      // identity for caching is derived via GetMeshId inside.
       ensured_mesh_resources = &EnsureMeshResources(*lod_mesh_ptr);
     }
     for (const auto& view : views_span) {
       DrawMetadata dm {};
-      // Geometry buffers: use resolved SRV indices if available.
       if (ensured_mesh_resources) {
         dm.vertex_buffer_index = ensured_mesh_resources->vertex_srv_index;
         dm.index_buffer_index = ensured_mesh_resources->index_srv_index;
       } else {
-        dm.vertex_buffer_index = 0; // fallback
+        dm.vertex_buffer_index = 0;
         dm.index_buffer_index = 0;
       }
-
-      // Determine indexed vs non-indexed from MeshView IndexBuffer().
       const auto index_view = view.IndexBuffer();
-      // MeshView IndexBuffer() returns detail::IndexBufferView; treat any
-      // non-zero count as indexed (IndexType exposed only internally).
       const bool has_indices = index_view.Count() > 0;
       if (has_indices) {
         dm.first_index = view.FirstIndex();
         dm.base_vertex = static_cast<int32_t>(view.FirstVertex());
         dm.is_indexed = 1;
         dm.index_count = static_cast<uint32_t>(index_view.Count());
-        dm.vertex_count = 0; // unused in indexed path
+        dm.vertex_count = 0;
       } else {
         dm.is_indexed = 0;
-        dm.index_count = 0; // unused in non-indexed path
+        dm.index_count = 0;
         dm.vertex_count = static_cast<uint32_t>(view.VertexCount());
       }
-
-      dm.instance_count = 1; // single instance path (instancing later)
-      // Material indirection + deduplication
+      dm.instance_count = 1;
       uint32_t material_index = 0;
       if (item.material) {
         const auto* raw_mat = item.material.get();
@@ -593,7 +630,7 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
             = static_cast<uint32_t>(material_constants_cpu_soa_.size() - 1U);
           material_index_map.emplace(raw_mat, material_index);
         }
-      } else { // fallback default material (single shared entry)
+      } else {
         if (material_default_index == std::numeric_limits<uint32_t>::max()) {
           const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
           material_constants_cpu_soa_.push_back(
@@ -603,141 +640,25 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
         }
         material_index = material_default_index;
       }
-      dm.material_index
-        = material_index; // index into material_constants_cpu_soa_
-      dm.transform_index = static_cast<uint32_t>(i); // matches matrix slots
-      dm.instance_metadata_buffer_index = 0; // unused placeholder
-      dm.instance_metadata_offset = 0; // unused placeholder
-      // Pass mask flags classification (minimal rule, 2025-09-04):
-      // ------------------------------------------------------------------
-      // We derive the render bucket from material properties using a
-      // deliberately conservative rule to maximize early-Z usage while
-      // enabling a transparent partition for ordering / blending work.
-      //
-      // Current bit assignments (subject to future expansion):
-      //   bit 0 : OpaqueOrMasked  (depth write ON)
-      //   bit 1 : Transparent     (depth write OFF, needs back-to-front or OIT)
-      //
-      // Minimal rule adopted now:
-      //   If material.domain == kOpaque AND base_color.a >= 0.999 AND no
-      //     obvious transparency feature flags -> OpaqueOrMasked (bit0)
-      //   Else if material.domain == kMasked -> OpaqueOrMasked (alpha test)
-      //   Else -> Transparent (bit1)
-      //
-      // Rationale:
-      //  * Masked (cutout) materials still benefit from early-Z & are written
-      //    into the main depth buffer (alpha clip in shader) so we group them
-      //    with opaque for now; a later refinement may use a distinct bit for
-      //    specialized sorting or separate depth pre-pass behavior.
-      //  * We intentionally do NOT attempt fine-grained heuristic detection
-      //    beyond the material domain + base alpha threshold to avoid
-      //    misclassification until a stable material system/flags contract is
-      //    finalized (future: texture alpha sampling prepass, transmission,
-      //    clearcoat, additive emissive categories, order-independent
-      //    transparency (OIT)).
-      //  * Keeping the rule simple allows deterministic partition tests and
-      //    isolates sorting behavior from evolving material feature sets.
-      //
-      // Future expansion (documented for design continuity):
-      //   - bit 2 : Additive / EmissiveOnly (no depth test order dependency)
-      //   - bit 3 : Transmission/Refraction (special shader path)
-      //   - bit 4 : Decal (projected layering, depth read only)
-      //   - bit 5 : UI (orthographic, late pass)
-      //   - Optional separate Masked bit if batching/shader divergence costly.
-      //
-      // Implementation details:
-      //   * Domain read via MaterialAsset::GetMaterialDomain().
-      //   * Base alpha obtained from fallback base_color; if a texture with
-      //     alpha is present it will NOT yet force transparency (pending
-      //     texture sampling classification path). When that feature is
-      //     added, presence of base_color_texture + known alpha usage flag
-      //     would flip classification unless domain explicitly forces Opaque.
-      //   * 'has_transparency_feature' placeholder currently always false;
-      //     future: inspect MaterialFlags (once defined) for transmission,
-      //     blend, or emissive-additive indicators.
-      using oxygen::engine::PassMaskFlags;
-
-      // TODO(SoA-RenderPassFlags): This classification currently uses raw
-      // bit constants defined locally. Replace with a centralized strongly
-      // typed enum (e.g. enum class PassMaskFlags : uint32_t { ... }) in a
-      // shared header once the full pass taxonomy (opaque, masked, transparent,
-      // additive, decal, ui, transmission) is finalized. Update DrawSortingKey,
-      // partition construction, validation asserts, and shader-side decoding
-      // to consume the enum instead of magic numbers. Ensure static asserts
-      // cover size/layout if serialized to GPU buffers.
-
-      auto ClassifyMaterialPassMask
-        = [&](const oxygen::data::MaterialAsset* mat) -> uint32_t {
-        if (!mat) {
-          // Fallback material assumed fully opaque neutral surface
-          return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
-        }
-        const auto domain = mat->GetMaterialDomain();
-        const auto base = mat->GetBaseColor();
-        const float alpha = base[3];
-        const bool has_transparency_feature = false; // placeholder hook
-        const bool is_opaque_domain
-          = (domain == oxygen::data::MaterialDomain::kOpaque);
-        const bool is_masked_domain
-          = (domain == oxygen::data::MaterialDomain::kMasked);
-
-        // Debug classification logging (verbosity 4+) for non-opaque domains
-        // to verify expected mapping of MaterialDomain -> PassMaskFlags.
-        DLOG_F(2,
-          "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
-          "is_masked={}",
-          mat->GetAssetName(), static_cast<int>(domain), alpha,
-          is_opaque_domain, is_masked_domain);
-
-        if (is_opaque_domain && alpha >= 0.999f && !has_transparency_feature) {
-          return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
-        }
-        if (is_masked_domain) {
-          return static_cast<uint32_t>(
-            PassMaskFlags::kOpaqueOrMasked); // alpha test path grouped with
-                                             // opaque
-        }
-        // All other domains currently treated as blended / transparent
-        DLOG_F(2,
-          " -> classified as Transparent (flags=0x{:X}) due to domain {} and "
-          "alpha={:.3f}",
-          static_cast<uint32_t>(PassMaskFlags::kTransparent),
-          static_cast<int>(domain), alpha);
-        return static_cast<uint32_t>(PassMaskFlags::kTransparent);
-      };
-
+      dm.material_index = material_index;
+      dm.transform_index = static_cast<uint32_t>(i);
+      dm.instance_metadata_buffer_index = 0;
+      dm.instance_metadata_offset = 0;
       dm.flags = ClassifyMaterialPassMask(item.material.get());
-
-      // Debug validation (will be extended later): ensure indices within
-      // provisional ranges *before* pushing to vector so any failure leaves
-      // container unchanged on that record.
-      DCHECK_F(dm.transform_index < count,
+      DCHECK_F(dm.transform_index < filtered.size(),
         "transform_index out of range while generating DrawMetadata");
       DCHECK_F(dm.material_index < material_constants_cpu_soa_.size(),
         "material_index out of range ({} >= {}): logic error in "
         "dedupe/population",
         dm.material_index, material_constants_cpu_soa_.size());
       DCHECK_F(dm.flags != 0, "flags must be non-zero after assignment");
-
       draw_metadata_cpu_soa_.push_back(dm);
     }
   }
-
-  // (Moved) draw_metadata_bytes & partitions publication occurs after sorting
-  // and partition range construction below.
-
-  // Upload / wire material constants if we produced any (SoA path).
   if (!material_constants_cpu_soa_.empty()) {
-    // Replace legacy path contents only if SoA produced something (keeps
-    // previous frame otherwise). We now DEFER the GPU upload + slot update to
-    // PreExecute() for consistency with world_transforms_ & draw_metadata_
-    // (single phase for all structured buffers). This avoids per-frame mixed
-    // timing and makes reasoning about visibility simpler.
     material_constants_.GetCpuData() = material_constants_cpu_soa_;
-    material_constants_.MarkDirty(); // uploaded in PreExecute
+    material_constants_.MarkDirty();
   }
-
-  // Diagnostic: log first few generated entries (limited verbosity level).
   if (!draw_metadata_cpu_soa_.empty()) {
     const std::size_t sample
       = std::min<std::size_t>(draw_metadata_cpu_soa_.size(), 3);
@@ -752,55 +673,35 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
         d.transform_index, d.material_index);
     }
   }
-  if (material_duplicate_avoids > 0) {
-    DLOG_F(2,
-      "Material dedupe avoided {} duplicate constant uploads "
-      "(unique_materials={} total_draws={})",
-      material_duplicate_avoids, material_constants_cpu_soa_.size(),
-      draw_metadata_cpu_soa_.size());
-  }
-  // Summary validation after full population (secondary range checks).
+  // Post population validation
   for (std::size_t s = 0; s < draw_metadata_cpu_soa_.size(); ++s) {
     const auto& d = draw_metadata_cpu_soa_[s];
-    DCHECK_F(d.transform_index < count,
+    DCHECK_F(d.transform_index < filtered.size(),
       "Post population: transform_index {} out of range count {}",
-      d.transform_index, count);
+      d.transform_index, filtered.size());
     DCHECK_F(d.material_index < material_constants_cpu_soa_.size(),
       "Post population: material_index {} out of range materials {}",
       d.material_index, material_constants_cpu_soa_.size());
-    // Ensure at least one classification bit set and only currently supported
-    // bits (0 or 1) are present (defensive against future expansion bugs).
     DCHECK_F(
       d.flags != 0u, "Pass mask flags must be non-zero for record {}", s);
     DCHECK_F((d.flags & ~(0x3u)) == 0u,
       "Unexpected future pass bits set prematurely (flags=0x{:X})", d.flags);
   }
+}
 
-  // Update PreparedSceneFrame spans (draw metadata not yet produced here).
-  prepared_frame_.world_matrices = std::span<const float>(
-    world_matrices_cpu_.data(), world_matrices_cpu_.size());
-  prepared_frame_.normal_matrices = std::span<const float>(
-    normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
+auto Renderer::UploadWorldTransforms(std::size_t count) -> void
+{
+  if (count == 0)
+    return;
+  auto& gpu_worlds = world_transforms_.GetCpuData();
+  const auto* src_mats
+    = reinterpret_cast<const glm::mat4*>(world_matrices_cpu_.data());
+  gpu_worlds.assign(src_mats, src_mats + count);
+  world_transforms_.MarkDirty();
+}
 
-  // --- GPU StructuredBuffer<WorldMatrix> population (restored) ---
-  // Regression Fix: After removing the legacy AoS path we stopped mirroring
-  // per-draw world matrices into the bindless structured buffer
-  // (world_transforms_). Shaders then read either an empty buffer or stale
-  // identity data, collapsing all meshes to the origin (user report: "Meshes
-  // are now all at the center"). We now copy the freshly finalized SoA world
-  // matrices (world_matrices_cpu_) into the structured buffer each frame and
-  // mark it dirty so PreExecute() uploads before passes execute.
-  if (count > 0) {
-    auto& gpu_worlds = world_transforms_.GetCpuData();
-    const auto* src_mats
-      = reinterpret_cast<const glm::mat4*>(world_matrices_cpu_.data());
-    gpu_worlds.assign(src_mats, src_mats + count);
-    world_transforms_
-      .MarkDirty(); // uploaded in PreExecute -> EnsureAndUploadWorldTransforms
-  }
-
-  // Build sorting key array (now used for actual ordering) and compute
-  // pre-sort hash for diagnostics.
+auto Renderer::BuildSortingAndPartitions() -> void
+{
   sorting_keys_cpu_soa_.clear();
   sorting_keys_cpu_soa_.reserve(draw_metadata_cpu_soa_.size());
   for (const auto& d : draw_metadata_cpu_soa_) {
@@ -811,8 +712,6 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
       .geometry_index_srv = d.index_buffer_index,
     });
   }
-  // Measure sorting + partition construction time separately from overall
-  // finalize_time to surface ordering overhead costs.
   const auto t_sort_begin = std::chrono::high_resolution_clock::now();
   auto ComputeFNV1a64 = [](const void* data, size_t size_bytes) -> uint64_t {
     uint64_t h = 1469598103934665603ULL; // offset
@@ -826,8 +725,6 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   };
   const auto pre_sort_hash = ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
     sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
-
-  // Stable sort: produce permutation indices, then apply to draw metadata.
   const size_t draw_count = draw_metadata_cpu_soa_.size();
   std::vector<uint32_t> permutation(draw_count);
   for (uint32_t i = 0; i < draw_count; ++i)
@@ -837,19 +734,15 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
       const auto& ka = sorting_keys_cpu_soa_[a];
       const auto& kb = sorting_keys_cpu_soa_[b];
       if (ka.pass_mask != kb.pass_mask)
-        return ka.pass_mask < kb.pass_mask; // group by pass
+        return ka.pass_mask < kb.pass_mask;
       if (ka.material_index != kb.material_index)
-        return ka.material_index < kb.material_index; // material locality
+        return ka.material_index < kb.material_index;
       if (ka.geometry_vertex_srv != kb.geometry_vertex_srv)
-        return ka.geometry_vertex_srv
-          < kb.geometry_vertex_srv; // vertex buffer locality
+        return ka.geometry_vertex_srv < kb.geometry_vertex_srv;
       if (ka.geometry_index_srv != kb.geometry_index_srv)
-        return ka.geometry_index_srv
-          < kb.geometry_index_srv; // index buffer locality
-      return a < b; // deterministic tiebreaker
+        return ka.geometry_index_srv < kb.geometry_index_srv;
+      return a < b;
     });
-  // Apply permutation to draw metadata and sorting keys (in-place via temp
-  // copies)
   std::vector<DrawMetadata> reordered_dm;
   reordered_dm.reserve(draw_count);
   std::vector<DrawSortingKey> reordered_keys;
@@ -860,14 +753,9 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   }
   draw_metadata_cpu_soa_.swap(reordered_dm);
   sorting_keys_cpu_soa_.swap(reordered_keys);
-
-  // Recompute hash post-sort (final deterministic order signature).
   const auto post_sort_hash = ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
     sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
   last_draw_order_hash_ = post_sort_hash;
-
-  // Build partition ranges from sorted draws: contiguous segments with same
-  // pass_mask.
   partitions_cpu_soa_.clear();
   if (!draw_metadata_cpu_soa_.empty()) {
     uint32_t current_mask = draw_metadata_cpu_soa_.front().flags;
@@ -876,48 +764,23 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
       const auto mask = draw_metadata_cpu_soa_[i].flags;
       if (mask != current_mask) {
         partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
-          .pass_mask = current_mask,
-          .begin = range_begin,
-          .end = i,
-        });
+          .pass_mask = current_mask, .begin = range_begin, .end = i });
         current_mask = mask;
         range_begin = i;
       }
     }
-    // Final range
-    partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
-      .pass_mask = current_mask,
-      .begin = range_begin,
-      .end = static_cast<uint32_t>(draw_metadata_cpu_soa_.size()),
-    });
+    partitions_cpu_soa_.push_back(
+      PreparedSceneFrame::PartitionRange { .pass_mask = current_mask,
+        .begin = range_begin,
+        .end = static_cast<uint32_t>(draw_metadata_cpu_soa_.size()) });
   }
   prepared_frame_.partitions_storage = &partitions_cpu_soa_;
   prepared_frame_.partitions
     = std::span<const PreparedSceneFrame::PartitionRange>(
       partitions_cpu_soa_.data(), partitions_cpu_soa_.size());
-
-  // Publish draw metadata bytes (post-sort order).
-  prepared_frame_.draw_metadata_bytes = std::span<const std::byte>(
-    reinterpret_cast<const std::byte*>(draw_metadata_cpu_soa_.data()),
-    draw_metadata_cpu_soa_.size() * sizeof(DrawMetadata));
-
-  // --- GPU StructuredBuffer<DrawMetadata> population (restored) ---
-  // Legacy EnsureResourcesForDrawList previously populated the bindless
-  // draw_metadata_ buffer each frame. After removing that path we must copy
-  // the freshly generated & sorted SoA DrawMetadata records into the
-  // bindless structured buffer so shaders (which fetch DrawMetadata via the
-  // bindless slot) see correct per-draw data. Without this, issued draws use
-  // an empty / stale buffer and nothing renders.
-  if (!draw_metadata_cpu_soa_.empty()) {
-    auto& gpu_dm = draw_metadata_.GetCpuData();
-    gpu_dm.assign(draw_metadata_cpu_soa_.begin(), draw_metadata_cpu_soa_.end());
-    draw_metadata_.MarkDirty(); // upload will occur in PreExecute
-  }
-
   const auto t_sort_end = std::chrono::high_resolution_clock::now();
   last_sort_time_ = std::chrono::duration_cast<std::chrono::microseconds>(
     t_sort_end - t_sort_begin);
-
   DLOG_F(2,
     "DrawOrderSort: pre=0x{:016X} post=0x{:016X} draws={} partitions={} "
     "keys_bytes={} sort_time_us={}",
@@ -925,31 +788,43 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
     partitions_cpu_soa_.size(),
     sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey),
     last_sort_time_.count());
+}
 
-  // Parity logging (transitional): we only log count divergence now since
-  // direct generation intentionally differs in layout/content from legacy.
-  if (draw_metadata_.HasData()) {
-    const auto legacy_count = draw_metadata_.GetCpuData().size();
-    const auto soa_count = draw_metadata_cpu_soa_.size();
-    if (legacy_count != soa_count) {
-      DLOG_F(1,
-        "DrawMetadata direct-gen count differs legacy={} soa={} (expected "
-        "while transition)",
-        legacy_count, soa_count);
-    }
-  }
-
-  DCHECK_F(world_matrices_cpu_.size() == count * 16u,
+auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
+{
+  prepared_frame_.world_matrices = std::span<const float>(
+    world_matrices_cpu_.data(), world_matrices_cpu_.size());
+  prepared_frame_.normal_matrices = std::span<const float>(
+    normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
+  prepared_frame_.draw_metadata_bytes = std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(draw_metadata_cpu_soa_.data()),
+    draw_metadata_cpu_soa_.size() * sizeof(DrawMetadata));
+  DCHECK_F(world_matrices_cpu_.size() == transform_count * 16u,
     "World matrices size mismatch (expected count*16)");
-  DCHECK_F(normal_matrices_cpu_.size() == count * 16u,
+  DCHECK_F(normal_matrices_cpu_.size() == transform_count * 16u,
     "Normal matrices size mismatch (expected count*16)");
+}
 
-  const auto t1 = std::chrono::high_resolution_clock::now();
+auto Renderer::UploadDrawMetadataBindless() -> void
+{
+  if (draw_metadata_cpu_soa_.empty())
+    return;
+  auto& gpu_dm = draw_metadata_.GetCpuData();
+  gpu_dm.assign(draw_metadata_cpu_soa_.begin(), draw_metadata_cpu_soa_.end());
+  draw_metadata_.MarkDirty();
+}
+
+auto Renderer::UpdateFinalizeStatistics(
+  const sceneprep::ScenePrepState& prep_state, std::size_t filtered_count,
+  std::chrono::high_resolution_clock::time_point t_begin) -> void
+{
+  const auto t_end = std::chrono::high_resolution_clock::now();
   const auto us
-    = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+    = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_begin)
+        .count();
   last_finalize_stats_.collected = prep_state.collected_items.size();
-  last_finalize_stats_.filtered = filtered.size();
-  last_finalize_stats_.finalized = count;
+  last_finalize_stats_.filtered = filtered_count;
+  last_finalize_stats_.finalized = filtered_count; // same for now
   last_finalize_stats_.finalize_time = std::chrono::microseconds(us);
   DLOG_F(2,
     "FinalizeScenePrepSoA: collected={} filtered={} finalized={} time_us={} "
@@ -968,6 +843,16 @@ auto Renderer::FinalizeScenePrepSoA(const sceneprep::ScenePrepState& prep_state)
   } else {
     DLOG_F(3, "Partition map empty (no draws)");
   }
+  if (draw_metadata_.HasData()) {
+    const auto legacy_count = draw_metadata_.GetCpuData().size();
+    const auto soa_count = draw_metadata_cpu_soa_.size();
+    if (legacy_count != soa_count) {
+      DLOG_F(1,
+        "DrawMetadata direct-gen count differs legacy={} soa={} (expected "
+        "while transition)",
+        legacy_count, soa_count);
+    }
+  }
 }
 
 auto Renderer::BuildFrame(const CameraView& camera_view,
@@ -975,6 +860,89 @@ auto Renderer::BuildFrame(const CameraView& camera_view,
 {
   const auto view = camera_view.Resolve();
   return BuildFrame(view, frame_context);
+}
+
+//=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) ---------------------//
+
+auto Renderer::ResolveScene(const engine::FrameContext& frame_context)
+  -> scene::Scene&
+{
+  auto scene_ptr = frame_context.GetScene();
+  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
+  // FIXME: temporary until everything uses the frame context (existing note
+  // preserved)
+  return *scene_ptr;
+}
+
+auto Renderer::InitializeFrameSequence(
+  const engine::FrameContext& frame_context) -> void
+{
+  // Store frame sequence number from FrameContext (PhaseId::kFrameGraph)
+  frame_seq_num = frame_context.GetFrameSequenceNumber();
+}
+
+auto Renderer::PrepareScenePrepCollectionConfig() const -> BasicCollectionConfig
+{
+  // Central hook for future renderer policy injection.
+  // TODO: pass policy/config from renderer settings (preserved from original
+  // comment)
+  return sceneprep::CreateBasicCollectionConfig();
+}
+
+template <typename CollectionCfg>
+auto Renderer::CollectScenePrep(scene::Scene& scene, const View& view,
+  sceneprep::ScenePrepState& prep_state, const CollectionCfg& cfg) -> void
+{
+  // === ScenePrep collection ===
+  // Legacy AoS translation step removed; we now directly finalize into SoA
+  // arrays (matrices, draw metadata, materials, partitions, sorting keys).
+  // FIXME(perf): Avoid per-frame allocations by pooling ScenePrepState or
+  // reusing internal vectors (requires clear ownership strategy & lifetime).
+  sceneprep::ScenePrepPipelineCollection<CollectionCfg> pipeline { cfg };
+  // NOTE: StrongType frame_seq_num unwrapped for ScenePrep API.
+  const auto t_collect0 = std::chrono::high_resolution_clock::now();
+  pipeline.Collect(scene, view, frame_seq_num.get(), prep_state);
+  const auto t_collect1 = std::chrono::high_resolution_clock::now();
+  last_finalize_stats_.collection_time
+    = std::chrono::duration_cast<std::chrono::microseconds>(
+      t_collect1 - t_collect0);
+  DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
+    prep_state.collected_items.size(), scene.GetNodes().Items().size(),
+    last_finalize_stats_.collection_time.count());
+}
+
+auto Renderer::FinalizeScenePrepPhase(
+  const sceneprep::ScenePrepState& prep_state) -> void
+{
+  // New path (SoA finalization) - currently only populates matrix arrays.
+  // This is non-destructive and coexists with legacy AoS until passes migrate.
+  FinalizeScenePrepSoA(prep_state);
+  DLOG_F(1,
+    "Renderer BuildFrame finalized SoA frame: collected={} filtered={} "
+    "draws={} partitions={}",
+    last_finalize_stats_.collected, last_finalize_stats_.filtered,
+    prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata),
+    prepared_frame_.partitions.size());
+}
+
+// Explicit template instantiation for current collection config
+template auto Renderer::CollectScenePrep<Renderer::BasicCollectionConfig>(
+  scene::Scene& scene, const View& view, sceneprep::ScenePrepState& prep_state,
+  const Renderer::BasicCollectionConfig& cfg) -> void;
+
+auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
+{
+  // Update scene constants from the provided view snapshot
+  ModifySceneConstants([&](SceneConstants& sc) {
+    sc.SetViewMatrix(view.ViewMatrix())
+      .SetProjectionMatrix(view.ProjectionMatrix())
+      .SetCameraPosition(view.CameraPosition());
+  });
+}
+
+auto Renderer::CurrentDrawCount() const noexcept -> std::size_t
+{
+  return prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata);
 }
 
 namespace {

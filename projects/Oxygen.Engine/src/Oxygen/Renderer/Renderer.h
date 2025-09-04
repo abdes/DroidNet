@@ -27,6 +27,7 @@
 // Bindless structured buffer helper for per-draw arrays
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
+#include <Oxygen/Renderer/ScenePrep/CollectionConfig.h> // template config return type
 
 namespace oxygen {
 class Graphics;
@@ -166,6 +167,57 @@ private:
   OXGN_RNDR_API auto PreExecute(RenderContext& context,
     const oxygen::engine::FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
+
+  //=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) -------------------//
+  //! Extract scene pointer from FrameContext (defensive null check).
+  auto ResolveScene(const oxygen::engine::FrameContext& frame_context)
+    -> scene::Scene&;
+  //! Initialize frame sequence number from FrameContext (PhaseId::kFrameGraph).
+  auto InitializeFrameSequence(
+    const oxygen::engine::FrameContext& frame_context) -> void;
+  //! Prepare collection configuration (centralized future policy hook).
+  using BasicCollectionConfig
+    = decltype(sceneprep::CreateBasicCollectionConfig());
+  auto PrepareScenePrepCollectionConfig() const -> BasicCollectionConfig;
+  //! Run ScenePrep collection with timing + logging; fills prep_state.
+  template <typename CollectionCfg>
+  auto CollectScenePrep(scene::Scene& scene, const View& view,
+    sceneprep::ScenePrepState& prep_state, const CollectionCfg& cfg) -> void;
+  //! Finalize SoA (wrapper around existing FinalizeScenePrepSoA) and log.
+  auto FinalizeScenePrepPhase(const sceneprep::ScenePrepState& prep_state)
+    -> void;
+  //! Update scene constants from resolved view matrices & camera state.
+  auto UpdateSceneConstantsFromView(const View& view) -> void;
+  //! Compute current finalized draw count (post-sort) from prepared frame.
+  auto CurrentDrawCount() const noexcept -> std::size_t;
+
+  //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
+  // These helpers break down the large FinalizeScenePrepSoA routine into
+  // focused steps while preserving original comments & ordering semantics.
+  auto ResolveFilteredIndices(const sceneprep::ScenePrepState& prep_state)
+    -> const std::vector<std::size_t>&;
+  //! Reserve matrix storage (monotonic high-water) for world & normal arrays.
+  auto ReserveMatrixStorage(std::size_t count) -> void;
+  //! Populate world & normal matrix SoA arrays from filtered indices.
+  auto PopulateMatrices(const std::vector<std::size_t>& filtered,
+    const sceneprep::ScenePrepState& prep_state) -> void;
+  //! Generate DrawMetadata & material constant arrays with dedupe + validate.
+  auto GenerateDrawMetadataAndMaterials(
+    const std::vector<std::size_t>& filtered,
+    const sceneprep::ScenePrepState& prep_state) -> void;
+  //! Mirror finalized world matrices into bindless StructuredBuffer.
+  auto UploadWorldTransforms(std::size_t count) -> void;
+  //! Build sorting keys, stable-sort, and construct partition ranges.
+  auto BuildSortingAndPartitions()
+    -> void; // builds sorting keys, sorts, partitions
+  //! Publish spans into PreparedSceneFrame for downstream passes.
+  auto PublishPreparedFrameSpans(std::size_t transform_count) -> void;
+  //! Upload sorted DrawMetadata to bindless StructuredBuffer.
+  auto UploadDrawMetadataBindless() -> void;
+  //! Aggregate timing + counters and emit diagnostic partition logs.
+  auto UpdateFinalizeStatistics(const sceneprep::ScenePrepState& prep_state,
+    std::size_t filtered_count,
+    std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
   auto MaybeUpdateSceneConstants(
