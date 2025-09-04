@@ -132,12 +132,18 @@ History Log (Chronological)
 2025-09-05T11:45Z Breaking rename: DrawMetadata.material_index -> material_handle across C++/HLSL; docs/tests pending full scrub.
 2025-09-05T12:05Z Const-correctness: FinalizeScenePrepSoA / GenerateDrawMetadataAndMaterials now mutate ScenePrepState (material registry) safely.
 2025-09-05T12:10Z Material constants buffer realigned to stable MaterialHandle indices (removed per-frame packed mapping causing wrong materials on GPU); visual validation passed.
+2025-09-05T12:25Z GeometryRegistry extended with mesh-level GetOrRegisterMesh (stable vertex/index buffer indices via callback provisioning).
+2025-09-05T12:35Z Removed obsolete GeometryResidencyCache (code + docs); ScenePrepState now owns persistent GeometryRegistry.
+2025-09-05T12:45Z Renderer integrated mesh registration through GeometryRegistry; DrawMetadata now uses stable geometry handle derived indices.
+2025-09-05T12:55Z Temporary instrumentation (per-mesh & per-frame geometry registration logs) added for validation.
+2025-09-05T13:05Z Removed temporary geometry registration debug logging (noise reduction after validation).
 
-Current Active Roadmap (Post MaterialHandle Adoption @2025-09-05T12:10Z)
+Current Active Roadmap (Post Geometry Residency Integration @2025-09-05T13:05Z)
 -----------------------------------------------------------------------
 Completed (Foundation Snapshot): Non-indexed draws, pass mask bits (opaque + transparent), multi-range partitions, validation asserts,
 normal matrix aliasing & caching, stable MaterialRegistry handles in DrawMetadata, removal of per-frame packed material mapping,
-world_transform field removal, initial sorting + partition map + order hashing, shader struct sync, design notes (Indirect Args, OIT).
+world_transform field removal, initial sorting + partition map + order hashing, shader struct sync, design notes (Indirect Args, OIT),
+stable GeometryRegistry (assets + mesh-level) with cache removal & renderer integration.
 
 Upcoming (Actionable):
 1. Indirect Draw Args Prototype: Implement unified 32-byte record build + optional shadow validation path; capture args_build_time_us.
@@ -173,9 +179,9 @@ Deferral Notes
 - Transparent ordering / OIT deferred (current scenes low overlap complexity).
 - Material registry (Task 13) deferred until after indirect args decision (avoid churn in indexing scheme).
 
-Active Task Status Summary (Transitional Tasks Pruned @2025-09-05T11:15Z)
+Active Task Status Summary (Transitional Tasks Pruned @2025-09-05T13:05Z)
 -----------------------------------------------------------------------
-14 NS Geometry residency integration (beyond current EnsureMeshResources caching)
+14 CM Geometry residency integration (stable registry + renderer usage; pending future MeshResourceManager for upload/eviction separation)
 17 IP Buffer upload plumbing (indirect args & sparse world upload optimization pending)
 19 NS Unit tests finalization core (SoA pipeline coverage)
 20 NS Integration tests passes (multi-pass parity & ordering)

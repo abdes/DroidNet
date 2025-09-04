@@ -15,8 +15,8 @@ auto ScenePrepState::ResetFrameData() -> void
   filtered_indices.clear();
   pass_masks.clear();
 
-  // Reset per-frame caches while preserving persistent data
-  geometry_cache.Reset();
+  // No per-frame geometry residency cache: GeometryRegistry provides stable
+  // handles.
 }
 
 } // namespace oxygen::engine::sceneprep

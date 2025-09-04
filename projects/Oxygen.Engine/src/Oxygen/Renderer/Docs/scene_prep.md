@@ -203,15 +203,15 @@ Fallback/error policy:
 
 GeometryUploader (Uploader)
 
-- CPU: resolve geometry views; compute required residency; determine bindless
-  handles.
+- CPU: resolve geometry views; compute required residency; obtain/register
+  bindless buffer handles via GeometryRegistry (idempotent).
 - GPU: ensure vertex/index buffer residency (schedule uploads as needed).
-- Output: state.geometry_cache updated (handles, residency records).
+- Output: stable GeometryHandle stored/queried via registry (no per-frame cache).
 
 GeometryAssembler (Assembler)
 
 - CPU: resolve mesh pointer = geometry->MeshAt(lod); validate submesh index;
-  attach handles.
+  fetch stable handles from registry (LookupGeometryHandle) or register lazily.
 - Output: per-item mesh/submesh and bindless geometry handles.
 
 Fallback/error policy:
@@ -355,10 +355,18 @@ struct BasicGeometryAssembler {
     }
     out.submesh_index = item.submesh_index;
 
-    // Get cached geometry handles from uploader phase
-    auto geom_handle = state.geometry_cache.GetHandle(item.geometry.get());
-    out.vertex_buffer_handle = geom_handle.vertex_buffer;
-    out.index_buffer_handle = geom_handle.index_buffer;
+    // Query stable geometry handles from persistent registry (idempotent)
+    if (item.geometry) {
+      if (auto existing = state.geometry_registry.LookupGeometryHandle(item.geometry.get())) {
+        out.vertex_buffer_handle = existing->vertex_buffer;
+        out.index_buffer_handle = existing->index_buffer;
+      } else {
+        // Optionally register on demand (policy dependent)
+        const auto h = state.geometry_registry.GetOrRegisterGeometry(item.geometry.get());
+        out.vertex_buffer_handle = h.vertex_buffer;
+        out.index_buffer_handle = h.index_buffer;
+      }
+    }
   }
 };
 
@@ -433,9 +441,9 @@ Examples:
   - Assembler reads material index and texture handles
 
 - Geometry
-  - Helper: GeometryResidencyCache (per-frame), GeometryRegistry (persistent)
-  - Uploader ensures VB/IB residency and records bindless handles
-  - Assembler resolves mesh pointers and submesh validation using recorded data
+  - Helper: GeometryRegistry (persistent)
+  - Uploader ensures VB/IB residency (idempotent) and registers geometry to obtain stable buffer handles
+  - Assembler resolves mesh pointers, validates submesh indices, and queries stable handles directly from the registry (no per-frame cache)
 
 These helpers are plain classes held as direct members of ScenePrepState to avoid
 pointer indirection and improve cache performance:
@@ -446,8 +454,7 @@ struct ScenePrepState {
   TransformBatchCache transform_cache; // per-frame
   MaterialRegistry material_registry;  // persistent
   // (material_cache removed)
-  GeometryRegistry geometry_registry;  // persistent
-  GeometryResidencyCache geometry_cache; // per-frame
+  GeometryRegistry geometry_registry;  // persistent (stable geometry buffer handles)
   // ... plus logging, etc.
 };
 ```
@@ -517,25 +524,24 @@ private:
 // Each RenderItemData stores both the shared_ptr material and a stable
 // MaterialHandle (for future bindless/material table usage).
 
-// Persistent geometry registry with residency tracking
+// Persistent geometry registry (stable, idempotent registration of geometry buffer handles)
 class GeometryRegistry {
 public:
-  auto EnsureResident(const GeometryAsset* geometry) -> GeometryHandle;
-  auto IsResident(const GeometryAsset* geometry) const -> bool;
+  // Idempotent: returns existing handle if geometry already registered; nullptr yields sentinel handle {0,0}
+  auto GetOrRegisterGeometry(const GeometryAsset* geometry) -> GeometryHandle;
 
+  // Lookup without side effects; returns std::nullopt if not registered
+  auto LookupGeometryHandle(const GeometryAsset* geometry) const -> std::optional<GeometryHandle>;
+
+  // Validation helpers
+  static constexpr bool IsSentinelHandle(GeometryHandle h) {
+    return h.vertex_buffer == 0u && h.index_buffer == 0u; }
+  bool IsValidHandle(GeometryHandle h) const; // non-sentinel and registered
+
+  // Deprecated transitional alias (removed in docs; kept in code temporarily): EnsureResident -> GetOrRegisterGeometry
 private:
   std::unordered_map<const GeometryAsset*, GeometryHandle> geometry_to_handle_;
-};
-
-// Per-frame geometry cache
-class GeometryResidencyCache {
-public:
-  auto SetHandle(const GeometryAsset* geometry, GeometryHandle handle) -> void;
-  auto GetHandle(const GeometryAsset* geometry) const -> std::optional<GeometryHandle>;
-  auto Reset() -> void;
-
-private:
-  std::unordered_map<const GeometryAsset*, GeometryHandle> geometry_handles_;
+  std::vector<const GeometryAsset*> handle_to_geometry_; // reverse for validation
 };
 
 // Handle types used throughout the system
@@ -747,7 +753,7 @@ function ScenePrep(collected_items, ctx, state, outputs)
   // Process items by index to avoid data copies
   TransformUploader(collected_items, filtered_indices, ctx, state)  // [GPU] -> writes state.transform_cache
   MaterialUploader(collected_items, filtered_indices, ctx, state)   // [GPU] (now writes material handles inline)
-  GeometryUploader(collected_items, filtered_indices, ctx, state)   // [GPU] -> writes state.geometry_cache
+  GeometryUploader(collected_items, filtered_indices, ctx, state)   // [GPU] -> ensures residency & registers stable handles (registry only)
 
   // 2) Sorting/partitioning once (CPU) - work with indices directly
   order, partitions = SortPartition(collected_items, filtered_indices, ctx, state)
@@ -762,7 +768,7 @@ function ScenePrep(collected_items, ctx, state, outputs)
     idx = filtered_indices[k]
     d = collected_items[idx]
     item = RenderItem{}
-    GeometryAssembler(d, ctx, state, item)   // reads state.geometry_cache/registry
+  GeometryAssembler(d, ctx, state, item)   // queries/allocates handles via geometry_registry
   MaterialAssembler(d, ctx, state, item)   // reads material_registry
     TransformAssembler(d, ctx, state, item)  // reads state.transform_cache/manager
     FlagsAssembler(d, ctx, state, item)      // pure CPU
@@ -946,17 +952,15 @@ struct ScenePrepState {
   TransformBatchCache transform_cache;
   MaterialRegistry material_registry;
   // material_cache removed
-  GeometryRegistry geometry_registry;
-  GeometryResidencyCache geometry_cache;
+  GeometryRegistry geometry_registry; // stable geometry handles (no per-frame cache)
 
   // Reset per-frame data
   auto ResetFrameData() -> void {
     collected_items.clear();
     filtered_indices.clear();
     pass_masks.clear();
-    transform_cache.Reset();
-  // material_cache removed
-    geometry_cache.Reset();
+  transform_cache.Reset();
+  // geometry_registry persists; no per-frame geometry cache to reset
   }
 };
 
@@ -1114,10 +1118,13 @@ auto CreateBasicScenePrepConfig() {
     if (item.geometry) {
       out.mesh = item.geometry->MeshAt(item.lod_index);
       out.submesh_index = item.submesh_index;
-      auto geom_handle = state.geometry_cache.GetHandle(item.geometry.get());
-      if (geom_handle) {
-        out.vertex_buffer_handle = geom_handle->vertex_buffer;
-        out.index_buffer_handle = geom_handle->index_buffer;
+      if (auto existing = state.geometry_registry.LookupGeometryHandle(item.geometry.get())) {
+        out.vertex_buffer_handle = existing->vertex_buffer;
+        out.index_buffer_handle = existing->index_buffer;
+      } else {
+        const auto h = state.geometry_registry.GetOrRegisterGeometry(item.geometry.get());
+        out.vertex_buffer_handle = h.vertex_buffer;
+        out.index_buffer_handle = h.index_buffer;
       }
     }
   };
