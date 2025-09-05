@@ -160,7 +160,7 @@ private:
 
   // Draw submission uses base RenderPass::IssueDrawCalls (SoA path).
   // NOTE: DepthPrePass supplies a predicate excluding
-  // PassMaskFlags::kTransparent records to avoid writing depth for blended
+  // PassMaskBit::kTransparent records to avoid writing depth for blended
   // geometry (prevents inversion artifacts where transparent depth occludes
   // later color blending).
 

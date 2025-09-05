@@ -10,9 +10,7 @@
 #include <span>
 #include <vector>
 
-// Forward declarations (avoid pulling in heavy headers here)
-namespace oxygen::engine {
-} // namespace oxygen::engine
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
 
@@ -44,7 +42,7 @@ struct PreparedSceneFrame {
 
   // Partition map (Task 11 scaffolding): pass mask -> contiguous draw range.
   struct PartitionRange {
-    uint32_t pass_mask = 0; // bitfield identifying pass categories
+    PassMask pass_mask {}; // bitfield identifying pass categories
     uint32_t begin = 0; // inclusive begin draw index
     uint32_t end = 0; // exclusive end draw index
   };

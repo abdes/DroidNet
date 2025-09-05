@@ -64,7 +64,7 @@ set(
   "Types/DrawMetaData.h"
   "Types/Frustum.h"
   "Types/MaterialConstants.h"
-  "Types/PassMaskFlags.h"
+  "Types/PassMask.h"
   "Types/SceneConstants.h"
   "Types/View.h"
 )

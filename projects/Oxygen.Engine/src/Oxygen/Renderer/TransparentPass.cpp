@@ -24,7 +24,7 @@
 #include <Oxygen/Renderer/ShaderPass.h>
 #include <Oxygen/Renderer/TransparentPass.h>
 #include <Oxygen/Renderer/Types/DrawMetaData.h>
-#include <Oxygen/Renderer/Types/PassMaskFlags.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::engine::TransparentPass;
 using oxygen::graphics::CommandRecorder;
@@ -33,12 +33,7 @@ using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::Texture; // ShaderType intentionally not imported (use
-                                 // oxygen::ShaderType)
-
-namespace {
-using oxygen::engine::PassMaskFlags;
-}
+using oxygen::graphics::Texture;
 
 TransparentPass::TransparentPass(std::shared_ptr<Config> config)
   : RenderPass(config ? config->debug_name : "TransparentPass")
@@ -150,10 +145,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   uint32_t emitted_count = 0;
   const bool emitted = IssueDrawCalls(
     recorder, [&emitted_count](const engine::DrawMetadata& md) {
-      if ((md.flags
-            & static_cast<uint32_t>(
-              oxygen::engine::PassMaskFlags::kTransparent))
-        == 0u) {
+      if (!md.flags.IsSet(PassMaskBit::kTransparent)) {
         return false;
       }
       ++emitted_count;

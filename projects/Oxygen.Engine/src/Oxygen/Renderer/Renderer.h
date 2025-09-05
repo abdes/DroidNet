@@ -28,6 +28,7 @@
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h> // template config return type
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen {
 class Graphics;
@@ -295,10 +296,9 @@ private:
   // reorder. Captures pass_mask + material + geometry indices (currently
   // placeholders) to ensure stable deterministic ordering hash.
   struct DrawSortingKey {
-    uint32_t pass_mask { 0 }; // from DrawMetadata.flags
-    uint32_t material_index {
-      0
-    }; // DrawMetadata.material_handle (stable MaterialHandle)
+    PassMask pass_mask {}; // from DrawMetadata.flags
+    // DrawMetadata.material_handle (stable MaterialHandle)
+    uint32_t material_index { 0 };
     uint32_t geometry_vertex_srv { 0 }; // DrawMetadata.vertex_buffer_index
     uint32_t geometry_index_srv { 0 }; // DrawMetadata.index_buffer_index
   };
