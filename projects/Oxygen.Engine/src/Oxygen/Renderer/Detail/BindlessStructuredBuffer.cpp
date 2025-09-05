@@ -69,6 +69,16 @@ auto BindlessStructuredBuffer<DataType>::CreateOrResizeBuffer(
     .debug_name = debug_name,
   };
 
+  // If an existing buffer is present, unregister it from the registry so it
+  // gets destroyed and its resource reclaimed. This is an immediate release,
+  // and it is assumed that the renderer will not recreate the buffer unless it
+  // is no longer used.
+  if (buffer_) {
+    const auto old_buffer = buffer_; // keep shared_ptr alive for lambda
+    auto& registry = graphics.GetResourceRegistry();
+    registry.UnRegisterResource(*old_buffer);
+  }
+
   buffer_ = graphics.CreateBuffer(desc);
   buffer_->SetName(debug_name);
   graphics.GetResourceRegistry().Register(buffer_);
