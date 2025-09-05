@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <Oxygen/Renderer/Types/PassMask.h>
+
 namespace oxygen::engine {
 
 //! Per-draw metadata for future-proof bindless rendering.
@@ -48,7 +50,7 @@ struct DrawMetadata {
   uint32_t instance_metadata_buffer_index; // Bindless index into instance
                                            // metadata buffer
   uint32_t instance_metadata_offset; // Offset into instance metadata buffer
-  uint32_t flags; // Bitfield: visibility, pass mask, etc.
+  PassMask flags; // uint32_t, Bitfield: visibility, pass mask, etc.
 };
 
 // Logical field bytes: 13 x 4 = 52. We intentionally use tight packing to

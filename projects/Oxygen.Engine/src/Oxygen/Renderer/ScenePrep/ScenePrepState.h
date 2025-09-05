@@ -14,6 +14,7 @@
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::sceneprep {

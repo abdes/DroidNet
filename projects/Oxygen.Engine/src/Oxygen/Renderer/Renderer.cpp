@@ -35,7 +35,7 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
-#include <Oxygen/Renderer/Types/PassMaskFlags.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -577,11 +577,10 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
   std::vector<uint8_t> material_slot_initialized; // parallels vector size
   material_slot_initialized.resize(1u, 1u); // slot 0 initialized
 
-  using oxygen::engine::PassMaskFlags;
   auto ClassifyMaterialPassMask
-    = [&](const oxygen::data::MaterialAsset* mat) -> uint32_t {
+    = [&](const oxygen::data::MaterialAsset* mat) -> PassMask {
     if (!mat) {
-      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+      return PassMask { PassMaskBit::kOpaqueOrMasked };
     }
     const auto domain = mat->GetMaterialDomain();
     const auto base = mat->GetBaseColor();
@@ -597,17 +596,16 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       mat->GetAssetName(), static_cast<int>(domain), alpha, is_opaque_domain,
       is_masked_domain);
     if (is_opaque_domain && alpha >= 0.999f && !has_transparency_feature) {
-      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+      return PassMask { PassMaskBit::kOpaqueOrMasked };
     }
     if (is_masked_domain) {
-      return static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked);
+      return PassMask { PassMaskBit::kOpaqueOrMasked };
     }
     DLOG_F(2,
-      " -> classified as Transparent (flags=0x{:X}) due to domain {} and "
+      " -> classified as Transparent (flags={}) due to domain {} and "
       "alpha={:.3f}",
-      static_cast<uint32_t>(PassMaskFlags::kTransparent),
-      static_cast<int>(domain), alpha);
-    return static_cast<uint32_t>(PassMaskFlags::kTransparent);
+      PassMask { PassMaskBit::kTransparent }, static_cast<int>(domain), alpha);
+    return PassMask { PassMaskBit::kTransparent };
   };
 
   for (size_t i = 0; i < filtered.size(); ++i) {
@@ -720,7 +718,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       DCHECK_F(dm.material_handle >= 0u,
         "Material handle unexpected negative (impossible) value={}",
         dm.material_handle);
-      DCHECK_F(dm.flags != 0, "flags must be non-zero after assignment");
+      DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
       draw_metadata_cpu_soa_.push_back(dm);
     }
   }
@@ -754,9 +752,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     // registry may exceed current per-frame material constants vector size
     // (which covers only referenced materials).
     DCHECK_F(
-      d.flags != 0u, "Pass mask flags must be non-zero for record {}", s);
-    DCHECK_F((d.flags & ~(0x3u)) == 0u,
-      "Unexpected future pass bits set prematurely (flags=0x{:X})", d.flags);
+      !d.flags.IsEmpty(), "Pass mask must not be empty for record {}", s);
   }
 }
 
@@ -864,21 +860,25 @@ auto Renderer::BuildSortingAndPartitions() -> void
   last_draw_order_hash_ = post_sort_hash;
   partitions_cpu_soa_.clear();
   if (!draw_metadata_cpu_soa_.empty()) {
-    uint32_t current_mask = draw_metadata_cpu_soa_.front().flags;
+    auto current_mask = draw_metadata_cpu_soa_.front().flags;
     uint32_t range_begin = 0u;
     for (uint32_t i = 1; i < draw_metadata_cpu_soa_.size(); ++i) {
       const auto mask = draw_metadata_cpu_soa_[i].flags;
       if (mask != current_mask) {
         partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
-          .pass_mask = current_mask, .begin = range_begin, .end = i });
+          .pass_mask = current_mask,
+          .begin = range_begin,
+          .end = i,
+        });
         current_mask = mask;
         range_begin = i;
       }
     }
-    partitions_cpu_soa_.push_back(
-      PreparedSceneFrame::PartitionRange { .pass_mask = current_mask,
-        .begin = range_begin,
-        .end = static_cast<uint32_t>(draw_metadata_cpu_soa_.size()) });
+    partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
+      .pass_mask = current_mask,
+      .begin = range_begin,
+      .end = static_cast<uint32_t>(draw_metadata_cpu_soa_.size()),
+    });
   }
   prepared_frame_.partitions_storage = &partitions_cpu_soa_;
   prepared_frame_.partitions
@@ -960,10 +960,8 @@ auto Renderer::UpdateFinalizeStatistics(
   if (!partitions_cpu_soa_.empty()) {
     for (std::size_t i = 0; i < partitions_cpu_soa_.size(); ++i) {
       const auto& pr = partitions_cpu_soa_[i];
-      DLOG_F(3, "Partition[{}]: mask=0x{:X} ({}) range=[{},{}] (count={})", i,
-        pr.pass_mask,
-        oxygen::engine::PassMaskFlagsToString(pr.pass_mask).c_str(), pr.begin,
-        pr.end, (pr.end - pr.begin));
+      DLOG_F(3, "Partition[{}]: mask={} range=[{},{}] (count={})", i,
+        pr.pass_mask, pr.begin, pr.end, (pr.end - pr.begin));
     }
   } else {
     DLOG_F(3, "Partition map empty (no draws)");

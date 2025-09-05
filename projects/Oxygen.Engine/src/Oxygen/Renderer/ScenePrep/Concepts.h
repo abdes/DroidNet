@@ -12,6 +12,7 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
 struct RenderItem;

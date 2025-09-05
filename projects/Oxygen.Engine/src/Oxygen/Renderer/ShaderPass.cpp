@@ -24,7 +24,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
-#include <Oxygen/Renderer/Types/PassMaskFlags.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::engine::ShaderPass;
 using oxygen::engine::ShaderPassConfig;
@@ -208,13 +208,11 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   uint32_t skipped_transparent = 0;
   const bool emitted = IssueDrawCalls(
     recorder, [&skipped_transparent](const engine::DrawMetadata& md) {
-      if ((md.flags & static_cast<uint32_t>(PassMaskFlags::kTransparent))
-        != 0u) {
+      if (md.flags.IsSet(PassMaskBit::kTransparent)) {
         ++skipped_transparent;
         return false;
       }
-      return (md.flags & static_cast<uint32_t>(PassMaskFlags::kOpaqueOrMasked))
-        != 0u;
+      return md.flags.IsSet(PassMaskBit::kOpaqueOrMasked);
     });
   DLOG_F(2,
     "ShaderPass emitted opaque/masked draws: emitted_any={} "

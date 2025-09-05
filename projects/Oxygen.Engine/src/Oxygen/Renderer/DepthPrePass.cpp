@@ -28,7 +28,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/DrawMetaData.h>
-#include <Oxygen/Renderer/Types/PassMaskFlags.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::Scissors;
 using oxygen::ViewPort;
@@ -221,21 +221,15 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // NOTE: Transparent draws are intentionally excluded from the depth pre-pass
   // to prevent them from writing depth and later occluding opaque color when
   // blended (would produce the previously observed inverted transparency).
-  // Only PassMaskFlags::kOpaqueOrMasked are accepted here.
+  // Only PassMaskBit::kOpaqueOrMasked are accepted here.
   uint32_t transparent_saw = 0;
   const bool emitted = IssueDrawCalls(
     recorder, [&transparent_saw](const engine::DrawMetadata& md) {
-      if ((md.flags
-            & static_cast<uint32_t>(
-              oxygen::engine::PassMaskFlags::kTransparent))
-        != 0u) {
+      if (md.flags.IsSet(PassMaskBit::kTransparent)) {
         ++transparent_saw; // counted for debug stats; not emitted
         return false;
       }
-      return (md.flags
-               & static_cast<uint32_t>(
-                 oxygen::engine::PassMaskFlags::kOpaqueOrMasked))
-        != 0u;
+      return (md.flags.IsSet(PassMaskBit::kOpaqueOrMasked));
     });
   DLOG_F(2,
     "DepthPrePass emitted depth draws (opaque/masked only): emitted_any={} "

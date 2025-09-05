@@ -35,23 +35,6 @@ class View;
 
 namespace oxygen::engine::sceneprep {
 
-//! Bitset representing which render passes an item participates in.
-/*!
- Each bit corresponds to a renderer-defined pass ID. Pass assignment is
- deterministic: equivalent inputs must produce identical masks. Use the
- bitwise NamedType helpers to construct, combine and query masks.
-*/
-using PassMask = oxygen::NamedType<uint32_t,
-  // clang-format off
-  struct PassMaskTag,
-  oxygen::BitWiseAndable,
-  oxygen::BitWiseOrable,
-  oxygen::BitWiseXorable,
-  oxygen::BitWiseLeftShiftable,
-  oxygen::BitWiseRightShiftable,
-  oxygen::BitWiseInvertable,
-  oxygen::Hashable>; // clang-format on
-
 //! Handle to a transform entry managed by ScenePrep.
 /*!
  Transform handles reference deduplicated world transforms stored by
