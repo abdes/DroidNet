@@ -50,7 +50,7 @@ include(GTestHelpers)
 
 m_gtest_program(TypeSystem SOURCES "TypeSystem_test.cpp")
 
-m_gtest_program(ObjectMetaData SOURCES "ObjectMetaData_test.cpp")
+m_gtest_program(ObjectMetadata SOURCES "ObjectMetadata_test.cpp")
 m_gtest_program(ComponentPool SOURCES "ComponentPool_test.cpp")
 m_gtest_program(ComponentPoolRegistry SOURCES "ComponentPoolRegistry_test.cpp")
 m_gtest_program(CompositionBasic SOURCES "Composition_Basic_test.cpp")
@@ -66,7 +66,7 @@ m_gtest_program(CompositionThreads SOURCES "Composition_Threads_test.cpp")
 add_custom_target(
   "Oxygen.Composition.AllTests"
   DEPENDS
-    "Oxygen.Composition.ObjectMetaData.Tests"
+    "Oxygen.Composition.ObjectMetadata.Tests"
     "Oxygen.Composition.ComponentPool.Tests"
     "Oxygen.Composition.ComponentPoolRegistry.Tests"
     "Oxygen.Composition.CompositionBasic.Tests"

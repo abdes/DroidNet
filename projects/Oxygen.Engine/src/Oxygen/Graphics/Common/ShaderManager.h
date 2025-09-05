@@ -18,7 +18,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -75,7 +75,7 @@ public:
   OXGN_GFX_API explicit ShaderManager(Config config)
     : config_(std::move(config))
   {
-    AddComponent<ObjectMetaData>(
+    AddComponent<ObjectMetadata>(
       std::string("ShaderManager for ") + config_.backend_name);
     Initialize();
   }
@@ -117,7 +117,7 @@ public:
 
   [[nodiscard]] auto GetName() const noexcept
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
 private:

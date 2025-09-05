@@ -13,7 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -156,7 +156,7 @@ class Buffer : public Composition, public Named {
 public:
   using ViewDescriptionT = BufferViewDescription;
 
-  explicit Buffer(std::string_view name) { AddComponent<ObjectMetaData>(name); }
+  explicit Buffer(std::string_view name) { AddComponent<ObjectMetadata>(name); }
 
   ~Buffer() override = default;
 
@@ -206,13 +206,13 @@ public:
   //! Returns the buffer's name.
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
   //! Sets the buffer's name.
   auto SetName(const std::string_view name) noexcept -> void override
   {
-    GetComponent<ObjectMetaData>().SetName(name);
+    GetComponent<ObjectMetadata>().SetName(name);
   }
 
   /// Returns the GPU virtual address of the buffer, if supported by the API

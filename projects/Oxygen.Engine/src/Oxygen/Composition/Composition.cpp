@@ -11,7 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <fmt/format.h>
 
@@ -495,14 +495,14 @@ auto Composition::PrintComponentInfo(std::ostream& out, const TypeId type_id,
 
 auto Composition::GetDebugName() const -> std::string_view
 {
-  if (HasComponent<ObjectMetaData>()) {
+  if (HasComponent<ObjectMetadata>()) {
     // We do not use RTTI, and thus cannot use dynamic_cast, but our type system
     // and the guarantees of Composition, ensure that if the Composition has a
     // component of a certain type, then that component can be safely cast to
     // that type.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    return static_cast<const ObjectMetaData&>(
-      GetComponentImpl(ObjectMetaData::ClassTypeId()))
+    return static_cast<const ObjectMetadata&>(
+      GetComponentImpl(ObjectMetadata::ClassTypeId()))
       .GetName();
   }
   return GetTypeNamePretty();

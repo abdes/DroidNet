@@ -10,7 +10,7 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Scene/api_export.h>
 
@@ -45,7 +45,7 @@ OXYGEN_DIAGNOSTIC_DISABLE(4324)
 */
 class TransformComponent final : public Component {
   OXYGEN_POOLED_COMPONENT(TransformComponent, ResourceTypeList)
-  OXYGEN_COMPONENT_REQUIRES(ObjectMetaData)
+  OXYGEN_COMPONENT_REQUIRES(ObjectMetadata)
 
 public:
   using Vec3 = glm::vec3;
@@ -179,8 +179,8 @@ protected:
   void UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept override
   {
-    meta_data_ = &static_cast<ObjectMetaData&>(
-      get_component(ObjectMetaData::ClassTypeId()));
+    meta_data_ = &static_cast<ObjectMetadata&>(
+      get_component(ObjectMetadata::ClassTypeId()));
   }
 
 private:
@@ -197,7 +197,7 @@ private:
   //! access).
   mutable alignas(16) Mat4 world_matrix_ { 1.0f };
 
-  ObjectMetaData* meta_data_ { nullptr };
+  ObjectMetadata* meta_data_ { nullptr };
 
   //! Dirty flag indicating world matrix cache needs re-computation.
   bool is_dirty_ = true;

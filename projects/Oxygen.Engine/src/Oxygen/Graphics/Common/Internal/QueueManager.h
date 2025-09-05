@@ -15,7 +15,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>

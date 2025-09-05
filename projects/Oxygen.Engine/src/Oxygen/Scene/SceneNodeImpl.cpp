@@ -6,7 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Detail/NodeData.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
@@ -25,7 +25,7 @@ SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
 {
   LOG_SCOPE_F(2, "SceneNodeImpl creation");
   DLOG_F(2, "name: '{}'", name);
-  AddComponent<ObjectMetaData>(name);
+  AddComponent<ObjectMetadata>(name);
   AddComponent<NodeData>(flags);
   AddComponent<GraphData>();
   AddComponent<TransformComponent>();
@@ -55,13 +55,13 @@ auto SceneNodeImpl::AsGraphNode() const noexcept -> const GraphNode&
 
 auto SceneNodeImpl::GetName() const noexcept -> std::string_view
 {
-  return GetComponent<ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetadata>().GetName();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::SetName(const std::string_view name) noexcept
 {
-  GetComponent<ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetadata>().SetName(name);
 }
 
 auto SceneNodeImpl::GetFlags() const noexcept -> const Flags&

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -13,14 +13,14 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/DrawMetaData.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 
 using oxygen::engine::RenderPass;
 using oxygen::graphics::CommandRecorder;
 
 RenderPass::RenderPass(const std::string_view name)
 {
-  AddComponent<ObjectMetaData>(name);
+  AddComponent<ObjectMetadata>(name);
 }
 
 auto RenderPass::PrepareResources(
@@ -72,12 +72,12 @@ auto RenderPass::Execute(
 
 auto RenderPass::GetName() const noexcept -> std::string_view
 {
-  return GetComponent<ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetadata>().GetName();
 }
 
 auto RenderPass::SetName(std::string_view name) noexcept -> void
 {
-  GetComponent<ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetadata>().SetName(name);
 }
 auto RenderPass::Context() const -> const RenderContext&
 {

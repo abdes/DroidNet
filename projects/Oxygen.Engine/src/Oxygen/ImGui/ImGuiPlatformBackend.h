@@ -7,7 +7,7 @@
 #pragma once
 
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 
 struct ImGuiContext;
 
@@ -15,17 +15,17 @@ namespace oxygen::imgui {
 
 class ImGuiPlatformBackend : public Composition {
 public:
-    explicit ImGuiPlatformBackend(std::string_view name)
-    {
-        AddComponent<ObjectMetaData>(name);
-    }
+  explicit ImGuiPlatformBackend(std::string_view name)
+  {
+    AddComponent<ObjectMetadata>(name);
+  }
 
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view
-    {
-        return GetComponent<ObjectMetaData>().GetName();
-    }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
+  {
+    return GetComponent<ObjectMetadata>().GetName();
+  }
 
-    virtual void NewFrame() = 0;
+  virtual void NewFrame() = 0;
 };
 
 } // namespace oxygen

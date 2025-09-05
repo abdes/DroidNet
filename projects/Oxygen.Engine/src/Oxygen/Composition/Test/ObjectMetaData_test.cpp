@@ -6,73 +6,74 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 
 namespace {
 
-using oxygen::ObjectMetaData;
+using oxygen::ObjectMetadata;
 
 // Constructor Tests
-NOLINT_TEST(ObjectMetaDataTest, Constructor)
+NOLINT_TEST(ObjectMetadataTest, Constructor)
 {
-    const ObjectMetaData md("TestObject");
-    EXPECT_EQ(md.GetName(), "TestObject");
+  const ObjectMetadata md("TestObject");
+  EXPECT_EQ(md.GetName(), "TestObject");
 }
 
 // Setter Tests
-NOLINT_TEST(ObjectMetaDataTest, SetName)
+NOLINT_TEST(ObjectMetadataTest, SetName)
 {
-    ObjectMetaData md("TestObject");
-    md.SetName("NewName");
-    EXPECT_EQ(md.GetName(), "NewName");
+  ObjectMetadata md("TestObject");
+  md.SetName("NewName");
+  EXPECT_EQ(md.GetName(), "NewName");
 }
 
 // Clone Tests
-NOLINT_TEST(ObjectMetaDataTest, Clone)
+NOLINT_TEST(ObjectMetadataTest, Clone)
 {
-    const ObjectMetaData original("TestObject");
-    const auto cloned = original.Clone();
-    auto* cloned_meta_data = reinterpret_cast<ObjectMetaData*>(cloned.get()); // NOLINT(*-pro-type-reinterpret-cast)
-    ASSERT_NE(cloned_meta_data, nullptr);
-    EXPECT_EQ(cloned_meta_data->GetName(), "TestObject");
-    cloned_meta_data->SetName("NewName");
-    EXPECT_EQ(original.GetName(), "TestObject");
-    EXPECT_EQ(cloned_meta_data->GetName(), "NewName");
+  const ObjectMetadata original("TestObject");
+  const auto cloned = original.Clone();
+  auto* cloned_meta_data = reinterpret_cast<ObjectMetadata*>(
+    cloned.get()); // NOLINT(*-pro-type-reinterpret-cast)
+  ASSERT_NE(cloned_meta_data, nullptr);
+  EXPECT_EQ(cloned_meta_data->GetName(), "TestObject");
+  cloned_meta_data->SetName("NewName");
+  EXPECT_EQ(original.GetName(), "TestObject");
+  EXPECT_EQ(cloned_meta_data->GetName(), "NewName");
 }
 
 // Copy/Move Tests
-NOLINT_TEST(ObjectMetaDataTest, CopyConstructor)
+NOLINT_TEST(ObjectMetadataTest, CopyConstructor)
 {
-    const ObjectMetaData original("TestObject");
-    ObjectMetaData copy(original);
-    EXPECT_EQ(copy.GetName(), "TestObject");
-    copy.SetName("CopiedObject");
-    EXPECT_EQ(copy.GetName(), "CopiedObject");
-    EXPECT_EQ(original.GetName(), "TestObject");
+  const ObjectMetadata original("TestObject");
+  ObjectMetadata copy(original);
+  EXPECT_EQ(copy.GetName(), "TestObject");
+  copy.SetName("CopiedObject");
+  EXPECT_EQ(copy.GetName(), "CopiedObject");
+  EXPECT_EQ(original.GetName(), "TestObject");
 }
 
-NOLINT_TEST(ObjectMetaDataTest, MoveConstructor)
+NOLINT_TEST(ObjectMetadataTest, MoveConstructor)
 {
-    ObjectMetaData original("TestObject");
-    const ObjectMetaData moved(std::move(original));
-    EXPECT_EQ(moved.GetName(), "TestObject");
+  ObjectMetadata original("TestObject");
+  const ObjectMetadata moved(std::move(original));
+  EXPECT_EQ(moved.GetName(), "TestObject");
 }
 
-NOLINT_TEST(ObjectMetaDataTest, CopyAssignment)
+NOLINT_TEST(ObjectMetadataTest, CopyAssignment)
 {
-    const ObjectMetaData original("TestObject");
-    ObjectMetaData copy = original;
-    EXPECT_EQ(copy.GetName(), "TestObject");
-    copy.SetName("CopiedObject");
-    EXPECT_EQ(copy.GetName(), "CopiedObject");
-    EXPECT_EQ(original.GetName(), "TestObject");
+  const ObjectMetadata original("TestObject");
+  ObjectMetadata copy = original;
+  EXPECT_EQ(copy.GetName(), "TestObject");
+  copy.SetName("CopiedObject");
+  EXPECT_EQ(copy.GetName(), "CopiedObject");
+  EXPECT_EQ(original.GetName(), "TestObject");
 }
 
-NOLINT_TEST(ObjectMetaDataTest, MoveAssignment)
+NOLINT_TEST(ObjectMetadataTest, MoveAssignment)
 {
-    ObjectMetaData original("TestObject");
-    const ObjectMetaData moved = std::move(original);
-    EXPECT_EQ(moved.GetName(), "TestObject");
+  ObjectMetadata original("TestObject");
+  const ObjectMetadata moved = std::move(original);
+  EXPECT_EQ(moved.GetName(), "TestObject");
 }
 
 } // namespace

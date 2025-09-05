@@ -9,7 +9,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Detail/NodeData.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -17,7 +17,7 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-using oxygen::ObjectMetaData;
+using oxygen::ObjectMetadata;
 using oxygen::scene::NodeHandle;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
@@ -509,21 +509,21 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ClonesAreIndependent)
   EXPECT_EQ(clone->GetName(), "ClonedNode");
 }
 
-NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesObjectMetaData)
+NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesObjectMetadata)
 {
   // Arrange: Create original node with a specific name
-  const std::string original_name = "MetaDataNode";
+  const std::string original_name = "MetadataNode";
   const auto original = SceneNodeImpl(original_name);
 
   // Act: Clone the node
   const auto clone = original.Clone();
 
-  // Assert: Clone should preserve ObjectMetaData (name)
+  // Assert: Clone should preserve ObjectMetadata (name)
   ASSERT_NE(clone, nullptr);
-  EXPECT_EQ(clone->GetComponent<ObjectMetaData>().GetName(), original_name);
+  EXPECT_EQ(clone->GetComponent<ObjectMetadata>().GetName(), original_name);
 }
 
-NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ObjectMetaDataIsIndependent)
+NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ObjectMetadataIsIndependent)
 {
   // Arrange: Create original node and clone it
   auto original = SceneNodeImpl("OriginalMeta");
@@ -531,13 +531,13 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ObjectMetaDataIsIndependent)
   ASSERT_NE(clone, nullptr);
 
   // Act: Change name in original and clone independently
-  original.GetComponent<ObjectMetaData>().SetName("ChangedOriginal");
-  clone->GetComponent<ObjectMetaData>().SetName("ChangedClone");
+  original.GetComponent<ObjectMetadata>().SetName("ChangedOriginal");
+  clone->GetComponent<ObjectMetadata>().SetName("ChangedClone");
 
   // Assert: Names are independent
   EXPECT_EQ(
-    original.GetComponent<ObjectMetaData>().GetName(), "ChangedOriginal");
-  EXPECT_EQ(clone->GetComponent<ObjectMetaData>().GetName(), "ChangedClone");
+    original.GetComponent<ObjectMetadata>().GetName(), "ChangedOriginal");
+  EXPECT_EQ(clone->GetComponent<ObjectMetadata>().GetName(), "ChangedClone");
 }
 
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesNodeDataFlags)

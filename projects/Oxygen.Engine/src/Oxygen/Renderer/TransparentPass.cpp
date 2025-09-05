@@ -23,7 +23,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ShaderPass.h>
 #include <Oxygen/Renderer/TransparentPass.h>
-#include <Oxygen/Renderer/Types/DrawMetaData.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::engine::TransparentPass;

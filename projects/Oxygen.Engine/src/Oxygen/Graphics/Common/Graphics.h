@@ -12,7 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -78,7 +78,7 @@ namespace imgui {
 
  ### Architecture Notes
 
- - Graphics is a Composition root; it provides access to ObjectMetaData and
+ - Graphics is a Composition root; it provides access to ObjectMetadata and
    installs a backend-agnostic Bindless component at the device level. The
    descriptor allocator is late-installed via a single-assignment setter to
    avoid virtual work in constructors and to keep backend concerns out of base
@@ -104,7 +104,7 @@ public:
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
   //=== Async operations ===--------------------------------------------------//

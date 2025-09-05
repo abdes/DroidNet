@@ -12,7 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
@@ -64,18 +64,18 @@ public:
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
   auto SetName(std::string_view name) noexcept -> void override
   {
-    GetComponent<ObjectMetaData>().SetName(name);
+    GetComponent<ObjectMetadata>().SetName(name);
   }
 
 protected:
   explicit Surface(std::string_view name = "Surface")
   {
-    AddComponent<ObjectMetaData>(name);
+    AddComponent<ObjectMetadata>(name);
   }
 
 private:

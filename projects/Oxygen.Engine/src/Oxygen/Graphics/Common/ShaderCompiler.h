@@ -14,7 +14,7 @@
 #include <type_traits>
 
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -39,7 +39,7 @@ public:
       throw std::invalid_argument("ShaderCompiler name cannot be empty.");
     }
 
-    AddComponent<ObjectMetaData>(config_.name);
+    AddComponent<ObjectMetadata>(config_.name);
   }
 
   OXGN_GFX_API ~ShaderCompiler() override = default;
@@ -75,7 +75,7 @@ public:
 
   [[nodiscard]] auto GetName() const noexcept
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
 protected:

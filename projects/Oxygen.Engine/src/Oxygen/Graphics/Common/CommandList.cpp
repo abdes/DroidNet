@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 
 using oxygen::graphics::CommandList;
@@ -14,24 +14,24 @@ CommandList::CommandList(std::string_view name, const QueueRole type)
   : type_(type)
   , state_(State::kFree)
 {
-  AddComponent<ObjectMetaData>(name);
+  AddComponent<ObjectMetadata>(name);
   DLOG_F(1, "CommandList created: {}", name);
 }
 
 CommandList::~CommandList()
 {
   DLOG_F(
-    1, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
+    1, "CommandList destroyed: {}", GetComponent<ObjectMetadata>().GetName());
 }
 
 auto CommandList::GetName() const noexcept -> std::string_view
 {
-  return GetComponent<ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetadata>().GetName();
 }
 
 void CommandList::SetName(const std::string_view name) noexcept
 {
-  GetComponent<ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetadata>().SetName(name);
 }
 
 void CommandList::OnBeginRecording()

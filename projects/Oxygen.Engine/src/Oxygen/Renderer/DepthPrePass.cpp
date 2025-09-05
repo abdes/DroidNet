@@ -27,7 +27,7 @@
 #include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/DrawMetaData.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::Scissors;

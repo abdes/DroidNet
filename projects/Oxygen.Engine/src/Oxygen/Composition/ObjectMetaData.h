@@ -13,15 +13,15 @@
 
 namespace oxygen {
 
-class ObjectMetaData final : public Component {
-  OXYGEN_COMPONENT(ObjectMetaData)
+class ObjectMetadata final : public Component {
+  OXYGEN_COMPONENT(ObjectMetadata)
 public:
-  OXGN_COM_API explicit ObjectMetaData(std::string_view name);
+  OXGN_COM_API explicit ObjectMetadata(std::string_view name);
 
-  OXGN_COM_API ~ObjectMetaData() override;
+  OXGN_COM_API ~ObjectMetadata() override;
 
-  OXYGEN_DEFAULT_COPYABLE(ObjectMetaData)
-  OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
+  OXYGEN_DEFAULT_COPYABLE(ObjectMetadata)
+  OXYGEN_DEFAULT_MOVABLE(ObjectMetadata)
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view
   {
@@ -47,13 +47,13 @@ public:
 
   [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
   {
-    return std::make_unique<ObjectMetaData>(this->name_);
+    return std::make_unique<ObjectMetadata>(this->name_);
   }
 
 private:
   std::string name_;
 };
 
-static_assert(IsComponent<ObjectMetaData>);
+static_assert(IsComponent<ObjectMetadata>);
 
 } // namespace oxygen
