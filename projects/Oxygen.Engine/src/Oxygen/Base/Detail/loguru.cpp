@@ -40,17 +40,14 @@
 #  include <cstdio>
 #  include <cstdlib>
 #  include <cstring>
+#  include <functional>
 #  include <mutex>
-#  include <regex>
+#  include <span>
+#  include <stdexcept>
 #  include <string>
+#  include <string_view>
 #  include <thread>
 #  include <vector>
-
-#  if LOGURU_SYSLOG
-#    include <syslog.h>
-#  else
-#    define LOG_USER 0
-#  endif
 
 #  ifdef _WIN32
 #    include <direct.h>
@@ -59,7 +56,6 @@
       localtime_s(b, a) // No localtime_r with MSVC, but arguments are swapped
 // for localtime_s
 #  else
-#    include <signal.h>
 #    include <sys/stat.h> // mkdir
 #    include <unistd.h> // STDERR_FILENO
 #  endif
@@ -209,11 +205,17 @@ static StringPairList s_user_stack_cleanups;
 static bool s_strip_file_path = true;
 static std::atomic<unsigned> s_stderr_indentation { 0 };
 
+// Registry of per-callsite caches for module semantics.
+struct ModuleSiteEntry {
+  std::atomic<int>* cache;
+  std::string file_path;
+};
+static std::mutex s_module_registry_mutex;
+static std::vector<ModuleSiteEntry> s_module_registry;
+
 // For periodic flushing:
 static std::thread* s_flush_thread = nullptr;
 static bool s_needs_flushing = false;
-
-static SignalOptions s_signal_options = SignalOptions::none();
 
 static const bool s_terminal_has_color = []() {
 #  ifdef _WIN32
@@ -424,52 +426,7 @@ void file_reopen(void* user_data)
   }
 }
 #  endif
-// ------------------------------------------------------------------------------
-// ------------------------------------------------------------------------------
-#  if LOGURU_SYSLOG
-void syslog_log(void* /*user_data*/, const Message& message)
-{
-  /*
-          Level 0: Is reserved for kernel panic type situations.
-          Level 1: Is for Major resource failure.
-          Level 2->7 Application level failures
-  */
-  int level;
-  if (message.verbosity < Verbosity_FATAL) {
-    level = 1; // System Alert
-  } else {
-    switch (message.verbosity) {
-    case Verbosity_FATAL:
-      level = 2;
-      break; // System Critical
-    case Verbosity_ERROR:
-      level = 3;
-      break; // System Error
-    case Verbosity_WARNING:
-      level = 4;
-      break; // System Warning
-    case Verbosity_INFO:
-      level = 5;
-      break; // System Notice
-    case Verbosity_1:
-      level = 6;
-      break; // System Info
-    default:
-      level = 7;
-      break; // System Debug
-    }
-  }
 
-  // Note: We don't add the time info.
-  // This is done automatically by the syslog deamon.
-  // Otherwise log all information that the file log does.
-  syslog(level, "%s%s%s", message.indentation, message.prefix, message.message);
-}
-
-void syslog_close(void* /*user_data*/) { closelog(); }
-
-void syslog_flush(void* /*user_data*/) { }
-#  endif
 // ------------------------------------------------------------------------------
 // Helpers:
 
@@ -529,20 +486,122 @@ static auto indentation(unsigned depth) -> const char*
   return buff + INDENTATION_WIDTH * (NUM_INDENTATIONS - depth);
 }
 
-static void parse_args(int& argc, char* argv[], const char* verbosity_flag)
+struct ModuleInfo {
+  std::string pattern;
+  int verbosity;
+};
+
+static std::mutex s_module_mutex;
+static std::vector<ModuleInfo> s_module_list;
+
+// Normalize path separators (both pattern and subject) to forward slashes.
+static void normalize_module_path(std::string& s)
 {
+  std::replace(s.begin(), s.end(), '\\', '/');
+}
+
+//! Parse a single vmodule override in the form "pattern=verbosity"
+/*!
+ Parses a vmodule override string and adds it to the global module list.
+
+ @param override_str The override string in format "pattern=verbosity"
+ @return True if parsing was successful, false otherwise
+
+ The verbosity can be either:
+ - A number from Verbosity_0 to Verbosity_MAX
+ - Case insensitive 'OFF' for Verbosity_OFF
+*/
+static bool parse_vmodule_override(std::string_view override_str)
+{
+  if (override_str.empty()) {
+    return false;
+  }
+
+  // Find the '=' separator
+  const auto eq_pos = override_str.find('=');
+  if (eq_pos == std::string_view::npos) {
+    return false;
+  }
+
+  // Extract pattern and level parts
+  auto pattern_view = override_str.substr(0, eq_pos);
+  auto level_view = override_str.substr(eq_pos + 1);
+
+  // Trim whitespace from both parts
+  auto trim = [](std::string_view& sv) {
+    while (
+      !sv.empty() && std::isspace(static_cast<unsigned char>(sv.front()))) {
+      sv.remove_prefix(1);
+    }
+    while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.back()))) {
+      sv.remove_suffix(1);
+    }
+  };
+
+  trim(pattern_view);
+  trim(level_view);
+
+  if (pattern_view.empty() || level_view.empty()) {
+    return false;
+  }
+
+  // Parse verbosity level
+  int level = 0;
+
+  // Check for case-insensitive 'OFF'
+  if (level_view.size() == 3) {
+    bool is_off
+      = (std::toupper(static_cast<unsigned char>(level_view[0])) == 'O'
+        && std::toupper(static_cast<unsigned char>(level_view[1])) == 'F'
+        && std::toupper(static_cast<unsigned char>(level_view[2])) == 'F');
+    if (is_off) {
+      level = static_cast<int>(Verbosity_OFF);
+    } else {
+      // Try to parse as number
+      std::string level_str(level_view);
+      char* end = nullptr;
+      level = static_cast<int>(std::strtol(level_str.c_str(), &end, 10));
+      if (!end || *end != '\0') {
+        return false; // Invalid number
+      }
+    }
+  } else {
+    // Parse as number
+    std::string level_str(level_view);
+    char* end = nullptr;
+    level = static_cast<int>(std::strtol(level_str.c_str(), &end, 10));
+    if (!end || *end != '\0') {
+      return false; // Invalid number
+    }
+  }
+
+  // Add to module list (store normalized pattern)
+  {
+    std::string stored_pattern(pattern_view);
+    normalize_module_path(stored_pattern);
+    std::lock_guard<std::mutex> l(s_module_mutex);
+    s_module_list.push_back(ModuleInfo { std::move(stored_pattern), level });
+  }
+
+  return true;
+}
+
+void parse_args(int& argc, char* argv[], const char* verbosity_flag)
+{
+  fprintf(stderr, "parse_args called with argc=%d\n", argc);
   int arg_dest = 1;
   int out_argc = argc;
 
   for (int arg_it = 1; arg_it < argc; ++arg_it) {
-    auto cmd = argv[arg_it];
-    auto arg_len = strlen(verbosity_flag);
-    auto cmd_len = strlen(cmd);
+    const char* cmd = argv[arg_it];
+    const auto arg_len = std::strlen(verbosity_flag);
+    const auto cmd_len = std::strlen(cmd);
 
+    // Check for verbosity flag (e.g., -v)
     bool last_is_alpha = false;
     if (arg_len < cmd_len) {
 #  if LOGURU_USE_LOCALE
-      try { // locale variant of isalpha will throw on error
+      try {
         last_is_alpha = std::isalpha(cmd[arg_len], std::locale(""));
       } catch (...) {
         last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
@@ -552,39 +611,467 @@ static void parse_args(int& argc, char* argv[], const char* verbosity_flag)
 #  endif
     }
 
-    if (strncmp(cmd, verbosity_flag, arg_len) == 0 && !last_is_alpha) {
+    // Only treat this as the verbosity flag if the token exactly matches the
+    // verbosity_flag or if the next character is '=' or a digit. This avoids
+    // incorrectly matching "--vmodule" (which starts with "-v") as a
+    // verbosity flag.
+    const char next_ch = (arg_len < cmd_len) ? cmd[arg_len] : '\0';
+    const bool verbosity_match = std::strncmp(cmd, verbosity_flag, arg_len) == 0
+      && (next_ch == '\0' || next_ch == '='
+        || (next_ch >= '0' && next_ch <= '9'));
+
+    if (verbosity_match) {
+      // Handle verbosity flag (-v N or -v=N or -v OFF or -v=OFF)
       out_argc -= 1;
-      auto value_str = cmd + arg_len;
+      const char* value_str = cmd + arg_len;
+
       if (value_str[0] == '\0') {
         // Value in separate argument
         arg_it += 1;
         CHECK_LT_F(arg_it, argc,
-          "Missing verbosiy level after " LOGURU_FMT(s) "", verbosity_flag);
+          "Missing verbosity level after " LOGURU_FMT(s) "", verbosity_flag);
         value_str = argv[arg_it];
         out_argc -= 1;
-      }
-      if (*value_str == '=') {
+      } else if (value_str[0] == '=') {
+        // Skip the '=' character
         value_str += 1;
       }
 
-      auto req_verbosity = get_verbosity_from_name(value_str);
-      if (req_verbosity != Verbosity_INVALID) {
-        g_stderr_verbosity = req_verbosity;
+      // Parse verbosity name or integer and apply to stderr verbosity
+      auto req_verbosity_local = get_verbosity_from_name(value_str);
+      if (req_verbosity_local != Verbosity_INVALID) {
+        g_stderr_verbosity = req_verbosity_local;
       } else {
-        char* end = 0;
-        g_stderr_verbosity = static_cast<int>(strtol(value_str, &end, 10));
+        char* end = nullptr;
+        g_stderr_verbosity = static_cast<int>(std::strtol(value_str, &end, 10));
         CHECK_F(end && *end == '\0',
           "Invalid verbosity. Expected integer, INFO, WARNING, ERROR or "
           "OFF, got '" LOGURU_FMT(s) "'",
           value_str);
       }
+    } else if (std::strncmp(cmd, "--vmodule", 9) == 0) {
+      // Handle --vmodule flag (only long form supported)
+      out_argc -= 1;
+      const char* value_str = cmd + 9;
+
+      if (value_str[0] == '\0') {
+        // Value in separate argument
+        arg_it += 1;
+        CHECK_LT_F(arg_it, argc, "Missing value after --vmodule");
+        value_str = argv[arg_it];
+        out_argc -= 1;
+      } else if (value_str[0] == '=') {
+        // Skip the '=' character
+        value_str += 1;
+      }
+
+      // Parse vmodule overrides (comma-separated list from command line)
+      std::string_view vmodule_str(value_str);
+
+      // Collect all overrides first, then process in reverse order so that
+      // first (more specific) patterns take precedence over later (more
+      // general) ones
+      std::vector<std::string_view> overrides;
+      size_t start = 0;
+      size_t pos = 0;
+
+      while (pos <= vmodule_str.length()) {
+        if (pos == vmodule_str.length() || vmodule_str[pos] == ',') {
+          if (pos > start) {
+            auto override_str = vmodule_str.substr(start, pos - start);
+            // Trim whitespace
+            while (!override_str.empty()
+              && std::isspace(
+                static_cast<unsigned char>(override_str.front()))) {
+              override_str.remove_prefix(1);
+            }
+            while (!override_str.empty()
+              && std::isspace(
+                static_cast<unsigned char>(override_str.back()))) {
+              override_str.remove_suffix(1);
+            }
+
+            if (!override_str.empty()) {
+              overrides.push_back(override_str);
+            }
+          }
+          start = pos + 1;
+        }
+        ++pos;
+      }
+
+      // Process overrides in given order; earlier entries get precedence via
+      // first-match semantics.
+      for (const auto& ov : overrides) {
+        configure_vmodule(ov);
+      }
     } else {
+      // Keep this argument
       argv[arg_dest++] = argv[arg_it];
     }
   }
 
   argc = out_argc;
   argv[argc] = nullptr;
+}
+
+// ------------------------------------------------------------------------
+// VModule-like support
+// Supports patterns with '*' and '?' only. If pattern contains a path
+// separator ('/' or '\\') it will be matched against full path; otherwise
+// it is matched against the filename base (basename without extension,
+// trimming a trailing "-inl"). Multiple entries may be comma-separated or
+// supplied via multiple flag instances.
+
+static std::string basename_for_matching(const char* file_path)
+{
+  // Extract basename (after last / or \) and strip extension and trailing -inl
+  const char* base = file_path;
+  for (const char* p = file_path; *p; ++p) {
+    if (*p == '/' || *p == '\\')
+      base = p + 1;
+  }
+  // truncate at first '.'
+  std::string s(base);
+  const size_t dot = s.find('.');
+  if (dot != std::string::npos)
+    s.resize(dot);
+  if (s.size() >= 4 && s.compare(s.size() - 4, 4, "-inl") == 0) {
+    s.resize(s.size() - 4);
+  }
+  return s;
+}
+
+static std::string fullpath_for_matching(const char* file_path)
+{
+  // Take full path and strip extension and trailing -inl, then normalize.
+  std::string s(file_path);
+  const size_t dot = s.find_last_of('.');
+  if (dot != std::string::npos) {
+    s.resize(dot);
+  }
+  if (s.size() >= 4 && s.compare(s.size() - 4, 4, "-inl") == 0) {
+    s.resize(s.size() - 4);
+  }
+  normalize_module_path(s);
+  return s;
+}
+
+// New glob matcher with segment semantics supporting *, ?, **.
+// Rules:
+//  *  matches zero or more characters except '/'
+//  ?  matches exactly one character except '/'
+//  ** matches zero or more path segments (may cross '/'), including empty
+//  Matching is against already normalized (forward slash) strings with
+//  extensions and '-inl' removed as appropriate by callers.
+// Match a single path segment (no '/') with '*' and '?' wildcards.
+static bool match_segment(const std::string& patt, const std::string& seg)
+{
+  size_t pi = 0, si = 0;
+  size_t star = std::string::npos, retry = 0;
+  while (si < seg.size()) {
+    if (pi < patt.size() && (patt[pi] == '?' || patt[pi] == seg[si])) {
+      ++pi;
+      ++si;
+      continue;
+    }
+    if (pi < patt.size() && patt[pi] == '*') {
+      star = pi++;
+      retry = si;
+      continue;
+    }
+    if (star != std::string::npos) {
+      pi = star + 1;
+      ++retry;
+      si = retry;
+      continue;
+    }
+    return false;
+  }
+  while (pi < patt.size() && patt[pi] == '*') {
+    ++pi;
+  }
+  return pi == patt.size();
+}
+
+// Fully specified module glob matching with segment semantics and '**'.
+static bool module_glob_match(
+  const std::string& pattern, const std::string& path)
+{
+  if (pattern == path) {
+    return true;
+  }
+  auto split = [](const std::string& s) {
+    std::vector<std::string> parts;
+    parts.reserve(8);
+    size_t start = 0;
+    while (true) {
+      size_t pos = s.find('/', start);
+      if (pos == std::string::npos) {
+        parts.emplace_back(s.substr(start));
+        break;
+      }
+      parts.emplace_back(s.substr(start, pos - start));
+      start = pos + 1;
+    }
+    return parts;
+  };
+  const auto pseg = split(pattern);
+  const auto sseg = split(path);
+  const size_t PN = pseg.size();
+  const size_t SN = sseg.size();
+  std::vector<std::vector<int8_t>> memo(
+    PN + 1, std::vector<int8_t>(SN + 1, -1));
+  std::function<bool(size_t, size_t)> dfs = [&](size_t pi, size_t si) -> bool {
+    if (memo[pi][si] != -1)
+      return memo[pi][si] == 1;
+    bool ok = false;
+    if (pi == PN) {
+      ok = (si == SN);
+    } else if (pseg[pi] == "**") {
+      // Collapse consecutive **
+      size_t next = pi + 1;
+      while (next < PN && pseg[next] == "**")
+        ++next;
+      if (next == PN) {
+        ok = true;
+      } else {
+        for (size_t k = si; k <= SN; ++k) {
+          if (dfs(next, k)) {
+            ok = true;
+            break;
+          }
+        }
+      }
+    } else if (si < SN && match_segment(pseg[pi], sseg[si])) {
+      ok = dfs(pi + 1, si + 1);
+    } else {
+      ok = false;
+    }
+    memo[pi][si] = ok ? 1 : 0;
+    return ok;
+  };
+  return dfs(0, 0);
+}
+
+//! Configure a single vmodule override
+/*!
+ Processes a single vmodule override in the form "pattern=verbosity".
+
+ @param input String view containing exactly one vmodule override
+ @throw std::invalid_argument if input contains comma or is invalid
+
+ The verbosity can be either:
+ - A number from Verbosity_0 to Verbosity_MAX
+ - Case insensitive 'OFF' for Verbosity_OFF
+*/
+LOGURU_EXPORT void configure_vmodule(std::string_view input)
+{
+  if (input.empty()) {
+    return; // Empty input is ignored, not an error
+  }
+
+  // Reject comma-separated input - use configure_vmodules for that
+  if (input.find(',') != std::string_view::npos) {
+    throw std::invalid_argument(
+      "configure_vmodule accepts only a single override. Use "
+      "configure_vmodules for comma-separated lists.");
+  }
+
+  // Parse the single override
+  bool parsed = parse_vmodule_override(input);
+  if (!parsed) {
+    throw std::invalid_argument(
+      "Invalid vmodule override format. Expected 'pattern=verbosity'.");
+  }
+
+  update_all_module_sites();
+}
+
+// Configure vmodule overrides from multiple string_view sources.
+// Each string_view should contain a single override. Processes in reverse order
+// so that first patterns take precedence over later ones.
+LOGURU_EXPORT void configure_vmodules(
+  std::initializer_list<std::string_view> overrides)
+{
+  // Process in provided order: earlier overrides take precedence (first-match)
+  for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+    if (!it->empty()) {
+      bool parsed = parse_vmodule_override(*it);
+      if (!parsed) {
+        throw std::invalid_argument(
+          "Invalid vmodule override format. Expected 'pattern=verbosity'.");
+      }
+    }
+  }
+  update_all_module_sites();
+}
+
+LOGURU_EXPORT void clear_vmodule_overrides()
+{
+  // Clear under lock.
+  {
+    std::lock_guard<std::mutex> l(s_module_mutex);
+    s_module_list.clear();
+  }
+  update_all_module_sites();
+}
+
+LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
+{
+  // Evaluate vmodule overrides first so module-specific rules take
+  // precedence over the global stderr cutoff. This matches intended
+  // semantics where modules can enable or suppress logs independent of
+  // the global verbosity.
+  std::lock_guard<std::mutex> l(s_module_mutex);
+  if (!s_module_list.empty()) {
+    const std::string base = basename_for_matching(file_path);
+    // Iterate forward so earlier entries take precedence (first-match-wins).
+    for (const auto& info : s_module_list) {
+      bool use_full = info.pattern.find('/') != std::string::npos
+        || info.pattern.find('\\') != std::string::npos;
+      if (use_full) {
+        // Full path matching with glob semantics.
+        std::string full_norm = fullpath_for_matching(file_path);
+        std::string patt_norm = info.pattern;
+        normalize_module_path(patt_norm);
+        if (module_glob_match(patt_norm, full_norm)) {
+          return verbosity <= info.verbosity;
+        }
+      } else {
+        if (module_glob_match(info.pattern, base)) {
+          return verbosity <= info.verbosity;
+        }
+      }
+    }
+  }
+
+  // Fall back to the global stderr cutoff.
+  return verbosity <= g_stderr_verbosity;
+}
+
+// Compute the effective vmodule level for a file path. Returns
+// Verbosity_UNSPECIFIED to indicate "no specific override" so callers can fall
+// back to global.
+LOGURU_EXPORT int compute_module_verbosity_for(const char* file_path)
+{
+  std::lock_guard<std::mutex> l(s_module_mutex);
+  if (s_module_list.empty()) {
+    return Verbosity_UNSPECIFIED;
+  }
+  const std::string base = basename_for_matching(file_path);
+
+  // Iterate forward so earlier inserted entries take precedence (first-match)
+  // aligning with is_enabled_for(). This guarantees consistent behavior for
+  // cached module sites and direct runtime checks after
+  // update_all_module_sites.
+  for (const auto& info : s_module_list) {
+    bool use_full = info.pattern.find('/') != std::string::npos
+      || info.pattern.find('\\') != std::string::npos;
+    if (use_full) {
+      std::string full_norm = fullpath_for_matching(file_path);
+      std::string patt_norm = info.pattern;
+      normalize_module_path(patt_norm);
+      if (module_glob_match(patt_norm, full_norm)) {
+        return info.verbosity;
+      }
+    } else {
+      if (module_glob_match(info.pattern, base)) {
+        return info.verbosity;
+      }
+    }
+  }
+  return Verbosity_UNSPECIFIED;
+}
+
+//! Recompute and cache vmodule verbosity for all registered call sites.
+/*!
+ Iterates over the registry of per-callsite module caches and updates each
+ atomic cache with the currently effective vmodule verbosity (or
+ Verbosity_UNSPECIFIED if no pattern matches). This ensures subsequent
+ check_module_fast() calls use a consistent, up-to-date cached value instead
+ of falling back to is_enabled_for() after pattern changes.
+
+ Locking strategy:
+ - We first snapshot the registry under s_module_registry_mutex.
+ - For each entry we invoke compute_module_verbosity_for(), which acquires
+   s_module_mutex internally; we never hold the registry mutex while doing
+   that, avoiding deadlocks / lock-order inversion.
+
+ Memory ordering:
+ - Stores use memory_order_release so a racing reader using acquire (or even
+   relaxed in current implementation) will observe a fully published value.
+   Existing readers use relaxed; upgrading them later (if needed) is safe.
+*/
+LOGURU_EXPORT void update_all_module_sites()
+{
+  std::vector<ModuleSiteEntry> copied;
+  {
+    std::lock_guard<std::mutex> reg(s_module_registry_mutex);
+    copied = s_module_registry;
+  }
+  for (auto& e : copied) {
+    const int level = compute_module_verbosity_for(e.file_path.c_str());
+    e.cache->store(level, std::memory_order_release);
+  }
+}
+
+LOGURU_EXPORT void ensure_module_site_registered(
+  std::atomic<int>* site_cache, const char* file_path)
+{
+  if (!site_cache || !file_path) {
+    return;
+  }
+  if (site_cache->load(std::memory_order_relaxed) != Verbosity_UNSPECIFIED) {
+    return; // Already initialized.
+  }
+  bool already_registered = false;
+  {
+    std::lock_guard<std::mutex> reg(s_module_registry_mutex);
+    for (const auto& e : s_module_registry) {
+      if (e.cache == site_cache) {
+        already_registered = true;
+        break;
+      }
+    }
+    if (!already_registered) {
+      s_module_registry.push_back(ModuleSiteEntry { site_cache, file_path });
+    }
+  }
+  if (!already_registered) {
+    const int level = compute_module_verbosity_for(file_path);
+    site_cache->store(
+      level == Verbosity_UNSPECIFIED ? Verbosity_UNSPECIFIED : level,
+      std::memory_order_relaxed);
+  }
+}
+
+LOGURU_EXPORT bool check_module_fast(
+  std::atomic<int>* site_cache, Verbosity verbosity, const char* file_path)
+{
+  if (!site_cache) {
+    return is_enabled_for(verbosity, file_path);
+  }
+  // Ensure registration happens at least once.
+  ensure_module_site_registered(site_cache, file_path);
+  const int cached = site_cache->load(std::memory_order_relaxed);
+
+  if (cached != Verbosity_UNSPECIFIED) {
+    const bool result = verbosity <= cached;
+    return result;
+  }
+  // No cached override -> fallback to full check.
+  const bool result = is_enabled_for(verbosity, file_path);
+  // If fallback succeeded (an override allowed it) capture and cache the
+  // module-specific level so subsequent calls are fast and can raise above
+  // a global OFF.
+  if (result) {
+    const int level = compute_module_verbosity_for(file_path);
+    if (level != Verbosity_UNSPECIFIED) {
+      site_cache->store(level, std::memory_order_relaxed);
+    }
+  }
+  return result;
 }
 
 static auto now_ns() -> long long
@@ -612,8 +1099,6 @@ static void on_atexit()
   VLOG_F(g_internal_verbosity, "atexit");
   flush();
 }
-
-static void install_signal_handlers(const SignalOptions& signal_options);
 
 static void write_hex_digit(std::string& out, unsigned num)
 {
@@ -758,8 +1243,6 @@ void init(int& argc, char* argv[], const Options& options)
   VLOG_F(g_internal_verbosity, "stderr verbosity: " LOGURU_FMT(d) "",
     g_stderr_verbosity);
   VLOG_F(g_internal_verbosity, "-----------------------------------");
-
-  install_signal_handlers(options.signal_options);
 
   atexit(on_atexit);
 }
@@ -938,48 +1421,6 @@ auto add_file(const char* path_in, FileMode mode, Verbosity verbosity) -> bool
   return true;
 }
 
-/*
-        Will add syslog as a standard sink for log messages
-        Any logging message with a verbosity lower or equal to
-        the given verbosity will be included.
-
-        This works for Unix like systems (i.e. Linux/Mac)
-        There is no current implementation for Windows (as I don't know the
-        equivalent calls or have a way to test them). If you know please
-        add and send a pull request.
-
-        The code should still compile under windows but will only generate
-        a warning message that syslog is unavailable.
-
-        Search for LOGURU_SYSLOG to find and fix.
-*/
-auto add_syslog(const char* app_name, Verbosity verbosity) -> bool
-{
-  return add_syslog(app_name, verbosity, LOG_USER);
-}
-auto add_syslog(const char* app_name, Verbosity verbosity, int facility) -> bool
-{
-#  if LOGURU_SYSLOG
-  if (app_name == nullptr) {
-    app_name = argv0_filename();
-  }
-  openlog(app_name, 0, facility);
-  add_callback(
-    "'syslog'", syslog_log, nullptr, verbosity, syslog_close, syslog_flush);
-
-  VLOG_F(g_internal_verbosity,
-    "Logging to 'syslog' , verbosity: " LOGURU_FMT(d) "", verbosity);
-  return true;
-#  else
-  (void)app_name;
-  (void)verbosity;
-  (void)facility;
-  VLOG_F(g_internal_verbosity,
-    "syslog not implemented on this system. Request "
-    "to install syslog logging ignored.");
-  return false;
-#  endif
-}
 // Will be called right before abort().
 void set_fatal_handler(fatal_handler_t handler) { s_fatal_handler = handler; }
 
@@ -1518,30 +1959,27 @@ static void log_message(int stack_trace_skip, Message& message,
     message.indentation = indentation(s_stderr_indentation);
   }
 
-  if (verbosity <= g_stderr_verbosity) {
-    if (g_colorlogtostderr && s_terminal_has_color) {
-      if (verbosity > Verbosity_WARNING) {
-        fprintf(stderr, "%s%s%s%s%s%s%s%s\n", terminal_reset(), terminal_dim(),
-          message.preamble, message.indentation,
-          verbosity == Verbosity_INFO ? terminal_reset()
-                                      : "", // un-dim for info
-          message.prefix, message.message, terminal_reset());
-      } else {
-        fprintf(stderr, "%s%s%s%s%s%s%s\n", terminal_reset(),
-          verbosity == Verbosity_WARNING ? terminal_yellow() : terminal_red(),
-          message.preamble, message.indentation, message.prefix,
-          message.message, terminal_reset());
-      }
+  if (g_colorlogtostderr && s_terminal_has_color) {
+    if (verbosity > Verbosity_WARNING) {
+      fprintf(stderr, "%s%s%s%s%s%s%s%s\n", terminal_reset(), terminal_dim(),
+        message.preamble, message.indentation,
+        verbosity == Verbosity_INFO ? terminal_reset() : "", // un-dim for info
+        message.prefix, message.message, terminal_reset());
     } else {
-      fprintf(stderr, "%s%s%s%s\n", message.preamble, message.indentation,
-        message.prefix, message.message);
+      fprintf(stderr, "%s%s%s%s%s%s%s\n", terminal_reset(),
+        verbosity == Verbosity_WARNING ? terminal_yellow() : terminal_red(),
+        message.preamble, message.indentation, message.prefix, message.message,
+        terminal_reset());
     }
+  } else {
+    fprintf(stderr, "%s%s%s%s\n", message.preamble, message.indentation,
+      message.prefix, message.message);
+  }
 
-    if (g_flush_interval_ms == 0) {
-      fflush(stderr);
-    } else {
-      s_needs_flushing = true;
-    }
+  if (g_flush_interval_ms == 0) {
+    fflush(stderr);
+  } else {
+    s_needs_flushing = true;
   }
 
   for (auto& p : s_callbacks) {
@@ -1595,6 +2033,12 @@ static void log_message(int stack_trace_skip, Message& message,
 void log_to_everywhere(int stack_trace_skip, Verbosity verbosity,
   const char* file, unsigned line, const char* prefix, const char* buff)
 {
+  // If this log site is not enabled for the given verbosity
+  // (considering per-module overrides), skip formatting and return early.
+  if (!is_enabled_for(verbosity, file)) {
+    return;
+  }
+
   char preamble_buff[LOGURU_PREAMBLE_WIDTH];
   print_preamble(preamble_buff, sizeof(preamble_buff), verbosity, file, line);
   auto message
@@ -1613,6 +2057,11 @@ void vlog(Verbosity verbosity, const char* file, unsigned line,
 void raw_vlog(Verbosity verbosity, const char* file, unsigned line,
   const char* format, fmt::format_args args)
 {
+  // If this log site is not enabled for the given verbosity
+  // (considering per-module overrides), skip formatting and return early.
+  if (!is_enabled_for(verbosity, file)) {
+    return;
+  }
   auto formatted = vformat(format, args);
   auto message
     = Message { verbosity, file, line, "", "", "", formatted.c_str() };
@@ -1638,6 +2087,9 @@ void vlog(Verbosity verbosity, const char* file, unsigned line,
 void raw_log(
   Verbosity verbosity, const char* file, unsigned line, const char* format, ...)
 {
+  // Avoid unnecessary work if the site is not enabled for this verbosity.
+  if (!is_enabled_for(verbosity, file))
+    return;
   va_list vlist;
   va_start(vlist, format);
   auto buff = vtextprintf(format, vlist);
@@ -1714,24 +2166,24 @@ LogScopeRAII::~LogScopeRAII()
 
 void LogScopeRAII::Init(const char* format, va_list vlist)
 {
-  if (_verbosity <= current_verbosity_cutoff()) {
-    std::lock_guard lock(s_mutex);
-    _indent_stderr = (_verbosity <= g_stderr_verbosity);
-    _start_time_ns = now_ns();
-    vsnprintf(_name, sizeof(_name), format, vlist);
-    log_to_everywhere(1, _verbosity, _file, _line, "{ ", _name);
+  std::lock_guard lock(s_mutex);
+  // Use full enable check (including per-module vmodule override) rather than
+  // only comparing against the global stderr verbosity. This ensures scope
+  // indentation is applied when a module-specific override raises verbosity
+  // above a globally lowered/off setting.
+  _indent_stderr = is_enabled_for(_verbosity, _file);
+  _start_time_ns = now_ns();
+  vsnprintf(_name, sizeof(_name), format, vlist);
+  log_to_everywhere(1, _verbosity, _file, _line, "{ ", _name);
 
-    if (_indent_stderr) {
-      ++s_stderr_indentation;
-    }
+  if (_indent_stderr) {
+    ++s_stderr_indentation;
+  }
 
-    for (auto& p : s_callbacks) {
-      if (_verbosity <= p.verbosity) {
-        ++p.indentation;
-      }
+  for (auto& p : s_callbacks) {
+    if (_verbosity <= p.verbosity) {
+      ++p.indentation;
     }
-  } else {
-    _file = nullptr;
   }
 }
 
@@ -2021,165 +2473,7 @@ auto ec_to_text(EcHandle ec_handle) -> Text
   return Text(with_newline);
 }
 
-// ----------------------------------------------------------------------------
-
 } // namespace loguru
-
-// ----------------------------------------------------------------------------
-// .dP"Y8 88  dP""b8 88b 88    db    88     .dP"Y8
-// `Ybo." 88 dP   `" 88Yb88   dPYb   88     `Ybo."
-// o.`Y8b 88 Yb  "88 88 Y88  dP__Yb  88  .o o.`Y8b
-// 8bodP' 88  YboodP 88  Y8 dP""""Yb 88ood8 8bodP'
-// ----------------------------------------------------------------------------
-
-#  ifdef _WIN32
-namespace loguru {
-void install_signal_handlers(const SignalOptions& signal_options)
-{
-  (void)signal_options;
-  // TODO: implement signal handlers on windows
-}
-} // namespace loguru
-
-#  else // _WIN32
-
-namespace loguru {
-void write_to_stderr(const char* data, size_t size)
-{
-  auto result = write(STDERR_FILENO, data, size);
-  (void)result; // Ignore errors.
-}
-
-void write_to_stderr(const char* data) { write_to_stderr(data, strlen(data)); }
-
-void call_default_signal_handler(int signal_number)
-{
-  struct sigaction sig_action;
-  memset(&sig_action, 0, sizeof(sig_action));
-  sigemptyset(&sig_action.sa_mask);
-  sig_action.sa_handler = SIG_DFL;
-  sigaction(signal_number, &sig_action, NULL);
-  kill(getpid(), signal_number);
-}
-
-void signal_handler(int signal_number, siginfo_t*, void*)
-{
-  const char* signal_name = "UNKNOWN SIGNAL";
-
-  if (signal_number == SIGABRT) {
-    signal_name = "SIGABRT";
-  }
-  if (signal_number == SIGBUS) {
-    signal_name = "SIGBUS";
-  }
-  if (signal_number == SIGFPE) {
-    signal_name = "SIGFPE";
-  }
-  if (signal_number == SIGILL) {
-    signal_name = "SIGILL";
-  }
-  if (signal_number == SIGINT) {
-    signal_name = "SIGINT";
-  }
-  if (signal_number == SIGSEGV) {
-    signal_name = "SIGSEGV";
-  }
-  if (signal_number == SIGTERM) {
-    signal_name = "SIGTERM";
-  }
-
-  // --------------------------------------------------------------------
-  /* There are few things that are safe to do in a signal handler,
-     but writing to stderr is one of them.
-     So we first print out what happened to stderr so we're sure that gets out,
-     then we do the unsafe things, like logging the stack trace.
-  */
-
-  if (g_colorlogtostderr && s_terminal_has_color) {
-    write_to_stderr(terminal_reset());
-    write_to_stderr(terminal_bold());
-    write_to_stderr(terminal_light_red());
-  }
-  write_to_stderr("\n");
-  write_to_stderr("Loguru caught a signal: ");
-  write_to_stderr(signal_name);
-  write_to_stderr("\n");
-  if (g_colorlogtostderr && s_terminal_has_color) {
-    write_to_stderr(terminal_reset());
-  }
-
-  // --------------------------------------------------------------------
-
-  if (s_signal_options.unsafe_signal_handler) {
-    // --------------------------------------------------------------------
-    /* Now we do unsafe things. This can for example lead to deadlocks if
-       the signal was triggered from the system's memory management functions
-       and the code below tries to do allocations.
-    */
-
-    flush();
-    char preamble_buff[LOGURU_PREAMBLE_WIDTH];
-    print_preamble(
-      preamble_buff, sizeof(preamble_buff), Verbosity_FATAL, "", 0);
-    auto message = Message { Verbosity_FATAL, "", 0, preamble_buff, "",
-      "Signal: ", signal_name };
-    try {
-      log_message(1, message, false, false);
-    } catch (...) {
-      // This can happed due to s_fatal_handler.
-      write_to_stderr(
-        "Exception caught and ignored by Loguru signal handler.\n");
-    }
-    flush();
-
-    // --------------------------------------------------------------------
-  }
-
-  call_default_signal_handler(signal_number);
-}
-
-void install_signal_handlers(const SignalOptions& signal_options)
-{
-  s_signal_options = signal_options;
-
-  struct sigaction sig_action;
-  memset(&sig_action, 0, sizeof(sig_action));
-  sigemptyset(&sig_action.sa_mask);
-  sig_action.sa_flags |= SA_SIGINFO;
-  sig_action.sa_sigaction = &signal_handler;
-
-  if (signal_options.sigabrt) {
-    CHECK_F(sigaction(SIGABRT, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGABRT");
-  }
-  if (signal_options.sigbus) {
-    CHECK_F(sigaction(SIGBUS, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGBUS");
-  }
-  if (signal_options.sigfpe) {
-    CHECK_F(sigaction(SIGFPE, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGFPE");
-  }
-  if (signal_options.sigill) {
-    CHECK_F(sigaction(SIGILL, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGILL");
-  }
-  if (signal_options.sigint) {
-    CHECK_F(sigaction(SIGINT, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGINT");
-  }
-  if (signal_options.sigsegv) {
-    CHECK_F(sigaction(SIGSEGV, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGSEGV");
-  }
-  if (signal_options.sigterm) {
-    CHECK_F(sigaction(SIGTERM, &sig_action, NULL) != -1,
-      "Failed to install handler for SIGTERM");
-  }
-}
-} // namespace loguru
-
-#  endif // _WIN32
 
 #  if defined(__GNUC__) || defined(__clang__)
 #    pragma GCC diagnostic pop
