@@ -53,8 +53,8 @@ https://github.com/nothings/stb.
 
 // ----------------------------------------------------------------------------
 
-#  ifndef LOGURU_EXPORT
-// Define to your project's export declaration if needed for use in a shared
+#  ifndef LOGURU_EXPORT // Define to your project's export declaration if needed
+                        // for use in a shared
 // library.
 #    include <Oxygen/Base/api_export.h>
 #    define LOGURU_EXPORT OXYGEN_BASE_API
@@ -211,7 +211,12 @@ https://github.com/nothings/stb.
 #    define STRDUP(str) strdup(str)
 #  endif
 
+#  include <atomic>
+#  include <initializer_list>
+#  include <limits>
 #  include <stdarg.h>
+#  include <string_view>
+#  include <vector>
 
 // --------------------------------------------------------------------
 LOGURU_ANONYMOUS_NAMESPACE_BEGIN
@@ -250,8 +255,7 @@ private:
 
 // Like printf, but returns the formated text.
 #  if LOGURU_USE_FMTLIB
-LOGURU_EXPORT
-Text vtextprintf(const char* format, fmt::format_args args);
+LOGURU_EXPORT Text vtextprintf(const char* format, fmt::format_args args);
 
 template <typename... Args>
 Text textprintf(LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
@@ -263,13 +267,12 @@ Text textprintf(LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
   return Text(STRDUP(s.c_str()));
 }
 #  else
-LOGURU_EXPORT
-Text textprintf(LOGURU_FORMAT_STRING_TYPE format, ...) LOGURU_PRINTF_LIKE(1, 2);
+LOGURU_EXPORT Text textprintf(LOGURU_FORMAT_STRING_TYPE format, ...)
+  LOGURU_PRINTF_LIKE(1, 2);
 #  endif
 
 // Overloaded for variadic template matching.
-LOGURU_EXPORT
-Text textprintf();
+LOGURU_EXPORT Text textprintf();
 
 using Verbosity = int;
 
@@ -280,6 +283,7 @@ using Verbosity = int;
 #  undef MAX
 
 enum NamedVerbosity : Verbosity {
+  Verbosity_UNSPECIFIED = (std::numeric_limits<Verbosity>::min)(),
   // Used to mark an invalid verbosity. Do not log to this level.
   Verbosity_INVALID = -10, // Never do LOG_F(INVALID)
 
@@ -371,48 +375,6 @@ typedef const char* (*verbosity_to_name_t)(Verbosity verbosity);
 // Verbosity_INVALID if name is not recognized.
 typedef Verbosity (*name_to_verbosity_t)(const char* name);
 
-struct SignalOptions {
-  /// Make Loguru try to do unsafe but useful things,
-  /// like printing a stack trace, when catching signals.
-  /// This may lead to bad things like deadlocks in certain situations.
-  bool unsafe_signal_handler = true;
-
-  /// Should Loguru catch SIGABRT ?
-  bool sigabrt = true;
-
-  /// Should Loguru catch SIGBUS ?
-  bool sigbus = true;
-
-  /// Should Loguru catch SIGFPE ?
-  bool sigfpe = true;
-
-  /// Should Loguru catch SIGILL ?
-  bool sigill = true;
-
-  /// Should Loguru catch SIGINT ?
-  bool sigint = true;
-
-  /// Should Loguru catch SIGSEGV ?
-  bool sigsegv = true;
-
-  /// Should Loguru catch SIGTERM ?
-  bool sigterm = true;
-
-  static SignalOptions none()
-  {
-    SignalOptions options;
-    options.unsafe_signal_handler = false;
-    options.sigabrt = false;
-    options.sigbus = false;
-    options.sigfpe = false;
-    options.sigill = false;
-    options.sigint = false;
-    options.sigsegv = false;
-    options.sigterm = false;
-    return options;
-  }
-};
-
 // Runtime options passed to loguru::init
 struct Options {
   // This allows you to use something else instead of "-v" via verbosity_flag.
@@ -426,8 +388,6 @@ struct Options {
   // if a thread name has not already been set.
   // To always set a thread name, use loguru::set_thread_name instead.
   const char* main_thread_name = "main thread";
-
-  SignalOptions signal_options;
 };
 
 /*  Should be called from the main thread.
@@ -456,56 +416,45 @@ struct Options {
         You can you something other than the -v flag by setting the
    verbosity_flag option.
 */
-LOGURU_EXPORT
-void init(int& argc, char* argv[], const Options& options = {});
+LOGURU_EXPORT void init(int& argc, char* argv[], const Options& options = {});
 
 // Will call remove_all_callbacks(). After calling this, logging will still go
 // to stderr. You generally don't need to call this.
-LOGURU_EXPORT
-void shutdown();
+LOGURU_EXPORT void shutdown();
 
 // What ~ will be replaced with, e.g. "/home/your_user_name/"
-LOGURU_EXPORT
-const char* home_dir();
+LOGURU_EXPORT const char* home_dir();
 
 /* Returns the name of the app as given in argv[0] but without leading path.
    That is, if argv[0] is "../foo/app" this will return "app".
 */
-LOGURU_EXPORT
-const char* argv0_filename();
+LOGURU_EXPORT const char* argv0_filename();
 
 // Returns all arguments given to loguru::init(), but escaped with a single
 // space as separator.
-LOGURU_EXPORT
-const char* arguments();
+LOGURU_EXPORT const char* arguments();
 
 // Returns the path to the current working dir when loguru::init() was called.
-LOGURU_EXPORT
-const char* current_dir();
+LOGURU_EXPORT const char* current_dir();
 
 // Returns the part of the path after the last / or \ (if any).
-LOGURU_EXPORT
-const char* filename(const char* path);
+LOGURU_EXPORT const char* filename(const char* path);
 
 // e.g. "foo/bar/baz.ext" will create the directories "foo/" and "foo/bar/"
-LOGURU_EXPORT
-bool create_directories(const char* file_path_const);
+LOGURU_EXPORT bool create_directories(const char* file_path_const);
 
 // Writes date and time with millisecond precision, e.g. "20151017_161503.123"
-LOGURU_EXPORT
-void write_date_time(char* buff, unsigned long long buff_size);
+LOGURU_EXPORT void write_date_time(char* buff, unsigned long long buff_size);
 
 // Helper: thread-safe version strerror
-LOGURU_EXPORT
-Text errno_as_text();
+LOGURU_EXPORT Text errno_as_text();
 
 /* Given a prefix of e.g. "~/loguru/" this might return
    "/home/your_username/loguru/app_name/20151017_161503.123.log"
 
    where "app_name" is a sanitized version of argv[0].
 */
-LOGURU_EXPORT
-void suggest_log_path(
+LOGURU_EXPORT void suggest_log_path(
   const char* prefix, char* buff, unsigned long long buff_size);
 
 enum FileMode { Truncate, Append };
@@ -518,81 +467,123 @@ enum FileMode { Truncate, Append };
         To stop the file logging, just call loguru::remove_callback(path) with
    the same path.
 */
-LOGURU_EXPORT
-bool add_file(const char* path, FileMode mode, Verbosity verbosity);
+LOGURU_EXPORT bool add_file(
+  const char* path, FileMode mode, Verbosity verbosity);
 
-LOGURU_EXPORT
-// Send logs to syslog with LOG_USER facility (see next call)
-bool add_syslog(const char* app_name, Verbosity verbosity);
-LOGURU_EXPORT
-// Send logs to syslog with your own choice of facility (LOG_USER, LOG_AUTH,
-// ...) see loguru.cpp: syslog_log() for more details.
-bool add_syslog(const char* app_name, Verbosity verbosity, int facility);
+LOGURU_EXPORT // Send logs to syslog with LOG_USER facility (see next call)
+  bool
+  add_syslog(const char* app_name, Verbosity verbosity);
+LOGURU_EXPORT // Send logs to syslog with your own choice of facility (LOG_USER,
+              // LOG_AUTH,
+  // ...) see loguru.cpp: syslog_log() for more details.
+  bool
+  add_syslog(const char* app_name, Verbosity verbosity, int facility);
 
 /*  Will be called right before abort().
         You can for instance use this to print custom error messages, or throw
    an exception. Feel free to call LOG:ing function from this, but not FATAL
    ones! */
-LOGURU_EXPORT
-void set_fatal_handler(fatal_handler_t handler);
+LOGURU_EXPORT void set_fatal_handler(fatal_handler_t handler);
 
 // Get the current fatal handler, if any. Default value is nullptr.
-LOGURU_EXPORT
-fatal_handler_t get_fatal_handler();
+LOGURU_EXPORT fatal_handler_t get_fatal_handler();
 
 /*  Will be called on each log messages with a verbosity less or equal to the
    given one. Useful for displaying messages on-screen in a game, for example.
         The given on_close is also expected to flush (if desired).
 */
-LOGURU_EXPORT
-void add_callback(const char* id, log_handler_t callback, void* user_data,
-  Verbosity verbosity, close_handler_t on_close = nullptr,
+LOGURU_EXPORT void add_callback(const char* id, log_handler_t callback,
+  void* user_data, Verbosity verbosity, close_handler_t on_close = nullptr,
   flush_handler_t on_flush = nullptr);
 
 /*  Set a callback that returns custom verbosity level names. If callback
         is nullptr or returns nullptr, default log names will be used.
 */
-LOGURU_EXPORT
-void set_verbosity_to_name_callback(verbosity_to_name_t callback);
+LOGURU_EXPORT void set_verbosity_to_name_callback(verbosity_to_name_t callback);
 
 /*  Set a callback that returns the verbosity level matching a name. The
         callback should return Verbosity_INVALID if the name is not
         recognized.
 */
-LOGURU_EXPORT
-void set_name_to_verbosity_callback(name_to_verbosity_t callback);
+LOGURU_EXPORT void set_name_to_verbosity_callback(name_to_verbosity_t callback);
 
 /*  Get a custom name for a specific verbosity, if one exists, or nullptr. */
-LOGURU_EXPORT
-const char* get_verbosity_name(Verbosity verbosity);
+LOGURU_EXPORT const char* get_verbosity_name(Verbosity verbosity);
 
 /*  Get the verbosity enum value from a custom 4-character level name, if one
    exists. If the name does not match a custom level name, Verbosity_INVALID is
    returned.
 */
-LOGURU_EXPORT
-Verbosity get_verbosity_from_name(const char* name);
+LOGURU_EXPORT Verbosity get_verbosity_from_name(const char* name);
 
 // Returns true iff the callback was found (and removed).
-LOGURU_EXPORT
-bool remove_callback(const char* id);
+LOGURU_EXPORT bool remove_callback(const char* id);
 
 // Shut down all file logging and any other callback hooks installed.
-LOGURU_EXPORT
-void remove_all_callbacks();
+LOGURU_EXPORT void remove_all_callbacks();
 
 // Returns the maximum of g_stderr_verbosity and all file/custom outputs.
-LOGURU_EXPORT
-Verbosity current_verbosity_cutoff();
+LOGURU_EXPORT Verbosity current_verbosity_cutoff();
+
+// Per-module verbosity overrides similar to glog's --vmodule.
+// Pattern syntax: '*' matches any sequence, '?' matches any single char.
+// If a pattern contains a path separator ('/' or '\\'), it is matched
+// against the full file path; otherwise matching is done against the
+// filename base (basename without extension, and with "-inl" trimmed).
+// Multiple entries can be supplied either as a single comma-separated
+// string or via multiple occurrences of the flag when parsing args.
+
+// Configure a single vmodule override. Throws std::invalid_argument
+// if input contains comma or has invalid format.
+LOGURU_EXPORT void configure_vmodule(std::string_view input);
+
+// Configure multiple vmodule overrides from an initializer list.
+// Each string_view should contain a single override (no commas).
+// Simply calls configure_vmodule for each entry.
+LOGURU_EXPORT void configure_vmodules(
+  std::initializer_list<std::string_view> overrides);
+
+// Clear any vmodule overrides (testing / runtime control).
+LOGURU_EXPORT void clear_vmodule_overrides();
+
+// Parse command line arguments for logging flags (e.g., -v, --vmodule).
+// Modifies argc and argv by removing processed arguments.
+LOGURU_EXPORT void parse_args(
+  int& argc, char* argv[], const char* verbosity_flag);
+
+// Returns true if a log site in the given file should log messages at the
+// requested verbosity (taking vmodule overrides into account).
+LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path);
+
+// Per-callsite vmodule cache registration and fast-path check.
+LOGURU_EXPORT void ensure_module_site_registered(
+  std::atomic<int>* site_cache, const char* file_path);
+// Fast path helper used by VLOG macros. Returns true if the message with
+// `verbosity` should be emitted for the given site cache and file.
+LOGURU_EXPORT bool check_module_fast(
+  std::atomic<int>* site_cache, Verbosity verbosity, const char* file_path);
+LOGURU_EXPORT void update_all_module_sites();
+
+// Return a pointer to a translation-unit-scoped cache (std::atomic<int>).
+// Each translation unit should call this once (first time a VLOG macro is
+// used) to initialize and thereafter reuse the cached module verbosity.
+// The returned pointer is valid for the lifetime of the program.
+// Provide an inline definition so each translation unit gets its own
+// function-local static cache. This implements the per-translation-unit
+// caching semantics: the first call in a TU initializes the atomic to
+// Verbosity_UNSPECIFIED and subsequent calls reuse the same atomic.
+inline std::atomic<int>* get_translation_unit_cache()
+{
+  static std::atomic<int> s_tu_module_cache { Verbosity_UNSPECIFIED };
+  return &s_tu_module_cache;
+}
 
 #  if LOGURU_USE_FMTLIB
 // Internal functions
-LOGURU_EXPORT
-void vlog(Verbosity verbosity, const char* file, unsigned line,
+LOGURU_EXPORT void vlog(Verbosity verbosity, const char* file, unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
-LOGURU_EXPORT
-void raw_vlog(Verbosity verbosity, const char* file, unsigned line,
-  LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
+LOGURU_EXPORT void raw_vlog(Verbosity verbosity, const char* file,
+  unsigned line, LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
 
 // Actual logging function. Use the LOG macro instead of calling this directly.
 template <typename... Args>
@@ -641,18 +632,15 @@ void raw_log(const Verbosity verbosity, const char* file, const unsigned line,
 #  else // LOGURU_USE_FMTLIB?
 // Actual logging function. Use the LOG macro instead of calling this
 // directly.
-LOGURU_EXPORT
-void log(Verbosity verbosity, const char* file, unsigned line,
+LOGURU_EXPORT void log(Verbosity verbosity, const char* file, unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, ...) LOGURU_PRINTF_LIKE(4, 5);
 
 // Actual logging function.
-LOGURU_EXPORT
-void vlog(Verbosity verbosity, const char* file, unsigned line,
+LOGURU_EXPORT void vlog(Verbosity verbosity, const char* file, unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, va_list) LOGURU_PRINTF_LIKE(4, 0);
 
 // Log without any preamble or indentation.
-LOGURU_EXPORT
-void raw_log(Verbosity verbosity, const char* file, unsigned line,
+LOGURU_EXPORT void raw_log(Verbosity verbosity, const char* file, unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, ...) LOGURU_PRINTF_LIKE(4, 5);
 #  endif // !LOGURU_USE_FMTLIB
 
@@ -715,10 +703,9 @@ private:
 // stack_trace_skip is the number of extrace stack frames to skip above
 // log_and_abort.
 #  if LOGURU_USE_FMTLIB
-LOGURU_EXPORT
-LOGURU_NORETURN void vlog_and_abort(int stack_trace_skip, const char* expr,
-  const char* file, unsigned line, LOGURU_FORMAT_STRING_TYPE format,
-  fmt::format_args);
+LOGURU_EXPORT LOGURU_NORETURN void vlog_and_abort(int stack_trace_skip,
+  const char* expr, const char* file, unsigned line,
+  LOGURU_FORMAT_STRING_TYPE format, fmt::format_args);
 template <typename... Args>
 LOGURU_NORETURN void log_and_abort(const int stack_trace_skip, const char* expr,
   const char* file, const unsigned line, LOGURU_FORMAT_STRING_TYPE format,
@@ -735,20 +722,17 @@ LOGURU_NORETURN void log_and_abort(const int stack_trace_skip, const char* expr,
     args...);
 }
 #  else
-LOGURU_EXPORT
-LOGURU_NORETURN void log_and_abort(int stack_trace_skip, const char* expr,
-  const char* file, unsigned line, LOGURU_FORMAT_STRING_TYPE format, ...)
-  LOGURU_PRINTF_LIKE(5, 6);
+LOGURU_EXPORT LOGURU_NORETURN void log_and_abort(int stack_trace_skip,
+  const char* expr, const char* file, unsigned line,
+  LOGURU_FORMAT_STRING_TYPE format, ...) LOGURU_PRINTF_LIKE(5, 6);
 #  endif
-LOGURU_EXPORT
-LOGURU_NORETURN void log_and_abort(
+LOGURU_EXPORT LOGURU_NORETURN void log_and_abort(
   int stack_trace_skip, const char* expr, const char* file, unsigned line);
 
 // Flush output to stderr and files.
 // If g_flush_interval_ms is set to non-zero, this will be called automatically
 // this often. If not set, you do not need to call this at all.
-LOGURU_EXPORT
-void flush();
+LOGURU_EXPORT void flush();
 
 template <class T> Text format_value(const T&) { return textprintf("N/A"); }
 template <> inline Text format_value(const char& v)
@@ -817,8 +801,7 @@ template <> inline Text format_value(const unsigned long long& v)
    These thread names may or may not be the same as the system thread names,
    depending on the system.
    Try to limit the thread name to 15 characters or less. */
-LOGURU_EXPORT
-void set_thread_name(const char* name);
+LOGURU_EXPORT void set_thread_name(const char* name);
 
 /* Returns the thread name for this thread.
    On most *nix systems this will return the system thread name (settable from
@@ -828,16 +811,14 @@ void set_thread_name(const char* name);
    the buffer. 17 is a good number for length. `right_align_hex_id` means any
    hexadecimal thread id will be written to the end of buffer.
 */
-LOGURU_EXPORT
-void get_thread_name(
+LOGURU_EXPORT void get_thread_name(
   char* buffer, unsigned long long length, bool right_align_hex_id);
 
 /* Generates a readable stacktrace as a string.
    'skip' specifies how many stack frames to skip.
    For instance, the default skip (1) means:
    don't include the call to loguru::stacktrace in the stack trace. */
-LOGURU_EXPORT
-Text stacktrace(int skip = 1);
+LOGURU_EXPORT Text stacktrace(int skip = 1);
 
 /*  Add a string to be replaced with something else in the stack output.
 
@@ -851,13 +832,12 @@ Text stacktrace(int skip = 1);
 
         `replace_with_this` must be shorter than `find_this`.
 */
-LOGURU_EXPORT
-void add_stack_cleanup(const char* find_this, const char* replace_with_this);
+LOGURU_EXPORT void add_stack_cleanup(
+  const char* find_this, const char* replace_with_this);
 
 // Example: demangle(typeid(std::ofstream).name()) -> "std::basic_ofstream<char,
 // std::char_traits<char> >"
-LOGURU_EXPORT
-Text demangle(const char* name);
+LOGURU_EXPORT Text demangle(const char* name);
 
 // ------------------------------------------------------------------------
 /*
@@ -883,8 +863,7 @@ will just not have funky \e[1m things showing.
 */
 
 // Do the output terminal support colors?
-LOGURU_EXPORT
-bool terminal_has_color();
+LOGURU_EXPORT bool terminal_has_color();
 
 // Colors
 LOGURU_EXPORT const char* terminal_black();
@@ -911,8 +890,8 @@ LOGURU_EXPORT const char* terminal_reset();
 struct StringStream;
 
 // Use this in your EcEntryBase::print_value overload.
-LOGURU_EXPORT
-void stream_print(StringStream& out_string_stream, const char* text);
+LOGURU_EXPORT void stream_print(
+  StringStream& out_string_stream, const char* text);
 
 class LOGURU_EXPORT EcEntryBase {
 public:
@@ -1071,17 +1050,14 @@ using EcHandle = const EcEntryBase*;
         }
 
 */
-LOGURU_EXPORT
-EcHandle get_thread_ec_handle();
+LOGURU_EXPORT EcHandle get_thread_ec_handle();
 
 // Get a string describing the current stack of error context. Empty string if
 // there is none.
-LOGURU_EXPORT
-Text get_error_context();
+LOGURU_EXPORT Text get_error_context();
 
 // Get a string describing the error context of the given thread handle.
-LOGURU_EXPORT
-Text get_error_context_for(EcHandle ec_handle);
+LOGURU_EXPORT Text get_error_context_for(EcHandle ec_handle);
 
 // ------------------------------------------------------------------------
 
@@ -1142,17 +1118,36 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 // Logging macros
 
 // LOG_F(2, "Only logged if verbosity is 2 or higher: %d", some_number);
+// The VLOG check now asks loguru whether the given verbosity should be
+// enabled for this call site (file). This enables per-module overrides
+// (via --vmodule) while keeping the fast-path of avoiding expensive
+// formatting when disabled.
+//
+// Caching semantics:
+// - Each translation unit (TU) gets a single function-local static
+//   `std::atomic<int>` returned by `GetTranslationUnitModuleCache()`.
+// - The first VLOG/RAW_VLOG call in a TU initializes that atomic to the
+//   computed module verbosity (or Verbosity_UNSPECIFIED meaning "no override").
+// - Subsequent VLOG calls in the same TU consult the cached value and avoid
+//   re-querying the global module table. When `set_module_from_string`
+//   is called, `update_all_module_sites()` will refresh all registered TU
+//   caches so changes propagate to existing TUs.
 #  define VLOG_F(verbosity, ...)                                               \
-    ((verbosity) > loguru::current_verbosity_cutoff())                         \
-      ? (void)0                                                                \
-      : loguru::log(verbosity, __FILE__, __LINE__, __VA_ARGS__)
+    do {                                                                       \
+      if (loguru::check_module_fast(                                           \
+            loguru::get_translation_unit_cache(), verbosity, __FILE__)) {      \
+        loguru::log(verbosity, __FILE__, __LINE__, __VA_ARGS__);               \
+      }                                                                        \
+    } while (false)
 
 // LOG_F(INFO, "Foo: %d", some_number);
 #  define LOG_F(verbosity_name, ...)                                           \
     VLOG_F(loguru::Verbosity_##verbosity_name, __VA_ARGS__)
 
 #  define VLOG_IF_F(verbosity, cond, ...)                                      \
-    ((verbosity) > loguru::current_verbosity_cutoff() || (cond) == false)      \
+    (!(loguru::check_module_fast(                                              \
+       loguru::get_translation_unit_cache(), verbosity, __FILE__))             \
+      || (cond) == false)                                                      \
       ? (void)0                                                                \
       : loguru::log(verbosity, __FILE__, __LINE__, __VA_ARGS__)
 
@@ -1161,15 +1156,19 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 
 #  define VLOG_SCOPE_F(verbosity, ...)                                         \
     loguru::LogScopeRAII LOGURU_ANONYMOUS_VARIABLE(error_context_RAII_)        \
-      = ((verbosity) > loguru::current_verbosity_cutoff())                     \
-      ? loguru::LogScopeRAII()                                                 \
-      : loguru::LogScopeRAII(verbosity, __FILE__, __LINE__, __VA_ARGS__)
+      = (loguru::check_module_fast(                                            \
+           loguru::get_translation_unit_cache(), verbosity, __FILE__)          \
+          ? loguru::LogScopeRAII(verbosity, __FILE__, __LINE__, __VA_ARGS__)   \
+          : loguru::LogScopeRAII())
 
 // Raw logging - no preamble, no indentation. Slightly faster than full logging.
 #  define RAW_VLOG_F(verbosity, ...)                                           \
-    ((verbosity) > loguru::current_verbosity_cutoff())                         \
-      ? (void)0                                                                \
-      : loguru::raw_log(verbosity, __FILE__, __LINE__, __VA_ARGS__)
+    do {                                                                       \
+      if (loguru::check_module_fast(                                           \
+            loguru::get_translation_unit_cache(), verbosity, __FILE__)) {      \
+        loguru::raw_log(verbosity, __FILE__, __LINE__, __VA_ARGS__);           \
+      }                                                                        \
+    } while (false)
 
 #  define RAW_LOG_F(verbosity_name, ...)                                       \
     RAW_VLOG_F(loguru::Verbosity_##verbosity_name, __VA_ARGS__)
@@ -1342,13 +1341,11 @@ LOGURU_ANONYMOUS_NAMESPACE_BEGIN
 
 namespace loguru {
 // Like sprintf, but returns the formated text.
-LOGURU_EXPORT
-std::string strprintf(LOGURU_FORMAT_STRING_TYPE format, ...)
+LOGURU_EXPORT std::string strprintf(LOGURU_FORMAT_STRING_TYPE format, ...)
   LOGURU_PRINTF_LIKE(1, 2);
 
 // Like vsprintf, but returns the formated text.
-LOGURU_EXPORT
-std::string vstrprintf(LOGURU_FORMAT_STRING_TYPE format, va_list)
+LOGURU_EXPORT std::string vstrprintf(LOGURU_FORMAT_STRING_TYPE format, va_list)
   LOGURU_PRINTF_LIKE(1, 0);
 
 class LOGURU_EXPORT StreamLogger {
