@@ -61,7 +61,7 @@ set(
   "PreparedSceneFrame.h"
   "Modules/TransformsModule.h"
   "ScenePrep/CollectionConfig.h"
-  "Types/DrawMetaData.h"
+  "Types/DrawMetadata.h"
   "Types/Frustum.h"
   "Types/MaterialConstants.h"
   "Types/PassMask.h"

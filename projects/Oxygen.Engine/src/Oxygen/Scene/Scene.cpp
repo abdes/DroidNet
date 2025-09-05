@@ -14,7 +14,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -92,7 +92,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   LOG_F(2, "name: '{}'", name);
   LOG_F(2, "initial capacity: '{}'", initial_capacity);
 
-  AddComponent<ObjectMetaData>(name);
+  AddComponent<ObjectMetadata>(name);
 
   // Allocate unique scene ID
   auto id = SceneIdManager::Instance().AllocateId();
@@ -117,13 +117,13 @@ Scene::~Scene()
 
 auto Scene::GetName() const noexcept -> std::string_view
 {
-  return GetComponent<ObjectMetaData>().GetName();
+  return GetComponent<ObjectMetadata>().GetName();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 void Scene::SetName(const std::string_view name) noexcept
 {
-  GetComponent<ObjectMetaData>().SetName(name);
+  GetComponent<ObjectMetadata>().SetName(name);
 }
 
 void Scene::LogPartialFailure(

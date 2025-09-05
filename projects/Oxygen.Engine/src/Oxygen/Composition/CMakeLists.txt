@@ -78,7 +78,7 @@ target_sources(
   PRIVATE
     "Composition.cpp"
     "Object.cpp"
-    "ObjectMetaData.cpp"
+    "ObjectMetadata.cpp"
     "TypeSystem.cpp"
     "cs_init.cpp"
     "Detail/FastIntMap.h"
@@ -96,7 +96,7 @@ target_sources(
       "ComponentPoolRegistry.h"
       "Named.h"
       "Object.h"
-      "ObjectMetaData.h"
+      "ObjectMetadata.h"
       "Typed.h"
       "TypedObject.h"
       "TypeSystem.h"

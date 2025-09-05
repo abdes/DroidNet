@@ -50,7 +50,7 @@ Bindless upload via existing `BindlessStructuredBuffer<DrawMetadata>` and `Bindl
 | Type | Location | Purpose | Action |
 |------|----------|---------|--------|
 | `sceneprep::DrawMetadata` | `ScenePrep/Types.h` | CPU logical draw description (counts/index ranges/debug IDs) | Consider rename to `CpuDrawDesc` later |
-| `engine::DrawMetadata` | `Renderer/Types/DrawMetaData.h` | GPU-facing packed metadata (bindless indices, offsets) | Final upload format |
+| `engine::DrawMetadata` | `Renderer/Types/DrawMetadata.h` | GPU-facing packed metadata (bindless indices, offsets) | Final upload format |
 
 Translation occurs in FrameGraph phase (late binding). Avoids GPU coupling inside Parallel/PostParallel.
 

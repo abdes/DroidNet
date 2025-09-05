@@ -59,7 +59,7 @@ private:
 
 Graphics::Graphics(const std::string_view name)
 {
-  AddComponent<ObjectMetaData>(name);
+  AddComponent<ObjectMetadata>(name);
   AddComponent<ResourceRegistryComponent>(name);
   AddComponent<QueueManager>();
   // CommandListPool before DeferredReclaimer

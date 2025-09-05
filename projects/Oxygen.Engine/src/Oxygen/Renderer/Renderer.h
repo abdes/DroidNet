@@ -142,8 +142,8 @@ public:
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
-  OXGN_RNDR_API auto SetDrawMetaData(const DrawMetadata& indices) -> void;
-  OXGN_RNDR_API auto GetDrawMetaData() const -> const DrawMetadata&;
+  OXGN_RNDR_API auto SetDrawMetadata(const DrawMetadata& indices) -> void;
+  OXGN_RNDR_API auto GetDrawMetadata() const -> const DrawMetadata&;
 
   //! Accessor for in-progress SoA frame snapshot (Task 6+). Returns an empty
   //! frame until finalization is wired.
@@ -245,9 +245,9 @@ private:
 
   auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
   auto UpdateBindlessWorldsSlotIfChanged() -> void;
-  auto UpdateDrawMetaDataSlotIfChanged() -> void;
+  auto UpdateDrawMetadataSlotIfChanged() -> void;
 
-  auto EnsureAndUploadDrawMetaDataBuffer() -> void;
+  auto EnsureAndUploadDrawMetadataBuffer() -> void;
   auto EnsureAndUploadMaterialConstants() -> void;
   auto EnsureAndUploadWorldTransforms() -> void;
 

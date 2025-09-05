@@ -10,7 +10,7 @@
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -56,7 +56,7 @@ class Sampler : public Composition,
 public:
   explicit Sampler(std::string_view name)
   {
-    AddComponent<ObjectMetaData>(name);
+    AddComponent<ObjectMetadata>(name);
   }
 
   OXGN_GFX_API ~Sampler() override = default;
@@ -73,13 +73,13 @@ public:
   //! Gets the name of the texture.
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
-    return GetComponent<ObjectMetaData>().GetName();
+    return GetComponent<ObjectMetadata>().GetName();
   }
 
   //! Sets the name of the texture.
   auto SetName(const std::string_view name) noexcept -> void override
   {
-    GetComponent<ObjectMetaData>().SetName(name);
+    GetComponent<ObjectMetadata>().SetName(name);
   }
 };
 

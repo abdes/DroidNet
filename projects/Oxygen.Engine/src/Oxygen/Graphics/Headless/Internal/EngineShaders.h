@@ -11,7 +11,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 
 namespace oxygen::graphics::headless::internal {

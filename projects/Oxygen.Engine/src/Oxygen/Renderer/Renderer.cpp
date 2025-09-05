@@ -207,8 +207,8 @@ auto Renderer::PreExecute(
   // transitional compatibility with any remaining callers; passes should now
   // consume prepared_frame / draw_metadata_bytes instead.
 
-  EnsureAndUploadDrawMetaDataBuffer();
-  UpdateDrawMetaDataSlotIfChanged();
+  EnsureAndUploadDrawMetadataBuffer();
+  UpdateDrawMetadataSlotIfChanged();
 
   EnsureAndUploadWorldTransforms();
   UpdateBindlessWorldsSlotIfChanged();
@@ -238,7 +238,7 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 // PreExecute helper implementations
 //===----------------------------------------------------------------------===//
 
-auto Renderer::EnsureAndUploadDrawMetaDataBuffer() -> void
+auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
 {
   // Delegate lifecycle to bindless structured buffer helper
   if (!draw_metadata_.HasData()) {
@@ -259,7 +259,7 @@ auto Renderer::EnsureAndUploadDrawMetaDataBuffer() -> void
 // Removed legacy draw-metadata helpers; lifecycle now handled by
 // BindlessStructuredBuffer<DrawMetadata>
 
-auto Renderer::UpdateDrawMetaDataSlotIfChanged() -> void
+auto Renderer::UpdateDrawMetadataSlotIfChanged() -> void
 {
   // DrawMetadata structured buffer now publishes its descriptor heap slot via
   // SceneConstants.bindless_draw_metadata_slot (HLSL reads this dynamic slot).
@@ -276,7 +276,7 @@ auto Renderer::UpdateDrawMetaDataSlotIfChanged() -> void
     new_draw_slot, SceneConstants::kRenderer);
 
   DLOG_F(2,
-    "UpdateDrawMetaDataSlotIfChanged: draw_metadata_slot={} (legacy "
+    "UpdateDrawMetadataSlotIfChanged: draw_metadata_slot={} (legacy "
     "indices_slot mirror={})",
     new_draw_slot.value, new_draw_slot.value);
 }
@@ -354,7 +354,7 @@ auto Renderer::UpdateBindlessMaterialConstantsSlotIfChanged() -> void
     new_slot, SceneConstants::kRenderer);
 }
 
-auto Renderer::SetDrawMetaData(const DrawMetadata& indices) -> void
+auto Renderer::SetDrawMetadata(const DrawMetadata& indices) -> void
 {
   // Set single-entry array in the bindless structured buffer and mark dirty
   auto& cpu = draw_metadata_.GetCpuData();
@@ -362,7 +362,7 @@ auto Renderer::SetDrawMetaData(const DrawMetadata& indices) -> void
   draw_metadata_.MarkDirty();
 }
 
-auto Renderer::GetDrawMetaData() const -> const DrawMetadata&
+auto Renderer::GetDrawMetadata() const -> const DrawMetadata&
 {
   const auto& cpu = draw_metadata_.GetCpuData();
   DCHECK_F(!cpu.empty());

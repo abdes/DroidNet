@@ -298,7 +298,7 @@ component wraps this with appropriate lifecycle management.
 - Resource transitions: follow the engine's `ResourceStates` mapping; implement
   barriers carefully and minimize redundant barriers for performance.
 - Debugging: provide helpful debug-name support for native objects (use the name
-  from `ObjectMetaData`), and validate descriptor and view compatibility early
+  from `ObjectMetadata`), and validate descriptor and view compatibility early
   with asserts.
 - Command submission modes: the new `AcquireCommandRecorder()` API supports both
   immediate and deferred submission. Use immediate mode for simple command

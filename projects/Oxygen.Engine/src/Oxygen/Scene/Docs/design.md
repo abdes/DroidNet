@@ -16,7 +16,7 @@ for future enhancement.
 | Hierarchy Management        | ✅ Complete         | Re-parenting, adoption (cross-scene)         |
 | Transform System            | ✅ Complete         | TRS decomposition, lazy evaluation           |
 | Flag System                 | ✅ Complete         | 6 flags with 5-bit layout, inheritance       |
-| Metadata (Name, Properties) | ✅ Complete         | ObjectMetaData component                     |
+| Metadata (Name, Properties) | ✅ Complete         | ObjectMetadata component                     |
 | Handle/View Pattern         | ✅ Complete         | ResourceTable + weak_ptr safety              |
 | Node Cloning                | ✅ Complete         | Single node and hierarchy cloning            |
 | Scene Traversal             | ✅ Complete         | Non-recursive, visitor/filter patterns       |
@@ -73,7 +73,7 @@ The Scene system consists of several key components working together:
 - **ResourceTable**: Dense/sparse storage system enabling fast handle-based
   access and memory efficiency
 - **Component Architecture**: SceneNodeImpl uses the Composition system
-  providing full component attachment capabilities: ObjectMetaData
+  providing full component attachment capabilities: ObjectMetadata
   (names/properties), NodeData (scene flags), GraphData (hierarchy
   relationships), TransformComponent (TRS data), plus runtime component
   attachment via `AddComponent<T>()`, `GetComponent<T>()`, `HasComponent<T>()`,
@@ -254,7 +254,7 @@ SceneNodeImpl inherits from Composition, providing complete component management
 
 **Core Components (Added at Construction):**
 
-- **ObjectMetaData**: Node names and properties
+- **ObjectMetadata**: Node names and properties
 - **NodeData**: Scene flags storage
 - **GraphData**: Hierarchy relationships (parent, children, siblings)
 - **TransformComponent**: TRS transformation data

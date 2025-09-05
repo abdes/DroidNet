@@ -50,7 +50,7 @@ Implementation Quality
 
 - Monolithic Renderer.cpp (~1300 lines) — policy & mechanics interleaved; hampers maintainability.
 - Repeated RTV/DSV descriptor code across Depth/Shader/Transparent passes.
-- Naming inconsistency: DrawMetaData.h filename vs DrawMetadata type name; leftover "indices" references in comments.
+- Naming inconsistency: leftover "indices" references in comments.
 - Silent continues obscure data issues; missing aggregated diagnostics for operational observability.
 - Potential UB if source vectors mutate before consumers finish (lifetime assumptions are implicit and undocumented).
 - ExecuteRenderGraph contract (expects callable returning coroutine when invoked with context) is undocumented.
@@ -85,7 +85,6 @@ Risk & Priority Summary
 
 - TransformManager hashing correctness & collision rate (can cause correctness and performance issues).
 - Sparse material constants memory growth and fragmentation.
-- Missing centralized pass mask definition causing inconsistent mask usage.
 - Raw byte draw metadata exposure (type safety risk and layout fragility).
 - Monolithic Renderer.cpp impeding maintainability and introducing coupling.
 
@@ -155,7 +154,7 @@ Active Task Status Summary (@2025-09-05T13:05Z)
 17 NS Audit and unify error handling to remove mixed strategies (exceptions/DCHECK_F/silent continues)
 18 NS Document thread-safety model and synchronization expectations for scene finalization
 19 NS Add field-level packing assertions for DrawMetadata and other critical SoA structs
-20 NS Rename/move DrawMetaData.h or type to resolve naming inconsistency and update comments
+20 NS Rename/move DrawMetadata.h or type to resolve naming inconsistency and update comments
 21 NS Prevent potential UB by auditing lifetimes of source vectors and consumers; add ownership contracts
 22 NS Add deterministic reorder tests and a post-sort equality check to avoid unnecessary sorts
 23 NS Cap high-water reservations and document reservation policies to avoid unbounded growth
@@ -185,7 +184,7 @@ Active Task Status Summary (@2025-09-05T13:05Z)
 47 NS Add unit tests to validate deterministic ordering when keys are identical
 48 NS Create a small design doc for indirect draw/argument buffer format and lifecycle
 49 NS Add a work item to standardize pass mask bits across design/docs
-50 NS Review and fix naming inconsistency: DrawMetaData.h vs DrawMetadata type
+50 NS Review and fix naming inconsistency: DrawMetadata.h vs DrawMetadata type
 
 History Log (Chronological)
 ---------------------------
