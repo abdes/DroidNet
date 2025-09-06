@@ -775,7 +775,12 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
     co_return;
   }
 
-  const auto fb = framebuffers_[current_frame];
+  // Always render to the framebuffer that wraps the swapchain's current
+  // backbuffer. The swapchain's backbuffer index may not match the engine's
+  // frame slot due to resize or present timing; querying the surface avoids
+  // D3D12 validation errors (WRONGSWAPCHAINBUFFERREFERENCE).
+  const auto backbuffer_index = surface_->GetCurrentBackBufferIndex();
+  const auto fb = framebuffers_.at(backbuffer_index);
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 

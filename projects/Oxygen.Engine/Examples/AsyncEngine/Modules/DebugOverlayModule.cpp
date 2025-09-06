@@ -65,7 +65,8 @@ auto DebugOverlayModule::OnFrameGraph(FrameContext& context) -> co::Co<>
 
   // Only contribute debug passes if the overlay is enabled
   if (enabled_) {
-    if (auto builder = context.GetRenderGraphBuilder()) {
+    if (engine_ && engine_->render_graph_builder_) {
+      auto* builder = engine_->render_graph_builder_.get();
       LOG_F(3, "[Debug] Adding debug overlay render passes");
 
       // Add debug overlay pass that renders over all views

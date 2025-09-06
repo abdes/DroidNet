@@ -50,6 +50,7 @@ using oxygen::core::PhaseIndex;
 using oxygen::engine::EngineModule;
 using oxygen::engine::FrameContext;
 using oxygen::engine::ModuleManager;
+using oxygen::engine::UnifiedSnapshot;
 
 ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
   : engine_(engine)
@@ -385,24 +386,16 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
   co_return;
 }
 
-auto ExecuteDeferredPipelinesPhase(
-  const std::vector<EngineModule*>& list, FrameContext& ctx) -> oxygen::co::Co<>
+auto ExecuteDeferredPipelinesPhase(const std::vector<EngineModule*>& list,
+  FrameContext& ctx, const UnifiedSnapshot& snapshot) -> oxygen::co::Co<>
 {
-  const auto* frame = ctx.GetFrameSnapshot();
-  if (!frame) {
-    DLOG_F(2,
-      "ExecutePhase(kDeferredPipelines): no frame snapshot available, "
-      "skipping");
-    co_return;
-  }
-
   std::vector<oxygen::co::Co<>> tasks;
   tasks.reserve(list.size());
   for (auto* m : list) {
     if (!m) {
       continue;
     }
-    tasks.emplace_back(RunHandlerImpl(m->OnParallelTasks(*frame), m, ctx));
+    tasks.emplace_back(RunHandlerImpl(m->OnParallelTasks(snapshot), m, ctx));
   }
 
   if (!tasks.empty()) {
@@ -451,14 +444,6 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
     break;
   }
 
-  case PhaseId::kParallelTasks: {
-    const auto& desc = kPhaseRegistry[PhaseIndex { phase }];
-    if (desc.category == ExecutionModel::kDeferredPipelines) {
-      co_await ExecuteDeferredPipelinesPhase(list, ctx);
-    }
-    break;
-  }
-
   case PhaseId::kDetachedServices: {
     // Detached services are expected to be started elsewhere.
     break;
@@ -471,6 +456,9 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
     // No modules participate in these engine-only phases.
     break;
 
+  case PhaseId::kParallelTasks:
+    ABORT_F("kParallelTasks must be executed via ExecuteParallelTasks()");
+
   case PhaseId::kCount:
     ABORT_F(
       "kCount is not supposed to be used as a PhaseId for module execution");
@@ -479,6 +467,22 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   // Handle module errors - remove non-critical failed modules, report critical
   // failures
   HandleModuleErrors(ctx, phase);
+
+  co_return;
+}
+
+auto ModuleManager::ExecuteParallelTasks(
+  FrameContext& ctx, const UnifiedSnapshot& snapshot) -> co::Co<>
+{
+  // Copy the module list for this phase so coroutine lambdas can safely capture
+  // module pointers without referencing a temporary container.
+  const auto list = phase_cache_[PhaseId::kParallelTasks];
+
+  co_await ExecuteDeferredPipelinesPhase(list, ctx, snapshot);
+
+  // Handle module errors - remove non-critical failed modules, report critical
+  // failures
+  HandleModuleErrors(ctx, PhaseId::kParallelTasks);
 
   co_return;
 }
