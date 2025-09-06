@@ -72,12 +72,11 @@ auto RenderGraphModule::OnFrameGraph(FrameContext& context) -> co::Co<>
   LOG_F(
     2, "[RenderGraph] Frame context has {} views", context.GetViews().size());
 
-  // Get the render graph builder from the frame context (set by
-  // AsyncEngineSimulator)
-  auto builder = context.GetRenderGraphBuilder();
-  if (!builder) {
-    LOG_F(WARNING,
-      "[RenderGraph] No render graph builder available in frame context");
+  // Get the render graph builder from the engine simulator instead of context
+  auto engine = engine_.get();
+  if (!engine || !engine->render_graph_builder_) {
+    LOG_F(
+      WARNING, "[RenderGraph] No render graph builder available from engine");
     co_return;
   }
 
@@ -85,7 +84,7 @@ auto RenderGraphModule::OnFrameGraph(FrameContext& context) -> co::Co<>
   // Note: The graphics integration should be set by the engine, but the module
   // can provide additional configuration here if needed
 
-  LOG_F(2, "[RenderGraph] Using render graph builder from frame context");
+  LOG_F(2, "[RenderGraph] Using render graph builder from engine");
 
   // Other modules will also access the builder via
   // context.GetRenderGraphBuilder() and add their passes and resources. This

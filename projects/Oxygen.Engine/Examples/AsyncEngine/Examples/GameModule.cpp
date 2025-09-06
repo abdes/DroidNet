@@ -203,19 +203,15 @@ auto GameModule::OnParallelWork(FrameContext& context) -> co::Co<>
   LOG_F(2, "[Game] Parallel work for frame {}", context.GetFrameIndex());
 
   // Parallel work using read-only snapshot
-  const auto* snapshot = context.GetFrameSnapshot();
-  if (!snapshot) {
-    LOG_F(WARNING, "[Game] No frame snapshot available for parallel work");
-    co_return;
-  }
+  const auto& snapshot = context.GetFrameSnapshot();
 
   // Simulate parallel game calculations (AI, animation, etc.)
-  co_await context.GetThreadPool()->Run([snapshot](auto /*cancel_token*/) {
+  co_await context.GetThreadPool()->Run([&snapshot](auto /*cancel_token*/) {
     std::this_thread::sleep_for(400us); // Simulate AI batch processing
 
     // In real implementation, would process game logic using snapshot data
     LOG_F(3, "[Game] AI processing complete for snapshot frame {}",
-      snapshot->frame_index);
+      snapshot.frame_index);
   });
 
   LOG_F(2, "[Game] Parallel work complete");

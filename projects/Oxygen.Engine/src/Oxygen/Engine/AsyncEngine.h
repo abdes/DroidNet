@@ -107,9 +107,11 @@ private:
     -> co::Co<>; // async (simulated work)
 
   // Synchronous snapshot: modules run OnSnapshot first; engine publishes last
-  auto PhaseSnapshot(engine::FrameContext& context) -> co::Co<>;
+  auto PhaseSnapshot(engine::FrameContext& context)
+    -> co::Co<const engine::UnifiedSnapshot&>;
 
-  auto ParallelTasks(engine::FrameContext& context) -> co::Co<>;
+  auto ParallelTasks(engine::FrameContext& context,
+    const engine::UnifiedSnapshot& snapshot) -> co::Co<>;
   auto PhasePostParallel(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
 

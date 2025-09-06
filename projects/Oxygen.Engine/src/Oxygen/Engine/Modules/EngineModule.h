@@ -144,7 +144,7 @@ public:
   // must not mutate GameState or EngineState directly; any per-job outputs
   // must be written into module-owned staging buffers (FrameState) and
   // integrated later during the ordered PostParallel phase.
-  virtual auto OnParallelTasks(const FrameSnapshot& /*snapshot*/) -> co::Co<>
+  virtual auto OnParallelTasks(const UnifiedSnapshot& /*snapshot*/) -> co::Co<>
   {
     co_return;
   }

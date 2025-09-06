@@ -404,21 +404,12 @@ auto AsyncEngineSimulator::PhasePostParallel(FrameContext& context) -> co::Co<>
 void AsyncEngineSimulator::SetRenderGraphBuilder(FrameContext& context)
 {
   render_graph_builder_ = std::make_unique<RenderGraphBuilder>();
-  auto engine_tag = internal::EngineTagFactory::Get();
-
   // Initialize the builder with the current frame context
   render_graph_builder_->BeginGraph(context);
-
-  // Set the builder in the frame context so modules can access it
-  context.SetRenderGraphBuilder(
-    observer_ptr { render_graph_builder_.get() }, engine_tag);
 }
 
-void AsyncEngineSimulator::ClearRenderGraphBuilder(FrameContext& context)
+void AsyncEngineSimulator::ClearRenderGraphBuilder(FrameContext& /*context*/)
 {
-  auto engine_tag = internal::EngineTagFactory::Get();
-  context.SetRenderGraphBuilder(
-    observer_ptr<RenderGraphBuilder> {}, engine_tag);
   render_graph_builder_.reset();
 }
 

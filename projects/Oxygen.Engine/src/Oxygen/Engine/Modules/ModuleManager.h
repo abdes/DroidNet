@@ -64,6 +64,9 @@ public:
   OXGN_NGIN_API auto ExecutePhase(core::PhaseId phase, FrameContext& ctx)
     -> co::Co<>;
 
+  OXGN_NGIN_API auto ExecuteParallelTasks(
+    FrameContext& ctx, const UnifiedSnapshot& snapshot) -> co::Co<>;
+
   [[nodiscard]] auto GetModules() const -> decltype(auto)
   {
     return modules_
