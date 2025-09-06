@@ -8,7 +8,7 @@
 // ModuleManager - Module Execution and Error Handling
 //
 // ERROR HANDLING BEHAVIOR:
-// 1. Synchronous phases (FrameStart, FrameEnd):
+// 1. Synchronous phases (FrameStart, Snapshot, FrameEnd):
 //    - Errors are handled immediately as each module executes
 //    - Failed modules are processed right after the exception is caught
 //
@@ -308,6 +308,11 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
         [](EngineModule& mm, FrameContext& c) { mm.OnFrameStart(c); }, m, ctx,
         std::ref(*m), std::ref(ctx));
       break;
+    case PhaseId::kSnapshot:
+      co_await RunHandlerImpl(
+        [](EngineModule& mm, FrameContext& c) { mm.OnSnapshot(c); }, m, ctx,
+        std::ref(*m), std::ref(ctx));
+      break;
     case PhaseId::kFrameEnd:
       co_await RunHandlerImpl(
         [](EngineModule& mm, FrameContext& c) { mm.OnFrameEnd(c); }, m, ctx,
@@ -420,6 +425,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   // dispatch to a helper based on its execution model.
   switch (phase) {
   case PhaseId::kFrameStart:
+  case PhaseId::kSnapshot:
   case PhaseId::kFrameEnd: {
     const auto& desc = kPhaseRegistry[PhaseIndex { phase }];
     if (desc.category == ExecutionModel::kSynchronousOrdered
@@ -460,7 +466,6 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
 
   case PhaseId::kNetworkReconciliation:
   case PhaseId::kRandomSeedManagement:
-  case PhaseId::kSnapshot:
   case PhaseId::kPresent:
   case PhaseId::kBudgetAdapt:
     // No modules participate in these engine-only phases.

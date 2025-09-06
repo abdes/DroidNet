@@ -501,7 +501,7 @@ Main -> Main : Apply structural changes\nAllocate handles / bindless indices
 Main -> Main : Hierarchy traversal → world transforms
 
 == Snapshot Build ==
-Main -> Main : Build immutable frame snapshot\n(components, transforms, visibility sets)
+Main -> Main : Modules run synchronously in kSnapshot to prepare immutable views\n(components, transforms, visibility, renderer_snapshot); Engine consolidates and publishes last
 
 == Launch Parallel Frame Tasks ==
 par Animation / IK
