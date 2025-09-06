@@ -189,7 +189,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     co_await PhaseTransforms(context);
 
     // Immutable snapshot build (B3)
-    PhaseSnapshot(context);
+    co_await PhaseSnapshot(context);
 
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
     co_await ParallelTasks(context);
@@ -404,13 +404,18 @@ auto AsyncEngine::PhaseTransforms(FrameContext& context) -> co::Co<>
     PhaseId::kTransformPropagation, context);
 }
 
-auto AsyncEngine::PhaseSnapshot(FrameContext& context) -> void
+auto AsyncEngine::PhaseSnapshot(FrameContext& context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
   context.SetCurrentPhase(PhaseId::kSnapshot, tag);
 
   LOG_F(1, "[F{}][A] PhaseSnapshot (build immutable snapshot)", frame_number_);
+  // Execute module snapshot handlers synchronously (main thread)
+  co_await module_manager_->ExecutePhase(PhaseId::kSnapshot, context);
+
+  // Engine consolidates contributions and publishes snapshots last
   context.PublishSnapshots(internal::EngineTagFactory::Get());
+  co_return;
 }
 
 // void AsyncEngine::SetRenderGraphBuilder(FrameContext& context)

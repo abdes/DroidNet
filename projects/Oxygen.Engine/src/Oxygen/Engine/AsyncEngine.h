@@ -106,7 +106,8 @@ private:
   auto PhaseTransforms(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseSnapshot(engine::FrameContext& context) -> void;
+  // Synchronous snapshot: modules run OnSnapshot first; engine publishes last
+  auto PhaseSnapshot(engine::FrameContext& context) -> co::Co<>;
 
   auto ParallelTasks(engine::FrameContext& context) -> co::Co<>;
   auto PhasePostParallel(engine::FrameContext& context)

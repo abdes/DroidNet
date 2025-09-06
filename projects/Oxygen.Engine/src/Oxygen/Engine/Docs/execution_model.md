@@ -127,7 +127,9 @@ frame-loop guarantees and parallel patterns are documented elsewhere.
   held locks MUST be released before any suspension point (co_await); prefer
   obtaining an immutable snapshot or using owner-provided thread-safe APIs
   instead of holding locks across awaits.
-- If downstream parallel readers require an immutable snapshot, the snapshot's
+- If downstream parallel readers require an immutable snapshot, modules (e.g.,
+  Renderer) run their synchronous handlers in kSnapshot to prepare views/data,
+  then the engine consolidates contributions and publishes the snapshot last;
   backing data structures are prepared and pinned for publication.
 - Resources required by subsequent phases are allocated or have valid published
   handles.

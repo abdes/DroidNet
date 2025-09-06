@@ -96,11 +96,15 @@ public:
 
   // === Module-facing phase handlers ===
   // Expose handlers for all phases except the explicitly engine-only ones:
-  // kRandomSeedManagement, kSnapshot, kPresent, kBudgetAdapt.
+  // kNetworkReconciliation, kRandomSeedManagement, kPresent, kBudgetAdapt.
 
   // Ordered phases
   virtual auto OnFrameStart(FrameContext& /*context*/) -> void { }
   virtual auto OnFrameEnd(FrameContext& /*context*/) -> void { }
+
+  // Synchronous snapshot phase (modules participate; engine publishes last)
+  // Must not spawn threads or coroutines; runs on the main thread.
+  virtual auto OnSnapshot(FrameContext& /*context*/) -> void { }
 
   virtual auto OnInput(FrameContext& /*context*/) -> co::Co<> { co_return; }
   virtual auto OnNetworkReconciliation(FrameContext& /*context*/) -> co::Co<>
