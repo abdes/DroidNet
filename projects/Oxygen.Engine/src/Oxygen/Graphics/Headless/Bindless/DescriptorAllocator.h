@@ -24,11 +24,15 @@ public:
 
   OXGN_HDLS_API ~DescriptorAllocator() override = default;
 
+  OXGN_HDLS_NDAPI auto GetShaderVisibleIndex(
+    const DescriptorHandle& handle) const noexcept
+    -> oxygen::bindless::ShaderVisibleIndex override;
+
 protected:
   auto CreateHeapSegment(oxygen::bindless::Capacity capacity,
     oxygen::bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility)
-    -> std::unique_ptr<detail::DescriptorHeapSegment> override;
+    -> std::unique_ptr<detail::DescriptorSegment> override;
 
   // Copy a descriptor from one handle to another. Headless backend has no
   // native descriptor objects, so this is a validation-only no-op.

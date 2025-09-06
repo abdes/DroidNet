@@ -8,7 +8,7 @@
 
 #include <d3d12.h>
 
-#include <Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -27,26 +27,27 @@ namespace d3d12 {
    Each segment is associated with a specific D3D12 descriptor heap,
    corresponding to a particular ResourceViewType and DescriptorVisibility.
   */
-  class DescriptorHeapSegment final
-    : public graphics::detail::FixedDescriptorHeapSegment {
+  // ReSharper disable once CppRedundantQualifier
+  class DescriptorSegment final
+    : public graphics::detail::FixedDescriptorSegment {
   public:
-    OXGN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
+    OXGN_D3D12_API DescriptorSegment(dx::IDevice* device,
       bindless::Capacity capacity, bindless::Handle base_index,
       ResourceViewType view_type, DescriptorVisibility visibility,
       std::string_view debug_name);
 
-    OXGN_D3D12_API DescriptorHeapSegment(dx::IDevice* device,
+    OXGN_D3D12_API DescriptorSegment(dx::IDevice* device,
       const bindless::Capacity capacity, const bindless::Handle base_index,
       const ResourceViewType view_type, const DescriptorVisibility visibility)
-      : DescriptorHeapSegment(
+      : DescriptorSegment(
           device, capacity, base_index, view_type, visibility, {})
     {
     }
 
-    OXGN_D3D12_API ~DescriptorHeapSegment() override;
+    OXGN_D3D12_API ~DescriptorSegment() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
-    OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
+    OXYGEN_MAKE_NON_COPYABLE(DescriptorSegment)
+    OXYGEN_DEFAULT_MOVABLE(DescriptorSegment)
 
     //! Checks if this segment's heap is shader visible.
     OXGN_D3D12_NDAPI auto IsShaderVisible() const noexcept -> bool;
@@ -89,7 +90,7 @@ namespace d3d12 {
 
   private:
     //! Computes a local index from a global index.
-    [[nodiscard]] auto GlobalToLocalIndex(bindless::Handle index) const
+    [[nodiscard]] auto GlobalToLocalIndex(bindless::Handle global_index) const
       -> bindless::Handle;
 
     dx::IDevice* device_;

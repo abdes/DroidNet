@@ -348,32 +348,21 @@ public:
     -> bindless::Count
     = 0;
 
-  //! Returns the shader-visible (local) index for a descriptor handle within
-  //! its heap/segment.
+  //! Returns the shader-visible bindless index for a descriptor allocated by
+  //! this allocator.
   /*!
-   This is NOT the global index, but the offset relative to the start of the
-   heap/segment from which the handle was allocated. This value should be used
-   as the index in the descriptor table bound for bindless rendering, and is
-   what the shader expects.
+   The mapping from a global `DescriptorHandle` to a shader-visible index is
+   allocator- and backend-specific. Callers must use this method instead of
+   attempting to derive the index themselves.
 
-   For example, if a descriptor heap segment has base index 100 and the
-   handle's global index is 102, this method will return 2 (local offset
-   within the heap/segment).
-
-   If the handle is invalid or not owned by this allocator, throws
-   std::runtime_error.
-
-   WARNING: Do NOT use the global index for shader resource indexing! Always
-   use this method to obtain the correct local index for bindless tables.
-
-   \param handle The descriptor handle to query.
-
-   \return The local (shader-visible) index within this heap, if the handle
-           is valid, was allocated from this allocator and is still allocated;
-           otherwise returns `DescriptorHandle::kInvalidIndex`.
+   @param handle The descriptor handle to map to a shader-visible index.
+   @return The shader-visible index into the bindless table for the resource
+   type associated with \p handle, or `kInvalidBindlessShaderVisibleIndex` if \p
+   handle is invalid or not owned by this allocator.
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> bindless::Handle
+    const DescriptorHandle& handle) const noexcept
+    -> bindless::ShaderVisibleIndex
     = 0;
 
 protected:

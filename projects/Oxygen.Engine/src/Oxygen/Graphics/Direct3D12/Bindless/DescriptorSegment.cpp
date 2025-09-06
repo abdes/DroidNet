@@ -8,18 +8,18 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
-#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 
 using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::graphics::d3d12 {
 
-DescriptorHeapSegment::DescriptorHeapSegment(dx::IDevice* device,
+DescriptorSegment::DescriptorSegment(dx::IDevice* device,
   const bindless::Capacity capacity, const bindless::Handle base_index,
   const ResourceViewType view_type, const DescriptorVisibility visibility,
-  std::string_view debug_name)
-  : FixedDescriptorHeapSegment(capacity, base_index, view_type, visibility)
+  const std::string_view debug_name)
+  : FixedDescriptorSegment(capacity, base_index, view_type, visibility)
   , device_(device)
   , heap_type_(D3D12HeapAllocationStrategy::GetHeapType(view_type))
 {
@@ -66,19 +66,19 @@ DescriptorHeapSegment::DescriptorHeapSegment(dx::IDevice* device,
   DLOG_F(1, "debug name : {}", debug_name);
 }
 
-DescriptorHeapSegment::~DescriptorHeapSegment() { ObjectRelease(heap_); }
+DescriptorSegment::~DescriptorSegment() { ObjectRelease(heap_); }
 
-auto DescriptorHeapSegment::GetCpuHandle(const DescriptorHandle& handle) const
+auto DescriptorSegment::GetCpuHandle(const DescriptorHandle& handle) const
   -> D3D12_CPU_DESCRIPTOR_HANDLE
 {
-  const auto local_index = GlobalToLocalIndex(handle.GetIndex());
+  const auto local_index = GlobalToLocalIndex(handle.GetBindlessHandle());
   D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = cpu_start_;
   cpu_handle.ptr
     += static_cast<SIZE_T>(local_index.get() * handle_increment_size_);
   return cpu_handle;
 }
 
-auto DescriptorHeapSegment::GetGpuHandle(const DescriptorHandle& handle) const
+auto DescriptorSegment::GetGpuHandle(const DescriptorHandle& handle) const
   -> D3D12_GPU_DESCRIPTOR_HANDLE
 {
   if (!IsShaderVisible()) {
@@ -86,14 +86,14 @@ auto DescriptorHeapSegment::GetGpuHandle(const DescriptorHandle& handle) const
       "Descriptor heap is not shader visible, cannot get GPU handle.");
   }
 
-  const auto local_index = GlobalToLocalIndex(handle.GetIndex());
+  const auto local_index = GlobalToLocalIndex(handle.GetBindlessHandle());
   D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = gpu_start_;
   gpu_handle.ptr
     += static_cast<UINT64>(local_index.get() * handle_increment_size_);
   return gpu_handle;
 }
 
-auto DescriptorHeapSegment::GetGpuDescriptorTableStart() const
+auto DescriptorSegment::GetGpuDescriptorTableStart() const
   -> D3D12_GPU_DESCRIPTOR_HANDLE
 {
   if (!IsShaderVisible()) {
@@ -103,29 +103,29 @@ auto DescriptorHeapSegment::GetGpuDescriptorTableStart() const
   return gpu_start_;
 }
 
-auto DescriptorHeapSegment::GetCpuDescriptorTableStart() const
+auto DescriptorSegment::GetCpuDescriptorTableStart() const
   -> D3D12_CPU_DESCRIPTOR_HANDLE
 {
   return cpu_start_;
 }
 
-auto DescriptorHeapSegment::IsShaderVisible() const noexcept -> bool
+auto DescriptorSegment::IsShaderVisible() const noexcept -> bool
 {
   const auto& desc = heap_->GetDesc();
   return (desc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) != 0;
 }
 
-auto DescriptorHeapSegment::GetHeap() const -> dx::IDescriptorHeap*
+auto DescriptorSegment::GetHeap() const -> dx::IDescriptorHeap*
 {
   return heap_;
 }
 
-auto DescriptorHeapSegment::GetHeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE
+auto DescriptorSegment::GetHeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE
 {
   return heap_type_;
 }
 
-auto DescriptorHeapSegment::GlobalToLocalIndex(
+auto DescriptorSegment::GlobalToLocalIndex(
   const bindless::Handle global_index) const -> bindless::Handle
 {
   // Validate the global index is within this segment's range

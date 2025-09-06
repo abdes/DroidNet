@@ -13,6 +13,8 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
 
+using oxygen::graphics::DescriptorHandle;
+
 namespace {
 
 //! Fake DescriptorAllocator used to drive DomainIndexMapper tests.
@@ -27,23 +29,23 @@ public:
     }] = oxygen::bindless::Handle { 10u };
   }
 
-  void SetBase(oxygen::graphics::ResourceViewType vt,
+  auto SetBase(oxygen::graphics::ResourceViewType vt,
     oxygen::graphics::DescriptorVisibility vis, oxygen::bindless::Handle base)
+    -> void
   {
     bases_[{ vt, vis }] = base;
   }
 
-  auto Allocate(
-    oxygen::graphics::ResourceViewType, oxygen::graphics::DescriptorVisibility)
-    -> oxygen::graphics::DescriptorHandle override
+  auto Allocate(oxygen::graphics::ResourceViewType,
+    oxygen::graphics::DescriptorVisibility) -> DescriptorHandle override
   {
-    return oxygen::graphics::DescriptorHandle {};
+    return DescriptorHandle {};
   }
 
-  void Release(oxygen::graphics::DescriptorHandle&) override { }
+  auto Release(DescriptorHandle&) -> void override { }
 
-  void CopyDescriptor(const oxygen::graphics::DescriptorHandle&,
-    const oxygen::graphics::DescriptorHandle&) override
+  auto CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&)
+    -> void override
   {
   }
 
@@ -61,8 +63,9 @@ public:
     -> oxygen::bindless::Handle override
   {
     auto it = bases_.find({ view_type, vis });
-    if (it != bases_.end())
+    if (it != bases_.end()) {
       return it->second;
+    }
     return oxygen::bindless::Handle { 0u };
   }
 
@@ -73,8 +76,7 @@ public:
     return std::nullopt;
   }
 
-  [[nodiscard]] auto Contains(const oxygen::graphics::DescriptorHandle&) const
-    -> bool override
+  [[nodiscard]] auto Contains(const DescriptorHandle&) const -> bool override
   {
     return false;
   }
@@ -88,16 +90,16 @@ public:
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const oxygen::graphics::DescriptorHandle&) const noexcept
-    -> oxygen::bindless::Handle override
+    const DescriptorHandle& /*handle*/) const noexcept
+    -> oxygen::bindless::ShaderVisibleIndex override
   {
-    return oxygen::bindless::Handle { 0u };
+    return oxygen::kInvalidBindlessShaderVisibleIndex;
   }
 
 private:
   struct KeyHash {
-    std::size_t operator()(const std::pair<oxygen::graphics::ResourceViewType,
-      oxygen::graphics::DescriptorVisibility>& k) const noexcept
+    auto operator()(const std::pair<oxygen::graphics::ResourceViewType,
+      oxygen::graphics::DescriptorVisibility>& k) const noexcept -> std::size_t
     {
       return (static_cast<std::size_t>(k.first) << 16)
         ^ static_cast<std::size_t>(k.second);
@@ -122,7 +124,7 @@ NOLINT_TEST(DomainIndexMapperTest,
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
 
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -153,7 +155,7 @@ NOLINT_TEST(
   namespace b = oxygen::bindless;
   using BindlessHandle = b::Handle;
 
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -179,11 +181,11 @@ NOLINT_TEST(DomainIndexMapperTest,
   namespace b = oxygen::bindless;
 
   // create two domains with adjacent ranges
-  const DomainKey d0 {
+  constexpr DomainKey d0 {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
-  const DomainKey d1 {
+  constexpr DomainKey d1 {
     ResourceViewType::kTexture_UAV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -254,7 +256,7 @@ NOLINT_TEST(
   };
 
   ZeroCapacityAllocator zero_alloc;
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -286,7 +288,7 @@ NOLINT_TEST(
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
 
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -336,11 +338,11 @@ NOLINT_TEST(DomainIndexMapperTest,
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
 
-  const DomainKey d0 {
+  constexpr DomainKey d0 {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
-  const DomainKey d1 {
+  constexpr DomainKey d1 {
     ResourceViewType::kTexture_UAV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -375,11 +377,11 @@ NOLINT_TEST(DomainIndexMapperTest, GetDomainRange_UnknownDomain_ReturnsNullopt)
   using ResourceViewType = oxygen::graphics::ResourceViewType;
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
 
-  const DomainKey known_dk {
+  constexpr DomainKey known_dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
-  const DomainKey unknown_dk {
+  constexpr DomainKey unknown_dk {
     ResourceViewType::kRawBuffer_UAV, // different type
     DescriptorVisibility::kShaderVisible,
   };
@@ -400,10 +402,10 @@ NOLINT_TEST(DomainIndexMapperTest, GetDomainRange_UnknownDomain_ReturnsNullopt)
 //===----------------------------------------------------------------------===//
 
 //! Test fixture for DomainIndexMapper thread safety scenarios.
-class DomainIndexMapperThreadSafetyTest : public ::testing::Test {
+class DomainIndexMapperThreadSafetyTest : public testing::Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
+  auto SetUp() -> void override { }
+  auto TearDown() -> void override { }
 };
 
 //! Verify concurrent GetDomainRange operations are thread-safe and
@@ -417,7 +419,7 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   using ResourceViewType = oxygen::graphics::ResourceViewType;
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
 
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -472,7 +474,7 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
 
-  const DomainKey dk {
+  constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -537,11 +539,11 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
 
-  const DomainKey d0 {
+  constexpr DomainKey d0 {
     ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible,
   };
-  const DomainKey d1 {
+  constexpr DomainKey d1 {
     ResourceViewType::kTexture_UAV,
     DescriptorVisibility::kShaderVisible,
   };
@@ -622,12 +624,12 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   // Assert: Verify operations completed successfully
   // Each range thread should succeed on all operations (2 domains)
   // Each resolve thread should succeed on 2/3 operations (2 valid indices)
-  const auto expected_range_successes
+  constexpr auto expected_range_successes
     = num_range_threads * operations_per_thread;
-  const auto expected_resolve_successes
+  constexpr auto expected_resolve_successes
     = num_resolve_threads * operations_per_thread * 2 / 3; // 2/3 success rate
 
-  const auto total_expected
+  constexpr auto total_expected
     = expected_range_successes + expected_resolve_successes;
   EXPECT_GE(total_successful_operations.load(), total_expected);
 }

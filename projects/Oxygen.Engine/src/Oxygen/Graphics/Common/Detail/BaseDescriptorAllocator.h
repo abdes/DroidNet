@@ -25,7 +25,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -180,8 +180,8 @@ public:
     std::lock_guard lock(mutex_);
     const auto view_type = handle.GetViewType();
     const auto visibility = handle.GetVisibility();
-    const auto index = handle.GetIndex();
-    const auto u_index = handle.GetIndex().get();
+    const auto index = handle.GetBindlessHandle();
+    const auto u_index = handle.GetBindlessHandle().get();
     const auto& key = keys_.at(HeapIndex(view_type, visibility));
     for (const auto& segments = heaps_.at(key);
       const auto& segment : segments) {
@@ -246,7 +246,7 @@ public:
       std::lock_guard lock(mutex_);
       const auto view_type = handle.GetViewType();
       const auto visibility = handle.GetVisibility();
-      const auto u_index = handle.GetIndex().get();
+      const auto u_index = handle.GetBindlessHandle().get();
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       const auto& segments = heaps_.at(key);
 
@@ -286,16 +286,17 @@ public:
     });
   }
 
-  [[nodiscard]] auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> bindless::Handle override
-  {
-    std::lock_guard lock(mutex_);
-    const auto segment = GetSegmentForHandleNoLock(handle);
-    if (!segment) {
-      return kInvalidBindlessHandle;
-    }
-    return (*segment)->GetShaderVisibleIndex(handle);
-  }
+  // [[nodiscard]] auto GetShaderVisibleIndex(
+  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
+  //   override
+  // {
+  //   std::lock_guard lock(mutex_);
+  //   const auto segment = GetSegmentForHandleNoLock(handle);
+  //   if (!segment) {
+  //     return kInvalidBindlessHandle;
+  //   }
+  //   return (*segment)->GetShaderVisibleIndex(handle);
+  // }
 
   [[nodiscard]] auto GetDomainBaseIndex(const ResourceViewType view_type,
     const DescriptorVisibility visibility) const -> bindless::Handle override
@@ -360,13 +361,13 @@ protected:
    This is the main extension point for derived classes. It should:
    1. Calculate the new segment size based on growth policy
    2. Create the backend-specific heap or pool
-   3. Return a DescriptorHeapSegment representing the new allocations
+   3. Return a DescriptorSegment representing the new allocations
 
    This function is called with the mutex already locked.
   */
   virtual auto CreateHeapSegment(bindless::Capacity capacity,
     bindless::Handle base_index, ResourceViewType view_type,
-    DescriptorVisibility visibility) -> std::unique_ptr<DescriptorHeapSegment>
+    DescriptorVisibility visibility) -> std::unique_ptr<DescriptorSegment>
     = 0;
 
   //! Gets the initial capacity for a specific view type and visibility.
@@ -414,7 +415,7 @@ protected:
    The caller should use Contains() first to validate ownership.
   */
   [[nodiscard]] auto GetSegmentForHandle(const DescriptorHandle& handle) const
-    -> std::optional<const DescriptorHeapSegment*>
+    -> std::optional<const DescriptorSegment*>
   {
     std::lock_guard lock(mutex_);
     return GetSegmentForHandleNoLock(handle);
@@ -422,7 +423,7 @@ protected:
 
   struct HeapView {
     const HeapDescription* description;
-    std::span<const std::unique_ptr<DescriptorHeapSegment>> segments;
+    std::span<const std::unique_ptr<DescriptorSegment>> segments;
   };
 
   //! Returns a vector of HeapView for all heaps that have at least one segment.
@@ -445,7 +446,7 @@ protected:
 private:
   [[nodiscard]] auto GetSegmentForHandleNoLock(
     const DescriptorHandle& handle) const
-    -> std::optional<const DescriptorHeapSegment*>
+    -> std::optional<const DescriptorSegment*>
   {
     if (!handle.IsValid() || handle.GetAllocator() != this) {
       return std::nullopt;
@@ -455,7 +456,7 @@ private:
     const auto visibility = handle.GetVisibility();
 
     // Unwrap to do the index math
-    const auto index = handle.GetIndex().get();
+    const auto index = handle.GetBindlessHandle().get();
     const auto& key = keys_.at(HeapIndex(view_type, visibility));
 
     for (const auto& segment : heaps_.at(key)) {
@@ -580,7 +581,7 @@ private:
   }
 
   std::array<std::string, kNumResourceViewTypes * kNumVisibilities> keys_;
-  using Segments = std::vector<std::unique_ptr<DescriptorHeapSegment>>;
+  using Segments = std::vector<std::unique_ptr<DescriptorSegment>>;
   std::unordered_map<std::string, Segments> heaps_ {};
 
   //! Thread synchronization mutex.

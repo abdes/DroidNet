@@ -45,7 +45,7 @@ auto oxygen::graphics::to_string(const DescriptorHandle& handle) -> std::string
 {
   return fmt::format(
     "DescriptorHandle{}{{index: {}, view_type: {}, visibility: {}}}",
-    handle.IsValid() ? "" : " (invalid)", handle.GetIndex().get(),
+    handle.IsValid() ? "" : " (invalid)", handle.GetBindlessHandle().get(),
     nostd::to_string(handle.GetViewType()),
     nostd::to_string(handle.GetVisibility()));
 }

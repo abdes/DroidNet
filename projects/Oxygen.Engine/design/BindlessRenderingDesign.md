@@ -76,13 +76,13 @@ None
 - `src/Oxygen/Graphics/Common/DescriptorHandle.h`
   *Defines DescriptorHandle, a type that encapsulates a stable index for a descriptor in a bindless table, with ownership and lifetime semantics.*
 
-- `src/Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h`
-  *Declares the DescriptorHeapSegment interface for managing a contiguous range of descriptor indices within a heap, and describes the contract for allocation, release, and state tracking.*
+- `src/Oxygen/Graphics/Common/Detail/DescriptorSegment.h`
+  *Declares the DescriptorSegment interface for managing a contiguous range of descriptor indices within a heap, and describes the contract for allocation, release, and state tracking.*
 
-- `src/Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.h`
+- `src/Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h`
   *Implements a fixed-capacity, LIFO-recycling descriptor heap segment.*
 
-- `src/Oxygen/Graphics/Common/Detail/StaticDescriptorHeapSegment.h`
+- `src/Oxygen/Graphics/Common/Detail/StaticDescriptorSegment.h`
   *Implements a static, compile-time capacity descriptor heap segment for testing and specialized use.*
 
 - `src/Oxygen/Graphics/Common/DescriptorAllocator.h`
@@ -139,9 +139,9 @@ None
      inspection methods
 - Does not directly expose platform-specific handles - these are
      implementation details, accessed through the DescriptorAllocator /
-     DescriptorHeapSegment
+     DescriptorSegment
 
-### 4. ✓ DescriptorHeapSegment
+### 4. ✓ DescriptorSegment
 
 - **Purpose**: Defines an interface for managing a dedicated section, or
      "segment," within a larger descriptor heap. Each segment is responsible for
@@ -166,7 +166,7 @@ None
   - **Accurate Counts**: `GetAllocatedCount()` and
        `GetAvailableCount()` must be accurate.
 
-- **`FixedDescriptorHeapSegment` Implementation**:
+- **`FixedDescriptorSegment` Implementation**:
   - **Pre-allocated Capacity**: The maximum number of descriptors is fixed at
        construction time and cannot be changed later. The segment maintains a
        fixed-size pool of descriptor indices.
@@ -182,7 +182,7 @@ None
 
 - **Relationship with `DescriptorAllocator`**: `DescriptorAllocator`
      implementations will typically manage collections of
-     `DescriptorHeapSegment` instances (or similar sub-allocation mechanisms).
+     `DescriptorSegment` instances (or similar sub-allocation mechanisms).
      The allocator will delegate requests for specific descriptor types and
      visibilities to the appropriate segment.
 
@@ -192,18 +192,18 @@ None
      heaps/pools.
 
 - **Internal Management**: Implementations will likely manage one or more
-     `DescriptorHeapSegment` instances (or analogous structures) for each
+     `DescriptorSegment` instances (or analogous structures) for each
      combination of `ResourceViewType` and `DescriptorVisibility`. This allows
      the `DescriptorAllocator` to organize and sub-allocate descriptors
      efficiently.
 
 - **Responsibilities**:
   - Manages shader-visible and CPU-only descriptor spaces by potentially
-       using different sets of `DescriptorHeapSegment`s for each
+       using different sets of `DescriptorSegment`s for each
        `DescriptorVisibility`.
   - Provides methods for allocation (`Allocate`) and release (`Release`) of
        `DescriptorHandle`s. These operations will typically be routed to an
-       appropriate `DescriptorHeapSegment`.     - Facilitates copying descriptors between visibility spaces through the
+       appropriate `DescriptorSegment`.     - Facilitates copying descriptors between visibility spaces through the
        `CopyDescriptor` method.
   - Exposes methods to get associated platform-specific handles/pointers for
        descriptors via `GetNativeHandle`.
@@ -737,11 +737,11 @@ Vertex vertex = resources[vertexBufferIndex].Load(vertexId);
 - `src/Oxygen/Graphics/Common/Test/DescriptorHandle_test.cpp`
   *Unit tests for DescriptorHandle, covering creation, movement, validity, and RAII behavior.*
 
-- `src/Oxygen/Graphics/Common/Test/DescriptorHeapSegment_test.cpp`
+- `src/Oxygen/Graphics/Common/Test/DescriptorSegment_test.cpp`
   *Unit tests for descriptor heap segments, covering allocation, release, recycling, and error conditions.*
 
-- `src/Oxygen/Graphics/Common/Test/Bindless/StaticDescriptorHeapSegment_test.cpp`
-  *Unit tests for StaticDescriptorHeapSegment, covering all supported ResourceViewTypes.*
+- `src/Oxygen/Graphics/Common/Test/Bindless/StaticDescriptorSegment_test.cpp`
+  *Unit tests for StaticDescriptorSegment, covering all supported ResourceViewTypes.*
 
 - `src/Oxygen/Graphics/Common/Test/ResourceRegistry_test.cpp`
   *Unit tests for ResourceRegistry, covering registration, view caching, error handling, concurrency, and lifecycle.*
@@ -755,11 +755,11 @@ Vertex vertex = resources[vertexBufferIndex].Load(vertexId);
 - `src/Oxygen/Graphics/Common/CMakeLists.txt`
   *Build configuration for the common graphics module and its tests.*
 
-- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h`
-  *Declares the D3D12-specific DescriptorHeapSegment, managing a segment of a D3D12 descriptor heap.*
+- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h`
+  *Declares the D3D12-specific DescriptorSegment, managing a segment of a D3D12 descriptor heap.*
 
-- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.cpp`
-  *Implements the D3D12 DescriptorHeapSegment, including heap creation, handle translation, and resource management.*
+- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.cpp`
+  *Implements the D3D12 DescriptorSegment, including heap creation, handle translation, and resource management.*
 
 - `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h`
   *Declares the D3D12 heap allocation strategy, mapping view types and visibilities to D3D12 heap types and configurations.*
@@ -767,8 +767,8 @@ Vertex vertex = resources[vertexBufferIndex].Load(vertexId);
 - `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.cpp`
   *Implements the D3D12 heap allocation strategy, including heap key construction and capacity management.*
 
-- `src/Oxygen/Graphics/Direct3D12/Test/DescriptorHeapSegment_test.cpp`
-  *Unit tests for the D3D12 DescriptorHeapSegment implementation.*
+- `src/Oxygen/Graphics/Direct3D12/Test/DescriptorSegment_test.cpp`
+  *Unit tests for the D3D12 DescriptorSegment implementation.*
 
 - `src/Oxygen/Graphics/Direct3D12/Test/Bindless/D3D12HeapAllocationStrategy_test.cpp`
   *Unit tests for the D3D12 heap allocation strategy.*

@@ -26,7 +26,7 @@
 
 #include "./BaseDescriptorAllocatorTest.h"
 #include "./Mocks/MockDescriptorAllocator.h"
-#include "./Mocks/MockDescriptorHeapSegment.h"
+#include "./Mocks/MockDescriptorSegment.h"
 
 using oxygen::kInvalidBindlessHandle;
 using oxygen::bindless::Capacity;
@@ -38,7 +38,7 @@ using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
-using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::MockDescriptorSegment;
 
 namespace b = oxygen::bindless;
 
@@ -56,7 +56,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
     if (segment_count == 1) {
       // Setup: Create a segment that will fill up and need to grow
       auto first_segment
-        = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
       EXPECT_CALL(*first_segment, Allocate())
         .WillOnce(testing::Return(Handle { 0 }))
         .WillRepeatedly(testing::Return(
@@ -80,7 +80,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
 
     // Second segment for growth
     auto growth_segment
-      = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+      = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*growth_segment, Allocate())
       .WillOnce(
         testing::Return(Handle { 100 })); // Different index to distinguish
@@ -109,8 +109,8 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
   // Verify: Both handles are valid, second segment was created
   EXPECT_TRUE(h1.IsValid());
   EXPECT_TRUE(h2.IsValid());
-  EXPECT_EQ(h1.GetIndex().get(), 0U);
-  EXPECT_EQ(h2.GetIndex().get(), 100U); // From second segment
+  EXPECT_EQ(h1.GetBindlessHandle().get(), 0U);
+  EXPECT_EQ(h2.GetBindlessHandle().get(), 100U); // From second segment
   EXPECT_EQ(segment_count, 2);
 
   h1.Release();
@@ -134,7 +134,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
     = heap_strategy_->GetHeapDescription(key).max_growth_iterations;
 
   // Setup factory to track the sizes that would be used for segment creation
-  b::Handle base_index { 0 };
+  Handle base_index { 0 };
   allocator_->segment_factory_ = [&requested_sizes, &base_index,
                                    initial_capacity,
                                    growth_factor](auto type, auto vis) {
@@ -155,7 +155,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
     requested_sizes.push_back(expected_size);
 
     // Create a segment that will immediately fail allocation to trigger growth
-    auto segment = std::make_unique<MockDescriptorHeapSegment>();
+    auto segment = std::make_unique<MockDescriptorSegment>();
     EXPECT_CALL(*segment, Allocate())
       .WillRepeatedly(testing::Return(kInvalidBindlessHandle));
     EXPECT_CALL(*segment, GetAvailableCount())
@@ -169,7 +169,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
     EXPECT_CALL(*segment, GetBaseIndex())
       .WillRepeatedly(testing::Return(Handle { base_index.get() }));
 
-    base_index = b::Handle { base_index.get() + 1 };
+    base_index = Handle { base_index.get() + 1 };
     return segment;
   };
 
@@ -204,7 +204,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, SegmentCreatedOnlyWhenNeeded)
   auto create_count = 0U;
 
   allocator_->segment_factory_ = [&create_count](auto, auto) {
-    auto segment = std::make_unique<MockDescriptorHeapSegment>();
+    auto segment = std::make_unique<MockDescriptorSegment>();
     EXPECT_CALL(*segment, Allocate()).WillOnce(testing::Return(Handle { 0 }));
     EXPECT_CALL(*segment, GetAvailableCount())
       .WillRepeatedly(testing::Return(Count { 1 }));
@@ -245,14 +245,13 @@ NOLINT_TEST_F(
 
   // Setup: Create segments that allow one allocation each, then fail
   uint32_t create_count { 0 };
-  b::Handle last_base_index { 0 };
+  Handle last_base_index { 0 };
   allocator_->segment_factory_ = [&create_count, &last_base_index](
                                    auto type, auto vis) {
-    auto segment
-      = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+    auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     const auto base_index = last_base_index;
     last_base_index
-      = b::Handle { base_index.get() + 1 }; // Each segment has capacity 1
+      = Handle { base_index.get() + 1 }; // Each segment has capacity 1
 
     // Each segment allows one allocation, then returns kInvalidIndex
     EXPECT_CALL(*segment, Allocate())
@@ -287,7 +286,7 @@ NOLINT_TEST_F(
     EXPECT_TRUE(h.IsValid());
     handles.push_back(std::move(h));
     EXPECT_TRUE(handles.back().IsValid());
-    EXPECT_EQ(handles.back().GetIndex().get(), i);
+    EXPECT_EQ(handles.back().GetBindlessHandle().get(), i);
   }
 
   // Next allocation should throw
@@ -302,13 +301,12 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
 {
   // Setup: Create segments that allow one allocation each, then fail
   auto create_count { 0U };
-  b::Handle last_base_index { 0 };
+  Handle last_base_index { 0 };
   allocator_->segment_factory_ = [&create_count, &last_base_index](
                                    auto type, auto vis) {
-    auto segment
-      = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+    auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     const auto base_index = last_base_index;
-    last_base_index = b::Handle { base_index.get() + 1 };
+    last_base_index = Handle { base_index.get() + 1 };
 
     // Each segment has capacity 1
     if (base_index.get() == 0) {
@@ -345,14 +343,14 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
   auto h1 = allocator_->Allocate(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h1.IsValid());
-  EXPECT_EQ(h1.GetIndex().get(), 0U);
+  EXPECT_EQ(h1.GetBindlessHandle().get(), 0U);
 
   // Action 2: Second allocation - segment 1 is full, should use segment 2 with
   // index 200
   const auto h2 = allocator_->Allocate(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h2.IsValid());
-  EXPECT_EQ(h2.GetIndex().get(), 1U);
+  EXPECT_EQ(h2.GetBindlessHandle().get(), 1U);
 
   // Action 3: Release the first allocation, making space in segment 1
   allocator_->Release(h1);
@@ -361,7 +359,8 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
   const auto h3 = allocator_->Allocate(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h3.IsValid());
-  EXPECT_EQ(h3.GetIndex().get(), 0U); // Should reuse the index from segment 1
+  EXPECT_EQ(
+    h3.GetBindlessHandle().get(), 0U); // Should reuse the index from segment 1
 
   EXPECT_EQ(create_count, 2);
 }
@@ -371,44 +370,44 @@ NOLINT_TEST_F(
 {
   // Setup: Factory that fails after first segment
   auto create_count { 0U };
-  b::Handle last_base_index { 0 };
-  allocator_->segment_factory_ = [&create_count, &last_base_index](
-                                   auto type, auto vis) {
-    create_count++;
-    if (create_count == 1) {
-      auto segment
-        = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-      const b::Handle base_index = last_base_index;
-      last_base_index = b::Handle { base_index.get() + 1 };
+  Handle last_base_index { 0 };
+  allocator_->segment_factory_
+    = [&create_count, &last_base_index](auto type, auto vis) {
+        create_count++;
+        if (create_count == 1) {
+          auto segment
+            = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
+          const Handle base_index = last_base_index;
+          last_base_index = Handle { base_index.get() + 1 };
 
-      EXPECT_CALL(*segment, Allocate())
-        .WillOnce(testing::Return(base_index))
-        .WillRepeatedly(testing::Return(kInvalidBindlessHandle));
-      EXPECT_CALL(*segment, Release(base_index))
-        .WillOnce(testing::Return(true));
-      EXPECT_CALL(*segment, GetViewType())
-        .WillRepeatedly(testing::Return(type));
-      EXPECT_CALL(*segment, GetVisibility())
-        .WillRepeatedly(testing::Return(vis));
-      EXPECT_CALL(*segment, GetBaseIndex())
-        .WillRepeatedly(testing::Return(base_index));
-      EXPECT_CALL(*segment, GetCapacity())
-        .WillRepeatedly(testing::Return(Capacity { 1 }));
-      EXPECT_CALL(*segment, GetAllocatedCount())
-        .WillOnce(testing::Return(Count { 0 }))
-        .WillRepeatedly(testing::Return(Count { 1 }));
+          EXPECT_CALL(*segment, Allocate())
+            .WillOnce(testing::Return(base_index))
+            .WillRepeatedly(testing::Return(kInvalidBindlessHandle));
+          EXPECT_CALL(*segment, Release(base_index))
+            .WillOnce(testing::Return(true));
+          EXPECT_CALL(*segment, GetViewType())
+            .WillRepeatedly(testing::Return(type));
+          EXPECT_CALL(*segment, GetVisibility())
+            .WillRepeatedly(testing::Return(vis));
+          EXPECT_CALL(*segment, GetBaseIndex())
+            .WillRepeatedly(testing::Return(base_index));
+          EXPECT_CALL(*segment, GetCapacity())
+            .WillRepeatedly(testing::Return(Capacity { 1 }));
+          EXPECT_CALL(*segment, GetAllocatedCount())
+            .WillOnce(testing::Return(Count { 0 }))
+            .WillRepeatedly(testing::Return(Count { 1 }));
 
-      return segment;
-    }
-    // Return null to simulate segment creation failure
-    return std::unique_ptr<::testing::NiceMock<MockDescriptorHeapSegment>> {};
-  };
+          return segment;
+        }
+        // Return null to simulate segment creation failure
+        return std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {};
+      };
 
   // First allocation should succeed
   const auto handle = allocator_->Allocate(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(handle.IsValid());
-  EXPECT_EQ(handle.GetIndex().get(), 0U);
+  EXPECT_EQ(handle.GetBindlessHandle().get(), 0U);
 
   // Second allocation should throw due to segment creation failure
   EXPECT_THROW(allocator_->Allocate(ResourceViewType::kTexture_SRV,
@@ -424,8 +423,8 @@ class GrowthTestAllocator final
   using Base = BaseDescriptorAllocator;
 
 public:
-  b::Capacity last_requested_capacity_ { 0 };
-  b::Handle last_requested_base_index_ { 0 };
+  Capacity last_requested_capacity_ { 0 };
+  Handle last_requested_base_index_ { 0 };
   ResourceViewType last_type_ = ResourceViewType::kNone;
   DescriptorVisibility last_vis_ = DescriptorVisibility::kNone;
 
@@ -435,10 +434,17 @@ public:
   {
   }
 
+  [[nodiscard]] auto GetShaderVisibleIndex(
+    const DescriptorHandle& /*handle*/) const noexcept
+    -> oxygen::bindless::ShaderVisibleIndex override
+  {
+    return oxygen::kInvalidBindlessShaderVisibleIndex;
+  }
+
 protected:
-  auto CreateHeapSegment(const b::Capacity capacity, const b::Handle base_index,
+  auto CreateHeapSegment(const Capacity capacity, const Handle base_index,
     const ResourceViewType type, const DescriptorVisibility vis)
-    -> std::unique_ptr<oxygen::graphics::detail::DescriptorHeapSegment> override
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> override
   {
     last_requested_capacity_ = capacity;
     last_requested_base_index_ = base_index;
@@ -447,7 +453,7 @@ protected:
 
     // Return a dummy segment that always fails allocation (to avoid further
     // growth)
-    struct DummySegment : oxygen::graphics::detail::DescriptorHeapSegment {
+    struct DummySegment : oxygen::graphics::detail::DescriptorSegment {
       bool allocated_once { false };
 
       auto Allocate() noexcept -> Handle override
@@ -486,11 +492,6 @@ protected:
       {
         return allocated_once ? Count { 10 } : Count { 0 };
       }
-      [[nodiscard]] auto GetShaderVisibleIndex(
-        const DescriptorHandle& /*handle*/) const noexcept -> Handle override
-      {
-        return Handle { 0 };
-      }
     };
     return std::make_unique<DummySegment>();
   }
@@ -499,8 +500,8 @@ protected:
   using Base::GetInitialCapacity;
 
 public:
-  void CopyDescriptor(const DescriptorHandle& /*source*/,
-    const DescriptorHandle& /*destination*/) override
+  auto CopyDescriptor(const DescriptorHandle& /*source*/,
+    const DescriptorHandle& /*destination*/) -> void override
   {
   }
 };
@@ -523,8 +524,8 @@ NOLINT_TEST_F(
       -> const HeapDescription& override
     {
       static HeapDescription desc {
-        .cpu_visible_capacity = b::Capacity { 10 },
-        .shader_visible_capacity = b::Capacity { 10 },
+        .cpu_visible_capacity = Capacity { 10 },
+        .shader_visible_capacity = Capacity { 10 },
         .allow_growth = true,
         .growth_factor = static_cast<float>(b::kMaxCapacity.get()),
         .max_growth_iterations = 3,
@@ -533,9 +534,9 @@ NOLINT_TEST_F(
     }
 
     [[nodiscard]] auto GetHeapBaseIndex(ResourceViewType /*type*/,
-      DescriptorVisibility /*vis*/) const -> b::Handle override
+      DescriptorVisibility /*vis*/) const -> Handle override
     {
-      return b::Handle { 0 };
+      return Handle { 0 };
     }
   };
 

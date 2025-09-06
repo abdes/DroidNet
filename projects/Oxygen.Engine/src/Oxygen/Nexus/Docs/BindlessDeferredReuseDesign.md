@@ -843,7 +843,7 @@ Edge cases handled
 
 | File/Class | Path | Purpose of change | Risk |
 |---|---|---|---|
-| FixedDescriptorHeapSegment.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | No change | Low |
+| FixedDescriptorSegment.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | No change | Low |
 | BaseDescriptorAllocator.{h,cpp} | src/Oxygen/Graphics/Common/Detail/ | No change | Low |
 | DescriptorAllocator.h | src/Oxygen/Graphics/Common/ | No change; SSoT queried by DomainIndexMapper | Low |
 | ResourceRegistry.{h,cpp} | src/Oxygen/Graphics/Common/ | No change | Low |
@@ -888,7 +888,7 @@ Backwards‑compatibility:
 
 ## Test plan and harness sketch
 
-- Test fixture builds a FixedDescriptorHeapSegment with small capacity (e.g.,
+- Test fixture builds a FixedDescriptorSegment with small capacity (e.g.,
   4). A FakeFenceClock<uint64_t> provides advance(n) and value().
 - Tests call Allocate/Release using injected fakes (allocate/free callables) and
   drive reclamation via frame cycling (Strategy A) or fake queue completed

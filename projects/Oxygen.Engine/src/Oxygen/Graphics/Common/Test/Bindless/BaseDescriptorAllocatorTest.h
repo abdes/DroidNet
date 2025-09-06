@@ -12,10 +12,8 @@
 #include <gtest/gtest.h>
 
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 
 #include "./Mocks/MockDescriptorAllocator.h"
-#include "./Mocks/MockDescriptorHeapSegment.h"
 
 namespace oxygen::graphics::bindless::testing {
 
@@ -120,21 +118,21 @@ protected:
   std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy_;
   std::unique_ptr<::testing::NiceMock<MockDescriptorAllocator>> allocator_;
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
     heap_strategy_ = std::make_shared<DefaultDescriptorAllocationStrategy>();
     allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
       heap_strategy_);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     // Destroy the allocator before the fixture is destroyed to avoid use
     // after free inside mocked methods in the destructor.
     allocator_.reset();
   }
 
-  void DisableGrowth()
+  auto DisableGrowth() -> void
   {
     heap_strategy_ = std::make_shared<NoGrowthDescriptorAllocationStrategy>();
     allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(

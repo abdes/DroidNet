@@ -322,7 +322,7 @@ lifetime/generation, validation, and type safety.
   - Status: Partial. The design requires that recycled slots carry a new
     generation so CPU-side handles can detect staleness. The codebase provides
     `DeferredReclaimer` to defer object destruction; allocator segments
-    currently recycle indices immediately (see `FixedDescriptorHeapSegment`).
+    currently recycle indices immediately (see `FixedDescriptorSegment`).
   - Action: Define the authoritative transition point where a slot's generation
     is incremented (for example, on fence/frame completion). Then either delay
     insertion of freed indices into the segment free list until that transition,
@@ -330,7 +330,7 @@ lifetime/generation, validation, and type safety.
     `VersionedBindlessHandle` validation will reject older generations.
   - Files: `src/Oxygen/Graphics/Common/ResourceRegistry.h/.cpp`,
     `src/Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h`,
-    `src/Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.*`,
+    `src/Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.*`,
     renderer/frame sync in `src/Oxygen/Renderer/Renderer.cpp` (or
     coordinator/maestro).
 

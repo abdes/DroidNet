@@ -50,9 +50,9 @@ m_gtest_program(BufferStateTracking SOURCES "BufferStateTracking_test.cpp")
 m_gtest_program(DescriptorHandle SOURCES "Bindless/DescriptorHandle_test.cpp")
 m_gtest_program(IndexRange SOURCES "Bindless/IndexRange_test.cpp")
 m_gtest_program(
-  DescriptorHeapSegment
+  DescriptorSegment
   SOURCES
-    "Bindless/FixedDescriptorHeapSegment_test.cpp"
+    "Bindless/FixedDescriptorSegment_test.cpp"
 )
 m_gtest_program(
   BaseDescriptorAllocator

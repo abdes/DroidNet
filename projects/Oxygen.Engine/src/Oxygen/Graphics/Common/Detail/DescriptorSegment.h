@@ -9,7 +9,7 @@
 // ReSharper disable once CppUnusedIncludeDirective - OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -60,13 +60,13 @@ namespace oxygen::graphics::detail {
  vary between implementations, the fundamental ability to reuse released
  descriptors is a key expectation.
 */
-class DescriptorHeapSegment {
+class DescriptorSegment {
 public:
-  DescriptorHeapSegment() noexcept = default;
-  virtual ~DescriptorHeapSegment() noexcept = default;
+  DescriptorSegment() noexcept = default;
+  virtual ~DescriptorSegment() noexcept = default;
 
-  OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
-  OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorSegment)
+  OXYGEN_DEFAULT_MOVABLE(DescriptorSegment)
 
   //! Allocates a descriptor index from this segment.
   /*!
@@ -86,6 +86,19 @@ public:
   [[nodiscard]] virtual auto GetAvailableCount() const noexcept
     -> bindless::Count
     = 0;
+
+  //! Checks if the segment is empty (i.e., no allocated descriptors).
+  [[nodiscard]] auto IsEmpty() const noexcept
+  {
+    return GetAllocatedCount() == bindless::Count { 0 };
+  }
+
+  //! Checks if the segment is full (i.e., all capacity is used for allocated
+  //! descriptors).
+  [[nodiscard]] auto IsFull() const noexcept
+  {
+    return GetAllocatedCount().get() == GetCapacity().get();
+  }
 
   //! Returns the resource view type of this segment.
   [[nodiscard]] virtual auto GetViewType() const noexcept -> ResourceViewType
@@ -110,31 +123,18 @@ public:
     -> bindless::Count
     = 0;
 
-  //! Returns the shader-visible (local) index for a descriptor handle within
-  //! this segment.
-  /*!
-   \param handle The descriptor handle to query.
-
-   \return The local (shader-visible) index within this segment, if the handle
-           is valid, was allocated from this segment and is still allocated;
-           otherwise returns `DescriptorHandle::kInvalidIndex`.
-  */
-  [[nodiscard]] virtual auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> bindless::Handle
-    = 0;
-
-  //! Checks if the segment is empty (i.e., no allocated descriptors).
-  [[nodiscard]] auto IsEmpty() const noexcept
-  {
-    return GetAllocatedCount() == bindless::Count { 0 };
-  }
-
-  //! Checks if the segment is full (i.e., all capacity is used for allocated
-  //! descriptors).
-  [[nodiscard]] auto IsFull() const noexcept
-  {
-    return GetAllocatedCount().get() == GetCapacity().get();
-  }
+  // //! Returns the shader-visible (local) index for a descriptor handle within
+  // //! this segment.
+  // /*!
+  //  \param handle The descriptor handle to query.
+  //  \return The local (shader-visible) index within this segment, if the
+  //  handle
+  //          is valid, was allocated from this segment and is still allocated;
+  //          otherwise returns `DescriptorHandle::kInvalidIndex`.
+  // */
+  // [[nodiscard]] virtual auto GetShaderVisibleIndex(
+  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
+  //   = 0;
 };
 
 } // namespace oxygen::graphics::detail

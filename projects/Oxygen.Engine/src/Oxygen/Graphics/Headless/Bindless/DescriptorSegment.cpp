@@ -6,12 +6,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/BindlessHandle.h>
-#include <Oxygen/Graphics/Headless/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Headless/Bindless/DescriptorSegment.h>
 
 namespace oxygen::graphics::headless::bindless {
 
-DescriptorHeapSegment::DescriptorHeapSegment(
-  oxygen::bindless::Capacity capacity,
+DescriptorSegment::DescriptorSegment(oxygen::bindless::Capacity capacity,
   const oxygen::bindless::Handle base_index, const ResourceViewType view_type,
   const DescriptorVisibility visibility)
   : base_index_(base_index)
@@ -31,7 +30,7 @@ DescriptorHeapSegment::DescriptorHeapSegment(
   free_list_.reserve(cap);
 }
 
-auto DescriptorHeapSegment::Allocate() noexcept -> oxygen::bindless::Handle
+auto DescriptorSegment::Allocate() noexcept -> oxygen::bindless::Handle
 {
   LOG_SCOPE_F(2, "Allocate bindless::Handle");
   DLOG_F(2, "view type  : {}", view_type_);
@@ -64,8 +63,7 @@ auto DescriptorHeapSegment::Allocate() noexcept -> oxygen::bindless::Handle
   return idx;
 }
 
-auto DescriptorHeapSegment::Release(oxygen::bindless::Handle index) noexcept
-  -> bool
+auto DescriptorSegment::Release(oxygen::bindless::Handle index) noexcept -> bool
 {
   LOG_SCOPE_F(2, "Release bindless::Handle");
   if (index == kInvalidBindlessHandle) {
@@ -102,7 +100,7 @@ auto DescriptorHeapSegment::Release(oxygen::bindless::Handle index) noexcept
   return true;
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetAvailableCount() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetAvailableCount() const noexcept
   -> oxygen::bindless::Count
 {
   std::lock_guard lock(mutex_);
@@ -110,51 +108,51 @@ auto DescriptorHeapSegment::Release(oxygen::bindless::Handle index) noexcept
   return oxygen::bindless::Count { cap - allocated_count_ };
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetViewType() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetViewType() const noexcept
   -> ResourceViewType
 {
   return view_type_;
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetVisibility() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetVisibility() const noexcept
   -> DescriptorVisibility
 {
   return visibility_;
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetBaseIndex() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetBaseIndex() const noexcept
   -> oxygen::bindless::Handle
 {
   return base_index_;
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetCapacity() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetCapacity() const noexcept
   -> oxygen::bindless::Capacity
 {
   return capacity_;
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetAllocatedCount() const noexcept
+[[nodiscard]] auto DescriptorSegment::GetAllocatedCount() const noexcept
   -> oxygen::bindless::Count
 {
   std::lock_guard lock(mutex_);
   return oxygen::bindless::Count { allocated_count_ };
 }
 
-[[nodiscard]] auto DescriptorHeapSegment::GetShaderVisibleIndex(
-  const DescriptorHandle& handle) const noexcept -> oxygen::bindless::Handle
-{
-  // For headless, shader-visible index equals the global handle index
-  if (!handle.IsValid()) {
-    return kInvalidBindlessHandle;
-  }
-  const auto idx = handle.GetIndex().get();
-  const auto base = base_index_.get();
-  const auto cap = static_cast<uint32_t>(capacity_.get());
-  if (idx < base || idx >= base + cap) {
-    return kInvalidBindlessHandle;
-  }
-  return handle.GetIndex();
-}
+// [[nodiscard]] auto DescriptorSegment::GetShaderVisibleIndex(
+//   const DescriptorHandle& handle) const noexcept -> oxygen::bindless::Handle
+// {
+//   // For headless, shader-visible index equals the global handle index
+//   if (!handle.IsValid()) {
+//     return kInvalidBindlessHandle;
+//   }
+//   const auto idx = handle.GetBindlessHandle().get();
+//   const auto base = base_index_.get();
+//   const auto cap = static_cast<uint32_t>(capacity_.get());
+//   if (idx < base || idx >= base + cap) {
+//     return kInvalidBindlessHandle;
+//   }
+//   return handle.GetBindlessHandle();
+// }
 
 } // namespace oxygen::graphics::headless::bindless
