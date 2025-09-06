@@ -26,14 +26,14 @@
 
 #include "./BaseDescriptorAllocatorTest.h"
 #include "./Mocks/MockDescriptorAllocator.h"
-#include "./Mocks/MockDescriptorHeapSegment.h"
+#include "./Mocks/MockDescriptorSegment.h"
 
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
-using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::MockDescriptorSegment;
 
 using oxygen::kInvalidBindlessHandle;
 namespace b = oxygen::bindless;
@@ -70,7 +70,7 @@ public:
     next_indices_;
 
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     BaseDescriptorAllocatorTest::SetUp();
 
@@ -93,8 +93,7 @@ NOLINT_TEST_F(
   // Setup the segment factory to create mock segments
   allocator_->segment_factory_ = [this, capacity](const ResourceViewType type,
                                    const DescriptorVisibility vis) {
-    auto segment
-      = std::make_unique<testing::NiceMock<MockDescriptorHeapSegment>>();
+    auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
 
     // Setup allocate to return sequential indices
     ON_CALL(*segment, Allocate()).WillByDefault([this, capacity] {
@@ -233,11 +232,10 @@ NOLINT_TEST_F(
                                    DescriptorVisibility vis) {
     // Skip combinations not in baseIndices to match thread skip logic
     if (!base_indices_.contains({ type, vis })) {
-      return std::unique_ptr<testing::NiceMock<MockDescriptorHeapSegment>> {};
+      return std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {};
     }
 
-    auto segment
-      = std::make_unique<testing::NiceMock<MockDescriptorHeapSegment>>();
+    auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     auto base_index = base_indices_[{ type, vis }];
 
     // Setup allocate to return sequential indices for this type/visibility
@@ -309,9 +307,11 @@ NOLINT_TEST_F(
                 // Only check properties if handle is valid and not
                 // kInvalidIndex
                 auto expected_base_index = base_indices_[{ type, vis }];
-                EXPECT_NE(handles.back().GetIndex(), kInvalidBindlessHandle);
-                EXPECT_GE(handles.back().GetIndex(), expected_base_index);
-                EXPECT_LT(handles.back().GetIndex().get(),
+                EXPECT_NE(
+                  handles.back().GetBindlessHandle(), kInvalidBindlessHandle);
+                EXPECT_GE(
+                  handles.back().GetBindlessHandle(), expected_base_index);
+                EXPECT_LT(handles.back().GetBindlessHandle().get(),
                   expected_base_index.get() + 500);
                 // Only check type/vis if valid
                 EXPECT_TRUE(handles.back().IsValid());

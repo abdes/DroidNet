@@ -21,11 +21,11 @@ namespace oxygen::graphics::bindless::testing {
 class MockDescriptorAllocator : public detail::BaseDescriptorAllocator {
 public:
   using SegmentFactory
-    = std::function<std::unique_ptr<detail::DescriptorHeapSegment>(
+    = std::function<std::unique_ptr<detail::DescriptorSegment>(
       ResourceViewType, DescriptorVisibility)>;
 
   using ExtendedSegmentFactory
-    = std::function<std::unique_ptr<detail::DescriptorHeapSegment>(
+    = std::function<std::unique_ptr<detail::DescriptorSegment>(
       oxygen::bindless::Capacity /*capacity*/,
       oxygen::bindless::Handle /*base_index*/, ResourceViewType,
       DescriptorVisibility)>;
@@ -45,19 +45,18 @@ public:
   SegmentFactory segment_factory_;
 
   // Expose other public methods from BaseDescriptorAllocator for testing
-  // (Allocate is now mocked)
   using BaseDescriptorAllocator::Contains;
   using BaseDescriptorAllocator::GetAllocatedDescriptorsCount;
   using BaseDescriptorAllocator::GetRemainingDescriptorsCount;
   using BaseDescriptorAllocator::Release;
 
-  // Google Mock for DescriptorAllocator interface
-  MOCK_METHOD(DescriptorHandle, Allocate,
-    (oxygen::graphics::ResourceViewType view_type,
-      oxygen::graphics::DescriptorVisibility visibility),
-    (override));
-  MOCK_METHOD(void, CopyDescriptor,
-    (const DescriptorHandle&, const DescriptorHandle&), (override));
+  // clang-format off
+  // NOLINTBEGIN
+  MOCK_METHOD(DescriptorHandle, Allocate, (oxygen::graphics::ResourceViewType view_type, oxygen::graphics::DescriptorVisibility visibility), (override));
+  MOCK_METHOD(void, CopyDescriptor, (const DescriptorHandle&, const DescriptorHandle&), (override));
+  MOCK_METHOD(oxygen::bindless::ShaderVisibleIndex, GetShaderVisibleIndex, (const DescriptorHandle& handle), (const, noexcept, override));
+  // NOLINTEND
+  // clang-format off
 
   DescriptorHandle RealAllocateForMock(
     const ResourceViewType view_type, const DescriptorVisibility visibility)
@@ -76,7 +75,7 @@ protected:
   auto CreateHeapSegment(const oxygen::bindless::Capacity capacity,
     const oxygen::bindless::Handle base_index, const ResourceViewType view_type,
     const DescriptorVisibility visibility)
-    -> std::unique_ptr<detail::DescriptorHeapSegment> override
+    -> std::unique_ptr<detail::DescriptorSegment> override
   {
     // capacity and base_index are ignored because test cases will mock the
     // segment methods

@@ -9,21 +9,21 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics::detail {
 
-class FixedDescriptorHeapSegment : public DescriptorHeapSegment {
+class FixedDescriptorSegment : public DescriptorSegment {
 public:
-  OXGN_GFX_API FixedDescriptorHeapSegment(bindless::Capacity capacity,
+  OXGN_GFX_API FixedDescriptorSegment(bindless::Capacity capacity,
     bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility);
 
-  OXGN_GFX_API ~FixedDescriptorHeapSegment() noexcept override;
+  OXGN_GFX_API ~FixedDescriptorSegment() noexcept override;
 
-  OXYGEN_MAKE_NON_COPYABLE(FixedDescriptorHeapSegment)
-  OXYGEN_DEFAULT_MOVABLE(FixedDescriptorHeapSegment)
+  OXYGEN_MAKE_NON_COPYABLE(FixedDescriptorSegment)
+  OXYGEN_DEFAULT_MOVABLE(FixedDescriptorSegment)
   //! Allocates a descriptor index from this segment.
   /*!
    \return The allocated index, or DescriptorHandle::kInvalidIndex if the
@@ -52,8 +52,9 @@ public:
   OXGN_GFX_NDAPI auto GetAllocatedCount() const noexcept
     -> bindless::Count override;
 
-  OXGN_GFX_NDAPI auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept -> bindless::Handle override;
+  // OXGN_GFX_NDAPI auto GetShaderVisibleIndex(
+  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
+  //   override;
 
   [[nodiscard]] auto GetCapacity() const noexcept -> bindless::Capacity override
   {

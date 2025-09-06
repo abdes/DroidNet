@@ -12,7 +12,7 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>
 
 #include "./Mocks/MockDescriptorHeap.h"
 #include "./Mocks/MockDevice.h"
@@ -20,14 +20,14 @@
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::d3d12::DescriptorHeapSegment;
+using oxygen::graphics::d3d12::DescriptorSegment;
 
 using oxygen::graphics::d3d12::testing::MockDescriptorHeap;
 using oxygen::graphics::d3d12::testing::MockDevice;
 
-using ::testing::DoAll;
-using ::testing::Return;
-using ::testing::SetArgPointee;
+using testing::DoAll;
+using testing::Return;
+using testing::SetArgPointee;
 
 namespace b = oxygen::bindless;
 
@@ -42,26 +42,26 @@ public:
   }
 };
 
-class GoodHeapTest : public ::testing::Test {
+class GoodHeapTest : public testing::Test {
 protected:
   MockDevice device_;
   MockDescriptorHeap heap_;
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    using ::testing::_;
+    using testing::_;
     ON_CALL(device_, CreateDescriptorHeap(_, _, _))
       .WillByDefault(DoAll(SetArgPointee<2>(&heap_), Return(S_OK)));
   }
 };
 
-class NoHeapTest : public ::testing::Test {
+class NoHeapTest : public testing::Test {
 protected:
   MockDevice device_;
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    using ::testing::_;
+    using testing::_;
     // Simulate failure to create heap by returning an error code.
     ON_CALL(device_, CreateDescriptorHeap(_, _, _))
       .WillByDefault(DoAll(SetArgPointee<2>(nullptr), Return(E_OUTOFMEMORY)));
@@ -70,7 +70,7 @@ protected:
 
 NOLINT_TEST_F(GoodHeapTest, ConstructorCreatesHeapAndSetsHandles)
 {
-  using ::testing::_;
+  using testing::_;
 
   // Setup heap desc
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc {
@@ -98,8 +98,8 @@ NOLINT_TEST_F(GoodHeapTest, ConstructorCreatesHeapAndSetsHandles)
     .WillOnce(Return(gpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
 
-  // Construct DescriptorHeapSegment
-  const DescriptorHeapSegment segment(&device_,
+  // Construct DescriptorSegment
+  const DescriptorSegment segment(&device_,
     b::Capacity { heap_desc.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
@@ -122,7 +122,7 @@ NOLINT_TEST_F(GoodHeapTest, ConstructorCreatesHeapAndSetsHandles)
 
 NOLINT_TEST_F(GoodHeapTest, ConstructorWithDebugNameSetsDebugName)
 {
-  using ::testing::_;
+  using testing::_;
 
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc {
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -155,17 +155,16 @@ NOLINT_TEST_F(GoodHeapTest, ConstructorWithDebugNameSetsDebugName)
     .WillOnce(Return(gpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
 
-  DescriptorHeapSegment segment(&device_,
-    b::Capacity { heap_desc.NumDescriptors }, b::Handle(0),
-    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible,
-    "TestHeap");
+  DescriptorSegment segment(&device_, b::Capacity { heap_desc.NumDescriptors },
+    b::Handle(0), ResourceViewType::kTexture_SRV,
+    DescriptorVisibility::kShaderVisible, "TestHeap");
   // Only test that construction with debug name does not throw or crash.
   // There is no way to query the debug name from the heap mock.
 }
 
 NOLINT_TEST_F(GoodHeapTest, GetGpuHandleThrowsIfNotShaderVisible)
 {
-  using ::testing::_;
+  using testing::_;
 
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -185,7 +184,7 @@ NOLINT_TEST_F(GoodHeapTest, GetGpuHandleThrowsIfNotShaderVisible)
     .WillOnce(Return(cpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
 
-  const DescriptorHeapSegment segment(&device_,
+  const DescriptorSegment segment(&device_,
     b::Capacity { heap_desc.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
   const FakeDescriptorHandle handle(b::Handle { 0 });
@@ -195,23 +194,23 @@ NOLINT_TEST_F(GoodHeapTest, GetGpuHandleThrowsIfNotShaderVisible)
 
 NOLINT_TEST_F(NoHeapTest, ConstructorThrowsWhenHeapAllocationFails)
 {
-  using ::testing::_;
+  using testing::_;
 
   EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
 
   NOLINT_EXPECT_THROW(
-    DescriptorHeapSegment(&device_, b::Capacity { 4 }, b::Handle(0),
+    DescriptorSegment(&device_, b::Capacity { 4 }, b::Handle(0),
       ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible),
     std::runtime_error);
 }
 
 NOLINT_TEST_F(NoHeapTest, ConstructorWithDebugNameThrowsWhenHeapAllocationFails)
 {
-  using ::testing::_;
+  using testing::_;
 
   EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
 
-  NOLINT_EXPECT_THROW(DescriptorHeapSegment(&device_, b::Capacity { 8 },
+  NOLINT_EXPECT_THROW(DescriptorSegment(&device_, b::Capacity { 8 },
                         b::Handle(0), ResourceViewType::kTexture_SRV,
                         DescriptorVisibility::kShaderVisible, "DebugNameTest"),
     std::runtime_error);
@@ -219,7 +218,7 @@ NOLINT_TEST_F(NoHeapTest, ConstructorWithDebugNameThrowsWhenHeapAllocationFails)
 
 NOLINT_TEST_F(GoodHeapTest, GetGpuDescriptorTableStartThrowsIfNotShaderVisible)
 {
-  using ::testing::_;
+  using testing::_;
 
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -234,7 +233,7 @@ NOLINT_TEST_F(GoodHeapTest, GetGpuDescriptorTableStartThrowsIfNotShaderVisible)
   EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart())
     .WillOnce(Return(cpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
-  const DescriptorHeapSegment segment(&device_,
+  const DescriptorSegment segment(&device_,
     b::Capacity { heap_desc.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
   NOLINT_EXPECT_THROW(
@@ -244,7 +243,7 @@ NOLINT_TEST_F(GoodHeapTest, GetGpuDescriptorTableStartThrowsIfNotShaderVisible)
 
 NOLINT_TEST_F(GoodHeapTest, GetCpuDescriptorTableStartReturnsCpuHandle)
 {
-  using ::testing::_;
+  using testing::_;
 
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -259,7 +258,7 @@ NOLINT_TEST_F(GoodHeapTest, GetCpuDescriptorTableStartReturnsCpuHandle)
   EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart())
     .WillOnce(Return(cpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
-  const DescriptorHeapSegment segment(&device_,
+  const DescriptorSegment segment(&device_,
     b::Capacity { heap_desc.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
   EXPECT_EQ(segment.GetCpuDescriptorTableStart().ptr, cpu_handle.ptr);
@@ -267,7 +266,7 @@ NOLINT_TEST_F(GoodHeapTest, GetCpuDescriptorTableStartReturnsCpuHandle)
 
 NOLINT_TEST_F(GoodHeapTest, IsShaderVisibleReflectsHeapFlags)
 {
-  using ::testing::_;
+  using testing::_;
 
   constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc_visible = {
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -292,7 +291,7 @@ NOLINT_TEST_F(GoodHeapTest, IsShaderVisibleReflectsHeapFlags)
   EXPECT_CALL(heap_, GetGPUDescriptorHandleForHeapStart())
     .WillOnce(Return(gpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc_visible));
-  const DescriptorHeapSegment segment_visible(&device_,
+  const DescriptorSegment segment_visible(&device_,
     b::Capacity { heap_desc_visible.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(segment_visible.IsShaderVisible());
@@ -303,7 +302,7 @@ NOLINT_TEST_F(GoodHeapTest, IsShaderVisibleReflectsHeapFlags)
   EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart())
     .WillOnce(Return(cpu_handle));
   EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc_cpu));
-  const DescriptorHeapSegment segment_cpu(&device_,
+  const DescriptorSegment segment_cpu(&device_,
     b::Capacity { heap_desc_cpu.NumDescriptors }, b::Handle(0),
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
   EXPECT_FALSE(segment_cpu.IsShaderVisible());

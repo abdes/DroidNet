@@ -10,7 +10,7 @@
 
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
@@ -18,9 +18,9 @@
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::MockDescriptorSegment;
 using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
-using oxygen::graphics::detail::DescriptorHeapSegment;
+using oxygen::graphics::detail::DescriptorSegment;
 namespace dx = oxygen::graphics::d3d12::dx;
 
 using oxygen::kInvalidBindlessHandle;
@@ -33,7 +33,7 @@ namespace {
 class TestD3D12Allocator
   : public oxygen::graphics::detail::BaseDescriptorAllocator {
 public:
-  using Base = oxygen::graphics::detail::BaseDescriptorAllocator;
+  using Base = BaseDescriptorAllocator;
 
   explicit TestD3D12Allocator(dx::IDevice* device = nullptr)
     : Base(std::make_shared<D3D12HeapAllocationStrategy>(device))
@@ -47,20 +47,27 @@ public:
   {
   }
 
-  void CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&) override
+  auto CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&)
+    -> void override
   {
     // Not needed for these tests
+  }
+
+  [[nodiscard]] auto GetShaderVisibleIndex(
+    const DescriptorHandle& /*handle*/) const noexcept
+    -> oxygen::bindless::ShaderVisibleIndex override
+  {
+    return oxygen::kInvalidBindlessShaderVisibleIndex;
   }
 
 protected:
   auto CreateHeapSegment(const b::Capacity capacity, const b::Handle base_index,
     const ResourceViewType view_type, const DescriptorVisibility visibility)
-    -> std::unique_ptr<DescriptorHeapSegment> override
+    -> std::unique_ptr<DescriptorSegment> override
   {
     // Use a simple mock heap segment from D3D12 tests
-    auto seg
-      = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-    using ::testing::Return;
+    auto seg = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
+    using testing::Return;
     EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(Return(view_type));
     EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(Return(visibility));
     EXPECT_CALL(*seg, GetBaseIndex()).WillRepeatedly(Return(base_index));
@@ -82,7 +89,7 @@ NOLINT_TEST(D3D12DomainTest, GetDomainBaseIndexMatchesStrategy)
   TestD3D12Allocator alloc { nullptr };
   auto strat = std::make_shared<D3D12HeapAllocationStrategy>(nullptr);
 
-  const std::pair<ResourceViewType, DescriptorVisibility> domains[] = {
+  constexpr std::pair<ResourceViewType, DescriptorVisibility> domains[] = {
     { ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible },
     { ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible },
     { ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly },
@@ -107,7 +114,7 @@ NOLINT_TEST(D3D12DomainTest, ReserveWithinCapacityAndAllocate)
   ASSERT_TRUE(reserved.has_value());
   auto handle = alloc.Allocate(kType, kVis);
   EXPECT_TRUE(handle.IsValid());
-  EXPECT_EQ(handle.GetIndex(), reserved.value());
+  EXPECT_EQ(handle.GetBindlessHandle(), reserved.value());
   alloc.Release(handle);
   EXPECT_FALSE(handle.IsValid());
 }
@@ -144,7 +151,7 @@ NOLINT_TEST(D3D12DomainTest, DomainBaseIndices_CpuOnlyValidAndDeterministic)
 {
   TestD3D12Allocator alloc { nullptr };
 
-  const std::pair<ResourceViewType, DescriptorVisibility> cpu_domains[] = {
+  constexpr std::pair<ResourceViewType, DescriptorVisibility> cpu_domains[] = {
     { ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly },
     { ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly },
     { ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly },
@@ -163,7 +170,7 @@ NOLINT_TEST(D3D12DomainTest, DomainBaseIndices_CpuOnlyValidAndDeterministic)
 NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
 {
   // Minimal JSON overriding two heaps' base_index values
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
   {
     "heaps": {
       "CBV_SRV_UAV:gpu": {
@@ -191,7 +198,7 @@ NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
       : json(std::move(j))
     {
     }
-    [[nodiscard]] std::string_view GetJson() const noexcept override
+    [[nodiscard]] auto GetJson() const noexcept -> std::string_view override
     {
       return json;
     }

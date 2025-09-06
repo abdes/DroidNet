@@ -5,12 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 
-using oxygen::graphics::detail::FixedDescriptorHeapSegment;
+using oxygen::graphics::detail::FixedDescriptorSegment;
 
-FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
+FixedDescriptorSegment::FixedDescriptorSegment(
   const bindless::Capacity capacity, const bindless::Handle base_index,
   const ResourceViewType view_type, const DescriptorVisibility visibility)
   : capacity_(capacity)
@@ -28,7 +27,7 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
 }
 
 //! Converts a global descriptor index to a local index within the segment.
-auto FixedDescriptorHeapSegment::ToLocalIndex(
+auto FixedDescriptorSegment::ToLocalIndex(
   const bindless::Handle global_index) const noexcept -> bindless::Handle
 {
   // Ensure the global index belongs to this segment's range.
@@ -38,8 +37,8 @@ auto FixedDescriptorHeapSegment::ToLocalIndex(
     return kInvalidBindlessHandle;
   }
 
-  const auto local = bindless::Handle { static_cast<uint32_t>(
-    global_index.get() - base_index_.get()) };
+  const auto local
+    = bindless::Handle { (global_index.get() - base_index_.get()) };
   if (local.get() >= capacity_.get()) {
     LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range",
       global_index);
@@ -49,7 +48,7 @@ auto FixedDescriptorHeapSegment::ToLocalIndex(
 }
 
 //! Checks if a local index is currently allocated in the segment.
-auto FixedDescriptorHeapSegment::IsAllocated(
+auto FixedDescriptorSegment::IsAllocated(
   const bindless::Handle local_index) const noexcept -> bool
 {
   const auto idx = local_index.get();
@@ -59,7 +58,7 @@ auto FixedDescriptorHeapSegment::IsAllocated(
   return !released_flags_[static_cast<size_t>(idx)];
 }
 
-inline auto FixedDescriptorHeapSegment::FreeListSize() const -> bindless::Count
+inline auto FixedDescriptorSegment::FreeListSize() const -> bindless::Count
 {
   const size_t free_count = free_list_.size();
   DCHECK_F(std::cmp_less(free_count, bindless::kMaxCount.get()),
@@ -71,9 +70,9 @@ inline auto FixedDescriptorHeapSegment::FreeListSize() const -> bindless::Count
   };
 }
 
-FixedDescriptorHeapSegment::~FixedDescriptorHeapSegment() noexcept
+FixedDescriptorSegment::~FixedDescriptorSegment() noexcept
 {
-  LOG_SCOPE_F(1, "~FixedDescriptorHeapSegment");
+  LOG_SCOPE_F(1, "~FixedDescriptorSegment");
   DLOG_F(1, "view type  : {}", view_type_);
   DLOG_F(1, "visibility : {}", visibility_);
   DLOG_F(1, "base index : {}", base_index_);
@@ -89,7 +88,7 @@ FixedDescriptorHeapSegment::~FixedDescriptorHeapSegment() noexcept
   }
 }
 
-auto FixedDescriptorHeapSegment::Allocate() noexcept -> bindless::Handle
+auto FixedDescriptorSegment::Allocate() noexcept -> bindless::Handle
 {
   LOG_SCOPE_F(2, "Allocate bindless::Handle");
   DLOG_F(2, "view type  : {}", view_type_);
@@ -122,7 +121,7 @@ auto FixedDescriptorHeapSegment::Allocate() noexcept -> bindless::Handle
   return global_index;
 }
 
-auto FixedDescriptorHeapSegment::Release(const bindless::Handle index) noexcept
+auto FixedDescriptorSegment::Release(const bindless::Handle index) noexcept
   -> bool
 {
   LOG_SCOPE_F(2, "Release bindless::Handle");
@@ -165,7 +164,7 @@ auto FixedDescriptorHeapSegment::Release(const bindless::Handle index) noexcept
   return true;
 }
 
-auto FixedDescriptorHeapSegment::GetAvailableCount() const noexcept
+auto FixedDescriptorSegment::GetAvailableCount() const noexcept
   -> bindless::Count
 {
   const auto available
@@ -173,44 +172,18 @@ auto FixedDescriptorHeapSegment::GetAvailableCount() const noexcept
   return bindless::Count { static_cast<uint32_t>(available) };
 }
 
-auto FixedDescriptorHeapSegment::GetAllocatedCount() const noexcept
+auto FixedDescriptorSegment::GetAllocatedCount() const noexcept
   -> bindless::Count
 {
   const auto allocated = next_index_.get() - FreeListSize().get();
   return bindless::Count { static_cast<uint32_t>(allocated) };
 }
 
-void FixedDescriptorHeapSegment::ReleaseAll()
+auto FixedDescriptorSegment::ReleaseAll() -> void
 {
   // Clear the free list and reset the released flags
   free_list_.clear();
   released_flags_.assign(capacity_.get(), false);
   // Reset the next index to zero
   next_index_ = bindless::Handle { 0 };
-}
-
-auto FixedDescriptorHeapSegment::GetShaderVisibleIndex(
-  const DescriptorHandle& handle) const noexcept -> bindless::Handle
-{
-  // Check if the handle is valid
-  if (!handle.IsValid()) {
-    LOG_F(WARNING, "Invalid descriptor handle");
-    return kInvalidBindlessHandle;
-  }
-
-  // Find the local index from the global index
-  const auto local_index = ToLocalIndex(handle.GetIndex());
-  if (local_index == kInvalidBindlessHandle) {
-    return kInvalidBindlessHandle;
-  }
-
-  // Check if the descriptor is allocated
-  if (!IsAllocated(local_index)) {
-    LOG_F(WARNING, "Descriptor handle {} is not allocated",
-      nostd::to_string(handle));
-    return kInvalidBindlessHandle;
-  }
-
-  // Return the local index as the shader-visible index
-  return local_index;
 }

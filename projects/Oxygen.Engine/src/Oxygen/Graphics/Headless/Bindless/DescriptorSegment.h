@@ -11,22 +11,22 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/BindlessHandle.h>
-#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 namespace oxygen::graphics::headless::bindless {
 
-class DescriptorHeapSegment final : public detail::DescriptorHeapSegment {
+class DescriptorSegment final : public detail::DescriptorSegment {
 public:
-  DescriptorHeapSegment(oxygen::bindless::Capacity capacity,
+  DescriptorSegment(oxygen::bindless::Capacity capacity,
     oxygen::bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility);
 
-  OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
-  OXYGEN_MAKE_NON_MOVABLE(DescriptorHeapSegment)
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorSegment)
+  OXYGEN_MAKE_NON_MOVABLE(DescriptorSegment)
 
-  ~DescriptorHeapSegment() override = default;
+  ~DescriptorSegment() override = default;
 
   auto Allocate() noexcept -> oxygen::bindless::Handle override;
   auto Release(oxygen::bindless::Handle index) noexcept -> bool override;
@@ -41,9 +41,9 @@ public:
     -> oxygen::bindless::Capacity override;
   [[nodiscard]] auto GetAllocatedCount() const noexcept
     -> oxygen::bindless::Count override;
-  [[nodiscard]] auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept
-    -> oxygen::bindless::Handle override;
+  // [[nodiscard]] auto GetShaderVisibleIndex(
+  //   const DescriptorHandle& handle) const noexcept
+  //   -> oxygen::bindless::Handle override;
 
 private:
   oxygen::bindless::Handle base_index_;

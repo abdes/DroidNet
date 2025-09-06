@@ -17,7 +17,7 @@
 
 namespace oxygen::graphics::d3d12 {
 
-class DescriptorHeapSegment;
+class DescriptorSegment;
 
 //! D3D12 implementation of descriptor allocator.
 /*!
@@ -27,7 +27,7 @@ class DescriptorHeapSegment;
 
  This class:
  - Creates D3D12 descriptor heaps for different resource view types and
- visibilities
+   visibilities
  - Translates between abstract descriptor handles and D3D12 native handles
  - Efficiently copies descriptors between heaps when needed
  - Prepares shader-visible descriptor heaps for rendering
@@ -76,6 +76,10 @@ public:
   OXGN_D3D12_API auto GetShaderVisibleHeaps()
     -> std::span<const detail::ShaderVisibleHeapInfo>;
 
+  OXGN_D3D12_NDAPI auto GetShaderVisibleIndex(
+    const DescriptorHandle& handle) const noexcept
+    -> bindless::ShaderVisibleIndex override;
+
 protected:
   //! Creates a D3D12-specific descriptor heap segment.
   /*!
@@ -88,12 +92,12 @@ protected:
   OXGN_D3D12_API auto CreateHeapSegment(bindless::Capacity capacity,
     bindless::Handle base_index, ResourceViewType view_type,
     DescriptorVisibility visibility)
-    -> std::unique_ptr<graphics::detail::DescriptorHeapSegment> override;
+    -> std::unique_ptr<graphics::detail::DescriptorSegment> override;
 
 private:
-  //! Gets the D3D12DescriptorHeapSegment from a handle.
+  //! Gets the D3D12DescriptorSegment from a handle.
   [[nodiscard]] auto GetD3D12Segment(const DescriptorHandle& handle) const
-    -> const DescriptorHeapSegment*;
+    -> const DescriptorSegment*;
 
   //! Updates the set of shader visible heaps.
   /*!

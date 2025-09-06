@@ -14,16 +14,16 @@
 
 #include "./BaseDescriptorAllocatorTest.h"
 #include "./Mocks/MockDescriptorAllocator.h"
-#include "./Mocks/MockDescriptorHeapSegment.h"
+#include "./Mocks/MockDescriptorSegment.h"
 
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::DescriptorHeapSegment;
+using oxygen::graphics::detail::DescriptorSegment;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
-using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::MockDescriptorSegment;
 using oxygen::graphics::bindless::testing::
   OneCapacityDescriptorAllocationStrategy;
 
@@ -43,10 +43,10 @@ NOLINT_TEST_F(
 {
   // Arrange: use a known strategy instance and re-create the allocator
   heap_strategy_ = std::make_shared<OneCapacityDescriptorAllocationStrategy>();
-  allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
+  allocator_ = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>(
     heap_strategy_);
 
-  const std::pair<ResourceViewType, DescriptorVisibility> domains[] = {
+  constexpr std::pair<ResourceViewType, DescriptorVisibility> domains[] = {
     { ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible },
     { ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible },
     { ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible },
@@ -69,7 +69,7 @@ NOLINT_TEST_F(
 {
   // Arrange: One item capacity per domain; do not create segments in Reserve()
   heap_strategy_ = std::make_shared<OneCapacityDescriptorAllocationStrategy>();
-  allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
+  allocator_ = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>(
     heap_strategy_);
 
   constexpr auto kType = ResourceViewType::kTexture_SRV;
@@ -91,7 +91,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
 {
   // Arrange
   heap_strategy_ = std::make_shared<OneCapacityDescriptorAllocationStrategy>();
-  allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
+  allocator_ = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>(
     heap_strategy_);
 
   constexpr auto kType = ResourceViewType::kTexture_SRV;
@@ -99,25 +99,24 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
 
   // Create segment during Reserve() and verify base index and capacity are
   // honored.
-  allocator_->ext_segment_factory_ =
-    [](const b::Capacity capacity, const b::Handle base_index,
-      const ResourceViewType vt, const DescriptorVisibility vis) {
-      auto seg
-        = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-      EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(::testing::Return(vt));
-      EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(::testing::Return(vis));
-      EXPECT_CALL(*seg, GetBaseIndex())
-        .WillRepeatedly(::testing::Return(base_index));
-      EXPECT_CALL(*seg, GetCapacity())
-        .WillRepeatedly(::testing::Return(capacity));
-      EXPECT_CALL(*seg, GetAllocatedCount())
-        .WillRepeatedly(::testing::Return(b::Count { 0 }));
-      EXPECT_CALL(*seg, GetAvailableCount())
-        .WillRepeatedly(::testing::Return(b::Count { capacity.get() }));
-      EXPECT_CALL(*seg, Allocate()).WillOnce(::testing::Return(base_index));
-      EXPECT_CALL(*seg, Release(base_index)).WillOnce(::testing::Return(true));
-      return seg;
-    };
+  allocator_->ext_segment_factory_ = [](const b::Capacity capacity,
+                                       const b::Handle base_index,
+                                       const ResourceViewType vt,
+                                       const DescriptorVisibility vis) {
+    auto seg = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
+    EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(testing::Return(vt));
+    EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(testing::Return(vis));
+    EXPECT_CALL(*seg, GetBaseIndex())
+      .WillRepeatedly(testing::Return(base_index));
+    EXPECT_CALL(*seg, GetCapacity()).WillRepeatedly(testing::Return(capacity));
+    EXPECT_CALL(*seg, GetAllocatedCount())
+      .WillRepeatedly(testing::Return(b::Count { 0 }));
+    EXPECT_CALL(*seg, GetAvailableCount())
+      .WillRepeatedly(testing::Return(b::Count { capacity.get() }));
+    EXPECT_CALL(*seg, Allocate()).WillOnce(testing::Return(base_index));
+    EXPECT_CALL(*seg, Release(base_index)).WillOnce(testing::Return(true));
+    return seg;
+  };
 
   // Act: Reserve then Allocate one descriptor
   const auto reserved = allocator_->Reserve(kType, kVis, b::Count { 1 });
@@ -126,7 +125,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
 
   // Assert
   EXPECT_TRUE(handle.IsValid());
-  EXPECT_EQ(handle.GetIndex(), reserved.value());
+  EXPECT_EQ(handle.GetBindlessHandle(), reserved.value());
 
   allocator_->Release(handle);
   EXPECT_FALSE(handle.IsValid());
@@ -137,7 +136,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest, ReserveExceedingCapacityFails)
 {
   // Arrange
   heap_strategy_ = std::make_shared<OneCapacityDescriptorAllocationStrategy>();
-  allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
+  allocator_ = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>(
     heap_strategy_);
 
   // Act

@@ -14,8 +14,10 @@
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+
+using oxygen::bindless::ShaderVisibleIndex;
 
 namespace oxygen::graphics::d3d12 {
 
@@ -63,8 +65,8 @@ auto DescriptorAllocator::GetGpuHandle(const DescriptorHandle& handle) const
   return segment->GetGpuHandle(handle);
 }
 
-void DescriptorAllocator::CopyDescriptor(
-  const DescriptorHandle& dst, const DescriptorHandle& src)
+auto DescriptorAllocator::CopyDescriptor(
+  const DescriptorHandle& dst, const DescriptorHandle& src) -> void
 {
   if (!dst.IsValid() || !src.IsValid()) {
     throw std::runtime_error("Cannot copy from/to invalid descriptor handles");
@@ -96,7 +98,7 @@ void DescriptorAllocator::CopyDescriptor(
   }
 }
 
-void DescriptorAllocator::UpdateShaderVisibleHeapsSet() const
+auto DescriptorAllocator::UpdateShaderVisibleHeapsSet() const -> void
 {
   DLOG_F(1, "updating shader visible heaps set");
   shader_visible_heaps_.clear();
@@ -107,7 +109,7 @@ void DescriptorAllocator::UpdateShaderVisibleHeapsSet() const
     for (const auto& segment_ptr : heap_view.segments) {
       // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
       auto* d3d12_segment
-        = static_cast<const DescriptorHeapSegment*>(segment_ptr.get());
+        = static_cast<const DescriptorSegment*>(segment_ptr.get());
       if (d3d12_segment->IsShaderVisible()) {
         // Debug check: Our allocation strategy ensures only one shader-visible
         // heap per type - check that the heap being added is not already in the
@@ -147,7 +149,7 @@ auto DescriptorAllocator::GetShaderVisibleHeaps()
 auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
   bindless::Handle base_index, ResourceViewType view_type,
   DescriptorVisibility visibility)
-  -> std::unique_ptr<graphics::detail::DescriptorHeapSegment>
+  -> std::unique_ptr<graphics::detail::DescriptorSegment>
 {
   // For D3D12, each segment maps directly to a single D3D12 descriptor heap
   // Create a unique name for debugging
@@ -156,8 +158,8 @@ auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
     static_cast<int>(D3D12HeapAllocationStrategy::GetHeapFlags(visibility)),
     base_index.get());
 
-  LOG_SCOPE_F(1, "New D3D12 DescriptorHeapSegment");
-  auto segment = std::make_unique<DescriptorHeapSegment>(
+  LOG_SCOPE_F(1, "New D3D12 DescriptorSegment");
+  auto segment = std::make_unique<DescriptorSegment>(
     device_, capacity, base_index, view_type, visibility, heap_name.c_str());
 
   // Mark the shader visible heaps set for update.
@@ -169,7 +171,7 @@ auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
 }
 
 auto DescriptorAllocator::GetD3D12Segment(const DescriptorHandle& handle) const
-  -> const DescriptorHeapSegment*
+  -> const DescriptorSegment*
 {
   if (!Contains(handle)) {
     return nullptr;
@@ -184,8 +186,24 @@ auto DescriptorAllocator::GetD3D12Segment(const DescriptorHandle& handle) const
   }
 
   // Cast to our D3D12-specific segment type
-  return static_cast<const DescriptorHeapSegment*>(
+  return static_cast<const DescriptorSegment*>(
     *segment_opt); // NOLINT(*-static-cast-downcast)
+}
+
+auto DescriptorAllocator::GetShaderVisibleIndex(
+  const DescriptorHandle& handle) const noexcept -> ShaderVisibleIndex
+{
+  // GetSegmentForHandle will do all the necessary validation of the handle.
+  const auto segment = GetSegmentForHandle(handle);
+  if (!segment.has_value()) {
+    return kInvalidBindlessShaderVisibleIndex;
+  }
+  DCHECK_NOTNULL_F(segment.value());
+
+  // Because we map bindless tables 1:1 to heap segments, the shader-visible
+  // index is the local index into the segment.
+  return ShaderVisibleIndex { handle.GetBindlessHandle().get()
+    - (*segment)->GetBaseIndex().get() };
 }
 
 } // namespace oxygen::graphics::d3d12

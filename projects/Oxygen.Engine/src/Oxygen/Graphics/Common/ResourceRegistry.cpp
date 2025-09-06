@@ -139,7 +139,7 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
   }
 
   // Store in maps
-  auto index = view_handle.GetIndex();
+  auto index = view_handle.GetBindlessHandle();
   auto& descriptors = resource_it->second.descriptors;
   auto [desc_it, inserted] = descriptors.emplace(index,
     ResourceEntry::ViewEntry {
@@ -201,7 +201,7 @@ auto ResourceRegistry::Contains(const DescriptorHandle& descriptor) const
     return {}; // Return invalid NativeObject
   }
 
-  const auto index = descriptor.GetIndex();
+  const auto index = descriptor.GetBindlessHandle();
   // If we have a mapping for this descriptor, return the resource
   if (const auto it = descriptor_to_resource_.find(index);
     it != descriptor_to_resource_.end()) {
@@ -220,7 +220,7 @@ auto ResourceRegistry::Find(const DescriptorHandle& descriptor) const
     return { 0ULL, kInvalidTypeId }; // Return invalid NativeObject
   }
 
-  const auto index = descriptor.GetIndex();
+  const auto index = descriptor.GetBindlessHandle();
   const auto resource_it = descriptor_to_resource_.find(index);
 
   if (resource_it == descriptor_to_resource_.end()) {
@@ -346,7 +346,7 @@ void ResourceRegistry::UnRegisterResourceViewsNoLock(
 
   // Release all descriptors and remove from descriptor_to_resource_ map
   for (auto& [index, view_entry] : descriptors) {
-    DLOG_F(4, "view for index {}", view_entry.descriptor.GetIndex());
+    DLOG_F(4, "view for index {}", view_entry.descriptor.GetBindlessHandle());
     if (view_entry.descriptor.IsValid()) {
       view_entry.descriptor.Release();
       descriptor_to_resource_.erase(index);

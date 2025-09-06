@@ -9,7 +9,6 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 
 #include <algorithm>
@@ -36,7 +35,7 @@ struct HeapKeyValidMappingParam {
   const char* key;
 };
 
-static constexpr HeapKeyValidMappingParam kValidMappings[] = {
+constexpr HeapKeyValidMappingParam kValidMappings[] = {
   // CBV_SRV_UAV heap
   { "Texture_SRV__GPU", ResourceViewType::kTexture_SRV,
     DescriptorVisibility::kShaderVisible, "CBV_SRV_UAV:gpu" },
@@ -104,7 +103,7 @@ struct HeapKeyInvalidMappingParam {
   DescriptorVisibility visibility;
 };
 
-static constexpr HeapKeyInvalidMappingParam kInvalidMappings[] = {
+constexpr HeapKeyInvalidMappingParam kInvalidMappings[] = {
   // RTV/DSV cannot be shader visible
   { "Texture_RTV__GPU", ResourceViewType::kTexture_RTV,
     DescriptorVisibility::kShaderVisible },
@@ -136,10 +135,10 @@ static constexpr HeapKeyInvalidMappingParam kInvalidMappings[] = {
 };
 
 // Array of all valid heap keys according to D3D12
-static constexpr const char* kAllValidKeys[] = { "CBV_SRV_UAV:gpu",
-  "CBV_SRV_UAV:cpu", "SAMPLER:gpu", "SAMPLER:cpu", "RTV:cpu", "DSV:cpu" };
+constexpr const char* kAllValidKeys[] = { "CBV_SRV_UAV:gpu", "CBV_SRV_UAV:cpu",
+  "SAMPLER:gpu", "SAMPLER:cpu", "RTV:cpu", "DSV:cpu" };
 
-class HeapAllocationStrategyTest : public ::testing::Test {
+class HeapAllocationStrategyTest : public testing::Test {
 public:
   D3D12HeapAllocationStrategy strat { nullptr };
   std::set<std::string> all_unique_heap_keys;
@@ -149,21 +148,21 @@ public:
   // Static arrays of all valid and invalid mappings as per D3D12
 
 protected:
-  void SetUp() override { CollectUniqueHeapKeys(); }
+  auto SetUp() -> void override { CollectUniqueHeapKeys(); }
 
 private:
-  void CollectUniqueHeapKeys()
+  auto CollectUniqueHeapKeys() -> void
   {
     all_unique_heap_keys.clear();
     pair_to_key_.clear();
-    using VT = oxygen::graphics::ResourceViewType;
-    using DV = oxygen::graphics::DescriptorVisibility;
+    using VT = ResourceViewType;
+    using DV = DescriptorVisibility;
     for (uint8_t vt = static_cast<uint8_t>(VT::kNone);
       vt <= static_cast<uint8_t>(VT::kMaxResourceViewType); ++vt) {
       for (uint8_t dv = static_cast<uint8_t>(DV::kNone);
         dv <= static_cast<uint8_t>(DV::kMaxDescriptorVisibility); ++dv) {
-        VT view_type = static_cast<VT>(vt);
-        DV visibility = static_cast<DV>(dv);
+        auto view_type = static_cast<VT>(vt);
+        auto visibility = static_cast<DV>(dv);
         if (oxygen::graphics::IsValid(view_type)
           && oxygen::graphics::IsValid(visibility)) {
           try {
@@ -199,15 +198,15 @@ NOLINT_TEST_F(HeapAllocationStrategyTest, GarbageKeyThrows)
 // Parametrized HeapKey validity tests
 // -----------------------------------------------------------------------------
 
-static std::string InvalidMappingTestName(
-  const ::testing::TestParamInfo<HeapKeyInvalidMappingParam>& info)
+auto InvalidMappingTestName(
+  const testing::TestParamInfo<HeapKeyInvalidMappingParam>& info) -> std::string
 {
   return info.param.test_name;
 }
 
 class InvalidMappingsTest
   : public HeapAllocationStrategyTest,
-    public ::testing::WithParamInterface<HeapKeyInvalidMappingParam> { };
+    public testing::WithParamInterface<HeapKeyInvalidMappingParam> { };
 
 INSTANTIATE_TEST_SUITE_P(All, InvalidMappingsTest,
   ::testing::ValuesIn(kInvalidMappings), InvalidMappingTestName);
@@ -226,15 +225,15 @@ NOLINT_TEST_P(InvalidMappingsTest, GetHeapBaseIndexThrows)
     std::runtime_error);
 }
 
-static std::string ValidMappingTestName(
-  const ::testing::TestParamInfo<HeapKeyValidMappingParam>& info)
+auto ValidMappingTestName(
+  const testing::TestParamInfo<HeapKeyValidMappingParam>& info) -> std::string
 {
   return info.param.test_name;
 }
 
 class ValidMappingsTest
   : public HeapAllocationStrategyTest,
-    public ::testing::WithParamInterface<HeapKeyValidMappingParam> { };
+    public testing::WithParamInterface<HeapKeyValidMappingParam> { };
 
 INSTANTIATE_TEST_SUITE_P(All, ValidMappingsTest,
   ::testing::ValuesIn(kValidMappings), ValidMappingTestName);
@@ -292,7 +291,7 @@ NOLINT_TEST_F(KeyMappingRulesTest, AllCBVSRVUAVTypesMapToSameHeapKey)
       // Case-insensitive check for 'cbv_srv_uav' in key
       std::string key_lower = returned_key;
       std::transform(
-        key_lower.begin(), key_lower.end(), key_lower.begin(), ::tolower);
+        key_lower.begin(), key_lower.end(), key_lower.begin(), tolower);
       EXPECT_NE(key_lower.find("cbv_srv_uav"), std::string::npos)
         << "Key does not contain cbv_srv_uav for test_name: "
         << mapping->test_name;
@@ -323,7 +322,7 @@ NOLINT_TEST_F(KeyMappingRulesTest, AllSamplerTypesMapToSameHeapKey)
       // Case-insensitive check for 'sampler' in key
       std::string key_lower = returned_key;
       std::transform(
-        key_lower.begin(), key_lower.end(), key_lower.begin(), ::tolower);
+        key_lower.begin(), key_lower.end(), key_lower.begin(), tolower);
       EXPECT_NE(key_lower.find("sampler"), std::string::npos)
         << "Key does not contain sampler for test_name: " << mapping->test_name;
     }
@@ -389,8 +388,9 @@ NOLINT_TEST_F(PolicyRulesTest, OnlyOneShaderVisibleHeapPerType_CBVSRVUAV)
   std::string gpu_key;
   for (auto vt : cbv_srv_uav_types) {
     auto gk = strat.GetHeapKey(vt, DescriptorVisibility::kShaderVisible);
-    if (gpu_key.empty())
+    if (gpu_key.empty()) {
       gpu_key = gk;
+    }
     EXPECT_EQ(gk, gpu_key);
   }
 }
@@ -402,8 +402,9 @@ NOLINT_TEST_F(PolicyRulesTest, OnlyOneShaderVisibleHeapPerType_Sampler)
   std::string gpu_key;
   for (auto vt : sampler_types) {
     auto gk = strat.GetHeapKey(vt, DescriptorVisibility::kShaderVisible);
-    if (gpu_key.empty())
+    if (gpu_key.empty()) {
       gpu_key = gk;
+    }
     EXPECT_EQ(gk, gpu_key);
   }
 }
@@ -458,8 +459,7 @@ NOLINT_TEST_F(
 // -----------------------------------------------------------------------------
 
 class HeapDescriptionTest : public HeapAllocationStrategyTest,
-                            public ::testing::WithParamInterface<const char*> {
-};
+                            public testing::WithParamInterface<const char*> { };
 
 INSTANTIATE_TEST_SUITE_P(
   ValidKeys, HeapDescriptionTest, ::testing::ValuesIn(kAllValidKeys));
@@ -504,7 +504,7 @@ struct TestProvider final : D3D12HeapAllocationStrategy::ConfigProvider {
     : json(std::move(j))
   {
   }
-  [[nodiscard]] std::string_view GetJson() const noexcept override
+  [[nodiscard]] auto GetJson() const noexcept -> std::string_view override
   {
     return json;
   }
@@ -516,7 +516,7 @@ NOLINT_TEST(
   HeapAllocationStrategy_ProviderConfig, ValidCustomJson_ParsedCorrectly)
 {
   // Minimal valid custom config with explicit base indices and capacities
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:gpu": { "capacity": 123, "shader_visible": true,  "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 1000 },
@@ -553,7 +553,7 @@ NOLINT_TEST(
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, InvalidKey_RTVGpu_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
     {
       "heaps": {
         "RTV:gpu": { "capacity": 1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -568,7 +568,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, InvalidKey_RTVGpu_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, MismatchVisibility_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
     {
       "heaps": {
         "SAMPLER:gpu": { "capacity": 1, "shader_visible": false, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -583,7 +583,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, MismatchVisibility_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, MissingHeapsObject_Throws)
 {
-  const char* kJson = R"JSON({ "meta": { "format": "x" } })JSON";
+  auto kJson = R"JSON({ "meta": { "format": "x" } })JSON";
   TestProvider provider { std::string { kJson } };
   EXPECT_THROW(
     { D3D12HeapAllocationStrategy strat(nullptr, provider); },
@@ -596,7 +596,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, MissingHeapsObject_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, LowercaseTypeKey_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "cbv_srv_uav:gpu": { "capacity": 1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -611,7 +611,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, LowercaseTypeKey_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, SpacesInKey_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV: gpu": { "capacity": 1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -626,7 +626,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, SpacesInKey_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, HeapEntryNotObject_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:gpu": 42
@@ -643,7 +643,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, HeapEntryNotObject_Throws)
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
   MissingSamplerGpuKey_GetHeapDescriptionThrows)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:gpu": { "capacity": 10, "shader_visible": true,  "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 },
@@ -658,7 +658,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, NegativeCapacity_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "SAMPLER:gpu": { "capacity": -1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -674,7 +674,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, NegativeCapacity_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, NonIntegerCapacity_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "SAMPLER:gpu": { "capacity": 12.5, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -690,7 +690,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, NonIntegerCapacity_Throws)
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, ZeroCapacitySemantics)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "SAMPLER:gpu": { "capacity": 0, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 5 }
@@ -713,7 +713,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, ZeroCapacitySemantics)
 NOLINT_TEST(
   HeapAllocationStrategy_ProviderConfig, OverlappingBaseIndices_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:gpu": { "capacity": 50, "shader_visible": true,  "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 100 },
@@ -730,7 +730,7 @@ NOLINT_TEST(
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, UnknownTypeInKey_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "UAV:gpu": { "capacity": 1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -746,7 +746,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, UnknownTypeInKey_Throws)
 NOLINT_TEST(
   HeapAllocationStrategy_ProviderConfig, WrongCaseVisibilityInKey_Throws)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:Gpu": { "capacity": 1, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 0 }
@@ -762,14 +762,14 @@ NOLINT_TEST(
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, HeapsIsArrayOrNull_Throws)
 {
   {
-    const char* kJson = R"JSON({ "heaps": [] })JSON";
+    auto kJson = R"JSON({ "heaps": [] })JSON";
     TestProvider provider { std::string { kJson } };
     EXPECT_THROW(
       { D3D12HeapAllocationStrategy strat(nullptr, provider); },
       std::runtime_error);
   }
   {
-    const char* kJson = R"JSON({ "heaps": null })JSON";
+    auto kJson = R"JSON({ "heaps": null })JSON";
     TestProvider provider { std::string { kJson } };
     EXPECT_THROW(
       { D3D12HeapAllocationStrategy strat(nullptr, provider); },
@@ -780,7 +780,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, HeapsIsArrayOrNull_Throws)
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
   CbvSrvUavGpu_AllMappedTypesShareKeyAndBaseIndex)
 {
-  const char* kJson = R"JSON(
+  auto kJson = R"JSON(
         {
             "heaps": {
                 "CBV_SRV_UAV:gpu": { "capacity": 100, "shader_visible": true, "allow_growth": false, "growth_factor": 0.0, "max_growth_iterations": 0, "base_index": 777 }
@@ -800,8 +800,9 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
   std::string gpu_key;
   for (auto vt : cbv_srv_uav_types) {
     auto k = strat.GetHeapKey(vt, DescriptorVisibility::kShaderVisible);
-    if (gpu_key.empty())
+    if (gpu_key.empty()) {
       gpu_key = k;
+    }
     EXPECT_EQ(k, gpu_key);
     EXPECT_EQ(strat.GetHeapBaseIndex(vt, DescriptorVisibility::kShaderVisible),
       b::Handle { 777u });

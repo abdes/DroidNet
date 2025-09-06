@@ -18,12 +18,39 @@
 
 namespace oxygen {
 
-//! Strongly-typed shader-visible bindless handle (32-bit).
-using BindlessHandle = oxygen::NamedType<uint32_t, struct BindlessHandleTag,
+//! Strong type representing a handle to a bindless engine resource.
+/*!
+ This is not to be confused with a GPU/CPU descriptor address, or a
+ shader-visible index. When needed, the allocator for this type of handles, or
+ the backend that manages the corresponding GPU resources, will provide the
+ appropriate mapping.
+
+ @see VersionedBindlessHandle, BindlessShaderVisibleIndex.
+*/
+using BindlessHandle = NamedType<uint32_t, struct BindlessHandleTag,
   // clang-format off
-  oxygen::Hashable,
-  oxygen::Comparable,
-  oxygen::Printable>; // clang-format on
+  Hashable,
+  Comparable,
+  Printable>; // clang-format on
+
+//! Strongly-typed shader-visible bindless index (32-bit).
+/*!
+ Represents the index used in shaders to access bindless resources. This is
+ distinct from `BindlessHandle`, which is an opaque handle used by the CPU-side
+ engine to manage resources. The mapping between `BindlessHandle` and
+ `BindlessShaderVisibleIndex` is managed by the allocator or backend.
+
+ @warning No assumptions should be made about the algorithm used for deriving a
+ `BindlessShaderVisibleIndex` from a `BindlessHandle`.
+
+ @see BindlessHandle, VersionedBindlessHandle.
+*/
+using BindlessShaderVisibleIndex
+  = NamedType<uint32_t, struct BindlessShaderVisibleIndexTag,
+    // clang-format off
+  Hashable,
+  Comparable,
+  Printable>; // clang-format on
 
 //! Strong type representing a count of bindless handles.
 /*!
@@ -31,17 +58,16 @@ using BindlessHandle = oxygen::NamedType<uint32_t, struct BindlessHandleTag,
  underlying type is the same as `BindlessHandle` to guarantee consistent bounds
  and semantics.
 */
-using BindlessHandleCount = oxygen::NamedType<uint32_t,
-  struct BindlessHandleCountTag,
+using BindlessHandleCount = NamedType<uint32_t, struct BindlessHandleCountTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::PreIncrementable,
-  oxygen::PostIncrementable,
-  oxygen::Addable,
-  oxygen::Subtractable,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  PreIncrementable,
+  PostIncrementable,
+  Addable,
+  Subtractable,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Strong type representing the capacity of an allocator or a container of
 //! bindless handles.
@@ -51,22 +77,31 @@ using BindlessHandleCount = oxygen::NamedType<uint32_t,
  and semantics.
 */
 using BindlessHandleCapacity
-  = oxygen::NamedType<uint32_t, struct BindlessHandleCapacityTag,
+  = NamedType<uint32_t, struct BindlessHandleCapacityTag,
     // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Addable,
-  oxygen::Subtractable,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  Addable,
+  Subtractable,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
 //! Sentinel value representing an invalid bindless handle.
 static constexpr BindlessHandle kInvalidBindlessHandle {
   kInvalidBindlessIndex
 };
 
+//! Sentinel value representing an invalid bindless handle.
+static constexpr BindlessShaderVisibleIndex kInvalidBindlessShaderVisibleIndex {
+  kInvalidBindlessIndex
+};
+
 //! Convert a BindlessHandle to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandle h) -> std::string;
+
+//! Convert a BindlessShaderVisibleIndex to a human-readable string
+//! representation.
+OXGN_CORE_NDAPI auto to_string(BindlessShaderVisibleIndex h) -> std::string;
 
 //! Convert a BindlessHandleCount to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandleCount count) -> std::string;
@@ -113,16 +148,16 @@ public:
    `VersionedBindlessHandle::FromPacked(...)` to obtain the logical structure
    for comparisons or hashing.
   */
-  using Packed = oxygen::NamedType<uint64_t, struct _PackedTag>;
+  using Packed = NamedType<uint64_t, struct PackedTag>;
 
   //! Strongly-typed generation counter for versioned handles.
-  using Generation = oxygen::NamedType<uint32_t, struct _GenerationTag,
+  using Generation = NamedType<uint32_t, struct GenerationTag,
     // clang-format off
-    oxygen::PreIncrementable,
-    oxygen::PostIncrementable,
-    oxygen::Addable,
-    oxygen::Comparable,
-    oxygen::Printable>; // clang-format on
+    PreIncrementable,
+    PostIncrementable,
+    Addable,
+    Comparable,
+    Printable>; // clang-format on
 
   //! Hasher alias to improve discoverability, and ergonomics when using the
   //! class in a generic context.
@@ -180,8 +215,8 @@ public:
   */
   [[nodiscard]] constexpr auto ToPacked() const noexcept
   {
-    const uint64_t high = static_cast<uint64_t>(index_.get());
-    const uint64_t low = static_cast<uint64_t>(generation_.get());
+    const uint64_t high = index_.get();
+    const uint64_t low = generation_.get();
     return Packed { (high << 32) | low };
   }
 
@@ -230,7 +265,7 @@ private:
 };
 
 //! Convert a VersionedBindlessHandle to a human-readable string.
-OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle const& h) -> std::string;
+OXGN_CORE_NDAPI auto to_string(const VersionedBindlessHandle& h) -> std::string;
 
 //! Convert a VersionedBindlessHandle::Generation to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle::Generation gen)
@@ -246,7 +281,7 @@ OXGN_CORE_NDAPI auto to_string(VersionedBindlessHandle::Generation gen)
  */
 struct VersionedBindlessHandleHash {
   //! Hash a versioned handle using its packed representation.
-  [[nodiscard]] auto operator()(VersionedBindlessHandle const& h) const noexcept
+  [[nodiscard]] auto operator()(const VersionedBindlessHandle& h) const noexcept
   {
     // Hash the underlying packed numeric value.
     return std::hash<uint64_t> {}(h.ToPacked().get());
@@ -257,6 +292,7 @@ struct VersionedBindlessHandleHash {
 //! improve ergonomic at use sites.
 namespace bindless {
   using Handle = BindlessHandle;
+  using ShaderVisibleIndex = BindlessShaderVisibleIndex;
   using VersionedHandle = VersionedBindlessHandle;
   using Count = BindlessHandleCount;
   using Capacity = BindlessHandleCapacity;

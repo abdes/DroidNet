@@ -47,7 +47,7 @@ class DescriptorAllocator;
  Usage:
  - Obtain from a DescriptorAllocator via the Allocate method
  - Store in resource registries or pass to rendering commands
- - Access the stable index via GetIndex() for shader bindings
+ - Access the stable index via GetBindlessHandle() for shader bindings
  - Release explicitly when no longer needed, or let RAII handle cleanup
 */
 class DescriptorHandle {
@@ -93,7 +93,10 @@ public:
     return properly_allocated;
   }
 
-  [[nodiscard]] constexpr auto GetIndex() const noexcept { return handle_; }
+  [[nodiscard]] constexpr auto GetBindlessHandle() const noexcept
+  {
+    return handle_;
+  }
 
   //! Gets the resource view type (SRV, UAV, CBV, Sampler, etc.) of this
   //! descriptor.

@@ -6,7 +6,9 @@
 
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Headless/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Headless/Bindless/DescriptorSegment.h>
+
+using oxygen::bindless::ShaderVisibleIndex;
 
 namespace oxygen::graphics::headless::bindless {
 
@@ -19,11 +21,25 @@ DescriptorAllocator::DescriptorAllocator(
 
 auto DescriptorAllocator::CreateHeapSegment(oxygen::bindless::Capacity capacity,
   oxygen::bindless::Handle base_index, ResourceViewType view_type,
-  DescriptorVisibility visibility)
-  -> std::unique_ptr<detail::DescriptorHeapSegment>
+  DescriptorVisibility visibility) -> std::unique_ptr<detail::DescriptorSegment>
 {
-  return std::make_unique<DescriptorHeapSegment>(
+  return std::make_unique<DescriptorSegment>(
     capacity, base_index, view_type, visibility);
+}
+
+auto DescriptorAllocator::GetShaderVisibleIndex(
+  const DescriptorHandle& handle) const noexcept -> ShaderVisibleIndex
+{
+  const auto segment = GetSegmentForHandle(handle);
+  if (!segment.has_value()) {
+    return kInvalidBindlessShaderVisibleIndex;
+  }
+  DCHECK_NOTNULL_F(segment.value());
+
+  // Because we map bindless tables 1:1 to heap segments, the shader-visible
+  // index is the local index into the segment.
+  return ShaderVisibleIndex { handle.GetBindlessHandle().get()
+    - (*segment)->GetBaseIndex().get() };
 }
 
 auto DescriptorAllocator::CopyDescriptor(
