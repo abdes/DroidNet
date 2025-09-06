@@ -11,10 +11,10 @@
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/api_export.h>
-// Generated root signature indices and metadata
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -123,6 +123,8 @@ protected:
   virtual auto ValidateConfig() -> void = 0;
   virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc = 0;
   virtual auto NeedRebuildPipelineState() const -> bool = 0;
+
+  static auto BuildRootBindings() -> std::vector<graphics::RootBindingItem>;
 
   // Legacy AoS draw list path removed. Derived passes now implement
   // IssueDrawCalls to emit draws; default helpers rely on PreparedSceneFrame.

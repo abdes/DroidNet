@@ -73,8 +73,6 @@ set(
   "CameraView.cpp"
   "DepthPrePass.cpp"
   "Detail/BindlessStructuredBuffer.cpp"
-  "Detail/RootParamToBindings.cpp"
-  "Detail/RootParamToBindings.h"
   "Internal/RenderScope.h"
   "Renderer.cpp"
   "RenderPass.cpp"

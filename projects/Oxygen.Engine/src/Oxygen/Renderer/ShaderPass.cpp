@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShaderPass.h>
@@ -357,8 +356,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   };
 
   // Build root bindings from generated table
-  auto generated_bindings
-    = oxygen::graphics::BuildRootBindingItemsFromGenerated();
+  auto generated_bindings = BuildRootBindings();
 
   // NOTE: The engine currently ships only a single general-purpose VS/PS pair
   // named FullScreenTriangle.hlsl. Despite the name, the HLSL file already

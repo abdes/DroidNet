@@ -18,7 +18,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ShaderPass.h>
@@ -206,8 +205,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .sample_count = sample_count };
 
   // Generated root binding items (indices + descriptor tables)
-  auto generated_bindings
-    = oxygen::graphics::BuildRootBindingItemsFromGenerated();
+  auto generated_bindings = BuildRootBindings();
 
   // NOTE: Reuse existing bindless mesh shader (see ShaderPass rationale).
   return GraphicsPipelineDesc::Builder()
