@@ -24,7 +24,6 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/DepthPrePass.h>
-#include <Oxygen/Renderer/Detail/RootParamToBindings.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
@@ -401,8 +400,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .sample_count = depth_texture_desc.sample_count };
 
   // Build root bindings from generated table
-  auto generated_bindings
-    = oxygen::graphics::BuildRootBindingItemsFromGenerated();
+  auto generated_bindings = BuildRootBindings();
 
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc {
