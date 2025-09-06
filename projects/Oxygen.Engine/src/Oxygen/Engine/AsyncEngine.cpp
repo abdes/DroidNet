@@ -19,10 +19,13 @@
 #include <Oxygen/Platform/Platform.h>
 
 // Implementation of EngineTagFactory. Provides access to EngineTag capability
-// tokens, only from the engine core.
+// tokens, only from the engine core. When building tests, allow tests to
+// override by defining OXYGEN_ENGINE_TESTING.
+#if !defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::internal {
 auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 } // namespace oxygen::engine::internal
+#endif
 
 using namespace std::chrono_literals;
 
@@ -189,10 +192,10 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     co_await PhaseTransforms(context);
 
     // Immutable snapshot build (B3)
-    co_await PhaseSnapshot(context);
+    const auto& snapshot = co_await PhaseSnapshot(context);
 
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
-    co_await ParallelTasks(context);
+    co_await ParallelTasks(context, snapshot);
     // Serial post-parallel integration (Category A resumes after B4)
     co_await PhasePostParallel(context);
 
@@ -250,6 +253,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 
   // TODO: setup all the properties of context that need to be set
 
+  context.ClearPresentableFlags(tag);
   context.SetFrameSequenceNumber(frame_number_, tag);
   context.SetFrameSlot(frame_slot_, tag);
   context.SetFrameStartTime(frame_start_ts_, tag);
@@ -404,7 +408,8 @@ auto AsyncEngine::PhaseTransforms(FrameContext& context) -> co::Co<>
     PhaseId::kTransformPropagation, context);
 }
 
-auto AsyncEngine::PhaseSnapshot(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseSnapshot(FrameContext& context)
+  -> co::Co<const UnifiedSnapshot&>
 {
   const auto tag = internal::EngineTagFactory::Get();
   context.SetCurrentPhase(PhaseId::kSnapshot, tag);
@@ -414,8 +419,12 @@ auto AsyncEngine::PhaseSnapshot(FrameContext& context) -> co::Co<>
   co_await module_manager_->ExecutePhase(PhaseId::kSnapshot, context);
 
   // Engine consolidates contributions and publishes snapshots last
-  context.PublishSnapshots(internal::EngineTagFactory::Get());
-  co_return;
+  const auto& snapshot
+    = context.PublishSnapshots(internal::EngineTagFactory::Get());
+  LOG_F(1, "[F{}][A] Published snapshots v{}", frame_number_,
+    snapshot.frameSnapshot.validation.snapshot_version);
+
+  co_return snapshot;
 }
 
 // void AsyncEngine::SetRenderGraphBuilder(FrameContext& context)
@@ -491,7 +500,6 @@ auto AsyncEngine::PhasePresent(FrameContext& context) -> void
 
   if (!presentable_surfaces.empty()) {
     gfx->PresentSurfaces(presentable_surfaces);
-    context.ClearPresentableFlags(tag);
   }
 
   LOG_F(1, "[F{}][A] PhasePresent complete - all {} surfaces presented",
@@ -569,7 +577,8 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
   }
 }
 
-auto AsyncEngine::ParallelTasks(FrameContext& context) -> co::Co<>
+auto AsyncEngine::ParallelTasks(
+  FrameContext& context, const UnifiedSnapshot& snapshot) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
   context.SetCurrentPhase(PhaseId::kParallelTasks, tag);

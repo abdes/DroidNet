@@ -43,6 +43,7 @@ include(GTestHelpers)
 m_gtest_program(System SOURCES "System_test.cpp")
 m_gtest_program(InputHandler SOURCES "InputHandler_test.cpp")
 m_gtest_program(EngineModule SOURCES "EngineModule_test.cpp")
+m_gtest_program(FrameContext SOURCES "FrameContext_test.cpp")
 m_gtest_program(
   ModuleManager
   SOURCES
