@@ -47,10 +47,14 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
 
   const bool is_block = finfo.block_size > 1;
   if (!is_block) {
-    auto bytes_per_pixel = static_cast<uint32_t>(finfo.bytes_per_block);
-    auto texture_row_pitch = dst_slice.width * bytes_per_pixel;
-    auto buffer_row_pitch
-      = region_.buffer_row_pitch ? region_.buffer_row_pitch : texture_row_pitch;
+    const auto bytes_per_pixel = static_cast<uint32_t>(finfo.bytes_per_block);
+    const auto mip = dst_slice.mip_level;
+    const auto mip_w = (std::max)(1u, dst_desc.width >> mip);
+    const auto texture_row_stride = mip_w * bytes_per_pixel; // dst stride
+    const auto copy_bytes_per_row
+      = dst_slice.width * bytes_per_pixel; // src bytes to copy
+    auto buffer_row_pitch = region_.buffer_row_pitch ? region_.buffer_row_pitch
+                                                     : copy_bytes_per_row;
     auto buffer_slice_pitch = region_.buffer_slice_pitch
       ? region_.buffer_slice_pitch
       : buffer_row_pitch * dst_slice.height;
@@ -67,15 +71,15 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
         // Compute base offset for this array slice + mip
         const auto mip_base = layout.ComputeSliceMipBaseOffset(
           dst_desc, dst_slice.array_slice + s, dst_slice.mip_level);
-        // Per-row offset within the mip (direct uint32_t arithmetic)
+        // Per-row offset within the mip uses full mip row stride
         const auto row_index_in_texture = mip_base
-          + ((dst_slice.y + y) * dst_slice.width * bytes_per_pixel)
+          + ((dst_slice.y + y) * texture_row_stride)
           + (dst_slice.x * bytes_per_pixel);
 
-        std::vector<uint8_t> row(texture_row_pitch);
-        src_h->ReadBacking(row.data(), row_index_in_buffer, texture_row_pitch);
+        std::vector<uint8_t> row(copy_bytes_per_row);
+        src_h->ReadBacking(row.data(), row_index_in_buffer, copy_bytes_per_row);
         dst_h->WriteBacking(
-          row.data(), row_index_in_texture, texture_row_pitch);
+          row.data(), row_index_in_texture, copy_bytes_per_row);
       }
     }
   } else {

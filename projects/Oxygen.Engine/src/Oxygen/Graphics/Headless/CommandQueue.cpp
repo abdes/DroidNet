@@ -44,14 +44,13 @@ auto CommandQueue::Signal(uint64_t value) const -> void
 
 [[nodiscard]] auto CommandQueue::Signal() const -> uint64_t
 {
+  // Reserve a future fence value to be signaled later by a queued command.
+  // Do NOT advance completed_value_ here, and do NOT modify
+  // pending_submissions_. The queued QueueSignalCommand will call
+  // QueueSignalCommand(value) -> Signal(value) when execution reaches it,
+  // which is the correct point to advance completion.
   std::lock_guard lk(mutex_);
   ++current_value_;
-  // One submission is considered completed by this signal.
-  if (pending_submissions_ > 0) {
-    --pending_submissions_;
-  }
-  completed_value_ = current_value_;
-  cv_.notify_all();
   return current_value_;
 }
 
@@ -69,10 +68,27 @@ auto CommandQueue::Wait(uint64_t value) const -> void
   cv_.wait(lk, [this, value] { return completed_value_ >= value; });
 }
 
-auto CommandQueue::QueueSignalCommand(uint64_t value) -> void { Signal(value); }
+// In headless, queue-side enqueue of signal/wait commands is modeled by
+// recording explicit commands that call GpuSignal/GpuWait during execution.
+// These methods should therefore be no-ops to avoid advancing completion
+// outside of the executor.
+auto CommandQueue::QueueSignalCommand(uint64_t value) -> void
+{
+  // Simulate GPU signaling the fence to the specified value while executing
+  // this in-stream command. Advance completed_value_ and wake waiters.
+  std::lock_guard lk(mutex_);
+  if (completed_value_ < value) {
+    completed_value_ = value;
+  }
+  if (pending_submissions_ > 0) {
+    --pending_submissions_;
+  }
+  cv_.notify_all();
+}
 
 auto CommandQueue::QueueWaitCommand(uint64_t value) const -> void
 {
+  // Simulate GPU waiting until CPU has signaled a fence value.
   Wait(value);
 }
 

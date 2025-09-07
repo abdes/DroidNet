@@ -37,6 +37,8 @@ protected:
       return;
     }
     DLOG_F(3, "value      : {}", value_);
+    // Call via the common interface; virtual dispatch will reach the
+    // headless queue's private override.
     queue_->QueueSignalCommand(value_);
   }
 
