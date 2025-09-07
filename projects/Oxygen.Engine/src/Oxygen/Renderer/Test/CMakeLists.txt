@@ -47,7 +47,6 @@ m_gtest_program(
     "ScenePrep/RenderItemProto_test.cpp"
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
-    "ScenePrep/TransformHelpers_test.cpp"
 )
 
 set(upload_helpers_sources "Helpers/UploadTestFakes.h")

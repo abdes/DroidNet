@@ -9,10 +9,10 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
-#include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -40,7 +40,7 @@ struct ScenePrepState {
 
   // === Transform Management ===
   //! Persistent transform deduplication and GPU buffer management.
-  TransformManager transform_mgr;
+  std::unique_ptr<oxygen::renderer::resources::TransformUploader> transform_mgr;
 
   // === Material Management ===
   //! Persistent material registry with deduplication.

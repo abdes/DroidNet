@@ -1,21 +1,23 @@
+// This file has been removed as part of the legacy cleanup.
+#if 0
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
+#  pragma once
 
-#include <cstdint>
-#include <span>
-#include <unordered_map>
-#include <vector>
+#  include <cstdint>
+#  include <span>
+#  include <unordered_map>
+#  include <vector>
 
-#include <glm/glm.hpp>
+#  include <glm/glm.hpp>
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/api_export.h>
+#  include <Oxygen/Base/Macros.h>
+#  include <Oxygen/Renderer/ScenePrep/Types.h>
+#  include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::sceneprep {
 
@@ -147,3 +149,4 @@ private:
 };
 
 } // namespace oxygen::engine::sceneprep
+#endif

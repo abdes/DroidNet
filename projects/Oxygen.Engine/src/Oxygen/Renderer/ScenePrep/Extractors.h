@@ -11,9 +11,9 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/Concepts.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
-#include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 
 namespace oxygen::engine::sceneprep {
@@ -71,10 +71,14 @@ inline void TransformResolveStage(const ScenePrepContext& /*ctx*/,
   if (item.IsDropped()) {
     return;
   }
-  // Acquire handle from state's transform manager (assumed exposed).
-  auto& tm = state.transform_mgr; // NOTE: requires member to exist.
-  const auto handle = tm.GetOrAllocate(item.GetWorldTransform());
-  item.SetTransformHandle(handle);
+  // Integrate TransformUploader: assign deduplicated handle for world
+  // transform.
+  if (state.transform_mgr) {
+    auto handle = state.transform_mgr->GetOrAllocate(item.GetWorldTransform());
+    item.SetTransformHandle(handle);
+  } else {
+    item.SetTransformHandle(TransformHandle { 0 });
+  }
 }
 static_assert(RenderItemDataExtractor<decltype(TransformResolveStage)>);
 

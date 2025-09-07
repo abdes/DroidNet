@@ -44,8 +44,9 @@ namespace oxygen::engine::sceneprep {
  `TransformHandle::get()` to retrieve the underlying integer index when
  interacting with low-level APIs.
 */
-using TransformHandle = oxygen::NamedType<uint32_t,
-  // clang-format off
+using TransformHandle
+  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                                // clang-format off
   struct TransformHandleTag,
   oxygen::Hashable,
   oxygen::Comparable>; // clang-format on
@@ -58,8 +59,9 @@ using TransformHandle = oxygen::NamedType<uint32_t,
  numerically; use `.get()` only for interop cases (for example when
  filling GPU descriptors).
 */
-using MaterialHandle = oxygen::NamedType<uint32_t,
-  // clang-format off
+using MaterialHandle
+  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                                // clang-format off
   struct MaterialHandleTag,
   oxygen::Hashable,
   oxygen::Comparable>; // clang-format on
