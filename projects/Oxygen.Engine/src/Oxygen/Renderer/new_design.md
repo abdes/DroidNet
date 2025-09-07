@@ -9,12 +9,7 @@ and invariants documented in:
 - `Engine/AsyncEngine.h` (phase orchestration)
 - `Engine/FrameContext.h/.cpp` (capabilities, concurrency model, snapshots)
 
-
-We don’t repeat those here. Instead we specify how the Renderer plugs into that
-model: what it stages, when it consumes, and how it exposes GPU-facing data to
-passes.
-
-## Renderer participation across phases (delta)
+## Renderer participation across phases
 
 - kSnapshot: run ScenePrep; stage typed payloads via `StageModuleData<T>`;
   optionally set views via `SetViews`.

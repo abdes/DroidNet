@@ -10,9 +10,9 @@
 
 #include <glm/glm.hpp>
 
-#include <Oxygen/Renderer/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
-namespace oxygen::engine {
+namespace oxygen {
 
 //! View frustum defined by 6 planes with outward normals.
 /*!
@@ -37,16 +37,16 @@ struct Frustum {
   std::array<Plane, kPlaneCount> planes {};
 
   //! Build a frustum from a view-projection matrix.
-  OXGN_RNDR_NDAPI static auto FromViewProj(
+  OXGN_CORE_NDAPI static auto FromViewProj(
     const glm::mat4& view_proj, bool reverse_z) -> Frustum;
 
   //! Test intersection with an axis-aligned bounding box (world space).
-  OXGN_RNDR_NDAPI auto IntersectsAABB(
+  OXGN_CORE_NDAPI auto IntersectsAABB(
     const glm::vec3& bmin, const glm::vec3& bmax) const -> bool;
 
   //! Test intersection with a sphere (world space).
-  OXGN_RNDR_NDAPI auto IntersectsSphere(
+  OXGN_CORE_NDAPI auto IntersectsSphere(
     const glm::vec3& center, float radius) const -> bool;
 };
 
-} // namespace oxygen::engine
+} // namespace oxygen

@@ -21,6 +21,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(fmt CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -69,12 +70,15 @@ set(
   "Types/BindlessHandle.h"
   "Types/Format.h"
   "Types/Frame.h"
+  "Types/Frustum.h"
   "Types/Scissors.h"
   "Types/ShaderType.h"
   "Types/TextureType.h"
+  "Types/View.h"
   "Types/ViewPort.h"
-  "version-info.h"
   "Version.h"
+  # Generated header
+  "version-info.h"
   # Generated headers (Bindless)
   "Bindless/Generated.Constants.h"
   "Bindless/Generated.Heaps.D3D12.h"
@@ -97,6 +101,8 @@ set(
   OXYGEN_CORE_PRIVATE_SOURCES
   "Detail/FormatUtils.cpp"
   "Detail/ToStringConverters.cpp"
+  "Types/Frustum.cpp"
+  "Types/View.cpp"
   "Version.cpp"
 )
 
@@ -124,6 +130,7 @@ target_compile_definitions(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
+    glm::glm
     oxygen::base
     oxygen::composition
 )

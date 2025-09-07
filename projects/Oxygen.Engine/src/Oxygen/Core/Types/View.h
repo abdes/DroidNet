@@ -8,12 +8,12 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Renderer/Types/Frustum.h>
-#include <Oxygen/Renderer/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
-namespace oxygen::engine {
+namespace oxygen {
 
 //! Immutable per-frame view snapshot used for rendering and culling.
 /*!
@@ -46,7 +46,7 @@ public:
     glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
   };
 
-  OXGN_RNDR_API explicit View(const Params& p);
+  OXGN_CORE_API explicit View(const Params& p);
 
   // Getters (immutable)
   [[nodiscard]] auto ViewMatrix() const noexcept { return view_; }
@@ -96,4 +96,4 @@ private:
   Frustum frustum_ {};
 };
 
-} // namespace oxygen::engine
+} // namespace oxygen

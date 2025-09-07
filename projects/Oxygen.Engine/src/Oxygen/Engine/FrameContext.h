@@ -64,10 +64,10 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/EngineTag.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Renderer/Types/View.h>
 
 namespace oxygen::scene {
 class Scene;

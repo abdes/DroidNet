@@ -6,9 +6,9 @@
 
 #include <glm/gtc/matrix_inverse.hpp>
 
-#include <Oxygen/Renderer/Types/View.h>
+#include <Oxygen/Core/Types/View.h>
 
-namespace oxygen::engine {
+namespace oxygen {
 
 View::View(const Params& p)
   : view_(p.view)
@@ -48,4 +48,4 @@ View::View(const Params& p)
   }
 }
 
-} // namespace oxygen::engine
+} // namespace oxygen

@@ -17,12 +17,12 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Renderer/api_export.h>
 // Bindless structured buffer helper for per-draw arrays
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>

@@ -10,13 +10,13 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -24,7 +24,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-using oxygen::engine::View;
+using oxygen::View;
+
 using oxygen::engine::sceneprep::EmitPerVisibleSubmesh;
 using oxygen::engine::sceneprep::MeshResolver;
 using oxygen::engine::sceneprep::RenderItemProto;

@@ -14,7 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/NamedType.h>
-#include <Oxygen/Renderer/Types/View.h>
+#include <Oxygen/Core/Types/View.h>
 
 #include "../Integration/GraphicsLayerIntegration.h"
 
