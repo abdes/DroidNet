@@ -326,6 +326,11 @@ struct FrameSnapshot {
 // Common game data structure template with SAME mutation policies as ModuleData
 template <typename MutationPolicy> struct GameData {
   // TODO: figure out what common game data we have
+  // FUTURE (authoritative, cross-module data captured in the snapshot):
+  // - World/environment state (sky/atmosphere, exposure, weather, time-of-day)
+  // - Physics/global settings (e.g., gravity, solver params, debug toggles)
+  // - Animation pose state (final sampled/retargeted poses per entity)
+  // - Terrain/heightfields and water state (streaming tiles, LOD, materials)
 
   // Default constructor
   GameData() = default;
@@ -389,8 +394,6 @@ struct InputSnapshot {
 struct GameStateSnapshot {
   std::vector<ViewInfo> views; // per-view transforms & targets
   std::shared_ptr<const InputSnapshot> input; // input snapshot at capture time
-  // std::vector<LightData> lights; // per-frame lights (copied)
-  // std::vector<DrawBatch> drawBatches; // batches computed during build
 
   // Cross-module game data using immutable policy
   GameDataImmutable gameData;

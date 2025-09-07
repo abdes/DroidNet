@@ -1,23 +1,30 @@
-# Oxygen Renderer Architecture Design
+# Oxygen Renderer Architecture Design (Incremental)
 
-## Executive Summary
+## Purpose
 
-This document defines the architecture for restructuring the Oxygen Engine renderer to properly integrate with the engine's frame phase lifecycle and existing systems. The design builds upon existing `RenderItemData`, `RenderContext`, `PreparedSceneFrame`, and frame phase orchestration, eliminating invented data structures and manager proliferation.
+This is an incremental, renderer-focused document. It assumes the contracts
+and invariants documented in:
 
-The architecture aligns with the engine's **ABCD execution model** defined in `PhaseRegistry.h` and properly supports snapshotting for parallel task execution during the `kParallelTasks` phase.
+- `Core/PhaseRegistry.h` (phase order and semantics)
+- `Engine/AsyncEngine.h` (phase orchestration)
+- `Engine/FrameContext.h/.cpp` (capabilities, concurrency model, snapshots)
 
-## Frame Phase Integration
 
-### Engine Frame Phases (from PhaseRegistry.h)
+We don’t repeat those here. Instead we specify how the Renderer plugs into that
+model: what it stages, when it consumes, and how it exposes GPU-facing data to
+passes.
 
-The renderer operates within the engine's canonical frame phases:
+## Renderer participation across phases (delta)
 
-- **kSnapshot** (Phase 8) - Fully synchronous module phase. Modules (incl. Renderer) run on the main thread, prepare snapshot-visible data; Engine consolidates module contributions and publishes snapshots last.
-- **kParallelTasks** (Phase 9) - Scene preparation runs in parallel on worker threads
-- **kPostParallel** (Phase 10) - Integration of parallel work results
-- **kFrameGraph** (Phase 11) - Render graph construction and optimization
-- **kCommandRecord** (Phase 12) - GPU command recording from prepared data
-- **kPresent** (Phase 13) - Graphics system presents frames (Renderer sets presentable surfaces)
+- kSnapshot: run ScenePrep; stage typed payloads via `StageModuleData<T>`;
+  optionally set views via `SetViews`.
+- kParallelTasks: no `FrameContext` access; workers consume the published
+  `UnifiedSnapshot` (read-only), including renderer payloads from `moduleData`.
+- kPostParallel: integrate results; build/freeze `PreparedSceneFrame`; update
+  constants/bindless.
+- kFrameGraph / kCommandRecord: seed `RenderContext`, execute passes, and set
+  presentable flags via `SetSurfacePresentable`.
+- kPresent: graphics reads presentable flags.
 
 ### Snapshotting Architecture
 
@@ -25,35 +32,59 @@ The engine's `FrameContext` is the **central coordination mechanism** providing 
 
 **FrameContext** - Central frame execution context with strict access control
 
-- **Access Control Model**: EngineState (engine-internal), GameState (cross-module), Snapshots (immutable parallel)
+- **Access Control Model**: EngineState (engine-internal), GameState (cross-module), `UnifiedSnapshot` (immutable for parallel tasks)
 - **Capability-Based Access**: EngineTag tokens restrict critical operations
 - **Phase-Dependent Validation**: Operations restricted by execution phase
-- **Atomic Snapshot Publication**: Double-buffered with lock-free parallel access
+- **Atomic Snapshot Publication**: Double-buffered `UnifiedSnapshot` with lock-free reader access; engine publishes on the main thread in `kSnapshot` only
 
 **GameStateSnapshot** - Heavy authoritative data (owned containers)
 
 - Scene node transforms, entity hierarchy, **prepared scene data from ScenePrep**
 - Material properties, animation states, physics simulation state, audio data
-- Owned via `FrameContext.GetGameStateSnapshot()` - modules access heavy data
-- Thread-safe sharing via `shared_ptr<const GameStateSnapshot>`
+- Obtained only via the `UnifiedSnapshot` returned by `FrameContext::PublishSnapshots(EngineTag)`; there are no global getters for snapshots
+- Thread-safe sharing via value semantics inside `UnifiedSnapshot` and internal `shared_ptr` members (e.g., InputSnapshot)
 
-**FrameSnapshot** - Lightweight coordination views (non-owning spans)
+**FrameSnapshot** - Lightweight engine coordination metadata
 
-- Views into GameStateSnapshot data optimized for parallel access
-- Structure-of-Arrays layouts for cache-friendly iteration
-- Different view patterns: culling, animation, rendering
-- Accessed via `FrameContext.GetFrameSnapshot()` - parallel tasks access coordination views
+- Provides identification, timing, budget, execution hints, task group, and validation context
+- Parallel tasks receive `UnifiedSnapshot` (which contains both `GameStateSnapshot` and `FrameSnapshot`) from the engine; they never access `FrameContext` directly
 
-Renderer-visible additions to FrameSnapshot (this design):
+Renderer-visible snapshot payloads (this design):
 
-- `RendererSnapshotViews` – snapshot-safe, item-centric, non-owning spans that expose exactly what renderer parallel tasks need. These may share storage with the arrays later used by passes, but are conceptually independent of PreparedSceneFrame (CPU-oriented vs GPU/draw-oriented). Includes:
-  - visible_items: `std::span<const RenderItemData>` (immutable)
-  - transform_handles: `std::span<const TransformHandle>` (aligned to visible_items)
-  - world_bounding_spheres: `std::span<const glm::vec4>` (aligned to visible_items)
-  - pass_masks: `std::span<const PassMask>` (aligned to visible_items)
-  - Optional transforms: world_matrices/normal_matrices spans, if finalized pre-snapshot
+- Use `FrameContext::StageModuleData<T>(...)` during `kSnapshot` (or any phase that allows GameState mutation) to contribute renderer-specific, item-centric views for parallel tasks. The engine moves these into `UnifiedSnapshot.moduleData` at publish time. These payloads are conceptually independent of `PreparedSceneFrame` (CPU-oriented vs GPU/draw-oriented).
 
-The Renderer prepares these views in its kSnapshot handler and installs them into the FrameSnapshot. The Engine then consolidates across modules and calls `PublishSnapshots(...)`. Passes later receive `PreparedSceneFrame` via `RenderContext.prepared_frame` (draw-centric GPU-facing data).
+### RendererSnapshotViews (typed moduleData payload)
+
+`RendererSnapshotViews` defines the item-centric spans parallel workers need. It’s a typed payload staged into `UnifiedSnapshot.moduleData`; it is NOT a `FrameSnapshot` member.
+
+```cpp
+// IsTyped-compliant type with T::ClassTypeId()
+struct RendererSnapshotViews /* IsTyped */ {
+  // Core item views
+  std::span<const TransformHandle> transform_handles;
+  std::span<const BoundingSphere>  world_bounding_spheres;
+  std::span<const PassMask>        pass_masks;
+
+  // Optional, if finalized pre-snapshot (16 floats per matrix)
+  std::span<const float>           world_matrices;
+  std::span<const float>           normal_matrices;
+};
+
+// In the renderer's kSnapshot handler (main thread):
+RendererSnapshotViews views{ /* fill spans from authoritative data */ };
+frame_ctx.StageModuleData<RendererSnapshotViews>(std::move(views));
+
+// Engine publishes once per frame during kSnapshot:
+auto& unified = frame_ctx.PublishSnapshots(engine_tag);
+
+// In parallel workers (kParallelTasks), read-only access:
+if (auto v = unified.moduleData.Get<RendererSnapshotViews>()) {
+  const auto& rs = v->get();
+  // consume rs.transform_handles, rs.world_bounding_spheres, etc.
+}
+```
+
+The Renderer stages these payloads in its `kSnapshot` handler. The Engine then consolidates across modules and calls `PublishSnapshots(EngineTag)`, returning the `UnifiedSnapshot` it will hand to parallel workers. Passes later receive `PreparedSceneFrame` via `RenderContext.prepared_frame` (draw-centric GPU-facing data).
 
 **PreparedSceneFrame** - Finalized SoA render data (existing system)
 
@@ -62,11 +93,11 @@ The Renderer prepares these views in its kSnapshot handler and installs them int
 - World/normal transform matrices indexed by draw
 - Partition ranges for different render passes
 
-Publication model in this design (and why it differs from snapshot views):
+Publication model in this design (and why it differs from staged snapshot payloads):
 
 - PreparedSceneFrame is draw-centric (GPU/draw commands, deduped matrices in draw order, partitions). It is wired into `RenderContext.prepared_frame` for pass execution.
-- FrameSnapshot stores `RendererSnapshotViews`, which are item-centric and CPU-friendly. They may optionally reference the same matrix storage but do not expose GPU draw metadata.
-- During kFrameGraph/kCommandRecord, passes consume `PreparedSceneFrame` only. Parallel tasks never rely on GPU draw metadata.
+- Renderer-specific snapshot data is contributed via typed `moduleData` in the `UnifiedSnapshot` and is item-centric and CPU-friendly. It may optionally reference the same matrix storage but does not expose GPU draw metadata.
+- During kFrameGraph/kCommandRecord, passes consume `PreparedSceneFrame` only via `RenderContext`. Parallel tasks never rely on renderer GPU draw metadata and never read `FrameContext` directly.
 
 ## Module Definitions
 
@@ -76,7 +107,7 @@ Publication model in this design (and why it differs from snapshot views):
 
 **Phase Integration:** Executes during `kSnapshot` (synchronous, main thread) as part of snapshot creation process
 
-**Responsibility:** Extract and filter scene data for rendering, contributes to authoritative snapshot
+**Responsibility:** Extract and filter scene data for rendering; then stage typed renderer snapshot payloads via `StageModuleData<T>` for inclusion in the published `UnifiedSnapshot`
 
 **Core Coordinator:**
 
@@ -91,8 +122,8 @@ Publication model in this design (and why it differs from snapshot views):
 - **MaterialFilter** - apply material-based filtering (transparent, opaque, etc.)
 - **SortingWorker** - sort RenderItems by depth, material, etc.
 
-**Input:** FrameContext reference (for mutable GameState access), camera parameters, culling volumes
-**Output:** Prepared scene data contributed to FrameContext's mutable GameState
+**Input:** `FrameContext&` (engine-coordinated, phase-gated), camera parameters, culling volumes
+**Output:** Typed payloads staged via `FrameContext::StageModuleData<T>`, and view definitions via `SetViews` (authoritative GameState)
 
 **Key Principle:** ScenePrep is CRITICAL TO SNAPSHOT CREATION - mutates FrameContext.GameState before PublishSnapshots()
 
@@ -102,8 +133,8 @@ Location: `src/Oxygen/Renderer/Resources/`
 
 Phase Integration:
 
-- kSnapshot (if needed) – finalize item-centric arrays used by `renderer_snapshot` views (no GPU/draw metadata exposure).
-- kPostParallel – integrate parallel results and process snapshot data to build the immutable `PreparedSceneFrame` for this frame.
+- kSnapshot – may finalize item-centric arrays and stage payloads for parallel tasks using `StageModuleData` (no GPU/draw metadata exposure). Engine publishes `UnifiedSnapshot` only in this phase.
+- kPostParallel – integrate parallel results and process snapshot data (from the previously published `UnifiedSnapshot`) to build the immutable `PreparedSceneFrame` for this frame.
 
 Responsibility: Manage GPU-facing SoA for the current frame and bindless/bookkeeping using snapshot data and ScenePrep outputs.
 
@@ -120,7 +151,7 @@ Worker Components (part of this design and grounded by existing systems):
 - ResidencyTracker – decides what to (re)upload this frame.
 - DescriptorManager – issues descriptor table updates for bindless access.
 
-Inputs: FrameContext snapshots (read-only) and ScenePrep collected items; Outputs: updated bindless handles, uploaded buffers, descriptor tables, and the finalized arrays wired into `PreparedSceneFrame`.
+Inputs: The published `UnifiedSnapshot` (read-only) and ScenePrep staged items; Outputs: updated bindless handles, uploaded buffers, descriptor tables, and the finalized arrays wired into `PreparedSceneFrame`.
 
 Dependencies: `Graphics::ResourceRegistry` for low-level GPU object/view creation.
 
@@ -161,29 +192,28 @@ Renderer (Main thread - synchronous kSnapshot handler):
   -> MaterialFilter: Separate opaque/transparent
   -> SortingWorker: Sort by depth/material
   -> Creates RenderItemData structures
-  -> Contributes RenderItemData to FrameContext's mutable GameState
+  -> Stages typed renderer payloads via FrameContext.StageModuleData<T>()
 
 Renderer (still in kSnapshot):
-  -> Installs `renderer_snapshot` views into FrameSnapshot (item-centric, CPU-friendly)
+  -> Defines per-view data via FrameContext.SetViews(...)
 
 Engine Core (after all modules finish kSnapshot):
   -> Consolidates module contributions
   -> Calls FrameContext.PublishSnapshots(EngineTag)
-  -> Atomic double-buffered publication for lock-free parallel access
-Result: Immutable snapshots available via `FrameContext.GetFrameSnapshot()` including `renderer_snapshot` (no GPU/draw metadata).
+  -> Atomic double-buffered publication of `UnifiedSnapshot` for lock-free parallel access
+Result: Immutable snapshots (`UnifiedSnapshot` with GameStateSnapshot + FrameSnapshot + typed moduleData) available to parallel workers. No GPU/draw metadata is exposed.
 ```
 
-### Phase 9: kParallelTasks (Animation, Particles, Physics, etc. via FrameSnapshot)
+### Phase 9: kParallelTasks (Animation, Particles, Physics, etc. via UnifiedSnapshot)
 
 ```text
-Parallel Workers (NO access to FrameContext - use immutable snapshots only):
-  -> Animation workers: Access FrameSnapshot.renderer_snapshot (e.g., matrices if present) and game data views
-  -> Particle workers: Access FrameSnapshot for spatial data and renderer_snapshot for matrices
-  -> Physics workers: Access FrameSnapshot for collision data and transforms
-  -> AI workers: Access FrameSnapshot for visibility and spatial information
-  -> All workers consume GameStateSnapshot + FrameSnapshot.renderer_snapshot atomically (no access to RenderContext or PreparedSceneFrame)
+Parallel Workers (NO access to FrameContext - use immutable UnifiedSnapshot only):
+  -> Animation workers: Access staged renderer payloads via UnifiedSnapshot.moduleData (e.g., matrices/handles) and game state views
+  -> Particle workers: Access FrameSnapshot context and staged renderer payloads
+  -> Physics/AI workers: Access GameStateSnapshot and FrameSnapshot coordination data
+  -> All workers consume GameStateSnapshot + FrameSnapshot + moduleData atomically (no access to RenderContext or PreparedSceneFrame)
   -> Each worker produces its own results (updated animations, particles, etc.)
-Result: Per-worker outputs ready for integration (renderer_snapshot is immutable)
+Result: Per-worker outputs ready for integration (snapshots are immutable)
 ```
 
 ### Phase 10: kPostParallel (Renderer Integration of Parallel Results)
@@ -194,12 +224,12 @@ Renderer (Main thread - collects parallel worker results):
   -> Queries particle workers for new particle render data
   -> Queries physics workers for updated collision/movement data
   -> Integrates all parallel results and updates internal buffers
-  -> Prepares finalized arrays for the next snapshot publication:
+  -> Prepares finalized arrays for command recording:
      * RenderContext.prepared_frame points to updated renderer data
      * Updates scene_constants buffer with new camera/lighting data
      * Updates material_constants buffer with material properties
      * Prepares bindless handle mappings and descriptor tables
-Result: Renderer has arrays ready; engine will publish snapshots next, installing renderer_snapshot into FrameSnapshot
+Result: Renderer has arrays ready for kFrameGraph/kCommandRecord. Note: snapshots are only published in kSnapshot.
 ```
 
 ### Phase 11: kFrameGraph (Coroutine-based pass orchestration)
@@ -248,9 +278,9 @@ This section explains how the existing data structures flow through the renderin
 
 ### Data Flow Timeline
 
-**Phase 8 (kSnapshot):** ScenePrep creates RenderItemData, contributes to GameState; FrameSnapshot contains renderer_snapshot views only (no PreparedSceneFrame exposure)
-**Phase 9 (kParallelTasks):** Animation, particles, and other parallel work using FrameSnapshot views (including RenderContext.prepared_frame)
-**Phase 10 (kPostParallel):** Resources processes parallel results, updates data that RenderContext.prepared_frame points to
+**Phase 8 (kSnapshot):** ScenePrep extracts data and stages typed payloads via `StageModuleData`; engine publishes `UnifiedSnapshot` (GameStateSnapshot + FrameSnapshot + moduleData). No `PreparedSceneFrame` exposure
+**Phase 9 (kParallelTasks):** Animation, particles, and other parallel work using the immutable `UnifiedSnapshot` only (no access to `RenderContext` or `PreparedSceneFrame`)
+**Phase 10 (kPostParallel):** Resources processes parallel results and the published snapshot, updates data that `RenderContext.prepared_frame` points to
 **Phase 11-12 (kFrameGraph/kCommandRecord):** RenderGraph consumes `RenderContext.prepared_frame` directly
 **Phase 13 (kPresent):** Only presentable surface flags transferred from RenderContext to FrameContext
 
@@ -259,7 +289,7 @@ This section explains how the existing data structures flow through the renderin
 **Created by:** ScenePrep workers during `kSnapshot` phase
 **Created when:** Entity extraction from live scene systems, contributed to FrameContext.GameState
 **Updated by:** Never updated - immutable after snapshot publication via FrameContext.PublishSnapshots()
-**Consumed by:** Resources module during `kPostParallel` phase (via FrameContext.GetGameStateSnapshot())
+**Consumed by:** Resources module during `kPostParallel` phase via the previously published `UnifiedSnapshot`
 
 ```cpp
 struct RenderItemData {
@@ -295,8 +325,8 @@ struct RenderItemData {
 
 **Part of RenderContext:** PreparedSceneFrame exists as observer_ptr field in RenderContext with std::span fields
 **Data location:** Spans point to data owned by renderer (implementation detail, not in FrameContext)
-**Updated during:** kPostParallel phase - Resources updates the underlying data that spans point to
-**Accessed via:** FrameSnapshot views during kParallelTasks, RenderContext.prepared_frame during kCommandRecord
+**Updated during:** kPostParallel phase - Resources updates the underlying data that spans point to and then freezes it
+**Accessed via:** Not accessed during `kParallelTasks`; `RenderContext.prepared_frame` during `kCommandRecord`
 **Transfer to FrameContext:** NEVER - only presentable surface flags transferred, not PreparedSceneFrame itself
 
 ```cpp
@@ -365,58 +395,50 @@ struct RenderContext {
 **Key Data Structures:**
 
 ```text
-RenderItemData → FrameSnapshot → ParallelTasks → RenderContext.prepared_frame → GPU Commands → Present Flags
-     ↑              ↑              ↑                     ↑                          ↑              ↑
-  ScenePrep    Engine Core    Parallel Tasks         Resources                RenderGraph    FrameContext
-  (Phase 8)     (Phase 8)      (Phase 9)            (Phase 10)               (Phase 12)     (Phase 13)
+RenderItemData → UnifiedSnapshot{gameSnapshot+frameSnapshot+moduleData} → ParallelTasks → RenderContext.prepared_frame → GPU Commands → Present Flags
+    ↑                                ↑                                   ↑                          ↑              ↑
+  ScenePrep                      Engine Core                        Resources                 RenderGraph    FrameContext
+  (Phase 8)                       (Phase 8)                          (Phase 10)                (Phase 12)     (Phase 13)
 ```
 
-## **Enhanced FrameContext for Renderer Integration**
+## Using FrameContext (current APIs)
 
-Based on the commented code in FrameContext.h, here are the specific modifications needed:
+The refactored `FrameContext` already provides the concurrency model and APIs needed by the renderer. Key points:
 
-### **GameState Extensions (Authoritative Data)**
+- Snapshots are published only in `kSnapshot` via `FrameContext::PublishSnapshots(EngineTag)` and returned as a `UnifiedSnapshot` containing `GameStateSnapshot`, `FrameSnapshot`, and immutable `moduleData`.
+- Parallel tasks never access `FrameContext`; they operate on a provided `UnifiedSnapshot`.
+- Renderer contributes per-frame, item-centric data for parallel tasks by staging typed values via `StageModuleData<T>` during allowed phases (including `kSnapshot`). Duplicates are rejected with `std::invalid_argument`.
+- Views and surfaces are coordinator-owned authoritative data. Use `SetViews`, `AddView`, `ClearViews` and `AddSurface`, `RemoveSurfaceAt`, `ClearSurfaces` before `kSnapshot`.
+- Presentation flags are updated via `SetSurfacePresentable(index, bool)` (< `kPresent`) and read via `IsSurfacePresentable` or `GetPresentableSurfaces()`. Individual flag loads/stores are atomic.
+- Error reporting uses typed helpers: `frame_ctx.ReportError<MyModule>("msg")` and clear APIs.
+
+### Staging and consuming the payload (summary)
 
 ```cpp
-// Add to GameDataCommon template in FrameContext.h
-struct RendererGameData {
-  // ScenePrep contributions (Phase 8: kSnapshot)
-  std::vector<RenderItemData> render_items;        // Visible geometry for rendering
-  std::vector<LightData> lights;                   // Scene lighting data
-  std::vector<DrawBatch> draw_batches;             // Pre-computed draw calls
-  std::vector<ViewInfo> render_views;              // Camera matrices, render targets
+// Stage during kSnapshot (renderer main thread):
+RendererSnapshotViews payload{ /* fill */ };
+frame_ctx.StageModuleData<RendererSnapshotViews>(std::move(payload));
 
-  // Spatial/culling data from visibility tests
-  std::vector<BoundingBox> render_bounds;          // Entity bounding boxes
-  std::vector<CullingVolume> culling_volumes;      // Frustum/portal culling data
+// Publish snapshots (engine):
+auto& unified = frame_ctx.PublishSnapshots(engine_tag);
 
-  // Material data for uniform preparation
-  std::vector<MaterialProperties> material_props;  // Static material parameters
-  std::vector<TextureHandle> texture_handles;      // Material texture references
-  std::vector<ShaderHandle> shader_handles;        // Material shader references
-};
+// Consume in kParallelTasks (workers):
+if (auto v = unified.moduleData.Get<RendererSnapshotViews>()) {
+  const auto& rs = v->get();
+  // read-only use
+}
 ```
 
-### **FrameSnapshot Extensions (Parallel Access Views)**
+### Presentation flags usage
 
 ```cpp
-// Add to FrameSnapshot in FrameContext.h – lightweight renderer views
-// Item-centric, CPU-friendly; may alias storage later used by PreparedSceneFrame.
-struct RendererSnapshotViews {
-  // Core item views
-  std::span<const TransformHandle> transform_handles;
-  std::span<const BoundingSphere>  world_bounding_spheres;
-  std::span<const PassMask>        pass_masks;
-
-  // Optional, if finalized pre-snapshot (16 floats per matrix)
-  std::span<const float>           world_matrices;
-  std::span<const float>           normal_matrices;
-};
-
-RendererSnapshotViews renderer_snapshot; // member of FrameSnapshot
+// During/after command recording (but before kPresent):
+frame_ctx.SetSurfacePresentable(surface_index, true);
+// Engine reads aggregated list later:
+auto presentable = frame_ctx.GetPresentableSurfaces();
 ```
 
-### **Renderer Coordination (NOT a big state object)**
+### Renderer Coordination (NOT a big state object)
 
 The Renderer acts as a **coordinator** that orchestrates module execution and sets up integration points:
 
@@ -427,35 +449,13 @@ public:
   auto ExecuteScenePrep(FrameContext& frame_ctx) -> void;
   auto ExecuteResources(FrameContext& frame_ctx) -> void;
   auto ExecuteRenderGraph(RenderContext& render_ctx) -> void;
-
-  // Integration – set prepared_frame from Resources output (before graph)
-  auto SetupRenderContext(RenderContext& ctx, const PreparedSceneFrame* frame) -> void {
-    ctx.prepared_frame.reset(frame);
-  }
-
   // Individual modules manage their own state - NO central RendererInternalState
 };
 ```
 
 **Key Principle:** Each module (ScenePrep, Resources, RenderGraph) manages its own state. Renderer just coordinates execution and integration points.
 
-### **FrameContext API Extensions**
-
-```cpp
-// Add to FrameContext class public interface
-class FrameContext {
-public:
-  // Renderer snapshot views (installed just before PublishSnapshots)
-  auto SetRendererSnapshotViews(RendererSnapshotViews views, EngineTag) -> void;
-
-  // Presentation coordination (engine-internal)
-  auto MarkSurfacePresentable(size_t surface_index, EngineTag) -> void;
-  auto GetPresentableSurfaces() const -> std::span<const bool>;
-
-  // Note: No central renderer state - modules manage their own state
-  // Renderer coordinates using existing RenderContext integration points
-};
-```
+There is no need to extend `FrameContext`. Use the existing APIs described above.
 
 ## **Renderer Data Flow Summary**
 
@@ -464,26 +464,19 @@ public:
 !theme plain
 skinparam backgroundColor white
 
-package "ScenePrep Module" {
-  [ScenePrep Workers] as ScenePrep
-}
-
-package "Resources Module" {
-  [Resource Coordinator] as Resources
-}
-
-package "RenderGraph Module" {
-  [RenderGraph Executor] as RenderGraph
-}
-
-package "Graphics Module" {
-  [Graphics System] as Graphics
-}
+rectangle Renderer
+rectangle ParallelWorkers
 
 package "FrameContext" {
   database "GameState" as GameState
-  database "FrameSnapshot" as FrameSnapshot
+  database "ModuleData (staged)" as ModuleData
   database "Present Flags" as PresentFlags
+}
+
+package "UnifiedSnapshot" {
+  database "GameStateSnapshot" as GSS
+  database "FrameSnapshot" as FS
+  database "moduleData" as MD
 }
 
 package "RenderContext" {
@@ -491,25 +484,34 @@ package "RenderContext" {
   note top of PreparedFrame : observer_ptr field\nSpans point to renderer data
 }
 
-ScenePrep --> GameState : "Phase 8:\nContribute RenderItemData"
-GameState --> FrameSnapshot : "Phase 8:\nCreate module views"
-Resources --> FrameSnapshot : "Phase 8:\nRenderer installs renderer_snapshot"
-FrameSnapshot --> Resources : "Phase 10:\nAccess snapshot data"
-Resources --> PreparedFrame : "Phase 10:\nUpdate underlying data"
-PreparedFrame --> RenderGraph : "Phase 12:\nConsume via RenderContext"
-RenderGraph --> PresentFlags : "Phase 13:\nTransfer only present flags"
+package "Graphics Module" {
+  [Graphics System] as Graphics
+}
+
+Renderer --> GameState : "Phase 8:\nScenePrep mutates\nauthoritative data"
+Renderer --> ModuleData : "Phase 8:\nStage RendererSnapshotViews\n(StageModuleData<T>)"
+FrameContext --> UnifiedSnapshot : "Phase 8:\nPublishSnapshots(EngineTag)\n→ {GSS, FS, MD}"
+
+UnifiedSnapshot --> ParallelWorkers : "Phase 9:\nRead-only consume\n(GSS/FS/MD)"
+ParallelWorkers --> Renderer : "Phase 10:\nReturn results\n(animation, particles, ...)"
+
+Renderer --> PreparedFrame : "Phase 10:\nBuild/freeze from\nsnapshot + results"
+PreparedFrame --> Renderer : "Phase 11:\nSeed RenderContext"
+PreparedFrame --> Graphics : "Phase 12:\nRecord GPU commands\n(via RenderGraph)"
+
+Renderer --> PresentFlags : "Phase 12-13:\nSet presentable flags"
 PresentFlags --> Graphics : "Phase 13:\nPresent surfaces"
 
 @enduml
 ```
 
-**Phase 8 (kSnapshot):** ScenePrep creates RenderItemData and contributes to GameState. FrameSnapshot contains `renderer_snapshot` (item-centric views). It does NOT expose `PreparedSceneFrame` or draw metadata.
+**Phase 8 (kSnapshot):** ScenePrep extracts `RenderItemData` and stages typed renderer payloads via `StageModuleData`. The published `UnifiedSnapshot` contains `GameStateSnapshot`, `FrameSnapshot`, and immutable `moduleData`. It does NOT expose `PreparedSceneFrame` or draw metadata.
 
-**Phase 9 (kParallelTasks):** Animation, particles, physics workers access FrameSnapshot (including `renderer_snapshot`), never `RenderContext` or `PreparedSceneFrame`.
+**Phase 9 (kParallelTasks):** Animation, particles, physics workers access the immutable `UnifiedSnapshot` (including typed moduleData), never `FrameContext`, `RenderContext`, or `PreparedSceneFrame`.
 
 **Phase 10 (kPostParallel):** Renderer collects parallel results, updates the underlying data that `PreparedSceneFrame` spans point to
 
-**Phase 12 (kCommandRecord):** RenderGraph consumes RenderContext.prepared_frame directly. At end: ONLY presentable surface flags transferred to FrameContext, ALL other renderer data stays in RenderContext
+**Phase 12 (kCommandRecord):** RenderGraph consumes `RenderContext.prepared_frame` directly. At end: ONLY presentable surface flags are updated in `FrameContext`; ALL other renderer data stays within the renderer
 
 **Phase 13 (kPresent):** Graphics layer reads presentable surface flags from FrameContext and executes present
 
@@ -541,21 +543,21 @@ end note
 :LightData\nposition: Vector3\nintensity: float\ncolor: Color\ntype: LightType;
 
 |Timeline|
-:Phase 8: kSnapshot (sync)\nRenderer runs ScenePrep and\ninstalls renderer_snapshot;\nEngine publishes last;
+:Phase 8: kSnapshot (sync)\nRenderer runs ScenePrep;\nstages RendererSnapshotViews;\nEngine publishes UnifiedSnapshot;
 
 split
    |FrameContext|
-   :GameState Extensions\nrender_items: vector<RenderItemData>\nlights: vector<LightData>\ndraw_batches: vector<DrawBatch>;
+  :Authoritative GameState updates (views/surfaces/etc.)\nrender_items: vector<RenderItemData>\nlights: vector<LightData>\ndraw_batches: vector<DrawBatch>;
 split again
-   |FrameContext|
-  :FrameSnapshot Views\nRenderItemData spans\n+ renderer_snapshot (item-centric views)\n(Installed by Renderer during kSnapshot);\nno PreparedSceneFrame exposure;
+  |UnifiedSnapshot|
+  :moduleData\nRendererSnapshotViews (item-centric);\nno PreparedSceneFrame exposure;
 end split
 
 |Timeline|
-:Phase 9: kParallelTasks\nWorkers access\nFrameSnapshot views\n(renderer_snapshot only);
+:Phase 9: kParallelTasks\nWorkers read\nUnifiedSnapshot (GSS/FS/MD)\nread-only;
 
 |Timeline|
-:Phase 10: kPostParallel\nResources updates\nrenderer internal data\nthat prepared_frame points to;
+:Phase 10: kPostParallel\nResources build/freeze\nPreparedSceneFrame;
 
 |RenderContext (Always Present)|
 :RenderContext.prepared_frame\nstill pointing to\nupdated internal data;
@@ -616,7 +618,7 @@ participant "Renderer" as Rend
 participant "ScenePrep" as Prep
 participant "Resources" as Res
 participant "GameState" as GS
-participant "FrameSnapshot" as FS
+participant "UnifiedSnapshot" as US
 participant "RenderGraph" as Graph
 participant "Graphics" as GFX
 
@@ -627,15 +629,15 @@ Rend -> Prep: Run ScenePrep (mutate GameState)
 activate Prep
 Prep --> GS: Contribute RenderItemData
 deactivate Prep
-Rend -> GS: SetRendererSnapshotViews(renderer_snapshot)
+Rend -> GS: StageModuleData<RendererSnapshotViews>(payload)
 deactivate Rend
 Engine -> GS: Consolidate module contributions
 Engine -> GS: PublishSnapshots(EngineTag)
-GS --> FS: Publish GameStateSnapshot + renderer_snapshot
-note right of FS: Immutable views for parallel tasks
+GS --> US: Publish UnifiedSnapshot (GameStateSnapshot + FrameSnapshot + moduleData)
+note right of US: Immutable data for parallel tasks
 
 == Phase 9: kParallelTasks ==
-note over FS: Workers read snapshots only
+note over US: Workers read UnifiedSnapshot only
 
 == Phase 10: kPostParallel ==
 Rend -> Res: Integrate parallel results
@@ -682,8 +684,9 @@ note right: Graphics system handles\nactual presentation to display
   (ScenePrep pipeline, Resources, RenderGraph, Upload) but exposes only a
   small, phase-aligned surface to the engine.
 - kSnapshot becomes a synchronous module phase. The Renderer participates via
-  its OnSnapshot handler (main thread), runs ScenePrep, and installs
-  `renderer_snapshot` views before the Engine consolidates and publishes.
+  its OnSnapshot handler (main thread), runs ScenePrep, and stages
+  `RendererSnapshotViews` via `StageModuleData<T>` before the Engine
+  consolidates and publishes.
   kPresent remains engine-only.
 - PreparedSceneFrame, bindless tables, and GPU resources are internal to the
   renderer and never stored in `FrameContext` (only presentable-surface flags
@@ -694,8 +697,8 @@ note right: Graphics system handles\nactual presentation to display
 - OnFrameStart: optional lightweight epoch/metrics reset; validate previous
   frame disposal; no heavy work.
 - OnSnapshot(FrameContext&): synchronous; run ScenePrep to mutate GameState
-  (visibility, LOD, `RenderItemData`, etc.) and install `renderer_snapshot`
-  views into `FrameSnapshot`. Must return before Engine publishes.
+  (visibility, LOD, `RenderItemData`, etc.) and stage `RendererSnapshotViews`
+  as typed module data. Must return before Engine publishes.
 - OnParallelTasks(const FrameSnapshot&): typically a no-op; may schedule
   strictly read-only helpers (e.g., precompute light clusters) using the
   immutable snapshots. Must not mutate GameState.
@@ -714,8 +717,8 @@ note right: Graphics system handles\nactual presentation to display
 
 Notes:
 
-- kSnapshot: synchronous across modules; Renderer does ScenePrep and installs
-  `renderer_snapshot`; Engine consolidates across modules and publishes last.
+- kSnapshot: synchronous across modules; Renderer does ScenePrep and stages
+  `RendererSnapshotViews`; Engine consolidates across modules and publishes last.
 - kPresent: engine-only; Engine Core reads presentable surface flags and
   performs the actual presentation.
 
@@ -739,8 +742,9 @@ Notes:
 
 - During kSnapshot (synchronous, module participation):
   - ScenePrep mutates GameState (visibility, LOD, RenderItemData, etc.).
-  - Renderer installs `renderer_snapshot` views into `FrameSnapshot` to
-    support parallel workers. No GPU/draw-facing data is exposed here.
+  - Renderer stages `RendererSnapshotViews` via `StageModuleData<T>` so the
+    engine includes it in the published `UnifiedSnapshot.moduleData`.
+    No GPU/draw-facing data is exposed here.
 
 - OnParallelTasks:
   - Zero or minimal read-only helpers; parallel producers (Animation,
@@ -765,7 +769,7 @@ Notes:
 
 - Snapshots are immutable: no GameState mutation after
   `PublishSnapshots(EngineTag)`.
-- `renderer_snapshot` is item-centric and CPU-oriented; it never exposes
+- The staged renderer payload is item-centric and CPU-oriented; it never exposes
   GPU draw metadata.
 - `PreparedSceneFrame` becomes immutable after OnPostParallel and remains so
   throughout OnCommandRecord.
@@ -839,7 +843,7 @@ skinparam backgroundColor white
 participant "Engine Core" as Engine
 participant "GameState" as Game
 participant "GameStateSnapshot" as Snapshot
-participant "FrameSnapshot" as Frame
+participant "UnifiedSnapshot" as USnap
 participant "ScenePrep Workers" as Workers
 
 == Phase 8: kSnapshot ==
@@ -851,24 +855,21 @@ Engine -> Frame: Create lightweight views
 note right: Non-owning spans:\n- Transform arrays\n- Visibility data\n- Culling volumes
 
 == Phase 9: kParallelTasks ==
-Engine --> Workers: Launch with FrameSnapshot
+Engine --> Workers: Launch with UnifiedSnapshot
 activate Workers
 
 par Worker 1
-  Workers -> Frame: GetTransformSpan()
-  Workers -> Frame: GetVisibilitySpan()
+  Workers -> USnap: Access GameStateSnapshot/FrameSnapshot/moduleData
   Workers -> Workers: Process entities 0-1000
 end
 
 par Worker 2
-  Workers -> Frame: GetTransformSpan()
-  Workers -> Frame: GetVisibilitySpan()
+  Workers -> USnap: Access GameStateSnapshot/FrameSnapshot/moduleData
   Workers -> Workers: Process entities 1000-2000
 end
 
 par Worker N
-  Workers -> Frame: GetTransformSpan()
-  Workers -> Frame: GetVisibilitySpan()
+  Workers -> USnap: Access GameStateSnapshot/FrameSnapshot/moduleData
   Workers -> Workers: Process entities N*1000-(N+1)*1000
 end
 
@@ -1132,12 +1133,12 @@ package "Oxygen Renderer" {
         +ShaderIndexAllocator
     }
 
-    rectangle RenderGraph {
-        +RenderGraphExecutor
-        +ForwardPass
-        +DeferredGBufferPass
-  +ShadowMapPass
-    }
+  rectangle RenderGraph {
+    +RenderGraphExecutor
+    +ForwardPass
+    +DeferredGBufferPass
+    +ShadowMapPass
+  }
 
     rectangle Upload {
         +UploadCoordinator
@@ -1185,11 +1186,10 @@ SP -> SP: Emit RenderItemData
 SP --> GS: Contribute RenderItemData
 deactivate SP
 
-R -> GS: Read GameStateSnapshot
-R -> R: Finalize arrays for this frame
-R -> GS: SetRendererSnapshotViews(renderer_snapshot)
+R -> GS: Read GameState (authoritative)
+R -> GS: StageModuleData<RendererSnapshotViews>(payload)
 FC -> GS: PublishSnapshots(EngineTag)
-GS --> FS: Publish GameStateSnapshot + renderer_snapshot views
+GS --> US: Publish GameStateSnapshot + FrameSnapshot + moduleData
 
 == kParallelTasks ==
 note over FS: Workers read immutable snapshots only
