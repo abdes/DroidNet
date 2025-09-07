@@ -12,11 +12,11 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/Extraction/SceneExtraction.h>
 #include <Oxygen/Renderer/RenderItemsList.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
@@ -24,7 +24,7 @@
 using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
 using oxygen::engine::RenderItemsList;
-using oxygen::engine::View;
+
 using oxygen::engine::extraction::CollectRenderItems;
 
 namespace {

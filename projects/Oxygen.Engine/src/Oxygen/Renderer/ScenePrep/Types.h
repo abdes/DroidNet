@@ -29,7 +29,7 @@ namespace oxygen::scene {
 class Scene;
 } // namespace oxygen::scene
 
-namespace oxygen::engine {
+namespace oxygen {
 class View;
 }
 

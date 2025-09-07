@@ -8,16 +8,17 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 using namespace oxygen::engine;
 using namespace oxygen::engine::sceneprep;
+using oxygen::View;
 using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;

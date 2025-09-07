@@ -9,9 +9,9 @@
 #include <cmath>
 #include <ranges>
 
-#include <Oxygen/Renderer/Types/Frustum.h>
+#include <Oxygen/Core/Types/Frustum.h>
 
-namespace oxygen::engine {
+namespace oxygen {
 
 namespace {
   constexpr int kLeft = 0;
@@ -130,4 +130,4 @@ auto Frustum::IntersectsSphere(const glm::vec3& center, float radius) const
   });
 }
 
-} // namespace oxygen::engine
+} // namespace oxygen

@@ -9,12 +9,12 @@
 #include <cstdint>
 #include <utility>
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
 #include <stdexcept>
 

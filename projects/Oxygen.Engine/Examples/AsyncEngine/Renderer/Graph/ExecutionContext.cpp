@@ -13,8 +13,8 @@
 #include <Oxygen/Base/Logging.h>
 
 #include "../Integration/GraphicsLayerIntegration.h"
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Renderer/Types/View.h>
 
 // Hash function for pair<uint32_t, uint32_t>
 namespace std {

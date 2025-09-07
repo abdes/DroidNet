@@ -11,9 +11,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Renderer/Types/Frustum.h>
+#include <Oxygen/Core/Types/Frustum.h>
 
-using oxygen::engine::Frustum;
+using oxygen::Frustum;
 
 namespace {
 

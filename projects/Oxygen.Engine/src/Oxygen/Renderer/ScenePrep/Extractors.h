@@ -8,13 +8,13 @@
 
 // no extra STL headers required here
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/Concepts.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/State/TransformManager.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Types/View.h>
 
 namespace oxygen::engine::sceneprep {
 

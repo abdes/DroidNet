@@ -62,11 +62,9 @@ set(
   "Modules/TransformsModule.h"
   "ScenePrep/CollectionConfig.h"
   "Types/DrawMetadata.h"
-  "Types/Frustum.h"
   "Types/MaterialConstants.h"
   "Types/PassMask.h"
   "Types/SceneConstants.h"
-  "Types/View.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
@@ -94,8 +92,6 @@ set(
   "ScenePrep/State/TransformManager.h"
   "ScenePrep/Types.h"
   "ShaderPass.cpp"
-  "Types/Frustum.cpp"
-  "Types/View.cpp"
 )
 
 target_sources(

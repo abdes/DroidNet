@@ -11,8 +11,8 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Renderer/Types/View.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/Scene/SceneNode.h>
 
