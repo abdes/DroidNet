@@ -20,9 +20,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/ShaderPass.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::engine::ShaderPass;

@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/RenderPass.h>
+#include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {

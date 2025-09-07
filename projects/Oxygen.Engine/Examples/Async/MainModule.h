@@ -14,9 +14,9 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/DepthPrePass.h>
-#include <Oxygen/Renderer/ShaderPass.h>
-#include <Oxygen/Renderer/TransparentPass.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen {

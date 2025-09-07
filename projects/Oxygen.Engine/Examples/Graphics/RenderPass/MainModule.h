@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/Renderer/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 
 namespace oxygen {
 class Platform;
