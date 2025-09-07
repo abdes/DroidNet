@@ -32,6 +32,7 @@ struct TestResource : std::enable_shared_from_this<TestResource> {
   auto WasReleased() const -> bool { return released; }
   auto GetName() const -> std::string_view { return name; }
   auto GetTypeName() const -> std::string_view { return "TestResource"; }
+  auto GetTypeNamePretty() const -> std::string_view { return "TestResource"; }
 
   std::string name;
   std::atomic<bool> released { false };
