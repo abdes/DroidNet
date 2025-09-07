@@ -12,6 +12,8 @@
 #include <Oxygen/Engine/EngineTag.h>
 #include <Oxygen/Engine/FrameContext.h>
 
+#include <unordered_set>
+
 namespace oxygen::engine::internal {
 auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 } // namespace oxygen::engine::internal
@@ -79,13 +81,12 @@ NOLINT_TEST(FrameContext_basic_test, StageModuleData)
     PhaseId::kSceneMutation, tag); // Use mutation phase instead of kSnapshot
 
   // Act - Use new facade API for staging data
-  auto success = ctx.StageModuleData<TestPayload>(TestPayload { 42 });
+  ctx.StageModuleData<TestPayload>(TestPayload { 42 });
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   auto& snap = ctx.PublishSnapshots(tag);
   const auto version = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_TRUE(success);
   EXPECT_GT(version, 0u);
 
   // Check module data using new facade
@@ -116,16 +117,13 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
   };
 
   // Act - Stage multiple different types
-  auto success1 = ctx.StageModuleData<TestPayload>(TestPayload { 7 });
-  auto success2
-    = ctx.StageModuleData<AnotherPayload>(AnotherPayload { "test" });
+  ctx.StageModuleData<TestPayload>(TestPayload { 7 });
+  ctx.StageModuleData<AnotherPayload>(AnotherPayload { "test" });
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   auto& snap = ctx.PublishSnapshots(tag);
   const auto version = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_TRUE(success1);
-  EXPECT_TRUE(success2);
   EXPECT_GT(version, 0u);
 
   const auto& module_data = snap.moduleData;
@@ -156,13 +154,13 @@ NOLINT_TEST(FrameContext_basic_test, StageOutsideMutationPhasesRejected)
   ctx.SetCurrentPhase(PhaseId::kParallelTasks, tag); // Non-mutation phase
 
   // Act
-  auto success = ctx.StageModuleData<TestPayload>(TestPayload { 1 });
+  NOLINT_ASSERT_DEATH(
+    ctx.StageModuleData<TestPayload>(TestPayload { 1 }), ".*");
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   auto& snap = ctx.PublishSnapshots(tag);
   const auto v1 = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_FALSE(success); // Should fail due to wrong phase
   EXPECT_GT(v1, 0u);
 
   const auto& module_data = snap.moduleData;
@@ -180,7 +178,7 @@ NOLINT_TEST(FrameContext_basic_test, StagingClearedAfterPublish)
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Act
-  auto success = ctx.StageModuleData<TestPayload>(TestPayload { 9 });
+  ctx.StageModuleData<TestPayload>(TestPayload { 9 });
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   (void)ctx.PublishSnapshots(tag); // First publish
 
@@ -189,7 +187,6 @@ NOLINT_TEST(FrameContext_basic_test, StagingClearedAfterPublish)
   auto& snap = ctx.PublishSnapshots(tag); // Second publish
 
   // Assert
-  EXPECT_TRUE(success);
   const auto& module_data = snap.moduleData;
   EXPECT_FALSE(module_data.Has<TestPayload>());
   auto payload = module_data.Get<TestPayload>();
@@ -205,12 +202,10 @@ NOLINT_TEST(FrameContext_basic_test, DuplicateStagingRejected)
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Act
-  auto success1 = ctx.StageModuleData<TestPayload>(TestPayload { 1 });
-  auto success2 = ctx.StageModuleData<TestPayload>(TestPayload { 2 });
-
-  // Assert
-  EXPECT_TRUE(success1);
-  EXPECT_FALSE(success2); // Should fail due to duplicate
+  ctx.StageModuleData<TestPayload>(TestPayload { 1 });
+  // Second staging with same TypeId should throw
+  EXPECT_THROW(
+    ctx.StageModuleData<TestPayload>(TestPayload { 2 }), std::invalid_argument);
 }
 
 //! Test Views mutations blocked in non-GameState phases
@@ -518,6 +513,199 @@ NOLINT_TEST(FrameContext_basic_test, GetStagingModuleDataPhaseMatrix)
       NOLINT_ASSERT_DEATH((void)ctx.GetStagingModuleData(), ".*");
     }
   }
+}
+
+//! Stage directly during Snapshot phase and verify retrieval from snapshot
+NOLINT_TEST(FrameContext_basic_test, StageDuringSnapshotAllowed)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+
+  // Act
+  ctx.StageModuleData<TestPayload>(TestPayload { 111 });
+  auto& snap = ctx.PublishSnapshots(tag);
+
+  // Assert
+  const auto& md = snap.moduleData;
+  EXPECT_TRUE(md.Has<TestPayload>());
+  auto v = md.Get<TestPayload>();
+  ASSERT_TRUE(v.has_value());
+  EXPECT_EQ(v->get().value, 111);
+}
+
+//! Mutate staged payload through mutable facade before publish; verify snapshot
+NOLINT_TEST(FrameContext_basic_test, MutableViewMutationReflectedInSnapshot)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  // Act
+  ctx.StageModuleData<TestPayload>(TestPayload { 5 });
+
+  // Access the staged storage via mutable facade and mutate the value
+  auto& staging = ctx.GetStagingModuleData();
+  auto v = staging.Get<TestPayload>();
+  ASSERT_TRUE(v.has_value());
+  v->get().value = 9;
+
+  // Publish and read back immutable view
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap = ctx.PublishSnapshots(tag);
+
+  // Assert
+  const auto& md = snap.moduleData;
+  auto got = md.Get<TestPayload>();
+  ASSERT_TRUE(got.has_value());
+  EXPECT_EQ(got->get().value, 9);
+}
+
+//! Verify Keys() empty state and membership semantics
+NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  // No staged data yet
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap0 = ctx.PublishSnapshots(tag);
+  const auto& md0 = snap0.moduleData;
+  auto keys0 = md0.Keys();
+  EXPECT_TRUE(keys0.empty());
+  EXPECT_FALSE(md0.Has<TestPayload>());
+  EXPECT_FALSE(md0.Get<TestPayload>().has_value());
+
+  // Act - stage two types
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.StageModuleData<TestPayload>(TestPayload { 1 });
+  struct P2 {
+    static constexpr auto ClassTypeId() -> oxygen::TypeId
+    {
+      return 0xABCDEF10ull;
+    }
+    int x { 0 };
+  };
+  ctx.StageModuleData<P2>(P2 { 2 });
+
+  // Publish
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap1 = ctx.PublishSnapshots(tag);
+  const auto& md1 = snap1.moduleData;
+
+  // Assert - order agnostic
+  auto keys1 = md1.Keys();
+  EXPECT_EQ(keys1.size(), 2u);
+  EXPECT_TRUE(md1.Has<TestPayload>());
+  EXPECT_TRUE(md1.Has<P2>());
+}
+
+//! Stage const payload (decays internally) and read back with const and
+//! non-const T
+NOLINT_TEST(FrameContext_basic_test, ImmutableConstAndDecayRetrieval)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  const TestPayload kPayload { 77 };
+
+  // Act
+  ctx.StageModuleData<const TestPayload>(kPayload);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap = ctx.PublishSnapshots(tag);
+  const auto& md = snap.moduleData;
+
+  // Assert - both retrieval spellings should succeed
+  auto v1 = md.Get<TestPayload>();
+  auto v2 = md.Get<const TestPayload>();
+  ASSERT_TRUE(v1.has_value());
+  ASSERT_TRUE(v2.has_value());
+  EXPECT_EQ(v1->get().value, 77);
+  EXPECT_EQ(v2->get().value, 77);
+}
+
+//! Stage and retrieve a move-only payload to ensure movable constraint works
+NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  struct MoveOnlyPayload {
+    static constexpr auto ClassTypeId() -> oxygen::TypeId
+    {
+      return 0xABCDEF20ull;
+    }
+    MoveOnlyPayload() = default;
+    explicit MoveOnlyPayload(int v)
+      : value(v)
+    {
+    }
+    MoveOnlyPayload(const MoveOnlyPayload&) = delete;
+    MoveOnlyPayload& operator=(const MoveOnlyPayload&) = delete;
+    MoveOnlyPayload(MoveOnlyPayload&&) noexcept = default;
+    MoveOnlyPayload& operator=(MoveOnlyPayload&&) noexcept = default;
+    int value { 0 };
+  };
+
+  // Act - stage move-only type
+  ctx.StageModuleData<MoveOnlyPayload>(MoveOnlyPayload { 321 });
+
+  // Mutate via mutable view
+  auto& staging = ctx.GetStagingModuleData();
+  auto v = staging.Get<MoveOnlyPayload>();
+  ASSERT_TRUE(v.has_value());
+  v->get().value = 654;
+
+  // Publish and read back
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap = ctx.PublishSnapshots(tag);
+  const auto& md = snap.moduleData;
+  auto got = md.Get<MoveOnlyPayload>();
+  ASSERT_TRUE(got.has_value());
+  EXPECT_EQ(got->get().value, 654);
+}
+
+//! Keys() returns the exact set of staged TypeIds (order independent)
+NOLINT_TEST(FrameContext_basic_test, ModuleDataExactKeysSet)
+{
+  // Arrange
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  struct P3 {
+    static constexpr auto ClassTypeId() -> oxygen::TypeId
+    {
+      return 0xABCDEF30ull;
+    }
+    int a { 0 };
+  };
+
+  // Act - stage two known types
+  ctx.StageModuleData<TestPayload>(TestPayload { 1 });
+  ctx.StageModuleData<P3>(P3 { 2 });
+
+  // Publish and inspect keys
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap = ctx.PublishSnapshots(tag);
+  const auto& md = snap.moduleData;
+  const auto keys = md.Keys();
+
+  // Assert: convert to unordered_set for order-agnostic equality
+  std::unordered_set<oxygen::TypeId> keyset(keys.begin(), keys.end());
+  std::unordered_set<oxygen::TypeId> expected {
+    TestPayload::ClassTypeId(),
+    P3::ClassTypeId(),
+  };
+  EXPECT_EQ(keyset, expected);
 }
 
 } // namespace

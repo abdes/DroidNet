@@ -5,43 +5,57 @@
 //===----------------------------------------------------------------------===//
 
 //------------------------------------------------------------------------------
-// FrameContext.h
-//
 // Encapsulated frame context for the AsyncEngine example with strict access
 // control and phase-dependent mutation restrictions. This implementation
 // enforces the AsyncEngine execution model through capability tokens and
 // compile-time access restrictions.
 //
-// DESIGN PRINCIPLES:
-// - Data Encapsulation: All mutable state is private with controlled access
-// - Phase-Dependent Access: Operations are restricted based on execution phase
-// - Engine Capability Model: Critical operations require EngineTag capability
-// - Thread-Safety: Parallel workers access immutable snapshots exclusively
+// ROLES & CAPABILITIES:
 //
-// ACCESS CONTROL MODEL:
+// - EngineTag methods are engine-only and may assume main-thread execution in
+//   non-parallel phases.
+// - Typed data is keyed by strong TypeId (T::ClassTypeId()); no RTTI.
 //
-// PARALLEL TASK ARCHITECTURE:
+// CONCURRENCY & PHASES:
 //
-// PHASE EXECUTION MODEL:
+// - ParallelTasks never access FrameContext; they operate on a passed
+//   UnifiedSnapshot only.
+// - PublishSnapshots runs on the main thread and is not concurrent.
+// - Phase checks gate all mutators. PhaseCanMutateGameState governs module data
+//   staging; staging is also allowed during kSnapshot.
+// - Shape changes to surfaces_/views_/staged_module_data_ occur on the main
+//   thread; readers may take shared locks for clarity.
+// - presentable_flags_: elements updated atomically; container shape updated
+//   only on the main thread by the engine coordinator.
 //
+// SNAPSHOT CONTRACT:
+// - Parallel Tasks only consume the UnifiedSnapshot passed to them by the
+//   engine. They do not see the FrameContext and cannot read from it or write
+//   to it. This is a base contract for the safety of the engine's snapshot
+//   publishing.
+// - UnifiedSnapshot is double-buffered; engine updates visible index and
+//   snapshot_version_ at publish time.
+// - snapshot_version_ is monotonic and intended for tracing/validation.
+// - Input snapshot pointer is published via atomic shared_ptr (release-store /
+//   acquire-load).
 //------------------------------------------------------------------------------
 
 #pragma once
 
 #include <algorithm>
-#include <any>
 #include <array>
 #include <atomic>
-#include <cassert>
 #include <chrono>
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <shared_mutex>
 #include <span>
 #include <string>
-#include <typeindex>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -73,16 +87,9 @@ namespace oxygen::engine {
 struct EngineConfig;
 struct AssetRegistry;
 struct ShaderCompilationDb;
-struct CommandList;
-struct DescriptorHeapPools;
-struct ResourceIntegrationData;
-struct FrameProfiler;
-struct EntityCommandBuffer;
-struct PhysicsWorldState;
-struct ResourceRegistry;
-class RenderGraphBuilder;
 
-struct EngineProps;
+struct ResourceIntegrationData; // FIXME: placeholder for future
+struct FrameProfiler; // FIXME: placeholder for future
 
 //=== Error Reporting System ===----------------------------------------------//
 
@@ -105,8 +112,8 @@ struct EngineProps;
 struct FrameError {
   TypeId source_type_id { kInvalidTypeId }; //!< Source module type identifier
   std::string message; //!< Human-readable error message
-  std::optional<std::string>
-    source_key; //!< Optional unique identifier for error source
+  //!< Optional unique identifier for error source
+  std::optional<std::string> source_key;
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -117,6 +124,32 @@ struct FrameError {
  Provides strict access control and type safety for module-specific data
  contributions to the frame context. Uses template policies to control
  mutability and enforce proper phase-based access patterns.
+
+ ### Invariants
+
+ - Keys are `TypeId` values obtained from `T::ClassTypeId()`.
+ - If `Has<T>()` is true, the stored pointer is non-null and points to a
+   value of exactly `std::decay_t<T>`.
+ - No RTTI is used; access is performed via `static_cast` under the strong
+   type contract.
+ - `Keys()` returns the exact set of staged type ids; order is unspecified.
+
+ ### Usage Examples
+
+ ```cpp
+ // Stage typed data into FrameContext (see StageModuleData)
+ context.StageModuleData<MyType>(MyType{});
+
+ // Read during allowed phases
+ auto view = context.GetStagingModuleData().Get<MyType>();
+ if (view) {
+   // Access via reference_wrapper
+   auto& value = view->get();
+   // ...
+ }
+ ```
+
+ @see FrameContext::StageModuleData, ModuleDataImmutable, ModuleDataMutable
 */
 template <typename MutationPolicy> class ModuleData {
 public:
@@ -140,14 +173,13 @@ public:
   //! Check if data of type T exists
   template <IsTyped T> [[nodiscard]] auto Has() const noexcept -> bool
   {
-    const auto type_id = GetTypeId<T>();
-    return data_.contains(type_id);
+    return data_.contains(T::ClassTypeId());
   }
 
   //! Get list of all type IDs that have staged data
-  [[nodiscard]] auto Keys() const noexcept -> std::vector<std::type_index>
+  [[nodiscard]] auto Keys() const noexcept -> std::vector<TypeId>
   {
-    std::vector<std::type_index> keys;
+    std::vector<TypeId> keys;
     keys.reserve(data_.size());
     for (const auto& type_id : data_ | std::views::keys) {
       keys.push_back(type_id);
@@ -160,27 +192,39 @@ public:
   [[nodiscard]] auto Get() const noexcept ->
     typename MutationPolicy::template ViewType<T>
   {
-    const auto type_id = GetTypeId<T>();
-    const auto iter = data_.find(type_id);
+    const auto iter = data_.find(T::ClassTypeId());
     if (iter == data_.end()) {
       return MutationPolicy::template GetDefault<T>();
     }
 
-    const auto* typed_storage = std::any_cast<T>(&iter->second);
-    assert(typed_storage != nullptr && "Type mismatch in ModuleData storage");
-    return MutationPolicy::template CreateView<T>(*typed_storage);
+    // Invariant: If a type id is present, the stored pointer is non-null and
+    // points to a value of exactly std::decay_t<T>. No RTTI or dynamic_cast is
+    // used; we rely on the type system contract (T::ClassTypeId()) and static
+    // casts for performance.
+    using StoredT = std::decay_t<T>;
+    auto* typed_ptr = static_cast<StoredT*>(iter->second.get());
+
+    // Single call: policy decides mutability (const or non-const view) based on
+    // MutationPolicy. Passing a non-const reference allows ImmutablePolicy to
+    // bind to const&, and MutablePolicy to return a mutable reference wrapper.
+    return MutationPolicy::template CreateView<StoredT>(*typed_ptr);
   }
 
 private:
   template <typename OtherPolicy> friend class ModuleData;
   friend class FrameContext;
 
-  std::unordered_map<std::type_index, std::any> data_;
+  // Store moved-in values directly using type-erased container to avoid an
+  // extra allocation and pointer indirection. The contract is: callers
+  // must stage values of the exact stored type (decay_t<T>) under the
+  // key T::ClassTypeId(). Storage is shared_ptr<void> to avoid RTTI. Access
+  // uses static_cast under the strong type contract.
+  std::unordered_map<TypeId, std::shared_ptr<void>> data_;
 
-  template <IsTyped T>
-  [[nodiscard]] static auto GetTypeId() noexcept -> std::type_index
+  template <IsTyped T> [[nodiscard]] static auto GetTypeId() noexcept -> TypeId
   {
-    return std::type_index(typeid(T));
+    // Use the project's strong-type id accessor instead of C++ RTTI.
+    return T::ClassTypeId();
   }
 };
 
@@ -379,9 +423,7 @@ struct UnifiedSnapshot {
 
 class FrameContext final {
 public:
-  //------------------------------------------------------------------------
-  // Immutable: read-only for app lifetime
-  //------------------------------------------------------------------------
+  //! Immutable: read-only for app lifetime.
   struct Immutable {
     const EngineConfig* config = nullptr;
     const AssetRegistry* assets = nullptr;
@@ -439,9 +481,6 @@ public:
     return immutable_.shaderDatabase;
   }
 
-  // Engine-only graphics backend management RATIONALE: Graphics backend
-  // lifecycle is engine-managed; external modules should not modify the
-  // graphics reference directly to avoid resource leaks
   //! Engine-only: Set graphics backend reference. Requires EngineTag
   //! capability.
   auto SetGraphicsBackend(std::weak_ptr<Graphics> graphics, EngineTag) noexcept
@@ -509,27 +548,36 @@ public:
   OXGN_NGIN_API auto PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&;
 
   //! Stage typed module data for inclusion in next snapshot
-  template <IsTyped T> auto StageModuleData(T data) noexcept -> bool
+  /*!
+   Stage a typed value for the upcoming snapshot using the project's
+   `TypeId` system. The value is stored under `T::ClassTypeId()` with exact
+   type `std::decay_t<T>`; no RTTI is used.
+
+   @tparam T Typed payload; must satisfy `IsTyped` and be movable.
+   @param data The value to move into the staging store.
+   @return void
+
+   ### Behavior
+
+   - Allowed phases: any phase that can mutate GameState, and
+     `PhaseId::kSnapshot`.
+   - Misuse: aborts the process via `CHECK_F` when called in a disallowed
+     phase.
+   - Duplicate key: throws `std::invalid_argument` if the `TypeId` is already
+     staged for this frame.
+
+   @see GetStagingModuleData, StageModuleDataErased
+  */
+  template <IsTyped T>
+    requires std::movable<std::decay_t<T>>
+  auto StageModuleData(T data) -> void
   {
-    // Allow staging during mutation phases, or during the Snapshot phase where
-    // modules may contribute to the snapshot.
-    using namespace oxygen::core::meta;
-    using namespace oxygen::core;
-    if (!PhaseCanMutateGameState(engine_state_.current_phase)
-      && engine_state_.current_phase != PhaseId::kSnapshot) {
-      return false;
-    }
-
-    std::unique_lock lock(staged_module_mutex_);
-    const auto type_id = std::type_index(typeid(T));
-
-    // Check for duplicates
-    if (staged_module_data_.data_.contains(type_id)) {
-      return false; // Duplicate staging not allowed
-    }
-
-    staged_module_data_.data_[type_id] = std::move(data);
-    return true;
+    using StoredT = std::decay_t<T>;
+    // Allocate concrete object and delegate to type-erased helper implemented
+    // in the .cpp to hide synchronization, phase checks, and duplicate logic.
+    auto ptr = std::make_shared<StoredT>(std::move(data));
+    StageModuleDataErased(
+      T::ClassTypeId(), std::static_pointer_cast<void>(std::move(ptr)));
   }
 
   //! Get mutable facade for staging module data during mutation phases. The
@@ -542,7 +590,7 @@ public:
 
   auto GetInputSnapshot() const noexcept
   {
-    return std::atomic_load(&atomic_input_snapshot_);
+    return atomic_input_snapshot_.load(std::memory_order_acquire);
   }
 
   auto GetViews() const noexcept -> std::span<const ViewInfo> { return views_; }
@@ -681,12 +729,6 @@ public:
    Reports an error with compile-time type safety. The source module type is
    automatically determined from the template parameter.
 
-   ### Performance Characteristics
-
-   - Time Complexity: O(1) for insertion
-   - Memory: Allocates string storage for message
-   - Optimization: Thread-safe using shared_mutex
-
    @tparam SourceType Module type reporting the error (must satisfy IsTyped)
    @param message Human-readable error description
    @param source_key Optional unique identifier for the error source
@@ -706,110 +748,57 @@ public:
     });
   }
 
-  //! Report an error using a TypeId directly
-  /*!
-   Reports an error to the frame context using the specified TypeId as the
-   source. This is useful when reporting errors on behalf of other objects.
-
-   @param source_type_id The TypeId of the source that caused the error
-   @param message Descriptive error message
-   @param source_key Optional unique identifier for the error source
-
-   @see HasErrors, GetErrors, ClearErrorsFromSource
-  */
+  //! Report an error using a TypeId directly.
   OXGN_NGIN_API auto ReportError(TypeId source_type_id, std::string message,
     std::optional<std::string> source_key = std::nullopt) noexcept -> void;
 
   //! Check if any errors have been reported this frame.
-  /*!
-   Returns true if any module has reported errors during the current frame.
-
-   @return True if errors exist, false otherwise
-   @note Thread-safe for concurrent access
-   @see GetErrors, ReportError
-  */
   OXGN_NGIN_NDAPI [[nodiscard]] auto HasErrors() const noexcept -> bool;
 
   //! Get a thread-safe copy of all reported errors.
-  /*!
-   Returns a copy of all errors reported during the current frame. Safe for
-   concurrent access and processing.
-
-   @return Vector containing copies of all frame errors
-   @note Thread-safe via copy, no live references to internal data
-   @see HasErrors, ClearErrors
-  */
   OXGN_NGIN_NDAPI [[nodiscard]] auto GetErrors() const noexcept
     -> std::vector<FrameError>;
 
   //! Clear errors from a specific typed module source.
-  /*!
-   Removes all errors reported by the specified module type using compile-time
-   type safety.
-
-   @tparam SourceType Module type to clear errors from (must satisfy IsTyped)
-   @note Thread-safe for concurrent access
-   @see ClearErrorsFromSource(TypeId), ClearAllErrors
-  */
   template <IsTyped SourceType> auto ClearErrorsFromSource() noexcept -> void
   {
     ClearErrorsFromSource(SourceType::ClassTypeId());
   }
 
   //! Clear errors from a specific module source by TypeId.
-  /*!
-   Removes all errors reported by the specified module type using runtime
-   TypeId. Useful for ModuleManager when working with dynamic module
-   collections.
-
-   @param source_type_id TypeId of the module type to clear errors from
-   @note Thread-safe for concurrent access
-   @see ClearErrorsFromSource<SourceType>(), ClearAllErrors
-  */
   OXGN_NGIN_API auto ClearErrorsFromSource(TypeId source_type_id) noexcept
     -> void;
 
   //! Clear errors from a specific module source by TypeId and source key.
-  /*!
-   Removes all errors reported by the specified module type that also match the
-   given source key. Provides granular error clearing for cases where multiple
-   modules of the same type exist.
-
-   @param source_type_id TypeId of the module type to clear errors from
-   @param source_key Optional source key to match for granular clearing
-   @note Thread-safe for concurrent access
-   @see ClearErrorsFromSource(TypeId), ClearAllErrors
-  */
   OXGN_NGIN_API auto ClearErrorsFromSource(TypeId source_type_id,
     const std::optional<std::string>& source_key) noexcept -> void;
 
   //! Clear all reported errors.
-  /*!
-   Removes all errors reported during the current frame from all sources.
-   Typically called at frame start to reset error state.
-
-   @note Thread-safe for concurrent access
-   @see ClearErrorsFromSource, HasErrors
-  */
   OXGN_NGIN_API auto ClearAllErrors() noexcept -> void;
 
 private:
   //------------------------------------------------------------------------
   // Private helper methods
   //------------------------------------------------------------------------
+  //! Type-erased staging entry point used by the template wrapper.
+  OXGN_NGIN_API auto StageModuleDataErased(
+    TypeId type_id, std::shared_ptr<void> data) -> void;
+
   // Create and populate both GameStateSnapshot and FrameSnapshot into target
   OXGN_NGIN_API auto CreateUnifiedSnapshot(
     UnifiedSnapshot& out, uint64_t version) noexcept -> void;
 
-  // Populate FrameSnapshot within a GameStateSnapshot with coordination context
-  // and views
+  // Populate FrameSnapshot within a GameStateSnapshot with coordination
+  // context and views. Caller is the engine during kSnapshot on the main
+  // thread; phase gating guarantees no concurrent mutation.
   OXGN_NGIN_API auto PopulateFrameSnapshot(FrameSnapshot& frame_snapshot,
     const GameStateSnapshot& game_snapshot) const noexcept -> void;
 
   // (one-off buffer index computation is inlined at call site)
 
   // Populate the immutable GameStateSnapshot value (capture + convert +
-  // version)
+  // version). Called by the engine during publish; non-concurrent by
+  // invariant, so no extra locks required beyond phase checks.
   OXGN_NGIN_API auto PopulateGameStateSnapshot(
     GameStateSnapshot& out, uint64_t version) noexcept -> void;
 
@@ -866,6 +855,13 @@ private:
   // Per-surface presentable flags (1:1 correspondence with surfaces vector)
   // uint8_t used for atomic operations and consistency with parallel workers.
   // Can be mutated until PhaseId::kPresent (not included).
+  // NOTE on std::atomic_ref<uint8_t> usage:
+  // - Only individual element stores/loads are done atomically by
+  //   SetSurfacePresentable/IsSurfacePresentable.
+  // - Container shape (size/capacity) is mutated only on the engine main
+  //   thread in allowed phases; workers never touch FrameContext.
+  // - Do not perform non-atomic reads/writes to these elements in contexts
+  //   where atomic writes may occur; use the provided APIs.
   std::vector<uint8_t> presentable_flags_;
 
   // Active rendering views, in multi-view rendering. There is no 1:1 mapping
@@ -880,14 +876,14 @@ private:
   // PhaseId::KSceneMutation (not included).
   observer_ptr<scene::Scene> scene_ { nullptr }; // active scene (non-owning)
 
-  // Replace the old coarse-grained snapshot_lock_ with clearer, fine-grained
-  // locks for the containers that were previously protected by it. This
-  // documents intent and reduces contention.
-  mutable std::shared_mutex
-    staged_module_mutex_; // protects staged_module_data_
-  mutable std::shared_mutex
-    surfaces_mutex_; // protects surfaces_ + presentable_flags_
-  mutable std::shared_mutex views_mutex_; // protects views_
+  // protects staged_module_data_
+  mutable std::shared_mutex staged_module_mutex_;
+  // protects surfaces_ + presentable_flags_
+  mutable std::shared_mutex surfaces_mutex_;
+  // protects views_
+  mutable std::shared_mutex views_mutex_;
+
+  // Double-buffered unified snapshot for lock-free atomic publication
   std::array<UnifiedSnapshot, 2> snapshot_buffers_;
   // Visible snapshot index: _not_ atomic because only the engine thread writes
   // it during PublishSnapshots and workers never read it directly.
