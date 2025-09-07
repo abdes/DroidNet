@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include <Oxygen/Renderer/RenderPass.h>
+#include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {

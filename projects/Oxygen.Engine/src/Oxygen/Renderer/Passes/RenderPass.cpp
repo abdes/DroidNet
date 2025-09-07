@@ -10,8 +10,8 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Renderer/Internal/RenderScope.h>
+#include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 

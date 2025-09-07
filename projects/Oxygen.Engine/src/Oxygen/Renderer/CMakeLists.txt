@@ -51,15 +51,15 @@ set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
   "CameraView.h"
-  "DepthPrePass.h"
   "Detail/BindlessStructuredBuffer.h"
+  "Passes/DepthPrePass.h"
+  "Passes/RenderPass.h"
+  "Passes/ShaderPass.h"
+  "Passes/TransparentPass.h"
   "PreparedSceneFrame.h"
   "RenderContext.h"
   "Renderer.h"
-  "RenderPass.h"
   "ScenePrep/CollectionConfig.h"
-  "ShaderPass.h"
-  "TransparentPass.h"
   "Types/DrawMetadata.h"
   "Types/MaterialConstants.h"
   "Types/PassMask.h"
@@ -68,12 +68,14 @@ set(
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
   "CameraView.cpp"
-  "DepthPrePass.cpp"
   "Detail/BindlessStructuredBuffer.cpp"
   "Internal/RenderScope.h"
+  "Passes/DepthPrePass.cpp"
+  "Passes/RenderPass.cpp"
+  "Passes/ShaderPass.cpp"
+  "Passes/TransparentPass.cpp"
   "PreparedSceneFrame.cpp"
   "Renderer.cpp"
-  "RenderPass.cpp"
   "ScenePrep/Concepts.h"
   "ScenePrep/Extractors.h"
   "ScenePrep/RenderItemData.h"
@@ -88,8 +90,6 @@ set(
   "ScenePrep/State/TransformManager.cpp"
   "ScenePrep/State/TransformManager.h"
   "ScenePrep/Types.h"
-  "ShaderPass.cpp"
-  "TransparentPass.cpp"
 )
 
 target_sources(
