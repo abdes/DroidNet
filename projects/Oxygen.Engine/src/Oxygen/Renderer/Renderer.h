@@ -25,6 +25,7 @@
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 // Bindless structured buffer helper for per-draw arrays
+#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h> // template config return type
@@ -88,15 +89,38 @@ public:
 
 //! Renderer: backend-agnostic, manages mesh-to-GPU resource mapping and
 //! eviction.
-class Renderer {
+class Renderer : public EngineModule {
+  OXYGEN_TYPED(Renderer)
+
 public:
   OXGN_RNDR_API explicit Renderer(std::weak_ptr<oxygen::Graphics> graphics,
     std::shared_ptr<EvictionPolicy> eviction_policy = nullptr);
 
-  OXGN_RNDR_API ~Renderer();
-
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
+
+  OXGN_RNDR_API ~Renderer();
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  {
+    return "RendererModule";
+  }
+
+  [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
+  {
+    // This module must run last, after all modules that may contribute to the
+    // frame context.
+    return ModulePriority { kModulePriorityLowest };
+  }
+
+  [[nodiscard]] auto GetSupportedPhases() const noexcept
+    -> ModulePhaseMask override
+  {
+    return MakeModuleMask<core::PhaseId::kTransformPropagation>();
+  }
+
+  OXGN_RNDR_NDAPI auto OnTransformPropagation(FrameContext& context)
+    -> co::Co<> override;
 
   //! Returns the vertex buffer for the given mesh, creating it if needed.
   OXGN_RNDR_API auto GetVertexBuffer(const data::Mesh& mesh)

@@ -34,7 +34,7 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Renderer/Modules/TransformsModule.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 #include "MainModule.h"
 
@@ -249,8 +249,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     // Register built-in engine modules (one-time)
     {
-      // TransformsModule: performs Scene::Update() during kTransformPropagation
-      register_module(std::make_unique<engine::TransformsModule>());
+      // Renderer: performs Scene::Update() during kTransformPropagation
+      register_module(std::make_unique<engine::Renderer>(app.gfx_weak));
 
       // Graphics main module (replaces RenderController/RenderThread pattern)
       register_module(std::make_unique<oxygen::examples::async::MainModule>(
