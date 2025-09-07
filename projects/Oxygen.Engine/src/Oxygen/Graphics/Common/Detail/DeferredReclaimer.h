@@ -140,13 +140,13 @@ private:
     std::string_view name { "(unnamed)" };
 
     if constexpr (HasGetTypeName<T>) {
-      type_name = resource->GetTypeName();
+      type_name = resource->GetTypeNamePretty();
     }
     if constexpr (HasGetNameMethod<T>) {
       name = resource->GetName();
     }
 
-    DLOG_F(3, "Releasing {} resource: {}", type_name, name);
+    DLOG_F(3, "Releasing resource, type_name={}, name={}", type_name, name);
 #endif
   }
 
