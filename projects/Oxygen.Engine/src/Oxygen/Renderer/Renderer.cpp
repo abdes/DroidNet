@@ -22,7 +22,6 @@
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -139,15 +138,19 @@ auto MakeLruEvictionPolicy(std::size_t max_age_frames
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
 
-Renderer::Renderer(std::weak_ptr<oxygen::Graphics> graphics,
+Renderer::Renderer(std::weak_ptr<Graphics> graphics,
   std::shared_ptr<EvictionPolicy> eviction_policy)
   : graphics_(std::move(graphics))
   , eviction_policy_(
       eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
 {
   if (auto g = graphics_.lock()) {
-    uploader_ = std::make_unique<oxygen::engine::upload::UploadCoordinator>(g);
+    uploader_ = std::make_unique<upload::UploadCoordinator>(g);
   }
+  // Ensure transform_mgr is always valid for scene prep and extraction
+  scene_prep_state_.transform_mgr
+    = std::make_unique<renderer::resources::TransformUploader>(
+      graphics_, observer_ptr { uploader_.get() });
 }
 
 Renderer::~Renderer()
@@ -162,7 +165,7 @@ Renderer::~Renderer()
   }
 }
 
-auto Renderer::GetGraphics() -> std::shared_ptr<oxygen::Graphics>
+auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
 {
   auto graphics_ptr = graphics_.lock();
   if (!graphics_ptr) {
@@ -207,7 +210,7 @@ auto Renderer::EvictUnusedMeshResources(const std::size_t current_frame) -> void
 }
 
 auto Renderer::PreExecute(
-  RenderContext& context, const engine::FrameContext& frame_context) -> void
+  RenderContext& context, const FrameContext& frame_context) -> void
 {
   // Contract checks (kept inline per style preference)
   DCHECK_F(!context.scene_constants,
@@ -282,15 +285,14 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
     draw_metadata_.EnsureBufferAndSrv(graphics, "DrawResourceIndices"));
   // Upload via coordinator when marked dirty
   if (uploader_ && draw_metadata_.IsDirty()) {
-    using oxygen::engine::upload::BatchPolicy;
-    using oxygen::engine::upload::UploadBufferDesc;
-    using oxygen::engine::upload::UploadDataView;
-    using oxygen::engine::upload::UploadKind;
-    using oxygen::engine::upload::UploadRequest;
+    using upload::BatchPolicy;
+    using upload::UploadBufferDesc;
+    using upload::UploadDataView;
+    using upload::UploadKind;
+    using upload::UploadRequest;
 
     const auto& cpu = draw_metadata_.GetCpuData();
-    const uint64_t size
-      = static_cast<uint64_t>(cpu.size() * sizeof(DrawMetadata));
+    const uint64_t size = cpu.size() * sizeof(DrawMetadata);
     if (size > 0 && draw_metadata_.GetBuffer()) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
@@ -333,8 +335,8 @@ auto Renderer::UpdateDrawMetadataSlotIfChanged() -> void
     new_draw_slot.value, new_draw_slot.value);
 }
 
-auto Renderer::MaybeUpdateSceneConstants(
-  const engine::FrameContext& frame_context) -> void
+auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
+  -> void
 {
   // Ensure renderer-managed fields are refreshed for this frame prior to
   // snapshot/upload. This also bumps the version when they change.
@@ -421,8 +423,8 @@ auto Renderer::GetDrawMetadata() const -> const DrawMetadata&
   return cpu.front();
 }
 
-auto Renderer::BuildFrame(
-  const View& view, const engine::FrameContext& frame_context) -> std::size_t
+auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
+  -> std::size_t
 {
   // Phase Mapping: This function orchestrates PhaseId::kFrameGraph duties:
   //  * sequence number init
@@ -437,7 +439,9 @@ auto Renderer::BuildFrame(
   // Reset per-frame state but retain persistent caches
   // (transform/material/geometry)
   scene_prep_state_.ResetFrameData();
-  scene_prep_state_.transform_mgr.BeginFrame();
+  if (scene_prep_state_.transform_mgr) {
+    scene_prep_state_.transform_mgr->BeginFrame();
+  }
   const auto cfg = PrepareScenePrepCollectionConfig();
   CollectScenePrep(scene, view, scene_prep_state_, cfg);
   FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
@@ -457,8 +461,9 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
   const auto& filtered = ResolveFilteredIndices(prep_state);
-  const auto unique_transform_count
-    = prep_state.transform_mgr.GetUniqueTransformCount();
+  const auto unique_transform_count = prep_state.transform_mgr
+    ? prep_state.transform_mgr->GetUniqueTransformCount()
+    : 0;
   // Allocate storage sized to number of unique transforms (handle id space)
   ReserveMatrixStorage(unique_transform_count);
   // Populate (or update) per-handle world/normal matrices using cached data.
@@ -552,9 +557,12 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
   const sceneprep::ScenePrepState& prep_state) -> void
 {
   // Transform caching path: fetch world & cached normal matrix via handle.
-  const auto& tm = prep_state.transform_mgr;
-  const auto unique_count = tm.GetUniqueTransformCount();
-  if (unique_count == 0) {
+  const auto* tm = prep_state.transform_mgr.get();
+  std::size_t unique_count = 0;
+  if (tm) {
+    unique_count = tm->GetUniqueTransformCount();
+  }
+  if (!tm || unique_count == 0) {
     return;
   }
   const bool alias_world = alias_world_matrices_;
@@ -569,7 +577,7 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
     const auto& item = prep_state.collected_items[src_index];
     const auto handle = item.transform_handle;
     const auto h = handle.get();
-    if (h >= unique_count) {
+    if (static_cast<std::size_t>(h) >= unique_count) {
       continue; // invalid handle (should not happen)
     }
     if (written[h]) {
@@ -578,9 +586,9 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
     written[h] = 1u;
     glm::mat4 world { 1.0f };
     glm::mat4 normal { 1.0f };
-    if (tm.IsValidHandle(handle)) {
-      world = tm.GetTransform(handle);
-      normal = tm.GetNormalMatrix(handle); // now stored natively as mat4
+    if (tm->IsValidHandle(handle)) {
+      world = tm->GetTransform(handle);
+      normal = tm->GetNormalMatrix(handle); // now stored natively as mat4
     }
     if (!alias_world) {
       std::memcpy(&world_matrices_cpu_[h * 16u], &world, sizeof(float) * 16u);
@@ -623,25 +631,23 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
   material_constants_cpu_soa_.resize(1u);
   {
     // Ensure index 0 populated with canonical default each frame for safety.
-    const auto fallback = oxygen::data::MaterialAsset::CreateDefault();
+    const auto fallback = data::MaterialAsset::CreateDefault();
     material_constants_cpu_soa_[0] = MakeMaterialConstants(*fallback);
   }
   std::vector<uint8_t> material_slot_initialized; // parallels vector size
   material_slot_initialized.resize(1u, 1u); // slot 0 initialized
 
   auto ClassifyMaterialPassMask
-    = [&](const oxygen::data::MaterialAsset* mat) -> PassMask {
+    = [&](const data::MaterialAsset* mat) -> PassMask {
     if (!mat) {
       return PassMask { PassMaskBit::kOpaqueOrMasked };
     }
     const auto domain = mat->GetMaterialDomain();
     const auto base = mat->GetBaseColor();
     const float alpha = base[3];
-    const bool has_transparency_feature = false; // placeholder hook
-    const bool is_opaque_domain
-      = (domain == oxygen::data::MaterialDomain::kOpaque);
-    const bool is_masked_domain
-      = (domain == oxygen::data::MaterialDomain::kMasked);
+    constexpr bool has_transparency_feature = false; // placeholder hook
+    const bool is_opaque_domain = (domain == data::MaterialDomain::kOpaque);
+    const bool is_masked_domain = (domain == data::MaterialDomain::kMasked);
     DLOG_F(2,
       "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
       "is_masked={}",
@@ -690,7 +696,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     if (views_span.empty()) {
       continue;
     }
-    oxygen::engine::sceneprep::GeometryHandle mesh_handle { 0, 0 };
+    sceneprep::GeometryHandle mesh_handle { 0, 0 };
     if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
       // Register or lookup stable geometry buffer indices via geometry
       // registry.
@@ -700,9 +706,9 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       mesh_handle = scene_prep_state_.geometry_registry.GetOrRegisterMesh(
         lod_mesh_ptr.get(), [this, &lod_mesh_ptr]() {
           auto& res = EnsureMeshResources(*lod_mesh_ptr);
-          return oxygen::engine::sceneprep::GeometryRegistry::
-            GeometryProvisionResult { res.vertex_srv_index,
-              res.index_srv_index };
+          return sceneprep::GeometryRegistry::GeometryProvisionResult {
+            res.vertex_srv_index, res.index_srv_index
+          };
         });
     }
     for (const auto& view : views_span) {
@@ -720,7 +726,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       } else {
         dm.is_indexed = 0;
         dm.index_count = 0;
-        dm.vertex_count = static_cast<uint32_t>(view.VertexCount());
+        dm.vertex_count = view.VertexCount();
       }
       dm.instance_count = 1;
       // Obtain stable registry handle (sentinel 0 if null material)
@@ -762,14 +768,10 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       dm.instance_metadata_buffer_index = 0;
       dm.instance_metadata_offset = 0;
       dm.flags = ClassifyMaterialPassMask(item.material.get());
-      DCHECK_F(prep_state.transform_mgr.IsValidHandle(handle),
+      DCHECK_F(prep_state.transform_mgr != nullptr);
+      DCHECK_F(prep_state.transform_mgr->IsValidHandle(handle),
         "Invalid transform handle (id={}) while generating DrawMetadata",
         dm.transform_index);
-      // Basic validity (0 sentinel allowed). Underlying type is unsigned so >=0
-      // always.
-      DCHECK_F(dm.material_handle >= 0u,
-        "Material handle unexpected negative (impossible) value={}",
-        dm.material_handle);
       DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
       draw_metadata_cpu_soa_.push_back(dm);
     }
@@ -793,11 +795,15 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     }
   }
   // Post population validation
-  const auto unique_transform_count
-    = prep_state.transform_mgr.GetUniqueTransformCount();
+  std::size_t unique_transform_count = 0;
+  if (prep_state.transform_mgr) {
+    unique_transform_count
+      = prep_state.transform_mgr->GetUniqueTransformCount();
+  }
   for (std::size_t s = 0; s < draw_metadata_cpu_soa_.size(); ++s) {
     const auto& d = draw_metadata_cpu_soa_[s];
-    DCHECK_F(d.transform_index < unique_transform_count,
+    DCHECK_F(
+      static_cast<std::size_t>(d.transform_index) < unique_transform_count,
       "Post population: transform_index {} >= unique_transform_count {}",
       d.transform_index, unique_transform_count);
     // material_handle not range-checked against per-frame constants: stable
@@ -810,8 +816,9 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
 
 auto Renderer::UploadWorldTransforms(std::size_t count) -> void
 {
-  if (count == 0)
+  if (count == 0) {
     return;
+  }
   auto& gpu_worlds = world_transforms_.GetCpuData();
   const auto* src_mats
     = reinterpret_cast<const glm::mat4*>(world_matrices_cpu_.data());
@@ -820,8 +827,9 @@ auto Renderer::UploadWorldTransforms(std::size_t count) -> void
   const bool size_mismatch = gpu_worlds.size() != count;
   if (size_mismatch) {
     if (alias_world_matrices_) {
-      const auto& tm_span
-        = scene_prep_state_.transform_mgr.GetWorldMatricesSpan();
+      const auto& tm_span = scene_prep_state_.transform_mgr
+        ? scene_prep_state_.transform_mgr->GetWorldMatricesSpan()
+        : std::span<const glm::mat4> {};
       gpu_worlds.assign(tm_span.begin(), tm_span.end());
     } else {
       gpu_worlds.assign(src_mats, src_mats + count);
@@ -830,24 +838,30 @@ auto Renderer::UploadWorldTransforms(std::size_t count) -> void
     return;
   }
   // Sparse update path using TransformManager dirty indices.
-  const auto& tm = scene_prep_state_.transform_mgr;
-  const auto& dirty = tm.GetDirtyIndices();
+  const auto* tm = scene_prep_state_.transform_mgr.get();
+  std::vector<std::uint32_t> dirty;
+  if (tm) {
+    dirty = tm->GetDirtyIndices();
+  }
   if (dirty.empty()) {
     return; // nothing changed
   }
   // Ensure gpu_worlds already sized (otherwise size_mismatch branch would run)
   if (alias_world_matrices_) {
-    const auto& tm_span
-      = scene_prep_state_.transform_mgr.GetWorldMatricesSpan();
-    for (auto idx : dirty) {
-      if (idx >= count)
-        continue;
-      gpu_worlds[idx] = tm_span[idx];
+    if (tm) {
+      const auto& tm_span = tm->GetWorldMatricesSpan();
+      for (auto idx : dirty) {
+        if (idx >= count) {
+          continue;
+        }
+        gpu_worlds[idx] = tm_span[idx];
+      }
     }
   } else {
     for (auto idx : dirty) {
-      if (idx >= count)
+      if (idx >= count) {
         continue;
+      }
       gpu_worlds[idx] = src_mats[idx];
     }
   }
@@ -881,20 +895,25 @@ auto Renderer::BuildSortingAndPartitions() -> void
     sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
   const size_t draw_count = draw_metadata_cpu_soa_.size();
   std::vector<uint32_t> permutation(draw_count);
-  for (uint32_t i = 0; i < draw_count; ++i)
+  for (uint32_t i = 0; i < draw_count; ++i) {
     permutation[i] = i;
+  }
   std::stable_sort(
     permutation.begin(), permutation.end(), [&](uint32_t a, uint32_t b) {
       const auto& ka = sorting_keys_cpu_soa_[a];
       const auto& kb = sorting_keys_cpu_soa_[b];
-      if (ka.pass_mask != kb.pass_mask)
+      if (ka.pass_mask != kb.pass_mask) {
         return ka.pass_mask < kb.pass_mask;
-      if (ka.material_index != kb.material_index)
+      }
+      if (ka.material_index != kb.material_index) {
         return ka.material_index < kb.material_index;
-      if (ka.geometry_vertex_srv != kb.geometry_vertex_srv)
+      }
+      if (ka.geometry_vertex_srv != kb.geometry_vertex_srv) {
         return ka.geometry_vertex_srv < kb.geometry_vertex_srv;
-      if (ka.geometry_index_srv != kb.geometry_index_srv)
+      }
+      if (ka.geometry_index_srv != kb.geometry_index_srv) {
         return ka.geometry_index_srv < kb.geometry_index_srv;
+      }
       return a < b;
     });
   std::vector<DrawMetadata> reordered_dm;
@@ -952,19 +971,27 @@ auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
 {
   const auto& tm = scene_prep_state_.transform_mgr;
   if (alias_world_matrices_) {
-    const auto world_span = tm.GetWorldMatricesSpan();
-    prepared_frame_.world_matrices = std::span<const float>(
-      reinterpret_cast<const float*>(world_span.data()),
-      world_span.size() * 16u);
+    if (tm) {
+      const auto world_span = tm->GetWorldMatricesSpan();
+      prepared_frame_.world_matrices = std::span<const float>(
+        reinterpret_cast<const float*>(world_span.data()),
+        world_span.size() * 16u);
+    } else {
+      prepared_frame_.world_matrices = std::span<const float>();
+    }
   } else {
     prepared_frame_.world_matrices = std::span<const float>(
       world_matrices_cpu_.data(), world_matrices_cpu_.size());
   }
   if (alias_normal_matrices_) {
-    const auto normal_span = tm.GetNormalMatricesSpan();
-    prepared_frame_.normal_matrices = std::span<const float>(
-      reinterpret_cast<const float*>(normal_span.data()),
-      normal_span.size() * 16u);
+    if (tm) {
+      const auto normal_span = tm->GetNormalMatricesSpan();
+      prepared_frame_.normal_matrices = std::span<const float>(
+        reinterpret_cast<const float*>(normal_span.data()),
+        normal_span.size() * 16u);
+    } else {
+      prepared_frame_.normal_matrices = std::span<const float>();
+    }
   } else {
     prepared_frame_.normal_matrices = std::span<const float>(
       normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
@@ -984,8 +1011,9 @@ auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
 
 auto Renderer::UploadDrawMetadataBindless() -> void
 {
-  if (draw_metadata_cpu_soa_.empty())
+  if (draw_metadata_cpu_soa_.empty()) {
     return;
+  }
   auto& gpu_dm = draw_metadata_.GetCpuData();
   gpu_dm.assign(draw_metadata_cpu_soa_.begin(), draw_metadata_cpu_soa_.end());
   draw_metadata_.MarkDirty();
@@ -1031,7 +1059,7 @@ auto Renderer::UpdateFinalizeStatistics(
 }
 
 auto Renderer::BuildFrame(const CameraView& camera_view,
-  const engine::FrameContext& frame_context) -> std::size_t
+  const FrameContext& frame_context) -> std::size_t
 {
   const auto view = camera_view.Resolve();
   return BuildFrame(view, frame_context);
@@ -1039,8 +1067,7 @@ auto Renderer::BuildFrame(const CameraView& camera_view,
 
 //=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) ---------------------//
 
-auto Renderer::ResolveScene(const engine::FrameContext& frame_context)
-  -> scene::Scene&
+auto Renderer::ResolveScene(const FrameContext& frame_context) -> scene::Scene&
 {
   auto scene_ptr = frame_context.GetScene();
   CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
@@ -1049,8 +1076,8 @@ auto Renderer::ResolveScene(const engine::FrameContext& frame_context)
   return *scene_ptr;
 }
 
-auto Renderer::InitializeFrameSequence(
-  const engine::FrameContext& frame_context) -> void
+auto Renderer::InitializeFrameSequence(const FrameContext& frame_context)
+  -> void
 {
   // Store frame sequence number from FrameContext (PhaseId::kFrameGraph)
   frame_seq_num = frame_context.GetFrameSequenceNumber();
@@ -1103,7 +1130,7 @@ auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
 // Explicit template instantiation for current collection config
 template auto Renderer::CollectScenePrep<Renderer::BasicCollectionConfig>(
   scene::Scene& scene, const View& view, sceneprep::ScenePrepState& prep_state,
-  const Renderer::BasicCollectionConfig& cfg) -> void;
+  const BasicCollectionConfig& cfg) -> void;
 
 auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
 {
@@ -1246,14 +1273,14 @@ auto Renderer::EnsureAndUploadWorldTransforms() -> void
   static_cast<void>(
     world_transforms_.EnsureBufferAndSrv(graphics, "WorldTransforms"));
   if (uploader_ && world_transforms_.IsDirty()) {
-    using oxygen::engine::upload::BatchPolicy;
-    using oxygen::engine::upload::UploadBufferDesc;
-    using oxygen::engine::upload::UploadDataView;
-    using oxygen::engine::upload::UploadKind;
-    using oxygen::engine::upload::UploadRequest;
+    using upload::BatchPolicy;
+    using upload::UploadBufferDesc;
+    using upload::UploadDataView;
+    using upload::UploadKind;
+    using upload::UploadRequest;
 
     const auto& cpu = world_transforms_.GetCpuData();
-    const uint64_t size = static_cast<uint64_t>(cpu.size() * sizeof(glm::mat4));
+    const uint64_t size = cpu.size() * sizeof(glm::mat4);
     if (size > 0 && world_transforms_.GetBuffer()) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
@@ -1285,15 +1312,14 @@ auto Renderer::EnsureAndUploadMaterialConstants() -> void
   static_cast<void>(
     material_constants_.EnsureBufferAndSrv(graphics, "MaterialConstants"));
   if (uploader_ && material_constants_.IsDirty()) {
-    using oxygen::engine::upload::BatchPolicy;
-    using oxygen::engine::upload::UploadBufferDesc;
-    using oxygen::engine::upload::UploadDataView;
-    using oxygen::engine::upload::UploadKind;
-    using oxygen::engine::upload::UploadRequest;
+    using upload::BatchPolicy;
+    using upload::UploadBufferDesc;
+    using upload::UploadDataView;
+    using upload::UploadKind;
+    using upload::UploadRequest;
 
     const auto& cpu = material_constants_.GetCpuData();
-    const uint64_t size
-      = static_cast<uint64_t>(cpu.size() * sizeof(MaterialConstants));
+    const uint64_t size = cpu.size() * sizeof(MaterialConstants);
     if (size > 0 && material_constants_.GetBuffer()) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
@@ -1354,11 +1380,11 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
 
   // Upload both buffers via UploadCoordinator in a single coalesced batch.
   if (uploader_) {
-    using oxygen::engine::upload::BatchPolicy;
-    using oxygen::engine::upload::UploadBufferDesc;
-    using oxygen::engine::upload::UploadDataView;
-    using oxygen::engine::upload::UploadKind;
-    using oxygen::engine::upload::UploadRequest;
+    using upload::BatchPolicy;
+    using upload::UploadBufferDesc;
+    using upload::UploadDataView;
+    using upload::UploadKind;
+    using upload::UploadRequest;
 
     std::vector<UploadRequest> reqs;
     reqs.reserve(2);
@@ -1366,8 +1392,7 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
     // Vertex buffer upload (if any vertices)
     const auto vertices = mesh.Vertices();
     if (!vertices.empty()) {
-      const auto vb_size
-        = static_cast<uint64_t>(vertices.size() * sizeof(oxygen::data::Vertex));
+      const auto vb_size = vertices.size() * sizeof(data::Vertex);
       UploadRequest vb_req;
       vb_req.kind = UploadKind::kBuffer;
       vb_req.batch_policy = BatchPolicy::kCoalesce;
@@ -1378,15 +1403,14 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
         .dst_offset = 0,
       };
       const auto* src = reinterpret_cast<const std::byte*>(vertices.data());
-      vb_req.data = UploadDataView { std::span<const std::byte>(
-        src, static_cast<size_t>(vb_size)) };
+      vb_req.data = UploadDataView { std::span<const std::byte>(src, vb_size) };
       reqs.emplace_back(std::move(vb_req));
     }
 
     // Index buffer upload (if indexed)
     const auto indices_view = mesh.IndexBuffer();
     if (indices_view.Count() != 0) {
-      const uint64_t ib_size = static_cast<uint64_t>(indices_view.bytes.size());
+      const uint64_t ib_size = indices_view.bytes.size();
       UploadRequest ib_req;
       ib_req.kind = UploadKind::kBuffer;
       ib_req.batch_policy = BatchPolicy::kCoalesce;
