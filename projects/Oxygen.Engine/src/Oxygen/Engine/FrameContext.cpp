@@ -5,7 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
+#include <cstring>
 #include <memory>
+#include <ranges>
+#include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Engine/FrameContext.h>
@@ -21,6 +25,7 @@ auto ReconstructFromMove(Dst& dst, Src& src) noexcept -> void
   std::destroy_at(std::addressof(dst));
   std::construct_at(std::addressof(dst), std::move(src));
 }
+
 } // namespace
 
 FrameContext::FrameContext()
@@ -71,7 +76,7 @@ auto FrameContext::SetInputSnapshot(
 {
   CHECK_F(engine_state_.current_phase == PhaseId::kInput);
   // Coordinator-only: publish the input snapshot atomically for readers.
-  std::atomic_store(&atomic_input_snapshot_, std::move(inp));
+  atomic_input_snapshot_.store(std::move(inp), std::memory_order_release);
 }
 
 auto FrameContext::SetViews(std::vector<ViewInfo> v) noexcept -> void
@@ -145,6 +150,7 @@ auto FrameContext::AddSurface(
   surfaces_.push_back(s);
   // Keep presentable flags in sync - new surfaces start as not presentable
   presentable_flags_.push_back(0);
+  DCHECK_F(presentable_flags_.size() == surfaces_.size());
 }
 
 auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
@@ -164,6 +170,7 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
     presentable_flags_.erase(
       presentable_flags_.begin() + static_cast<std::ptrdiff_t>(index));
   }
+  DCHECK_F(presentable_flags_.size() == surfaces_.size());
   return true;
 }
 
@@ -176,6 +183,7 @@ auto FrameContext::ClearSurfaces(EngineTag) noexcept -> void
   surfaces_.clear();
   // Keep presentable flags in sync
   presentable_flags_.clear();
+  DCHECK_F(presentable_flags_.size() == surfaces_.size());
 }
 
 auto FrameContext::SetSurfaces(
@@ -190,6 +198,7 @@ auto FrameContext::SetSurfaces(
   surfaces_ = std::move(surfaces);
   // Reset presentable flags to match new surface count
   presentable_flags_.assign(surfaces_.size(), 0);
+  DCHECK_F(presentable_flags_.size() == surfaces_.size());
 }
 
 auto FrameContext::SetSurfacePresentable(
@@ -251,7 +260,8 @@ auto FrameContext::ClearPresentableFlags(EngineTag) noexcept -> void
   // (but not including) the Present phase. Use an explicit PhaseId ordering
   // check to match the documentation.
   CHECK_F(engine_state_.current_phase < PhaseId::kPresent);
-
+  // By invariant, this is called single-threaded by the engine before kPresent
+  // and cannot race with SetSurfacePresentable. No additional locking needed.
   std::ranges::fill(presentable_flags_, 0);
 }
 
@@ -370,4 +380,23 @@ auto FrameContext::GetStagingModuleData() noexcept -> ModuleDataMutable&
     || engine_state_.current_phase == PhaseId::kSnapshot);
 
   return staged_module_data_;
+}
+
+auto FrameContext::StageModuleDataErased(
+  TypeId type_id, std::shared_ptr<void> data) -> void
+{
+  // Allow staging during mutation phases, or during the Snapshot phase where
+  // modules may contribute to the snapshot.
+  CHECK_F(PhaseCanMutateGameState(engine_state_.current_phase)
+    || engine_state_.current_phase == PhaseId::kSnapshot);
+
+  std::unique_lock lock(staged_module_mutex_);
+
+  // Check for duplicates
+  if (staged_module_data_.data_.contains(type_id)) {
+    throw std::invalid_argument("TypeId already staged");
+  }
+
+  // Store an owning pointer without RTTI; value already allocated by caller.
+  staged_module_data_.data_[type_id] = std::move(data);
 }
