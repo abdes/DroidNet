@@ -28,15 +28,16 @@ using oxygen::graphics::ResourceViewType;
 // Explicit instantiation requires a complete type
 
 template <typename DataType>
-auto BindlessStructuredBuffer<DataType>::EnsureAndUpload(
+auto BindlessStructuredBuffer<DataType>::EnsureBufferAndSrv(
   oxygen::Graphics& graphics, const std::string& debug_name) -> bool
 {
   if (!HasData()) {
-    return false; // No data to upload this frame
+    return false; // No data this frame
   }
 
+  // If buffer exists and not marked dirty, heap slot remains valid.
   if (buffer_ && !dirty_) {
-    return false; // Up-to-date
+    return false;
   }
 
   const auto size_bytes = CalculateBufferSize();
@@ -49,12 +50,22 @@ auto BindlessStructuredBuffer<DataType>::EnsureAndUpload(
     slot_changed = true;
   }
 
-  if (dirty_) {
-    UploadData();
-    dirty_ = false;
-  }
+  // Upload happens in Renderer via UploadCoordinator. Do not clear dirty_ here;
+  // caller will clear after scheduling upload.
 
   return slot_changed;
+}
+
+template <typename DataType>
+auto BindlessStructuredBuffer<DataType>::ReleaseGpuResources(
+  oxygen::Graphics& graphics) -> void
+{
+  if (buffer_) {
+    graphics.GetResourceRegistry().UnRegisterResource(*buffer_);
+    buffer_.reset();
+  }
+  heap_slot_ = kInvalidHeapSlot;
+  // Keep CPU data and dirty flag unchanged; caller controls lifecycle.
 }
 
 template <typename DataType>
@@ -64,8 +75,9 @@ auto BindlessStructuredBuffer<DataType>::CreateOrResizeBuffer(
 {
   const BufferDesc desc {
     .size_bytes = size_bytes,
-    .usage = BufferUsage::kConstant,
-    .memory = BufferMemory::kUpload,
+    // StructuredBuffer SRV requires kStorage usage for SRV/UAV creation.
+    .usage = BufferUsage::kStorage,
+    .memory = BufferMemory::kDeviceLocal,
     .debug_name = debug_name,
   };
 
@@ -119,14 +131,7 @@ auto BindlessStructuredBuffer<DataType>::RegisterStructuredBufferSrv(
     buffer_->GetName(), heap_slot_);
 }
 
-template <typename DataType>
-auto BindlessStructuredBuffer<DataType>::UploadData() -> void
-{
-  const auto size_bytes = CalculateBufferSize();
-  void* mapped = buffer_->Map();
-  std::memcpy(mapped, cpu_data_.data(), size_bytes);
-  buffer_->UnMap();
-}
+// No UploadData here; uploads are coordinated centrally.
 
 // Explicit template instantiation for common types used by the renderer. Placed
 // here because this is the only translation unit that sees the entire template

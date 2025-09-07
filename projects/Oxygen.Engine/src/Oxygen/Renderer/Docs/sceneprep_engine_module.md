@@ -102,7 +102,7 @@ class ScenePrepModule : public EngineModule {
 3. Build mapping material_handle -> material constants index (bindless slot).
 4. Assign transform_offset = index in world_transforms vector.
 5. Populate `engine::DrawMetadata` entries (is_indexed, first_index, base_vertex, etc.).
-6. Upload world transforms + draw metadata through bindless structured buffer helpers (mark dirty & EnsureAndUpload).
+6. Upload world transforms + draw metadata through bindless structured buffer helpers (mark dirty & EnsureBufferAndSrv).
 7. Patch `SceneConstants` bindless slots (already supported by renderer methods) — renderer may query module for needed counts first.
 
 ## 8. Incremental Migration Milestones

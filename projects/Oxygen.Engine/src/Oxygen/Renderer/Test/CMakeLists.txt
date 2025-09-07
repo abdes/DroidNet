@@ -49,3 +49,29 @@ m_gtest_program(
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
     "ScenePrep/TransformHelpers_test.cpp"
 )
+
+set(upload_helpers_sources "Helpers/UploadTestFakes.h")
+
+# UploadCoordinator (buffer path) mocked tests
+m_gtest_program(
+  UploadCoordinator
+  SOURCES
+    ${upload_helpers_sources}
+    "UploadCoordinator_buffer_test.cpp"
+    "UploadCoordinator_texture2d_test.cpp"
+    "UploadCoordinator_texture3d_test.cpp"
+    "UploadCoordinator_texturecube_test.cpp"
+)
+
+# Upload unit tests (no backend dependency)
+m_gtest_program(UploadTracker SOURCES "UploadTracker_basic_test.cpp")
+
+# StagingAllocator unit tests (backend-free)
+m_gtest_program(
+  UploadStagingAllocator
+  SOURCES
+    "UploadStagingAllocator_basic_test.cpp"
+)
+
+# UploadPlanner unit tests (backend-free)
+m_gtest_program(UploadPlanner SOURCES "UploadPlanner_basic_test.cpp")
