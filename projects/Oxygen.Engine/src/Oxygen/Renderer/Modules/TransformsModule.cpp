@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Modules/TransformsModule.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Renderer/Modules/TransformsModule.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::engine {
@@ -74,12 +73,9 @@ auto TransformsModule::OnTransformPropagation(FrameContext& context) -> co::Co<>
     co_return; // Nothing to update
   }
 
-  auto saved = loguru::g_stderr_verbosity;
-  loguru::g_stderr_verbosity
-    = 0; // FIXME: Suppress noisy logs from Scene::Update
   // Perform hierarchy propagation & world matrix updates.
   scene_ptr->Update();
-  loguru::g_stderr_verbosity = saved; // Restore original verbosity
+
   co_return;
 }
 
