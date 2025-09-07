@@ -174,6 +174,62 @@ Output: Rendered surfaces; passes mark presentable surfaces in `FrameContext`.
 
 Dependencies: `RenderContext` pass registry and `Graphics::ResourceRegistry`.
 
+### 4. Upload Module - Centralized GPU Data Transfers
+
+Location: `src/Oxygen/Renderer/Upload/`
+
+Phase Integration:
+
+- kPostParallel/kPreExecute (renderer-internal): the renderer schedules buffer
+  and texture uploads based on what changed this frame.
+- kCommandRecord: the renderer retires completed uploads and reclaims staging.
+
+Responsibility: Provide a single, consistent path for uploading GPU data with
+batched/coalesced copies, correct post-copy states, and clean lifecycle of
+staging resources.
+
+Core Components (implemented for this design):
+
+- UploadCoordinator – front door used by the renderer; supports SubmitBuffer,
+  SubmitTexture2D/3D/Cube, and SubmitMany for batching. Flush submits work;
+  RetireCompleted reclaims staging.
+- UploadPlanner – coalesces adjacent buffer regions; plans texture
+  subresource copies, including BC formats.
+- UploadTracker – issues tickets/fences; supports coroutine-style waiting and
+  failure registration.
+- StagingAllocator – persistently mapped staging buffers with alignment
+  policy; deferred-unmap safety on teardown.
+- UploadPolicy/Diagnostics – alignment and batching knobs; stats reporting.
+
+Integration points (current code):
+
+- Mesh uploads: vertex and index buffers are uploaded via a single SubmitMany
+  call per mesh to maximize coalescing.
+- Bindless structured buffers: world transforms, material constants, and draw
+  metadata are uploaded via SubmitMany (one request each). The helper
+  `BindlessStructuredBuffer<T>` is “lean”: `EnsureBufferAndSrv(...)` ensures a
+  device-local Storage buffer and registers an SRV; it does not perform
+  uploads.
+- State mapping: post-copy steady states are selected from BufferUsage
+  (e.g., Index→IndexBuffer, Vertex→VertexBuffer, Constant→ConstantBuffer,
+  Storage→ShaderResource).
+- Queue selection: prefers a transfer/async copy queue when available;
+  otherwise falls back to the graphics queue.
+
+Contract and lifecycle:
+
+- Renderer schedules uploads during PreExecute and calls Flush() once; it
+  calls RetireCompleted() during OnCommandRecord to reclaim staging.
+- Staging buffers are always unmapped before release (deferred unmap+release
+  helper) to avoid shutdown warnings.
+- Renderer explicitly unregisters bindless structured buffer resources from
+  the ResourceRegistry during shutdown for a clean teardown.
+
+Status: Implemented and integrated for the features needed by this design
+(buffers incl. coalescing; 2D/3D/Cube textures incl. BC formats; queue
+selection; clean staging lifecycle). Additional policy/diagnostics are
+tracked as future work.
+
 ## Data Flow Architecture
 
 ### Phase 8: kSnapshot (Synchronous module phase; engine publishes last)
@@ -726,6 +782,9 @@ Notes:
     Descriptor/Handle managers, Residency)
   - RenderGraph (coroutine host and pass registry)
   - Upload (staging, batching, transfer queue)
+    - Centralized path via UploadCoordinator: buffer coalescing, 2D/3D/Cube
+      textures (incl. BC), queue selection (prefers transfer/async copy),
+      clean staging reclamation
 
 - External dependencies:
   - Engine Core for phase orchestration and snapshot publication
@@ -748,7 +807,8 @@ Notes:
 
 - OnPostParallel:
   - Collect and integrate parallel results.
-  - Build/update arrays, bindless tables, and buffers; assemble
+  - Build/update arrays, bindless tables, and buffers; schedule uploads via
+    UploadCoordinator; assemble
     `PreparedSceneFrame` and freeze it for the rest of the frame.
 
 - OnFrameGraph:
@@ -757,8 +817,8 @@ Notes:
     coroutine model (no separate builder/compiled graph abstraction).
 
 - OnCommandRecord:
-  - Execute passes; record and submit GPU work; set presentable surface
-    flags via `FrameContext`.
+  - Execute passes; retire completed uploads; record and submit GPU work;
+    set presentable surface flags via `FrameContext`.
 
 ### Invariants and safety
 
@@ -1054,10 +1114,13 @@ src/Oxygen/Renderer/
 │
 ├── Upload/                             # GPU upload coordination
 │   ├── UploadCoordinator.h                 # Upload coordination (MANAGER)
-│   ├── UploadBatcher.h                     # Upload batching
+│   ├── UploadPlanner.h                     # Upload planning/coalescing
+│   ├── UploadTracker.h                     # Ticket/fence tracking
 │   ├── StagingAllocator.h                  # Staging buffer allocation
-│   ├── TransferQueue.h                     # GPU transfer queue
-│   └── CompletionTracker.h                 # Upload completion tracking
+│   ├── UploadPolicy.h                      # Alignment/batching policy
+│   ├── UploadDiagnostics.h                 # Stats/diagnostics
+│   ├── Types.h                             # Common upload types
+│   └── README.md                           # Module overview
 │
 └── Core/                               # Top-level coordination
     ├── Renderer.h                          # Main renderer interface (coroutine graph)
@@ -1136,10 +1199,10 @@ package "Oxygen Renderer" {
   }
 
     rectangle Upload {
-        +UploadCoordinator
-        +UploadBatcher
-        +StagingAllocator
-        +TransferQueue
+  +UploadCoordinator
+  +UploadPlanner
+  +UploadTracker
+  +StagingAllocator
     }
 }
 

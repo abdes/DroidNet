@@ -69,14 +69,18 @@ public:
     return heap_slot_ != kInvalidHeapSlot;
   }
 
-  //! Ensures structured buffer exists, uploads if dirty, and registers SRV if
-  //! needed. Returns true if any changes were made that might affect scene
-  //! constants.
-  OXGN_RNDR_API auto EnsureAndUpload(
+  //! Ensures GPU buffer exists (device-local) and its SRV is registered.
+  //! Does NOT perform uploads; callers must use UploadCoordinator.
+  //! @return true if the shader-visible heap slot changed.
+  OXGN_RNDR_API auto EnsureBufferAndSrv(
     oxygen::Graphics& graphics, const std::string& debug_name) -> bool;
 
   //! Returns true if CPU data vector contains elements.
   [[nodiscard]] auto HasData() const -> bool { return !cpu_data_.empty(); }
+
+  //! Explicitly releases GPU resources and unregisters them from the
+  //! ResourceRegistry. Safe to call multiple times.
+  OXGN_RNDR_API auto ReleaseGpuResources(oxygen::Graphics& graphics) -> void;
 
 private:
   //! Creates or resizes the GPU structured buffer if needed.
@@ -86,8 +90,7 @@ private:
   //! Registers structured buffer SRV and caches heap slot.
   auto RegisterStructuredBufferSrv(oxygen::Graphics& graphics) -> void;
 
-  //! Uploads CPU data to GPU structured buffer.
-  auto UploadData() -> void;
+  // No direct upload here; uploads are routed via UploadCoordinator.
 
   //! Calculates required structured buffer size in bytes.
   [[nodiscard]] auto CalculateBufferSize() const -> std::size_t

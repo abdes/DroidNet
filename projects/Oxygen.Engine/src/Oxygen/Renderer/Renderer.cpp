@@ -145,9 +145,22 @@ Renderer::Renderer(std::weak_ptr<oxygen::Graphics> graphics,
   , eviction_policy_(
       eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
 {
+  if (auto g = graphics_.lock()) {
+    uploader_ = std::make_unique<oxygen::engine::upload::UploadCoordinator>(g);
+  }
 }
 
-Renderer::~Renderer() = default;
+Renderer::~Renderer()
+{
+  // Proactively unregister bindless structured buffers from the registry to
+  // avoid late destruction during Graphics shutdown.
+  if (auto g = graphics_.lock()) {
+    // Best-effort: ignore if already unregistered or null.
+    draw_metadata_.ReleaseGpuResources(*g);
+    world_transforms_.ReleaseGpuResources(*g);
+    material_constants_.ReleaseGpuResources(*g);
+  }
+}
 
 auto Renderer::GetGraphics() -> std::shared_ptr<oxygen::Graphics>
 {
@@ -224,6 +237,11 @@ auto Renderer::PreExecute(
   // passes to start consuming SoA data incrementally. Null remains valid if
   // finalization produced an empty frame.
   context.prepared_frame.reset(&prepared_frame_);
+
+  // Ensure any upload command lists are submitted promptly for this frame.
+  if (uploader_) {
+    uploader_->Flush();
+  }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -232,6 +250,15 @@ auto Renderer::PostExecute(RenderContext& context) -> void
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
   context.Reset();
+}
+
+auto Renderer::OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
+{
+  // Upload queues may have completed work by now; retire staging.
+  if (uploader_) {
+    uploader_->RetireCompleted();
+  }
+  co_return;
 }
 
 //===----------------------------------------------------------------------===//
@@ -250,10 +277,35 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
     return;
   }
   auto& graphics = *graphics_ptr;
-  // Ensure SRV exists and upload CPU snapshot if dirty; returns true if slot
-  // changed
+  // Ensure SRV exists (device-local buffer) and register if needed
   static_cast<void>(
-    draw_metadata_.EnsureAndUpload(graphics, "DrawResourceIndices"));
+    draw_metadata_.EnsureBufferAndSrv(graphics, "DrawResourceIndices"));
+  // Upload via coordinator when marked dirty
+  if (uploader_ && draw_metadata_.IsDirty()) {
+    using oxygen::engine::upload::BatchPolicy;
+    using oxygen::engine::upload::UploadBufferDesc;
+    using oxygen::engine::upload::UploadDataView;
+    using oxygen::engine::upload::UploadKind;
+    using oxygen::engine::upload::UploadRequest;
+
+    const auto& cpu = draw_metadata_.GetCpuData();
+    const uint64_t size
+      = static_cast<uint64_t>(cpu.size() * sizeof(DrawMetadata));
+    if (size > 0 && draw_metadata_.GetBuffer()) {
+      UploadRequest req;
+      req.kind = UploadKind::kBuffer;
+      req.batch_policy = BatchPolicy::kCoalesce;
+      req.debug_name = "DrawResourceIndices";
+      req.desc = UploadBufferDesc {
+        .dst = draw_metadata_.GetBuffer(),
+        .size_bytes = size,
+        .dst_offset = 0,
+      };
+      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
+      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      draw_metadata_.ClearDirty();
+    }
+  }
 }
 
 // Removed legacy draw-metadata helpers; lifecycle now handled by
@@ -1112,81 +1164,6 @@ auto CreateIndexBuffer(const Mesh& mesh, Graphics& graphics)
   return index_buffer;
 }
 
-auto UploadVertexBuffer(const Mesh& mesh, Graphics& graphics,
-  Buffer& vertex_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
-{
-  DLOG_F(2, "Upload vertex buffer");
-
-  const auto vertices = mesh.Vertices();
-  if (vertices.empty()) {
-    return;
-  }
-  const BufferDesc upload_desc {
-    .size_bytes = vertices.size() * sizeof(oxygen::data::Vertex),
-    .usage = BufferUsage::kNone,
-    .memory = BufferMemory::kUpload,
-    .debug_name = std::string(mesh.GetName()) + ".VertexUploadBuffer",
-  };
-  auto upload_buffer = graphics.CreateBuffer(upload_desc);
-  upload_buffer->SetName(upload_desc.debug_name);
-  void* mapped = upload_buffer->Map();
-  std::memcpy(mapped, vertices.data(), upload_desc.size_bytes);
-  upload_buffer->UnMap();
-  recorder.BeginTrackingResourceState(
-    vertex_buffer, ResourceStates::kCommon, false);
-  recorder.RequireResourceState(vertex_buffer, ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-  recorder.CopyBuffer(
-    vertex_buffer, 0, *upload_buffer, 0, upload_desc.size_bytes);
-  recorder.RequireResourceState(vertex_buffer, ResourceStates::kVertexBuffer);
-  recorder.FlushBarriers();
-
-  // Keep the upload buffer alive until the command list is executed
-  DeferredObjectRelease(upload_buffer, graphics.GetDeferredReclaimer());
-}
-
-auto UploadIndexBuffer(const Mesh& mesh, Graphics& graphics,
-  Buffer& index_buffer, oxygen::graphics::CommandRecorder& recorder) -> void
-{
-  DLOG_F(2, "Upload index buffer");
-
-  const auto indices_view = mesh.IndexBuffer();
-  if (indices_view.Count() == 0) {
-    return;
-  }
-  const std::size_t element_size = indices_view.type == IndexType::kUInt16
-    ? sizeof(std::uint16_t)
-    : sizeof(std::uint32_t);
-  const BufferDesc upload_desc {
-    .size_bytes = indices_view.Count() * element_size,
-    .usage = BufferUsage::kNone,
-    .memory = BufferMemory::kUpload,
-    .debug_name = std::string(mesh.GetName()) + ".IndexUploadBuffer",
-  };
-  auto upload_buffer = graphics.CreateBuffer(upload_desc);
-  upload_buffer->SetName(upload_desc.debug_name);
-  void* mapped = upload_buffer->Map();
-  if (indices_view.type == IndexType::kUInt16) {
-    const auto src = indices_view.AsU16();
-    std::memcpy(mapped, src.data(), upload_desc.size_bytes);
-  } else if (indices_view.type == IndexType::kUInt32) {
-    const auto src = indices_view.AsU32();
-    std::memcpy(mapped, src.data(), upload_desc.size_bytes);
-  }
-  upload_buffer->UnMap();
-  recorder.BeginTrackingResourceState(
-    index_buffer, ResourceStates::kCommon, false);
-  recorder.RequireResourceState(index_buffer, ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-  recorder.CopyBuffer(
-    index_buffer, 0, *upload_buffer, 0, upload_desc.size_bytes);
-  recorder.RequireResourceState(index_buffer, ResourceStates::kIndexBuffer);
-  recorder.FlushBarriers();
-
-  // Keep the upload buffer alive until the command list is executed
-  DeferredObjectRelease(upload_buffer, graphics.GetDeferredReclaimer());
-}
-
 // Create a StructuredBuffer SRV for a vertex buffer and register it.
 auto CreateAndRegisterVertexSrv(Graphics& graphics, Buffer& vertex_buffer)
   -> uint32_t
@@ -1267,7 +1244,31 @@ auto Renderer::EnsureAndUploadWorldTransforms() -> void
   }
   auto& graphics = *graphics_ptr;
   static_cast<void>(
-    world_transforms_.EnsureAndUpload(graphics, "WorldTransforms"));
+    world_transforms_.EnsureBufferAndSrv(graphics, "WorldTransforms"));
+  if (uploader_ && world_transforms_.IsDirty()) {
+    using oxygen::engine::upload::BatchPolicy;
+    using oxygen::engine::upload::UploadBufferDesc;
+    using oxygen::engine::upload::UploadDataView;
+    using oxygen::engine::upload::UploadKind;
+    using oxygen::engine::upload::UploadRequest;
+
+    const auto& cpu = world_transforms_.GetCpuData();
+    const uint64_t size = static_cast<uint64_t>(cpu.size() * sizeof(glm::mat4));
+    if (size > 0 && world_transforms_.GetBuffer()) {
+      UploadRequest req;
+      req.kind = UploadKind::kBuffer;
+      req.batch_policy = BatchPolicy::kCoalesce;
+      req.debug_name = "WorldTransforms";
+      req.desc = UploadBufferDesc {
+        .dst = world_transforms_.GetBuffer(),
+        .size_bytes = size,
+        .dst_offset = 0,
+      };
+      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
+      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      world_transforms_.ClearDirty();
+    }
+  }
 }
 
 auto Renderer::EnsureAndUploadMaterialConstants() -> void
@@ -1282,7 +1283,32 @@ auto Renderer::EnsureAndUploadMaterialConstants() -> void
   }
   auto& graphics = *graphics_ptr;
   static_cast<void>(
-    material_constants_.EnsureAndUpload(graphics, "MaterialConstants"));
+    material_constants_.EnsureBufferAndSrv(graphics, "MaterialConstants"));
+  if (uploader_ && material_constants_.IsDirty()) {
+    using oxygen::engine::upload::BatchPolicy;
+    using oxygen::engine::upload::UploadBufferDesc;
+    using oxygen::engine::upload::UploadDataView;
+    using oxygen::engine::upload::UploadKind;
+    using oxygen::engine::upload::UploadRequest;
+
+    const auto& cpu = material_constants_.GetCpuData();
+    const uint64_t size
+      = static_cast<uint64_t>(cpu.size() * sizeof(MaterialConstants));
+    if (size > 0 && material_constants_.GetBuffer()) {
+      UploadRequest req;
+      req.kind = UploadKind::kBuffer;
+      req.batch_policy = BatchPolicy::kCoalesce;
+      req.debug_name = "MaterialConstants";
+      req.desc = UploadBufferDesc {
+        .dst = material_constants_.GetBuffer(),
+        .size_bytes = size,
+        .dst_offset = 0,
+      };
+      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
+      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      material_constants_.ClearDirty();
+    }
+  }
 }
 
 // Removed legacy material constants SRV registration; handled by helper
@@ -1326,13 +1352,59 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
   const auto vertex_buffer = CreateVertexBuffer(mesh, *graphics_ptr);
   const auto index_buffer = CreateIndexBuffer(mesh, *graphics_ptr);
 
-  // Upload both buffers in a single command recorder scope.
-  {
-    const auto recorder = graphics_ptr->AcquireCommandRecorder(
-      SingleQueueStrategy().KeyFor(graphics::QueueRole::kGraphics),
-      "MeshBufferUpload");
-    UploadVertexBuffer(mesh, *graphics_ptr, *vertex_buffer, *recorder);
-    UploadIndexBuffer(mesh, *graphics_ptr, *index_buffer, *recorder);
+  // Upload both buffers via UploadCoordinator in a single coalesced batch.
+  if (uploader_) {
+    using oxygen::engine::upload::BatchPolicy;
+    using oxygen::engine::upload::UploadBufferDesc;
+    using oxygen::engine::upload::UploadDataView;
+    using oxygen::engine::upload::UploadKind;
+    using oxygen::engine::upload::UploadRequest;
+
+    std::vector<UploadRequest> reqs;
+    reqs.reserve(2);
+
+    // Vertex buffer upload (if any vertices)
+    const auto vertices = mesh.Vertices();
+    if (!vertices.empty()) {
+      const auto vb_size
+        = static_cast<uint64_t>(vertices.size() * sizeof(oxygen::data::Vertex));
+      UploadRequest vb_req;
+      vb_req.kind = UploadKind::kBuffer;
+      vb_req.batch_policy = BatchPolicy::kCoalesce;
+      vb_req.debug_name = std::string(mesh.GetName()) + ".VertexUpload";
+      vb_req.desc = UploadBufferDesc {
+        .dst = vertex_buffer,
+        .size_bytes = vb_size,
+        .dst_offset = 0,
+      };
+      const auto* src = reinterpret_cast<const std::byte*>(vertices.data());
+      vb_req.data = UploadDataView { std::span<const std::byte>(
+        src, static_cast<size_t>(vb_size)) };
+      reqs.emplace_back(std::move(vb_req));
+    }
+
+    // Index buffer upload (if indexed)
+    const auto indices_view = mesh.IndexBuffer();
+    if (indices_view.Count() != 0) {
+      const uint64_t ib_size = static_cast<uint64_t>(indices_view.bytes.size());
+      UploadRequest ib_req;
+      ib_req.kind = UploadKind::kBuffer;
+      ib_req.batch_policy = BatchPolicy::kCoalesce;
+      ib_req.debug_name = std::string(mesh.GetName()) + ".IndexUpload";
+      ib_req.desc = UploadBufferDesc {
+        .dst = index_buffer,
+        .size_bytes = ib_size,
+        .dst_offset = 0,
+      };
+      ib_req.data = UploadDataView { indices_view.bytes };
+      reqs.emplace_back(std::move(ib_req));
+    }
+
+    if (!reqs.empty()) {
+      static_cast<void>(uploader_->SubmitMany(reqs));
+      // Actual submission to the GPU happens when Flush() is called during
+      // PreExecute; completion retirement occurs in OnCommandRecord.
+    }
   }
 
   MeshGpuResources gpu;

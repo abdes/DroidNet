@@ -30,6 +30,8 @@
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h> // template config return type
 #include <Oxygen/Renderer/Types/PassMask.h>
+// Upload coordinator facade
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace oxygen {
 class Graphics;
@@ -116,10 +118,16 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> ModulePhaseMask override
   {
-    return MakeModuleMask<core::PhaseId::kTransformPropagation>();
+    // Participate in transform propagation and command record for uploads.
+    return MakeModuleMask<core::PhaseId::kTransformPropagation,
+      core::PhaseId::kCommandRecord>();
   }
 
   OXGN_RNDR_NDAPI auto OnTransformPropagation(FrameContext& context)
+    -> co::Co<> override;
+
+  // Submit deferred uploads and retire completed ones during command record.
+  OXGN_RNDR_NDAPI auto OnCommandRecord(FrameContext& context)
     -> co::Co<> override;
 
   //! Returns the vertex buffer for the given mesh, creating it if needed.
@@ -365,6 +373,9 @@ private:
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
+
+  // Upload coordinator: manages buffer/texture uploads and completion.
+  std::unique_ptr<oxygen::engine::upload::UploadCoordinator> uploader_;
 };
 
 } // namespace oxygen::engine
