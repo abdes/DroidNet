@@ -13,6 +13,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -138,7 +139,7 @@ auto TransformUploader::Update(
   }
 }
 
-auto TransformUploader::BeginFrame() -> void
+auto TransformUploader::OnFrameStart() -> void
 {
   // BeginFrame must be called once per frame by the orchestrator (Renderer).
   ++current_epoch_;
@@ -234,8 +235,9 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   return n;
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 auto TransformUploader::EnsureBufferAndSrv(
-  std::shared_ptr<graphics::Buffer>& buffer, std::uint32_t& bindless_index,
+  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
   std::uint64_t size_bytes, const char* debug_label) -> bool
 {
   bool recreated = false;
@@ -261,7 +263,7 @@ auto TransformUploader::EnsureBufferAndSrv(
       = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
     const auto index = allocator.GetShaderVisibleIndex(handle);
-    bindless_index = index.get();
+    bindless_index = ShaderVisibleIndex(index.get());
     registry.RegisterView(*buffer, std::move(handle), view_desc);
 
     DLOG_F(1, "TransformUploader: {} SRV assigned to heap index {}",
@@ -271,6 +273,7 @@ auto TransformUploader::EnsureBufferAndSrv(
   return recreated;
 }
 
+// ReSharper disable once CppMemberFunctionMayBeStatic
 auto TransformUploader::BuildSparseUploadRequests(
   const std::vector<std::uint32_t>& indices, std::span<const glm::mat4> src,
   const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
@@ -328,16 +331,16 @@ auto TransformUploader::EnsureWorldsOnGpu() -> void
   }
 
   // Create or resize the device-local buffer when needed (DRY helper)
-  const auto prev_world_index = bindless_index_;
+  const auto prev_world_index = worlds_bindless_index_;
   const bool need_recreate = EnsureBufferAndSrv(
-    gpu_world_buffer_, bindless_index_, buffer_size, "WorldTransforms");
+    gpu_world_buffer_, worlds_bindless_index_, buffer_size, "WorldTransforms");
 
   // Stability check: once assigned, the bindless index should remain stable
   // across frames. Skip the check when we recreated the buffer/SRV.
-  if (!need_recreate && prev_world_index != 0u) {
-    DCHECK_F(bindless_index_ == prev_world_index,
+  if (!need_recreate && prev_world_index != kInvalidShaderVisibleIndex) {
+    DCHECK_F(worlds_bindless_index_ == prev_world_index,
       "Worlds bindless index changed from {} to {} unexpectedly",
-      prev_world_index, bindless_index_);
+      prev_world_index, worlds_bindless_index_);
   }
 
   // Upload current CPU data
@@ -382,7 +385,7 @@ auto TransformUploader::EnsureNormalsOnGpu() -> void
   const bool need_recreate = EnsureBufferAndSrv(gpu_normals_buffer_,
     normals_bindless_index_, buffer_size, "NormalMatrices");
 
-  if (!need_recreate && prev_normal_index != 0u) {
+  if (!need_recreate && prev_normal_index != kInvalidShaderVisibleIndex) {
     DCHECK_F(normals_bindless_index_ == prev_normal_index,
       "Normals bindless index changed from {} to {} unexpectedly",
       prev_normal_index, normals_bindless_index_);
@@ -415,17 +418,40 @@ auto TransformUploader::EnsureNormalsOnGpu() -> void
     }
   }
 }
-auto TransformUploader::GetNormalsSrvIndex() const -> std::uint32_t
+auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   CHECK_NOTNULL_F(gpu_normals_buffer_,
-    "GetNormalsSrvIndex called before EnsureNormalsOnGpu() created buffer");
+    "EnsureFrameResources() must be called before GetNormalsSrvIndex()");
   return normals_bindless_index_;
 }
-auto TransformUploader::GetWorldsSrvIndex() const -> std::uint32_t
+
+auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 {
   CHECK_NOTNULL_F(gpu_world_buffer_,
-    "GetWorldsSrvIndex called before EnsureWorldsOnGpu() created buffer");
-  return bindless_index_;
+    "EnsureFrameResources() must be called before GetWorldsSrvIndex()");
+  return worlds_bindless_index_;
+}
+
+auto TransformUploader::EnsureFrameResources() -> void
+{
+  // Contract: BeginFrame() must have been called this frame
+  DCHECK_F(current_epoch_ > 0U,
+    "EnsureFrameResources() called before BeginFrame() - frame lifecycle "
+    "violation");
+
+  // Always ensure both resources are prepared (idempotent operations)
+  PrepareWorldMatricesInternal();
+  PrepareNormalMatricesInternal();
+}
+
+auto TransformUploader::PrepareWorldMatricesInternal() -> void
+{
+  EnsureWorldsOnGpu();
+}
+
+auto TransformUploader::PrepareNormalMatricesInternal() -> void
+{
+  EnsureNormalsOnGpu();
 }
 
 } // namespace oxygen::renderer::resources

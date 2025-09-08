@@ -32,7 +32,7 @@ auto DescriptorAllocator::GetShaderVisibleIndex(
 {
   const auto segment = GetSegmentForHandle(handle);
   if (!segment.has_value()) {
-    return kInvalidBindlessShaderVisibleIndex;
+    return kInvalidShaderVisibleIndex;
   }
   DCHECK_NOTNULL_F(segment.value());
 

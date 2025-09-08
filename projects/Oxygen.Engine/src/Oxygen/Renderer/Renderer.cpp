@@ -160,7 +160,6 @@ Renderer::~Renderer()
   if (auto g = gfx_weak_.lock()) {
     // Best-effort: ignore if already unregistered or null.
     draw_metadata_.ReleaseGpuResources(*g);
-    world_transforms_.ReleaseGpuResources(*g);
     material_constants_.ReleaseGpuResources(*g);
 
     // Also unregister any remaining mesh buffers we still track.
@@ -261,19 +260,20 @@ auto Renderer::PreExecute(
   EnsureAndUploadDrawMetadataBuffer();
   UpdateDrawMetadataSlotIfChanged();
 
-  // Incremental: allow TransformUploader to publish/upload world buffers
+  // Consolidated transform resource preparation
   if (scene_prep_state_.transform_mgr) {
-    scene_prep_state_.transform_mgr->EnsureWorldsOnGpu();
-  }
-  UpdateBindlessWorldsSlotIfChanged();
+    scene_prep_state_.transform_mgr->EnsureFrameResources();
 
-  // Prepare normal matrices GPU buffer for future bindless wiring
-  if (scene_prep_state_.transform_mgr) {
-    scene_prep_state_.transform_mgr->EnsureNormalsOnGpu();
-  }
+    const auto worlds_srv
+      = scene_prep_state_.transform_mgr->GetWorldsSrvIndex();
+    const auto normals_srv
+      = scene_prep_state_.transform_mgr->GetNormalsSrvIndex();
 
-  // Publish normals slot (safe even if shaders don't consume it yet)
-  UpdateBindlessNormalsSlotIfChanged();
+    scene_const_cpu_.SetBindlessWorldsSlot(
+      BindlessWorldsSlot(worlds_srv.get()), SceneConstants::kRenderer);
+    scene_const_cpu_.SetBindlessNormalMatricesSlot(
+      BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
+  }
 
   EnsureAndUploadMaterialConstants();
   UpdateBindlessMaterialConstantsSlotIfChanged();
@@ -435,38 +435,6 @@ auto Renderer::WireContext(RenderContext& context) -> void
   context.SetRenderer(this, graphics_ptr.get());
 }
 
-auto Renderer::UpdateBindlessWorldsSlotIfChanged() -> void
-{
-  auto new_slot = BindlessWorldsSlot(kInvalidDescriptorSlot);
-  // Prefer TransformUploader-provided bindless SRV if available
-  if (scene_prep_state_.transform_mgr) {
-    // Ensure buffer/SRV exist per contract, then query the index. This will
-    // DCHECK_F (abort) if the uploader failed to create the buffer.
-    scene_prep_state_.transform_mgr->EnsureWorldsOnGpu();
-    const auto idx = scene_prep_state_.transform_mgr->GetWorldsSrvIndex();
-    if (idx != 0u) {
-      new_slot = BindlessWorldsSlot(idx);
-    }
-  }
-  scene_const_cpu_.SetBindlessWorldsSlot(new_slot, SceneConstants::kRenderer);
-}
-
-auto Renderer::UpdateBindlessNormalsSlotIfChanged() -> void
-{
-  auto new_slot = BindlessNormalsSlot(kInvalidDescriptorSlot);
-
-  if (scene_prep_state_.transform_mgr) {
-    scene_prep_state_.transform_mgr->EnsureNormalsOnGpu();
-    const auto idx = scene_prep_state_.transform_mgr->GetNormalsSrvIndex();
-    if (idx != 0u) {
-      new_slot = BindlessNormalsSlot(idx);
-    }
-  }
-
-  scene_const_cpu_.SetBindlessNormalMatricesSlot(
-    new_slot, SceneConstants::kRenderer);
-}
-
 auto Renderer::UpdateBindlessMaterialConstantsSlotIfChanged() -> void
 {
   auto new_slot = BindlessMaterialConstantsSlot(kInvalidDescriptorSlot);
@@ -508,9 +476,6 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   // Reset per-frame state but retain persistent caches
   // (transform/material/geometry)
   scene_prep_state_.ResetFrameData();
-  if (scene_prep_state_.transform_mgr) {
-    scene_prep_state_.transform_mgr->BeginFrame();
-  }
   const auto cfg = PrepareScenePrepCollectionConfig();
   CollectScenePrep(scene, view, scene_prep_state_, cfg);
   FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
@@ -539,7 +504,6 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   PopulateMatrices(filtered, prep_state);
   GenerateDrawMetadataAndMaterials(filtered,
     prep_state); // may mutate material registry (stable handle allocation)
-  UploadWorldTransforms(unique_transform_count); // upload unique transforms
   BuildSortingAndPartitions();
   PublishPreparedFrameSpans(unique_transform_count);
   UploadDrawMetadataBindless();
@@ -714,7 +678,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     const auto domain = mat->GetMaterialDomain();
     const auto base = mat->GetBaseColor();
     const float alpha = base[3];
-    constexpr bool has_transparency_feature = false; // placeholder hook
     const bool is_opaque_domain = (domain == data::MaterialDomain::kOpaque);
     const bool is_masked_domain = (domain == data::MaterialDomain::kMasked);
     DLOG_F(2,
@@ -722,7 +685,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       "is_masked={}",
       mat->GetAssetName(), static_cast<int>(domain), alpha, is_opaque_domain,
       is_masked_domain);
-    if (is_opaque_domain && alpha >= 0.999f && !has_transparency_feature) {
+    if (is_opaque_domain && alpha >= 0.999f) {
       return PassMask { PassMaskBit::kOpaqueOrMasked };
     }
     if (is_masked_domain) {
@@ -881,57 +844,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     DCHECK_F(
       !d.flags.IsEmpty(), "Pass mask must not be empty for record {}", s);
   }
-}
-
-auto Renderer::UploadWorldTransforms(std::size_t count) -> void
-{
-  DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
-
-  if (count == 0) {
-    return;
-  }
-  auto& gpu_worlds = world_transforms_.GetCpuData();
-  const auto* src_mats
-    = reinterpret_cast<const glm::mat4*>(world_matrices_cpu_.data());
-
-  // First frame or size change -> full upload path.
-  const bool size_mismatch = gpu_worlds.size() != count;
-  if (size_mismatch) {
-    if (alias_world_matrices_) {
-      const auto& tm_span = scene_prep_state_.transform_mgr
-        ? scene_prep_state_.transform_mgr->GetWorldMatrices()
-        : std::span<const glm::mat4> {};
-      gpu_worlds.assign(tm_span.begin(), tm_span.end());
-    } else {
-      gpu_worlds.assign(src_mats, src_mats + count);
-    }
-    world_transforms_.MarkDirty();
-    return;
-  }
-  // Sparse update path using TransformManager dirty indices.
-  const auto& tm = *scene_prep_state_.transform_mgr;
-  auto dirty = tm.GetDirtyIndices();
-  if (dirty.empty()) {
-    return; // nothing changed
-  }
-  // Ensure gpu_worlds already sized (otherwise size_mismatch branch would run)
-  if (alias_world_matrices_) {
-    const auto& tm_span = tm.GetWorldMatrices();
-    for (auto idx : dirty) {
-      if (idx >= count) {
-        continue;
-      }
-      gpu_worlds[idx] = tm_span[idx];
-    }
-  } else {
-    for (auto idx : dirty) {
-      if (idx >= count) {
-        continue;
-      }
-      gpu_worlds[idx] = src_mats[idx];
-    }
-  }
-  world_transforms_.MarkDirty();
 }
 
 auto Renderer::BuildSortingAndPartitions() -> void
@@ -1486,6 +1398,13 @@ auto Renderer::ModifySceneConstants(
 auto Renderer::GetSceneConstants() const -> const SceneConstants&
 {
   return scene_const_cpu_;
+}
+
+auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
+{
+  // Reset transform manager for the new frame
+  DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
+  scene_prep_state_.transform_mgr->OnFrameStart();
 }
 
 /*!
