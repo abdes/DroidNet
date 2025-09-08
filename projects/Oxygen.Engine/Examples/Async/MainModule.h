@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
@@ -85,7 +86,8 @@ namespace examples::async {
      @param fullscreen Whether to create the window in full-screen mode
     */
     explicit MainModule(std::shared_ptr<Platform> platform,
-      std::weak_ptr<Graphics> gfx_weak, bool fullscreen = false);
+      std::weak_ptr<Graphics> gfx_weak, bool fullscreen = false,
+      observer_ptr<engine::Renderer> renderer = nullptr);
 
     ~MainModule() override;
 
@@ -154,7 +156,7 @@ namespace examples::async {
 
     //! Scene and rendering.
     std::shared_ptr<scene::Scene> scene_;
-    std::shared_ptr<engine::Renderer> renderer_;
+    observer_ptr<engine::Renderer> renderer_;
 
     //! Render passes (configured during frame graph, executed during command
     //! record).

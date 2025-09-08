@@ -267,10 +267,12 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, float t) -> void
 } // namespace
 
 MainModule::MainModule(std::shared_ptr<Platform> platform,
-  std::weak_ptr<Graphics> gfx_weak, bool fullscreen)
+  std::weak_ptr<Graphics> gfx_weak, bool fullscreen,
+  observer_ptr<engine::Renderer> renderer)
   : platform_(std::move(platform))
   , gfx_weak_(std::move(gfx_weak))
   , fullscreen_(fullscreen)
+  , renderer_(renderer)
 {
   DCHECK_NOTNULL_F(platform_);
   DCHECK_F(!gfx_weak_.expired());
@@ -502,12 +504,8 @@ auto MainModule::SetupSurface() -> void
 
 auto MainModule::SetupRenderer() -> void
 {
-  CHECK_F(!gfx_weak_.expired());
-
-  const auto gfx = gfx_weak_.lock();
-  renderer_ = std::make_shared<engine::Renderer>(gfx);
-  CHECK_NOTNULL_F(renderer_, "Failed to create renderer for AsyncEngine");
-  LOG_F(INFO, "Renderer created for AsyncEngine");
+  CHECK_NOTNULL_F(renderer_, "Renderer was not provided to MainModule");
+  LOG_F(INFO, "Using provided Renderer for AsyncEngine");
 }
 
 auto MainModule::SetupFramebuffers() -> void
@@ -678,9 +676,9 @@ auto MainModule::UpdateSceneMutations(const float time_seconds) -> void
         LOG_F(INFO, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
       }
 
-      // Every 3 seconds, toggle an override on submesh 1 (use blue instead of
-      // debug)
-      int ovr_phase = static_cast<int>(time_seconds) / 3;
+      // Every second, toggle an override on submesh 1 (use blue instead of
+      // green)
+      int ovr_phase = static_cast<int>(time_seconds);
       if (ovr_phase != last_ovr_toggle_) {
         last_ovr_toggle_ = ovr_phase;
         const bool apply_override = (ovr_phase % 2) == 1;
@@ -694,8 +692,8 @@ auto MainModule::UpdateSceneMutations(const float time_seconds) -> void
           desc.header.name[n] = '\0';
           desc.material_domain
             = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
-          desc.base_color[0] = 0.1f;
-          desc.base_color[1] = 0.1f;
+          desc.base_color[0] = 0.2f;
+          desc.base_color[1] = 0.3f;
           desc.base_color[2] = 1.0f;
           desc.base_color[3] = 1.0f;
           auto blue = std::make_shared<const data::MaterialAsset>(

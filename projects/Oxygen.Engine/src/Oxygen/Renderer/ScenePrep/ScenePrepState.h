@@ -9,13 +9,14 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
+#include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
-#include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
-#include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
+#include <Oxygen/Renderer\ScenePrep\RenderItemData.h>
 
 namespace oxygen::engine::sceneprep {
 
@@ -28,6 +29,13 @@ namespace oxygen::engine::sceneprep {
  for cache efficiency and avoid pointer indirection.
  */
 struct ScenePrepState {
+  ScenePrepState() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(ScenePrepState)
+  OXYGEN_MAKE_NON_MOVABLE(ScenePrepState)
+
+  ~ScenePrepState() = default;
+
   // === Collection Phase Data ===
   //! Raw items collected during scene traversal.
   std::vector<RenderItemData> collected_items;
@@ -38,18 +46,15 @@ struct ScenePrepState {
   //! Pass masks aligned with filtered_indices.
   std::vector<PassMask> pass_masks;
 
-  // === Transform Management ===
-  //! Persistent transform deduplication and GPU buffer management.
-  std::unique_ptr<oxygen::renderer::resources::TransformUploader> transform_mgr;
-
-  // === Material Management ===
-  //! Persistent material registry with deduplication.
-  MaterialRegistry material_registry;
-
-  // === Geometry Management ===
   //! Modern geometry uploader with deduplication and bindless access.
   std::unique_ptr<oxygen::renderer::resources::GeometryUploader>
     geometry_uploader;
+
+  //! Persistent transform deduplication and GPU buffer management.
+  std::unique_ptr<oxygen::renderer::resources::TransformUploader> transform_mgr;
+
+  //! Persistent material deduplication and GPU buffer management.
+  std::unique_ptr<oxygen::renderer::resources::MaterialBinder> material_binder;
 
   //! Reset per-frame data while preserving persistent caches.
   OXGN_RNDR_API auto ResetFrameData() -> void;

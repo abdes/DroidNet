@@ -251,8 +251,7 @@ inline void EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
     };
 
     auto mat_ptr = resolve_material();
-    const auto mat_handle
-      = state.material_registry.GetOrRegisterMaterial(mat_ptr);
+    const auto mat_handle = state.material_binder->GetOrAllocate(mat_ptr);
     state.collected_items.push_back(RenderItemData {
       .lod_index = lod,
       .submesh_index = index,

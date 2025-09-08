@@ -90,8 +90,6 @@ set(
   "ScenePrep/ScenePrepPipeline.h"
   "ScenePrep/ScenePrepState.cpp"
   "ScenePrep/ScenePrepState.h"
-  "ScenePrep/State/MaterialRegistry.cpp"
-  "ScenePrep/State/MaterialRegistry.h"
   "ScenePrep/Types.h"
   "Upload/StagingAllocator.cpp"
   "Upload/StagingAllocator.h"

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 
 namespace oxygen::engine::sceneprep {
@@ -14,14 +15,6 @@ auto ScenePrepState::ResetFrameData() -> void
   collected_items.clear();
   filtered_indices.clear();
   pass_masks.clear();
-
-  // Frame lifecycle for uploaders
-  if (transform_mgr) {
-    transform_mgr->OnFrameStart();
-  }
-  if (geometry_uploader) {
-    geometry_uploader->OnFrameStart();
-  }
 }
 
 } // namespace oxygen::engine::sceneprep
