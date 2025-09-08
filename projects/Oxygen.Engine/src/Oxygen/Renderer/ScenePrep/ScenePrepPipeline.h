@@ -20,17 +20,9 @@
 
 namespace oxygen::engine::sceneprep {
 
-//! Collection-only pipeline that orchestrates ScenePrep extractors.
-/*!
- Applies configured collection stages over all scene nodes and produces
- `RenderItemData` entries in `ScenePrepState::collected_items`.
-
- Stages are invoked with compile-time gating via presence flags on the
- `CollectionConfig` type. Dropped items short-circuit downstream stages.
- */
-template <typename CollectionCfg> class ScenePrepPipelineCollection {
+template <typename CollectionCfg> class ScenePrepPipeline {
 public:
-  explicit ScenePrepPipelineCollection(CollectionCfg cfg) noexcept
+  explicit ScenePrepPipeline(CollectionCfg cfg) noexcept
     : collection_(std::move(cfg))
   {
   }

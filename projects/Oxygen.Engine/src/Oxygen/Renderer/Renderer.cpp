@@ -996,7 +996,7 @@ auto Renderer::CollectScenePrep(scene::Scene& scene, const View& view,
   // arrays (matrices, draw metadata, materials, partitions, sorting keys).
   // FIXME(perf): Avoid per-frame allocations by pooling ScenePrepState or
   // reusing internal vectors (requires clear ownership strategy & lifetime).
-  sceneprep::ScenePrepPipelineCollection<CollectionCfg> pipeline { cfg };
+  sceneprep::ScenePrepPipeline<CollectionCfg> pipeline { cfg };
   // NOTE: StrongType frame_seq_num unwrapped for ScenePrep API.
   const auto t_collect0 = std::chrono::high_resolution_clock::now();
   pipeline.Collect(scene, view, frame_seq_num.get(), prep_state);
