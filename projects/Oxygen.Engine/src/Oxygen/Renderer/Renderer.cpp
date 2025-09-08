@@ -148,6 +148,11 @@ auto Renderer::PreExecute(
       BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
   }
 
+  // Consolidated geometry resource preparation
+  if (scene_prep_state_.geometry_uploader) {
+    scene_prep_state_.geometry_uploader->EnsureFrameResources();
+  }
+
   EnsureAndUploadMaterialConstants();
   UpdateBindlessMaterialConstantsSlotIfChanged();
 
@@ -376,6 +381,10 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   -> void
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
+
+  // Ensure geometry uploader resources are ready for this frame
+  prep_state.geometry_uploader->EnsureFrameResources();
+
   const auto& filtered = prep_state.filtered_indices;
   GenerateDrawMetadataAndMaterials(filtered,
     prep_state); // may mutate material registry (stable handle allocation)
@@ -435,46 +444,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
   const std::vector<std::size_t>& filtered,
   sceneprep::ScenePrepState& prep_state) -> void
 {
-  // TODO: TEMPORARY HACK - This is a band-aid fix to get examples working.
-  // PROPER FIX: Split this function into two phases:
-  //   1. Registration phase: Loop through all items, call GetOrAllocate() only
-  //   2. EnsureFrameResources() call
-  //   3. SRV access phase: Loop again, call
-  //   GetVertexSrvIndex()/GetIndexSrvIndex()
-  // This would eliminate the need to call EnsureFrameResources() in the middle
-  // of draw metadata generation and make the dependency explicit.
-
-  // Phase 1: Register all geometry first
-  std::vector<engine::sceneprep::GeometryHandle> mesh_handles;
-  mesh_handles.resize(filtered.size());
-
-  for (size_t i = 0; i < filtered.size(); ++i) {
-    const auto src_index = filtered[i];
-    if (src_index >= prep_state.collected_items.size()) {
-      continue;
-    }
-    const auto& item = prep_state.collected_items[src_index];
-    if (!item.geometry) {
-      continue;
-    }
-    const auto lod_index = item.lod_index;
-    const auto& geom = *item.geometry;
-    auto meshes_span = geom.Meshes();
-    if (lod_index >= meshes_span.size()) {
-      continue;
-    }
-    const auto& lod_mesh_ptr = meshes_span[lod_index];
-    if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-      mesh_handles[i]
-        = scene_prep_state_.geometry_uploader->GetOrAllocate(*lod_mesh_ptr);
-    }
-  }
-
-  // Phase 2: Ensure all registered geometry has GPU resources
-  if (prep_state.geometry_uploader) {
-    prep_state.geometry_uploader->EnsureFrameResources();
-  }
-
   // Direct DrawMetadata generation (Task 6: native SoA path)
   draw_metadata_cpu_soa_.clear();
   draw_metadata_cpu_soa_.reserve(filtered.size());
@@ -567,21 +536,26 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     if (views_span.empty()) {
       continue;
     }
-    engine::sceneprep::GeometryHandle mesh_handle {};
-    ShaderVisibleIndex vertex_srv_index {};
-    ShaderVisibleIndex index_srv_index {};
-    if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-      // Use pre-registered handle from Phase 1
-      mesh_handle = mesh_handles[i];
-      if (scene_prep_state_.geometry_uploader->IsValidHandle(mesh_handle)) {
-        vertex_srv_index
-          = scene_prep_state_.geometry_uploader->GetVertexSrvIndex(mesh_handle);
-        index_srv_index
-          = scene_prep_state_.geometry_uploader->GetIndexSrvIndex(mesh_handle);
-      }
-    }
     for (const auto& view : views_span) {
       DrawMetadata dm {};
+
+      // Get actual SRV indices for GPU access
+      ShaderVisibleIndex vertex_srv_index { kInvalidShaderVisibleIndex };
+      ShaderVisibleIndex index_srv_index { kInvalidShaderVisibleIndex };
+      if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
+        const auto mesh_handle
+          = scene_prep_state_.geometry_uploader->GetOrAllocate(*lod_mesh_ptr);
+        if (scene_prep_state_.geometry_uploader->IsValidHandle(mesh_handle)) {
+          // Get the actual SRV indices for GPU access
+          vertex_srv_index
+            = scene_prep_state_.geometry_uploader->GetVertexSrvIndex(
+              mesh_handle);
+          index_srv_index
+            = scene_prep_state_.geometry_uploader->GetIndexSrvIndex(
+              mesh_handle);
+        }
+      }
+
       dm.vertex_buffer_index = vertex_srv_index;
       dm.index_buffer_index = index_srv_index;
       const auto index_view = view.IndexBuffer();
