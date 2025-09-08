@@ -7,6 +7,7 @@ When answering:
 - Give a clear, direct response and the essential rationale.
 - Show a short, actionable plan or steps the reader can follow.
 - Offer one or two viable alternatives with trade-offs when appropriate.
+- **KEEP API SURFACES MINIMAL, LEAN AND MEAN**: Always prefer using existing APIs over adding new methods. Question every new method or parameter - can existing functionality handle this instead?
 
 Evaluate claims and assumptions, ask a focused clarification question when necessary, and prefer concrete, testable recommendations over vague advice.
 
@@ -22,6 +23,7 @@ For writing doc comments in c++ files, follow instruction in the [DocCommentGuid
 
 ## Architecture & Major Patterns
 
+- **API Design Philosophy**: MINIMAL, LEAN AND MEAN. Every public method must justify its existence. Prefer composition and delegation to existing APIs over creating new surface area. Break compatibility ruthlessly to achieve clean, expressive APIs.
 - **Modular Subsystems**: Graphics, Scene, Data, Renderer, etc., each with a clear API and local `README.md`. Refer to the module's README.md when implementing or modifying functionality within that module.
 - **Bindless Rendering**: All GPU resources are accessed via global indices, not per-draw bindings. See `design/BindlessArchitecture.md`, `BindlessRenderingDesign.md`, and `BindlessRenderingRootSignature.md` for rationale, API, and HLSL/D3D12/GLSL patterns. Shaders use global indices for all resource access.
 - **Pipeline State Objects (PSO)**: Immutable, hashable pipeline state abstractions. See `design/PipelineDesign.md` for how PSOs, root signatures, and bindless tables are created and managed. Backend-specific caches (e.g., D3D12) are used for efficient reuse.

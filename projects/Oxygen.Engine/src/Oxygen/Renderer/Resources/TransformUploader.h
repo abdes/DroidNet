@@ -23,8 +23,6 @@
 
 namespace oxygen::renderer::resources {
 
-// No public buffer-creation helpers are exposed; the uploader owns GPU state.
-
 class TransformUploader {
 public:
   /*!
@@ -45,7 +43,7 @@ public:
   auto OnFrameStart() -> void;
 
   // Deduplication and handle management
-  auto GetOrAllocate(const glm::mat4& transform)
+  OXGN_RNDR_NDAPI auto GetOrAllocate(const glm::mat4& transform)
     -> engine::sceneprep::TransformHandle;
   auto Update(engine::sceneprep::TransformHandle handle,
     const glm::mat4& transform) -> void;
@@ -58,18 +56,6 @@ public:
     -> std::span<const glm::mat4>;
   [[nodiscard]] auto GetDirtyIndices() const noexcept
     -> std::span<const std::uint32_t>;
-
-  // GPU upload API (new incremental path)
-  //! Ensure a GPU buffer exists for the internally managed world matrices
-  //! and upload current CPU data.
-  //!
-  //! Simplicity-first: performs a full upload of all matrices when called.
-  //! Future: use GetDirtyIndices() for sparse updates.
-  OXGN_RNDR_API auto EnsureWorldsOnGpu() -> void;
-
-  //! Ensure a GPU buffer exists for the internally managed normal matrices and
-  //! upload current CPU data (sparse when beneficial).
-  OXGN_RNDR_API auto EnsureNormalsOnGpu() -> void;
 
   //! Ensures all transform GPU resources are prepared for the current frame.
   //! MUST be called after BeginFrame() and before any Get*SrvIndex() calls.
@@ -99,8 +85,8 @@ private:
     const char* debug_label) -> bool;
 
   //! Internal methods for resource preparation
-  auto PrepareWorldMatricesInternal() -> void;
-  auto PrepareNormalMatricesInternal() -> void;
+  auto PrepareWorldMatrices() -> void;
+  auto PrepareNormalMatrices() -> void;
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
