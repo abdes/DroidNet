@@ -140,34 +140,45 @@ auto MakeLruEvictionPolicy(std::size_t max_age_frames
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics,
   std::shared_ptr<EvictionPolicy> eviction_policy)
-  : graphics_(std::move(graphics))
+  : gfx_weak_(std::move(graphics))
   , eviction_policy_(
       eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
 {
-  if (auto g = graphics_.lock()) {
-    uploader_ = std::make_unique<upload::UploadCoordinator>(g);
-  }
+  CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
+  auto& gfx = *gfx_weak_.lock();
+  uploader_ = std::make_unique<upload::UploadCoordinator>(gfx);
   // Ensure transform_mgr is always valid for scene prep and extraction
   scene_prep_state_.transform_mgr
     = std::make_unique<renderer::resources::TransformUploader>(
-      graphics_, observer_ptr { uploader_.get() });
+      gfx, observer_ptr { uploader_.get() });
 }
 
 Renderer::~Renderer()
 {
   // Proactively unregister bindless structured buffers from the registry to
   // avoid late destruction during Graphics shutdown.
-  if (auto g = graphics_.lock()) {
+  if (auto g = gfx_weak_.lock()) {
     // Best-effort: ignore if already unregistered or null.
     draw_metadata_.ReleaseGpuResources(*g);
     world_transforms_.ReleaseGpuResources(*g);
     material_constants_.ReleaseGpuResources(*g);
+
+    // Also unregister any remaining mesh buffers we still track.
+    auto& registry = g->GetResourceRegistry();
+    for (auto& [_, res] : mesh_resources_) {
+      if (res.vertex_buffer) {
+        registry.UnRegisterResource(*res.vertex_buffer);
+      }
+      if (res.index_buffer) {
+        registry.UnRegisterResource(*res.index_buffer);
+      }
+    }
   }
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
 {
-  auto graphics_ptr = graphics_.lock();
+  auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error("Graphics expired in Renderer::GetGraphics");
   }
@@ -189,6 +200,16 @@ auto Renderer::UnregisterMesh(const Mesh& mesh) -> void
   const MeshId id = GetMeshId(mesh);
   const auto it = mesh_resources_.find(id);
   if (it != mesh_resources_.end()) {
+    // Unregister resources and their views from the registry
+    if (auto g = gfx_weak_.lock()) {
+      auto& registry = g->GetResourceRegistry();
+      if (it->second.vertex_buffer) {
+        registry.UnRegisterResource(*it->second.vertex_buffer);
+      }
+      if (it->second.index_buffer) {
+        registry.UnRegisterResource(*it->second.index_buffer);
+      }
+    }
     mesh_resources_.erase(it);
     if (eviction_policy_) {
       eviction_policy_->OnMeshRemoved(id);
@@ -204,7 +225,21 @@ auto Renderer::EvictUnusedMeshResources(const std::size_t current_frame) -> void
   const auto to_evict
     = eviction_policy_->SelectResourcesToEvict(mesh_resources_, current_frame);
   for (MeshId id : to_evict) {
-    mesh_resources_.erase(id);
+    // Ensure we unregister from the resource registry before erasing
+    if (auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
+      if (auto g = gfx_weak_.lock()) {
+        auto& registry = g->GetResourceRegistry();
+        if (it->second.vertex_buffer) {
+          registry.UnRegisterResource(*it->second.vertex_buffer);
+        }
+        if (it->second.index_buffer) {
+          registry.UnRegisterResource(*it->second.index_buffer);
+        }
+      }
+      mesh_resources_.erase(it);
+    } else {
+      mesh_resources_.erase(id);
+    }
     eviction_policy_->OnMeshRemoved(id);
   }
 }
@@ -226,8 +261,19 @@ auto Renderer::PreExecute(
   EnsureAndUploadDrawMetadataBuffer();
   UpdateDrawMetadataSlotIfChanged();
 
-  EnsureAndUploadWorldTransforms();
+  // Incremental: allow TransformUploader to publish/upload world buffers
+  if (scene_prep_state_.transform_mgr) {
+    scene_prep_state_.transform_mgr->EnsureWorldsOnGpu();
+  }
   UpdateBindlessWorldsSlotIfChanged();
+
+  // Prepare normal matrices GPU buffer for future bindless wiring
+  if (scene_prep_state_.transform_mgr) {
+    scene_prep_state_.transform_mgr->EnsureNormalsOnGpu();
+  }
+
+  // Publish normals slot (safe even if shaders don't consume it yet)
+  UpdateBindlessNormalsSlotIfChanged();
 
   EnsureAndUploadMaterialConstants();
   UpdateBindlessMaterialConstantsSlotIfChanged();
@@ -274,7 +320,7 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
   if (!draw_metadata_.HasData()) {
     return; // optional feature not used this frame
   }
-  const auto graphics_ptr = graphics_.lock();
+  const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     LOG_F(ERROR, "Graphics expired while ensuring draw metadata buffer");
     return;
@@ -340,7 +386,7 @@ auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
 {
   // Ensure renderer-managed fields are refreshed for this frame prior to
   // snapshot/upload. This also bumps the version when they change.
-  const auto graphics_ptr = graphics_.lock();
+  const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     LOG_F(ERROR, "Graphics expired while updating scene constants");
     return;
@@ -382,7 +428,7 @@ auto Renderer::WireContext(RenderContext& context) -> void
 {
   context.scene_constants = scene_const_buffer_;
   // Material constants are now accessed through bindless table, not direct CBV
-  const auto graphics_ptr = graphics_.lock();
+  const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error("Graphics expired in Renderer::WireContext");
   }
@@ -392,10 +438,33 @@ auto Renderer::WireContext(RenderContext& context) -> void
 auto Renderer::UpdateBindlessWorldsSlotIfChanged() -> void
 {
   auto new_slot = BindlessWorldsSlot(kInvalidDescriptorSlot);
-  if (world_transforms_.HasData() && world_transforms_.IsSlotAssigned()) {
-    new_slot = BindlessWorldsSlot(world_transforms_.GetHeapSlot());
+  // Prefer TransformUploader-provided bindless SRV if available
+  if (scene_prep_state_.transform_mgr) {
+    // Ensure buffer/SRV exist per contract, then query the index. This will
+    // DCHECK_F (abort) if the uploader failed to create the buffer.
+    scene_prep_state_.transform_mgr->EnsureWorldsOnGpu();
+    const auto idx = scene_prep_state_.transform_mgr->GetWorldsSrvIndex();
+    if (idx != 0u) {
+      new_slot = BindlessWorldsSlot(idx);
+    }
   }
   scene_const_cpu_.SetBindlessWorldsSlot(new_slot, SceneConstants::kRenderer);
+}
+
+auto Renderer::UpdateBindlessNormalsSlotIfChanged() -> void
+{
+  auto new_slot = BindlessNormalsSlot(kInvalidDescriptorSlot);
+
+  if (scene_prep_state_.transform_mgr) {
+    scene_prep_state_.transform_mgr->EnsureNormalsOnGpu();
+    const auto idx = scene_prep_state_.transform_mgr->GetNormalsSrvIndex();
+    if (idx != 0u) {
+      new_slot = BindlessNormalsSlot(idx);
+    }
+  }
+
+  scene_const_cpu_.SetBindlessNormalMatricesSlot(
+    new_slot, SceneConstants::kRenderer);
 }
 
 auto Renderer::UpdateBindlessMaterialConstantsSlotIfChanged() -> void
@@ -461,9 +530,9 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
   const auto& filtered = ResolveFilteredIndices(prep_state);
-  const auto unique_transform_count = prep_state.transform_mgr
-    ? prep_state.transform_mgr->GetUniqueTransformCount()
-    : 0;
+  const std::size_t unique_transform_count = prep_state.transform_mgr
+    ? prep_state.transform_mgr->GetWorldMatrices().size()
+    : 0ULL;
   // Allocate storage sized to number of unique transforms (handle id space)
   ReserveMatrixStorage(unique_transform_count);
   // Populate (or update) per-handle world/normal matrices using cached data.
@@ -558,11 +627,13 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
 {
   // Transform caching path: fetch world & cached normal matrix via handle.
   const auto* tm = prep_state.transform_mgr.get();
-  std::size_t unique_count = 0;
-  if (tm) {
-    unique_count = tm->GetUniqueTransformCount();
+  if (!tm) {
+    return;
   }
-  if (!tm || unique_count == 0) {
+  const auto world_span = tm->GetWorldMatrices();
+  const auto normal_span = tm->GetNormalMatrices();
+  const std::size_t unique_count = world_span.size();
+  if (unique_count == 0) {
     return;
   }
   const bool alias_world = alias_world_matrices_;
@@ -584,12 +655,10 @@ auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
       continue; // already populated
     }
     written[h] = 1u;
-    glm::mat4 world { 1.0f };
-    glm::mat4 normal { 1.0f };
-    if (tm->IsValidHandle(handle)) {
-      world = tm->GetTransform(handle);
-      normal = tm->GetNormalMatrix(handle); // now stored natively as mat4
-    }
+    DCHECK_F(tm->IsValidHandle(handle));
+    const glm::mat4& world = world_span[h];
+    const glm::mat4& normal
+      = normal_span.size() > h ? normal_span[h] : glm::mat4(1.0f);
     if (!alias_world) {
       std::memcpy(&world_matrices_cpu_[h * 16u], &world, sizeof(float) * 16u);
     }
@@ -798,7 +867,7 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
   std::size_t unique_transform_count = 0;
   if (prep_state.transform_mgr) {
     unique_transform_count
-      = prep_state.transform_mgr->GetUniqueTransformCount();
+      = prep_state.transform_mgr->GetWorldMatrices().size();
   }
   for (std::size_t s = 0; s < draw_metadata_cpu_soa_.size(); ++s) {
     const auto& d = draw_metadata_cpu_soa_[s];
@@ -816,6 +885,8 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
 
 auto Renderer::UploadWorldTransforms(std::size_t count) -> void
 {
+  DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
+
   if (count == 0) {
     return;
   }
@@ -828,7 +899,7 @@ auto Renderer::UploadWorldTransforms(std::size_t count) -> void
   if (size_mismatch) {
     if (alias_world_matrices_) {
       const auto& tm_span = scene_prep_state_.transform_mgr
-        ? scene_prep_state_.transform_mgr->GetWorldMatricesSpan()
+        ? scene_prep_state_.transform_mgr->GetWorldMatrices()
         : std::span<const glm::mat4> {};
       gpu_worlds.assign(tm_span.begin(), tm_span.end());
     } else {
@@ -838,24 +909,19 @@ auto Renderer::UploadWorldTransforms(std::size_t count) -> void
     return;
   }
   // Sparse update path using TransformManager dirty indices.
-  const auto* tm = scene_prep_state_.transform_mgr.get();
-  std::vector<std::uint32_t> dirty;
-  if (tm) {
-    dirty = tm->GetDirtyIndices();
-  }
+  const auto& tm = *scene_prep_state_.transform_mgr;
+  auto dirty = tm.GetDirtyIndices();
   if (dirty.empty()) {
     return; // nothing changed
   }
   // Ensure gpu_worlds already sized (otherwise size_mismatch branch would run)
   if (alias_world_matrices_) {
-    if (tm) {
-      const auto& tm_span = tm->GetWorldMatricesSpan();
-      for (auto idx : dirty) {
-        if (idx >= count) {
-          continue;
-        }
-        gpu_worlds[idx] = tm_span[idx];
+    const auto& tm_span = tm.GetWorldMatrices();
+    for (auto idx : dirty) {
+      if (idx >= count) {
+        continue;
       }
+      gpu_worlds[idx] = tm_span[idx];
     }
   } else {
     for (auto idx : dirty) {
@@ -972,7 +1038,7 @@ auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
   const auto& tm = scene_prep_state_.transform_mgr;
   if (alias_world_matrices_) {
     if (tm) {
-      const auto world_span = tm->GetWorldMatricesSpan();
+      const auto world_span = tm->GetWorldMatrices();
       prepared_frame_.world_matrices = std::span<const float>(
         reinterpret_cast<const float*>(world_span.data()),
         world_span.size() * 16u);
@@ -985,7 +1051,7 @@ auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
   }
   if (alias_normal_matrices_) {
     if (tm) {
-      const auto normal_span = tm->GetNormalMatricesSpan();
+      const auto normal_span = tm->GetNormalMatrices();
       prepared_frame_.normal_matrices = std::span<const float>(
         reinterpret_cast<const float*>(normal_span.data()),
         normal_span.size() * 16u);
@@ -1064,8 +1130,6 @@ auto Renderer::BuildFrame(const CameraView& camera_view,
   const auto view = camera_view.Resolve();
   return BuildFrame(view, frame_context);
 }
-
-//=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) ---------------------//
 
 auto Renderer::ResolveScene(const FrameContext& frame_context) -> scene::Scene&
 {
@@ -1259,51 +1323,15 @@ auto CreateAndRegisterIndexSrv(Graphics& graphics, Buffer& index_buffer,
 
 } // namespace
 
-auto Renderer::EnsureAndUploadWorldTransforms() -> void
-{
-  if (!world_transforms_.HasData()) {
-    return;
-  }
-  const auto graphics_ptr = graphics_.lock();
-  if (!graphics_ptr) {
-    LOG_F(ERROR, "Graphics expired while ensuring world transforms");
-    return;
-  }
-  auto& graphics = *graphics_ptr;
-  static_cast<void>(
-    world_transforms_.EnsureBufferAndSrv(graphics, "WorldTransforms"));
-  if (uploader_ && world_transforms_.IsDirty()) {
-    using upload::BatchPolicy;
-    using upload::UploadBufferDesc;
-    using upload::UploadDataView;
-    using upload::UploadKind;
-    using upload::UploadRequest;
-
-    const auto& cpu = world_transforms_.GetCpuData();
-    const uint64_t size = cpu.size() * sizeof(glm::mat4);
-    if (size > 0 && world_transforms_.GetBuffer()) {
-      UploadRequest req;
-      req.kind = UploadKind::kBuffer;
-      req.batch_policy = BatchPolicy::kCoalesce;
-      req.debug_name = "WorldTransforms";
-      req.desc = UploadBufferDesc {
-        .dst = world_transforms_.GetBuffer(),
-        .size_bytes = size,
-        .dst_offset = 0,
-      };
-      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
-      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
-      world_transforms_.ClearDirty();
-    }
-  }
-}
+// Legacy EnsureAndUploadWorldTransforms retired; TransformUploader owns
+// worlds GPU buffer + SRV and publishes bindless slot.
 
 auto Renderer::EnsureAndUploadMaterialConstants() -> void
 {
   if (!material_constants_.HasData()) {
     return; // optional feature not used this frame
   }
-  const auto graphics_ptr = graphics_.lock();
+  const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     LOG_F(ERROR, "Graphics expired while ensuring material constants");
     return;
@@ -1369,7 +1397,7 @@ auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
     return it->second; // cache hit
   }
 
-  const auto graphics_ptr = graphics_.lock();
+  const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error(
       "Graphics expired in Renderer::EnsureMeshResources");

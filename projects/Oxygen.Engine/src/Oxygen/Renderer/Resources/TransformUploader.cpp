@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -11,6 +12,7 @@
 
 #include <glm/mat4x4.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -18,20 +20,68 @@
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
+#include <cmath>
+#include <cstring>
+
+namespace {
+
+[[nodiscard]] auto IsFinite(const glm::mat4& m) noexcept -> bool
+{
+  for (int c = 0; c < 4; ++c) {
+    for (int r = 0; r < 4; ++r) {
+      if (!std::isfinite(m[c][r])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Quantized key helper
+auto MakeTransformKey(const glm::mat4& m) noexcept -> std::uint64_t
+{
+  constexpr float scale = 1024.0f;
+  auto q = [&](float v) -> std::int32_t {
+    return static_cast<std::int32_t>(std::lround(v * scale));
+  };
+  std::uint64_t a = static_cast<std::uint32_t>(q(m[0][0]) & 0xFFFF);
+  std::uint64_t b = static_cast<std::uint32_t>(q(m[1][1]) & 0xFFFF);
+  std::uint64_t c = static_cast<std::uint32_t>(q(m[2][2]) & 0xFFFF);
+  std::uint64_t d = static_cast<std::uint32_t>(q(m[3][3]) & 0xFFFF);
+  return (a) | (b << 16) | (c << 32) | (d << 48);
+}
+
+} // namespace
+
 namespace oxygen::renderer::resources {
 
-TransformUploader::TransformUploader(std::weak_ptr<Graphics> graphics,
-  observer_ptr<engine::upload::UploadCoordinator> uploader)
-  : graphics_(std::move(graphics))
+TransformUploader::TransformUploader(
+  Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader)
+  : gfx_(gfx)
   , uploader_(uploader)
 {
 }
 
-TransformUploader::~TransformUploader() = default;
+TransformUploader::~TransformUploader()
+{
+  // Best-effort cleanup: unregister our GPU buffers from the registry so they
+  // don't linger until registry destruction.
+  auto& registry = gfx_.GetResourceRegistry();
+  if (gpu_world_buffer_) {
+    registry.UnRegisterResource(*gpu_world_buffer_);
+    gpu_world_buffer_.reset();
+  }
+  if (gpu_normals_buffer_) {
+    registry.UnRegisterResource(*gpu_normals_buffer_);
+    gpu_normals_buffer_.reset();
+  }
+}
 
 auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   -> engine::sceneprep::TransformHandle
 {
+  DCHECK_F(
+    IsFinite(transform), "GetOrAllocate received non-finite matrix values");
   const auto key = MakeTransformKey(transform);
   if (const auto it = transform_key_to_handle_.find(key);
     it != transform_key_to_handle_.end()) {
@@ -53,21 +103,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   }
   transforms_[idx] = transform;
   // Compute normal matrix (inverse transpose upper-left 3x3) lazily here.
-  const glm::mat3 upper(transform);
-  const float det = glm::determinant(upper);
-  glm::mat3 normal3;
-  if (std::abs(det - 1.0f) < 1e-3f) {
-    normal3 = upper;
-  } else {
-    normal3 = glm::transpose(glm::inverse(upper));
-  }
-  glm::mat4 normal4(1.0f);
-  for (int r = 0; r < 3; ++r) {
-    for (int c = 0; c < 3; ++c) {
-      normal4[c][r] = normal3[r][c];
-    }
-  }
-  normal_matrices_[idx] = normal4;
+  normal_matrices_[idx] = ComputeNormalMatrix(transform);
   world_versions_[idx] = global_version_;
   normal_versions_[idx] = global_version_;
   // Mark dirty for this frame.
@@ -85,29 +121,15 @@ auto TransformUploader::Update(
   engine::sceneprep::TransformHandle handle, const glm::mat4& transform) -> void
 {
   const auto idx = static_cast<std::size_t>(handle.get());
-  if (idx >= transforms_.size()) {
-    return; // invalid
-  }
+  DCHECK_F(idx < transforms_.size(),
+    "Update received invalid handle index {} (size={})", idx,
+    transforms_.size());
   if (transforms_[idx] == transform) {
     return; // no change
   }
   ++global_version_;
   transforms_[idx] = transform;
-  const glm::mat3 upper(transform);
-  const float det = glm::determinant(upper);
-  glm::mat3 normal3;
-  if (std::abs(det - 1.0f) < 1e-3f) {
-    normal3 = upper;
-  } else {
-    normal3 = glm::transpose(glm::inverse(upper));
-  }
-  glm::mat4 normal4(1.0f);
-  for (int r = 0; r < 3; ++r) {
-    for (int c = 0; c < 3; ++c) {
-      normal4[c][r] = normal3[r][c];
-    }
-  }
-  normal_matrices_[idx] = normal4;
+  normal_matrices_[idx] = ComputeNormalMatrix(transform);
   world_versions_[idx] = global_version_;
   normal_versions_[idx] = global_version_;
   if (dirty_epoch_[idx] != current_epoch_) {
@@ -118,6 +140,7 @@ auto TransformUploader::Update(
 
 auto TransformUploader::BeginFrame() -> void
 {
+  // BeginFrame must be called once per frame by the orchestrator (Renderer).
   ++current_epoch_;
   if (current_epoch_ == 0U) { // wrapped
     current_epoch_ = 1U;
@@ -126,48 +149,26 @@ auto TransformUploader::BeginFrame() -> void
   dirty_indices_.clear();
 }
 
-auto TransformUploader::GetUniqueTransformCount() const -> std::size_t
-{
-  return transforms_.size();
-}
+// Accessors for spans and dirty indices retained; individual element getters
+// removed.
 
-auto TransformUploader::GetTransform(
-  engine::sceneprep::TransformHandle handle) const -> glm::mat4
-{
-  const auto idx = static_cast<std::size_t>(handle.get());
-  if (idx < transforms_.size()) {
-    return transforms_[idx];
-  }
-  return { 1.0f };
-}
-
-auto TransformUploader::GetNormalMatrix(
-  engine::sceneprep::TransformHandle handle) const -> glm::mat4
-{
-  const auto idx = static_cast<std::size_t>(handle.get());
-  if (idx < normal_matrices_.size()) {
-    return normal_matrices_[idx];
-  }
-  return { 1.0f };
-}
-
-auto TransformUploader::GetWorldMatricesSpan() const noexcept
+auto TransformUploader::GetWorldMatrices() const noexcept
   -> std::span<const glm::mat4>
 {
   return { transforms_.data(), transforms_.size() };
 }
 
-auto TransformUploader::GetNormalMatricesSpan() const noexcept
+auto TransformUploader::GetNormalMatrices() const noexcept
   -> std::span<const glm::mat4>
 {
   return { normal_matrices_.data(), normal_matrices_.size() };
 }
 
 auto TransformUploader::GetDirtyIndices() const noexcept
-  -> const std::vector<std::uint32_t>&
+  -> std::span<const std::uint32_t>
 
 {
-  return dirty_indices_;
+  return { dirty_indices_.data(), dirty_indices_.size() };
 }
 
 auto TransformUploader::IsValidHandle(
@@ -177,52 +178,254 @@ auto TransformUploader::IsValidHandle(
   return idx < transforms_.size();
 }
 
-auto TransformUploader::ProcessTransforms(
-  const std::vector<glm::mat4>& transforms) -> TransformBufferInfo
+auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
+  -> glm::mat4
 {
-  // Optionally, this could use the deduplication logic above, but for now, just
-  // upload the provided transforms.
-  TransformBufferInfo info;
-  std::vector<glm::mat4> unique_transforms = transforms;
-  for (size_t i = 0; i < transforms.size(); ++i) {
-    info.handle_to_slot[static_cast<uint32_t>(i)] = static_cast<uint32_t>(i);
+  // Compute inverse-transpose of the upper-left 3x3, place into a mat4.
+  // Keep translation as (0,0,0,1).
+  // glm::inverseTranspose(mat3) may not be available consistently; do it
+  // explicitly for robustness.
+  // Extract 3x3
+  const float a00 = world[0][0], a01 = world[0][1], a02 = world[0][2];
+  const float a10 = world[1][0], a11 = world[1][1], a12 = world[1][2];
+  const float a20 = world[2][0], a21 = world[2][1], a22 = world[2][2];
+
+  // Compute determinant
+  const float det = a00 * (a11 * a22 - a12 * a21)
+    - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
+
+  // Guard against singular matrices; fall back to identity normal matrix.
+  if (det == 0.0f || !std::isfinite(det)) {
+    return glm::mat4 { 1.0f };
   }
-  auto graphics = graphics_.lock();
-  if (!graphics) {
-    return info;
+  const float inv_det = 1.0f / det;
+
+  // Inverse of 3x3 (cofactor matrix transposed) times inv_det
+  const float i00 = (a11 * a22 - a12 * a21) * inv_det;
+  const float i01 = (a02 * a21 - a01 * a22) * inv_det;
+  const float i02 = (a01 * a12 - a02 * a11) * inv_det;
+
+  const float i10 = (a12 * a20 - a10 * a22) * inv_det;
+  const float i11 = (a00 * a22 - a02 * a20) * inv_det;
+  const float i12 = (a02 * a10 - a00 * a12) * inv_det;
+
+  const float i20 = (a10 * a21 - a11 * a20) * inv_det;
+  const float i21 = (a01 * a20 - a00 * a21) * inv_det;
+  const float i22 = (a00 * a11 - a01 * a10) * inv_det;
+
+  // Transpose to get inverse-transpose
+  glm::mat4 n { 1.0f };
+  n[0][0] = i00;
+  n[0][1] = i10;
+  n[0][2] = i20;
+  n[0][3] = 0.0f;
+  n[1][0] = i01;
+  n[1][1] = i11;
+  n[1][2] = i21;
+  n[1][3] = 0.0f;
+  n[2][0] = i02;
+  n[2][1] = i12;
+  n[2][2] = i22;
+  n[2][3] = 0.0f;
+  n[3][0] = 0.0f;
+  n[3][1] = 0.0f;
+  n[3][2] = 0.0f;
+  n[3][3] = 1.0f;
+  return n;
+}
+
+auto TransformUploader::EnsureBufferAndSrv(
+  std::shared_ptr<graphics::Buffer>& buffer, std::uint32_t& bindless_index,
+  std::uint64_t size_bytes, const char* debug_label) -> bool
+{
+  bool recreated = false;
+  if (!buffer || buffer->GetSize() < size_bytes) {
+    graphics::BufferDesc desc;
+    desc.size_bytes = size_bytes;
+    desc.usage = graphics::BufferUsage::kStorage;
+    desc.memory = graphics::BufferMemory::kDeviceLocal;
+    desc.debug_name = debug_label;
+    buffer = gfx_.CreateBuffer(desc);
+
+    auto& registry = gfx_.GetResourceRegistry();
+    auto& allocator = gfx_.GetDescriptorAllocator();
+    registry.Register(buffer);
+
+    graphics::BufferViewDescription view_desc;
+    view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+    view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    view_desc.range = { 0, size_bytes };
+    view_desc.stride = sizeof(glm::mat4);
+
+    auto handle
+      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    bindless_index = index.get();
+    registry.RegisterView(*buffer, std::move(handle), view_desc);
+
+    DLOG_F(1, "TransformUploader: {} SRV assigned to heap index {}",
+      debug_label, bindless_index);
+    recreated = true;
   }
-  auto& allocator = graphics->GetDescriptorAllocator();
-  auto& registry = graphics->GetResourceRegistry();
-  const uint64_t buffer_size = unique_transforms.size() * sizeof(glm::mat4);
-  graphics::BufferDesc desc;
-  desc.size_bytes = buffer_size;
-  desc.usage = graphics::BufferUsage::kStorage;
-  desc.memory = graphics::BufferMemory::kDeviceLocal;
-  desc.debug_name = "TransformBuffer";
-  std::shared_ptr<graphics::Buffer> buffer = graphics->CreateBuffer(desc);
-  engine::upload::UploadRequest req;
-  req.kind = engine::upload::UploadKind::kBuffer;
-  req.desc = engine::upload::UploadBufferDesc {
-    .dst = buffer,
-    .size_bytes = buffer_size,
-    .dst_offset = 0,
-  };
-  req.data = engine::upload::UploadDataView { std::as_bytes(
-    std::span<const glm::mat4>(unique_transforms)) };
-  uploader_->Submit(req);
-  registry.Register(buffer);
-  graphics::BufferViewDescription view_desc;
-  view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  view_desc.range = { 0, buffer_size };
-  view_desc.stride = sizeof(glm::mat4);
-  auto handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
-  info.buffer = buffer;
-  info.bindless_index = allocator.GetShaderVisibleIndex(handle).get();
-  registry.RegisterView(*buffer, std::move(handle), view_desc);
-  return info;
+  return recreated;
+}
+
+auto TransformUploader::BuildSparseUploadRequests(
+  const std::vector<std::uint32_t>& indices, std::span<const glm::mat4> src,
+  const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
+  -> std::vector<engine::upload::UploadRequest>
+{
+  std::vector<engine::upload::UploadRequest> uploads;
+  if (!dst || indices.empty()) {
+    return uploads;
+  }
+
+  std::vector<std::uint32_t> sorted = indices;
+  std::ranges::sort(sorted);
+  sorted.erase(std::ranges::unique(sorted).begin(), sorted.end());
+
+  uploads.reserve(sorted.size());
+  std::size_t run_begin = 0;
+  while (run_begin < sorted.size()) {
+    std::size_t run_end = run_begin;
+    while (run_end + 1 < sorted.size()
+      && sorted[run_end + 1] == (sorted[run_end] + 1)) {
+      ++run_end;
+    }
+    const std::uint32_t first = sorted[run_begin];
+    const std::uint32_t last = sorted[run_end];
+    const std::size_t count = last - first + 1;
+    const std::size_t byte_count = count * sizeof(glm::mat4);
+    const std::size_t byte_offset
+      = static_cast<std::size_t>(first) * sizeof(glm::mat4);
+
+    engine::upload::UploadRequest r;
+    r.kind = engine::upload::UploadKind::kBuffer;
+    r.batch_policy = engine::upload::BatchPolicy::kCoalesce;
+    r.debug_name = debug_name;
+    r.desc = engine::upload::UploadBufferDesc {
+      .dst = dst,
+      .size_bytes = static_cast<std::uint64_t>(byte_count),
+      .dst_offset = static_cast<std::uint64_t>(byte_offset),
+    };
+    const auto* src_ptr = reinterpret_cast<const std::byte*>(&src[first]);
+    r.data = engine::upload::UploadDataView { std::span<const std::byte>(
+      src_ptr, byte_count) };
+    uploads.emplace_back(std::move(r));
+
+    run_begin = run_end + 1;
+  }
+
+  return uploads;
+}
+
+auto TransformUploader::EnsureWorldsOnGpu() -> void
+{
+  const uint64_t buffer_size = transforms_.size() * sizeof(glm::mat4);
+  if (buffer_size == 0) {
+    return;
+  }
+
+  // Create or resize the device-local buffer when needed (DRY helper)
+  const auto prev_world_index = bindless_index_;
+  const bool need_recreate = EnsureBufferAndSrv(
+    gpu_world_buffer_, bindless_index_, buffer_size, "WorldTransforms");
+
+  // Stability check: once assigned, the bindless index should remain stable
+  // across frames. Skip the check when we recreated the buffer/SRV.
+  if (!need_recreate && prev_world_index != 0u) {
+    DCHECK_F(bindless_index_ == prev_world_index,
+      "Worlds bindless index changed from {} to {} unexpectedly",
+      prev_world_index, bindless_index_);
+  }
+
+  // Upload current CPU data
+  if (uploader_ && gpu_world_buffer_) {
+    // If buffer was recreated or the dirty region set is large, do a full
+    // upload.
+    const bool do_full_upload = need_recreate
+      || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
+
+    if (do_full_upload) {
+      engine::upload::UploadRequest req;
+      req.kind = engine::upload::UploadKind::kBuffer;
+      req.batch_policy = engine::upload::BatchPolicy::kCoalesce;
+      req.debug_name = "WorldTransforms";
+      req.desc = engine::upload::UploadBufferDesc {
+        .dst = gpu_world_buffer_,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+      };
+      req.data = engine::upload::UploadDataView { std::as_bytes(
+        std::span<const glm::mat4>(transforms_)) };
+      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+    } else if (!dirty_indices_.empty()) {
+      auto uploads = BuildSparseUploadRequests(dirty_indices_,
+        std::span<const glm::mat4>(transforms_), gpu_world_buffer_,
+        "WorldTransforms.sparse");
+      if (!uploads.empty()) {
+        static_cast<void>(uploader_->SubmitMany(uploads));
+      }
+    }
+  }
+}
+
+auto TransformUploader::EnsureNormalsOnGpu() -> void
+{
+  const uint64_t buffer_size = normal_matrices_.size() * sizeof(glm::mat4);
+  if (buffer_size == 0) {
+    return;
+  }
+
+  const auto prev_normal_index = normals_bindless_index_;
+  const bool need_recreate = EnsureBufferAndSrv(gpu_normals_buffer_,
+    normals_bindless_index_, buffer_size, "NormalMatrices");
+
+  if (!need_recreate && prev_normal_index != 0u) {
+    DCHECK_F(normals_bindless_index_ == prev_normal_index,
+      "Normals bindless index changed from {} to {} unexpectedly",
+      prev_normal_index, normals_bindless_index_);
+  }
+
+  if (uploader_ && gpu_normals_buffer_) {
+    const bool do_full_upload = need_recreate
+      || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
+
+    if (do_full_upload) {
+      engine::upload::UploadRequest req;
+      req.kind = engine::upload::UploadKind::kBuffer;
+      req.batch_policy = engine::upload::BatchPolicy::kCoalesce;
+      req.debug_name = "NormalMatrices";
+      req.desc = engine::upload::UploadBufferDesc {
+        .dst = gpu_normals_buffer_,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+      };
+      req.data = engine::upload::UploadDataView { std::as_bytes(
+        std::span<const glm::mat4>(normal_matrices_)) };
+      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+    } else if (!dirty_indices_.empty()) {
+      auto uploads = BuildSparseUploadRequests(dirty_indices_,
+        std::span<const glm::mat4>(normal_matrices_), gpu_normals_buffer_,
+        "NormalMatrices.sparse");
+      if (!uploads.empty()) {
+        static_cast<void>(uploader_->SubmitMany(uploads));
+      }
+    }
+  }
+}
+auto TransformUploader::GetNormalsSrvIndex() const -> std::uint32_t
+{
+  CHECK_NOTNULL_F(gpu_normals_buffer_,
+    "GetNormalsSrvIndex called before EnsureNormalsOnGpu() created buffer");
+  return normals_bindless_index_;
+}
+auto TransformUploader::GetWorldsSrvIndex() const -> std::uint32_t
+{
+  CHECK_NOTNULL_F(gpu_world_buffer_,
+    "GetWorldsSrvIndex called before EnsureWorldsOnGpu() created buffer");
+  return bindless_index_;
 }
 
 } // namespace oxygen::renderer::resources

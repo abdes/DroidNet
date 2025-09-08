@@ -94,8 +94,6 @@ set(
   "ScenePrep/State/GeometryRegistry.h"
   "ScenePrep/State/MaterialRegistry.cpp"
   "ScenePrep/State/MaterialRegistry.h"
-  "ScenePrep/State/TransformManager.cpp"
-  "ScenePrep/State/TransformManager.h"
   "ScenePrep/Types.h"
   "Upload/StagingAllocator.cpp"
   "Upload/StagingAllocator.h"

@@ -277,6 +277,7 @@ private:
 
   auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
   auto UpdateBindlessWorldsSlotIfChanged() -> void;
+  auto UpdateBindlessNormalsSlotIfChanged() -> void;
   auto UpdateDrawMetadataSlotIfChanged() -> void;
 
   auto EnsureAndUploadDrawMetadataBuffer() -> void;
@@ -286,7 +287,7 @@ private:
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
 
-  std::weak_ptr<oxygen::Graphics> graphics_; // New AsyncEngine path
+  std::weak_ptr<oxygen::Graphics> gfx_weak_; // New AsyncEngine path
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
 
