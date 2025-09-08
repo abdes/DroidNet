@@ -154,8 +154,8 @@ void CommandQueue::Signal(const uint64_t value) const
 
   DCHECK_GT_F(value, GetCurrentValue(),
     "New value must be greater than the current value");
-  DLOG_F(2, "CommandQueue[{}]::Signal({} / current={})", GetName(), value,
-    GetCurrentValue());
+  DLOG_F(1, "CommandQueue[{}]::Signal({} / current={} completed={})", GetName(),
+    value, GetCurrentValue(), GetCompletedValue());
   ThrowOnFailed((command_queue_->Signal(fence_, value)),
     fmt::format("Signal({}) on fence failed", value));
   current_value_ = value;
@@ -195,7 +195,8 @@ void CommandQueue::QueueWaitCommand(const uint64_t value) const
 {
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-
+  DLOG_F(1, "CommandQueue[{}]::QueueWaitCommand({}) completed={} current={}",
+    GetName(), value, GetCompletedValue(), GetCurrentValue());
   ThrowOnFailed(command_queue_->Wait(fence_, value),
     fmt::format("QueueWaitCommand({}) on fence failed", value));
 }
@@ -204,6 +205,8 @@ void CommandQueue::QueueSignalCommand(const uint64_t value)
 {
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
+  DLOG_F(1, "CommandQueue[{}]::QueueSignalCommand({}) completed={} current={}",
+    GetName(), value, GetCompletedValue(), GetCurrentValue());
   ThrowOnFailed(command_queue_->Signal(fence_, value),
     fmt::format("QueueSignalCommand({}) on fence failed", value));
 }

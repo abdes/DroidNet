@@ -109,7 +109,7 @@ auto AsyncEngine::Shutdown() -> co::Co<>
 {
   // Ensure work is done and deferred reclaims are processed
   if (!gfx_weak_.expired()) {
-    gfx_weak_.lock()->Shutdown();
+    gfx_weak_.lock()->Flush();
   }
 
   // Shutdown the platform event pump and processing loops
