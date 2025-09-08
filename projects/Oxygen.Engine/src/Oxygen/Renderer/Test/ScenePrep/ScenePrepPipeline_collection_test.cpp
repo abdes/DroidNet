@@ -152,7 +152,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
+  ScenePrepPipeline<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -191,7 +191,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
+  ScenePrepPipeline<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -233,7 +233,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
+  ScenePrepPipeline<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
@@ -277,7 +277,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipelineCollection<ConfigT> pipeline { cfg };
+  ScenePrepPipeline<ConfigT> pipeline { cfg };
 
   pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
 
