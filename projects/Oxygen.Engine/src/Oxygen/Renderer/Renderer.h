@@ -147,25 +147,6 @@ public:
   OXGN_RNDR_API auto BuildFrame(const CameraView& camera_view,
     const FrameContext& frame_context) -> std::size_t;
 
-  //! Configure zero-copy matrix aliasing.
-  /*!
-   Enables or disables zero-copy aliasing for world and normal matrices.
-   When aliasing is enabled for a matrix class, the prepared frame's span
-   will reference TransformManager's persistent storage directly instead of
-   copying into the renderer's per-frame CPU vectors. Disabling aliasing
-   forces a conservative copy path on the next frame build. Safe to call
-   mid-run; changes take effect on subsequent BuildFrame.
-
-   @param world  Enable aliasing for world matrices (glm::mat4).
-   @param normal Enable aliasing for normal matrices (glm::mat3 promoted to
-                 mat4 layout) if true; otherwise copy into per-frame buffer.
-  */
-  OXGN_RNDR_API auto SetMatrixAliasing(bool world, bool normal) -> void
-  {
-    alias_world_matrices_ = world;
-    alias_normal_matrices_ = normal;
-  }
-
 private:
   OXGN_RNDR_API auto PreExecute(
     RenderContext& context, const FrameContext& frame_context) -> void;
@@ -196,11 +177,6 @@ private:
   // focused steps while preserving original comments & ordering semantics.
   auto ResolveFilteredIndices(const sceneprep::ScenePrepState& prep_state)
     -> const std::vector<std::size_t>&;
-  //! Reserve matrix storage (monotonic high-water) for world & normal arrays.
-  auto ReserveMatrixStorage(std::size_t count) -> void;
-  //! Populate world & normal matrix SoA arrays from filtered indices.
-  auto PopulateMatrices(const std::vector<std::size_t>& filtered,
-    const sceneprep::ScenePrepState& prep_state) -> void;
   //! Generate DrawMetadata & material constant arrays with dedupe + validate.
   auto GenerateDrawMetadataAndMaterials(
     const std::vector<std::size_t>& filtered,
@@ -209,8 +185,9 @@ private:
   //! Build sorting keys, stable-sort, and construct partition ranges.
   auto BuildSortingAndPartitions()
     -> void; // builds sorting keys, sorts, partitions
-  //! Publish spans into PreparedSceneFrame for downstream passes.
-  auto PublishPreparedFrameSpans(std::size_t transform_count) -> void;
+  //! Publish spans into PreparedSceneFrame using TransformUploader data
+  //! directly.
+  auto PublishPreparedFrameSpans() -> void;
   //! Upload sorted DrawMetadata to bindless StructuredBuffer.
   auto UploadDrawMetadataBindless() -> void;
   //! Aggregate timing + counters and emit diagnostic partition logs.
@@ -247,11 +224,7 @@ private:
 
   //=== SoA Finalization (in-progress) ===----------------------------------//
   // CPU-owning storage populated during finalization each frame. Spans inside
-  // PreparedSceneFrame alias these vectors (no ownership transfer). Only world
-  // & normal matrices for Task 6; draw metadata still built through legacy
-  // path until later tasks migrate it fully.
-  std::vector<float> world_matrices_cpu_; // 16 floats per draw
-  std::vector<float> normal_matrices_cpu_; // 16 floats per draw
+  // PreparedSceneFrame alias these vectors (no ownership transfer).
   PreparedSceneFrame prepared_frame_ {}; // view object
   std::vector<DrawMetadata>
     draw_metadata_cpu_soa_; // SoA-built per-draw records
@@ -293,16 +266,6 @@ private:
 
   // Populates SoA arrays from ScenePrep outputs (initial minimal subset).
   auto FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state) -> void;
-
-  // Configuration: when true, publish world matrix spans directly over
-  // TransformManager storage (zero-copy) instead of copying into
-  // world_matrices_cpu_. Disabled by default until validated.
-  bool alias_world_matrices_ { true };
-  // Configuration: when true, publish normal matrix spans directly over
-  // TransformManager cached normal matrices (now natively stored as glm::mat4
-  // like world matrices). Enabled by default after validation of storage
-  // refactor eliminating per-frame promotion overhead.
-  bool alias_normal_matrices_ { true };
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each BuildFrame while retaining

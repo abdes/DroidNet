@@ -377,17 +377,10 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
   const auto& filtered = ResolveFilteredIndices(prep_state);
-  const std::size_t unique_transform_count = prep_state.transform_mgr
-    ? prep_state.transform_mgr->GetWorldMatrices().size()
-    : 0ULL;
-  // Allocate storage sized to number of unique transforms (handle id space)
-  ReserveMatrixStorage(unique_transform_count);
-  // Populate (or update) per-handle world/normal matrices using cached data.
-  PopulateMatrices(filtered, prep_state);
   GenerateDrawMetadataAndMaterials(filtered,
     prep_state); // may mutate material registry (stable handle allocation)
   BuildSortingAndPartitions();
-  PublishPreparedFrameSpans(unique_transform_count);
+  PublishPreparedFrameSpans();
   UploadDrawMetadataBindless();
   UpdateFinalizeStatistics(prep_state, filtered.size(), t_begin);
 }
@@ -450,68 +443,6 @@ auto Renderer::ResolveFilteredIndices(
     return synth;
   }
   return prep_state.filtered_indices;
-}
-
-auto Renderer::ReserveMatrixStorage(std::size_t count) -> void
-{
-  if (count > max_finalized_count_) {
-    max_finalized_count_ = count; // grow monotonic
-  }
-  const auto needed_floats = count * 16u; // 4x4 per transform
-  if (world_matrices_cpu_.capacity() < needed_floats) {
-    world_matrices_cpu_.reserve(needed_floats);
-  }
-  if (normal_matrices_cpu_.capacity() < needed_floats) {
-    normal_matrices_cpu_.reserve(needed_floats);
-  }
-  world_matrices_cpu_.resize(needed_floats);
-  normal_matrices_cpu_.resize(needed_floats);
-}
-
-auto Renderer::PopulateMatrices(const std::vector<std::size_t>& filtered,
-  const sceneprep::ScenePrepState& prep_state) -> void
-{
-  // Transform caching path: fetch world & cached normal matrix via handle.
-  const auto* tm = prep_state.transform_mgr.get();
-  if (!tm) {
-    return;
-  }
-  const auto world_span = tm->GetWorldMatrices();
-  const auto normal_span = tm->GetNormalMatrices();
-  const std::size_t unique_count = world_span.size();
-  if (unique_count == 0) {
-    return;
-  }
-  const bool alias_world = alias_world_matrices_;
-  const bool alias_normal = alias_normal_matrices_;
-  std::vector<uint8_t> written;
-  written.resize(unique_count, 0u);
-  for (size_t fi = 0; fi < filtered.size(); ++fi) {
-    const auto src_index = filtered[fi];
-    if (src_index >= prep_state.collected_items.size()) {
-      continue; // defensive
-    }
-    const auto& item = prep_state.collected_items[src_index];
-    const auto handle = item.transform_handle;
-    const auto h = handle.get();
-    if (static_cast<std::size_t>(h) >= unique_count) {
-      continue; // invalid handle (should not happen)
-    }
-    if (written[h]) {
-      continue; // already populated
-    }
-    written[h] = 1u;
-    DCHECK_F(tm->IsValidHandle(handle));
-    const glm::mat4& world = world_span[h];
-    const glm::mat4& normal
-      = normal_span.size() > h ? normal_span[h] : glm::mat4(1.0f);
-    if (!alias_world) {
-      std::memcpy(&world_matrices_cpu_[h * 16u], &world, sizeof(float) * 16u);
-    }
-    if (!alias_normal) {
-      std::memcpy(&normal_matrices_cpu_[h * 16u], &normal, sizeof(float) * 16u);
-    }
-  }
 }
 
 auto Renderer::GenerateDrawMetadataAndMaterials(
@@ -865,46 +796,22 @@ auto Renderer::BuildSortingAndPartitions() -> void
     last_sort_time_.count());
 }
 
-auto Renderer::PublishPreparedFrameSpans(std::size_t transform_count) -> void
+auto Renderer::PublishPreparedFrameSpans() -> void
 {
   const auto& tm = scene_prep_state_.transform_mgr;
-  if (alias_world_matrices_) {
-    if (tm) {
-      const auto world_span = tm->GetWorldMatrices();
-      prepared_frame_.world_matrices = std::span<const float>(
-        reinterpret_cast<const float*>(world_span.data()),
-        world_span.size() * 16u);
-    } else {
-      prepared_frame_.world_matrices = std::span<const float>();
-    }
-  } else {
-    prepared_frame_.world_matrices = std::span<const float>(
-      world_matrices_cpu_.data(), world_matrices_cpu_.size());
-  }
-  if (alias_normal_matrices_) {
-    if (tm) {
-      const auto normal_span = tm->GetNormalMatrices();
-      prepared_frame_.normal_matrices = std::span<const float>(
-        reinterpret_cast<const float*>(normal_span.data()),
-        normal_span.size() * 16u);
-    } else {
-      prepared_frame_.normal_matrices = std::span<const float>();
-    }
-  } else {
-    prepared_frame_.normal_matrices = std::span<const float>(
-      normal_matrices_cpu_.data(), normal_matrices_cpu_.size());
-  }
+  DCHECK_NOTNULL_F(tm); // tm should never be null in a valid Renderer
+  const auto world_span = tm->GetWorldMatrices();
+  prepared_frame_.world_matrices = std::span<const float>(
+    reinterpret_cast<const float*>(world_span.data()), world_span.size() * 16u);
+
+  const auto normal_span = tm->GetNormalMatrices();
+  prepared_frame_.normal_matrices
+    = std::span<const float>(reinterpret_cast<const float*>(normal_span.data()),
+      normal_span.size() * 16u);
+
   prepared_frame_.draw_metadata_bytes = std::span<const std::byte>(
     reinterpret_cast<const std::byte*>(draw_metadata_cpu_soa_.data()),
     draw_metadata_cpu_soa_.size() * sizeof(DrawMetadata));
-  if (!alias_world_matrices_) {
-    DCHECK_F(world_matrices_cpu_.size() == transform_count * 16u,
-      "World matrices size mismatch (unique_count * 16)");
-  }
-  if (!alias_normal_matrices_) {
-    DCHECK_F(normal_matrices_cpu_.size() == transform_count * 16u,
-      "Normal matrices size mismatch (unique_count * 16)");
-  }
 }
 
 auto Renderer::UploadDrawMetadataBindless() -> void
