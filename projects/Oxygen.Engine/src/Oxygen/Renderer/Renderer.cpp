@@ -376,7 +376,7 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   -> void
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
-  const auto& filtered = ResolveFilteredIndices(prep_state);
+  const auto& filtered = prep_state.filtered_indices;
   GenerateDrawMetadataAndMaterials(filtered,
     prep_state); // may mutate material registry (stable handle allocation)
   BuildSortingAndPartitions();
@@ -430,20 +430,6 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
 //    Optional expensive checks (mesh SRV indices valid, no NaN in matrices)
 //    gated by a debug flag to keep hot path clean in release.
 //----------------------------------------------------------------------------//
-
-auto Renderer::ResolveFilteredIndices(
-  const sceneprep::ScenePrepState& prep_state)
-  -> const std::vector<std::size_t>&
-{
-  // Fallback: if filtering not yet producing output, synthesize full sequence.
-  if (prep_state.filtered_indices.empty()) {
-    static std::vector<std::size_t> synth;
-    synth.resize(prep_state.collected_items.size());
-    std::iota(synth.begin(), synth.end(), 0ULL);
-    return synth;
-  }
-  return prep_state.filtered_indices;
-}
 
 auto Renderer::GenerateDrawMetadataAndMaterials(
   const std::vector<std::size_t>& filtered,

@@ -173,10 +173,6 @@ private:
   auto CurrentDrawCount() const noexcept -> std::size_t;
 
   //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
-  // These helpers break down the large FinalizeScenePrepSoA routine into
-  // focused steps while preserving original comments & ordering semantics.
-  auto ResolveFilteredIndices(const sceneprep::ScenePrepState& prep_state)
-    -> const std::vector<std::size_t>&;
   //! Generate DrawMetadata & material constant arrays with dedupe + validate.
   auto GenerateDrawMetadataAndMaterials(
     const std::vector<std::size_t>& filtered,

@@ -48,6 +48,7 @@ public:
     const auto items = node_table.Items();
     // Reserve an upper bound to minimize reallocations in producer
     state.collected_items.reserve(state.collected_items.size() + items.size());
+    state.filtered_indices.reserve(items.size());
 
     for (const auto& node_impl : items) {
       try {
@@ -77,8 +78,18 @@ public:
             continue;
           }
         }
+
+        // Track how many items were in collected_items before producer
+        const auto items_before = state.collected_items.size();
+
         if constexpr (CollectionCfg::has_producer) {
           collection_.producer(ctx, state, item);
+        }
+
+        // Track indices of all new items added by the producer
+        const auto items_after = state.collected_items.size();
+        for (auto i = items_before; i < items_after; ++i) {
+          state.filtered_indices.push_back(i);
         }
       } catch (const std::exception&) {
         // Skip node if RenderItemProto construction fails (missing components)
