@@ -41,7 +41,6 @@ m_gtest_program(
     "ScenePrep/DrawMetadata_material_handle_test.cpp"
     "ScenePrep/EmitPerVisibleSubmesh_test.cpp"
     "ScenePrep/ExtractionPreFilter_test.cpp"
-    "ScenePrep/MaterialRegistry_basic_test.cpp"
     "ScenePrep/MeshResolver_test.cpp"
     "ScenePrep/RenderItemProto_test.cpp"
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"

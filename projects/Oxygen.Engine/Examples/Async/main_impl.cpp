@@ -16,6 +16,7 @@
 #include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -249,12 +250,17 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     // Register built-in engine modules (one-time)
     {
-      // Renderer: performs Scene::Update() during kTransformPropagation
-      register_module(std::make_unique<engine::Renderer>(app.gfx_weak));
+      // Create the Renderer - we need unique_ptr for registration and
+      // observer_ptr for MainModule
+      auto renderer_unique = std::make_unique<engine::Renderer>(app.gfx_weak);
+      auto renderer_observer = observer_ptr { renderer_unique.get() };
+
+      // Register as module
+      register_module(std::move(renderer_unique));
 
       // Graphics main module (replaces RenderController/RenderThread pattern)
       register_module(std::make_unique<oxygen::examples::async::MainModule>(
-        app.platform, app.gfx_weak, fullscreen));
+        app.platform, app.gfx_weak, fullscreen, renderer_observer));
     }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));

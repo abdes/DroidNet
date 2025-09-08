@@ -152,11 +152,6 @@ private:
     RenderContext& context, const FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
-  //=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) -------------------//
-  //! Extract scene pointer from FrameContext (defensive null check).
-  auto ResolveScene(const FrameContext& frame_context) -> scene::Scene&;
-  //! Initialize frame sequence number from FrameContext (PhaseId::kFrameGraph).
-  auto InitializeFrameSequence(const FrameContext& frame_context) -> void;
   //! Prepare collection configuration (centralized future policy hook).
   using BasicCollectionConfig
     = decltype(sceneprep::CreateBasicCollectionConfig());
@@ -174,8 +169,7 @@ private:
 
   //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
   //! Generate DrawMetadata & material constant arrays with dedupe + validate.
-  auto GenerateDrawMetadataAndMaterials(
-    const std::vector<std::size_t>& filtered,
+  auto GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
     sceneprep::ScenePrepState& prep_state)
     -> void; // non-const: may register new materials (stable handle allocation)
   //! Build sorting keys, stable-sort, and construct partition ranges.
@@ -193,11 +187,9 @@ private:
 
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
 
-  auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
   auto UpdateDrawMetadataSlotIfChanged() -> void;
 
   auto EnsureAndUploadDrawMetadataBuffer() -> void;
-  auto EnsureAndUploadMaterialConstants() -> void;
 
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
@@ -224,9 +216,6 @@ private:
   PreparedSceneFrame prepared_frame_ {}; // view object
   std::vector<DrawMetadata>
     draw_metadata_cpu_soa_; // SoA-built per-draw records
-  std::vector<MaterialConstants>
-    material_constants_cpu_soa_; // SoA-built material constants parallel to
-                                 // draw metadata
   // Partition map backing storage (pass mask -> [begin,end)) published via
   // PreparedSceneFrame spans each frame (Task 11 scaffolding).
   std::vector<PreparedSceneFrame::PartitionRange> partitions_cpu_soa_;

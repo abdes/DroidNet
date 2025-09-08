@@ -82,6 +82,8 @@ auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
 Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   : gfx_weak_(std::move(graphics))
 {
+  LOG_F(
+    2, "Renderer::Renderer [this={}] - constructor", static_cast<void*>(this));
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
   auto& gfx = *gfx_weak_.lock();
   uploader_ = std::make_unique<upload::UploadCoordinator>(gfx);
@@ -93,6 +95,11 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   // Initialize GeometryUploader to replace legacy GeometryRegistry
   scene_prep_state_.geometry_uploader
     = std::make_unique<renderer::resources::GeometryUploader>(
+      gfx, observer_ptr { uploader_.get() });
+
+  // Initialize MaterialBinder to replace legacy MaterialRegistry
+  scene_prep_state_.material_binder
+    = std::make_unique<renderer::resources::MaterialBinder>(
       gfx, observer_ptr { uploader_.get() });
 }
 
@@ -153,8 +160,16 @@ auto Renderer::PreExecute(
     scene_prep_state_.geometry_uploader->EnsureFrameResources();
   }
 
-  EnsureAndUploadMaterialConstants();
-  UpdateBindlessMaterialConstantsSlotIfChanged();
+  // Consolidated material resource preparation
+  if (scene_prep_state_.material_binder) {
+    scene_prep_state_.material_binder->EnsureFrameResources();
+
+    const auto materials_srv
+      = scene_prep_state_.material_binder->GetMaterialsSrvIndex();
+    scene_const_cpu_.SetBindlessMaterialConstantsSlot(
+      BindlessMaterialConstantsSlot(materials_srv.get()),
+      SceneConstants::kRenderer);
+  }
 
   MaybeUpdateSceneConstants(frame_context);
 
@@ -181,19 +196,8 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 
 auto Renderer::OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
 {
-  // Ensure all pending geometry uploads complete before command recording
-  if (uploader_ && scene_prep_state_.geometry_uploader) {
-    const auto tickets
-      = scene_prep_state_.geometry_uploader->GetPendingUploadTickets();
-    if (!tickets.empty()) {
-      uploader_->AwaitAll(tickets);
-    }
-  }
-
-  // Upload queues may have completed work by now; retire staging.
-  if (uploader_) {
-    uploader_->RetireCompleted();
-  }
+  // TODO: this will receive the render graph execution once the rendeer is
+  // fully refactored
   co_return;
 }
 
@@ -283,7 +287,7 @@ auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
   scene_const_cpu_.SetFrameSlot(
     frame_context.GetFrameSlot(), SceneConstants::kRenderer);
   scene_const_cpu_.SetFrameSequenceNumber(
-    frame_seq_num, SceneConstants::kRenderer);
+    frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
   const auto current_version = scene_const_cpu_.GetVersion();
   if (scene_const_buffer_
     && current_version == last_uploaded_scene_const_version_) {
@@ -322,16 +326,6 @@ auto Renderer::WireContext(RenderContext& context) -> void
   context.SetRenderer(this, graphics_ptr.get());
 }
 
-auto Renderer::UpdateBindlessMaterialConstantsSlotIfChanged() -> void
-{
-  auto new_slot = BindlessMaterialConstantsSlot(kInvalidDescriptorSlot);
-  if (material_constants_.HasData() && material_constants_.IsSlotAssigned()) {
-    new_slot = BindlessMaterialConstantsSlot(material_constants_.GetHeapSlot());
-  }
-  scene_const_cpu_.SetBindlessMaterialConstantsSlot(
-    new_slot, SceneConstants::kRenderer);
-}
-
 auto Renderer::SetDrawMetadata(const DrawMetadata& indices) -> void
 {
   // Set single-entry array in the bindless structured buffer and mark dirty
@@ -357,14 +351,14 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   //  * view/scenec constants update
   // Command recording happens later (PhaseId::kCommandRecord).
 
-  auto& scene = ResolveScene(frame_context);
-  InitializeFrameSequence(frame_context);
+  auto scene_ptr = frame_context.GetScene();
+  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
 
   // Reset per-frame state but retain persistent caches
   // (transform/material/geometry)
   scene_prep_state_.ResetFrameData();
   const auto cfg = PrepareScenePrepCollectionConfig();
-  CollectScenePrep(scene, view, scene_prep_state_, cfg);
+  CollectScenePrep(*scene_ptr, view, scene_prep_state_, cfg);
   FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
 
@@ -386,97 +380,19 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   prep_state.geometry_uploader->EnsureFrameResources();
 
   const auto& filtered = prep_state.filtered_indices;
-  GenerateDrawMetadataAndMaterials(filtered,
-    prep_state); // may mutate material registry (stable handle allocation)
+  GenerateDrawMetadata(filtered, prep_state);
   BuildSortingAndPartitions();
   PublishPreparedFrameSpans();
   UploadDrawMetadataBindless();
   UpdateFinalizeStatistics(prep_state, filtered.size(), t_begin);
 }
 
-//=== SoA Finalization helper implementations =============================//
-
-//=== Improvement Opportunities (SoA Finalization)
-//-----------------------------//
-// 1. Matrix Computation Caching:
-//    (Partially Addressed) World & normal matrices now sourced from
-//    TransformManager cache (allocated during collection). We still duplicate
-//    them into per-frame SoA arrays. Next: alias cached storage directly and
-//    map DrawMetadata.transform_index to global handle indices.
-// 2. Parallelization:
-//    PopulateMatrices + GenerateDrawMetadataAndMaterials are independent of
-//    sorting; could be partitioned across worker threads (job system) using
-//    chunked ranges. Care: material dedupe map would need thread-safe
-//    combining (e.g. per-thread maps + merge phase) to keep deterministic
-//    ordering.
-// 3. Memory Pooling:
-//    Replace std::vector high-water reserves with a ring-buffer or slab
-//    allocator to retain pages and reduce potential fragmentation for large
-//    scenes. Track peak separately per frame graph stage.
-// 4. Sorting Key Optimization:
-//    Current stable_sort builds permutation then copies vectors. Could switch
-//    to radix / timsort adaptation over array-of-struct keys, or store keys
-//    interleaved in DrawMetadata to reduce cache misses.
-// 5. Pass Mask Expansion:
-//    Future additional bits (additive, decals, ui, transmission) require
-//    adjusting partition build to group by composite classes (e.g. depth pre-
-//    pass eligibility) rather than raw flag value order.
-// 6. Indirect Draw Args:
-//    Once unified 32-byte indirect arg struct is implemented, generate and
-//    upload alongside DrawMetadata to avoid CPU re-walk for multi-pass issue
-//    (see work log indirect args note).
-// 7. GPU-driven Culling Path:
-//    Insert compute stage after collection to perform frustum/occlusion
-//    culling on compressed instance data; filter masks before sorting to
-//    shrink sort workload.
-// 8. Material Dedupe Hashing:
-//    Replace pointer-map with content hash (pipeline-affecting fields) to
-//    enable merging identical materials originating from distinct assets.
-// 9. Telemetry:
-//    Add counters for per-stage time (populate, materials, sort, partition)
-//    instead of aggregated finalize_time for finer regressions.
-// 10. Validation Mode:
-//    Optional expensive checks (mesh SRV indices valid, no NaN in matrices)
-//    gated by a debug flag to keep hot path clean in release.
-//----------------------------------------------------------------------------//
-
-auto Renderer::GenerateDrawMetadataAndMaterials(
-  const std::vector<std::size_t>& filtered,
+auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
   sceneprep::ScenePrepState& prep_state) -> void
 {
   // Direct DrawMetadata generation (Task 6: native SoA path)
   draw_metadata_cpu_soa_.clear();
   draw_metadata_cpu_soa_.reserve(filtered.size());
-  material_constants_cpu_soa_.clear();
-  // IMPORTANT: After adopting stable registry MaterialHandle in DrawMetadata
-  // we must make the MaterialConstants StructuredBuffer index space MATCH the
-  // handle values. Previous logic built a densely packed per-frame dedupe
-  // array and stored the stable handle in DrawMetadata; this caused mismatched
-  // lookups on the GPU (wrong colors) because meta.material_handle no longer
-  // referenced the packed slot. We now build a sparse-aligned array whose
-  // indices correspond exactly to MaterialHandle values used this frame.
-  // Strategy:
-  //  - Allocate vector up to (max_handle_value + 1) lazily as we encounter
-  //    handles during draw emission.
-  //  - Slot 0 always contains default material constants (sentinel).
-  //  - For each draw with non-null material, fill the slot at its handle
-  //    value if not already initialized.
-  //  - Unused intermediate slots remain default-initialized (zero / default
-  //    constructed). This is acceptable because no draw references them.
-  //  - This keeps per-frame rebuild cheap while guaranteeing index alignment.
-  // NOTE: Potential memory growth if handle space becomes sparse & large.
-  // Acceptable for current iteration; future optimization could maintain a
-  // compact indirection table (handle->packed index) and store packed index in
-  // DrawMetadata instead.
-  // Initialize default slot (index 0) always.
-  material_constants_cpu_soa_.resize(1u);
-  {
-    // Ensure index 0 populated with canonical default each frame for safety.
-    const auto fallback = data::MaterialAsset::CreateDefault();
-    material_constants_cpu_soa_[0] = MakeMaterialConstants(*fallback);
-  }
-  std::vector<uint8_t> material_slot_initialized; // parallels vector size
-  material_slot_initialized.resize(1u, 1u); // slot 0 initialized
 
   auto ClassifyMaterialPassMask
     = [&](const data::MaterialAsset* mat) -> PassMask {
@@ -572,39 +488,17 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
         dm.vertex_count = view.VertexCount();
       }
       dm.instance_count = 1;
-      // Obtain stable registry handle (sentinel 0 if null material)
+      // Obtain stable handle from MaterialBinder
+      LOG_F(2,
+        "GenerateDrawMetadata - prep_state addr={}, "
+        "material_binder addr={}",
+        static_cast<void*>(&prep_state),
+        static_cast<void*>(prep_state.material_binder.get()));
       const auto stable_handle
-        = prep_state.material_registry.GetOrRegisterMaterial(item.material);
+        = prep_state.material_binder->GetOrAllocate(item.material);
       const auto stable_handle_value = stable_handle.get();
-      // Migration assert: stable handle should be 0 iff material pointer is
-      // null.
-      DCHECK_F((stable_handle_value == 0u) == (item.material == nullptr),
-        "MaterialHandle sentinel mismatch (handle={} null_ptr={})",
-        stable_handle_value, item.material == nullptr);
-      // Resize aligned constants array if needed.
-      if (stable_handle_value >= material_constants_cpu_soa_.size()) {
-        material_constants_cpu_soa_.resize(stable_handle_value + 1u);
-        material_slot_initialized.resize(stable_handle_value + 1u, 0u);
-        // Newly added slots remain uninitialized until first assignment.
-        // (They contain default constructed MaterialConstants.)
-      }
-      // Populate slot if first time this frame.
-      if (!material_slot_initialized[stable_handle_value]) {
-        if (stable_handle_value == 0u) {
-          // Already default; nothing to do (but mark initialized).
-          material_slot_initialized[0] = 1u;
-        } else if (item.material) {
-          material_constants_cpu_soa_[stable_handle_value]
-            = MakeMaterialConstants(*item.material);
-          material_slot_initialized[stable_handle_value] = 1u;
-        } else {
-          // Null material with non-zero handle should never occur.
-          DCHECK_F(false,
-            "Null material produced non-zero handle value={} (logic error)",
-            stable_handle_value);
-        }
-      }
-      dm.material_handle = stable_handle_value; // stable registry handle value
+
+      dm.material_handle = stable_handle_value;
       // Use stable TransformHandle id instead of filtered order index.
       const auto handle = item.transform_handle;
       dm.transform_index = handle.get();
@@ -619,10 +513,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
       draw_metadata_cpu_soa_.push_back(dm);
     }
   }
-  if (!material_constants_cpu_soa_.empty()) {
-    material_constants_.GetCpuData() = material_constants_cpu_soa_;
-    material_constants_.MarkDirty();
-  }
   if (!draw_metadata_cpu_soa_.empty()) {
     const std::size_t sample
       = std::min<std::size_t>(draw_metadata_cpu_soa_.size(), 3);
@@ -636,24 +526,6 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
         d.base_vertex, d.index_count, d.vertex_count, d.is_indexed,
         d.transform_index, d.material_handle);
     }
-  }
-  // Post population validation
-  std::size_t unique_transform_count = 0;
-  if (prep_state.transform_mgr) {
-    unique_transform_count
-      = prep_state.transform_mgr->GetWorldMatrices().size();
-  }
-  for (std::size_t s = 0; s < draw_metadata_cpu_soa_.size(); ++s) {
-    const auto& d = draw_metadata_cpu_soa_[s];
-    DCHECK_F(
-      static_cast<std::size_t>(d.transform_index) < unique_transform_count,
-      "Post population: transform_index {} >= unique_transform_count {}",
-      d.transform_index, unique_transform_count);
-    // material_handle not range-checked against per-frame constants: stable
-    // registry may exceed current per-frame material constants vector size
-    // (which covers only referenced materials).
-    DCHECK_F(
-      !d.flags.IsEmpty(), "Pass mask must not be empty for record {}", s);
   }
 }
 
@@ -830,22 +702,6 @@ auto Renderer::BuildFrame(const CameraView& camera_view,
   return BuildFrame(view, frame_context);
 }
 
-auto Renderer::ResolveScene(const FrameContext& frame_context) -> scene::Scene&
-{
-  auto scene_ptr = frame_context.GetScene();
-  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
-  // FIXME: temporary until everything uses the frame context (existing note
-  // preserved)
-  return *scene_ptr;
-}
-
-auto Renderer::InitializeFrameSequence(const FrameContext& frame_context)
-  -> void
-{
-  // Store frame sequence number from FrameContext (PhaseId::kFrameGraph)
-  frame_seq_num = frame_context.GetFrameSequenceNumber();
-}
-
 auto Renderer::PrepareScenePrepCollectionConfig() const -> BasicCollectionConfig
 {
   // Central hook for future renderer policy injection.
@@ -879,8 +735,6 @@ auto Renderer::CollectScenePrep(scene::Scene& scene, const View& view,
 auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
   -> void
 {
-  // New path (SoA finalization) - currently only populates matrix arrays.
-  // This is non-destructive and coexists with legacy AoS until passes migrate.
   FinalizeScenePrepSoA(prep_state); // may allocate new material handles
   DLOG_F(1,
     "Renderer BuildFrame finalized SoA frame: collected={} filtered={} "
@@ -909,162 +763,6 @@ auto Renderer::CurrentDrawCount() const noexcept -> std::size_t
 {
   return prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata);
 }
-
-namespace {
-auto CreateVertexBuffer(const Mesh& mesh, Graphics& graphics)
-  -> std::shared_ptr<Buffer>
-{
-  DLOG_F(2, "Create vertex buffer");
-
-  const auto vertices = mesh.Vertices();
-  const BufferDesc vb_desc {
-    .size_bytes = vertices.size() * sizeof(oxygen::data::Vertex),
-    .usage = BufferUsage::kVertex,
-    .memory = BufferMemory::kDeviceLocal,
-    .debug_name = std::string(mesh.GetName()) + ".VertexBuffer",
-  };
-  auto vertex_buffer = graphics.CreateBuffer(vb_desc);
-  vertex_buffer->SetName(vb_desc.debug_name);
-  graphics.GetResourceRegistry().Register(vertex_buffer);
-  return vertex_buffer;
-}
-
-auto CreateIndexBuffer(const Mesh& mesh, Graphics& graphics)
-  -> std::shared_ptr<Buffer>
-{
-  DLOG_F(2, "Create index buffer");
-
-  const auto indices_view = mesh.IndexBuffer();
-  std::size_t element_size = 0U;
-  if (indices_view.type == IndexType::kUInt16) {
-    element_size = sizeof(std::uint16_t);
-  } else if (indices_view.type == IndexType::kUInt32) {
-    element_size = sizeof(std::uint32_t);
-  }
-  const auto index_count = indices_view.Count();
-  const BufferDesc ib_desc {
-    .size_bytes = index_count * element_size,
-    .usage = BufferUsage::kIndex,
-    .memory = BufferMemory::kDeviceLocal,
-    .debug_name = std::string(mesh.GetName()) + ".IndexBuffer",
-  };
-  auto index_buffer = graphics.CreateBuffer(ib_desc);
-  index_buffer->SetName(ib_desc.debug_name);
-  graphics.GetResourceRegistry().Register(index_buffer);
-  return index_buffer;
-}
-
-// Create a StructuredBuffer SRV for a vertex buffer and register it.
-auto CreateAndRegisterVertexSrv(Graphics& graphics, Buffer& vertex_buffer)
-  -> uint32_t
-{
-  using oxygen::Format;
-  using oxygen::data::Vertex;
-  using oxygen::graphics::BufferViewDescription;
-  using oxygen::graphics::DescriptorVisibility;
-  using oxygen::graphics::ResourceViewType;
-
-  auto& descriptor_allocator = graphics.GetDescriptorAllocator();
-  auto& registry = graphics.GetResourceRegistry();
-
-  constexpr BufferViewDescription srv_desc {
-    .view_type = ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = DescriptorVisibility::kShaderVisible,
-    .format = Format::kUnknown,
-    .stride = sizeof(Vertex),
-  };
-  auto handle
-    = descriptor_allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      DescriptorVisibility::kShaderVisible);
-  if (!handle.IsValid()) {
-    LOG_F(ERROR, "Failed to allocate descriptor for vertex buffer SRV");
-    return 0U;
-  }
-  const auto view = vertex_buffer.GetNativeView(handle, srv_desc);
-  const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
-  registry.RegisterView(vertex_buffer, view, std::move(handle), srv_desc);
-  LOG_F(INFO, "Vertex buffer SRV registered at heap index {}", index);
-  return index.get();
-}
-
-// Create a typed SRV for an index buffer (R16/R32) and register it.
-auto CreateAndRegisterIndexSrv(Graphics& graphics, Buffer& index_buffer,
-  const IndexType index_type) -> uint32_t
-{
-  using oxygen::Format;
-  using oxygen::graphics::BufferViewDescription;
-  using oxygen::graphics::DescriptorVisibility;
-  using oxygen::graphics::ResourceViewType;
-
-  auto& descriptor_allocator = graphics.GetDescriptorAllocator();
-  auto& registry = graphics.GetResourceRegistry();
-
-  const auto typed_format
-    = index_type == IndexType::kUInt16 ? Format::kR16UInt : Format::kR32UInt;
-  const BufferViewDescription srv_desc {
-    .view_type = ResourceViewType::kTypedBuffer_SRV,
-    .visibility = DescriptorVisibility::kShaderVisible,
-    .format = typed_format,
-    .stride = 0,
-  };
-  auto handle = descriptor_allocator.Allocate(
-    ResourceViewType::kTypedBuffer_SRV, DescriptorVisibility::kShaderVisible);
-  if (!handle.IsValid()) {
-    LOG_F(ERROR, "Failed to allocate descriptor for index buffer SRV");
-    return 0U;
-  }
-  const auto view = index_buffer.GetNativeView(handle, srv_desc);
-  const auto index = descriptor_allocator.GetShaderVisibleIndex(handle);
-  registry.RegisterView(index_buffer, view, std::move(handle), srv_desc);
-  LOG_F(INFO, "Index buffer SRV registered at heap index {}", index);
-  return index.get();
-}
-
-} // namespace
-
-// Legacy EnsureAndUploadWorldTransforms retired; TransformUploader owns
-// worlds GPU buffer + SRV and publishes bindless slot.
-
-auto Renderer::EnsureAndUploadMaterialConstants() -> void
-{
-  if (!material_constants_.HasData()) {
-    return; // optional feature not used this frame
-  }
-  const auto graphics_ptr = gfx_weak_.lock();
-  if (!graphics_ptr) {
-    LOG_F(ERROR, "Graphics expired while ensuring material constants");
-    return;
-  }
-  auto& graphics = *graphics_ptr;
-  static_cast<void>(
-    material_constants_.EnsureBufferAndSrv(graphics, "MaterialConstants"));
-  if (uploader_ && material_constants_.IsDirty()) {
-    using upload::BatchPolicy;
-    using upload::UploadBufferDesc;
-    using upload::UploadDataView;
-    using upload::UploadKind;
-    using upload::UploadRequest;
-
-    const auto& cpu = material_constants_.GetCpuData();
-    const uint64_t size = cpu.size() * sizeof(MaterialConstants);
-    if (size > 0 && material_constants_.GetBuffer()) {
-      UploadRequest req;
-      req.kind = UploadKind::kBuffer;
-      req.batch_policy = BatchPolicy::kCoalesce;
-      req.debug_name = "MaterialConstants";
-      req.desc = UploadBufferDesc {
-        .dst = material_constants_.GetBuffer(),
-        .size_bytes = size,
-        .dst_offset = 0,
-      };
-      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
-      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
-      material_constants_.ClearDirty();
-    }
-  }
-}
-
-// Removed legacy material constants SRV registration; handled by helper
 
 auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
 {
@@ -1096,6 +794,17 @@ auto Renderer::GetSceneConstants() const -> const SceneConstants&
 
 auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
 {
+  LOG_F(2,
+    "Renderer::OnFrameStart - scene_prep_state_ addr={}, material_binder "
+    "addr={}",
+    static_cast<void*>(&scene_prep_state_),
+    static_cast<void*>(scene_prep_state_.material_binder.get()));
+
+  // Retire staging resources from previous frame uploads
+  if (uploader_) {
+    uploader_->RetireCompleted();
+  }
+
   // Reset transform manager for the new frame
   DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
   scene_prep_state_.transform_mgr->OnFrameStart();
@@ -1103,6 +812,10 @@ auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
   // Reset geometry uploader for the new frame
   DCHECK_NOTNULL_F(scene_prep_state_.geometry_uploader);
   scene_prep_state_.geometry_uploader->OnFrameStart();
+
+  // Reset material binder for the new frame
+  DCHECK_NOTNULL_F(scene_prep_state_.material_binder);
+  scene_prep_state_.material_binder->OnFrameStart();
 }
 
 /*!
