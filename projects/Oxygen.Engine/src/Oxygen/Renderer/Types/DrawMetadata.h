@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
@@ -30,8 +31,10 @@ namespace oxygen::engine {
 */
 struct DrawMetadata {
   // --- Geometry buffers ---
-  uint32_t vertex_buffer_index; // Bindless index into vertex buffer table
-  uint32_t index_buffer_index; // Bindless index into index buffer table
+  ShaderVisibleIndex
+    vertex_buffer_index; // Bindless index into vertex buffer table
+  ShaderVisibleIndex
+    index_buffer_index; // Bindless index into index buffer table
   uint32_t first_index; // Start index within the mesh index buffer
   int32_t base_vertex; // Base vertex offset (can be negative)
 

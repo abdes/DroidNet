@@ -15,8 +15,13 @@ auto ScenePrepState::ResetFrameData() -> void
   filtered_indices.clear();
   pass_masks.clear();
 
-  // No per-frame geometry residency cache: GeometryRegistry provides stable
-  // handles.
+  // Frame lifecycle for uploaders
+  if (transform_mgr) {
+    transform_mgr->OnFrameStart();
+  }
+  if (geometry_uploader) {
+    geometry_uploader->OnFrameStart();
+  }
 }
 
 } // namespace oxygen::engine::sceneprep

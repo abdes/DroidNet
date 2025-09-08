@@ -323,7 +323,7 @@ auto TransformUploader::BuildSparseUploadRequests(
   return uploads;
 }
 
-auto TransformUploader::EnsureWorldsOnGpu() -> void
+auto TransformUploader::PrepareWorldMatrices() -> void
 {
   const uint64_t buffer_size = transforms_.size() * sizeof(glm::mat4);
   if (buffer_size == 0) {
@@ -374,7 +374,7 @@ auto TransformUploader::EnsureWorldsOnGpu() -> void
   }
 }
 
-auto TransformUploader::EnsureNormalsOnGpu() -> void
+auto TransformUploader::PrepareNormalMatrices() -> void
 {
   const uint64_t buffer_size = normal_matrices_.size() * sizeof(glm::mat4);
   if (buffer_size == 0) {
@@ -440,18 +440,8 @@ auto TransformUploader::EnsureFrameResources() -> void
     "violation");
 
   // Always ensure both resources are prepared (idempotent operations)
-  PrepareWorldMatricesInternal();
-  PrepareNormalMatricesInternal();
-}
-
-auto TransformUploader::PrepareWorldMatricesInternal() -> void
-{
-  EnsureWorldsOnGpu();
-}
-
-auto TransformUploader::PrepareNormalMatricesInternal() -> void
-{
-  EnsureNormalsOnGpu();
+  PrepareWorldMatrices();
+  PrepareNormalMatrices();
 }
 
 } // namespace oxygen::renderer::resources

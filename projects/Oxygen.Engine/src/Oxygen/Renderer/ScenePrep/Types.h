@@ -66,37 +66,29 @@ using MaterialHandle
   oxygen::Hashable,
   oxygen::Comparable>; // clang-format on
 
-//! GPU resource handles for geometry assets.
+//! Handle to a geometry entry managed by GeometryUploader.
 /*!
- Represents the GPU-resident buffer identifiers for a geometry asset.
- Fields are opaque bindless indices into the renderer's resource tables.
- A value of 0 indicates an invalid or uninitialized handle.
+ Geometry handles reference deduplicated mesh resources stored by
+ the GeometryUploader. Handles are stable for the lifetime of the
+ residency entry but may be recycled over long-running execution;
+ do not assume monotonically increasing values. Use
+ `GeometryHandle::get()` to retrieve the underlying integer index when
+ interacting with low-level APIs.
+*/
+using GeometryHandle = oxygen::NamedType<uint32_t, // clang-format off
+  struct GeometryHandleTag,
+  oxygen::Hashable,
+  oxygen::Comparable>; // clang-format on
+
+//! DEPRECATED: Old GPU resource handles for legacy GeometryRegistry.
+/*!
+ @deprecated This struct-based approach is being replaced by the new
+ strong-typed GeometryHandle above. Will be removed when GeometryRegistry
+ migration is complete.
  */
-struct GeometryHandle {
+struct LegacyGeometryHandle {
   uint32_t vertex_buffer = 0;
   uint32_t index_buffer = 0;
-};
-
-//! Draw metadata for GPU command generation.
-/*!
- Minimal set of parameters required to emit a draw call. Fields are
- zero-initialized; populate the indexed or non-indexed subset depending on the
- draw type. Optional fields are provided for debugging and validation.
- */
-struct DrawMetadata {
-  // Indexed draw parameters
-  uint32_t first_index = 0;
-  uint32_t index_count = 0;
-  uint32_t base_vertex = 0;
-
-  // Non-indexed draw parameters
-  uint32_t first_vertex = 0;
-  uint32_t vertex_count = 0;
-
-  // Optional debugging/validation data
-  uint32_t draw_id = 0;
-  uint32_t mesh_id = 0;
-  uint32_t submesh_id = 0;
 };
 
 //! Shared context passed to ScenePrep algorithms.

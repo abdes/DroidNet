@@ -136,7 +136,7 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_RecordsRegionAndCompletes)
     .data = UploadDataView {
       .bytes = std::span<const std::byte>(data.data(), data.size()) } };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -159,7 +159,7 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_RecordsRegionAndCompletes)
   ASSERT_TRUE(res.has_value());
   EXPECT_EQ(res->bytes_uploaded, total);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 } // namespace
@@ -197,7 +197,7 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_ProducerFails_NoCopy)
     .subresources = {},
     .data = std::move(prod) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -213,5 +213,5 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_ProducerFails_NoCopy)
   EXPECT_EQ(res->error, oxygen::engine::upload::UploadError::kProducerFailed);
   EXPECT_EQ(res->bytes_uploaded, 0u);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }

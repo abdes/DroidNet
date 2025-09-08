@@ -142,7 +142,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_MockedPath_Completes)
     .data = UploadDataView {
       .bytes = std::span<const std::byte>(data.data(), data.size()) } };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
 
   // Act
   auto ticket = coord.Submit(req);
@@ -165,7 +165,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_MockedPath_Completes)
   EXPECT_EQ(res->bytes_uploaded, 64u);
 
   // Cleanup: process deferred releases to avoid reclaimer warnings
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Producer path: UploadRequest holds a producer instead of a byte view; the
@@ -200,7 +200,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Completes)
     .subresources = {},
     .data = std::move(producer) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
 
   // Act
   auto ticket = coord.Submit(req);
@@ -223,7 +223,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Completes)
   EXPECT_TRUE(res->success);
   EXPECT_EQ(res->bytes_uploaded, kSize);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! SubmitMany coalesces consecutive buffer uploads into one staging allocation
@@ -264,7 +264,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_CoalescesAndCompletes)
     .data = UploadDataView {
       .bytes = std::span<const std::byte>(data_b.data(), data_b.size()) } };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
 
   // Act
   std::vector<UploadRequest> reqs;
@@ -303,7 +303,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_CoalescesAndCompletes)
   EXPECT_EQ(e1.src_offset - e0.src_offset, 256u);
 
   // Cleanup
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! SubmitMany coalescing with producers: two producer-backed requests are
@@ -353,7 +353,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_Producers_CoalescesAndCompletes)
     .subresources = {},
     .data = std::move(pb) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
 
   // Act
   std::vector<UploadRequest> reqs;
@@ -393,7 +393,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_Producers_CoalescesAndCompletes)
   EXPECT_EQ(e0.src_offset % 256u, 0u);
   EXPECT_EQ(e1.src_offset - e0.src_offset, 256u);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Producer returns false: coordinator reports failure and records no copy.
@@ -419,7 +419,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Fails_NoCopy)
     .subresources = {},
     .data = std::move(prod) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -435,7 +435,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Fails_NoCopy)
   EXPECT_EQ(res->error, oxygen::engine::upload::UploadError::kProducerFailed);
   EXPECT_EQ(res->bytes_uploaded, 0u);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Batch: first producer ok, second fails. Only first copy is recorded; both
@@ -480,7 +480,7 @@ NOLINT_TEST(
     .subresources = {},
     .data = std::move(pb) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   std::vector<UploadRequest> reqs;
   reqs.emplace_back(std::move(ra));
   reqs.emplace_back(std::move(rb));
@@ -508,7 +508,7 @@ NOLINT_TEST(
   EXPECT_FALSE(r1->success);
   EXPECT_EQ(r1->error, oxygen::engine::upload::UploadError::kProducerFailed);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 } // namespace

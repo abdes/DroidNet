@@ -55,45 +55,13 @@ namespace sceneprep {
 struct RenderContext;
 struct MaterialConstants;
 
-//! Holds GPU resources for a mesh asset.
-struct MeshGpuResources {
-  std::shared_ptr<graphics::Buffer> vertex_buffer;
-  std::shared_ptr<graphics::Buffer> index_buffer;
-  // Optionally, descriptor indices, views, etc.
-  //! Shader-visible descriptor heap index for the vertex buffer SRV.
-  uint32_t vertex_srv_index { 0 };
-  //! Shader-visible descriptor heap index for the index buffer SRV.
-  uint32_t index_srv_index { 0 };
-};
-
-using MeshId = std::size_t;
-
-// TODO: Optimize the eviction so that only one traversal is needed.
-//! Interface for mesh resource eviction policy.
-class EvictionPolicy {
-public:
-  EvictionPolicy() = default;
-  virtual ~EvictionPolicy() = default;
-
-  OXYGEN_DEFAULT_COPYABLE(EvictionPolicy)
-  OXYGEN_DEFAULT_MOVABLE(EvictionPolicy)
-
-  virtual auto OnMeshAccess(MeshId id) -> void = 0;
-  virtual auto SelectResourcesToEvict(
-    const std::unordered_map<MeshId, MeshGpuResources>& current_resources,
-    std::size_t current_frame) -> std::vector<MeshId>
-    = 0;
-  virtual auto OnMeshRemoved(MeshId id) -> void = 0;
-};
-
 //! Renderer: backend-agnostic, manages mesh-to-GPU resource mapping and
 //! eviction.
 class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
-  OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics,
-    std::shared_ptr<EvictionPolicy> eviction_policy = nullptr);
+  OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
@@ -128,21 +96,6 @@ public:
   // Submit deferred uploads and retire completed ones during command record.
   OXGN_RNDR_NDAPI auto OnCommandRecord(FrameContext& context)
     -> co::Co<> override;
-
-  //! Returns the vertex buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API auto GetVertexBuffer(const data::Mesh& mesh)
-    -> std::shared_ptr<graphics::Buffer>;
-
-  //! Returns the index buffer for the given mesh, creating it if needed.
-  OXGN_RNDR_API auto GetIndexBuffer(const data::Mesh& mesh)
-    -> std::shared_ptr<graphics::Buffer>;
-
-  //! Explicitly unregisters a mesh and its GPU resources.
-  OXGN_RNDR_API auto UnregisterMesh(const data::Mesh& mesh) -> void;
-
-  //! Evicts unused mesh resources according to the eviction policy.
-  OXGN_RNDR_API auto EvictUnusedMeshResources(std::size_t current_frame)
-    -> void;
 
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
@@ -265,7 +218,6 @@ private:
     std::size_t filtered_count,
     std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
-  auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
 
   auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
@@ -278,8 +230,6 @@ private:
   auto WireContext(RenderContext& context) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
-  std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
-  std::shared_ptr<EvictionPolicy> eviction_policy_;
 
   // Managed draw item container removed (AoS path deprecated).
 
@@ -318,8 +268,9 @@ private:
     PassMask pass_mask {}; // from DrawMetadata.flags
     // DrawMetadata.material_handle (stable MaterialHandle)
     uint32_t material_index { 0 };
-    uint32_t geometry_vertex_srv { 0 }; // DrawMetadata.vertex_buffer_index
-    uint32_t geometry_index_srv { 0 }; // DrawMetadata.index_buffer_index
+    ShaderVisibleIndex
+      geometry_vertex_srv {}; // DrawMetadata.vertex_buffer_index
+    ShaderVisibleIndex geometry_index_srv {}; // DrawMetadata.index_buffer_index
   };
   std::vector<DrawSortingKey> sorting_keys_cpu_soa_;
   uint64_t last_draw_order_hash_ { 0ULL }; // FNV-1a over sequence of keys

@@ -137,7 +137,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_RecordsRegionAndCompletes)
     .data = UploadDataView {
       .bytes = std::span<const std::byte>(data.data(), data.size()) } };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
 
   auto ticket = coord.Submit(req);
   coord.Flush();
@@ -166,7 +166,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_RecordsRegionAndCompletes)
   EXPECT_EQ(res->bytes_uploaded, 32768u);
 
   // Cleanup deferred releases
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Multi-subresource upload: verifies two regions with proper pitches and
@@ -197,7 +197,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_MipChainTwoRegions_AlignedOffsets)
     .data = UploadDataView{ .bytes = std::span<const std::byte>(data.data(), data.size()) }
   };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -225,7 +225,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_MipChainTwoRegions_AlignedOffsets)
   EXPECT_EQ(res->bytes_uploaded, total);
 
   // Cleanup deferred releases
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Full Texture2D upload using a producer callback; verifies region pitches and
@@ -264,7 +264,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_WithProducer_Completes)
     .subresources = {},
     .data = std::move(prod) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -284,7 +284,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_WithProducer_Completes)
   ASSERT_TRUE(res.has_value());
   EXPECT_EQ(res->bytes_uploaded, expected_slice);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 //! Producer returns false: no CopyBufferToTexture and failed result.
@@ -315,7 +315,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_ProducerFails_NoCopy)
     .subresources = {},
     .data = std::move(prod) };
 
-  UploadCoordinator coord(gfx);
+  UploadCoordinator coord(*gfx);
   auto ticket = coord.Submit(req);
   coord.Flush();
   coord.RetireCompleted();
@@ -331,7 +331,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_ProducerFails_NoCopy)
   EXPECT_EQ(res->error, oxygen::engine::upload::UploadError::kProducerFailed);
   EXPECT_EQ(res->bytes_uploaded, 0u);
 
-  gfx->Shutdown();
+  gfx->Flush();
 }
 
 } // namespace

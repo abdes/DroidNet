@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
-#include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/State/MaterialRegistry.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
@@ -47,8 +47,9 @@ struct ScenePrepState {
   MaterialRegistry material_registry;
 
   // === Geometry Management ===
-  //! Persistent geometry registry with residency tracking.
-  GeometryRegistry geometry_registry;
+  //! Modern geometry uploader with deduplication and bindless access.
+  std::unique_ptr<oxygen::renderer::resources::GeometryUploader>
+    geometry_uploader;
 
   //! Reset per-frame data while preserving persistent caches.
   OXGN_RNDR_API auto ResetFrameData() -> void;

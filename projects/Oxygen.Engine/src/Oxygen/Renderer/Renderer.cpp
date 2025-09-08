@@ -32,7 +32,6 @@
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
-#include <Oxygen/Renderer/ScenePrep/State/GeometryRegistry.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
@@ -41,10 +40,7 @@
 using oxygen::Graphics;
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
-using oxygen::engine::EvictionPolicy;
 using oxygen::engine::MaterialConstants;
-using oxygen::engine::MeshGpuResources;
-using oxygen::engine::MeshId;
 using oxygen::engine::Renderer;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
@@ -54,14 +50,6 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
 namespace {
-//! Returns a unique MeshId for the given mesh instance.
-/*!
- Uses the address of the mesh object as the identifier.
-*/
-auto GetMeshId(const Mesh& mesh) -> MeshId
-{
-  return std::bit_cast<MeshId>(&mesh);
-}
 
 // Convert a data::MaterialAsset snapshot into engine::MaterialConstants
 auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
@@ -85,64 +73,14 @@ auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
   return mc;
 }
 
-//===----------------------------------------------------------------------===//
-// LRU Eviction Policy Implementation
-//===----------------------------------------------------------------------===//
-
-class LruEvictionPolicy : public EvictionPolicy {
-public:
-  static constexpr std::size_t kDefaultLruAge = 60; // frames
-  explicit LruEvictionPolicy(const std::size_t max_age_frames = kDefaultLruAge)
-    : max_age_(max_age_frames)
-  {
-  }
-  auto OnMeshAccess(const MeshId id) -> void override
-  {
-    last_used_[id] = current_frame_;
-  }
-  auto SelectResourcesToEvict(
-    const std::unordered_map<MeshId, MeshGpuResources>& currentResources,
-    const std::size_t currentFrame) -> std::vector<MeshId> override
-  {
-    current_frame_ = currentFrame;
-    std::vector<MeshId> evict;
-    for (const auto& id : currentResources | std::views::keys) {
-      auto it = last_used_.find(id);
-      if (it == last_used_.end() || currentFrame - it->second > max_age_) {
-        evict.push_back(id);
-      }
-    }
-    return evict;
-  }
-  auto OnMeshRemoved(const MeshId id) -> void override { last_used_.erase(id); }
-
-private:
-  std::size_t current_frame_ = 0;
-  std::size_t max_age_;
-  std::unordered_map<MeshId, std::size_t> last_used_;
-};
-
-//===----------------------------------------------------------------------===//
-// LRU Policy Factory
-//===----------------------------------------------------------------------===//
-
-auto MakeLruEvictionPolicy(std::size_t max_age_frames
-  = LruEvictionPolicy::kDefaultLruAge) -> std::shared_ptr<EvictionPolicy>
-{
-  return std::make_shared<LruEvictionPolicy>(max_age_frames);
-}
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
 
-Renderer::Renderer(std::weak_ptr<Graphics> graphics,
-  std::shared_ptr<EvictionPolicy> eviction_policy)
+Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   : gfx_weak_(std::move(graphics))
-  , eviction_policy_(
-      eviction_policy ? std::move(eviction_policy) : MakeLruEvictionPolicy())
 {
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
   auto& gfx = *gfx_weak_.lock();
@@ -150,6 +88,11 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics,
   // Ensure transform_mgr is always valid for scene prep and extraction
   scene_prep_state_.transform_mgr
     = std::make_unique<renderer::resources::TransformUploader>(
+      gfx, observer_ptr { uploader_.get() });
+
+  // Initialize GeometryUploader to replace legacy GeometryRegistry
+  scene_prep_state_.geometry_uploader
+    = std::make_unique<renderer::resources::GeometryUploader>(
       gfx, observer_ptr { uploader_.get() });
 }
 
@@ -161,17 +104,6 @@ Renderer::~Renderer()
     // Best-effort: ignore if already unregistered or null.
     draw_metadata_.ReleaseGpuResources(*g);
     material_constants_.ReleaseGpuResources(*g);
-
-    // Also unregister any remaining mesh buffers we still track.
-    auto& registry = g->GetResourceRegistry();
-    for (auto& [_, res] : mesh_resources_) {
-      if (res.vertex_buffer) {
-        registry.UnRegisterResource(*res.vertex_buffer);
-      }
-      if (res.index_buffer) {
-        registry.UnRegisterResource(*res.index_buffer);
-      }
-    }
   }
 }
 
@@ -182,65 +114,6 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
     throw std::runtime_error("Graphics expired in Renderer::GetGraphics");
   }
   return graphics_ptr;
-}
-
-auto Renderer::GetVertexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
-{
-  return EnsureMeshResources(mesh).vertex_buffer;
-}
-
-auto Renderer::GetIndexBuffer(const Mesh& mesh) -> std::shared_ptr<Buffer>
-{
-  return EnsureMeshResources(mesh).index_buffer;
-}
-
-auto Renderer::UnregisterMesh(const Mesh& mesh) -> void
-{
-  const MeshId id = GetMeshId(mesh);
-  const auto it = mesh_resources_.find(id);
-  if (it != mesh_resources_.end()) {
-    // Unregister resources and their views from the registry
-    if (auto g = gfx_weak_.lock()) {
-      auto& registry = g->GetResourceRegistry();
-      if (it->second.vertex_buffer) {
-        registry.UnRegisterResource(*it->second.vertex_buffer);
-      }
-      if (it->second.index_buffer) {
-        registry.UnRegisterResource(*it->second.index_buffer);
-      }
-    }
-    mesh_resources_.erase(it);
-    if (eviction_policy_) {
-      eviction_policy_->OnMeshRemoved(id);
-    }
-  }
-}
-
-auto Renderer::EvictUnusedMeshResources(const std::size_t current_frame) -> void
-{
-  if (!eviction_policy_) {
-    return;
-  }
-  const auto to_evict
-    = eviction_policy_->SelectResourcesToEvict(mesh_resources_, current_frame);
-  for (MeshId id : to_evict) {
-    // Ensure we unregister from the resource registry before erasing
-    if (auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
-      if (auto g = gfx_weak_.lock()) {
-        auto& registry = g->GetResourceRegistry();
-        if (it->second.vertex_buffer) {
-          registry.UnRegisterResource(*it->second.vertex_buffer);
-        }
-        if (it->second.index_buffer) {
-          registry.UnRegisterResource(*it->second.index_buffer);
-        }
-      }
-      mesh_resources_.erase(it);
-    } else {
-      mesh_resources_.erase(id);
-    }
-    eviction_policy_->OnMeshRemoved(id);
-  }
 }
 
 auto Renderer::PreExecute(
@@ -303,6 +176,15 @@ auto Renderer::PostExecute(RenderContext& context) -> void
 
 auto Renderer::OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
 {
+  // Ensure all pending geometry uploads complete before command recording
+  if (uploader_ && scene_prep_state_.geometry_uploader) {
+    const auto tickets
+      = scene_prep_state_.geometry_uploader->GetPendingUploadTickets();
+    if (!tickets.empty()) {
+      uploader_->AwaitAll(tickets);
+    }
+  }
+
   // Upload queues may have completed work by now; retire staging.
   if (uploader_) {
     uploader_->RetireCompleted();
@@ -636,6 +518,46 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
   const std::vector<std::size_t>& filtered,
   sceneprep::ScenePrepState& prep_state) -> void
 {
+  // TODO: TEMPORARY HACK - This is a band-aid fix to get examples working.
+  // PROPER FIX: Split this function into two phases:
+  //   1. Registration phase: Loop through all items, call GetOrAllocate() only
+  //   2. EnsureFrameResources() call
+  //   3. SRV access phase: Loop again, call
+  //   GetVertexSrvIndex()/GetIndexSrvIndex()
+  // This would eliminate the need to call EnsureFrameResources() in the middle
+  // of draw metadata generation and make the dependency explicit.
+
+  // Phase 1: Register all geometry first
+  std::vector<engine::sceneprep::GeometryHandle> mesh_handles;
+  mesh_handles.resize(filtered.size());
+
+  for (size_t i = 0; i < filtered.size(); ++i) {
+    const auto src_index = filtered[i];
+    if (src_index >= prep_state.collected_items.size()) {
+      continue;
+    }
+    const auto& item = prep_state.collected_items[src_index];
+    if (!item.geometry) {
+      continue;
+    }
+    const auto lod_index = item.lod_index;
+    const auto& geom = *item.geometry;
+    auto meshes_span = geom.Meshes();
+    if (lod_index >= meshes_span.size()) {
+      continue;
+    }
+    const auto& lod_mesh_ptr = meshes_span[lod_index];
+    if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
+      mesh_handles[i]
+        = scene_prep_state_.geometry_uploader->GetOrAllocate(*lod_mesh_ptr);
+    }
+  }
+
+  // Phase 2: Ensure all registered geometry has GPU resources
+  if (prep_state.geometry_uploader) {
+    prep_state.geometry_uploader->EnsureFrameResources();
+  }
+
   // Direct DrawMetadata generation (Task 6: native SoA path)
   draw_metadata_cpu_soa_.clear();
   draw_metadata_cpu_soa_.reserve(filtered.size());
@@ -728,25 +650,23 @@ auto Renderer::GenerateDrawMetadataAndMaterials(
     if (views_span.empty()) {
       continue;
     }
-    sceneprep::GeometryHandle mesh_handle { 0, 0 };
+    engine::sceneprep::GeometryHandle mesh_handle {};
+    ShaderVisibleIndex vertex_srv_index {};
+    ShaderVisibleIndex index_srv_index {};
     if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-      // Register or lookup stable geometry buffer indices via geometry
-      // registry.
-      // TODO(geometry-resource): Move EnsureMeshResources upload + eviction
-      // logic into a dedicated MeshResourceManager so this call becomes purely
-      // logical.
-      mesh_handle = scene_prep_state_.geometry_registry.GetOrRegisterMesh(
-        lod_mesh_ptr.get(), [this, &lod_mesh_ptr]() {
-          auto& res = EnsureMeshResources(*lod_mesh_ptr);
-          return sceneprep::GeometryRegistry::GeometryProvisionResult {
-            res.vertex_srv_index, res.index_srv_index
-          };
-        });
+      // Use pre-registered handle from Phase 1
+      mesh_handle = mesh_handles[i];
+      if (scene_prep_state_.geometry_uploader->IsValidHandle(mesh_handle)) {
+        vertex_srv_index
+          = scene_prep_state_.geometry_uploader->GetVertexSrvIndex(mesh_handle);
+        index_srv_index
+          = scene_prep_state_.geometry_uploader->GetIndexSrvIndex(mesh_handle);
+      }
     }
     for (const auto& view : views_span) {
       DrawMetadata dm {};
-      dm.vertex_buffer_index = mesh_handle.vertex_buffer;
-      dm.index_buffer_index = mesh_handle.index_buffer;
+      dm.vertex_buffer_index = vertex_srv_index;
+      dm.index_buffer_index = index_srv_index;
       const auto index_view = view.IndexBuffer();
       const bool has_indices = index_view.Count() > 0;
       if (has_indices) {
@@ -1296,99 +1216,6 @@ auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
   return cpu.front();
 }
 
-auto Renderer::EnsureMeshResources(const Mesh& mesh) -> MeshGpuResources&
-{
-  DLOG_SCOPE_FUNCTION(3);
-  DLOG_F(3, "mesh: {}", mesh.GetName());
-
-  MeshId id = GetMeshId(mesh);
-  if (const auto it = mesh_resources_.find(id); it != mesh_resources_.end()) {
-    if (eviction_policy_) {
-      eviction_policy_->OnMeshAccess(id);
-    }
-    return it->second; // cache hit
-  }
-
-  const auto graphics_ptr = gfx_weak_.lock();
-  if (!graphics_ptr) {
-    throw std::runtime_error(
-      "Graphics expired in Renderer::EnsureMeshResources");
-  }
-
-  const auto vertex_buffer = CreateVertexBuffer(mesh, *graphics_ptr);
-  const auto index_buffer = CreateIndexBuffer(mesh, *graphics_ptr);
-
-  // Upload both buffers via UploadCoordinator in a single coalesced batch.
-  if (uploader_) {
-    using upload::BatchPolicy;
-    using upload::UploadBufferDesc;
-    using upload::UploadDataView;
-    using upload::UploadKind;
-    using upload::UploadRequest;
-
-    std::vector<UploadRequest> reqs;
-    reqs.reserve(2);
-
-    // Vertex buffer upload (if any vertices)
-    const auto vertices = mesh.Vertices();
-    if (!vertices.empty()) {
-      const auto vb_size = vertices.size() * sizeof(data::Vertex);
-      UploadRequest vb_req;
-      vb_req.kind = UploadKind::kBuffer;
-      vb_req.batch_policy = BatchPolicy::kCoalesce;
-      vb_req.debug_name = std::string(mesh.GetName()) + ".VertexUpload";
-      vb_req.desc = UploadBufferDesc {
-        .dst = vertex_buffer,
-        .size_bytes = vb_size,
-        .dst_offset = 0,
-      };
-      const auto* src = reinterpret_cast<const std::byte*>(vertices.data());
-      vb_req.data = UploadDataView { std::span<const std::byte>(src, vb_size) };
-      reqs.emplace_back(std::move(vb_req));
-    }
-
-    // Index buffer upload (if indexed)
-    const auto indices_view = mesh.IndexBuffer();
-    if (indices_view.Count() != 0) {
-      const uint64_t ib_size = indices_view.bytes.size();
-      UploadRequest ib_req;
-      ib_req.kind = UploadKind::kBuffer;
-      ib_req.batch_policy = BatchPolicy::kCoalesce;
-      ib_req.debug_name = std::string(mesh.GetName()) + ".IndexUpload";
-      ib_req.desc = UploadBufferDesc {
-        .dst = index_buffer,
-        .size_bytes = ib_size,
-        .dst_offset = 0,
-      };
-      ib_req.data = UploadDataView { indices_view.bytes };
-      reqs.emplace_back(std::move(ib_req));
-    }
-
-    if (!reqs.empty()) {
-      static_cast<void>(uploader_->SubmitMany(reqs));
-      // Actual submission to the GPU happens when Flush() is called during
-      // PreExecute; completion retirement occurs in OnCommandRecord.
-    }
-  }
-
-  MeshGpuResources gpu;
-  gpu.vertex_buffer = vertex_buffer;
-  gpu.index_buffer = index_buffer;
-
-  // Create SRVs and register to obtain shader-visible indices
-  gpu.vertex_srv_index
-    = CreateAndRegisterVertexSrv(*graphics_ptr, *vertex_buffer);
-  gpu.index_srv_index = CreateAndRegisterIndexSrv(
-    *graphics_ptr, *index_buffer, mesh.IndexBuffer().type);
-
-  auto [iter, _] = mesh_resources_.emplace(id, std::move(gpu));
-  if (eviction_policy_) {
-    eviction_policy_->OnMeshAccess(id);
-  }
-
-  return iter->second;
-}
-
 auto Renderer::ModifySceneConstants(
   const std::function<void(SceneConstants&)>& mutator) -> void
 {
@@ -1405,6 +1232,10 @@ auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
   // Reset transform manager for the new frame
   DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
   scene_prep_state_.transform_mgr->OnFrameStart();
+
+  // Reset geometry uploader for the new frame
+  DCHECK_NOTNULL_F(scene_prep_state_.geometry_uploader);
+  scene_prep_state_.geometry_uploader->OnFrameStart();
 }
 
 /*!

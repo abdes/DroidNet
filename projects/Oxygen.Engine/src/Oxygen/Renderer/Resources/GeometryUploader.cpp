@@ -4,163 +4,674 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <memory>
 #include <span>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
-#include "GeometryUploader.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+
+namespace {
+
+[[nodiscard]] auto IsValidMesh(const oxygen::data::Mesh& mesh) noexcept -> bool
+{
+  const auto vertices = mesh.Vertices();
+  if (vertices.empty()) {
+    return false; // No vertices
+  }
+
+  // Check for finite vertex positions
+  for (const auto& vertex : vertices) {
+    if (!std::isfinite(vertex.position.x) || !std::isfinite(vertex.position.y)
+      || !std::isfinite(vertex.position.z)) {
+      return false; // Invalid position
+    }
+
+    // Check for finite normals if present
+    if (!std::isfinite(vertex.normal.x) || !std::isfinite(vertex.normal.y)
+      || !std::isfinite(vertex.normal.z)) {
+      return false; // Invalid normal
+    }
+
+    // Check for finite texture coordinates if present
+    if (!std::isfinite(vertex.texcoord.x)
+      || !std::isfinite(vertex.texcoord.y)) {
+      return false; // Invalid texture coordinates
+    }
+  }
+
+  // Validate indices if present
+  const auto index_buffer = mesh.IndexBuffer();
+  if (index_buffer.Count() > 0) {
+    const auto max_vertex_index
+      = static_cast<std::uint32_t>(vertices.size() - 1);
+
+    // Check indices based on type
+    if (index_buffer.type == oxygen::data::detail::IndexType::kUInt16) {
+      const auto indices = index_buffer.AsU16();
+      for (std::size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > max_vertex_index) {
+          return false; // Index out of bounds
+        }
+      }
+    } else if (index_buffer.type == oxygen::data::detail::IndexType::kUInt32) {
+      const auto indices = index_buffer.AsU32();
+      for (std::size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > max_vertex_index) {
+          return false; // Index out of bounds
+        }
+      }
+    }
+
+    // Check that index count is multiple of 3 for triangle meshes
+    if (index_buffer.Count() % 3 != 0) {
+      return false; // Invalid triangle topology
+    }
+  }
+
+  return true;
+}
+
+// Enhanced mesh validation with detailed error messages
+[[nodiscard]] auto ValidateMeshDetailed(
+  const oxygen::data::Mesh& mesh, std::string& error_msg) -> bool
+{
+  const auto vertices = mesh.Vertices();
+  if (vertices.empty()) {
+    error_msg = "Mesh has no vertices";
+    return false;
+  }
+
+  // Check for reasonable vertex count (prevent memory issues)
+  constexpr std::uint32_t kMaxVertexCount = 10'000'000; // 10M vertices
+  if (vertices.size() > kMaxVertexCount) {
+    error_msg = "Mesh vertex count exceeds maximum limit";
+    return false;
+  }
+
+  // Check for finite vertex data
+  for (std::size_t i = 0; i < vertices.size(); ++i) {
+    const auto& vertex = vertices[i];
+
+    if (!std::isfinite(vertex.position.x) || !std::isfinite(vertex.position.y)
+      || !std::isfinite(vertex.position.z)) {
+      error_msg = "Vertex " + std::to_string(i) + " has invalid position";
+      return false;
+    }
+
+    if (!std::isfinite(vertex.normal.x) || !std::isfinite(vertex.normal.y)
+      || !std::isfinite(vertex.normal.z)) {
+      error_msg = "Vertex " + std::to_string(i) + " has invalid normal";
+      return false;
+    }
+
+    if (!std::isfinite(vertex.texcoord.x)
+      || !std::isfinite(vertex.texcoord.y)) {
+      error_msg
+        = "Vertex " + std::to_string(i) + " has invalid texture coordinates";
+      return false;
+    }
+  }
+
+  // Validate indices if present
+  const auto index_buffer = mesh.IndexBuffer();
+  if (index_buffer.Count() > 0) {
+    constexpr std::uint32_t kMaxIndexCount = 30'000'000; // 30M indices
+    if (index_buffer.Count() > kMaxIndexCount) {
+      error_msg = "Mesh index count exceeds maximum limit";
+      return false;
+    }
+
+    const auto max_vertex_index
+      = static_cast<std::uint32_t>(vertices.size() - 1);
+
+    // Check indices based on type
+    if (index_buffer.type == oxygen::data::detail::IndexType::kUInt16) {
+      const auto indices = index_buffer.AsU16();
+      for (std::size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > max_vertex_index) {
+          error_msg = "Index " + std::to_string(i) + " ("
+            + std::to_string(indices[i]) + ") exceeds vertex count ("
+            + std::to_string(vertices.size()) + ")";
+          return false;
+        }
+      }
+    } else if (index_buffer.type == oxygen::data::detail::IndexType::kUInt32) {
+      const auto indices = index_buffer.AsU32();
+      for (std::size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > max_vertex_index) {
+          error_msg = "Index " + std::to_string(i) + " ("
+            + std::to_string(indices[i]) + ") exceeds vertex count ("
+            + std::to_string(vertices.size()) + ")";
+          return false;
+        }
+      }
+    }
+
+    if (index_buffer.Count() % 3 != 0) {
+      error_msg
+        = "Index count is not a multiple of 3 (invalid triangle topology)";
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Hash-based key for mesh deduplication
+auto MakeGeometryKey(const oxygen::data::Mesh& mesh) noexcept -> std::uint64_t
+{
+  // Simple hash based on vertex count and first few vertices
+  const auto vertices = mesh.Vertices();
+  if (vertices.empty()) {
+    return 0;
+  }
+
+  std::uint64_t hash = vertices.size();
+
+  // Hash first few vertices for quick differentiation
+  const auto hash_count
+    = std::min(static_cast<std::size_t>(4), vertices.size());
+  for (std::size_t i = 0; i < hash_count; ++i) {
+    const auto& v = vertices[i];
+    hash ^= std::hash<float> {}(v.position.x) + 0x9e3779b9 + (hash << 6)
+      + (hash >> 2);
+    hash ^= std::hash<float> {}(v.position.y) + 0x9e3779b9 + (hash << 6)
+      + (hash >> 2);
+    hash ^= std::hash<float> {}(v.position.z) + 0x9e3779b9 + (hash << 6)
+      + (hash >> 2);
+  }
+
+  return hash;
+}
+
+} // namespace
 
 namespace oxygen::renderer::resources {
 
-GeometryUploader::GeometryUploader(std::weak_ptr<Graphics> graphics,
-  observer_ptr<engine::upload::UploadCoordinator> uploader)
-  : graphics_(std::move(graphics))
+GeometryUploader::GeometryUploader(
+  Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader)
+  : gfx_(gfx)
   , uploader_(uploader)
 {
 }
 
-GeometryUploader::~GeometryUploader() = default;
-
-auto GeometryUploader::ProcessMeshes(
-  const std::vector<const data::Mesh*>& meshes)
-  -> std::unordered_map<const data::Mesh*, MeshGpuResourceIndices>
+GeometryUploader::~GeometryUploader()
 {
-  // Deduplicate meshes and assign slots
-  std::unordered_map<const data::Mesh*, uint32_t> mesh_to_slot;
-  std::vector<const data::Mesh*> unique_meshes;
-  for (const auto* mesh : meshes) {
-    if (!mesh) {
+  // Best-effort cleanup: unregister our GPU buffers from the registry so they
+  // don't linger until registry destruction.
+  auto& registry = gfx_.GetResourceRegistry();
+
+  for (auto& buffer : vertex_buffers_) {
+    if (buffer) {
+      registry.UnRegisterResource(*buffer);
+    }
+  }
+
+  for (auto& buffer : index_buffers_) {
+    if (buffer) {
+      registry.UnRegisterResource(*buffer);
+    }
+  }
+
+  vertex_buffers_.clear();
+  index_buffers_.clear();
+}
+
+auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh)
+  -> engine::sceneprep::GeometryHandle
+{
+  return GetOrAllocate(mesh, false); // Default to non-critical
+}
+
+auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
+  -> engine::sceneprep::GeometryHandle
+{
+  // Enhanced validation with detailed error messages
+  std::string error_msg;
+  if (!::ValidateMeshDetailed(mesh, error_msg)) {
+    LOG_F(ERROR, "GeometryUploader::GetOrAllocate failed: {}", error_msg);
+    DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
+    return engine::sceneprep::GeometryHandle { 0U }; // Return invalid handle
+  }
+
+  const auto key = ::MakeGeometryKey(mesh);
+  if (const auto it = geometry_key_to_handle_.find(key);
+    it != geometry_key_to_handle_.end()) {
+    const auto h = it->second;
+    const auto idx = static_cast<std::size_t>(h.get());
+    if (idx < meshes_.size() && meshes_[idx] == &mesh) {
+      // Update criticality if this is a new request
+      if (is_critical && idx < is_critical_.size()) {
+        is_critical_[idx] = true;
+      }
+      return h; // Cache hit with exact match
+    }
+  }
+
+  // Not found or collision mismatch: allocate new handle
+  const auto handle = next_handle_;
+  const auto idx = static_cast<std::size_t>(handle.get());
+
+  // Resize vectors if needed
+  if (meshes_.size() <= idx) {
+    meshes_.resize(idx + 1U);
+    versions_.resize(idx + 1U);
+    is_critical_.resize(idx + 1U);
+    dirty_epoch_.resize(idx + 1U);
+    vertex_buffers_.resize(idx + 1U);
+    index_buffers_.resize(idx + 1U);
+    vertex_srv_indices_.resize(idx + 1U, kInvalidShaderVisibleIndex);
+    index_srv_indices_.resize(idx + 1U, kInvalidShaderVisibleIndex);
+  }
+
+  meshes_[idx] = &mesh;
+  versions_[idx] = global_version_;
+  is_critical_[idx] = is_critical;
+
+  // Mark dirty for this frame
+  if (dirty_epoch_[idx] != current_epoch_) {
+    dirty_epoch_[idx] = current_epoch_;
+    dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
+  }
+
+  geometry_key_to_handle_[key] = handle;
+  next_handle_ = engine::sceneprep::GeometryHandle { handle.get() + 1U };
+
+  return handle;
+}
+
+auto GeometryUploader::Update(
+  engine::sceneprep::GeometryHandle handle, const data::Mesh& mesh) -> void
+{
+  const auto idx = static_cast<std::size_t>(handle.get());
+  DCHECK_F(idx < meshes_.size(),
+    "Update received invalid handle index {} (size={})", idx, meshes_.size());
+
+  // Validate the new mesh data
+  std::string error_msg;
+  if (!::ValidateMeshDetailed(mesh, error_msg)) {
+    LOG_F(ERROR, "GeometryUploader::Update failed: {}", error_msg);
+    DCHECK_F(false, "Update received invalid mesh: {}", error_msg);
+    return; // Don't update with invalid data
+  }
+
+  if (meshes_[idx] == &mesh) {
+    return; // no change
+  }
+
+  ++global_version_;
+  meshes_[idx] = &mesh;
+  versions_[idx] = global_version_;
+
+  if (dirty_epoch_[idx] != current_epoch_) {
+    dirty_epoch_[idx] = current_epoch_;
+    dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
+  }
+}
+
+auto GeometryUploader::OnFrameStart() -> void
+{
+  // BeginFrame must be called once per frame by the orchestrator (Renderer).
+  ++current_epoch_;
+  if (current_epoch_ == 0U) { // wrapped
+    current_epoch_ = 1U;
+    std::ranges::fill(dirty_epoch_, 0U);
+  }
+  dirty_indices_.clear();
+
+  // Clean up completed upload tickets
+  RetireCompletedUploads();
+}
+
+auto GeometryUploader::IsValidHandle(
+  engine::sceneprep::GeometryHandle handle) const -> bool
+{
+  const auto idx = static_cast<std::size_t>(handle.get());
+  return idx < meshes_.size() && meshes_[idx] != nullptr;
+}
+
+auto GeometryUploader::MakeGeometryKey(const data::Mesh& mesh) noexcept
+  -> std::uint64_t
+{
+  return ::MakeGeometryKey(mesh);
+}
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto GeometryUploader::EnsureBufferAndSrv(
+  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
+  std::uint64_t size_bytes, const char* debug_label) -> bool
+{
+  bool recreated = false;
+  if (!buffer || buffer->GetSize() < size_bytes) {
+    graphics::BufferDesc desc;
+    desc.size_bytes = size_bytes;
+    desc.usage = graphics::BufferUsage::kStorage;
+    desc.memory = graphics::BufferMemory::kDeviceLocal;
+    desc.debug_name = debug_label;
+
+    try {
+      buffer = gfx_.CreateBuffer(desc);
+      if (!buffer) {
+        LOG_F(ERROR,
+          "GeometryUploader: Failed to create buffer '{}' ({} bytes)",
+          debug_label, size_bytes);
+        return false;
+      }
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "GeometryUploader: Exception creating buffer '{}': {}",
+        debug_label, e.what());
+      return false;
+    }
+
+    auto& registry = gfx_.GetResourceRegistry();
+    auto& allocator = gfx_.GetDescriptorAllocator();
+    registry.Register(buffer);
+
+    graphics::BufferViewDescription view_desc;
+    view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+    view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    view_desc.range = { 0, size_bytes };
+
+    // Set appropriate stride based on buffer type
+    if (std::string_view(debug_label).find("Vertex")
+      != std::string_view::npos) {
+      view_desc.stride = sizeof(oxygen::data::Vertex);
+    } else if (std::string_view(debug_label).find("Index")
+      != std::string_view::npos) {
+      view_desc.stride = sizeof(std::uint32_t); // Assume 32-bit indices for now
+    } else {
+      view_desc.stride = 4; // Default fallback
+    }
+
+    try {
+      auto handle
+        = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+          graphics::DescriptorVisibility::kShaderVisible);
+      const auto index = allocator.GetShaderVisibleIndex(handle);
+      bindless_index = ShaderVisibleIndex(index.get());
+      registry.RegisterView(*buffer, std::move(handle), view_desc);
+
+      DLOG_F(1, "GeometryUploader: {} SRV assigned to heap index {}",
+        debug_label, bindless_index);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "GeometryUploader: Failed to allocate SRV for '{}': {}",
+        debug_label, e.what());
+      return false;
+    }
+
+    recreated = true;
+  }
+  return recreated;
+}
+
+auto GeometryUploader::PrepareVertexBuffers() -> void
+{
+  if (dirty_indices_.empty()) {
+    return; // No dirty geometry to upload
+  }
+
+  std::vector<engine::upload::UploadRequest> uploads;
+  uploads.reserve(dirty_indices_.size());
+
+  for (const auto dirty_idx : dirty_indices_) {
+    if (dirty_idx >= meshes_.size() || !meshes_[dirty_idx]) {
       continue;
     }
-    if (!mesh_to_slot.contains(mesh)) {
-      uint32_t slot = static_cast<uint32_t>(unique_meshes.size());
-      mesh_to_slot[mesh] = slot;
-      unique_meshes.push_back(mesh);
-    }
-  }
 
-  auto graphics = graphics_.lock();
-  if (!graphics) {
-    return {};
-  }
-  auto& allocator = graphics->GetDescriptorAllocator();
-  auto& registry = graphics->GetResourceRegistry();
-
-  // For each unique mesh, create vertex and index buffers, upload, and register
-  // SRVs
-  std::unordered_map<const data::Mesh*, MeshGpuResourceIndices> result;
-  for (const auto* mesh : unique_meshes) {
-    if (!mesh) {
+    const auto* mesh = meshes_[dirty_idx];
+    const auto vertices = mesh->Vertices();
+    if (vertices.empty()) {
       continue;
     }
-    MeshGpuResourceIndices indices;
 
-    // Vertex buffer
-    const uint64_t vertex_buffer_size
-      = mesh->VertexCount() * sizeof(data::Vertex);
-    graphics::BufferDesc v_desc;
-    v_desc.size_bytes = vertex_buffer_size;
-    v_desc.usage = graphics::BufferUsage::kVertex;
-    v_desc.memory = graphics::BufferMemory::kDeviceLocal;
-    v_desc.debug_name = "VertexBuffer";
-    indices.vertex_buffer = graphics->CreateBuffer(v_desc);
+    const uint64_t buffer_size = vertices.size() * sizeof(data::Vertex);
 
-    // Index buffer
-    const uint64_t index_buffer_size
-      = mesh->IndexCount() * sizeof(std::uint32_t); // Assuming 32-bit indices
-    graphics::BufferDesc i_desc;
-    i_desc.size_bytes = index_buffer_size;
-    i_desc.usage = graphics::BufferUsage::kIndex;
-    i_desc.memory = graphics::BufferMemory::kDeviceLocal;
-    i_desc.debug_name = "IndexBuffer";
-    indices.index_buffer = graphics->CreateBuffer(i_desc);
+    // Ensure buffer and SRV exist
+    auto& vertex_buffer = vertex_buffers_[dirty_idx];
+    auto& srv_index = vertex_srv_indices_[dirty_idx];
 
-    // Upload vertex data
-    engine::upload::UploadRequest v_req;
-    v_req.kind = engine::upload::UploadKind::kBuffer;
-    v_req.desc = engine::upload::UploadBufferDesc {
-      .dst = indices.vertex_buffer,
-      .size_bytes = vertex_buffer_size,
-      .dst_offset = 0,
-    };
-    v_req.data = engine::upload::UploadDataView { std::as_bytes(
-      std::span<const data::Vertex>(
-        mesh->Vertices().data(), mesh->VertexCount())) };
-    if (uploader_) {
-      uploader_->Submit(v_req);
+    const auto prev_srv_index = srv_index;
+    const bool need_recreate = EnsureBufferAndSrv(
+      vertex_buffer, srv_index, buffer_size, "VertexBuffer");
+
+    // Check if buffer creation failed
+    if (!vertex_buffer) {
+      LOG_F(ERROR,
+        "GeometryUploader: Failed to create vertex buffer for mesh (size: {} "
+        "bytes)",
+        buffer_size);
+      continue; // Skip this mesh
     }
 
-    // Upload index data
-    engine::upload::UploadRequest i_req;
-    i_req.kind = engine::upload::UploadKind::kBuffer;
-    i_req.desc = engine::upload::UploadBufferDesc {
-      .dst = indices.index_buffer,
-      .size_bytes = index_buffer_size,
-      .dst_offset = 0,
-    };
-    {
-      auto ib_view = mesh->IndexBuffer();
-      i_req.data = engine::upload::UploadDataView { ib_view.bytes };
-    }
-    if (uploader_) {
-      uploader_->Submit(i_req);
+    // Stability check: once assigned, the bindless index should remain stable
+    if (!need_recreate && prev_srv_index != kInvalidShaderVisibleIndex) {
+      DCHECK_F(srv_index == prev_srv_index,
+        "Vertex SRV index changed from {} to {} unexpectedly", prev_srv_index,
+        srv_index);
     }
 
-    // Register buffers and SRVs
-    registry.Register(indices.vertex_buffer);
-    registry.Register(indices.index_buffer);
+    // Prepare vertex data upload request
+    if (uploader_ && vertex_buffer) {
+      const bool is_mesh_critical
+        = (dirty_idx < is_critical_.size()) ? is_critical_[dirty_idx] : false;
+      const auto batch_policy
+        = SelectBatchPolicy(buffer_size, is_mesh_critical);
 
-    // Vertex buffer SRV
-    graphics::BufferViewDescription v_view_desc;
-    v_view_desc.view_type = graphics::ResourceViewType::kTypedBuffer_SRV;
-    v_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    v_view_desc.range = { 0, vertex_buffer_size };
-    v_view_desc.format = {}; // Set as needed
-    v_view_desc.stride = sizeof(data::Vertex);
-    auto v_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTypedBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    indices.vertex_srv_index = allocator.GetShaderVisibleIndex(v_handle).get();
-    registry.RegisterView(
-      *indices.vertex_buffer, std::move(v_handle), v_view_desc);
+      engine::upload::UploadRequest req;
+      req.kind = engine::upload::UploadKind::kBuffer;
+      req.batch_policy = batch_policy;
+      req.debug_name = "VertexUpload";
+      req.desc = engine::upload::UploadBufferDesc {
+        .dst = vertex_buffer,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+      };
+      const auto* src = reinterpret_cast<const std::byte*>(vertices.data());
+      req.data = engine::upload::UploadDataView { std::span<const std::byte>(
+        src, buffer_size) };
 
-    // Index buffer SRV
-    graphics::BufferViewDescription i_view_desc;
-    i_view_desc.view_type = graphics::ResourceViewType::kTypedBuffer_SRV;
-    i_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    i_view_desc.range = { 0, index_buffer_size };
-    i_view_desc.format = {}; // Set as needed
-    // Index stride: 2 for uint16, 4 for uint32, 0 for none
-    {
-      auto ib_view = mesh->IndexBuffer();
-      i_view_desc.stride = static_cast<uint32_t>(ib_view.ElementSize());
+      uploads.emplace_back(std::move(req));
     }
-    auto i_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTypedBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    indices.index_srv_index = allocator.GetShaderVisibleIndex(i_handle).get();
-    registry.RegisterView(
-      *indices.index_buffer, std::move(i_handle), i_view_desc);
-
-    result[mesh] = indices;
   }
 
-  // Map input meshes to their GPU resource indices
-  std::unordered_map<const data::Mesh*, MeshGpuResourceIndices> final_result;
-  for (const auto* mesh : meshes) {
-    if (!mesh) {
+  // Submit all vertex uploads in a single batch and track tickets
+  if (!uploads.empty() && uploader_) {
+    auto tickets = uploader_->SubmitMany(uploads);
+    pending_upload_tickets_.insert(
+      pending_upload_tickets_.end(), tickets.begin(), tickets.end());
+  }
+}
+
+auto GeometryUploader::PrepareIndexBuffers() -> void
+{
+  if (dirty_indices_.empty()) {
+    return; // No dirty geometry to upload
+  }
+
+  std::vector<engine::upload::UploadRequest> uploads;
+  uploads.reserve(dirty_indices_.size());
+
+  for (const auto dirty_idx : dirty_indices_) {
+    if (dirty_idx >= meshes_.size() || !meshes_[dirty_idx]) {
       continue;
     }
-    final_result[mesh] = result[mesh];
+
+    const auto* mesh = meshes_[dirty_idx];
+    const auto index_view = mesh->IndexBuffer();
+    if (index_view.Count() == 0) {
+      continue; // No indices
+    }
+
+    const uint64_t buffer_size = index_view.bytes.size();
+
+    // Ensure buffer and SRV exist
+    auto& index_buffer = index_buffers_[dirty_idx];
+    auto& srv_index = index_srv_indices_[dirty_idx];
+
+    const auto prev_srv_index = srv_index;
+    const bool need_recreate
+      = EnsureBufferAndSrv(index_buffer, srv_index, buffer_size, "IndexBuffer");
+
+    // Check if buffer creation failed
+    if (!index_buffer) {
+      LOG_F(ERROR,
+        "GeometryUploader: Failed to create index buffer for mesh (size: {} "
+        "bytes)",
+        buffer_size);
+      continue; // Skip this mesh
+    }
+
+    // Stability check: once assigned, the bindless index should remain stable
+    if (!need_recreate && prev_srv_index != kInvalidShaderVisibleIndex) {
+      DCHECK_F(srv_index == prev_srv_index,
+        "Index SRV index changed from {} to {} unexpectedly", prev_srv_index,
+        srv_index);
+    }
+
+    // Prepare index data upload request
+    if (uploader_ && index_buffer) {
+      const bool is_mesh_critical
+        = (dirty_idx < is_critical_.size()) ? is_critical_[dirty_idx] : false;
+      const auto batch_policy
+        = SelectBatchPolicy(buffer_size, is_mesh_critical);
+
+      engine::upload::UploadRequest req;
+      req.kind = engine::upload::UploadKind::kBuffer;
+      req.batch_policy = batch_policy;
+      req.debug_name = "IndexUpload";
+      req.desc = engine::upload::UploadBufferDesc {
+        .dst = index_buffer,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+      };
+      req.data = engine::upload::UploadDataView { index_view.bytes };
+
+      uploads.emplace_back(std::move(req));
+    }
   }
-  return final_result;
+
+  // Submit all index uploads in a single batch and track tickets
+  if (!uploads.empty() && uploader_) {
+    auto tickets = uploader_->SubmitMany(uploads);
+    pending_upload_tickets_.insert(
+      pending_upload_tickets_.end(), tickets.begin(), tickets.end());
+  }
+}
+
+auto GeometryUploader::EnsureFrameResources() -> void
+{
+  // Contract: OnFrameStart() must have been called this frame
+  DCHECK_F(current_epoch_ > 0U,
+    "EnsureFrameResources() called before OnFrameStart() - frame lifecycle "
+    "violation");
+
+  // Always ensure both resources are prepared (idempotent operations)
+  PrepareVertexBuffers();
+  PrepareIndexBuffers();
+}
+
+auto GeometryUploader::GetVertexSrvIndex(
+  engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex
+{
+  const auto idx = static_cast<std::size_t>(handle.get());
+  DCHECK_F(idx < vertex_srv_indices_.size()
+      && vertex_srv_indices_[idx] != kInvalidShaderVisibleIndex,
+    "EnsureFrameResources() must be called before GetVertexSrvIndex() for "
+    "handle {}",
+    handle.get());
+  return vertex_srv_indices_[idx];
+}
+
+auto GeometryUploader::GetIndexSrvIndex(
+  engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex
+{
+  const auto idx = static_cast<std::size_t>(handle.get());
+  DCHECK_F(idx < index_srv_indices_.size()
+      && index_srv_indices_[idx] != kInvalidShaderVisibleIndex,
+    "EnsureFrameResources() must be called before GetIndexSrvIndex() for "
+    "handle {}",
+    handle.get());
+  return index_srv_indices_[idx];
+}
+
+auto GeometryUploader::RetireCompletedUploads() -> void
+{
+  if (!uploader_ || pending_upload_tickets_.empty()) {
+    return;
+  }
+
+  // Check for completed uploads and handle errors
+  std::size_t completed_count = 0;
+  std::size_t error_count = 0;
+
+  auto remove_it = std::remove_if(pending_upload_tickets_.begin(),
+    pending_upload_tickets_.end(),
+    [this, &completed_count, &error_count](
+      const engine::upload::UploadTicket& ticket) {
+      if (!uploader_->IsComplete(ticket)) {
+        return false; // Not completed yet
+      }
+
+      ++completed_count;
+
+      // Check for upload errors
+      if (const auto result = uploader_->TryGetResult(ticket)) {
+        if (!result->success) {
+          ++error_count;
+          LOG_F(ERROR, "GeometryUploader: Upload failed with error {} - {}",
+            static_cast<int>(result->error), result->message);
+        } else {
+          DLOG_F(2,
+            "GeometryUploader: Upload completed successfully ({} bytes)",
+            result->bytes_uploaded);
+        }
+      }
+
+      return true; // Remove this ticket
+    });
+
+  if (remove_it != pending_upload_tickets_.end()) {
+    pending_upload_tickets_.erase(remove_it, pending_upload_tickets_.end());
+
+    if (error_count > 0) {
+      LOG_F(WARNING, "GeometryUploader: Retired {} upload tickets ({} errors)",
+        completed_count, error_count);
+    } else if (completed_count > 0) {
+      DLOG_F(2, "GeometryUploader: Retired {} completed upload tickets",
+        completed_count);
+    }
+  }
+}
+
+auto GeometryUploader::SelectBatchPolicy(std::uint64_t size_bytes,
+  bool is_critical) const -> engine::upload::BatchPolicy
+{
+  // Critical geometry (e.g., immediately visible meshes) use immediate upload
+  if (is_critical) {
+    return engine::upload::BatchPolicy::kImmediate;
+  }
+
+  // Large geometry goes to background processing to avoid blocking
+  // Use a simple size threshold directly in the method
+  constexpr std::uint64_t kLargeGeometryThreshold = 2U * 1024U * 1024U; // 2MB
+  if (size_bytes >= kLargeGeometryThreshold) {
+    return engine::upload::BatchPolicy::kBackground;
+  }
+
+  // Small to medium geometry uses coalescing for efficiency
+  return engine::upload::BatchPolicy::kCoalesce;
 }
 
 } // namespace oxygen::renderer::resources
