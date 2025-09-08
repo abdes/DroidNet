@@ -146,6 +146,11 @@ public:
   [[nodiscard]] OXGN_RNDR_API auto GetIndexSrvIndex(
     engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex;
 
+  [[nodiscard]] auto GetVertexSrvIndices() const noexcept
+    -> std::span<const ShaderVisibleIndex>;
+  [[nodiscard]] auto GetIndexSrvIndices() const noexcept
+    -> std::span<const ShaderVisibleIndex>;
+
   //! Returns the number of pending upload operations.
   //! Useful for debugging and monitoring upload queue health.
   [[nodiscard]] auto GetPendingUploadCount() const -> std::size_t
@@ -204,6 +209,9 @@ private:
 
   // Upload tracking
   std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
+
+  // Frame lifecycle tracking
+  bool frame_resources_ensured_ { false };
 };
 
 } // namespace oxygen::renderer::resources
