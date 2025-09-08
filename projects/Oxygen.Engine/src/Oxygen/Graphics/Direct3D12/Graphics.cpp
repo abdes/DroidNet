@@ -48,8 +48,14 @@ auto CreateBackend(const oxygen::SerializedBackendConfig& config) -> void*
 auto DestroyBackend() -> void
 {
   LOG_SCOPE_F(INFO, "DestroyBackend");
-  auto& renderer = GetBackendInternal();
-  renderer.reset();
+  auto& backend = GetBackendInternal();
+  if (backend) {
+    // Ensure async tasks are stopped and resources are released in a safe
+    // order before resetting the backend instance.
+    backend->Stop();
+    backend->Flush();
+  }
+  backend.reset();
 }
 
 } // namespace

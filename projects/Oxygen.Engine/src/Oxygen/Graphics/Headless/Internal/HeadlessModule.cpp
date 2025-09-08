@@ -30,8 +30,13 @@ OXGN_HDLS_API auto CreateBackendImpl(
 OXGN_HDLS_API auto DestroyBackendImpl() -> void
 {
   LOG_SCOPE_F(INFO, "DestroyBackend");
-  // Reset the stored shared_ptr. Any external shared_ptr copies must be
-  // released by the caller to fully destroy the instance.
+  // Ensure orderly shutdown before resetting the stored shared_ptr. Any
+  // external shared_ptr copies must be released by the caller to fully destroy
+  // the instance.
+  if (g_headless_instance) {
+    g_headless_instance->Stop();
+    g_headless_instance->Flush();
+  }
   g_headless_instance.reset();
 }
 

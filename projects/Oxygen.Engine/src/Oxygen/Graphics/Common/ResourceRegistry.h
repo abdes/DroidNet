@@ -128,6 +128,83 @@ public:
       .IsValid();
   }
 
+  //! Update a registered view in-place, keeping the same descriptor slot.
+  /*!
+   Replaces the native view object bound at the given bindless index with a new
+   view created from the provided resource and view description. The
+   shader-visible bindless index remains unchanged. If the descriptor was
+   previously associated with a different resource, ownership is transferred to
+   the new resource. The view cache is updated accordingly.
+
+   @tparam Resource The resource type (must satisfy ResourceWithViews)
+   @param resource The resource that will own the updated view.
+   @param index The existing bindless descriptor slot to update.
+   @param desc The new view description.
+   @return true if the view was updated successfully.
+  */
+  template <ResourceWithViews Resource>
+  auto UpdateView(Resource& resource, bindless::Handle index,
+    const typename Resource::ViewDescriptionT& desc) -> bool
+  {
+    std::lock_guard lock(registry_mutex_);
+
+    const auto key_hash
+      = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+
+    // Ensure destination resource is registered
+    const NativeObject new_res_obj { &resource, Resource::ClassTypeId() };
+    auto new_res_it = resources_.find(new_res_obj);
+    if (new_res_it == resources_.end()) {
+      return false;
+    }
+
+    // Find existing owner and take ownership of the descriptor handle entry
+    DescriptorHandle owned_descriptor;
+    if (const auto owner_it = descriptor_to_resource_.find(index);
+      owner_it != descriptor_to_resource_.end()) {
+      const auto& old_res_obj = owner_it->second;
+      if (auto old_res_it = resources_.find(old_res_obj);
+        old_res_it != resources_.end()) {
+        auto& old_descs = old_res_it->second.descriptors;
+        if (auto ve_it = old_descs.find(index); ve_it != old_descs.end()) {
+          owned_descriptor = std::move(ve_it->second.descriptor);
+          old_descs.erase(ve_it);
+        } else {
+          // Inconsistent state
+          return false;
+        }
+      }
+    } else {
+      // Unknown index
+      return false;
+    }
+
+    // Create the new native view at the same descriptor slot using the owned
+    // descriptor handle.
+    auto new_view = resource.GetNativeView(owned_descriptor, desc);
+    if (!new_view.IsValid()) {
+      // Put the descriptor back into the mapping so it isn't leaked
+      descriptor_to_resource_[index] = new_res_obj;
+      new_res_it->second.descriptors[index]
+        = ResourceEntry::ViewEntry { .view_object = {},
+            .descriptor = std::move(owned_descriptor) };
+      return false;
+    }
+
+    // Attach descriptor to the new resource and update caches/mappings.
+    auto& new_descs = new_res_it->second.descriptors;
+    new_descs[index] = ResourceEntry::ViewEntry { .view_object = new_view,
+      .descriptor = std::move(owned_descriptor) };
+    descriptor_to_resource_[index] = new_res_obj;
+
+    // Update cache entry
+    ViewCacheEntry cache_entry { .view_object = new_view,
+      .view_description = std::any(desc) };
+    const CacheKey new_cache_key { .resource = new_res_obj, .hash = key_hash };
+    view_cache_[new_cache_key] = std::move(cache_entry);
+    return true;
+  }
+
   template <ResourceWithViews Resource>
   [[nodiscard]] auto Contains(const Resource& resource) const -> bool
   {

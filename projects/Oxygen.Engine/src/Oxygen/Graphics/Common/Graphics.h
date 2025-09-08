@@ -117,7 +117,7 @@ public:
   OXGN_GFX_NDAPI auto IsRunning() const -> bool override;
 
   OXGN_GFX_API auto Stop() -> void override;
-  OXGN_GFX_API auto Shutdown() -> void;
+  OXGN_GFX_API auto Flush() -> void;
 
   //=== Engine frame loop interface ===---------------------------------------//
 
