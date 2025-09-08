@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <memory>
 #include <span>
 #include <vector>
 
@@ -26,12 +25,15 @@ namespace oxygen::engine::upload {
 
 class UploadCoordinator {
 public:
-  explicit UploadCoordinator(std::shared_ptr<oxygen::Graphics> graphics,
-    UploadPolicy policy = DefaultUploadPolicy())
-    : graphics_(std::move(graphics))
-    , policy_(policy)
-  {
-  }
+  /*!
+   @note UploadCoordinator lifetime is entirely linked to the Renderer. We
+         completely rely on the Renderer to handle the lifetime of the Graphics
+         backend and we assume that for as long as we are alive, the Graphics
+         backend is stable. When it is no longer stable, the Renderer is
+         responsible for destroying and re-creating the UploadCoordinator.
+  */
+  OXGN_RNDR_API explicit UploadCoordinator(
+    Graphics& gfx, UploadPolicy policy = DefaultUploadPolicy());
 
   OXYGEN_MAKE_NON_COPYABLE(UploadCoordinator)
   OXYGEN_DEFAULT_MOVABLE(UploadCoordinator)
@@ -100,19 +102,21 @@ public:
 
   auto AwaitAllAsync(std::span<const UploadTicket> tickets) -> co::Co<void>
   {
-    if (tickets.empty())
+    if (tickets.empty()) {
       co_return;
+    }
     FenceValue max_fence { 0 };
     for (const auto& t : tickets) {
-      if (max_fence < t.fence)
+      if (max_fence < t.fence) {
         max_fence = t.fence;
+      }
     }
     co_await Until(tracker_.CompletedFenceValue() >= max_fence);
     co_return;
   }
 
 private:
-  std::shared_ptr<oxygen::Graphics> graphics_;
+  Graphics& gfx_;
   UploadPolicy policy_;
   UploadTracker tracker_;
 };

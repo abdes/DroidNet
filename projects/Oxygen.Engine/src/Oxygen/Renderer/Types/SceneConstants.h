@@ -49,6 +49,17 @@ struct BindlessWorldsSlot {
   constexpr operator uint32_t() const noexcept { return value; }
 };
 
+struct BindlessNormalsSlot {
+  uint32_t value;
+  explicit constexpr BindlessNormalsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessNormalsSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
 struct BindlessMaterialConstantsSlot {
   uint32_t value;
   explicit constexpr BindlessMaterialConstantsSlot(
@@ -133,11 +144,8 @@ public:
     frame::SequenceNumber::UnderlyingType frame_seq_num { 0 };
     uint32_t bindless_draw_metadata_slot { kInvalidDescriptorSlot };
     uint32_t bindless_transforms_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_normal_matrices_slot { kInvalidDescriptorSlot };
     uint32_t bindless_material_constants_slot { kInvalidDescriptorSlot };
-    uint32_t _pad0 { 0 };
-    uint32_t _pad1 { 0 };
-    uint32_t _pad2 { 0 };
-    uint32_t _pad3 { 0 };
   };
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
@@ -226,6 +234,16 @@ public:
     return *this;
   }
 
+  auto SetBindlessNormalMatricesSlot(
+    const BindlessNormalsSlot slot, RendererTag) noexcept -> SceneConstants&
+  {
+    if (bindless_normal_matrices_slot_ != slot) {
+      bindless_normal_matrices_slot_ = slot;
+      version_ = version_.Next();
+    }
+    return *this;
+  }
+
   auto SetBindlessMaterialConstantsSlot(
     const BindlessMaterialConstantsSlot slot, RendererTag) noexcept
     -> SceneConstants&
@@ -266,6 +284,11 @@ public:
     return bindless_transforms_slot_;
   }
 
+  [[nodiscard]] constexpr auto GetBindlessNormalMatricesSlot() const noexcept
+  {
+    return bindless_normal_matrices_slot_;
+  }
+
   [[nodiscard]] constexpr auto GetBindlessMaterialConstantsSlot() const noexcept
   {
     return bindless_material_constants_slot_;
@@ -297,6 +320,7 @@ private:
       .frame_seq_num = frame_seq_num_.get(),
       .bindless_draw_metadata_slot = bindless_draw_metadata_slot_.value,
       .bindless_transforms_slot = bindless_transforms_slot_.value,
+      .bindless_normal_matrices_slot = bindless_normal_matrices_slot_.value,
       .bindless_material_constants_slot
       = bindless_material_constants_slot_.value,
     };
@@ -313,6 +337,7 @@ private:
   frame::SequenceNumber frame_seq_num_ {};
   BindlessDrawMetadataSlot bindless_draw_metadata_slot_ {};
   BindlessWorldsSlot bindless_transforms_slot_ {};
+  BindlessNormalsSlot bindless_normal_matrices_slot_ {};
   BindlessMaterialConstantsSlot bindless_material_constants_slot_ {};
 
   // Versioning + cache

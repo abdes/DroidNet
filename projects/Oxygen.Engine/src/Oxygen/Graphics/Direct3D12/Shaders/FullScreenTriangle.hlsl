@@ -76,11 +76,9 @@ cbuffer SceneConstants : register(b1) {
     uint64_t frame_seq_num;
     uint bindless_draw_metadata_slot; // dynamic slot for per-draw metadata
     uint bindless_transforms_slot; // dynamic slot for per-draw world matrices
+    uint bindless_normal_matrices_slot; // dynamic slot for per-draw normal matrices
     uint bindless_material_constants_slot; // dynamic slot for material constants
     uint _pad0; // Padding for alignment
-    uint _pad1; // Padding for alignment
-    uint _pad2; // Padding for alignment
-    uint _pad3; // Padding for alignment
 }
 
 // Draw index passed as a root constant (32-bit value at register b2)
