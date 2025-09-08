@@ -357,7 +357,7 @@ public:
 
    @param handle The descriptor handle to map to a shader-visible index.
    @return The shader-visible index into the bindless table for the resource
-   type associated with \p handle, or `kInvalidBindlessShaderVisibleIndex` if \p
+   type associated with \p handle, or `kInvalidShaderVisibleIndex` if \p
    handle is invalid or not owned by this allocator.
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(

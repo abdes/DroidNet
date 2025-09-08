@@ -102,9 +102,9 @@ auto oxygen::to_string(BindlessHandle h) -> std::string
   return fmt::format("BindlessHandle(i:{})", h.get());
 }
 
-auto oxygen::to_string(BindlessShaderVisibleIndex idx) -> std::string
+auto oxygen::to_string(ShaderVisibleIndex idx) -> std::string
 {
-  return fmt::format("BindlessShaderVisibleIndex(i:{})", idx.get());
+  return fmt::format("ShaderVisibleIndex(i:{})", idx.get());
 }
 
 auto oxygen::to_string(const VersionedBindlessHandle& h) -> std::string

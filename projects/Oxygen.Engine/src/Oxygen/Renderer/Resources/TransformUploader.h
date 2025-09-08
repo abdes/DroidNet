@@ -11,12 +11,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include <cmath>
-
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -31,7 +30,7 @@ public:
   /*!
    @note TransformUploader lifetime is entirely linked to the Renderer. We
          completely rely on the Renderer to handle the lifetime of the Graphics
-         backend and we assume that for as long as we are alive, the Graphics
+         backend, and we assume that for as long as we are alive, the Graphics
          backend is stable. When it is no longer stable, the Renderer is
          responsible for destroying and re-creating the TransformUploader.
   */
@@ -43,7 +42,7 @@ public:
 
   OXGN_RNDR_API ~TransformUploader();
 
-  auto BeginFrame() -> void;
+  auto OnFrameStart() -> void;
 
   // Deduplication and handle management
   auto GetOrAllocate(const glm::mat4& transform)
@@ -68,19 +67,24 @@ public:
   //! Future: use GetDirtyIndices() for sparse updates.
   OXGN_RNDR_API auto EnsureWorldsOnGpu() -> void;
 
-  //! Returns the bindless descriptor heap index for the world transforms SRV.
-  //! EnsureWorldsOnGpu() MUST be called before this; callers that fail to do
-  //! so are considered incorrect and will be aborted in debug builds.
-  OXGN_RNDR_NDAPI auto GetWorldsSrvIndex() const -> std::uint32_t;
-
-  //! Returns the bindless descriptor index for the normal matrices SRV.
-  //! EnsureNormalsOnGpu() MUST be called before this; callers that fail to do
-  //! so are considered incorrect and will be aborted in debug builds.
-  OXGN_RNDR_NDAPI auto GetNormalsSrvIndex() const -> std::uint32_t;
-
   //! Ensure a GPU buffer exists for the internally managed normal matrices and
   //! upload current CPU data (sparse when beneficial).
   OXGN_RNDR_API auto EnsureNormalsOnGpu() -> void;
+
+  //! Ensures all transform GPU resources are prepared for the current frame.
+  //! MUST be called after BeginFrame() and before any Get*SrvIndex() calls.
+  //! Safe to call multiple times per frame - internally optimized.
+  OXGN_RNDR_API auto EnsureFrameResources() -> void;
+
+  //! Returns the bindless descriptor heap index for the world transforms SRV.
+  //! REQUIRES: EnsureFrameResources() must have been called this frame.
+  [[nodiscard]] OXGN_RNDR_API auto GetWorldsSrvIndex() const
+    -> ShaderVisibleIndex;
+
+  //! Returns the bindless descriptor index for the normal matrices SRV.
+  //! REQUIRES: EnsureFrameResources() must have been called this frame.
+  [[nodiscard]] OXGN_RNDR_API auto GetNormalsSrvIndex() const
+    -> ShaderVisibleIndex;
 
 private:
   static auto ComputeNormalMatrix(const glm::mat4& world) noexcept -> glm::mat4;
@@ -91,8 +95,12 @@ private:
     -> std::vector<engine::upload::UploadRequest>;
 
   auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
-    std::uint32_t& bindless_index, std::uint64_t size_bytes,
+    ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
     const char* debug_label) -> bool;
+
+  //! Internal methods for resource preparation
+  auto PrepareWorldMatricesInternal() -> void;
+  auto PrepareNormalMatricesInternal() -> void;
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
@@ -113,11 +121,11 @@ private:
 
   // GPU resources (incremental)
   std::shared_ptr<graphics::Buffer> gpu_world_buffer_;
-  // 0 is reserved/unset; valid indices are non-zero. The existence of the
-  // corresponding buffer is the ultimate source of truth for validity.
-  std::uint32_t bindless_index_ { 0u };
+  // The existence of the corresponding buffer is the ultimate source of truth
+  // for validity.
+  ShaderVisibleIndex worlds_bindless_index_ { kInvalidShaderVisibleIndex };
   std::shared_ptr<graphics::Buffer> gpu_normals_buffer_;
-  std::uint32_t normals_bindless_index_ { 0u };
+  ShaderVisibleIndex normals_bindless_index_ { kInvalidShaderVisibleIndex };
 };
 
 } // namespace oxygen::renderer::resources

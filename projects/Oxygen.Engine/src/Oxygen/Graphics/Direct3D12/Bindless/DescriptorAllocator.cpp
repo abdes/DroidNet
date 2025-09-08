@@ -196,7 +196,7 @@ auto DescriptorAllocator::GetShaderVisibleIndex(
   // GetSegmentForHandle will do all the necessary validation of the handle.
   const auto segment = GetSegmentForHandle(handle);
   if (!segment.has_value()) {
-    return kInvalidBindlessShaderVisibleIndex;
+    return kInvalidShaderVisibleIndex;
   }
   DCHECK_NOTNULL_F(segment.value());
 

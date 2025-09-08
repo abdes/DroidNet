@@ -10,11 +10,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <span>
 #include <unordered_map>
 #include <vector>
-
-#include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/View.h>
@@ -95,13 +92,13 @@ class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
-  OXGN_RNDR_API explicit Renderer(std::weak_ptr<oxygen::Graphics> graphics,
+  OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics,
     std::shared_ptr<EvictionPolicy> eviction_policy = nullptr);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
 
-  OXGN_RNDR_API ~Renderer();
+  OXGN_RNDR_API ~Renderer() override;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -118,10 +115,12 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> ModulePhaseMask override
   {
-    // Participate in transform propagation and command record for uploads.
-    return MakeModuleMask<core::PhaseId::kTransformPropagation,
-      core::PhaseId::kCommandRecord>();
+    // Participate in frame start, transform propagation and command record.
+    return MakeModuleMask<core::PhaseId::kFrameStart,
+      core::PhaseId::kTransformPropagation, core::PhaseId::kCommandRecord>();
   }
+
+  OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
 
   OXGN_RNDR_NDAPI auto OnTransformPropagation(FrameContext& context)
     -> co::Co<> override;
@@ -148,8 +147,7 @@ public:
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
   auto ExecuteRenderGraph(RenderGraphCoroutine&& graph_coroutine,
-    RenderContext& context, const oxygen::engine::FrameContext& frame_context)
-    -> co::Co<>
+    RenderContext& context, const FrameContext& frame_context) -> co::Co<>
   {
     PreExecute(context, frame_context);
     co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(context);
@@ -161,7 +159,7 @@ public:
   // must migrate to PreparedSceneFrame consumption.
 
   //! Returns the Graphics system used by this renderer.
-  OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<oxygen::Graphics>;
+  OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<Graphics>;
 
   //! Modify scene constants in-place via a user-provided mutator.
   /*!
@@ -190,11 +188,11 @@ public:
     -> void;
   OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
 
-  OXGN_RNDR_API auto BuildFrame(const View& view,
-    const oxygen::engine::FrameContext& frame_context) -> std::size_t;
+  OXGN_RNDR_API auto BuildFrame(
+    const View& view, const FrameContext& frame_context) -> std::size_t;
 
   OXGN_RNDR_API auto BuildFrame(const CameraView& camera_view,
-    const oxygen::engine::FrameContext& frame_context) -> std::size_t;
+    const FrameContext& frame_context) -> std::size_t;
 
   //! Configure zero-copy matrix aliasing.
   /*!
@@ -216,17 +214,15 @@ public:
   }
 
 private:
-  OXGN_RNDR_API auto PreExecute(RenderContext& context,
-    const oxygen::engine::FrameContext& frame_context) -> void;
+  OXGN_RNDR_API auto PreExecute(
+    RenderContext& context, const FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
   //=== FrameGraph Phase Helpers (PhaseId::kFrameGraph) -------------------//
   //! Extract scene pointer from FrameContext (defensive null check).
-  auto ResolveScene(const oxygen::engine::FrameContext& frame_context)
-    -> scene::Scene&;
+  auto ResolveScene(const FrameContext& frame_context) -> scene::Scene&;
   //! Initialize frame sequence number from FrameContext (PhaseId::kFrameGraph).
-  auto InitializeFrameSequence(
-    const oxygen::engine::FrameContext& frame_context) -> void;
+  auto InitializeFrameSequence(const FrameContext& frame_context) -> void;
   //! Prepare collection configuration (centralized future policy hook).
   using BasicCollectionConfig
     = decltype(sceneprep::CreateBasicCollectionConfig());
@@ -257,8 +253,6 @@ private:
     const std::vector<std::size_t>& filtered,
     sceneprep::ScenePrepState& prep_state)
     -> void; // non-const: may register new materials (stable handle allocation)
-  //! Mirror finalized world matrices into bindless StructuredBuffer.
-  auto UploadWorldTransforms(std::size_t count) -> void;
   //! Build sorting keys, stable-sort, and construct partition ranges.
   auto BuildSortingAndPartitions()
     -> void; // builds sorting keys, sorts, partitions
@@ -272,22 +266,18 @@ private:
     std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
   auto EnsureMeshResources(const data::Mesh& mesh) -> MeshGpuResources&;
-  auto MaybeUpdateSceneConstants(
-    const oxygen::engine::FrameContext& frame_context) -> void;
+  auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
 
   auto UpdateBindlessMaterialConstantsSlotIfChanged() -> void;
-  auto UpdateBindlessWorldsSlotIfChanged() -> void;
-  auto UpdateBindlessNormalsSlotIfChanged() -> void;
   auto UpdateDrawMetadataSlotIfChanged() -> void;
 
   auto EnsureAndUploadDrawMetadataBuffer() -> void;
   auto EnsureAndUploadMaterialConstants() -> void;
-  auto EnsureAndUploadWorldTransforms() -> void;
 
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
 
-  std::weak_ptr<oxygen::Graphics> gfx_weak_; // New AsyncEngine path
+  std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
   std::unordered_map<MeshId, MeshGpuResources> mesh_resources_;
   std::shared_ptr<EvictionPolicy> eviction_policy_;
 
@@ -300,14 +290,10 @@ private:
     std::numeric_limits<uint64_t>::max)() };
 
   // Material constants (StructuredBuffer<MaterialConstants>)
-  oxygen::engine::detail::BindlessStructuredBuffer<MaterialConstants>
-    material_constants_;
+  detail::BindlessStructuredBuffer<MaterialConstants> material_constants_;
 
   // Per-draw metadata buffer (StructuredBuffer<DrawMetadata>)
-  oxygen::engine::detail::BindlessStructuredBuffer<DrawMetadata> draw_metadata_;
-
-  // Per-draw world matrices buffer (StructuredBuffer<float4x4>)
-  oxygen::engine::detail::BindlessStructuredBuffer<glm::mat4> world_transforms_;
+  detail::BindlessStructuredBuffer<DrawMetadata> draw_metadata_;
 
   //=== SoA Finalization (in-progress) ===----------------------------------//
   // CPU-owning storage populated during finalization each frame. Spans inside
@@ -376,7 +362,7 @@ private:
   frame::SequenceNumber frame_seq_num { 0ULL };
 
   // Upload coordinator: manages buffer/texture uploads and completion.
-  std::unique_ptr<oxygen::engine::upload::UploadCoordinator> uploader_;
+  std::unique_ptr<upload::UploadCoordinator> uploader_;
 };
 
 } // namespace oxygen::engine

@@ -25,7 +25,7 @@ namespace oxygen {
  the backend that manages the corresponding GPU resources, will provide the
  appropriate mapping.
 
- @see VersionedBindlessHandle, BindlessShaderVisibleIndex.
+ @see VersionedBindlessHandle, ShaderVisibleIndex.
 */
 using BindlessHandle = NamedType<uint32_t, struct BindlessHandleTag,
   // clang-format off
@@ -38,16 +38,15 @@ using BindlessHandle = NamedType<uint32_t, struct BindlessHandleTag,
  Represents the index used in shaders to access bindless resources. This is
  distinct from `BindlessHandle`, which is an opaque handle used by the CPU-side
  engine to manage resources. The mapping between `BindlessHandle` and
- `BindlessShaderVisibleIndex` is managed by the allocator or backend.
+ `ShaderVisibleIndex` is managed by the allocator or backend.
 
  @warning No assumptions should be made about the algorithm used for deriving a
- `BindlessShaderVisibleIndex` from a `BindlessHandle`.
+ `ShaderVisibleIndex` from a `BindlessHandle`.
 
  @see BindlessHandle, VersionedBindlessHandle.
 */
-using BindlessShaderVisibleIndex
-  = NamedType<uint32_t, struct BindlessShaderVisibleIndexTag,
-    // clang-format off
+using ShaderVisibleIndex = NamedType<uint32_t, struct ShaderVisibleIndexTag,
+  // clang-format off
   Hashable,
   Comparable,
   Printable>; // clang-format on
@@ -92,16 +91,16 @@ static constexpr BindlessHandle kInvalidBindlessHandle {
 };
 
 //! Sentinel value representing an invalid bindless handle.
-static constexpr BindlessShaderVisibleIndex kInvalidBindlessShaderVisibleIndex {
+static constexpr ShaderVisibleIndex kInvalidShaderVisibleIndex {
   kInvalidBindlessIndex
 };
 
 //! Convert a BindlessHandle to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandle h) -> std::string;
 
-//! Convert a BindlessShaderVisibleIndex to a human-readable string
+//! Convert a ShaderVisibleIndex to a human-readable string
 //! representation.
-OXGN_CORE_NDAPI auto to_string(BindlessShaderVisibleIndex h) -> std::string;
+OXGN_CORE_NDAPI auto to_string(ShaderVisibleIndex h) -> std::string;
 
 //! Convert a BindlessHandleCount to a human-readable string representation.
 OXGN_CORE_NDAPI auto to_string(BindlessHandleCount count) -> std::string;
@@ -292,7 +291,7 @@ struct VersionedBindlessHandleHash {
 //! improve ergonomic at use sites.
 namespace bindless {
   using Handle = BindlessHandle;
-  using ShaderVisibleIndex = BindlessShaderVisibleIndex;
+  using ShaderVisibleIndex = ShaderVisibleIndex;
   using VersionedHandle = VersionedBindlessHandle;
   using Count = BindlessHandleCount;
   using Capacity = BindlessHandleCapacity;

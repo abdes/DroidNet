@@ -57,7 +57,7 @@ public:
     const DescriptorHandle& /*handle*/) const noexcept
     -> oxygen::bindless::ShaderVisibleIndex override
   {
-    return oxygen::kInvalidBindlessShaderVisibleIndex;
+    return oxygen::kInvalidShaderVisibleIndex;
   }
 
 protected:
