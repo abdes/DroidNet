@@ -54,18 +54,25 @@ struct DrawMetadata {
 // root CBV (not indexed from the descriptor heap), allowing fast and efficient
 // updates for per-frame or per-draw constants.
 cbuffer SceneConstants : register(b1) {
-    float4x4 view_matrix;
-    float4x4 projection_matrix;
-    float3 camera_position;
-    float time_seconds;
-    uint frame_slot;
-    uint64_t frame_seq_num;
-    uint bindless_draw_metadata_slot; // dynamic slot for per-draw metadata
-    uint bindless_transforms_slot; // dynamic slot for per-draw world matrices
-    uint bindless_normal_matrices_slot; // dynamic slot for per-draw normal matrices
-    uint bindless_material_constants_slot; // dynamic slot for material constants
-    uint _pad0; // Padding for alignment
-}
+    float4x4 view_matrix;                     // 64 bytes
+    float4x4 projection_matrix;               // 64-bytes
+    float3 camera_position;                   // 12-bytes
+    uint frame_slot;                          // 4-bytes
+    // Aligned at 8 bytes here
+    float time_seconds;                       // 4-bytes
+    uint64_t frame_seq_num;                   // 8-bytes
+
+    // Dynamic bindless slots for the SRVs for various resource types.
+    // These are allocated in the descriptor heap and their indices are
+    // provided here for shader access.
+    uint bindless_draw_metadata_slot;         // 4 bytes
+    uint bindless_transforms_slot;            // 4 bytes
+    uint bindless_normal_matrices_slot;       // 4 bytes
+    uint bindless_material_constants_slot;    // 4 bytes
+
+    // Padding to ensure 16-byte alignment (HLSL packs to 16-byte boundaries)
+    uint _pad0;                               // 4 bytes
+} // Total is 176 bytes
 
 // Draw index passed as a root constant (32-bit value at register b2)
 cbuffer DrawIndexConstant : register(b2) {

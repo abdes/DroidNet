@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <cstring>
 #include <limits>
 
 #include <glm/mat4x4.hpp>
@@ -15,6 +14,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
 
@@ -135,20 +135,30 @@ public:
   };
   static constexpr RendererTag kRenderer {};
 
-  struct GpuData {
+  // ReSharper disable CppInconsistentNaming
+  struct alignas(16) GpuData {
     glm::mat4 view_matrix { 1.0f };
     glm::mat4 projection_matrix { 1.0f };
+    // Aligned at 16 bytes here
     glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
-    float time_seconds { 0.0f };
     frame::Slot::UnderlyingType frame_slot { 0 };
+    // Aligned at 16 bytes here
     frame::SequenceNumber::UnderlyingType frame_seq_num { 0 };
+    // Aligned at 8 bytes here
+    float time_seconds { 0.0f };
+    uint32_t _pad0 { 0 }; // padding - do not use
+    // Aligned at 16 bytes here
     uint32_t bindless_draw_metadata_slot { kInvalidDescriptorSlot };
     uint32_t bindless_transforms_slot { kInvalidDescriptorSlot };
     uint32_t bindless_normal_matrices_slot { kInvalidDescriptorSlot };
     uint32_t bindless_material_constants_slot { kInvalidDescriptorSlot };
+    // Aligned at 16 bytes here
   };
+  // ReSharper restore CppInconsistentNaming
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
+  static_assert(
+    sizeof(GpuData) == 176, "GpuData size must match HLSL cbuffer packing");
 
   SceneConstants() = default;
   OXYGEN_DEFAULT_COPYABLE(SceneConstants)
@@ -156,104 +166,36 @@ public:
   ~SceneConstants() = default;
 
   // Application setters (chainable) — modern return type
-  auto SetViewMatrix(const glm::mat4& m) noexcept -> SceneConstants&
-  {
-    if (std::memcmp(&view_matrix_, &m, sizeof(glm::mat4)) != 0) {
-      view_matrix_ = m;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  auto SetViewMatrix(const glm::mat4& m) noexcept -> SceneConstants&;
 
-  auto SetProjectionMatrix(const glm::mat4& m) noexcept -> SceneConstants&
-  {
-    if (std::memcmp(&projection_matrix_, &m, sizeof(glm::mat4)) != 0) {
-      projection_matrix_ = m;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetProjectionMatrix(const glm::mat4& m) noexcept
+    -> SceneConstants&;
 
-  auto SetCameraPosition(const glm::vec3& p) noexcept -> SceneConstants&
-  {
-    if (camera_position_.x != p.x || camera_position_.y != p.y
-      || camera_position_.z != p.z) {
-      camera_position_ = p;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetCameraPosition(const glm::vec3& p) noexcept
+    -> SceneConstants&;
 
   // Renderer-only setters (require the renderer tag)
-  auto SetTimeSeconds(const float t, RendererTag) noexcept -> SceneConstants&
-  {
-    if (time_seconds_ != t) {
-      time_seconds_ = t;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetTimeSeconds(float t, RendererTag) noexcept
+    -> SceneConstants&;
 
-  auto SetFrameSlot(const frame::Slot slot, RendererTag) noexcept
-    -> SceneConstants&
-  {
-    if (frame_slot_ != slot) {
-      frame_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetFrameSlot(frame::Slot slot, RendererTag) noexcept
+    -> SceneConstants&;
 
-  auto SetFrameSequenceNumber(
-    const frame::SequenceNumber seq, RendererTag) noexcept -> SceneConstants&
-  {
-    if (frame_seq_num_ != seq) {
-      frame_seq_num_ = seq;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetFrameSequenceNumber(
+    frame::SequenceNumber seq, RendererTag) noexcept -> SceneConstants&;
 
-  auto SetBindlessDrawMetadataSlot(const BindlessDrawMetadataSlot slot,
-    RendererTag) noexcept -> SceneConstants&
-  {
-    if (bindless_draw_metadata_slot_ != slot) {
-      bindless_draw_metadata_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetBindlessDrawMetadataSlot(
+    BindlessDrawMetadataSlot slot, RendererTag) noexcept -> SceneConstants&;
 
-  auto SetBindlessWorldsSlot(
-    const BindlessWorldsSlot slot, RendererTag) noexcept -> SceneConstants&
-  {
-    if (bindless_transforms_slot_ != slot) {
-      bindless_transforms_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetBindlessWorldsSlot(
+    BindlessWorldsSlot slot, RendererTag) noexcept -> SceneConstants&;
 
-  auto SetBindlessNormalMatricesSlot(
-    const BindlessNormalsSlot slot, RendererTag) noexcept -> SceneConstants&
-  {
-    if (bindless_normal_matrices_slot_ != slot) {
-      bindless_normal_matrices_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetBindlessNormalMatricesSlot(
+    BindlessNormalsSlot slot, RendererTag) noexcept -> SceneConstants&;
 
-  auto SetBindlessMaterialConstantsSlot(
-    const BindlessMaterialConstantsSlot slot, RendererTag) noexcept
-    -> SceneConstants&
-  {
-    if (bindless_material_constants_slot_ != slot) {
-      bindless_material_constants_slot_ = slot;
-      version_ = version_.Next();
-    }
-    return *this;
-  }
+  OXGN_RNDR_API auto SetBindlessMaterialConstantsSlot(
+    BindlessMaterialConstantsSlot slot, RendererTag) noexcept
+    -> SceneConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -299,14 +241,7 @@ public:
 
   // Returns a reference to a cached GPU snapshot. Rebuilds only when version_
   // changed.
-  [[nodiscard]] auto GetSnapshot() const noexcept
-  {
-    if (cached_version_ != version_) {
-      RebuildCache();
-      cached_version_ = version_;
-    }
-    return cached_;
-  }
+  OXGN_RNDR_NDAPI auto GetSnapshot() const noexcept -> const GpuData&;
 
 private:
   auto RebuildCache() const noexcept -> void
@@ -315,9 +250,9 @@ private:
       .view_matrix = view_matrix_,
       .projection_matrix = projection_matrix_,
       .camera_position = camera_position_,
-      .time_seconds = time_seconds_,
       .frame_slot = frame_slot_.get(),
       .frame_seq_num = frame_seq_num_.get(),
+      .time_seconds = time_seconds_,
       .bindless_draw_metadata_slot = bindless_draw_metadata_slot_.value,
       .bindless_transforms_slot = bindless_transforms_slot_.value,
       .bindless_normal_matrices_slot = bindless_normal_matrices_slot_.value,
