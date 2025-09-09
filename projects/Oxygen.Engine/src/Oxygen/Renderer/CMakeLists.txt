@@ -91,6 +91,7 @@ set(
   "ScenePrep/ScenePrepState.cpp"
   "ScenePrep/ScenePrepState.h"
   "ScenePrep/Types.h"
+  "Types/SceneConstants.cpp"
   "Upload/StagingAllocator.cpp"
   "Upload/StagingAllocator.h"
   "Upload/Types.h"
