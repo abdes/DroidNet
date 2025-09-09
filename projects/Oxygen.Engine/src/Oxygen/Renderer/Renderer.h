@@ -16,19 +16,17 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/CameraView.h>
-#include <Oxygen/Renderer/Types/DrawMetadata.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/api_export.h>
-// Bindless structured buffer helper for per-draw arrays
-#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
-#include <Oxygen/Renderer/ScenePrep/CollectionConfig.h> // template config return type
+#include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
-// Upload coordinator facade
+#include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
 class Graphics;
@@ -49,8 +47,9 @@ class Mesh;
 namespace oxygen::engine {
 
 namespace sceneprep {
-  struct ScenePrepState; // forward for SoA finalization method
-}
+  struct ScenePrepState;
+  class ScenePrepPipeline;
+} // namespace sceneprep
 
 struct RenderContext;
 struct MaterialConstants;
@@ -152,14 +151,6 @@ private:
     RenderContext& context, const FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
-  //! Prepare collection configuration (centralized future policy hook).
-  using BasicCollectionConfig
-    = decltype(sceneprep::CreateBasicCollectionConfig());
-  auto PrepareScenePrepCollectionConfig() const -> BasicCollectionConfig;
-  //! Run ScenePrep collection with timing + logging; fills prep_state.
-  template <typename CollectionCfg>
-  auto CollectScenePrep(scene::Scene& scene, const View& view,
-    sceneprep::ScenePrepState& prep_state, const CollectionCfg& cfg) -> void;
   //! Finalize SoA (wrapper around existing FinalizeScenePrepSoA) and log.
   auto FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state) -> void;
   //! Update scene constants from resolved view matrices & camera state.
@@ -256,6 +247,7 @@ private:
   // frames). ResetFrameData() is invoked each BuildFrame while retaining
   // deduplicated caches inside contained managers.
   sceneprep::ScenePrepState scene_prep_state_;
+  std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_pipeline_;
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
