@@ -57,7 +57,13 @@ struct ScenePrepState {
   std::unique_ptr<oxygen::renderer::resources::MaterialBinder> material_binder;
 
   //! Reset per-frame data while preserving persistent caches.
-  OXGN_RNDR_API auto ResetFrameData() -> void;
+  auto ResetFrameData() -> void
+  {
+    // Clear collection phase data
+    collected_items.clear();
+    filtered_indices.clear();
+    pass_masks.clear();
+  }
 };
 
 } // namespace oxygen::engine::sceneprep

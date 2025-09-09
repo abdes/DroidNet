@@ -81,6 +81,9 @@ auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   : gfx_weak_(std::move(graphics))
+  , scene_prep_pipeline_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
+        decltype(sceneprep::CreateBasicCollectionConfig())>>(
+      sceneprep::CreateBasicCollectionConfig()))
 {
   LOG_F(
     2, "Renderer::Renderer [this={}] - constructor", static_cast<void*>(this));
@@ -353,12 +356,19 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
 
   auto scene_ptr = frame_context.GetScene();
   CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
+  auto& scene = *scene_ptr;
 
-  // Reset per-frame state but retain persistent caches
-  // (transform/material/geometry)
-  scene_prep_state_.ResetFrameData();
-  const auto cfg = PrepareScenePrepCollectionConfig();
-  CollectScenePrep(*scene_ptr, view, scene_prep_state_, cfg);
+  const auto t_collect0 = std::chrono::high_resolution_clock::now();
+  scene_prep_pipeline_->Collect(
+    scene, view, frame_seq_num.get(), scene_prep_state_, true);
+  const auto t_collect1 = std::chrono::high_resolution_clock::now();
+  last_finalize_stats_.collection_time
+    = std::chrono::duration_cast<std::chrono::microseconds>(
+      t_collect1 - t_collect0);
+  DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
+    scene_prep_state_.collected_items.size(), scene.GetNodes().Items().size(),
+    last_finalize_stats_.collection_time.count());
+
   FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
 
@@ -702,36 +712,6 @@ auto Renderer::BuildFrame(const CameraView& camera_view,
   return BuildFrame(view, frame_context);
 }
 
-auto Renderer::PrepareScenePrepCollectionConfig() const -> BasicCollectionConfig
-{
-  // Central hook for future renderer policy injection.
-  // TODO: pass policy/config from renderer settings (preserved from original
-  // comment)
-  return sceneprep::CreateBasicCollectionConfig();
-}
-
-template <typename CollectionCfg>
-auto Renderer::CollectScenePrep(scene::Scene& scene, const View& view,
-  sceneprep::ScenePrepState& prep_state, const CollectionCfg& cfg) -> void
-{
-  // === ScenePrep collection ===
-  // Legacy AoS translation step removed; we now directly finalize into SoA
-  // arrays (matrices, draw metadata, materials, partitions, sorting keys).
-  // FIXME(perf): Avoid per-frame allocations by pooling ScenePrepState or
-  // reusing internal vectors (requires clear ownership strategy & lifetime).
-  sceneprep::ScenePrepPipeline<CollectionCfg> pipeline { cfg };
-  // NOTE: StrongType frame_seq_num unwrapped for ScenePrep API.
-  const auto t_collect0 = std::chrono::high_resolution_clock::now();
-  pipeline.Collect(scene, view, frame_seq_num.get(), prep_state);
-  const auto t_collect1 = std::chrono::high_resolution_clock::now();
-  last_finalize_stats_.collection_time
-    = std::chrono::duration_cast<std::chrono::microseconds>(
-      t_collect1 - t_collect0);
-  DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
-    prep_state.collected_items.size(), scene.GetNodes().Items().size(),
-    last_finalize_stats_.collection_time.count());
-}
-
 auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
   -> void
 {
@@ -743,11 +723,6 @@ auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
     prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata),
     prepared_frame_.partitions.size());
 }
-
-// Explicit template instantiation for current collection config
-template auto Renderer::CollectScenePrep<Renderer::BasicCollectionConfig>(
-  scene::Scene& scene, const View& view, sceneprep::ScenePrepState& prep_state,
-  const BasicCollectionConfig& cfg) -> void;
 
 auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
 {

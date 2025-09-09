@@ -9,21 +9,38 @@
 #include <cstdint>
 #include <utility>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Scene/Scene.h>
-#include <stdexcept>
 
 namespace oxygen::engine::sceneprep {
 
-template <typename CollectionCfg> class ScenePrepPipeline {
+class ScenePrepPipeline {
 public:
-  explicit ScenePrepPipeline(CollectionCfg cfg) noexcept
-    : collection_(std::move(cfg))
+  ScenePrepPipeline() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(ScenePrepPipeline)
+  OXYGEN_DEFAULT_MOVABLE(ScenePrepPipeline)
+
+  virtual ~ScenePrepPipeline() = default;
+
+  virtual auto Collect(scene::Scene& scene, const View& view, uint64_t frame_id,
+    ScenePrepState& state, bool reset_state) -> void
+    = 0;
+
+  // virtual auto Finalize() -> void = 0;
+};
+
+template <typename CollectionCfg>
+class ScenePrepPipelineImpl : public ScenePrepPipeline {
+public:
+  explicit ScenePrepPipelineImpl(CollectionCfg collection_cfg) noexcept
+    : collection_(std::move(collection_cfg))
   {
   }
 
@@ -39,10 +56,15 @@ public:
    @param state ScenePrep working state and output buffers
   */
   auto Collect(scene::Scene& scene, const View& view, uint64_t frame_id,
-    ScenePrepState& state) const -> void
+    ScenePrepState& state, bool reset_state) -> void override
   {
-    ScenePrepContext ctx { frame_id, view, scene };
-    state.ResetFrameData();
+    prep_state_ = observer_ptr { &state };
+    ctx_.emplace(frame_id, view, scene);
+
+    // Reset per-frame state if requested.
+    if (reset_state) {
+      prep_state_->ResetFrameData();
+    }
 
     const auto& node_table = scene.GetNodes();
     const auto items = node_table.Items();
@@ -55,25 +77,25 @@ public:
         RenderItemProto item { node_impl };
 
         if constexpr (CollectionCfg::has_pre_filter) {
-          collection_.pre_filter(ctx, state, item);
+          collection_.pre_filter(*ctx_, state, item);
           if (item.IsDropped()) {
             continue;
           }
         }
         if constexpr (CollectionCfg::has_transform_resolve) {
-          collection_.transform_resolve(ctx, state, item);
+          collection_.transform_resolve(*ctx_, state, item);
           if (item.IsDropped()) {
             continue;
           }
         }
         if constexpr (CollectionCfg::has_mesh_resolver) {
-          collection_.mesh_resolver(ctx, state, item);
+          collection_.mesh_resolver(*ctx_, state, item);
           if (item.IsDropped()) {
             continue;
           }
         }
         if constexpr (CollectionCfg::has_visibility_filter) {
-          collection_.visibility_filter(ctx, state, item);
+          collection_.visibility_filter(*ctx_, state, item);
           if (item.IsDropped()) {
             continue;
           }
@@ -83,7 +105,7 @@ public:
         const auto items_before = state.collected_items.size();
 
         if constexpr (CollectionCfg::has_producer) {
-          collection_.producer(ctx, state, item);
+          collection_.producer(*ctx_, state, item);
         }
 
         // Track indices of all new items added by the producer
@@ -98,7 +120,9 @@ public:
   }
 
 private:
-  CollectionCfg collection_ {};
+  std::optional<ScenePrepContext> ctx_ {};
+  observer_ptr<ScenePrepState> prep_state_;
+  [[no_unique_address]] CollectionCfg collection_ {};
 };
 
 } // namespace oxygen::engine::sceneprep
