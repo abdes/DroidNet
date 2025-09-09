@@ -68,6 +68,7 @@ set(
   "Resources.h"
   "SafeCall.h"
   "Types/BindlessHandle.h"
+  "Types/Epoch.h"
   "Types/Format.h"
   "Types/Frame.h"
   "Types/Frustum.h"
