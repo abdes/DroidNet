@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -48,8 +49,12 @@ using TransformHandle
   = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
                                 // clang-format off
   struct TransformHandleTag,
-  oxygen::Hashable,
-  oxygen::Comparable>; // clang-format on
+  oxygen::Arithmetic>; // clang-format on
+
+inline constexpr auto to_string(TransformHandle h)
+{
+  return "TransH(" + std::to_string(h.get()) + ")";
+}
 
 //! Handle to a material registered with ScenePrep.
 /*!
@@ -63,8 +68,12 @@ using MaterialHandle
   = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
                                 // clang-format off
   struct MaterialHandleTag,
-  oxygen::Hashable,
-  oxygen::Comparable>; // clang-format on
+  oxygen::Arithmetic>; // clang-format on
+
+inline constexpr auto to_string(MaterialHandle h)
+{
+  return "MatH(" + std::to_string(h.get()) + ")";
+}
 
 //! Handle to a geometry entry managed by GeometryUploader.
 /*!
@@ -75,21 +84,16 @@ using MaterialHandle
  `GeometryHandle::get()` to retrieve the underlying integer index when
  interacting with low-level APIs.
 */
-using GeometryHandle = oxygen::NamedType<uint32_t, // clang-format off
+using GeometryHandle
+  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                                // clang-format off
   struct GeometryHandleTag,
-  oxygen::Hashable,
-  oxygen::Comparable>; // clang-format on
+  oxygen::Arithmetic>; // clang-format on
 
-//! DEPRECATED: Old GPU resource handles for legacy GeometryRegistry.
-/*!
- @deprecated This struct-based approach is being replaced by the new
- strong-typed GeometryHandle above. Will be removed when GeometryRegistry
- migration is complete.
- */
-struct LegacyGeometryHandle {
-  uint32_t vertex_buffer = 0;
-  uint32_t index_buffer = 0;
-};
+inline constexpr auto to_string(GeometryHandle h)
+{
+  return "GeoH(" + std::to_string(h.get()) + ")";
+}
 
 //! Shared context passed to ScenePrep algorithms.
 /*!
