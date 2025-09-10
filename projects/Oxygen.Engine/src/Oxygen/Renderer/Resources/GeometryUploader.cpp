@@ -113,28 +113,13 @@ namespace {
 // Hash-based key for mesh deduplication
 auto MakeGeometryKey(const oxygen::data::Mesh& mesh) noexcept -> std::uint64_t
 {
-  // Simple hash based on vertex count and first few vertices
-  const auto vertices = mesh.Vertices();
-  if (vertices.empty()) {
-    return 0;
-  }
-
-  std::uint64_t hash = vertices.size();
-
-  // Hash first few vertices for quick differentiation
-  const auto hash_count
-    = std::min(static_cast<std::size_t>(4), vertices.size());
-  for (std::size_t i = 0; i < hash_count; ++i) {
-    const auto& v = vertices[i];
-    hash ^= std::hash<float> {}(v.position.x) + 0x9e3779b9 + (hash << 6)
-      + (hash >> 2);
-    hash ^= std::hash<float> {}(v.position.y) + 0x9e3779b9 + (hash << 6)
-      + (hash >> 2);
-    hash ^= std::hash<float> {}(v.position.z) + 0x9e3779b9 + (hash << 6)
-      + (hash >> 2);
-  }
-
-  return hash;
+  // Use mesh object identity instead of content-based hashing This
+  // automatically handles LOD switching since different LOD meshes are
+  // different objects with different addresses.
+  //
+  // TODO: Consider hooking this with the AssetLoader to get stable IDs or be
+  // notified when meshes are destroyed
+  return reinterpret_cast<std::uintptr_t>(&mesh);
 }
 
 } // namespace
@@ -179,6 +164,16 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh)
 auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
   -> engine::sceneprep::GeometryHandle
 {
+  static constexpr engine::sceneprep::GeometryHandle kInvalidHandle {
+    kInvalidBindlessIndex
+  };
+
+  LOG_SCOPE_FUNCTION(2);
+
+  LOG_F(2, "mesh name     = {}", mesh.GetName());
+  LOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
+  LOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
+
   // Enhanced validation with detailed error messages
   std::string error_msg;
   if (!ValidateMeshDetailed(mesh, error_msg)) {
@@ -189,10 +184,20 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
   }
 
   const auto key = ::MakeGeometryKey(mesh);
+  LOG_F(2, "mesh key     = {}", key);
   if (const auto it = geometry_key_to_handle_.find(key);
     it != geometry_key_to_handle_.end()) {
     const auto h = it->second;
-    const auto idx = static_cast<std::size_t>(h.get());
+    const auto idx = h.get();
+
+    DCHECK_LT_F(idx, geometry_entries_.size()); // valid index
+    auto& entry = geometry_entries_[idx];
+    if (entry.mesh.get() == &mesh) {
+      // Found and same mesh object - update criticality only if stronger than
+      // before
+      entry.is_critical |= is_critical;
+    }
+
     if (idx < meshes_.size() && meshes_[idx] == &mesh) {
       // Update criticality if this is a new request
       if (is_critical && idx < is_critical_.size()) {
@@ -204,10 +209,12 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
 
   // Not found or collision mismatch: allocate new handle
   const auto handle = next_handle_;
-  const auto idx = static_cast<std::size_t>(handle.get());
+  DLOG_F(2, "new handle : {}", handle);
+  const auto idx = handle.get();
 
   // Resize vectors if needed
   if (meshes_.size() <= idx) {
+    DLOG_F(2, "resize internal storage to : {}", idx + 1U);
     meshes_.resize(idx + 1U);
     versions_.resize(idx + 1U);
     is_critical_.resize(idx + 1U);
@@ -228,8 +235,16 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
     dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
   }
 
+  geometry_entries_.emplace_back(
+    observer_ptr { &mesh }, current_epoch_, true, is_critical);
+
+  DLOG_F(2, "key         : {}", fmt::ptr(&mesh));
+  DLOG_F(2, "epoch       : {}", current_epoch_);
+  DLOG_F(2, "is dirty    : {}", true);
+  DLOG_F(2, "is critical : {}", is_critical);
+
   geometry_key_to_handle_[key] = handle;
-  next_handle_ = engine::sceneprep::GeometryHandle { handle.get() + 1U };
+  ++next_handle_;
 
   return handle;
 }
@@ -268,9 +283,9 @@ auto GeometryUploader::OnFrameStart() -> void
 {
   // BeginFrame must be called once per frame by the orchestrator (Renderer).
   ++current_epoch_;
-  if (current_epoch_ == 0U) { // wrapped
-    current_epoch_ = 1U;
-    std::ranges::fill(dirty_epoch_, 0U);
+  if (current_epoch_ == Epoch { 0 }) { // wrapped
+    current_epoch_ = Epoch { 1 };
+    std::ranges::fill(dirty_epoch_, Epoch { 0 });
   }
   dirty_indices_.clear();
 
@@ -297,69 +312,81 @@ auto GeometryUploader::MakeGeometryKey(const data::Mesh& mesh) noexcept
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto GeometryUploader::EnsureBufferAndSrv(
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  std::uint64_t size_bytes, const char* debug_label) -> bool
+  std::uint64_t size_bytes, const std::string& debug_label) -> bool
 {
-  bool recreated = false;
-  if (!buffer || buffer->GetSize() < size_bytes) {
-    graphics::BufferDesc desc;
-    desc.size_bytes = size_bytes;
-    desc.usage = graphics::BufferUsage::kStorage;
-    desc.memory = graphics::BufferMemory::kDeviceLocal;
-    desc.debug_name = debug_label;
-
-    try {
-      buffer = gfx_.CreateBuffer(desc);
-      if (!buffer) {
-        LOG_F(ERROR,
-          "GeometryUploader: Failed to create buffer '{}' ({} bytes)",
-          debug_label, size_bytes);
-        return false;
-      }
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "GeometryUploader: Exception creating buffer '{}': {}",
-        debug_label, e.what());
-      return false;
-    }
-
-    auto& registry = gfx_.GetResourceRegistry();
-    auto& allocator = gfx_.GetDescriptorAllocator();
-    registry.Register(buffer);
-
-    graphics::BufferViewDescription view_desc;
-    view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-    view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    view_desc.range = { 0, size_bytes };
-
-    // Set appropriate stride based on buffer type
-    if (std::string_view(debug_label).find("Vertex")
-      != std::string_view::npos) {
-      view_desc.stride = sizeof(data::Vertex);
-    } else if (std::string_view(debug_label).find("Index")
-      != std::string_view::npos) {
-      view_desc.stride = sizeof(std::uint32_t); // Assume 32-bit indices for now
-    } else {
-      view_desc.stride = 4; // Default fallback
-    }
-
-    try {
-      auto handle
-        = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-          graphics::DescriptorVisibility::kShaderVisible);
-      const auto index = allocator.GetShaderVisibleIndex(handle);
-      bindless_index = ShaderVisibleIndex(index.get());
-      registry.RegisterView(*buffer, std::move(handle), view_desc);
-
-      DLOG_F(1, "GeometryUploader: {} SRV assigned to heap index {}",
-        debug_label, bindless_index);
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "GeometryUploader: Failed to allocate SRV for '{}': {}",
-        debug_label, e.what());
-      return false;
-    }
-
-    recreated = true;
+  if (buffer && buffer->GetSize() >= size_bytes) {
+    return true;
   }
-  return recreated;
+
+  DLOG_SCOPE_F(
+    2, fmt::format("EnsureBufferAndSrv for '{}'", debug_label).c_str());
+  DLOG_F(2, "requested size  : {} bytes", size_bytes);
+  DLOG_F(2, "existing buffer : {}{}", buffer ? "yes" : "no",
+    buffer ? fmt::format(" ({})", buffer->GetSize()) : "");
+
+  graphics::BufferDesc desc;
+  desc.size_bytes = size_bytes;
+  desc.usage = graphics::BufferUsage::kStorage;
+  desc.memory = graphics::BufferMemory::kDeviceLocal;
+  desc.debug_name = debug_label;
+
+  std::shared_ptr<graphics::Buffer> new_buffer;
+  try {
+    new_buffer = gfx_.CreateBuffer(desc);
+    if (!new_buffer) {
+      LOG_F(ERROR, "-failed- to create new buffer resource");
+      return false;
+    }
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "-failed- to create new buffer resource with exception: {}",
+      e.what());
+    return false;
+  }
+  DLOG_F(2, "new buffer resource created");
+
+  graphics::BufferViewDescription view_desc;
+  view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  view_desc.range = { 0, size_bytes };
+
+  // Set appropriate stride based on buffer type
+  if (std::string_view(debug_label).find("Vertex") != std::string_view::npos) {
+    view_desc.stride = sizeof(data::Vertex);
+  } else if (std::string_view(debug_label).find("Index")
+    != std::string_view::npos) {
+    view_desc.stride = sizeof(std::uint32_t); // Assume 32-bit indices for now
+  } else {
+    view_desc.stride = 4; // Default fallback
+  }
+
+  graphics::DescriptorHandle new_view_handle {};
+  auto new_bindless_index = kInvalidShaderVisibleIndex;
+  try {
+    auto& allocator = gfx_.GetDescriptorAllocator();
+    new_view_handle
+      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    new_bindless_index = allocator.GetShaderVisibleIndex(new_view_handle);
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "-failed- to allocate SRV with exception: {}", e.what());
+    new_buffer.reset();
+    return false;
+  }
+  DLOG_F(2, "new buffer SRV assigned to heap index {}", new_bindless_index);
+
+  auto& registry = gfx_.GetResourceRegistry();
+  registry.Register(new_buffer);
+  registry.RegisterView(*new_buffer, std::move(new_view_handle), view_desc);
+  DLOG_F(2, "new buffer and SRV registered");
+  if (buffer) {
+    // Unregister old buffer with all its views
+    registry.UnRegisterResource(*buffer);
+    DLOG_F(2, "old buffer and SRV unregistered");
+  }
+  buffer = std::move(new_buffer);
+  bindless_index = new_bindless_index;
+
+  return true;
 }
 
 auto GeometryUploader::PrepareVertexBuffers() -> void
@@ -519,7 +546,7 @@ auto GeometryUploader::PrepareIndexBuffers() -> void
 auto GeometryUploader::EnsureFrameResources() -> void
 {
   // Contract: OnFrameStart() must have been called this frame
-  DCHECK_F(current_epoch_ > 0U,
+  DCHECK_F(current_epoch_ > Epoch { 0 },
     "EnsureFrameResources() called before OnFrameStart() - frame lifecycle "
     "violation");
 
@@ -531,14 +558,133 @@ auto GeometryUploader::EnsureFrameResources() -> void
   frame_resources_ensured_ = true;
 }
 
+auto GeometryUploader::UploadBuffers() -> void
+{
+  DCHECK_NOTNULL_F(uploader_);
+
+  DLOG_SCOPE_FUNCTION(2);
+
+  std::vector<engine::upload::UploadRequest> uploads;
+
+  // CRITICAL FIX: Don't call GetOrAllocate during upload loop
+  // All buffers should already be allocated by EnsureFrameResources
+  for (size_t idx = 0; idx < geometry_entries_.size(); ++idx) {
+    auto& entry = geometry_entries_[idx];
+    DLOG_F(2, "mesh : {}", entry.mesh->GetName());
+    if (!entry.is_dirty) {
+      DLOG_F(3, "-skipped- {}", entry.is_dirty ? "dirty" : "not dirty");
+      continue; // Skip clean entries
+    }
+
+    // // Ensure buffer and SRV exist - these should already be created
+    // DCHECK_F(vertex_buffers_[idx]
+    //     && vertex_srv_indices_[idx] != kInvalidShaderVisibleIndex,
+    //   "-abort- called before resources ensured, buffer={}, srv_index={}",
+    //   fmt::ptr(vertex_buffers_[idx].get()), vertex_srv_indices_[idx]);
+
+    DCHECK_NOTNULL_F(entry.mesh);
+    {
+      DLOG_SCOPE_F(2, fmt::format("Mesh '{}'", entry.mesh->GetName()).c_str());
+
+      uploads.emplace_back(UploadVertexBuffer(entry, idx));
+      if (entry.mesh->IsIndexed()) {
+        uploads.emplace_back(UploadIndexBuffer(entry, idx));
+      }
+      entry.is_dirty = false; // reset dirty flag
+    }
+  }
+
+  // Submit all vertex uploads in a single batch and track tickets
+  if (!uploads.empty()) {
+    auto tickets = uploader_->SubmitMany(uploads);
+    pending_upload_tickets_.insert(
+      pending_upload_tickets_.end(), tickets.begin(), tickets.end());
+    LOG_F(1, "{} uploads submitted", uploads.size());
+  } else {
+    LOG_F(1, "no uploads needed this frame");
+  }
+}
+
+auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry,
+  size_t at_index) -> engine::upload::UploadRequest
+{
+  DCHECK_NOTNULL_F(dirty_entry.mesh);
+
+  auto& vertex_buffer = vertex_buffers_[at_index];
+  auto& srv_index = vertex_srv_indices_[at_index];
+  // DCHECK_NOTNULL_F(vertex_buffer);
+
+  const auto vertices = dirty_entry.mesh->Vertices();
+  DCHECK_F(!vertices.empty()); // should not have passed through validation
+  const uint64_t buffer_size = vertices.size() * sizeof(data::Vertex);
+
+  DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
+  const bool need_recreate
+    = EnsureBufferAndSrv(vertex_buffer, srv_index, buffer_size, "VertexBuffer");
+
+  // Prepare vertex data upload request
+  const auto batch_policy
+    = SelectBatchPolicy(buffer_size, dirty_entry.is_critical);
+  return engine::upload::UploadRequest {
+    .kind = engine::upload::UploadKind::kBuffer,
+    .batch_policy = batch_policy,
+    .debug_name = "VertexUpload",
+    .desc = engine::upload::UploadBufferDesc {
+        .dst = vertex_buffer,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+    },
+    .data = engine::upload::UploadDataView {
+        std::span<const std::byte>(
+            reinterpret_cast<const std::byte*>(vertices.data()),
+            buffer_size)
+    },
+  };
+}
+
+auto GeometryUploader::UploadIndexBuffer(const GeometryEntry& dirty_entry,
+  size_t at_index) -> engine::upload::UploadRequest
+{
+  DCHECK_NOTNULL_F(dirty_entry.mesh);
+
+  auto& index_buffer = index_buffers_[at_index];
+  auto& srv_index = index_srv_indices_[at_index];
+  // DCHECK_NOTNULL_F(index_buffer);
+
+  const auto mesh = dirty_entry.mesh;
+  DCHECK_F(mesh->IsIndexed());
+  const auto indices = mesh->IndexBuffer();
+  const uint64_t buffer_size = indices.bytes.size();
+
+  DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
+  const bool need_recreate
+    = EnsureBufferAndSrv(index_buffer, srv_index, buffer_size, "IndexBuffer");
+
+  // Prepare index data upload request
+  const auto batch_policy
+    = SelectBatchPolicy(buffer_size, dirty_entry.is_critical);
+
+  return engine::upload::UploadRequest {
+    .kind = engine::upload::UploadKind::kBuffer,
+    .batch_policy = batch_policy,
+    .debug_name = "IndexUpload",
+    .desc = engine::upload::UploadBufferDesc {
+        .dst = index_buffer,
+        .size_bytes = buffer_size,
+        .dst_offset = 0,
+    },
+    .data = engine::upload::UploadDataView { indices.bytes },
+  };
+}
+
 auto GeometryUploader::GetVertexSrvIndex(
   engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex
 {
-  // Check that EnsureFrameResources() was called this frame
-  DCHECK_F(frame_resources_ensured_,
-    "EnsureFrameResources() must be called before GetVertexSrvIndex() for "
-    "handle {}",
-    handle.get());
+  // // Check that EnsureFrameResources() was called this frame
+  // DCHECK_F(frame_resources_ensured_,
+  //   "EnsureFrameResources() must be called before GetVertexSrvIndex() for "
+  //   "handle {}",
+  //   handle.get());
 
   const auto idx = static_cast<std::size_t>(handle.get());
   DCHECK_F(idx < vertex_srv_indices_.size(),
@@ -551,11 +697,11 @@ auto GeometryUploader::GetVertexSrvIndex(
 auto GeometryUploader::GetIndexSrvIndex(
   engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex
 {
-  // Check that EnsureFrameResources() was called this frame
-  DCHECK_F(frame_resources_ensured_,
-    "EnsureFrameResources() must be called before GetIndexSrvIndex() for "
-    "handle {}",
-    handle.get());
+  // // Check that EnsureFrameResources() was called this frame
+  // DCHECK_F(frame_resources_ensured_,
+  //   "EnsureFrameResources() must be called before GetIndexSrvIndex() for "
+  //   "handle {}",
+  //   handle.get());
 
   const auto idx = static_cast<std::size_t>(handle.get());
   DCHECK_F(idx < index_srv_indices_.size(),

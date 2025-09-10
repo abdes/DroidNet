@@ -28,6 +28,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
+#include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
@@ -54,8 +55,10 @@ using oxygen::graphics::SingleQueueStrategy;
 Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   : gfx_weak_(std::move(graphics))
   , scene_prep_pipeline_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
-        decltype(sceneprep::CreateBasicCollectionConfig())>>(
-      sceneprep::CreateBasicCollectionConfig()))
+        decltype(sceneprep::CreateBasicCollectionConfig()),
+        decltype(sceneprep::CreateStandardFinalizationConfig())>>(
+      sceneprep::CreateBasicCollectionConfig(),
+      sceneprep::CreateStandardFinalizationConfig()))
 {
   LOG_F(
     2, "Renderer::Renderer [this={}] - constructor", static_cast<void*>(this));
@@ -126,10 +129,10 @@ auto Renderer::PreExecute(
       BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
   }
 
-  // Consolidated geometry resource preparation
-  if (const auto geometry = scene_prep_state_->GetGeometryUploader()) {
-    geometry->EnsureFrameResources();
-  }
+  // // Consolidated geometry resource preparation
+  // if (const auto geometry = scene_prep_state_->GetGeometryUploader()) {
+  //   geometry->EnsureFrameResources();
+  // }
 
   // Consolidated material resource preparation
   if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
@@ -151,9 +154,10 @@ auto Renderer::PreExecute(
   context.prepared_frame.reset(&prepared_frame_);
 
   // Ensure any upload command lists are submitted promptly for this frame.
-  if (uploader_) {
-    uploader_->Flush();
-  }
+  // if (uploader_) {
+  //   uploader_->Flush();
+  //   gfx_weak_.lock()->Flush();
+  // }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -337,6 +341,8 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
     scene_prep_state_->CollectedItems().size(), scene.GetNodes().Items().size(),
     last_finalize_stats_.collection_time.count());
 
+  // scene_prep_pipeline_->Finalize();
+
   FinalizeScenePrepPhase(
     *scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
@@ -355,11 +361,14 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
 {
   const auto t_begin = std::chrono::high_resolution_clock::now();
 
-  // Ensure geometry uploader resources are ready for this frame
-  prep_state.GetGeometryUploader()->EnsureFrameResources();
-
   GenerateDrawMetadata(prep_state);
   BuildSortingAndPartitions();
+
+  // Ensure geometry uploader resources are ready for this frame
+  // prep_state.GetGeometryUploader()->EnsureFrameResources();
+  // prep_state.GetGeometryUploader()->UploadBuffers();
+  scene_prep_pipeline_->Finalize();
+
   PublishPreparedFrameSpans();
   UploadDrawMetadataBindless();
   UpdateFinalizeStatistics(prep_state, t_begin);

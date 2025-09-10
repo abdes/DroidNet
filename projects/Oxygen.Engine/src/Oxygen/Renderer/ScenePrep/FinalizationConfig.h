@@ -18,7 +18,6 @@ namespace oxygen::engine::sceneprep {
 
 //! Configuration for the Finalization phase (draw preparation).
 template < // clang-format off
-  typename GeometryPrepFT = void,
   typename DrawMetadataEmitFT = void,
   typename DrawMetadataSortFT = void,
   typename GeometryUploadFT = void,
@@ -37,7 +36,6 @@ struct FinalizationConfig {
   using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
 
   // Essential stages (use `void` to omit)
-  [[no_unique_address]] StageOrDummy<GeometryPrepFT> geometry_prep {};
   [[no_unique_address]] StageOrDummy<DrawMetadataEmitFT> draw_md_emit {};
   [[no_unique_address]] StageOrDummy<DrawMetadataSortFT> draw_md_sort {};
   [[no_unique_address]] StageOrDummy<GeometryUploadFT> geometry_upload {};
@@ -47,7 +45,6 @@ struct FinalizationConfig {
 
   // Presence checks for `if constexpr`
   // clang-format off
-  static constexpr bool has_geometry_prep = !std::is_void_v<GeometryPrepFT>;
   static constexpr bool has_draw_md_emit = !std::is_void_v<DrawMetadataEmitFT>;
   static constexpr bool has_draw_md_sorter = !std::is_void_v<DrawMetadataSortFT>;
   static constexpr bool has_geometry_upload = !std::is_void_v<GeometryUploadFT>;
@@ -61,32 +58,29 @@ struct FinalizationConfig {
 //! needed by the current Renderer implementation.
 inline auto CreateStandardFinalizationConfig()
   -> FinalizationConfig< // clang-format off
-    decltype(&GeometryPrepareResourcesFinalizer),
-    decltype(&DrawMetadataEmitFinalizer),
-    decltype(&DrawMetadataSortAndPartitionFinalizer),
-    decltype(&TransformUploadFinalizer),
-    decltype(&MaterialUploadFinalizer),
+    void,// decltype(&DrawMetadataEmitFinalizer),
+    void,// decltype(&DrawMetadataSortAndPartitionFinalizer),
     decltype(&GeometryUploadFinalizer),
-    decltype(&DrawMetadataUploadFinalizer)
+    void,// decltype(&TransformUploadFinalizer),
+    void,// decltype(&MaterialUploadFinalizer),
+    void// decltype(&DrawMetadataUploadFinalizer)
   > // clang-format on
 {
   // Concept checks (callables must qualify as finalization stages)
-  static_assert(Finalizer<decltype(GeometryPrepareResourcesFinalizer)>);
-  static_assert(DrawMetadataEmitter<decltype(DrawMetadataEmitFinalizer)>);
-  static_assert(Finalizer<decltype(DrawMetadataSortAndPartitionFinalizer)>);
-  static_assert(Uploader<decltype(TransformUploadFinalizer)>);
-  static_assert(Uploader<decltype(MaterialUploadFinalizer)>);
+  // static_assert(DrawMetadataEmitter<decltype(DrawMetadataEmitFinalizer)>);
+  // static_assert(Finalizer<decltype(DrawMetadataSortAndPartitionFinalizer)>);
+  // static_assert(Uploader<decltype(TransformUploadFinalizer)>);
+  // static_assert(Uploader<decltype(MaterialUploadFinalizer)>);
   static_assert(Uploader<decltype(GeometryUploadFinalizer)>);
-  static_assert(Uploader<decltype(DrawMetadataUploadFinalizer)>);
+  // static_assert(Uploader<decltype(DrawMetadataUploadFinalizer)>);
 
   return {
-    .geometry_prep = &GeometryPrepareResourcesFinalizer,
-    .draw_md_emit = &DrawMetadataEmitFinalizer,
-    .draw_md_sort = &DrawMetadataSortAndPartitionFinalizer,
-    .transform_upload = &TransformUploadFinalizer,
-    .material_upload = &MaterialUploadFinalizer,
     .geometry_upload = &GeometryUploadFinalizer,
-    .draw_md_upload = &DrawMetadataUploadFinalizer,
+    // .draw_md_emit = &DrawMetadataEmitFinalizer,
+    // .draw_md_sort = &DrawMetadataSortAndPartitionFinalizer,
+    // .transform_upload = &TransformUploadFinalizer,
+    // .material_upload = &MaterialUploadFinalizer,
+    // .draw_md_upload = &DrawMetadataUploadFinalizer,
   };
 }
 

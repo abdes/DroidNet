@@ -44,4 +44,15 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene, const View& view,
   }
 }
 
+auto ScenePrepPipeline::Finalize() -> void
+{
+  DCHECK_F(ctx_.has_value());
+  DCHECK_NOTNULL_F(prep_state_);
+
+  DLOG_SCOPE_F(
+    2, fmt::format("ScenePrep Finalize f:{}", ctx_->GetFrameId()).c_str());
+
+  FinalizeImpl(*prep_state_);
+}
+
 } // namespace oxygen::engine::sceneprep

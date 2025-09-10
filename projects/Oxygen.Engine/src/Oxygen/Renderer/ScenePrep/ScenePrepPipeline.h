@@ -40,16 +40,20 @@ protected:
     ScenePrepState& state, RenderItemProto& item) -> void
     = 0;
 
+  virtual auto FinalizeImpl(ScenePrepState& state) -> void = 0;
+
 private:
   std::optional<ScenePrepContext> ctx_ {};
   observer_ptr<ScenePrepState> prep_state_;
 };
 
-template <typename CollectionCfg>
+template <typename CollectionCfg, typename FinalizationCfg>
 class ScenePrepPipelineImpl : public ScenePrepPipeline {
 public:
-  explicit ScenePrepPipelineImpl(CollectionCfg collection_cfg) noexcept
-    : collection_(std::move(collection_cfg))
+  explicit ScenePrepPipelineImpl(
+    CollectionCfg collect_cfg, FinalizationCfg finalize_cfg) noexcept
+    : collection_(std::move(collect_cfg))
+    , finalization_(std::move(finalize_cfg))
   {
   }
 
@@ -96,8 +100,16 @@ public:
     }
   }
 
+  auto FinalizeImpl(ScenePrepState& state) -> void
+  {
+    if constexpr (FinalizationCfg::has_geometry_upload) {
+      finalization_.geometry_upload(state);
+    }
+  }
+
 private:
-  [[no_unique_address]] CollectionCfg collection_ {};
+  [[no_unique_address]] CollectionCfg collection_;
+  [[no_unique_address]] FinalizationCfg finalization_;
 };
 
 } // namespace oxygen::engine::sceneprep
