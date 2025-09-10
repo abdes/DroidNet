@@ -169,7 +169,7 @@ namespace examples::async {
 
     //! State tracking.
     bool initialized_ { false };
-    float start_time_ { 0.0f };
+    std::chrono::steady_clock::time_point start_time_;
 
     //! Scene nodes for the example.
     scene::SceneNode sphere_distance_; // LOD policy: Distance

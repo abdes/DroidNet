@@ -276,6 +276,9 @@ MainModule::MainModule(std::shared_ptr<Platform> platform,
 {
   DCHECK_NOTNULL_F(platform_);
   DCHECK_F(!gfx_weak_.expired());
+
+  // Record start time for animations (use time_point for robust delta)
+  start_time_ = std::chrono::steady_clock::now();
 }
 
 MainModule::~MainModule()
@@ -319,11 +322,6 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
     SetupRenderer();
     SetupShaders();
     initialized_ = true;
-
-    // Record start time for animations
-    const auto now = std::chrono::steady_clock::now();
-    const auto epoch = now.time_since_epoch();
-    start_time_ = std::chrono::duration<float>(epoch).count();
   }
 
   // Check if window is closed
@@ -365,9 +363,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   // Handle scene mutations (material overrides, visibility changes)
   const auto now = std::chrono::steady_clock::now();
-  const auto epoch = now.time_since_epoch();
-  const float current_time = std::chrono::duration<float>(epoch).count();
-  UpdateSceneMutations(current_time - start_time_);
+  const float time_seconds = std::chrono::duration<float>(now - start_time_).count();
+  UpdateSceneMutations(time_seconds);
 
   co_return;
 }
@@ -379,9 +376,8 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
 
   // Update animations and transforms (no scene mutations)
   const auto now = std::chrono::steady_clock::now();
-  const auto epoch = now.time_since_epoch();
-  const float current_time = std::chrono::duration<float>(epoch).count();
-  UpdateAnimations(current_time - start_time_);
+  const float time_seconds = std::chrono::duration<float>(now - start_time_).count();
+  UpdateAnimations(time_seconds);
 
   co_return;
 }
