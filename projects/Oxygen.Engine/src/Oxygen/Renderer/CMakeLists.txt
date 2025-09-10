@@ -89,6 +89,7 @@ set(
   "ScenePrep/Finalizers.h"
   "ScenePrep/RenderItemData.h"
   "ScenePrep/RenderItemProto.h"
+  "ScenePrep/ScenePrepPipeline.cpp"
   "ScenePrep/ScenePrepPipeline.h"
   "ScenePrep/ScenePrepState.h"
   "ScenePrep/Types.h"

@@ -16,6 +16,7 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::engine::sceneprep {
@@ -29,11 +30,19 @@ public:
 
   virtual ~ScenePrepPipeline() = default;
 
-  virtual auto Collect(scene::Scene& scene, const View& view, uint64_t frame_id,
-    ScenePrepState& state, bool reset_state) -> void
-    = 0;
+  OXGN_RNDR_API auto Collect(scene::Scene& scene, const View& view,
+    uint64_t frame_id, ScenePrepState& state, bool reset_state) -> void;
 
   // virtual auto Finalize() -> void = 0;
+
+protected:
+  virtual auto CollectImpl(std::optional<ScenePrepContext> ctx_,
+    ScenePrepState& state, RenderItemProto& item) -> void
+    = 0;
+
+private:
+  std::optional<ScenePrepContext> ctx_ {};
+  observer_ptr<ScenePrepState> prep_state_;
 };
 
 template <typename CollectionCfg>
@@ -55,73 +64,49 @@ public:
    @param render_context Renderer context (passed into ScenePrepContext)
    @param state ScenePrep working state and output buffers
   */
-  auto Collect(scene::Scene& scene, const View& view, uint64_t frame_id,
-    ScenePrepState& state, bool reset_state) -> void override
+  auto CollectImpl(std::optional<ScenePrepContext> ctx, ScenePrepState& state,
+    RenderItemProto& item) -> void override
   {
-    prep_state_ = observer_ptr { &state };
-    ctx_.emplace(frame_id, view, scene);
-
-    // Reset per-frame state if requested.
-    if (reset_state) {
-      prep_state_->ResetFrameData();
+    if constexpr (CollectionCfg::has_pre_filter) {
+      collection_.pre_filter(*ctx, state, item);
+      if (item.IsDropped()) {
+        return;
+      }
+    }
+    if constexpr (CollectionCfg::has_transform_resolve) {
+      collection_.transform_resolve(*ctx, state, item);
+      if (item.IsDropped()) {
+        return;
+      }
+    }
+    if constexpr (CollectionCfg::has_mesh_resolver) {
+      collection_.mesh_resolver(*ctx, state, item);
+      if (item.IsDropped()) {
+        return;
+      }
+    }
+    if constexpr (CollectionCfg::has_visibility_filter) {
+      collection_.visibility_filter(*ctx, state, item);
+      if (item.IsDropped()) {
+        return;
+      }
     }
 
-    const auto& node_table = scene.GetNodes();
-    const auto items = node_table.Items();
-    // Reserve an upper bound to minimize reallocations in producer
-    state.collected_items.reserve(state.collected_items.size() + items.size());
-    state.filtered_indices.reserve(items.size());
+    // Track how many items were in collected_items before producer
+    const auto items_before = state.collected_items.size();
 
-    for (const auto& node_impl : items) {
-      try {
-        RenderItemProto item { node_impl };
+    if constexpr (CollectionCfg::has_producer) {
+      collection_.producer(*ctx, state, item);
+    }
 
-        if constexpr (CollectionCfg::has_pre_filter) {
-          collection_.pre_filter(*ctx_, state, item);
-          if (item.IsDropped()) {
-            continue;
-          }
-        }
-        if constexpr (CollectionCfg::has_transform_resolve) {
-          collection_.transform_resolve(*ctx_, state, item);
-          if (item.IsDropped()) {
-            continue;
-          }
-        }
-        if constexpr (CollectionCfg::has_mesh_resolver) {
-          collection_.mesh_resolver(*ctx_, state, item);
-          if (item.IsDropped()) {
-            continue;
-          }
-        }
-        if constexpr (CollectionCfg::has_visibility_filter) {
-          collection_.visibility_filter(*ctx_, state, item);
-          if (item.IsDropped()) {
-            continue;
-          }
-        }
-
-        // Track how many items were in collected_items before producer
-        const auto items_before = state.collected_items.size();
-
-        if constexpr (CollectionCfg::has_producer) {
-          collection_.producer(*ctx_, state, item);
-        }
-
-        // Track indices of all new items added by the producer
-        const auto items_after = state.collected_items.size();
-        for (auto i = items_before; i < items_after; ++i) {
-          state.filtered_indices.push_back(i);
-        }
-      } catch (const std::exception&) {
-        // Skip node if RenderItemProto construction fails (missing components)
-      }
+    // Track indices of all new items added by the producer
+    const auto items_after = state.collected_items.size();
+    for (auto i = items_before; i < items_after; ++i) {
+      state.filtered_indices.push_back(i);
     }
   }
 
 private:
-  std::optional<ScenePrepContext> ctx_ {};
-  observer_ptr<ScenePrepState> prep_state_;
   [[no_unique_address]] CollectionCfg collection_ {};
 };
 
