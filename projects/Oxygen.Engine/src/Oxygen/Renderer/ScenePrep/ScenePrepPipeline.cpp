@@ -9,9 +9,8 @@
 
 namespace oxygen::engine::sceneprep {
 
-__declspec(noinline) auto ScenePrepPipeline::Collect(scene::Scene& scene,
-  const View& view, uint64_t frame_id, ScenePrepState& state, bool reset_state)
-  -> void
+auto ScenePrepPipeline::Collect(const scene::Scene& scene, const View& view,
+  uint64_t frame_id, ScenePrepState& state, bool reset_state) -> void
 {
   DLOG_SCOPE_F(2, fmt::format("ScenePrep Collect f:{}", frame_id).c_str());
 
@@ -26,8 +25,7 @@ __declspec(noinline) auto ScenePrepPipeline::Collect(scene::Scene& scene,
   const auto& node_table = scene.GetNodes();
   const auto items = node_table.Items();
   // Reserve an upper bound to minimize reallocations in producer
-  state.collected_items.reserve(state.collected_items.size() + items.size());
-  state.filtered_indices.reserve(items.size());
+  state.ReserveCapacityForItems(items.size());
 
   for (const auto& node_impl : items) {
     if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {

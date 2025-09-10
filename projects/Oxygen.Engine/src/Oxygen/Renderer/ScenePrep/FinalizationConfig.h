@@ -17,29 +17,15 @@
 namespace oxygen::engine::sceneprep {
 
 //! Configuration for the Finalization phase (draw preparation).
-/*!
- Configures essential finalization stages based on actual Renderer needs.
- Following MINIMAL, LEAN AND MEAN philosophy - only includes stages that are
- actually used by the current implementation.
-
- Essential stages:
- - geometry_uploader: EnsureFrameResources() call
- - transform_uploader: EnsureFrameResources() call
- - material_uploader: EnsureFrameResources() call
- - draw_metadata_emitter: Generate DrawMetadata records (per-item processing)
- - sorter: Sort items and create partitions for efficient rendering (batch
-   processing)
- - draw_metadata_uploader: Upload final DrawMetadata to GPU
-
- All stages are validated using appropriate concepts to ensure type safety and
- correct usage patterns.
-
- Presence flags (`has_*`) allow compile-time gating with `if constexpr`.
- */
-template <typename GeometryUploaderT = void, typename TransformUploaderT = void,
-  typename MaterialUploaderT = void, typename DrawMetadataEmitterT = void,
-  typename GeometrySrvResolverT = void, typename SorterT = void,
-  typename DrawMetadataUploaderT = void>
+template < // clang-format off
+  typename GeometryPrepFT = void,
+  typename DrawMetadataEmitFT = void,
+  typename DrawMetadataSortFT = void,
+  typename GeometryUploadFT = void,
+  typename TransformUploadFT = void,
+  typename MaterialUploadFT = void,
+  typename DrawMetadataUploadFT = void
+> // clang-format on
 struct FinalizationConfig {
   struct _DummyStage {
     template <typename... Args>
@@ -51,83 +37,56 @@ struct FinalizationConfig {
   using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
 
   // Essential stages (use `void` to omit)
-  [[no_unique_address]] StageOrDummy<GeometryUploaderT> geometry_uploader {};
-  [[no_unique_address]] StageOrDummy<TransformUploaderT> transform_uploader {};
-  [[no_unique_address]] StageOrDummy<MaterialUploaderT> material_uploader {};
-  [[no_unique_address]] StageOrDummy<DrawMetadataEmitterT>
-    draw_metadata_emitter {};
-  [[no_unique_address]] StageOrDummy<GeometrySrvResolverT>
-    geometry_srv_resolver {};
-  [[no_unique_address]] StageOrDummy<SorterT> sorter {};
-  [[no_unique_address]] StageOrDummy<DrawMetadataUploaderT>
-    draw_metadata_uploader {};
+  [[no_unique_address]] StageOrDummy<GeometryPrepFT> geometry_prep {};
+  [[no_unique_address]] StageOrDummy<DrawMetadataEmitFT> draw_md_emit {};
+  [[no_unique_address]] StageOrDummy<DrawMetadataSortFT> draw_md_sort {};
+  [[no_unique_address]] StageOrDummy<GeometryUploadFT> geometry_upload {};
+  [[no_unique_address]] StageOrDummy<TransformUploadFT> transform_upload {};
+  [[no_unique_address]] StageOrDummy<MaterialUploadFT> material_upload {};
+  [[no_unique_address]] StageOrDummy<DrawMetadataUploadFT> draw_md_upload {};
 
   // Presence checks for `if constexpr`
-  static constexpr bool has_geometry_uploader
-    = !std::is_void_v<GeometryUploaderT>;
-  static constexpr bool has_transform_uploader
-    = !std::is_void_v<TransformUploaderT>;
-  static constexpr bool has_material_uploader
-    = !std::is_void_v<MaterialUploaderT>;
-  static constexpr bool has_draw_metadata_emitter
-    = !std::is_void_v<DrawMetadataEmitterT>;
-  static constexpr bool has_geometry_srv_resolver
-    = !std::is_void_v<GeometrySrvResolverT>;
-  static constexpr bool has_sorter = !std::is_void_v<SorterT>;
-  static constexpr bool has_draw_metadata_uploader
-    = !std::is_void_v<DrawMetadataUploaderT>;
+  // clang-format off
+  static constexpr bool has_geometry_prep = !std::is_void_v<GeometryPrepFT>;
+  static constexpr bool has_draw_md_emit = !std::is_void_v<DrawMetadataEmitFT>;
+  static constexpr bool has_draw_md_sorter = !std::is_void_v<DrawMetadataSortFT>;
+  static constexpr bool has_geometry_upload = !std::is_void_v<GeometryUploadFT>;
+  static constexpr bool has_transform_upload = !std::is_void_v<TransformUploadFT>;
+  static constexpr bool has_material_upload = !std::is_void_v<MaterialUploadFT>;
+  static constexpr bool has_draw_md_upload = !std::is_void_v<DrawMetadataUploadFT>;
+  // clang-format on
 };
 
-//! Factory: basic finalization configuration with all essential stages.
-/*!
- Provides a complete finalization pipeline that includes all the stages
- needed by the current Renderer implementation. Follows the same pattern
- as CreateBasicCollectionConfig.
-
- All stages satisfy their respective concepts.
- */
-inline auto CreateBasicFinalizationConfig()
-  -> FinalizationConfig<decltype(&GeometryEnsureFrameResources),
-    decltype(&TransformEnsureFrameResources),
-    decltype(&MaterialEnsureFrameResources), decltype(&DrawMetadataEmit),
-    decltype(&ResolveGeometrySrvIndices), decltype(&SortAndPartition),
-    decltype(&DrawMetadataUpload)>
+//! Provides a complete finalization pipeline that includes all the stages
+//! needed by the current Renderer implementation.
+inline auto CreateStandardFinalizationConfig()
+  -> FinalizationConfig< // clang-format off
+    decltype(&GeometryPrepareResourcesFinalizer),
+    decltype(&DrawMetadataEmitFinalizer),
+    decltype(&DrawMetadataSortAndPartitionFinalizer),
+    decltype(&TransformUploadFinalizer),
+    decltype(&MaterialUploadFinalizer),
+    decltype(&GeometryUploadFinalizer),
+    decltype(&DrawMetadataUploadFinalizer)
+  > // clang-format on
 {
   // Concept checks (callables must qualify as finalization stages)
-  static_assert(FinalizationUploader<decltype(GeometryEnsureFrameResources)>);
-  static_assert(FinalizationUploader<decltype(TransformEnsureFrameResources)>);
-  static_assert(FinalizationUploader<decltype(MaterialEnsureFrameResources)>);
-  static_assert(DrawMetadataEmitter<decltype(DrawMetadataEmit)>);
-  static_assert(FinalizationSorter<decltype(ResolveGeometrySrvIndices)>);
-  static_assert(FinalizationSorter<decltype(SortAndPartition)>);
-  static_assert(FinalizationUploader<decltype(DrawMetadataUpload)>);
+  static_assert(Finalizer<decltype(GeometryPrepareResourcesFinalizer)>);
+  static_assert(DrawMetadataEmitter<decltype(DrawMetadataEmitFinalizer)>);
+  static_assert(Finalizer<decltype(DrawMetadataSortAndPartitionFinalizer)>);
+  static_assert(Uploader<decltype(TransformUploadFinalizer)>);
+  static_assert(Uploader<decltype(MaterialUploadFinalizer)>);
+  static_assert(Uploader<decltype(GeometryUploadFinalizer)>);
+  static_assert(Uploader<decltype(DrawMetadataUploadFinalizer)>);
 
   return {
-    .geometry_uploader = &GeometryEnsureFrameResources,
-    .transform_uploader = &TransformEnsureFrameResources,
-    .material_uploader = &MaterialEnsureFrameResources,
-    .draw_metadata_emitter = &DrawMetadataEmit,
-    .geometry_srv_resolver = &ResolveGeometrySrvIndices,
-    .sorter = &SortAndPartition,
-    .draw_metadata_uploader = &DrawMetadataUpload,
-  };
-}
-
-//! Factory: minimal finalization configuration with only draw metadata emitter.
-/*!
- Provides a minimal finalization pipeline with just the draw metadata emitter,
- useful for testing or simplified rendering scenarios.
-
- @param draw_metadata_emitter Reference to DrawMetadataEmitter instance
- @return Configured FinalizationConfig with only draw metadata emission
- */
-template <DrawMetadataEmitter DrawMetadataEmitterT>
-inline auto CreateMinimalFinalizationConfig(
-  DrawMetadataEmitterT& draw_metadata_emitter)
-  -> FinalizationConfig<void, void, void, DrawMetadataEmitterT&>
-{
-  return {
-    .draw_metadata_emitter = draw_metadata_emitter,
+    .geometry_prep = &GeometryPrepareResourcesFinalizer,
+    .draw_md_emit = &DrawMetadataEmitFinalizer,
+    .draw_md_sort = &DrawMetadataSortAndPartitionFinalizer,
+    .transform_upload = &TransformUploadFinalizer,
+    .material_upload = &MaterialUploadFinalizer,
+    .geometry_upload = &GeometryUploadFinalizer,
+    .draw_md_upload = &DrawMetadataUploadFinalizer,
   };
 }
 

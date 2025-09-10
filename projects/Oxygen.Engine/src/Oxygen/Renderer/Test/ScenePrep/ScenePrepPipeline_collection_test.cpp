@@ -30,9 +30,9 @@ namespace {
 // Shared test fixture that builds a scene with two roots and a child under the
 // first root. All nodes get minimal geometry (1 LOD, 1 submesh). Also provides
 // a default View and per-test ScenePrepState.
-class ScenePrepPipelineFixture : public ::testing::Test {
+class ScenePrepPipelineFixture : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     scene_ = std::make_shared<Scene>("TestScene");
     root_a_ = scene_->CreateNode("RootA");
@@ -50,22 +50,27 @@ protected:
     View::Params vp {};
     vp.view = glm::mat4(1.0f);
     vp.proj = glm::mat4(1.0f);
-    vp.viewport = { 0, 0, 0, 600 };
+    vp.viewport = {
+      .top_left_x = 0,
+      .top_left_y = 0,
+      .width = 0,
+      .height = 600,
+    };
     vp.has_camera_position = true;
     vp.camera_position = { 0.0f, 0.0f, 5.0f };
     view_ = View { vp };
 
     // rc_ default constructed
-    state_ = ScenePrepState {};
+    state_ = std::make_unique<ScenePrepState>(nullptr, nullptr, nullptr);
   }
 
   static auto BuildSimpleGeometry() -> std::shared_ptr<GeometryAsset>
   {
-    std::vector<oxygen::data::Vertex> verts(3);
+    std::vector<oxygen::data::Vertex> vertices(3);
     std::vector<uint32_t> idx { 0, 1, 2 };
     auto mat = MaterialAsset::CreateDefault();
     auto mesh = MeshBuilder()
-                  .WithVertices(verts)
+                  .WithVertices(vertices)
                   .WithIndices(idx)
                   .BeginSubMesh("S0", mat)
                   .WithMeshView({ .first_index = 0u,
@@ -78,18 +83,14 @@ protected:
     desc.lod_count = 1;
     std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
     lods.emplace_back(std::shared_ptr<oxygen::data::Mesh>(mesh.release()));
-    return std::make_shared<GeometryAsset>(std::move(desc), std::move(lods));
+    return std::make_shared<GeometryAsset>(desc, std::move(lods));
   }
 
   // Accessors for convenience
-  auto SceneRef() -> Scene& { return *scene_; }
+  [[nodiscard]] auto SceneRef() const -> const Scene& { return *scene_; }
   auto ViewRef() -> View& { return view_; }
-  auto StateRef() -> ScenePrepState& { return state_; }
-
-  // Nodes
-  auto RootA() -> SceneNode& { return root_a_; }
-  auto RootB() -> SceneNode& { return root_b_; }
-  auto ChildOfA() -> SceneNode& { return child_of_a_; }
+  // ReSharper disable once CppMemberFunctionMayBeConst
+  auto StateRef() -> ScenePrepState& { return *state_; }
 
   static constexpr size_t kNodeCount = 3; // RootA, RootB, ChildOfA
 
@@ -99,7 +100,7 @@ private:
   SceneNode root_b_ {};
   SceneNode child_of_a_ {};
   View view_ { View::Params {} };
-  ScenePrepState state_ {};
+  std::unique_ptr<ScenePrepState> state_ {};
 };
 
 //! Verifies pipeline is testable by injecting custom stages and calling
@@ -132,11 +133,11 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   auto prod = [](const ScenePrepContext& /*ctx*/, ScenePrepState& st,
                 RenderItemProto& it) {
     for (auto sm : it.VisibleSubmeshes()) {
-      st.collected_items.push_back(RenderItemData {
+      st.CollectItem(RenderItemData {
         .lod_index = it.ResolvedMeshIndex(),
         .submesh_index = sm,
         .geometry = it.Geometry(),
-        .material = oxygen::data::MaterialAsset::CreateDefault(),
+        .material = MaterialAsset::CreateDefault(),
         .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
         .cast_shadows = it.CastsShadows(),
         .receive_shadows = it.ReceivesShadows(),
@@ -152,13 +153,13 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipeline<ConfigT> pipeline { cfg };
+  std::unique_ptr<ScenePrepPipeline> pipeline
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
+  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
-  ASSERT_EQ(
-    StateRef().collected_items.size(), ScenePrepPipelineFixture::kNodeCount);
-  for (const auto& item : StateRef().collected_items) {
+  ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineFixture::kNodeCount);
+  for (const auto& item : StateRef().CollectedItems()) {
     EXPECT_EQ(item.lod_index, 0u);
     EXPECT_EQ(item.submesh_index, 0u);
     EXPECT_TRUE(item.geometry);
@@ -191,11 +192,12 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipeline<ConfigT> pipeline { cfg };
+  std::unique_ptr<ScenePrepPipeline> pipeline
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
+  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
-  EXPECT_TRUE(StateRef().collected_items.empty());
+  EXPECT_EQ(StateRef().CollectedCount(), 0);
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
   EXPECT_EQ(res_called, 0);
   EXPECT_EQ(vis_called, 0);
@@ -233,11 +235,12 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipeline<ConfigT> pipeline { cfg };
+  std::unique_ptr<ScenePrepPipeline> pipeline
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
+  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
-  EXPECT_TRUE(StateRef().collected_items.empty());
+  EXPECT_TRUE(StateRef().CollectedItems().empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
   EXPECT_EQ(vis_called, 0);
@@ -277,11 +280,12 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
-  ScenePrepPipeline<ConfigT> pipeline { cfg };
+  std::unique_ptr<ScenePrepPipeline> pipeline
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
 
-  pipeline.Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef());
+  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
-  EXPECT_TRUE(StateRef().collected_items.empty());
+  EXPECT_TRUE(StateRef().CollectedItems().empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
   EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));

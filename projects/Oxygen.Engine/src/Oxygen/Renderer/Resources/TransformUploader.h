@@ -45,8 +45,10 @@ public:
   // Deduplication and handle management
   OXGN_RNDR_NDAPI auto GetOrAllocate(const glm::mat4& transform)
     -> engine::sceneprep::TransformHandle;
+
   auto Update(engine::sceneprep::TransformHandle handle,
     const glm::mat4& transform) -> void;
+
   [[nodiscard]] auto IsValidHandle(
     engine::sceneprep::TransformHandle handle) const -> bool;
 
@@ -56,6 +58,9 @@ public:
     -> std::span<const glm::mat4>;
   [[nodiscard]] auto GetDirtyIndices() const noexcept
     -> std::span<const std::uint32_t>;
+
+  //! Uploads all pending world and normal transform changes to GPU buffers.
+  OXGN_RNDR_API auto Upload() -> void;
 
   //! Ensures all transform GPU resources are prepared for the current frame.
   //! MUST be called after BeginFrame() and before any Get*SrvIndex() calls.
@@ -85,8 +90,8 @@ private:
     const char* debug_label) -> bool;
 
   //! Internal methods for resource preparation
-  auto PrepareWorldMatrices() -> void;
-  auto PrepareNormalMatrices() -> void;
+  auto UploadWorldMatrices() -> void;
+  auto UploadNormalMatrices() -> void;
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
@@ -100,6 +105,7 @@ private:
   std::vector<std::uint32_t> dirty_indices_;
   std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
   engine::sceneprep::TransformHandle next_handle_ { 0U };
+  bool uploaded_ { false };
 
   // GPU upload dependencies
   Graphics& gfx_;

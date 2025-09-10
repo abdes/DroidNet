@@ -148,6 +148,7 @@ auto TransformUploader::OnFrameStart() -> void
     std::ranges::fill(dirty_epoch_, 0U);
   }
   dirty_indices_.clear();
+  uploaded_ = false;
 }
 
 // Accessors for spans and dirty indices retained; individual element getters
@@ -323,7 +324,7 @@ auto TransformUploader::BuildSparseUploadRequests(
   return uploads;
 }
 
-auto TransformUploader::PrepareWorldMatrices() -> void
+auto TransformUploader::UploadWorldMatrices() -> void
 {
   const uint64_t buffer_size = transforms_.size() * sizeof(glm::mat4);
   if (buffer_size == 0) {
@@ -374,7 +375,7 @@ auto TransformUploader::PrepareWorldMatrices() -> void
   }
 }
 
-auto TransformUploader::PrepareNormalMatrices() -> void
+auto TransformUploader::UploadNormalMatrices() -> void
 {
   const uint64_t buffer_size = normal_matrices_.size() * sizeof(glm::mat4);
   if (buffer_size == 0) {
@@ -418,6 +419,18 @@ auto TransformUploader::PrepareNormalMatrices() -> void
     }
   }
 }
+
+auto TransformUploader::Upload() -> void
+{
+  if (uploaded_) {
+    return; // already uploaded this frame
+  }
+
+  UploadWorldMatrices();
+  UploadNormalMatrices();
+  uploaded_ = true;
+}
+
 auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   CHECK_NOTNULL_F(gpu_normals_buffer_,
@@ -438,10 +451,7 @@ auto TransformUploader::EnsureFrameResources() -> void
   DCHECK_F(current_epoch_ > 0U,
     "EnsureFrameResources() called before BeginFrame() - frame lifecycle "
     "violation");
-
-  // Always ensure both resources are prepared (idempotent operations)
-  PrepareWorldMatrices();
-  PrepareNormalMatrices();
+  Upload();
 }
 
 } // namespace oxygen::renderer::resources

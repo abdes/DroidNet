@@ -43,9 +43,9 @@ using oxygen::scene::SceneNodeFlags;
 
 namespace {
 
-class EmitPerVisibleSubmeshTest : public ::testing::Test {
+class EmitPerVisibleSubmeshTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     scene_ = std::make_shared<Scene>("TestScene");
     node_ = scene_->CreateNode("TestNode");
@@ -66,11 +66,11 @@ protected:
     ctx_.emplace(0, view_, *scene_);
   }
 
-  void TearDown() override { scene_.reset(); }
+  auto TearDown() -> void override { scene_.reset(); }
 
-  void ConfigurePerspectiveView(glm::vec3 eye, glm::vec3 center,
+  auto ConfigurePerspectiveView(glm::vec3 eye, glm::vec3 center,
     glm::vec3 up = { 0, 1, 0 }, float fovy_deg = 60.0f, float aspect = 1.0f,
-    float znear = 0.1f, float zfar = 1000.0f, float viewport = 1000.0f)
+    float znear = 0.1f, float zfar = 1000.0f, float viewport = 1000.0f) -> void
   {
     View::Params p {};
     p.view = glm::lookAt(eye, center, up);
@@ -81,13 +81,13 @@ protected:
     view_ = View { p };
   }
 
-  void SetGeometry(const std::shared_ptr<GeometryAsset>& geometry)
+  auto SetGeometry(const std::shared_ptr<GeometryAsset>& geometry) -> void
   {
     Node().GetRenderable().SetGeometry(geometry);
     proto_->SetGeometry(geometry);
   }
 
-  void SeedVisibilityAndTransform()
+  auto SeedVisibilityAndTransform() -> void
   {
     proto_->SetVisible();
     proto_->SetWorldTransform(*node_.GetTransform().GetWorldMatrix());
@@ -111,12 +111,10 @@ protected:
       b.BeginSubMesh("SM", mat)
         .WithMeshView({ .first_index = 0u,
           .index_count
-          = static_cast<oxygen::data::pak::MeshViewDesc::BufferIndexT>(
-            idx.size()),
+          = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
           .first_vertex = 0u,
           .vertex_count
-          = static_cast<oxygen::data::pak::MeshViewDesc::BufferIndexT>(
-            verts.size()) })
+          = static_cast<pak::MeshViewDesc::BufferIndexT>(verts.size()) })
         .EndSubMesh();
     }
     return std::shared_ptr<Mesh>(b.Build().release());
@@ -146,7 +144,7 @@ protected:
   auto& Flags() { return node_.GetFlags()->get(); }
 
 private:
-  void AddDefaultGeometry()
+  auto AddDefaultGeometry() -> void
   {
     using namespace oxygen::data;
     std::vector<Vertex> verts(3);
@@ -163,7 +161,7 @@ private:
                                    .EndSubMesh()
                                    .Build();
 
-    oxygen::data::pak::GeometryAssetDesc desc {};
+    pak::GeometryAssetDesc desc {};
     desc.lod_count = 1;
     std::vector<std::shared_ptr<Mesh>> lods;
     lods.push_back(mesh);
@@ -211,7 +209,7 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
   EmitPerVisibleSubmesh(Context(), State(), Proto());
 
   // Assert
-  EXPECT_TRUE(State().collected_items.empty());
+  EXPECT_TRUE(State().CollectedItems().empty());
 }
 
 // Emit one item per visible submesh with correct properties
@@ -228,7 +226,7 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmitsAllVisible_WithExpectedFields)
   EmitPerVisibleSubmesh(Context(), State(), Proto());
 
   // Assert
-  const auto& items = State().collected_items;
+  const auto& items = State().CollectedItems();
   ASSERT_EQ(items.size(), 3u);
   for (size_t i = 0; i < items.size(); ++i) {
     EXPECT_EQ(items[i].lod_index, Proto().ResolvedMeshIndex());
@@ -259,7 +257,7 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MaterialOverride_TakesPrecedence)
   EmitPerVisibleSubmesh(Context(), State(), Proto());
 
   // Assert: find submesh 1 item and check material ptr
-  const auto& items = State().collected_items;
+  const auto& items = State().CollectedItems();
   auto it = std::find_if(items.begin(), items.end(),
     [](const auto& r) { return r.submesh_index == 1u; });
   ASSERT_NE(it, items.end());
@@ -283,7 +281,7 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MeshMaterial_UsedWhenNoOverride)
   EmitPerVisibleSubmesh(Context(), State(), Proto());
 
   // Assert: find submesh 0 item and check material ptr equals mesh material
-  const auto& items = State().collected_items;
+  const auto& items = State().CollectedItems();
   auto it = std::find_if(items.begin(), items.end(),
     [](const auto& r) { return r.submesh_index == 0u; });
   ASSERT_NE(it, items.end());
@@ -306,7 +304,7 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MaskedOutSubmesh_NotEmitted)
   EmitPerVisibleSubmesh(Context(), State(), Proto());
 
   // Expect only 0 and 2 emitted
-  const auto& items = State().collected_items;
+  const auto& items = State().CollectedItems();
   ASSERT_EQ(items.size(), 2u);
   EXPECT_EQ(items[0].submesh_index, 0u);
   EXPECT_EQ(items[1].submesh_index, 2u);

@@ -21,74 +21,67 @@ namespace oxygen::engine::sceneprep {
  the collection stage which perform CPU-side processing and may update the
  provided `RenderItemProto` and `ScenePrepState` as needed.
 
- Stage: Collection
+ ### Contracts
 
- @param F The extractor algorithm type
- */
+ - Per-item processing, with no mutation of RenderItemData
+ - May, and most likely will, mutate the ScenePrepState
+*/
 template <typename F>
 concept RenderItemDataExtractor = requires(
   F f, ScenePrepContext& ctx, ScenePrepState& state, RenderItemProto& item) {
   { f(ctx, state, item) } -> std::same_as<void>;
 };
 
-//! Concept for simple uploader callables used in finalization.
+//! Concept for finalizer callables used in finalization, responsible for
+//! preparing GPU resources and associated stable handles.
 /*!
- FinalizationUploader represents simple callable algorithms that ensure
- resources are ready for GPU usage. These correspond to EnsureFrameResources()
- calls in the actual Renderer implementation.
+ ### Contracts
 
- Stage: Finalization
+ - Bulk processing of collected/filtered items
+ - May, but most likely will not, mutate the ScenePrepState
+ - Must ensure stable handles are allocated, and become available to subsequent
+   stages, for all processed items
 
- Contract:
- - Takes ScenePrepState& to access uploaders
- - May perform GPU operations (resource preparation)
- - Should be idempotent
-
- @param U The uploader algorithm type
- */
+ @note: Typically use the `GetOrAllocate` API of the respective scene prep
+ workers.
+*/
 template <typename U>
-concept FinalizationUploader = requires(U u, ScenePrepState& state) {
+concept Finalizer = requires(U u, ScenePrepState& state) {
+  { u(state) } -> std::same_as<void>;
+};
+
+//! Concept for uploader callables used in finalization, responsible for
+//! uploading CPU prepared data to the GPU resources created by finalizers.
+/*!
+ ### Contracts
+
+ - May not mutate the ScenePrepState
+
+ @note: Typically use the `EnsureFrameResources` API of the respective scene
+ prep workers. The implementation should be idempotentnt, and resilient against
+ the *optional* prior calls to `GetOrAllocate` of the respective workers.
+*/
+template <typename U>
+concept Uploader = requires(U u, const ScenePrepState& state) {
   { u(state) } -> std::same_as<void>;
 };
 
 //! Concept for draw metadata emitter callables used in finalization.
 /*!
  DrawMetadataEmitter represents callable algorithms that generate draw metadata
- from render item data. This maps to the DrawMetadataEmitter::EmitDrawMetadata
+ from render items data. This maps to the DrawMetadataEmitter::EmitDrawMetadata
  pattern used in the actual implementation.
 
- Stage: Finalization
+ ### Contracts
 
- Contract:
- - Per-item processing
- - Takes ScenePrepState& and const RenderItemData reference
- - May update internal state for later upload
-
- @param E The emitter algorithm type
- */
+ - Per-item processing, with no mutation of RenderItemData
+ - May, and most likely will, mutate the ScenePrepState
+ - Contributes the CPU data for later upload of draw metadata
+*/
 template <typename E>
 concept DrawMetadataEmitter
   = requires(E e, ScenePrepState& state, const RenderItemData& item) {
       { e(state, item) } -> std::same_as<void>;
     };
-
-//! Concept for sorting/partitioning callables used in finalization.
-/*!
- FinalizationSorter represents callable algorithms that sort and partition
- draw metadata for efficient rendering. This corresponds to the
- BuildSortingAndPartitions() pattern in the actual implementation.
-
- Stage: Finalization
-
- Contract:
- - Takes ScenePrepState& to access internal data structures
- - May reorder and partition data
-
- @param S The sorter algorithm type
- */
-template <typename S>
-concept FinalizationSorter = requires(S s, ScenePrepState& state) {
-  { s(state) } -> std::same_as<void>;
-};
 
 } // namespace oxygen::engine::sceneprep

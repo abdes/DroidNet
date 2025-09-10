@@ -9,8 +9,6 @@
 #include <cstdint>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
-#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
@@ -46,12 +44,12 @@ namespace oxygen::engine::sceneprep {
  interacting with low-level APIs.
 */
 using TransformHandle
-  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
-                                // clang-format off
+  = NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                        // clang-format off
   struct TransformHandleTag,
-  oxygen::Arithmetic>; // clang-format on
+  Arithmetic>; // clang-format on
 
-inline constexpr auto to_string(TransformHandle h)
+constexpr auto to_string(TransformHandle h)
 {
   return "TransH(" + std::to_string(h.get()) + ")";
 }
@@ -65,12 +63,12 @@ inline constexpr auto to_string(TransformHandle h)
  filling GPU descriptors).
 */
 using MaterialHandle
-  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
-                                // clang-format off
+  = NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                        // clang-format off
   struct MaterialHandleTag,
-  oxygen::Arithmetic>; // clang-format on
+  Arithmetic>; // clang-format on
 
-inline constexpr auto to_string(MaterialHandle h)
+constexpr auto to_string(MaterialHandle h)
 {
   return "MatH(" + std::to_string(h.get()) + ")";
 }
@@ -85,12 +83,12 @@ inline constexpr auto to_string(MaterialHandle h)
  interacting with low-level APIs.
 */
 using GeometryHandle
-  = oxygen::NamedType<uint32_t, // TODO: replace with VersionedHandle?
-                                // clang-format off
+  = NamedType<uint32_t, // TODO: replace with VersionedHandle?
+                        // clang-format off
   struct GeometryHandleTag,
-  oxygen::Arithmetic>; // clang-format on
+  Arithmetic>; // clang-format on
 
-inline constexpr auto to_string(GeometryHandle h)
+constexpr auto to_string(GeometryHandle h)
 {
   return "GeoH(" + std::to_string(h.get()) + ")";
 }
@@ -106,8 +104,8 @@ public:
   //! Construct a ScenePrepContext that borrows the provided references.
   ScenePrepContext(uint64_t fid, const View& v, const scene::Scene& s) noexcept
     : frame_id { fid }
-    , view { std::ref(v) }
-    , scene { std::ref(s) }
+    , view_ { std::ref(v) }
+    , scene_ { std::ref(s) }
   {
   }
 
@@ -117,8 +115,8 @@ public:
   ~ScenePrepContext() noexcept = default;
 
   [[nodiscard]] auto GetFrameId() const noexcept { return frame_id; }
-  [[nodiscard]] auto& GetView() const noexcept { return view.get(); }
-  [[nodiscard]] auto& GetScene() const noexcept { return scene.get(); }
+  [[nodiscard]] auto& GetView() const noexcept { return view_.get(); }
+  [[nodiscard]] auto& GetScene() const noexcept { return scene_.get(); }
   // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
 
 private:
@@ -126,10 +124,10 @@ private:
   uint64_t frame_id; // TODO: strong type
 
   //! View containing camera matrices and frustum for the current frame.
-  std::reference_wrapper<const View> view;
+  std::reference_wrapper<const View> view_;
 
   //! Scene graph being processed.
-  std::reference_wrapper<const scene::Scene> scene;
+  std::reference_wrapper<const scene::Scene> scene_;
 
   // (RenderContext placeholder removed)
 };

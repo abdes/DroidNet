@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -21,7 +20,6 @@
 #include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
-#include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
@@ -47,7 +45,7 @@ class Mesh;
 namespace oxygen::engine {
 
 namespace sceneprep {
-  struct ScenePrepState;
+  class ScenePrepState;
   class ScenePrepPipeline;
 } // namespace sceneprep
 
@@ -160,8 +158,7 @@ private:
 
   //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
   //! Generate DrawMetadata & material constant arrays with dedupe + validate.
-  auto GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
-    sceneprep::ScenePrepState& prep_state)
+  auto GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
     -> void; // non-const: may register new materials (stable handle allocation)
   //! Build sorting keys, stable-sort, and construct partition ranges.
   auto BuildSortingAndPartitions()
@@ -173,7 +170,6 @@ private:
   auto UploadDrawMetadataBindless() -> void;
   //! Aggregate timing + counters and emit diagnostic partition logs.
   auto UpdateFinalizeStatistics(const sceneprep::ScenePrepState& prep_state,
-    std::size_t filtered_count,
     std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
@@ -246,7 +242,7 @@ private:
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each BuildFrame while retaining
   // deduplicated caches inside contained managers.
-  sceneprep::ScenePrepState scene_prep_state_;
+  std::unique_ptr<sceneprep::ScenePrepState> scene_prep_state_;
   std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_pipeline_;
 
   // Frame sequence number from FrameContext
