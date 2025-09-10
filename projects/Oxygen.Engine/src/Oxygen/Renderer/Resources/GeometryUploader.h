@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Upload/Types.h>
@@ -167,11 +168,24 @@ public:
   }
 
 private:
+  struct GeometryEntry {
+    observer_ptr<const data::Mesh> mesh { nullptr };
+    Epoch epoch { epoch::kNever };
+    bool is_dirty { true };
+    bool is_critical { false };
+  };
+
   static auto MakeGeometryKey(const data::Mesh& mesh) noexcept -> std::uint64_t;
 
   auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
     ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
-    const char* debug_label) -> bool;
+    const std::string& debug_label) -> bool;
+
+  auto UploadBuffers() -> void;
+  auto UploadVertexBuffer(const GeometryEntry& dirty_entry, size_t at_index)
+    -> engine::upload::UploadRequest;
+  auto UploadIndexBuffer(const GeometryEntry& dirty_entry, size_t at_index)
+    -> engine::upload::UploadRequest;
 
   //! Internal methods for resource preparation
   auto PrepareVertexBuffers() -> void;
@@ -188,13 +202,14 @@ private:
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::GeometryHandle>
     geometry_key_to_handle_;
+  std::vector<GeometryEntry> geometry_entries_;
   std::vector<const data::Mesh*> meshes_;
   std::vector<std::uint32_t> versions_;
   std::vector<bool> is_critical_;
   std::uint32_t global_version_ { 0U };
-  std::vector<std::uint32_t> dirty_epoch_;
+  std::vector<Epoch> dirty_epoch_;
   std::vector<std::uint32_t> dirty_indices_;
-  std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
+  Epoch current_epoch_ { 1 }; // 0 reserved for 'never'
   engine::sceneprep::GeometryHandle next_handle_ { 0U };
 
   // GPU upload dependencies

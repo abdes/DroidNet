@@ -15,78 +15,14 @@
 
 namespace oxygen::engine::sceneprep {
 
-//! Ensure geometry uploader resources are ready for this frame.
-/*!
- Calls EnsureFrameResources() on the geometry uploader stored in ScenePrepState.
-
- @param state ScenePrep working state containing geometry_uploader
- */
-inline auto GeometryPrepareResourcesFinalizer(ScenePrepState& state) -> void
+inline auto GeometryUploadFinalizer(const ScenePrepState& state) -> void
 {
-  DLOG_SCOPE_FUNCTION(INFO);
-
-  if (state.geometry_uploader_) {
-
-    // iterate over the unfiltered items and ensure their geometry resources are
-    // created Use existing retained_indices if available, otherwise process all
-    // collected items
-    // clang-format off
-    const auto& indices_to_process = state.retained_indices_.empty()
-    ? [&]() -> std::vector<std::size_t> {
-      std::vector<std::size_t> all_indices(state.collected_items_.size());
-      std::ranges::iota(all_indices, 0);
-      return all_indices;
-    }()
-    : state.retained_indices_;
-    // clang-format on
-    DLOG_F(INFO, "processing {} items", indices_to_process.size());
-
-    for (const auto item_index : indices_to_process) {
-      const auto& item = state.collected_items_[item_index];
-      const auto lod_index = item.lod_index;
-      const auto submesh_index = item.submesh_index;
-      const auto& geom = *item.geometry;
-      const auto meshes_span = geom.Meshes();
-
-      const auto& lod_mesh_ptr = meshes_span[lod_index];
-      DCHECK_NOTNULL_F(lod_mesh_ptr);
-      if (!lod_mesh_ptr->IsValid()) {
-        DLOG_F(WARNING,
-          "-skipped- invalid lod mesh at index {} for geometry '{}'", lod_index,
-          lod_mesh_ptr->GetName());
-        continue;
-      }
-      const auto& lod = *lod_mesh_ptr;
-
-      const auto submeshes_span = lod.SubMeshes();
-      const auto& submesh = submeshes_span[submesh_index];
-      const auto views_span = submesh.MeshViews();
-      DCHECK_F(!views_span.empty());
-
-      // Get the actual SRV indices immediately - no deferred resolution
-      if (lod_mesh_ptr->IsValid()) {
-        const auto mesh_handle
-          = state.geometry_uploader_->GetOrAllocate(*lod_mesh_ptr);
-        if (mesh_handle == GeometryHandle { kInvalidBindlessIndex }) {
-          DLOG_F(WARNING,
-            "-skipped- failed to get geometry handle for mesh '{}'",
-            lod_mesh_ptr->GetName());
-        }
-      }
-    }
-
-    state.geometry_uploader_->EnsureFrameResources();
+  if (state.GetGeometryUploader()) {
+    state.GetGeometryUploader()->EnsureFrameResources();
   }
 }
 
-inline auto GeometryUploadFinalizer(ScenePrepState& state) -> void
-{
-  DLOG_SCOPE_FUNCTION(INFO);
-  if (state.geometry_uploader_) {
-    state.geometry_uploader_->EnsureFrameResources();
-  }
-}
-
+#if defined(LATER)
 //! Ensure transform manager resources are ready for this frame.
 /*!
  Calls EnsureFrameResources() on the transform manager stored in ScenePrepState.
@@ -114,6 +50,7 @@ inline auto MaterialUploadFinalizer(ScenePrepState& state) -> void
     state.material_binder_->EnsureFrameResources();
   }
 }
+#endif
 
 #if defined(LATER)
 
