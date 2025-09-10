@@ -21,28 +21,28 @@ namespace oxygen::engine::sceneprep {
 
  @param state ScenePrep working state containing geometry_uploader
  */
-inline auto GeometryEnsureFrameResources(ScenePrepState& state) -> void
+inline auto GeometryPrepareResourcesFinalizer(ScenePrepState& state) -> void
 {
-  DLOG_SCOPE_F(INFO, "ScenePrep Pipeline: Geometry");
+  DLOG_SCOPE_FUNCTION(INFO);
 
-  if (state.geometry_uploader) {
+  if (state.geometry_uploader_) {
 
     // iterate over the unfiltered items and ensure their geometry resources are
-    // created Use existing filtered_indices if available, otherwise process all
+    // created Use existing retained_indices if available, otherwise process all
     // collected items
     // clang-format off
-    const auto& indices_to_process = state.filtered_indices.empty()
+    const auto& indices_to_process = state.retained_indices_.empty()
     ? [&]() -> std::vector<std::size_t> {
-      std::vector<std::size_t> all_indices(state.collected_items.size());
+      std::vector<std::size_t> all_indices(state.collected_items_.size());
       std::ranges::iota(all_indices, 0);
       return all_indices;
     }()
-    : state.filtered_indices;
+    : state.retained_indices_;
     // clang-format on
     DLOG_F(INFO, "processing {} items", indices_to_process.size());
 
     for (const auto item_index : indices_to_process) {
-      const auto& item = state.collected_items[item_index];
+      const auto& item = state.collected_items_[item_index];
       const auto lod_index = item.lod_index;
       const auto submesh_index = item.submesh_index;
       const auto& geom = *item.geometry;
@@ -66,7 +66,7 @@ inline auto GeometryEnsureFrameResources(ScenePrepState& state) -> void
       // Get the actual SRV indices immediately - no deferred resolution
       if (lod_mesh_ptr->IsValid()) {
         const auto mesh_handle
-          = state.geometry_uploader->GetOrAllocate(*lod_mesh_ptr);
+          = state.geometry_uploader_->GetOrAllocate(*lod_mesh_ptr);
         if (mesh_handle == GeometryHandle { kInvalidBindlessIndex }) {
           DLOG_F(WARNING,
             "-skipped- failed to get geometry handle for mesh '{}'",
@@ -75,7 +75,15 @@ inline auto GeometryEnsureFrameResources(ScenePrepState& state) -> void
       }
     }
 
-    state.geometry_uploader->EnsureFrameResources();
+    state.geometry_uploader_->EnsureFrameResources();
+  }
+}
+
+inline auto GeometryUploadFinalizer(ScenePrepState& state) -> void
+{
+  DLOG_SCOPE_FUNCTION(INFO);
+  if (state.geometry_uploader_) {
+    state.geometry_uploader_->EnsureFrameResources();
   }
 }
 
@@ -86,10 +94,10 @@ inline auto GeometryEnsureFrameResources(ScenePrepState& state) -> void
 
  @param state ScenePrep working state containing transform_mgr
  */
-inline auto TransformEnsureFrameResources(ScenePrepState& state) -> void
+inline auto TransformUploadFinalizer(ScenePrepState& state) -> void
 {
-  if (state.transform_mgr) {
-    state.transform_mgr->EnsureFrameResources();
+  if (state.GetTransformManager) {
+    state.GetTransformManager->Upload();
   }
 }
 
@@ -100,10 +108,10 @@ inline auto TransformEnsureFrameResources(ScenePrepState& state) -> void
 
  @param state ScenePrep working state containing material_binder
  */
-inline auto MaterialEnsureFrameResources(ScenePrepState& state) -> void
+inline auto MaterialUploadFinalizer(ScenePrepState& state) -> void
 {
-  if (state.material_binder) {
-    state.material_binder->EnsureFrameResources();
+  if (state.material_binder_) {
+    state.material_binder_->EnsureFrameResources();
   }
 }
 

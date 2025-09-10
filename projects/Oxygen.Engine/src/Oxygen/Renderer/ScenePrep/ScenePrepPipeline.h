@@ -30,13 +30,13 @@ public:
 
   virtual ~ScenePrepPipeline() = default;
 
-  OXGN_RNDR_API auto Collect(scene::Scene& scene, const View& view,
+  OXGN_RNDR_API auto Collect(const scene::Scene& scene, const View& view,
     uint64_t frame_id, ScenePrepState& state, bool reset_state) -> void;
 
-  // virtual auto Finalize() -> void = 0;
+  OXGN_RNDR_API auto Finalize() -> void;
 
 protected:
-  virtual auto CollectImpl(std::optional<ScenePrepContext> ctx_,
+  virtual auto CollectImpl(std::optional<ScenePrepContext> ctx,
     ScenePrepState& state, RenderItemProto& item) -> void
     = 0;
 
@@ -54,16 +54,6 @@ public:
   }
 
   //! Traverse scene and run collection extractors.
-  /*!
-   Builds a `ScenePrepContext`, resets per-frame state, visits all nodes,
-   and invokes configured extractors in sequence.
-
-   @param scene Source scene graph
-   @param view Current view providing camera/frustum
-   @param frame_id Monotonic frame identifier
-   @param render_context Renderer context (passed into ScenePrepContext)
-   @param state ScenePrep working state and output buffers
-  */
   auto CollectImpl(std::optional<ScenePrepContext> ctx, ScenePrepState& state,
     RenderItemProto& item) -> void override
   {
@@ -93,16 +83,16 @@ public:
     }
 
     // Track how many items were in collected_items before producer
-    const auto items_before = state.collected_items.size();
+    const auto items_before = state.CollectedCount();
 
     if constexpr (CollectionCfg::has_producer) {
       collection_.producer(*ctx, state, item);
     }
 
     // Track indices of all new items added by the producer
-    const auto items_after = state.collected_items.size();
+    const auto items_after = state.CollectedCount();
     for (auto i = items_before; i < items_after; ++i) {
-      state.filtered_indices.push_back(i);
+      state.MarkItemRetained(i);
     }
   }
 

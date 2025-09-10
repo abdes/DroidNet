@@ -22,9 +22,7 @@
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -49,32 +47,6 @@ using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
-namespace {
-
-// Convert a data::MaterialAsset snapshot into engine::MaterialConstants
-auto MakeMaterialConstants(const oxygen::data::MaterialAsset& mat)
-  -> MaterialConstants
-{
-  MaterialConstants mc;
-  const auto base = mat.GetBaseColor();
-  mc.base_color = { base[0], base[1], base[2], base[3] };
-  mc.metalness = mat.GetMetalness();
-  mc.roughness = mat.GetRoughness();
-  mc.normal_scale = mat.GetNormalScale();
-  mc.ambient_occlusion = mat.GetAmbientOcclusion();
-  // Texture indices (bindless). If not wired yet, keep zero which shaders can
-  // treat as "no texture".
-  mc.base_color_texture_index = mat.GetBaseColorTexture();
-  mc.normal_texture_index = mat.GetNormalTexture();
-  mc.metallic_texture_index = mat.GetMetallicTexture();
-  mc.roughness_texture_index = mat.GetRoughnessTexture();
-  mc.ambient_occlusion_texture_index = mat.GetAmbientOcclusionTexture();
-  // Flags reserved for future use; leave zero for now.
-  return mc;
-}
-
-} // namespace
-
 //===----------------------------------------------------------------------===//
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
@@ -91,19 +63,17 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   auto& gfx = *gfx_weak_.lock();
   uploader_ = std::make_unique<upload::UploadCoordinator>(gfx);
   // Ensure transform_mgr is always valid for scene prep and extraction
-  scene_prep_state_.transform_mgr
-    = std::make_unique<renderer::resources::TransformUploader>(
-      gfx, observer_ptr { uploader_.get() });
+  scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
+    // Initialize GeometryUploader to replace legacy GeometryRegistry
+    std::make_unique<renderer::resources::GeometryUploader>(
+      gfx, observer_ptr { uploader_.get() }),
 
-  // Initialize GeometryUploader to replace legacy GeometryRegistry
-  scene_prep_state_.geometry_uploader
-    = std::make_unique<renderer::resources::GeometryUploader>(
-      gfx, observer_ptr { uploader_.get() });
+    std::make_unique<renderer::resources::TransformUploader>(
+      gfx, observer_ptr { uploader_.get() }),
 
-  // Initialize MaterialBinder to replace legacy MaterialRegistry
-  scene_prep_state_.material_binder
-    = std::make_unique<renderer::resources::MaterialBinder>(
-      gfx, observer_ptr { uploader_.get() });
+    // Initialize MaterialBinder to replace legacy MaterialRegistry
+    std::make_unique<renderer::resources::MaterialBinder>(
+      gfx, observer_ptr { uploader_.get() }));
 }
 
 Renderer::~Renderer()
@@ -144,13 +114,11 @@ auto Renderer::PreExecute(
   UpdateDrawMetadataSlotIfChanged();
 
   // Consolidated transform resource preparation
-  if (scene_prep_state_.transform_mgr) {
-    scene_prep_state_.transform_mgr->EnsureFrameResources();
+  if (const auto transforms = scene_prep_state_->GetTransformManager()) {
+    transforms->EnsureFrameResources();
 
-    const auto worlds_srv
-      = scene_prep_state_.transform_mgr->GetWorldsSrvIndex();
-    const auto normals_srv
-      = scene_prep_state_.transform_mgr->GetNormalsSrvIndex();
+    const auto worlds_srv = transforms->GetWorldsSrvIndex();
+    const auto normals_srv = transforms->GetNormalsSrvIndex();
 
     scene_const_cpu_.SetBindlessWorldsSlot(
       BindlessWorldsSlot(worlds_srv.get()), SceneConstants::kRenderer);
@@ -159,16 +127,15 @@ auto Renderer::PreExecute(
   }
 
   // Consolidated geometry resource preparation
-  if (scene_prep_state_.geometry_uploader) {
-    scene_prep_state_.geometry_uploader->EnsureFrameResources();
+  if (const auto geometry = scene_prep_state_->GetGeometryUploader()) {
+    geometry->EnsureFrameResources();
   }
 
   // Consolidated material resource preparation
-  if (scene_prep_state_.material_binder) {
-    scene_prep_state_.material_binder->EnsureFrameResources();
+  if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
+    materials->EnsureFrameResources();
 
-    const auto materials_srv
-      = scene_prep_state_.material_binder->GetMaterialsSrvIndex();
+    const auto materials_srv = materials->GetMaterialsSrvIndex();
     scene_const_cpu_.SetBindlessMaterialConstantsSlot(
       BindlessMaterialConstantsSlot(materials_srv.get()),
       SceneConstants::kRenderer);
@@ -360,16 +327,18 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
 
   const auto t_collect0 = std::chrono::high_resolution_clock::now();
   scene_prep_pipeline_->Collect(scene, view,
-    frame_context.GetFrameSequenceNumber().get(), scene_prep_state_, true);
+    frame_context.GetFrameSequenceNumber().get(), *scene_prep_state_, true);
   const auto t_collect1 = std::chrono::high_resolution_clock::now();
   last_finalize_stats_.collection_time
     = std::chrono::duration_cast<std::chrono::microseconds>(
       t_collect1 - t_collect0);
+
   DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
-    scene_prep_state_.collected_items.size(), scene.GetNodes().Items().size(),
+    scene_prep_state_->CollectedItems().size(), scene.GetNodes().Items().size(),
     last_finalize_stats_.collection_time.count());
 
-  FinalizeScenePrepPhase(scene_prep_state_); // non-const: material registration
+  FinalizeScenePrepPhase(
+    *scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
@@ -387,22 +356,21 @@ auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
   const auto t_begin = std::chrono::high_resolution_clock::now();
 
   // Ensure geometry uploader resources are ready for this frame
-  prep_state.geometry_uploader->EnsureFrameResources();
+  prep_state.GetGeometryUploader()->EnsureFrameResources();
 
-  const auto& filtered = prep_state.filtered_indices;
-  GenerateDrawMetadata(filtered, prep_state);
+  GenerateDrawMetadata(prep_state);
   BuildSortingAndPartitions();
   PublishPreparedFrameSpans();
   UploadDrawMetadataBindless();
-  UpdateFinalizeStatistics(prep_state, filtered.size(), t_begin);
+  UpdateFinalizeStatistics(prep_state, t_begin);
 }
 
-auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
-  sceneprep::ScenePrepState& prep_state) -> void
+auto Renderer::GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
+  -> void
 {
   // Direct DrawMetadata generation (Task 6: native SoA path)
   draw_metadata_cpu_soa_.clear();
-  draw_metadata_cpu_soa_.reserve(filtered.size());
+  draw_metadata_cpu_soa_.reserve(prep_state.RetainedCount());
 
   auto ClassifyMaterialPassMask
     = [&](const data::MaterialAsset* mat) -> PassMask {
@@ -432,12 +400,7 @@ auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
     return PassMask { PassMaskBit::kTransparent };
   };
 
-  for (size_t i = 0; i < filtered.size(); ++i) {
-    const auto src_index = filtered[i];
-    if (src_index >= prep_state.collected_items.size()) {
-      continue;
-    }
-    const auto& item = prep_state.collected_items[src_index];
+  for (const auto& item : prep_state.RetainedItems()) {
     if (!item.geometry) {
       continue;
     }
@@ -469,16 +432,12 @@ auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
       ShaderVisibleIndex vertex_srv_index { kInvalidShaderVisibleIndex };
       ShaderVisibleIndex index_srv_index { kInvalidShaderVisibleIndex };
       if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-        const auto mesh_handle
-          = scene_prep_state_.geometry_uploader->GetOrAllocate(*lod_mesh_ptr);
-        if (scene_prep_state_.geometry_uploader->IsValidHandle(mesh_handle)) {
+        const auto geometry = scene_prep_state_->GetGeometryUploader();
+        const auto mesh_handle = geometry->GetOrAllocate(*lod_mesh_ptr);
+        if (geometry->IsValidHandle(mesh_handle)) {
           // Get the actual SRV indices for GPU access
-          vertex_srv_index
-            = scene_prep_state_.geometry_uploader->GetVertexSrvIndex(
-              mesh_handle);
-          index_srv_index
-            = scene_prep_state_.geometry_uploader->GetIndexSrvIndex(
-              mesh_handle);
+          vertex_srv_index = geometry->GetVertexSrvIndex(mesh_handle);
+          index_srv_index = geometry->GetIndexSrvIndex(mesh_handle);
         }
       }
 
@@ -499,13 +458,8 @@ auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
       }
       dm.instance_count = 1;
       // Obtain stable handle from MaterialBinder
-      LOG_F(2,
-        "GenerateDrawMetadata - prep_state addr={}, "
-        "material_binder addr={}",
-        static_cast<void*>(&prep_state),
-        static_cast<void*>(prep_state.material_binder.get()));
       const auto stable_handle
-        = prep_state.material_binder->GetOrAllocate(item.material);
+        = prep_state.GetMaterialBinder()->GetOrAllocate(item.material);
       const auto stable_handle_value = stable_handle.get();
 
       dm.material_handle = stable_handle_value;
@@ -515,8 +469,7 @@ auto Renderer::GenerateDrawMetadata(const std::vector<std::size_t>& filtered,
       dm.instance_metadata_buffer_index = 0;
       dm.instance_metadata_offset = 0;
       dm.flags = ClassifyMaterialPassMask(item.material.get());
-      DCHECK_F(prep_state.transform_mgr != nullptr);
-      DCHECK_F(prep_state.transform_mgr->IsValidHandle(handle),
+      DCHECK_F(prep_state.GetTransformManager()->IsValidHandle(handle),
         "Invalid transform handle (id={}) while generating DrawMetadata",
         dm.transform_index);
       DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
@@ -640,13 +593,12 @@ auto Renderer::BuildSortingAndPartitions() -> void
 
 auto Renderer::PublishPreparedFrameSpans() -> void
 {
-  const auto& tm = scene_prep_state_.transform_mgr;
-  DCHECK_NOTNULL_F(tm); // tm should never be null in a valid Renderer
-  const auto world_span = tm->GetWorldMatrices();
+  const auto transforms = scene_prep_state_->GetTransformManager();
+  const auto world_span = transforms->GetWorldMatrices();
   prepared_frame_.world_matrices = std::span<const float>(
     reinterpret_cast<const float*>(world_span.data()), world_span.size() * 16u);
 
-  const auto normal_span = tm->GetNormalMatrices();
+  const auto normal_span = transforms->GetNormalMatrices();
   prepared_frame_.normal_matrices
     = std::span<const float>(reinterpret_cast<const float*>(normal_span.data()),
       normal_span.size() * 16u);
@@ -667,16 +619,17 @@ auto Renderer::UploadDrawMetadataBindless() -> void
 }
 
 auto Renderer::UpdateFinalizeStatistics(
-  const sceneprep::ScenePrepState& prep_state, std::size_t filtered_count,
+  const sceneprep::ScenePrepState& prep_state,
   std::chrono::high_resolution_clock::time_point t_begin) -> void
 {
   const auto t_end = std::chrono::high_resolution_clock::now();
   const auto us
     = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_begin)
         .count();
-  last_finalize_stats_.collected = prep_state.collected_items.size();
-  last_finalize_stats_.filtered = filtered_count;
-  last_finalize_stats_.finalized = filtered_count; // same for now
+  last_finalize_stats_.collected = prep_state.CollectedCount();
+  last_finalize_stats_.filtered = prep_state.RetainedCount();
+  last_finalize_stats_.finalized
+    = prep_state.RetainedCount(); // FIXME: same for now
   last_finalize_stats_.finalize_time = std::chrono::microseconds(us);
   DLOG_F(2,
     "FinalizeScenePrepSoA: collected={} filtered={} finalized={} time_us={} "
@@ -769,28 +722,19 @@ auto Renderer::GetSceneConstants() const -> const SceneConstants&
 
 auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
 {
-  LOG_F(2,
-    "Renderer::OnFrameStart - scene_prep_state_ addr={}, material_binder "
-    "addr={}",
-    static_cast<void*>(&scene_prep_state_),
-    static_cast<void*>(scene_prep_state_.material_binder.get()));
-
   // Retire staging resources from previous frame uploads
   if (uploader_) {
     uploader_->RetireCompleted();
   }
 
   // Reset transform manager for the new frame
-  DCHECK_NOTNULL_F(scene_prep_state_.transform_mgr);
-  scene_prep_state_.transform_mgr->OnFrameStart();
+  scene_prep_state_->GetTransformManager()->OnFrameStart();
 
   // Reset geometry uploader for the new frame
-  DCHECK_NOTNULL_F(scene_prep_state_.geometry_uploader);
-  scene_prep_state_.geometry_uploader->OnFrameStart();
+  scene_prep_state_->GetGeometryUploader()->OnFrameStart();
 
   // Reset material binder for the new frame
-  DCHECK_NOTNULL_F(scene_prep_state_.material_binder);
-  scene_prep_state_.material_binder->OnFrameStart();
+  scene_prep_state_->GetMaterialBinder()->OnFrameStart();
 }
 
 /*!

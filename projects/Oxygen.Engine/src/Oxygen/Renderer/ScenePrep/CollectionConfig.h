@@ -17,26 +17,19 @@ namespace oxygen::engine::sceneprep {
 
 //! Configuration for the Collection phase (scene traversal/extraction).
 /*!
- Configures optional per-item extractors used during collection. Each stage
- is a callable with signature compatible with
- `void(const ScenePrepContext&, ScenePrepState&, RenderItemProto&)`.
+ ### Contracts
 
- Stages:
- - pre_filter: early drop + seeding (visibility, transform, geometry)
- - mesh_resolver: select LOD and resolve mesh
- - visibility_filter: compute `VisibleSubmeshes` (per-submesh frustum culling)
- - producer: emit `RenderItemData` entries from proto state
-
- Presence flags (`has_*`) allow compile-time gating with `if constexpr`.
-
- Stage call contract:
  - CPU-only, no GPU calls
  - May mutate `RenderItemProto` and `ScenePrepState`
  - May mark proto as dropped to skip downstream stages
- */
-template <typename PreFilterT = void, typename TransformResolveT = void,
-  typename MeshResolverT = void, typename VisibilityFilterT = void,
-  typename ProducerT = void>
+*/
+template < // clang-format off
+  typename PreFilterT = void,
+  typename TransformResolveT = void,
+  typename MeshResolverT = void,
+  typename VisibilityFilterT = void,
+  typename ProducerT = void
+> // clang-format on
 struct CollectionConfig {
   struct _DummyStage {
     template <typename... Args>
@@ -56,29 +49,24 @@ struct CollectionConfig {
   [[no_unique_address]] StageOrDummy<ProducerT> producer {};
 
   // Presence checks for `if constexpr`
+  // clang-format off
   static constexpr bool has_pre_filter = !std::is_void_v<PreFilterT>;
-  static constexpr bool has_transform_resolve
-    = !std::is_void_v<TransformResolveT>;
+  static constexpr bool has_transform_resolve = !std::is_void_v<TransformResolveT>;
   static constexpr bool has_mesh_resolver = !std::is_void_v<MeshResolverT>;
-  static constexpr bool has_visibility_filter
-    = !std::is_void_v<VisibilityFilterT>;
+  static constexpr bool has_visibility_filter = !std::is_void_v<VisibilityFilterT>;
   static constexpr bool has_producer = !std::is_void_v<ProducerT>;
+  // clang-format on
 };
 
-//! Factory: default collection configuration using built-in extractors.
-/*!
- Wires the following stages:
- - ExtractionPreFilter
- - MeshResolver
- - SubMeshVisibilityFilter
- - EmitPerVisibleSubmesh
-
- All stages satisfy `RenderItemDataExtractor`.
- */
+//! Provides a complete collection configuration using built-in extractors.
 inline auto CreateBasicCollectionConfig()
-  -> CollectionConfig<decltype(&ExtractionPreFilter),
-    decltype(&TransformResolveStage), decltype(&MeshResolver),
-    decltype(&SubMeshVisibilityFilter), decltype(&EmitPerVisibleSubmesh)>
+  -> CollectionConfig< // clang-format off
+    decltype(&ExtractionPreFilter),
+    decltype(&TransformResolveStage),
+    decltype(&MeshResolver),
+    decltype(&SubMeshVisibilityFilter),
+    decltype(&EmitPerVisibleSubmesh)
+  > // clang-format on
 {
   // Concept checks (callables must qualify as collection extractors)
   static_assert(RenderItemDataExtractor<decltype(ExtractionPreFilter)>);

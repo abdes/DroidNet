@@ -40,10 +40,10 @@ namespace oxygen::engine::sceneprep {
  - Time Complexity: O(1)
  - Memory: O(1)
 */
-inline void ExtractionPreFilter(const ScenePrepContext& /*ctx*/,
-  ScenePrepState& /*state*/, RenderItemProto& item) noexcept
+inline auto ExtractionPreFilter(const ScenePrepContext& /*ctx*/,
+  ScenePrepState& /*state*/, RenderItemProto& item) noexcept -> void
 {
-  using enum oxygen::scene::SceneNodeFlags;
+  using enum scene::SceneNodeFlags;
 
   // Skip nodes culled by effective visibility (hierarchy-aware flag).
   if (!item.Flags().GetEffectiveValue(kVisible)) {
@@ -65,16 +65,17 @@ static_assert(RenderItemDataExtractor<decltype(ExtractionPreFilter)>);
 //! Resolve or allocate stable transform handle (after pre-filter flags).
 /*! Allocates a stable handle in TransformManager for the item's world
     transform and stores it on the prototype for downstream use. */
-inline void TransformResolveStage(const ScenePrepContext& /*ctx*/,
-  ScenePrepState& state, RenderItemProto& item) noexcept
+inline auto TransformResolveStage(const ScenePrepContext& /*ctx*/,
+  const ScenePrepState& state, RenderItemProto& item) noexcept -> void
 {
   if (item.IsDropped()) {
     return;
   }
   // Integrate TransformUploader: assign deduplicated handle for world
   // transform.
-  if (state.transform_mgr) {
-    auto handle = state.transform_mgr->GetOrAllocate(item.GetWorldTransform());
+  if (state.GetTransformManager()) {
+    const auto handle
+      = state.GetTransformManager()->GetOrAllocate(item.GetWorldTransform());
     item.SetTransformHandle(handle);
   } else {
     item.SetTransformHandle(TransformHandle { 0 });
@@ -100,8 +101,9 @@ static_assert(RenderItemDataExtractor<decltype(TransformResolveStage)>);
 
  @see ExtractionPreFilter, SubMeshVisibilityFilter
 */
-inline void MeshResolver(const ScenePrepContext& ctx, ScenePrepState& /*state*/,
-  RenderItemProto& item) noexcept
+inline auto MeshResolver(const ScenePrepContext& ctx,
+  [[maybe_unused]] ScenePrepState& state, RenderItemProto& item) noexcept
+  -> void
 {
   CHECK_F(!item.IsDropped());
   CHECK_NOTNULL_F(item.Geometry());
@@ -128,7 +130,7 @@ inline void MeshResolver(const ScenePrepContext& ctx, ScenePrepState& /*state*/,
   }
   // Use the selected LOD or fallback to the first mesh
   uint32_t lod { 0 };
-  if (auto active = item.Renderable().GetActiveLodIndex()) {
+  if (const auto active = item.Renderable().GetActiveLodIndex()) {
     lod = static_cast<std::uint32_t>(*active);
   }
   try {
@@ -156,8 +158,9 @@ static_assert(RenderItemDataExtractor<decltype(MeshResolver)>);
 
  @see MeshResolver, EmitPerVisibleSubmesh
 */
-inline void SubMeshVisibilityFilter(const ScenePrepContext& ctx,
-  ScenePrepState& /*state*/, RenderItemProto& item) noexcept
+inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
+  [[maybe_unused]] ScenePrepState& state, RenderItemProto& item) noexcept
+  -> void
 {
   CHECK_F(!item.IsDropped());
   CHECK_NOTNULL_F(item.Geometry());
@@ -172,7 +175,7 @@ inline void SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   const auto& submeshes = item.ResolvedMesh()->SubMeshes();
   const auto& frustum = ctx.GetView().GetFrustum();
   // Fast path: single pass, cached facade, reserve upper bound, push visible
-  auto& rend = item.Renderable();
+  const auto& rend = item.Renderable();
   std::vector<uint32_t> visible_submeshes;
   visible_submeshes.reserve(submeshes.size());
   for (uint32_t i = 0, n = static_cast<uint32_t>(submeshes.size()); i < n;
@@ -183,8 +186,8 @@ inline void SubMeshVisibilityFilter(const ScenePrepContext& ctx,
     }
 
     // Frustum culling per submesh: prefer world AABB; fallback to node sphere
-    bool in_frustum = true;
-    if (auto aabb = item.Renderable().GetWorldSubMeshBoundingBox(i)) {
+    bool in_frustum;
+    if (const auto aabb = item.Renderable().GetWorldSubMeshBoundingBox(i)) {
       in_frustum = frustum.IntersectsAABB(aabb->first, aabb->second);
     } else {
       const auto sphere = rend.GetWorldBoundingSphere();
@@ -223,12 +226,13 @@ static_assert(RenderItemDataExtractor<decltype(SubMeshVisibilityFilter)>);
 
  @see ExtractionPreFilter, MeshResolver, SubMeshVisibilityFilter
 */
-inline void EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
-  ScenePrepState& state, RenderItemProto& item) noexcept
+inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
+  ScenePrepState& state, RenderItemProto& item) noexcept -> void
 {
   CHECK_F(!item.IsDropped());
   CHECK_NOTNULL_F(item.Geometry());
   CHECK_NOTNULL_F(item.ResolvedMesh());
+  CHECK_NOTNULL_F(state.GetMaterialBinder());
 
   const auto& visible_submeshes = item.VisibleSubmeshes();
   if (visible_submeshes.empty()) {
@@ -240,19 +244,19 @@ inline void EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
   for (auto index : visible_submeshes) {
     // Material selection chain as a local lambda
     auto resolve_material
-      = [&]() -> std::shared_ptr<const oxygen::data::MaterialAsset> {
+      = [&]() -> std::shared_ptr<const data::MaterialAsset> {
       if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, index)) {
         return mat;
       }
       if (auto mesh_mat = submeshes[index].Material()) {
         return mesh_mat;
       }
-      return oxygen::data::MaterialAsset::CreateDefault();
+      return data::MaterialAsset::CreateDefault();
     };
 
     auto mat_ptr = resolve_material();
-    const auto mat_handle = state.material_binder->GetOrAllocate(mat_ptr);
-    state.collected_items.push_back(RenderItemData {
+    const auto mat_handle = state.GetMaterialBinder()->GetOrAllocate(mat_ptr);
+    state.CollectItem(RenderItemData {
       .lod_index = lod,
       .submesh_index = index,
       .geometry = item.Geometry(),
