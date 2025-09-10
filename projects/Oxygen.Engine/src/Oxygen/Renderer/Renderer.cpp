@@ -359,8 +359,8 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   auto& scene = *scene_ptr;
 
   const auto t_collect0 = std::chrono::high_resolution_clock::now();
-  scene_prep_pipeline_->Collect(
-    scene, view, frame_seq_num.get(), scene_prep_state_, true);
+  scene_prep_pipeline_->Collect(scene, view,
+    frame_context.GetFrameSequenceNumber().get(), scene_prep_state_, true);
   const auto t_collect1 = std::chrono::high_resolution_clock::now();
   last_finalize_stats_.collection_time
     = std::chrono::duration_cast<std::chrono::microseconds>(
