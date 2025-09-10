@@ -567,16 +567,18 @@ LOGURU_EXPORT void update_all_module_sites();
 // Return a pointer to a translation-unit-scoped cache (std::atomic<int>).
 // Each translation unit should call this once (first time a VLOG macro is
 // used) to initialize and thereafter reuse the cached module verbosity.
-// The returned pointer is valid for the lifetime of the program.
-// Provide an inline definition so each translation unit gets its own
-// function-local static cache. This implements the per-translation-unit
-// caching semantics: the first call in a TU initializes the atomic to
-// Verbosity_UNSPECIFIED and subsequent calls reuse the same atomic.
-inline std::atomic<int>* get_translation_unit_cache()
-{
-  static std::atomic<int> s_tu_module_cache { Verbosity_UNSPECIFIED };
-  return &s_tu_module_cache;
-}
+// Optimized macro to get translation unit cache with zero runtime overhead.
+// Each call site gets a local static pointer that's initialized once to point
+// to the TU-shared cache. After initialization, it's just a pointer
+// dereference.
+#  define LOGURU_GET_TU_CACHE()                                                \
+    ([]() -> std::atomic<int>* {                                               \
+      static std::atomic<int>* s_local_ptr = []() -> std::atomic<int>* {       \
+        static std::atomic<int> s_tu_cache { loguru::Verbosity_UNSPECIFIED };  \
+        return &s_tu_cache;                                                    \
+      }();                                                                     \
+      return s_local_ptr;                                                      \
+    }())
 
 #  if LOGURU_USE_FMTLIB
 // Internal functions
@@ -1135,7 +1137,7 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 #  define VLOG_F(verbosity, ...)                                               \
     do {                                                                       \
       if (loguru::check_module_fast(                                           \
-            loguru::get_translation_unit_cache(), verbosity, __FILE__)) {      \
+            LOGURU_GET_TU_CACHE(), verbosity, __FILE__)) {                     \
         loguru::log(verbosity, __FILE__, __LINE__, __VA_ARGS__);               \
       }                                                                        \
     } while (false)
@@ -1145,8 +1147,7 @@ LOGURU_ANONYMOUS_NAMESPACE_END
     VLOG_F(loguru::Verbosity_##verbosity_name, __VA_ARGS__)
 
 #  define VLOG_IF_F(verbosity, cond, ...)                                      \
-    (!(loguru::check_module_fast(                                              \
-       loguru::get_translation_unit_cache(), verbosity, __FILE__))             \
+    (!(loguru::check_module_fast(LOGURU_GET_TU_CACHE(), verbosity, __FILE__))  \
       || (cond) == false)                                                      \
       ? (void)0                                                                \
       : loguru::log(verbosity, __FILE__, __LINE__, __VA_ARGS__)
@@ -1156,8 +1157,7 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 
 #  define VLOG_SCOPE_F(verbosity, ...)                                         \
     loguru::LogScopeRAII LOGURU_ANONYMOUS_VARIABLE(error_context_RAII_)        \
-      = (loguru::check_module_fast(                                            \
-           loguru::get_translation_unit_cache(), verbosity, __FILE__)          \
+      = (loguru::check_module_fast(LOGURU_GET_TU_CACHE(), verbosity, __FILE__) \
           ? loguru::LogScopeRAII(verbosity, __FILE__, __LINE__, __VA_ARGS__)   \
           : loguru::LogScopeRAII())
 
@@ -1165,7 +1165,7 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 #  define RAW_VLOG_F(verbosity, ...)                                           \
     do {                                                                       \
       if (loguru::check_module_fast(                                           \
-            loguru::get_translation_unit_cache(), verbosity, __FILE__)) {      \
+            LOGURU_GET_TU_CACHE(), verbosity, __FILE__)) {                     \
         loguru::raw_log(verbosity, __FILE__, __LINE__, __VA_ARGS__);           \
       }                                                                        \
     } while (false)
