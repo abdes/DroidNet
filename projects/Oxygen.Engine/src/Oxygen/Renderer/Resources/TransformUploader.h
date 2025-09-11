@@ -86,10 +86,6 @@ private:
     const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
     -> std::vector<engine::upload::UploadRequest>;
 
-  auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
-    ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
-    const char* debug_label) -> bool;
-
   //! Internal methods for resource preparation
   auto UploadWorldMatrices() -> void;
   auto UploadNormalMatrices() -> void;
@@ -124,6 +120,15 @@ private:
   ShaderVisibleIndex worlds_bindless_index_ { kInvalidShaderVisibleIndex };
   std::shared_ptr<graphics::Buffer> gpu_normals_buffer_;
   ShaderVisibleIndex normals_bindless_index_ { kInvalidShaderVisibleIndex };
+  // Statistics
+  // Number of times a transform lookup returned an existing handle (cache hit)
+  std::uint64_t transform_reuse_count_ { 0U };
+  // Number of times the transforms (world) GPU buffer was recreated/resized
+  std::uint64_t transforms_buffer_recreate_count_ { 0U };
+  // Total number of GetOrAllocate calls
+  std::uint64_t total_get_calls_ { 0U };
+  // Total number of allocations (new handles created)
+  std::uint64_t total_allocations_ { 0U };
 };
 
 } // namespace oxygen::renderer::resources

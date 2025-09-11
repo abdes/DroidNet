@@ -307,19 +307,6 @@ auto GeometryUploader::IsValidHandle(
     && geometry_entries_[idx].mesh != nullptr;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto GeometryUploader::EnsureBufferAndSrv(
-  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  const std::uint64_t size_bytes, const std::uint32_t stride,
-  const std::string& debug_label) -> bool
-{
-  // Delegate to the shared helper to ensure consistent ordering and error
-  // handling across uploaders. This preserves existing behavior but centralizes
-  // buffer + SRV creation logic.
-  return internal::EnsureBufferAndSrv(
-    gfx_, buffer, bindless_index, size_bytes, stride, debug_label);
-}
-
 auto GeometryUploader::EnsureFrameResources() -> void
 {
   if (frame_resources_ensured_) {
@@ -405,8 +392,9 @@ auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_EQ_F(buffer_size % stride, 0);
 
   DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
-  if (!EnsureBufferAndSrv(
-        vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
+  if (!internal::EnsureBufferAndSrv(
+        gfx_, vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
+    // logging is done in the helper
     return std::unexpected { false };
   }
   DCHECK_NOTNULL_F(vertex_buffer);
@@ -448,8 +436,8 @@ auto GeometryUploader::UploadIndexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_EQ_F(buffer_size % stride, 0);
 
   DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
-  if (!EnsureBufferAndSrv(
-        index_buffer, srv_index, buffer_size, stride, "IndexBuffer")) {
+  if (!internal::EnsureBufferAndSrv(
+        gfx_, index_buffer, srv_index, buffer_size, stride, "IndexBuffer")) {
     return std::unexpected { false };
   }
   DCHECK_NOTNULL_F(index_buffer);

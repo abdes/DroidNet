@@ -177,10 +177,6 @@ private:
     mutable ShaderVisibleIndex index_srv_index { kInvalidBindlessIndex };
   };
 
-  auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
-    ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
-    uint32_t stride, const std::string& debug_label) -> bool;
-
   auto UploadBuffers() -> void;
   auto UploadVertexBuffer(const GeometryEntry& dirty_entry)
     -> std::expected<engine::upload::UploadRequest, bool>;
