@@ -7,19 +7,35 @@
 #pragma once
 
 #include <any>
+#include <concepts>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
+
+namespace detail {
+  template <typename Resource, typename Fn>
+  concept ViewUpdaterCallable = std::is_same_v<std::decay_t<Fn>, std::nullptr_t>
+    || requires(Fn&& fn, const typename Resource::ViewDescriptionT& desc) {
+         {
+           fn(desc)
+         } -> std::convertible_to<
+           std::optional<typename Resource::ViewDescriptionT>>;
+       };
+} // namespace detail
 
 //! Registry for graphics resources and their views, supporting bindless
 //! rendering.
@@ -31,9 +47,6 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
   OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
-
-  // TODO: provide API to update a view registration with a new native object,
-  // keeping the same descriptor handle.
 
   //! Register a graphics resource, such as textures, buffers, and samplers.
   /*!
@@ -88,7 +101,7 @@ public:
   }
 
   //! Register an already created view for a graphics resource, such as
-  //! textures and buffers, making it available for for cached lookups.
+  //! textures and buffers, making it available for cached lookups.
   /*!
    Registers an already created native view for a graphics resource (e.g.,
    texture or buffer), making it available for bindless rendering and view
@@ -141,6 +154,13 @@ public:
    @param index The existing bindless descriptor slot to update.
    @param desc The new view description.
    @return true if the view was updated successfully.
+
+  ### Failure Semantics
+
+  - If view creation fails for any reason after the descriptor is acquired
+    from the previous owner, the descriptor handle is released and the view
+    registration for that index is removed (index becomes free), matching
+    Replace() behavior.
   */
   template <ResourceWithViews Resource>
   auto UpdateView(Resource& resource, bindless::Handle index,
@@ -153,22 +173,28 @@ public:
 
     // Ensure destination resource is registered
     const NativeObject new_res_obj { &resource, Resource::ClassTypeId() };
-    auto new_res_it = resources_.find(new_res_obj);
+    const auto new_res_it = resources_.find(new_res_obj);
     if (new_res_it == resources_.end()) {
       return false;
     }
 
     // Find existing owner and take ownership of the descriptor handle entry
     DescriptorHandle owned_descriptor;
+    NativeObject old_view_obj; // for cache purge
+    NativeObject old_res_obj; // original owner
     if (const auto owner_it = descriptor_to_resource_.find(index);
       owner_it != descriptor_to_resource_.end()) {
-      const auto& old_res_obj = owner_it->second;
-      if (auto old_res_it = resources_.find(old_res_obj);
+      old_res_obj = owner_it->second;
+      if (const auto old_res_it = resources_.find(old_res_obj);
         old_res_it != resources_.end()) {
-        auto& old_descs = old_res_it->second.descriptors;
-        if (auto ve_it = old_descs.find(index); ve_it != old_descs.end()) {
+        auto& old_descriptors = old_res_it->second.descriptors;
+        if (const auto ve_it = old_descriptors.find(index);
+          ve_it != old_descriptors.end()) {
+          old_view_obj = ve_it->second.view_object;
           owned_descriptor = std::move(ve_it->second.descriptor);
-          old_descs.erase(ve_it);
+          old_descriptors.erase(ve_it);
+          // Clear mapping while we attempt update; will be re-added on success
+          descriptor_to_resource_.erase(index);
         } else {
           // Inconsistent state
           return false;
@@ -183,17 +209,24 @@ public:
     // descriptor handle.
     auto new_view = resource.GetNativeView(owned_descriptor, desc);
     if (!new_view.IsValid()) {
-      // Put the descriptor back into the mapping so it isn't leaked
-      descriptor_to_resource_[index] = new_res_obj;
-      new_res_it->second.descriptors[index]
-        = ResourceEntry::ViewEntry { .view_object = {},
-            .descriptor = std::move(owned_descriptor) };
+      // Failure -> release the temporary descriptor and purge old cache; the
+      // index becomes free and no registration remains for it.
+      if (owned_descriptor.IsValid()) {
+        owned_descriptor.Release();
+      }
+      // Remove any cache entry for the old view object if present.
+      if (old_view_obj.IsValid()) {
+        std::erase_if(view_cache_, [&](const auto& it) {
+          return it.first.resource == old_res_obj
+            && it.second.view_object == old_view_obj;
+        });
+      }
       return false;
     }
 
     // Attach descriptor to the new resource and update caches/mappings.
-    auto& new_descs = new_res_it->second.descriptors;
-    new_descs[index] = ResourceEntry::ViewEntry { .view_object = new_view,
+    auto& new_descriptors = new_res_it->second.descriptors;
+    new_descriptors[index] = ResourceEntry::ViewEntry { .view_object = new_view,
       .descriptor = std::move(owned_descriptor) };
     descriptor_to_resource_[index] = new_res_obj;
 
@@ -202,7 +235,201 @@ public:
       .view_description = std::any(desc) };
     const CacheKey new_cache_key { .resource = new_res_obj, .hash = key_hash };
     view_cache_[new_cache_key] = std::move(cache_entry);
+    // Remove any cache entry for the old view object (previous owner)
+    if (old_view_obj.IsValid()) {
+      std::erase_if(view_cache_, [&](const auto& it) {
+        return it.first.resource == old_res_obj
+          && it.second.view_object == old_view_obj;
+      });
+    }
     return true;
+  }
+
+  //! Replace a registered resource with standardized semantics.
+  /*!
+   Two explicit modes are supported:
+
+   1) Updater provided (recreate-in-place):
+      - For each descriptor of `old_resource`, call `update_fn` with the
+        previous `ViewDescriptionT`.
+      - If `update_fn` returns a description and creating the view for
+        `new_resource` succeeds, the view is recreated in-place at the same
+        bindless index (stable handle retained).
+      - If `update_fn` returns `std::nullopt` or view creation fails, that
+        descriptor handle is released (freed) and not transferred.
+
+   2) No updater (nullptr):
+      - No descriptors are transferred. All views/handles of `old_resource`
+        are unregistered and released. `new_resource` remains registered but
+        owns no descriptors.
+
+   Consequences:
+   - Stable handles are guaranteed only for successfully recreated views.
+   - Null-updater path performs a clean release; no dangling entries exist in
+     the registry, and no follow-up UpdateView calls are expected to succeed
+     for the old indices.
+
+   @tparam Resource A resource type that satisfies ResourceWithViews.
+   @tparam ViewUpdater Callable conforming to
+   `detail::ViewUpdaterCallable<Resource, ViewUpdater>`. Use
+   `std::nullptr_t` to select the release-all mode.
+
+   @param old_resource The currently registered resource being replaced.
+   @param new_resource The new resource to register; may receive recreated
+          views when the updater is provided and succeeds.
+   @param update_fn Per-descriptor policy; given the previous
+          `ViewDescriptionT`, returns an optional next description.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(N) for N descriptors of the resource.
+   - Memory: O(N) transient for snapshotting indices; no heap growth in the
+     registry beyond the new resource entry.
+   - Optimization: Avoids descriptor re-allocation for recreated views and
+     ensures immediate cleanup for released ones.
+
+   ### Usage Example
+
+   ```cpp
+   // Recreate in-place (keep handles for successful updates)
+   registry.Replace(old_buf, new_buf,
+     [](const Buffer::ViewDescriptionT& prev) -> std::optional<auto> {
+       auto next = prev; // adjust as needed
+       return next;
+     });
+
+   // Release-all (no transfers)
+   registry.Replace(old_buf, new_buf, nullptr);
+   ```
+
+   @throw std::runtime_error if `old_resource` is not registered.
+   @see UpdateView
+  */
+  template <ResourceWithViews Resource, typename ViewUpdater = std::nullptr_t>
+    requires detail::ViewUpdaterCallable<Resource, ViewUpdater>
+  auto Replace(const Resource& old_resource,
+    std::shared_ptr<Resource> new_resource, ViewUpdater&& update_fn) -> void
+  {
+    // Perfect-forward the updater callable (or nullptr) to a local so that we
+    // do not have that linter warning about it not being forwarded or moved.
+    const auto& updater = std::forward<ViewUpdater>(update_fn);
+
+    std::lock_guard lock(registry_mutex_);
+
+    const NativeObject old_obj { const_cast<Resource*>(&old_resource),
+      Resource::ClassTypeId() };
+    const auto old_it = resources_.find(old_obj);
+    if (old_it == resources_.end()) {
+      throw std::runtime_error(
+        "ResourceRegistry::Replace: old resource not registered");
+    }
+
+    DLOG_SCOPE_FUNCTION(2);
+
+    const NativeObject new_obj { new_resource.get(), Resource::ClassTypeId() };
+    auto new_it = resources_.find(new_obj);
+    if (new_it == resources_.end()) {
+      // Inline registration to avoid re-entrant lock in Register().
+      ResourceEntry new_entry { .resource
+        = std::static_pointer_cast<void>(new_resource),
+        .descriptors = {} };
+      resources_.emplace(new_obj, std::move(new_entry));
+      new_it = resources_.find(new_obj);
+    }
+    DLOG_F(2, "replaced resource {} with {}", old_obj, new_obj);
+
+    // No updater => release all views/handles of the old resource.
+    if constexpr (std::is_same_v<std::decay_t<ViewUpdater>, std::nullptr_t>) {
+      // Release all descriptors and associated cache entries for old_resource.
+      UnRegisterResourceViewsNoLock(old_obj);
+      // Remove the old resource entry and purge any remaining cached views.
+      resources_.erase(old_it);
+      PurgeCachedViewsForResource(old_obj);
+      return;
+    }
+    // Updater provided => attempt to recreate views in-place.
+    else {
+      // Snapshot indices before we mutate the map to preserve iteration
+      // guarantees while moving entries between maps.
+      std::vector<bindless::Handle> indices
+        = CollectDescriptorIndicesForResource(old_obj);
+
+      // Helper to find cached description for a given view object.
+      const auto find_desc_any
+        = [&](const NativeObject& view_obj) -> std::optional<std::any> {
+        for (const auto& [key, entry] : view_cache_) {
+          if (key.resource == old_obj && entry.view_object == view_obj) {
+            return entry.view_description;
+          }
+        }
+        return std::nullopt;
+      };
+
+      for (const auto index : indices) {
+        auto ve_it = old_it->second.descriptors.find(index);
+        if (ve_it == old_it->second.descriptors.end()) {
+          continue;
+        }
+
+        DescriptorHandle owned_descriptor = std::move(ve_it->second.descriptor);
+        const NativeObject view_obj = ve_it->second.view_object;
+
+        DLOG_F(2, "replacing view: {}. {}", view_obj, owned_descriptor);
+
+        old_it->second.descriptors.erase(ve_it);
+        // Clear any owner mapping for this index; it will be re-added if we
+        // successfully recreate the view for the new resource.
+        descriptor_to_resource_.erase(index);
+
+        bool recreated = false;
+        // Apply updater policy: if it yields a new description and view
+        // creation succeeds, recreate in place; otherwise, release the handle.
+        try {
+          auto desc_any = find_desc_any(view_obj);
+          DCHECK_F(desc_any.has_value());
+          const auto& typed_desc
+            = std::any_cast<const typename Resource::ViewDescriptionT&>(
+              desc_any.value());
+          if (auto next_desc = updater(typed_desc); next_desc.has_value()) {
+            auto new_view
+              = new_resource->GetNativeView(owned_descriptor, *next_desc);
+            if (new_view.IsValid()) {
+              const auto key_hash = std::hash<
+                std::remove_cvref_t<typename Resource::ViewDescriptionT>> {}(
+                *next_desc);
+              AttachDescriptorWithView(new_obj, index,
+                std::move(owned_descriptor), new_view, std::any(*next_desc),
+                key_hash);
+              recreated = true;
+            } else {
+              DLOG_F(WARNING,
+                "-discarded- could not create native view with new "
+                "description");
+            }
+          } else {
+            DLOG_F(WARNING, "-discarded- updater returned no description");
+          }
+        } catch (std::exception& ex) {
+          // Swallow and fall through to unified release below.
+          DLOG_F(WARNING, "-discarded- with exception: {}", ex.what());
+          (void)0;
+        } catch (...) {
+          // Swallow and fall through to unified release below.
+          DLOG_F(WARNING, "-discarded- with unknown exception");
+          (void)0;
+        }
+
+        if (!recreated && owned_descriptor.IsValid()) {
+          // Ensure the temporary descriptor is not leaked; bindless index is
+          // free.
+          owned_descriptor.Release();
+        }
+      }
+    }
+
+    // Remove the old resource entry and purge its cached views.
+    resources_.erase(old_it);
+    PurgeCachedViewsForResource(old_obj);
   }
 
   template <ResourceWithViews Resource>
@@ -273,19 +500,29 @@ private:
 
   auto UnRegisterViewNoLock(
     const NativeObject& resource, const NativeObject& view) -> void;
-  auto UnRegisterResourceViewsNoLock(const NativeObject& resource) -> void;
+  OXGN_GFX_API auto UnRegisterResourceViewsNoLock(const NativeObject& resource)
+    -> void;
+
+  // Internal helpers (assume registry_mutex_ is held)
+  //! Remove all cached views for a resource. Assumes registry_mutex_ held.
+  OXGN_GFX_API auto PurgeCachedViewsForResource(const NativeObject& resource)
+    -> void;
+  //! Attach a descriptor and associate a native view and cache entry.
+  //! Assumes registry_mutex_ held.
+  OXGN_GFX_API auto AttachDescriptorWithView(const NativeObject& dst_resource,
+    bindless::Handle index, DescriptorHandle descriptor_handle,
+    const NativeObject& view, std::any description, std::size_t key_hash)
+    -> void;
+  //! Collect all descriptor indices owned by a resource. Assumes
+  //! registry_mutex_ held.
+  OXGN_GFX_NDAPI auto CollectDescriptorIndicesForResource(
+    const NativeObject& resource) const -> std::vector<bindless::Handle>;
 
   OXGN_GFX_NDAPI auto Contains(const NativeObject& resource) const -> bool;
   OXGN_GFX_NDAPI auto Contains(
     const NativeObject& resource, size_t key_hash) const -> bool;
 
   OXGN_GFX_NDAPI auto Find(const NativeObject& resource, size_t key_hash) const
-    -> NativeObject;
-
-  // TODO: consider deleting these methods as I cannot find a use case
-  [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const
-    -> NativeObject;
-  [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const
     -> NativeObject;
 
   // Thread safety
@@ -347,146 +584,3 @@ private:
 };
 
 } // namespace oxygen::graphics
-
-/*
-================================================================================
-Resource Replacement & View Update Design Notes
-================================================================================
-
-- When replacing a resource (e.g., resizing a texture), it is critical to keep
-  the shader-visible descriptor handle (bindless index) stable, even if the
-  underlying native resource object changes.
-
-- In D3D12/Vulkan/Metal, descriptors (views) are tightly bound to the native
-  resource object. Replacing the resource invalidates all existing views; they
-  must be recreated for the new resource at the same descriptor slot.
-
-- There are two main strategies for handling view updates:
-    1. The registry automatically recreates views in-place for the new resource.
-    2. The registry clears cached views and requires the resource owner to
-       explicitly recreate or discard them.
-
-- The second approach is safer and more flexible, especially when resource
-  compatibility is not guaranteed. It avoids accidental reuse of incompatible
-  views and gives the resource owner full control.
-
-- The best practice is for the registry to provide an Update or UpdateView
-  method that takes a function (callback). The registry iterates all cached
-  views for the replaced resource and invokes the callback for each view
-  description. The resource owner decides whether to recreate, update, or
-  discard each view.
-
-- The callback should have the signature:
-      NativeObject callback(const Resource::ViewDescriptionT& desc);
-  If the returned NativeObject is valid, the view is recreated in-place at the
-  same descriptor handle. If invalid, the view is discarded.
-
-- Use a template for the callback to ensure zero-overhead, type safety, and
-  flexibility. This is preferred over std::function for performance-critical
-  engine code.
-
-================================================================================
-*/
-
-//! Replace a registered resource with a new instance, updating or discarding
-//! views as directed by a callback.
-/*!
- This method enables resource replacement (e.g., resizing a texture) while
- keeping shader-visible descriptor handles stable. For each cached view of the
- old resource, the provided callback is invoked with the view description. The
- callback must return a NativeObject representing the new native view for the
- replacement resource, or an invalid NativeObject to indicate the view should be
- discarded.
-
- The callback signature must be:
-     NativeObject callback(const Resource::ViewDescriptionT& desc);
-
- \tparam Resource The resource type (must satisfy ResourceWithViews).
- \tparam Callback The callback type (must accept a const ViewDescriptionT& and
-         return NativeObject).
- \param old_resource The resource to be replaced (must be registered).
- \param new_resource The new resource instance (must be of the same type).
- \param update_view_fn The callback invoked for each view description.
- \throws std::runtime_error if the resource is not registered.
-
-    template <typename Resource, typename Fn>
-    concept ViewUpdateCallback =
-        requires(Fn&& fn, const typename Resource::ViewDescriptionT& desc) {
-            { fn(desc) } -> std::convertible_to<NativeObject>;
-        };
-
-    template <ResourceWithViews Resource, ViewUpdateCallback<Resource> Callback>
-    void Replace(
-        const Resource& resource,
-        std::shared_ptr<Resource> new_resource,
-        Callback&& update_fn = nullptr);
-*/
-
-/*
-================================================================================
-View Replacement & UpdateView Design Notes
-================================================================================
-
-- In modern graphics APIs, a descriptor handle (bindless index) refers to a
-  specific slot in a descriptor heap. The view object (e.g., SRV/RTV/UAV) at
-  that slot can be changed at runtime, allowing the shader to see a new view
-  without changing the index.
-
-- The UpdateView method enables replacing the native view object at a given
-  descriptor handle for a resource, while keeping the shader-visible index
-  stable. This is useful for hot-reloading, dynamic format/sub-resource changes,
-  or swapping views at runtime.
-
-- The new view does not need to be compatible with the old view; it can have a
-  different description, as long as the application logic ensures correctness.
-
-- This method is not for resource replacement (which invalidates all views), but
-  for updating a single view of an existing resource.
-
-- The registry updates the descriptor heap slot in-place and updates its cache
-  to point to the new view object.
-
---------------------------------------------------------------------------------
-Signatures:
-
-Update a registered view for a resource, replacing the old view with a new one
-at the same descriptor handle.
-
-This method finds the existing view (old_view) for the given resource and
-replaces it with new_view, keeping the same descriptor handle (bindless index)
-for shader access. The new view must be compatible with the existing view
-description (e.g., format, sub-resources, etc.), as the descriptor slot and view
-description are not changed—only the underlying native view object is replaced.
-This is useful for scenarios such as re-creating a view after device loss,
-resource reinitialization, or hot-reloading when the view semantics remain the
-same.
-
-    template <ResourceWithViews Resource>
-    void ReplaceView(
-        Resource& resource,
-        NativeObject old_view,
-        NativeObject new_view);
-
-Update a registered view for a resource, replacing the old view with a new one
-at the same descriptor handle.
-
-This method finds the existing view (old_view) for the given resource and
-replaces it with new_view, keeping the same descriptor handle (bindless index)
-for shader access. The new view can have a different description, as long as the
-application logic ensures correctness. This is useful for hot-reloading, dynamic
-format/sub-resource changes, or swapping views at runtime.
-
-    template <ResourceWithViews Resource>
-    bool ReplaceView(
-        Resource& resource,
-        NativeObject old_view,
-        NativeObject new_view,
-        const typename Resource::ViewDescriptionT& desc);
-
-    // - resource: The resource whose view is being updated or registered.
-    // - old_view: The native view object to be replaced (in-place update).
-    // - new_view: The new native view object to use.
-    // - desc: The new view description (for new descriptor handle).
-
-================================================================================
-*/

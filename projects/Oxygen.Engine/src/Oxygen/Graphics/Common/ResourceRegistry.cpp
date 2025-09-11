@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <ranges>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <ranges>
 
 using oxygen::graphics::ResourceRegistry;
 
@@ -64,7 +65,8 @@ ResourceRegistry::~ResourceRegistry() noexcept
   }
 }
 
-void ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
+auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
+  -> void
 {
   DCHECK_NOTNULL_F(resource, "Resource must not be null");
 
@@ -192,72 +194,15 @@ auto ResourceRegistry::Find(
   return {}; // Return invalid NativeObject
 }
 
-auto ResourceRegistry::Contains(const DescriptorHandle& descriptor) const
-  -> NativeObject
-{
-  std::lock_guard lock(registry_mutex_);
-
-  if (!descriptor.IsValid()) {
-    return {}; // Return invalid NativeObject
-  }
-
-  const auto index = descriptor.GetBindlessHandle();
-  // If we have a mapping for this descriptor, return the resource
-  if (const auto it = descriptor_to_resource_.find(index);
-    it != descriptor_to_resource_.end()) {
-    return it->second;
-  }
-
-  return {}; // Return invalid NativeObject
-}
-
-auto ResourceRegistry::Find(const DescriptorHandle& descriptor) const
-  -> NativeObject
-{
-  std::lock_guard lock(registry_mutex_);
-
-  if (!descriptor.IsValid()) {
-    return { 0ULL, kInvalidTypeId }; // Return invalid NativeObject
-  }
-
-  const auto index = descriptor.GetBindlessHandle();
-  const auto resource_it = descriptor_to_resource_.find(index);
-
-  if (resource_it == descriptor_to_resource_.end()) {
-    return { 0ULL, kInvalidTypeId }; // Return invalid NativeObject
-  }
-
-  const NativeObject& resource = resource_it->second;
-  const auto it = resources_.find(resource);
-  if (it == resources_.end()) {
-    // This shouldn't happen - inconsistent state
-    LOG_F(
-      ERROR, "Inconsistent state: descriptor points to non-existent resource");
-    return {}; // Return invalid NativeObject
-  }
-
-  // Look up the view entry
-  auto& descriptors = it->second.descriptors;
-  const auto view_it = descriptors.find(index);
-
-  if (view_it == descriptors.end()) {
-    // Again, shouldn't happen
-    LOG_F(ERROR, "Inconsistent state: descriptor not found in resource entry");
-    return {}; // Return invalid NativeObject
-  }
-
-  return view_it->second.view_object;
-}
-
-void ResourceRegistry::UnRegisterView(
-  const NativeObject& resource, const NativeObject& view)
+auto ResourceRegistry::UnRegisterView(
+  const NativeObject& resource, const NativeObject& view) -> void
 {
   std::lock_guard lock(registry_mutex_);
   UnRegisterViewNoLock(resource, view);
 }
 
-void ResourceRegistry::UnRegisterViewNoLock(
-  const NativeObject& resource, const NativeObject& view)
+auto ResourceRegistry::UnRegisterViewNoLock(
+  const NativeObject& resource, const NativeObject& view) -> void
 {
   LOG_SCOPE_F(3, "UnRegister view");
   DLOG_F(3, "resource: {}", nostd::to_string(resource));
@@ -295,7 +240,7 @@ void ResourceRegistry::UnRegisterViewNoLock(
     nostd::to_string(resource), nostd::to_string(view));
 }
 
-void ResourceRegistry::UnRegisterResource(const NativeObject& resource)
+auto ResourceRegistry::UnRegisterResource(const NativeObject& resource) -> void
 {
   std::lock_guard lock(registry_mutex_);
   const auto it = resources_.find(resource);
@@ -313,7 +258,8 @@ void ResourceRegistry::UnRegisterResource(const NativeObject& resource)
     3, "UnRegisterResource: resource {} removed", nostd::to_string(resource));
 }
 
-void ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
+auto ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
+  -> void
 {
   std::lock_guard lock(registry_mutex_);
 
@@ -323,8 +269,8 @@ void ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
 }
 
 // Private helper to avoid lock duplication
-void ResourceRegistry::UnRegisterResourceViewsNoLock(
-  const NativeObject& resource)
+auto ResourceRegistry::UnRegisterResourceViewsNoLock(
+  const NativeObject& resource) -> void
 {
   LOG_SCOPE_F(3, "UnRegister all views for resource");
   DLOG_F(3, "resource: {}", nostd::to_string(resource));
@@ -360,4 +306,51 @@ void ResourceRegistry::UnRegisterResourceViewsNoLock(
 
   // Clear descriptors map
   descriptors.clear();
+}
+
+//=== Internal helpers ----------------------------------------------------//
+
+auto ResourceRegistry::PurgeCachedViewsForResource(const NativeObject& resource)
+  -> void
+{
+  // Remove all relevant entries from view_cache_ in a single pass
+  std::erase_if(view_cache_, [&resource](const auto& cache_entry) {
+    return cache_entry.first.resource == resource;
+  });
+}
+
+auto ResourceRegistry::AttachDescriptorWithView(
+  const NativeObject& dst_resource, const bindless::Handle index,
+  DescriptorHandle descriptor_handle, const NativeObject& view,
+  std::any description, const std::size_t key_hash) -> void
+{
+  DCHECK_F(view.IsValid(), "invalid native view object");
+  const auto it = resources_.find(dst_resource);
+  DCHECK_F(it != resources_.end(), "destination resource not registered: {}",
+    nostd::to_string(dst_resource));
+  it->second.descriptors[index]
+    = ResourceEntry::ViewEntry { .view_object = view,
+        .descriptor = std::move(descriptor_handle) };
+  descriptor_to_resource_[index] = dst_resource;
+
+  // Update cache entry
+  ViewCacheEntry cache_entry { .view_object = view,
+    .view_description = std::move(description) };
+  const CacheKey new_cache_key { .resource = dst_resource, .hash = key_hash };
+  view_cache_[new_cache_key] = std::move(cache_entry);
+}
+
+auto ResourceRegistry::CollectDescriptorIndicesForResource(
+  const NativeObject& resource) const -> std::vector<bindless::Handle>
+{
+  const auto it = resources_.find(resource);
+  if (it == resources_.end()) {
+    return {};
+  }
+  std::vector<bindless::Handle> out;
+  out.reserve(it->second.descriptors.size());
+  for (const auto& idx : it->second.descriptors | std::views::keys) {
+    out.push_back(idx);
+  }
+  return out;
 }
