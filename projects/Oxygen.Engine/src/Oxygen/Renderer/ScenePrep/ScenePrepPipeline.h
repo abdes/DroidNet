@@ -105,6 +105,9 @@ public:
     if constexpr (FinalizationCfg::has_geometry_upload) {
       finalization_.geometry_upload(state);
     }
+    if constexpr (FinalizationCfg::has_transform_upload) {
+      finalization_.transform_upload(state);
+    }
   }
 
 private:

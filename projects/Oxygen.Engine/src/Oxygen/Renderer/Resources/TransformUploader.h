@@ -63,9 +63,6 @@ public:
   [[nodiscard]] auto GetDirtyIndices() const noexcept
     -> std::span<const std::uint32_t>;
 
-  //! Uploads all pending world and normal transform changes to GPU buffers.
-  OXGN_RNDR_API auto Upload() -> void;
-
   //! Ensures all transform GPU resources are prepared for the current frame.
   //! MUST be called after BeginFrame() and before any Get*SrvIndex() calls.
   //! Safe to call multiple times per frame - internally optimized.

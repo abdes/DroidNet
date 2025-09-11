@@ -105,7 +105,7 @@ public:
   }
 
   //! Get non-owning observer to transform manager (maybe nullptr).
-  constexpr auto GetTransformManager() const noexcept
+  constexpr auto GetTransformUploader() const noexcept
     -> observer_ptr<renderer::resources::TransformUploader>
   {
     return observer_ptr(transform_mgr_.get());

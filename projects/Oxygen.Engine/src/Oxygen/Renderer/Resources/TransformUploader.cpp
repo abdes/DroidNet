@@ -465,17 +465,6 @@ auto TransformUploader::UploadNormalMatrices() -> void
   }
 }
 
-auto TransformUploader::Upload() -> void
-{
-  if (uploaded_) {
-    return; // already uploaded this frame
-  }
-
-  UploadWorldMatrices();
-  UploadNormalMatrices();
-  uploaded_ = true;
-}
-
 auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(gpu_normals_buffer_,
@@ -492,11 +481,18 @@ auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 
 auto TransformUploader::EnsureFrameResources() -> void
 {
+  if (uploaded_) {
+    return; // already uploaded this frame
+  }
+
   // Contract: BeginFrame() must have been called this frame
   DCHECK_F(current_epoch_ > 0U,
     "EnsureFrameResources() called before BeginFrame() - frame lifecycle "
     "violation");
-  Upload();
+
+  UploadWorldMatrices();
+  UploadNormalMatrices();
+  uploaded_ = true;
 }
 
 } // namespace oxygen::renderer::resources
