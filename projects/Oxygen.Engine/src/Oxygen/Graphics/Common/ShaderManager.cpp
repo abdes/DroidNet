@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderCompiler.h>
@@ -25,26 +26,9 @@ using oxygen::graphics::ShaderManager;
 
 namespace {
 
-// ReSharper disable once CppInconsistentNaming
-[[nodiscard]] auto FNV1aHash(const void* data, const size_t size) -> uint64_t
-{
-  constexpr uint64_t fnv_offset_basis = 0xcbf29ce484222325ULL;
-
-  const auto bytes = std::span(static_cast<const uint8_t*>(data), size);
-  uint64_t hash = fnv_offset_basis;
-
-  for (const auto byte : bytes) {
-    constexpr uint64_t fnv_prime = 0x100000001b3ULL;
-    hash ^= byte;
-    hash *= fnv_prime;
-  }
-
-  return hash;
-}
-
 auto CalculateShaderSourceHash(const std::u8string& shader_source) -> uint64_t
 {
-  return FNV1aHash(shader_source.data(), shader_source.size());
+  return oxygen::ComputeFNV1a64(shader_source.data(), shader_source.size());
 }
 
 auto ComputeSourceHash(const std::filesystem::path& source_path) -> uint64_t
