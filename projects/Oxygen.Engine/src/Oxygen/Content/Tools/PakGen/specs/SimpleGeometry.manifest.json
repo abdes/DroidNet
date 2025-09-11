@@ -1,0 +1,56 @@
+{
+  "counts": {
+    "assets_total": 2,
+    "geometries": 1,
+    "materials": 1,
+    "regions": 2,
+    "tables": 3
+  },
+  "deterministic": true,
+  "file_size": 2592,
+  "pak_crc32": 916802744,
+  "regions": [
+    {
+      "name": "texture",
+      "offset": 256,
+      "size": 4
+    },
+    {
+      "name": "buffer",
+      "offset": 512,
+      "size": 262
+    }
+  ],
+  "resource_index_map": {
+    "buffer": [
+      {
+        "index": 0,
+        "name": "default_empty_buffer"
+      },
+      {
+        "index": 1,
+        "name": "vertex_buffer"
+      },
+      {
+        "index": 2,
+        "name": "index_buffer"
+      }
+    ],
+    "texture": [
+      {
+        "index": 0,
+        "name": "default_texture"
+      }
+    ]
+  },
+  "sha256": "97437676ed11f9275073ea485327047c15f2417dc198329f6cb5d100a0246409",
+  "spec_hash": "16ae3d13ad4093f6c3820532caa2171a8417bd611d9c0bdc6fcfa41b9b8c59d2",
+  "version": 1,
+  "zero_length_resources": [
+    {
+      "index": 0,
+      "name": "default_empty_buffer",
+      "type": "buffer"
+    }
+  ]
+}

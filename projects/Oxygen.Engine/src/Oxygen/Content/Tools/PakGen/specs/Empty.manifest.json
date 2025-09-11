@@ -1,0 +1,16 @@
+{
+  "counts": {
+    "assets_total": 0,
+    "geometries": 0,
+    "materials": 0,
+    "regions": 0,
+    "tables": 3
+  },
+  "deterministic": true,
+  "file_size": 320,
+  "pak_crc32": 2758430786,
+  "regions": [],
+  "sha256": "f2496a0c61ffe007dd7167bb5211a9935a7ab42a0ebd9e92d1029e59b0278ee5",
+  "spec_hash": "483680201b844fa0c7feae7d0e4671bddf5f4c0b23b1088b58a17948da96a57c",
+  "version": 1
+}
