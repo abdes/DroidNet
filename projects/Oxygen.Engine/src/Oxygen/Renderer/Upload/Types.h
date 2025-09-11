@@ -34,32 +34,32 @@ namespace oxygen::engine::upload {
 
 //=== Types & strong aliases -------------------------------------------------//
 
-using Bytes = oxygen::NamedType<uint64_t, struct BytesTag,
+using Bytes = NamedType<uint64_t, struct BytesTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Arithmetic>; // clang-format on
+  DefaultInitialized,
+  Arithmetic>; // clang-format on
 
-using Alignment = oxygen::NamedType<uint32_t, struct AlignmentTag,
+using Alignment = NamedType<uint32_t, struct AlignmentTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable>; // clang-format on
+  DefaultInitialized,
+  Comparable,
+  Printable>; // clang-format on
 
-using TicketId = oxygen::NamedType<uint64_t, struct TicketIdTag,
+using TicketId = NamedType<uint64_t, struct TicketIdTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable,
-  oxygen::Hashable>; // clang-format on
+  DefaultInitialized,
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
 
-using Priority = oxygen::NamedType<int, struct PriorityTag,
+using Priority = NamedType<int, struct PriorityTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Comparable,
-  oxygen::Printable>; // clang-format on
+  DefaultInitialized,
+  Comparable,
+  Printable>; // clang-format on
 
 // FenceValue exists in graphics common; reuse to avoid duplication.
-using FenceValue = oxygen::graphics::FenceValue;
+using FenceValue = graphics::FenceValue;
 
 //=== POD contracts ----------------------------------------------------------//
 
@@ -87,17 +87,17 @@ enum class BatchPolicy : uint8_t {
 };
 
 struct UploadBufferDesc {
-  std::shared_ptr<oxygen::graphics::Buffer> dst;
+  std::shared_ptr<graphics::Buffer> dst;
   uint64_t size_bytes { 0 };
   uint64_t dst_offset { 0 };
 };
 
 struct UploadTextureDesc {
-  std::shared_ptr<oxygen::graphics::Texture> dst;
+  std::shared_ptr<graphics::Texture> dst;
   uint32_t width { 0 };
   uint32_t height { 0 };
   uint32_t depth { 1 };
-  oxygen::Format format { oxygen::Format::kUnknown };
+  Format format { Format::kUnknown };
 };
 
 struct UploadSubresource {
@@ -121,7 +121,7 @@ struct UploadRequest {
   std::string debug_name;
 
   std::variant<UploadBufferDesc, UploadTextureDesc> desc;
-  std::vector<UploadSubresource> subresources;
+  std::vector<UploadSubresource> subresources {};
 
   // Either a view or a producer; implementation will support both paths.
   std::variant<UploadDataView,
@@ -131,7 +131,7 @@ struct UploadRequest {
 
 struct UploadTicket {
   TicketId id { 0 };
-  FenceValue fence { oxygen::graphics::fence::kInvalidValue };
+  FenceValue fence { graphics::fence::kInvalidValue };
 };
 
 struct UploadResult {

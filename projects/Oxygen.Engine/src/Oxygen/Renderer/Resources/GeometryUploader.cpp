@@ -17,10 +17,10 @@
 #include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
+#include <Oxygen/Renderer/Resources/UploadHelpers.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace {
@@ -124,12 +124,33 @@ auto MakeGeometryKey(const oxygen::data::Mesh& mesh) noexcept -> std::uint64_t
   return reinterpret_cast<std::uintptr_t>(&mesh);
 }
 
+auto SelectBatchPolicy(const std::uint64_t size_bytes, const bool is_critical)
+  -> oxygen::engine::upload::BatchPolicy
+{
+  using oxygen::engine::upload::BatchPolicy;
+
+  // Critical geometry (e.g., immediately visible meshes) use immediate upload
+  if (is_critical) {
+    return BatchPolicy::kImmediate;
+  }
+
+  // Large geometry goes to background processing to avoid blocking
+  // Use a simple size threshold directly in the method
+  constexpr std::uint64_t large_geometry_threshold = 2ULL * 1024 * 1024; // 2MB
+  if (size_bytes >= large_geometry_threshold) {
+    return BatchPolicy::kBackground;
+  }
+
+  // Small to medium geometry uses coalescing for efficiency
+  return BatchPolicy::kCoalesce;
+}
+
 } // namespace
 
 namespace oxygen::renderer::resources {
 
 GeometryUploader::GeometryUploader(
-  Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader)
+  Graphics& gfx, const observer_ptr<engine::upload::UploadCoordinator> uploader)
   : gfx_(gfx)
   , uploader_(uploader)
 {
@@ -142,10 +163,12 @@ GeometryUploader::~GeometryUploader()
   auto& registry = gfx_.GetResourceRegistry();
 
   auto unregister_buffers = [&](auto& entry) {
-    if (entry.vertex_buffer)
-      registry.UnRegisterResource(*entry.vertex_buffer);
-    if (entry.index_buffer)
-      registry.UnRegisterResource(*entry.index_buffer);
+    if (entry.vertex_buffer) {
+      registry.UnRegisterResource<graphics::Buffer>(*entry.vertex_buffer);
+    }
+    if (entry.index_buffer) {
+      registry.UnRegisterResource<graphics::Buffer>(*entry.index_buffer);
+    }
   };
 
   std::ranges::for_each(geometry_entries_, unregister_buffers);
@@ -161,13 +184,9 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh)
   return GetOrAllocate(mesh, false); // Default to non-critical
 }
 
-auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
-  -> engine::sceneprep::GeometryHandle
+auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh,
+  const bool is_critical) -> engine::sceneprep::GeometryHandle
 {
-  static constexpr engine::sceneprep::GeometryHandle kInvalidHandle {
-    kInvalidBindlessIndex
-  };
-
   LOG_SCOPE_FUNCTION(2);
 
   LOG_F(2, "mesh name     = {}", mesh.GetName());
@@ -183,7 +202,7 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh, bool is_critical)
     return engine::sceneprep::GeometryHandle { kInvalidBindlessIndex };
   }
 
-  const auto key = ::MakeGeometryKey(mesh);
+  const auto key = MakeGeometryKey(mesh);
   LOG_F(2, "mesh key     = {}", key);
   if (const auto it = mesh_to_handle_.find(key); it != mesh_to_handle_.end()) {
     const auto h = it->second;
@@ -244,6 +263,7 @@ auto GeometryUploader::Update(
   if (!ValidateMesh(mesh, error_msg)) {
     LOG_F(ERROR, "GeometryUploader::Update failed: {}", error_msg);
     DCHECK_F(false, "Update received invalid mesh: {}", error_msg);
+    // ReSharper disable once CppUnreachableCode
     return; // Don't update with invalid data
   }
 
@@ -290,73 +310,14 @@ auto GeometryUploader::IsValidHandle(
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto GeometryUploader::EnsureBufferAndSrv(
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  std::uint64_t size_bytes, std::uint32_t stride,
+  const std::uint64_t size_bytes, const std::uint32_t stride,
   const std::string& debug_label) -> bool
 {
-  if (buffer && buffer->GetSize() >= size_bytes) {
-    return true;
-  }
-
-  DLOG_SCOPE_F(2, fmt::format("EnsureBufferAndSrv: '{}'", debug_label).c_str());
-  DLOG_F(2, "requested size  : {} bytes", size_bytes);
-  DLOG_F(2, "stride          : {} bytes", stride);
-  DLOG_F(2, "existing buffer : {}{}", buffer ? "yes" : "no",
-    buffer ? fmt::format(" ({})", buffer->GetSize()) : "");
-
-  graphics::BufferDesc desc;
-  desc.size_bytes = size_bytes;
-  desc.usage = graphics::BufferUsage::kStorage;
-  desc.memory = graphics::BufferMemory::kDeviceLocal;
-  desc.debug_name = debug_label;
-
-  std::shared_ptr<graphics::Buffer> new_buffer;
-  try {
-    new_buffer = gfx_.CreateBuffer(desc);
-    if (!new_buffer) {
-      LOG_F(ERROR, "-failed- to create new buffer resource");
-      return false;
-    }
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "-failed- to create new buffer resource with exception: {}",
-      e.what());
-    return false;
-  }
-  DLOG_F(2, "new buffer resource created");
-
-  graphics::BufferViewDescription view_desc;
-  view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  view_desc.range = { 0, size_bytes };
-  view_desc.stride = stride;
-
-  graphics::DescriptorHandle new_view_handle {};
-  auto new_bindless_index = kInvalidShaderVisibleIndex;
-  try {
-    auto& allocator = gfx_.GetDescriptorAllocator();
-    new_view_handle
-      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    new_bindless_index = allocator.GetShaderVisibleIndex(new_view_handle);
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "-failed- to allocate SRV with exception: {}", e.what());
-    new_buffer.reset();
-    return false;
-  }
-  DLOG_F(2, "new buffer SRV assigned to heap index {}", new_bindless_index);
-
-  auto& registry = gfx_.GetResourceRegistry();
-  if (buffer) {
-    // Unregister old buffer with all its views
-    registry.UnRegisterResource(*buffer);
-    DLOG_F(2, "old buffer and SRV unregistered");
-  }
-  registry.Register(new_buffer);
-  registry.RegisterView(*new_buffer, std::move(new_view_handle), view_desc);
-  DLOG_F(2, "new buffer and SRV registered");
-  buffer = std::move(new_buffer);
-  bindless_index = new_bindless_index;
-
-  return true;
+  // Delegate to the shared helper to ensure consistent ordering and error
+  // handling across uploaders. This preserves existing behavior but centralizes
+  // buffer + SRV creation logic.
+  return internal::EnsureBufferAndSrv(
+    gfx_, buffer, bindless_index, size_bytes, stride, debug_label);
 }
 
 auto GeometryUploader::EnsureFrameResources() -> void
@@ -440,7 +401,7 @@ auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry)
   const auto& vertices = dirty_entry.mesh->Vertices();
   DCHECK_F(!vertices.empty()); // should not have passed through validation
   const uint64_t buffer_size = vertices.size() * sizeof(data::Vertex);
-  const auto stride = sizeof(data::Vertex);
+  constexpr auto stride = sizeof(data::Vertex);
   DCHECK_EQ_F(buffer_size % stride, 0);
 
   DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
@@ -521,7 +482,10 @@ auto GeometryUploader::GetShaderVisibleIndices(
     "Invalid geometry handle {} (out of range, max={})", handle.get(),
     geometry_entries_.size());
   const auto& entry = geometry_entries_[idx];
-  return { entry.vertex_srv_index, entry.index_srv_index };
+  return {
+    .vertex_srv_index = entry.vertex_srv_index,
+    .index_srv_index = entry.index_srv_index,
+  };
 }
 
 auto GeometryUploader::RetireCompletedUploads() -> void
@@ -536,8 +500,8 @@ auto GeometryUploader::RetireCompletedUploads() -> void
 
   // Use std::remove_if (from <algorithm>) to partition completed tickets and
   // then erase the tail. We must also accumulate counts in the predicate.
-  auto pred = [this, &completed_count, &error_count](
-                const engine::upload::UploadTicket& ticket) {
+  auto predicate = [this, &completed_count, &error_count](
+                     const engine::upload::UploadTicket& ticket) {
     if (!uploader_->IsComplete(ticket)) {
       return false; // keep
     }
@@ -559,8 +523,8 @@ auto GeometryUploader::RetireCompletedUploads() -> void
     return true; // remove this ticket
   };
 
-  auto remove_it = std::remove_if(
-    pending_upload_tickets_.begin(), pending_upload_tickets_.end(), pred);
+  const auto remove_it
+    = std::ranges::remove_if(pending_upload_tickets_, predicate).begin();
 
   if (remove_it != pending_upload_tickets_.end()) {
     pending_upload_tickets_.erase(remove_it, pending_upload_tickets_.end());
@@ -573,25 +537,6 @@ auto GeometryUploader::RetireCompletedUploads() -> void
         completed_count);
     }
   }
-}
-
-auto GeometryUploader::SelectBatchPolicy(std::uint64_t size_bytes,
-  bool is_critical) const -> engine::upload::BatchPolicy
-{
-  // Critical geometry (e.g., immediately visible meshes) use immediate upload
-  if (is_critical) {
-    return engine::upload::BatchPolicy::kImmediate;
-  }
-
-  // Large geometry goes to background processing to avoid blocking
-  // Use a simple size threshold directly in the method
-  constexpr std::uint64_t large_geometry_threshold = 2ULL * 1024 * 1024; // 2MB
-  if (size_bytes >= large_geometry_threshold) {
-    return engine::upload::BatchPolicy::kBackground;
-  }
-
-  // Small to medium geometry uses coalescing for efficiency
-  return engine::upload::BatchPolicy::kCoalesce;
 }
 
 } // namespace oxygen::renderer::resources

@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -508,18 +509,10 @@ auto Renderer::BuildSortingAndPartitions() -> void
     });
   }
   const auto t_sort_begin = std::chrono::high_resolution_clock::now();
-  auto ComputeFNV1a64 = [](const void* data, size_t size_bytes) -> uint64_t {
-    uint64_t h = 1469598103934665603ULL; // offset
-    constexpr uint64_t prime = 1099511628211ULL;
-    const auto* p = static_cast<const unsigned char*>(data);
-    for (size_t i = 0; i < size_bytes; ++i) {
-      h ^= static_cast<uint64_t>(p[i]);
-      h *= prime;
-    }
-    return h;
-  };
-  const auto pre_sort_hash = ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
-    sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
+
+  const auto pre_sort_hash
+    = oxygen::ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
+      sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
   const size_t draw_count = draw_metadata_cpu_soa_.size();
   std::vector<uint32_t> permutation(draw_count);
   for (uint32_t i = 0; i < draw_count; ++i) {
@@ -553,8 +546,9 @@ auto Renderer::BuildSortingAndPartitions() -> void
   }
   draw_metadata_cpu_soa_.swap(reordered_dm);
   sorting_keys_cpu_soa_.swap(reordered_keys);
-  const auto post_sort_hash = ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
-    sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
+  const auto post_sort_hash
+    = oxygen::ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
+      sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
   last_draw_order_hash_ = post_sort_hash;
   partitions_cpu_soa_.clear();
   if (!draw_metadata_cpu_soa_.empty()) {

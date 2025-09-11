@@ -190,11 +190,6 @@ private:
   //! Clean up completed upload tickets
   auto RetireCompletedUploads() -> void;
 
-  //! Determine optimal batch policy for geometry upload based on size and
-  //! priority
-  [[nodiscard]] auto SelectBatchPolicy(std::uint64_t size_bytes,
-    bool is_critical) const -> engine::upload::BatchPolicy;
-
   Epoch current_epoch_ { 1 }; // 0 reserved for 'never'
 
   using MeshKey = std::uint64_t; // Simple hash key for deduplication

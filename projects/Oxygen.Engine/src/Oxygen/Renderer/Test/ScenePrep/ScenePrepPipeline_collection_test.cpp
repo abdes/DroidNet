@@ -12,6 +12,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
+#include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -153,8 +154,10 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
+  auto final_cfg = CreateStandardFinalizationConfig();
   std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
@@ -192,8 +195,10 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
+  auto final_cfg = CreateStandardFinalizationConfig();
   std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
@@ -235,8 +240,10 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
+  auto final_cfg = CreateStandardFinalizationConfig();
   std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
@@ -280,8 +287,10 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .visibility_filter = vis,
     .producer = prod,
   };
+  auto final_cfg = CreateStandardFinalizationConfig();
   std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT>>(cfg);
+    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
 
