@@ -438,17 +438,11 @@ auto Renderer::GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
       DrawMetadata dm {};
 
       // Get actual SRV indices for GPU access
-      ShaderVisibleIndex vertex_srv_index { kInvalidShaderVisibleIndex };
-      ShaderVisibleIndex index_srv_index { kInvalidShaderVisibleIndex };
-      if (lod_mesh_ptr && lod_mesh_ptr->IsValid()) {
-        const auto geometry = scene_prep_state_->GetGeometryUploader();
-        const auto mesh_handle = geometry->GetOrAllocate(*lod_mesh_ptr);
-        if (geometry->IsValidHandle(mesh_handle)) {
-          // Get the actual SRV indices for GPU access
-          vertex_srv_index = geometry->GetVertexSrvIndex(mesh_handle);
-          index_srv_index = geometry->GetIndexSrvIndex(mesh_handle);
-        }
-      }
+      const auto geometry = scene_prep_state_->GetGeometryUploader();
+      const auto mesh_handle = geometry->GetOrAllocate(*lod_mesh_ptr);
+      // Get the actual SRV indices for GPU access using structured bindings
+      auto [vertex_srv_index, index_srv_index]
+        = geometry->GetShaderVisibleIndices(mesh_handle);
 
       dm.vertex_buffer_index = vertex_srv_index;
       dm.index_buffer_index = index_srv_index;
