@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <expected>
 #include <memory>
 
 #include <Oxygen/Core/Types/BindlessHandle.h>
@@ -20,9 +21,16 @@ namespace graphics {
 
 namespace oxygen::renderer::resources::internal {
 
+//! Result of EnsureBufferAndSrv when it succeeds.
+enum class EnsureBufferResult {
+  kUnchanged, //!< existing buffer already large enough
+  kCreated, //!< buffer was created new (no previous buffer)
+  kResized //!< an existing buffer was replaced with a larger one
+};
+
 OXGN_RNDR_API auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
   std::uint64_t size_bytes, std::uint32_t stride, std::string_view debug_label)
-  -> bool;
+  -> std::expected<EnsureBufferResult, std::error_code>;
 
 } // namespace oxygen::renderer::resources::internal

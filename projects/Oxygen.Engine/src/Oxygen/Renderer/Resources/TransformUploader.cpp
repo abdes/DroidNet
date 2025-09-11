@@ -100,8 +100,20 @@ TransformUploader::TransformUploader(
 TransformUploader::~TransformUploader()
 {
   // Best-effort cleanup: unregister our GPU buffers from the registry so they
-  // don't linger until registry destruction.
+  // don't linger until registry destruction. Also emit collected statistics.
   auto& registry = gfx_.GetResourceRegistry();
+  // Log statistics before releasing GPU resources
+  const auto total_transforms = transforms_.size();
+  const auto current_world_buffer_size
+    = gpu_world_buffer_ ? gpu_world_buffer_->GetSize() : 0ULL;
+  LOG_F(INFO,
+    "TransformUploader stats: total_transforms={}, world_buffer_size_bytes={}, "
+    "total_get_calls={}, total_allocations={}, transform_reuse_count={}, "
+    "transforms_buffer_recreate_count={}",
+    total_transforms, current_world_buffer_size, total_get_calls_,
+    total_allocations_, transform_reuse_count_,
+    transforms_buffer_recreate_count_);
+
   if (gpu_world_buffer_) {
     registry.UnRegisterResource(*gpu_world_buffer_);
     gpu_world_buffer_.reset();
@@ -117,6 +129,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
 {
   DCHECK_F(
     IsFinite(transform), "GetOrAllocate received non-finite matrix values");
+  ++total_get_calls_;
   const auto key = MakeTransformKey(transform);
   if (const auto it = transform_key_to_handle_.find(key);
     it != transform_key_to_handle_.end()) {
@@ -124,7 +137,9 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     const auto idx = static_cast<std::size_t>(h.get());
     if (idx < transforms_.size()
       && MatrixAlmostEqual(transforms_[idx], transform)) {
-      return h; // accept near-equal matrices
+      // accept near-equal matrices -> cache hit
+      ++transform_reuse_count_;
+      return h;
     }
   }
   // Not found or collision mismatch: allocate new handle
@@ -139,6 +154,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     next_handle_
       = engine::sceneprep::TransformHandle { next_handle_.get() + 1U };
   }
+  ++total_allocations_;
   const auto idx = static_cast<std::size_t>(handle.get());
   if (transforms_.size() <= idx) {
     transforms_.resize(idx + 1U);
@@ -283,15 +299,6 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   return n;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto TransformUploader::EnsureBufferAndSrv(
-  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  const std::uint64_t size_bytes, const char* debug_label) -> bool
-{
-  return internal::EnsureBufferAndSrv(gfx_, buffer, bindless_index, size_bytes,
-    sizeof(glm::mat4), std::string_view(debug_label));
-}
-
 auto TransformUploader::Release(engine::sceneprep::TransformHandle handle)
   -> void
 {
@@ -378,8 +385,21 @@ auto TransformUploader::UploadWorldMatrices() -> void
 
   // Create or resize the device-local buffer when needed (DRY helper)
   const auto prev_world_index = worlds_bindless_index_;
-  const bool need_recreate = EnsureBufferAndSrv(
-    gpu_world_buffer_, worlds_bindless_index_, buffer_size, "WorldTransforms");
+  const auto result = internal::EnsureBufferAndSrv(gfx_, gpu_world_buffer_,
+    worlds_bindless_index_, buffer_size, sizeof(glm::mat4), "WorldTransforms");
+  if (!result) {
+    // bail out, logging is done in helper
+    return;
+  }
+  const auto need_recreate = result.transform([](const auto& res) {
+    return res != internal::EnsureBufferResult::kUnchanged;
+  });
+
+  // Count a recreate only when EnsureBufferAndSrv reports it and there was a
+  // previously assigned bindless index (i.e. not the initial creation).
+  if (need_recreate && prev_world_index != kInvalidShaderVisibleIndex) {
+    ++transforms_buffer_recreate_count_;
+  }
 
   // Stability check: once assigned, the bindless index should remain stable
   // across frames. Skip the check when we recreated the buffer/SRV.
@@ -428,8 +448,16 @@ auto TransformUploader::UploadNormalMatrices() -> void
   }
 
   const auto prev_normal_index = normals_bindless_index_;
-  const bool need_recreate = EnsureBufferAndSrv(gpu_normals_buffer_,
-    normals_bindless_index_, buffer_size, "NormalMatrices");
+  const auto result = internal::EnsureBufferAndSrv(gfx_, gpu_normals_buffer_,
+    normals_bindless_index_, buffer_size, sizeof(glm::mat4),
+    "NormalTransforms");
+  if (!result) {
+    // bail out, logging is done in helper
+    return;
+  }
+  const auto need_recreate = result.transform([](const auto& res) {
+    return res != internal::EnsureBufferResult::kUnchanged;
+  });
 
   if (!need_recreate && prev_normal_index != kInvalidShaderVisibleIndex) {
     DCHECK_F(normals_bindless_index_ == prev_normal_index,
