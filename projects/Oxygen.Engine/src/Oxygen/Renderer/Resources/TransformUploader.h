@@ -32,13 +32,17 @@ public:
          backend is stable. When it is no longer stable, the Renderer is
          responsible for destroying and re-creating the TransformUploader.
   */
-  OXGN_RNDR_API TransformUploader(Graphics& graphics,
-    observer_ptr<engine::upload::UploadCoordinator> uploader);
+  OXGN_RNDR_API TransformUploader(
+    Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader);
 
   OXYGEN_MAKE_NON_COPYABLE(TransformUploader)
   OXYGEN_MAKE_NON_MOVABLE(TransformUploader)
 
   OXGN_RNDR_API ~TransformUploader();
+
+  //! Release a previously allocated transform handle. After release the
+  //! handle may be reused by future allocations.
+  auto Release(engine::sceneprep::TransformHandle handle) -> void;
 
   auto OnFrameStart() -> void;
 
@@ -96,6 +100,11 @@ private:
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
     transform_key_to_handle_;
+  // Free-list of released handle indices for reuse.
+  std::vector<std::uint32_t> free_handles_;
+  // Reverse mapping from index -> key to allow O(1) removal during Release().
+  // Uses std::numeric_limits<uint64_t>::max() as sentinel for 'no key'.
+  std::vector<std::uint64_t> index_to_key_;
   std::vector<glm::mat4> transforms_;
   std::vector<glm::mat4> normal_matrices_;
   std::vector<std::uint32_t> world_versions_;

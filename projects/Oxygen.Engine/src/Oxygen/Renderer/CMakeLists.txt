@@ -83,6 +83,8 @@ set(
   "Resources/MaterialBinder.h"
   "Resources/TransformUploader.cpp"
   "Resources/TransformUploader.h"
+  "Resources/UploadHelpers.cpp"
+  "Resources/UploadHelpers.h"
   "ScenePrep/Concepts.h"
   "ScenePrep/Extractors.h"
   "ScenePrep/Finalizers.h"

@@ -6,19 +6,21 @@
 
 #include <algorithm>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <unordered_map>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
+#include <Oxygen/Renderer/Resources/UploadHelpers.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 #include <cmath>
@@ -39,17 +41,49 @@ namespace {
 }
 
 // Quantized key helper
+// Quantize the upper-left 3x4 of the transform and compute a stable 64-bit
+// hash. This reduces sensitivity to tiny floating point noise while still
+// hashing the meaningful components (rotation, scale, shear, translation).
 auto MakeTransformKey(const glm::mat4& m) noexcept -> std::uint64_t
 {
+  // Quantize the first 3 rows of each column into 12 ints.
   constexpr float scale = 1024.0f;
-  auto q = [&](float v) -> std::int32_t {
-    return static_cast<std::int32_t>(std::lround(v * scale));
-  };
-  std::uint64_t a = static_cast<std::uint32_t>(q(m[0][0]) & 0xFFFF);
-  std::uint64_t b = static_cast<std::uint32_t>(q(m[1][1]) & 0xFFFF);
-  std::uint64_t c = static_cast<std::uint32_t>(q(m[2][2]) & 0xFFFF);
-  std::uint64_t d = static_cast<std::uint32_t>(q(m[3][3]) & 0xFFFF);
-  return (a) | (b << 16) | (c << 32) | (d << 48);
+  std::array<std::int32_t, 12> quantized;
+
+  auto quantized_view = std::views::iota(0, 4) // columns
+    | std::views::transform([&](const int c) {
+        return std::views::iota(0, 3) | std::views::transform([&](const int r) {
+          return static_cast<std::int32_t>(std::lround(m[c][r] * scale));
+        });
+      })
+    | std::views::join;
+
+  std::ranges::copy(quantized_view, quantized.begin());
+
+  return oxygen::ComputeFNV1a64(quantized.data(), sizeof(quantized));
+}
+
+// Element-wise almost-equality for matrices. Uses absolute + relative
+// tolerance to be robust across scales.
+auto MatrixAlmostEqual(const glm::mat4& a, const glm::mat4& b,
+  const float eps = 1e-5f) noexcept -> bool
+{
+  for (int c = 0; c < 4; ++c) {
+    for (int r = 0; r < 4; ++r) {
+      const float av = a[c][r];
+      const float bv = b[c][r];
+      const float diff = std::fabs(av - bv);
+      if (diff <= eps) {
+        continue;
+      }
+      const float max_abs = std::max(std::fabs(av), std::fabs(bv));
+      if (diff <= eps * std::max(1.0f, max_abs)) {
+        continue;
+      }
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace
@@ -57,7 +91,7 @@ auto MakeTransformKey(const glm::mat4& m) noexcept -> std::uint64_t
 namespace oxygen::renderer::resources {
 
 TransformUploader::TransformUploader(
-  Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader)
+  Graphics& gfx, const observer_ptr<engine::upload::UploadCoordinator> uploader)
   : gfx_(gfx)
   , uploader_(uploader)
 {
@@ -88,12 +122,23 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     it != transform_key_to_handle_.end()) {
     const auto h = it->second;
     const auto idx = static_cast<std::size_t>(h.get());
-    if (idx < transforms_.size() && transforms_[idx] == transform) {
-      return h; // exact match
+    if (idx < transforms_.size()
+      && MatrixAlmostEqual(transforms_[idx], transform)) {
+      return h; // accept near-equal matrices
     }
   }
   // Not found or collision mismatch: allocate new handle
-  const auto handle = next_handle_;
+  // Prefer reuse from free list when available
+  engine::sceneprep::TransformHandle handle;
+  if (!free_handles_.empty()) {
+    const auto idx = free_handles_.back();
+    free_handles_.pop_back();
+    handle = engine::sceneprep::TransformHandle { idx };
+  } else {
+    handle = next_handle_;
+    next_handle_
+      = engine::sceneprep::TransformHandle { next_handle_.get() + 1U };
+  }
   const auto idx = static_cast<std::size_t>(handle.get());
   if (transforms_.size() <= idx) {
     transforms_.resize(idx + 1U);
@@ -101,6 +146,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     world_versions_.resize(idx + 1U);
     normal_versions_.resize(idx + 1U);
     dirty_epoch_.resize(idx + 1U);
+    index_to_key_.resize(idx + 1U, std::numeric_limits<std::uint64_t>::max());
   }
   transforms_[idx] = transform;
   // Compute normal matrix (inverse transpose upper-left 3x3) lazily here.
@@ -113,7 +159,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
   }
   transform_key_to_handle_[key] = handle;
-  next_handle_ = engine::sceneprep::TransformHandle { handle.get() + 1U };
+  index_to_key_[idx] = key;
 
   return handle;
 }
@@ -197,7 +243,8 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
     - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
 
   // Guard against singular matrices; fall back to identity normal matrix.
-  if (det == 0.0f || !std::isfinite(det)) {
+  constexpr float kDetEps = 1e-12f;
+  if (!std::isfinite(det) || std::fabs(det) <= kDetEps) {
     return glm::mat4 { 1.0f };
   }
   const float inv_det = 1.0f / det;
@@ -239,44 +286,42 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto TransformUploader::EnsureBufferAndSrv(
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  std::uint64_t size_bytes, const char* debug_label) -> bool
+  const std::uint64_t size_bytes, const char* debug_label) -> bool
 {
-  bool recreated = false;
-  if (!buffer || buffer->GetSize() < size_bytes) {
-    graphics::BufferDesc desc;
-    desc.size_bytes = size_bytes;
-    desc.usage = graphics::BufferUsage::kStorage;
-    desc.memory = graphics::BufferMemory::kDeviceLocal;
-    desc.debug_name = debug_label;
-    buffer = gfx_.CreateBuffer(desc);
+  return internal::EnsureBufferAndSrv(gfx_, buffer, bindless_index, size_bytes,
+    sizeof(glm::mat4), std::string_view(debug_label));
+}
 
-    auto& registry = gfx_.GetResourceRegistry();
-    auto& allocator = gfx_.GetDescriptorAllocator();
-    registry.Register(buffer);
-
-    graphics::BufferViewDescription view_desc;
-    view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-    view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    view_desc.range = { 0, size_bytes };
-    view_desc.stride = sizeof(glm::mat4);
-
-    auto handle
-      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    const auto index = allocator.GetShaderVisibleIndex(handle);
-    bindless_index = ShaderVisibleIndex(index.get());
-    registry.RegisterView(*buffer, std::move(handle), view_desc);
-
-    DLOG_F(1, "TransformUploader: {} SRV assigned to heap index {}",
-      debug_label, bindless_index);
-    recreated = true;
+auto TransformUploader::Release(engine::sceneprep::TransformHandle handle)
+  -> void
+{
+  const auto idx = static_cast<std::size_t>(handle.get());
+  if (idx >= transforms_.size()) {
+    DLOG_F(2, "TransformUploader::Release called with invalid handle {}", idx);
+    return;
   }
-  return recreated;
+  // O(1) removal: look up the key for this index and erase mapping.
+  if (idx < index_to_key_.size()) {
+    const auto key = index_to_key_[idx];
+    if (key != std::numeric_limits<std::uint64_t>::max()) {
+      transform_key_to_handle_.erase(key);
+      index_to_key_[idx] = std::numeric_limits<std::uint64_t>::max();
+    }
+  }
+
+  // Reset transform slot to identity and push to free list for reuse.
+  transforms_[idx] = glm::mat4 { 1.0f };
+  normal_matrices_[idx] = glm::mat4 { 1.0f };
+  world_versions_[idx] = 0U;
+  normal_versions_[idx] = 0U;
+  dirty_epoch_[idx] = 0U;
+  free_handles_.push_back(static_cast<std::uint32_t>(idx));
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
 auto TransformUploader::BuildSparseUploadRequests(
-  const std::vector<std::uint32_t>& indices, std::span<const glm::mat4> src,
+  const std::vector<std::uint32_t>& indices,
+  const std::span<const glm::mat4> src,
   const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
   -> std::vector<engine::upload::UploadRequest>
 {
@@ -433,14 +478,14 @@ auto TransformUploader::Upload() -> void
 
 auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
-  CHECK_NOTNULL_F(gpu_normals_buffer_,
+  DCHECK_NOTNULL_F(gpu_normals_buffer_,
     "EnsureFrameResources() must be called before GetNormalsSrvIndex()");
   return normals_bindless_index_;
 }
 
 auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 {
-  CHECK_NOTNULL_F(gpu_world_buffer_,
+  DCHECK_NOTNULL_F(gpu_world_buffer_,
     "EnsureFrameResources() must be called before GetWorldsSrvIndex()");
   return worlds_bindless_index_;
 }
