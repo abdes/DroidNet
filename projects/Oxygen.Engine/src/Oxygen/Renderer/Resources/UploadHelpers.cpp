@@ -64,51 +64,58 @@ auto EnsureBufferAndSrv(Graphics& gfx,
   view_desc.range = { 0, size_bytes };
   view_desc.stride = stride;
 
-  // At this point we have a new buffer object. Allocate a new descriptor,
-  // register the new buffer and its view, then unregister the old buffer.
-  // Allocate descriptor, register the new buffer and its view, then
-  // unregister the old buffer. This logic was previously in
-  // RegisterNewBufferAndView and is inlined here to reduce indirection.
-  oxygen::graphics::DescriptorHandle view_handle {};
-  ShaderVisibleIndex sv_index { kInvalidShaderVisibleIndex };
-  try {
-    auto& allocator = gfx.GetDescriptorAllocator();
-    view_handle
-      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    sv_index = allocator.GetShaderVisibleIndex(view_handle);
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "-failed- to allocate SRV with exception: {}", e.what());
-    return std::unexpected(
-      make_error_code(GraphicsError::kDescriptorAllocationFailed));
+  auto& registry = gfx.GetResourceRegistry();
+  const bool had_old = static_cast<bool>(buffer);
+
+  if (!had_old) {
+    // First-time creation: allocate descriptor, register resource, register
+    // view.
+    oxygen::graphics::DescriptorHandle view_handle {};
+    ShaderVisibleIndex sv_index { kInvalidShaderVisibleIndex };
+    try {
+      auto& allocator = gfx.GetDescriptorAllocator();
+      view_handle
+        = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+          graphics::DescriptorVisibility::kShaderVisible);
+      sv_index = allocator.GetShaderVisibleIndex(view_handle);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "-failed- to allocate SRV with exception: {}", e.what());
+      return std::unexpected(
+        make_error_code(GraphicsError::kDescriptorAllocationFailed));
+    }
+
+    try {
+      registry.Register(new_buffer);
+      registry.RegisterView(*new_buffer, std::move(view_handle), view_desc);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "-failed- to register new buffer or view: {}", e.what());
+      return std::unexpected(
+        make_error_code(GraphicsError::kResourceRegistrationFailed));
+    }
+
+    buffer = std::move(new_buffer);
+    bindless_index = ShaderVisibleIndex(sv_index.get());
+    return std::expected<EnsureBufferResult, GraphicsError>(
+      EnsureBufferResult::kCreated);
   }
 
-  auto& registry = gfx.GetResourceRegistry();
-  // Register new buffer and view. If these throw, map to register error.
+  // Resize path: keep the same bindless index by replacing resource and
+  // recreating the SRV in-place via the callback-based Replace.
   try {
-    registry.Register(new_buffer);
-    registry.RegisterView(*new_buffer, std::move(view_handle), view_desc);
+    registry.Replace(
+      *buffer, new_buffer, [&](const graphics::BufferViewDescription&) {
+        return std::optional<graphics::BufferViewDescription>(view_desc);
+      });
+    // new_buffer is now owned by registry; update our shared_ptr to match.
+    buffer = std::move(new_buffer);
   } catch (const std::exception& e) {
-    LOG_F(ERROR, "-failed- to register new buffer or view: {}", e.what());
+    LOG_F(ERROR, "-failed- to replace buffer: {}", e.what());
     return std::unexpected(
       make_error_code(GraphicsError::kResourceRegistrationFailed));
   }
 
-  // Unregister old buffer if present, then move new buffer into place
-  const bool had_old = static_cast<bool>(buffer);
-  if (buffer) {
-    registry.UnRegisterResource(*buffer);
-  }
-  buffer = std::move(new_buffer);
-  bindless_index = ShaderVisibleIndex(sv_index.get());
-
-  // If there was an old buffer we replaced, it's a resize; otherwise creation
-  if (had_old) {
-    return std::expected<EnsureBufferResult, GraphicsError>(
-      EnsureBufferResult::kResized);
-  }
   return std::expected<EnsureBufferResult, GraphicsError>(
-    EnsureBufferResult::kCreated);
+    EnsureBufferResult::kResized);
 }
 
 } // namespace oxygen::renderer::resources::internal
