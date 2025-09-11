@@ -61,7 +61,7 @@ inline auto CreateStandardFinalizationConfig()
     void,// decltype(&DrawMetadataEmitFinalizer),
     void,// decltype(&DrawMetadataSortAndPartitionFinalizer),
     decltype(&GeometryUploadFinalizer),
-    void,// decltype(&TransformUploadFinalizer),
+    decltype(&TransformUploadFinalizer),
     void,// decltype(&MaterialUploadFinalizer),
     void// decltype(&DrawMetadataUploadFinalizer)
   > // clang-format on
@@ -69,7 +69,7 @@ inline auto CreateStandardFinalizationConfig()
   // Concept checks (callables must qualify as finalization stages)
   // static_assert(DrawMetadataEmitter<decltype(DrawMetadataEmitFinalizer)>);
   // static_assert(Finalizer<decltype(DrawMetadataSortAndPartitionFinalizer)>);
-  // static_assert(Uploader<decltype(TransformUploadFinalizer)>);
+  static_assert(Uploader<decltype(TransformUploadFinalizer)>);
   // static_assert(Uploader<decltype(MaterialUploadFinalizer)>);
   static_assert(Uploader<decltype(GeometryUploadFinalizer)>);
   // static_assert(Uploader<decltype(DrawMetadataUploadFinalizer)>);
@@ -78,7 +78,7 @@ inline auto CreateStandardFinalizationConfig()
     .geometry_upload = &GeometryUploadFinalizer,
     // .draw_md_emit = &DrawMetadataEmitFinalizer,
     // .draw_md_sort = &DrawMetadataSortAndPartitionFinalizer,
-    // .transform_upload = &TransformUploadFinalizer,
+    .transform_upload = &TransformUploadFinalizer,
     // .material_upload = &MaterialUploadFinalizer,
     // .draw_md_upload = &DrawMetadataUploadFinalizer,
   };

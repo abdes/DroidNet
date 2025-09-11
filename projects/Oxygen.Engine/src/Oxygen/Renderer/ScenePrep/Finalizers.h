@@ -21,8 +21,6 @@ inline auto GeometryUploadFinalizer(const ScenePrepState& state) -> void
     state.GetGeometryUploader()->EnsureFrameResources();
   }
 }
-
-#if defined(LATER)
 //! Ensure transform manager resources are ready for this frame.
 /*!
  Calls EnsureFrameResources() on the transform manager stored in ScenePrepState.
@@ -30,12 +28,14 @@ inline auto GeometryUploadFinalizer(const ScenePrepState& state) -> void
 
  @param state ScenePrep working state containing transform_mgr
  */
-inline auto TransformUploadFinalizer(ScenePrepState& state) -> void
+inline auto TransformUploadFinalizer(const ScenePrepState& state) -> void
 {
-  if (state.GetTransformManager) {
-    state.GetTransformManager->Upload();
+  if (state.GetTransformUploader()) {
+    state.GetTransformUploader()->EnsureFrameResources();
   }
 }
+
+#if defined(LATER)
 
 //! Ensure material binder resources are ready for this frame.
 /*!

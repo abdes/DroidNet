@@ -64,18 +64,16 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   LOG_F(
     2, "Renderer::Renderer [this={}] - constructor", static_cast<void*>(this));
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
+
   auto& gfx = *gfx_weak_.lock();
+
   uploader_ = std::make_unique<upload::UploadCoordinator>(gfx);
-  // Ensure transform_mgr is always valid for scene prep and extraction
+
   scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
-    // Initialize GeometryUploader to replace legacy GeometryRegistry
     std::make_unique<renderer::resources::GeometryUploader>(
       gfx, observer_ptr { uploader_.get() }),
-
     std::make_unique<renderer::resources::TransformUploader>(
       gfx, observer_ptr { uploader_.get() }),
-
-    // Initialize MaterialBinder to replace legacy MaterialRegistry
     std::make_unique<renderer::resources::MaterialBinder>(
       gfx, observer_ptr { uploader_.get() }));
 }
@@ -118,9 +116,7 @@ auto Renderer::PreExecute(
   UpdateDrawMetadataSlotIfChanged();
 
   // Consolidated transform resource preparation
-  if (const auto transforms = scene_prep_state_->GetTransformManager()) {
-    transforms->EnsureFrameResources();
-
+  if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
     const auto worlds_srv = transforms->GetWorldsSrvIndex();
     const auto normals_srv = transforms->GetNormalsSrvIndex();
 
@@ -130,14 +126,10 @@ auto Renderer::PreExecute(
       BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
   }
 
-  // // Consolidated geometry resource preparation
-  // if (const auto geometry = scene_prep_state_->GetGeometryUploader()) {
-  //   geometry->EnsureFrameResources();
-  // }
-
   // Consolidated material resource preparation
   if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
-    materials->EnsureFrameResources();
+    materials
+      ->EnsureFrameResources(); // TODO: optimize to avoid redundant calls
 
     const auto materials_srv = materials->GetMaterialsSrvIndex();
     scene_const_cpu_.SetBindlessMaterialConstantsSlot(
@@ -473,7 +465,7 @@ auto Renderer::GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
       dm.instance_metadata_buffer_index = 0;
       dm.instance_metadata_offset = 0;
       dm.flags = ClassifyMaterialPassMask(item.material.get());
-      DCHECK_F(prep_state.GetTransformManager()->IsValidHandle(handle),
+      DCHECK_F(prep_state.GetTransformUploader()->IsValidHandle(handle),
         "Invalid transform handle (id={}) while generating DrawMetadata",
         dm.transform_index);
       DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
@@ -590,7 +582,7 @@ auto Renderer::BuildSortingAndPartitions() -> void
 
 auto Renderer::PublishPreparedFrameSpans() -> void
 {
-  const auto transforms = scene_prep_state_->GetTransformManager();
+  const auto transforms = scene_prep_state_->GetTransformUploader();
   const auto world_span = transforms->GetWorldMatrices();
   prepared_frame_.world_matrices = std::span<const float>(
     reinterpret_cast<const float*>(world_span.data()), world_span.size() * 16u);
@@ -725,7 +717,7 @@ auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
   }
 
   // Reset transform manager for the new frame
-  scene_prep_state_->GetTransformManager()->OnFrameStart();
+  scene_prep_state_->GetTransformUploader()->OnFrameStart();
 
   // Reset geometry uploader for the new frame
   scene_prep_state_->GetGeometryUploader()->OnFrameStart();

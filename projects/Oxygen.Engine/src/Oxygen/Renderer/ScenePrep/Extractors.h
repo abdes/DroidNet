@@ -73,9 +73,9 @@ inline auto TransformResolveStage(const ScenePrepContext& /*ctx*/,
   }
   // Integrate TransformUploader: assign deduplicated handle for world
   // transform.
-  if (state.GetTransformManager()) {
-    const auto handle
-      = state.GetTransformManager()->GetOrAllocate(item.GetWorldTransform());
+  auto uploader = state.GetTransformUploader();
+  if (uploader) {
+    const auto handle = uploader->GetOrAllocate(item.GetWorldTransform());
     item.SetTransformHandle(handle);
   } else {
     item.SetTransformHandle(TransformHandle { 0 });
