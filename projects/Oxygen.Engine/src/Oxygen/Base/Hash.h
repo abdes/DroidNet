@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <type_traits>
+
 namespace oxygen {
 
 //! Combines a hash seed with the hash of a value.
@@ -33,5 +36,18 @@ template <class T> void HashCombine(size_t& seed, const T& v)
   seed
     ^= hasher(v) + golden_ratio + (seed << shift_left) + (seed >> shift_right);
 }
+
+// Use FNV-1a helper for the final hash.
+inline auto ComputeFNV1a64(const void* data, size_t size_bytes) -> std::uint64_t
+{
+  std::uint64_t h = 14695981039346656037ULL; // offset basis for FNV-1a 64
+  constexpr std::uint64_t prime = 1099511628211ULL;
+  const auto* p = static_cast<const unsigned char*>(data);
+  for (size_t i = 0; i < size_bytes; ++i) {
+    h ^= static_cast<std::uint64_t>(p[i]);
+    h *= prime;
+  }
+  return h;
+};
 
 } // namespace oxygen

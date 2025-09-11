@@ -76,6 +76,9 @@ m_gtest_program(
     "EnumAsIndex_test.cpp"
 )
 
+# Hash utilities tests
+m_gtest_program(Hash SOURCES "Hash_test.cpp")
+
 # -- Catch2 Test Programs -------------------------------------------------------
 
 include(Catch2Helpers)
