@@ -66,6 +66,7 @@ set(
   "Detail/FixedDescriptorSegment.h"
   "Detail/DeferredReclaimer.h"
   "Detail/ResourceStateTracker.h"
+  "Errors.h"
   "Forward.h"
   "Framebuffer.h"
   "Graphics.h"
