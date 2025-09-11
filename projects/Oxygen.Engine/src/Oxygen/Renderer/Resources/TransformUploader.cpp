@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/Resources/UploadHelpers.h>
+#include <Oxygen/Renderer/Upload/RingUploadBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 #include <cmath>
@@ -94,7 +95,11 @@ TransformUploader::TransformUploader(
   Graphics& gfx, const observer_ptr<engine::upload::UploadCoordinator> uploader)
   : gfx_(gfx)
   , uploader_(uploader)
+  , worlds_ring_(gfx, sizeof(glm::mat4), "WorldTransforms")
+  , normals_ring_(gfx, sizeof(glm::mat4), "NormalMatrices")
 {
+  DCHECK_NOTNULL_F(
+    uploader_.get(), "TransformUploader requires a valid UploadCoordinator");
 }
 
 TransformUploader::~TransformUploader()
@@ -104,23 +109,40 @@ TransformUploader::~TransformUploader()
   auto& registry = gfx_.GetResourceRegistry();
   // Log statistics before releasing GPU resources
   const auto total_transforms = transforms_.size();
-  const auto current_world_buffer_size
-    = gpu_world_buffer_ ? gpu_world_buffer_->GetSize() : 0ULL;
-  LOG_F(INFO,
-    "TransformUploader stats: total_transforms={}, world_buffer_size_bytes={}, "
-    "total_get_calls={}, total_allocations={}, transform_reuse_count={}, "
-    "transforms_buffer_recreate_count={}",
-    total_transforms, current_world_buffer_size, total_get_calls_,
-    total_allocations_, transform_reuse_count_,
-    transforms_buffer_recreate_count_);
 
-  if (gpu_world_buffer_) {
-    registry.UnRegisterResource(*gpu_world_buffer_);
-    gpu_world_buffer_.reset();
+  if (auto buf = worlds_ring_.GetBuffer()) {
+    registry.UnRegisterResource(*buf);
   }
-  if (gpu_normals_buffer_) {
-    registry.UnRegisterResource(*gpu_normals_buffer_);
-    gpu_normals_buffer_.reset();
+  if (auto buf = normals_ring_.GetBuffer()) {
+    registry.UnRegisterResource(*buf);
+  }
+
+  {
+    LOG_SCOPE_F(1, "TransformUploader Statistics");
+    // High-level counters (aligned labels)
+    LOG_F(1, "total transforms         : {}", total_transforms);
+    LOG_F(1, "get() calls              : {}", total_get_calls_);
+    LOG_F(1, "new handle allocations   : {}", total_allocations_);
+    LOG_F(1, "transform cache reuses   : {}", transform_reuse_count_);
+    LOG_F(1, "buffers re-created       : {}", worlds_grow_count_);
+
+    // Ring buffer telemetry (worlds)
+    {
+      LOG_SCOPE_F(2, "Worlds Upload Ring Buffer");
+      LOG_F(2, "capacity (bytes)         : {}", worlds_ring_.CapacityBytes());
+      LOG_F(2, "used (bytes)             : {}", worlds_ring_.UsedBytes());
+      LOG_F(2, "free (bytes)             : {}", worlds_ring_.FreeBytes());
+      LOG_F(2, "is full                  : {}", worlds_ring_.IsFull());
+    }
+
+    // Ring buffer telemetry (normals)
+    {
+      LOG_SCOPE_F(2, "Normals Upload Ring Buffer");
+      LOG_F(2, "capacity (bytes)         : {}", normals_ring_.CapacityBytes());
+      LOG_F(2, "used (bytes)             : {}", normals_ring_.UsedBytes());
+      LOG_F(2, "free (bytes)             : {}", normals_ring_.FreeBytes());
+      LOG_F(2, "is full                  : {}", normals_ring_.IsFull());
+    }
   }
 }
 
@@ -211,6 +233,7 @@ auto TransformUploader::OnFrameStart() -> void
   }
   dirty_indices_.clear();
   uploaded_ = false;
+  ReclaimCompletedChunks();
 }
 
 // Accessors for spans and dirty indices retained; individual element getters
@@ -329,11 +352,11 @@ auto TransformUploader::Release(engine::sceneprep::TransformHandle handle)
 auto TransformUploader::BuildSparseUploadRequests(
   const std::vector<std::uint32_t>& indices,
   const std::span<const glm::mat4> src,
-  const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
+  renderer::upload::RingUploadBuffer& ring, const char* debug_name) const
   -> std::vector<engine::upload::UploadRequest>
 {
   std::vector<engine::upload::UploadRequest> uploads;
-  if (!dst || indices.empty()) {
+  if (!ring.GetBuffer() || indices.empty()) {
     return uploads;
   }
 
@@ -353,22 +376,9 @@ auto TransformUploader::BuildSparseUploadRequests(
     const std::uint32_t last = sorted[run_end];
     const std::size_t count = last - first + 1;
     const std::size_t byte_count = count * sizeof(glm::mat4);
-    const std::size_t byte_offset
-      = static_cast<std::size_t>(first) * sizeof(glm::mat4);
-
-    engine::upload::UploadRequest r;
-    r.kind = engine::upload::UploadKind::kBuffer;
-    r.batch_policy = engine::upload::BatchPolicy::kCoalesce;
-    r.debug_name = debug_name;
-    r.desc = engine::upload::UploadBufferDesc {
-      .dst = dst,
-      .size_bytes = static_cast<std::uint64_t>(byte_count),
-      .dst_offset = static_cast<std::uint64_t>(byte_offset),
-    };
     const auto* src_ptr = reinterpret_cast<const std::byte*>(&src[first]);
-    r.data = engine::upload::UploadDataView { std::span<const std::byte>(
-      src_ptr, byte_count) };
-    uploads.emplace_back(std::move(r));
+    uploads.emplace_back(ring.BuildCopyRange(
+      first, std::span<const std::byte>(src_ptr, byte_count), debug_name));
 
     run_begin = run_end + 1;
   }
@@ -382,59 +392,39 @@ auto TransformUploader::UploadWorldMatrices() -> void
   if (buffer_size == 0) {
     return;
   }
-
-  // Create or resize the device-local buffer when needed (DRY helper)
-  const auto prev_world_index = worlds_bindless_index_;
-  const auto result = internal::EnsureBufferAndSrv(gfx_, gpu_world_buffer_,
-    worlds_bindless_index_, buffer_size, sizeof(glm::mat4), "WorldTransforms");
-  if (!result) {
-    // bail out, logging is done in helper
-    return;
+  // Reserve with slack to reduce reallocations.
+  const auto prev_capacity = worlds_ring_.CapacityElements();
+  const bool grew = worlds_ring_.ReserveElements(
+    static_cast<std::uint64_t>(transforms_.size()), 0.5f);
+  if (grew && prev_capacity != 0) {
+    ++worlds_grow_count_;
   }
-  const auto need_recreate = result.transform([](const auto& res) {
-    return res != internal::EnsureBufferResult::kUnchanged;
-  });
+  // Clamp SRV visible range to the logical element count.
+  static_cast<void>(worlds_ring_.SetActiveElements(
+    static_cast<std::uint64_t>(transforms_.size())));
 
-  // Count a recreate only when EnsureBufferAndSrv reports it and there was a
-  // previously assigned bindless index (i.e. not the initial creation).
-  if (need_recreate && prev_world_index != kInvalidShaderVisibleIndex) {
-    ++transforms_buffer_recreate_count_;
-  }
-
-  // Stability check: once assigned, the bindless index should remain stable
-  // across frames. Skip the check when we recreated the buffer/SRV.
-  if (!need_recreate && prev_world_index != kInvalidShaderVisibleIndex) {
-    DCHECK_F(worlds_bindless_index_ == prev_world_index,
-      "Worlds bindless index changed from {} to {} unexpectedly",
-      prev_world_index, worlds_bindless_index_);
-  }
-
-  // Upload current CPU data
-  if (uploader_ && gpu_world_buffer_) {
-    // If buffer was recreated or the dirty region set is large, do a full
-    // upload.
-    const bool do_full_upload = need_recreate
-      || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
+  if (uploader_ && worlds_ring_.GetBuffer()) {
+    const bool do_full_upload
+      = grew || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
 
     if (do_full_upload) {
-      engine::upload::UploadRequest req;
-      req.kind = engine::upload::UploadKind::kBuffer;
-      req.batch_policy = engine::upload::BatchPolicy::kCoalesce;
-      req.debug_name = "WorldTransforms";
-      req.desc = engine::upload::UploadBufferDesc {
-        .dst = gpu_world_buffer_,
-        .size_bytes = buffer_size,
-        .dst_offset = 0,
-      };
-      req.data = engine::upload::UploadDataView { std::as_bytes(
-        std::span<const glm::mat4>(transforms_)) };
-      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      const auto bytes = std::as_bytes(std::span<const glm::mat4>(transforms_));
+      auto req = worlds_ring_.BuildCopyAll(bytes, "WorldTransforms");
+      auto tickets = uploader_->SubmitMany(std::span { &req, 1 });
+      if (auto id = worlds_ring_.FinalizeChunk()) {
+        world_chunks_.push_back(
+          ChunkRecord { .id = *id, .tickets = std::move(tickets) });
+      }
     } else if (!dirty_indices_.empty()) {
       auto uploads = BuildSparseUploadRequests(dirty_indices_,
-        std::span<const glm::mat4>(transforms_), gpu_world_buffer_,
+        std::span<const glm::mat4>(transforms_), worlds_ring_,
         "WorldTransforms.sparse");
       if (!uploads.empty()) {
-        static_cast<void>(uploader_->SubmitMany(uploads));
+        auto tickets = uploader_->SubmitMany(uploads);
+        if (auto id = worlds_ring_.FinalizeChunk()) {
+          world_chunks_.push_back(
+            ChunkRecord { .id = *id, .tickets = std::move(tickets) });
+        }
       }
     }
   }
@@ -447,47 +437,35 @@ auto TransformUploader::UploadNormalMatrices() -> void
     return;
   }
 
-  const auto prev_normal_index = normals_bindless_index_;
-  const auto result = internal::EnsureBufferAndSrv(gfx_, gpu_normals_buffer_,
-    normals_bindless_index_, buffer_size, sizeof(glm::mat4),
-    "NormalTransforms");
-  if (!result) {
-    // bail out, logging is done in helper
-    return;
-  }
-  const auto need_recreate = result.transform([](const auto& res) {
-    return res != internal::EnsureBufferResult::kUnchanged;
-  });
+  const bool grew = normals_ring_.ReserveElements(
+    static_cast<std::uint64_t>(normal_matrices_.size()), 0.5f);
+  // Clamp SRV visible range to the logical element count.
+  static_cast<void>(normals_ring_.SetActiveElements(
+    static_cast<std::uint64_t>(normal_matrices_.size())));
 
-  if (!need_recreate && prev_normal_index != kInvalidShaderVisibleIndex) {
-    DCHECK_F(normals_bindless_index_ == prev_normal_index,
-      "Normals bindless index changed from {} to {} unexpectedly",
-      prev_normal_index, normals_bindless_index_);
-  }
-
-  if (uploader_ && gpu_normals_buffer_) {
-    const bool do_full_upload = need_recreate
-      || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
+  if (uploader_ && normals_ring_.GetBuffer()) {
+    const bool do_full_upload
+      = grew || (dirty_indices_.size() * sizeof(glm::mat4) > (buffer_size / 2));
 
     if (do_full_upload) {
-      engine::upload::UploadRequest req;
-      req.kind = engine::upload::UploadKind::kBuffer;
-      req.batch_policy = engine::upload::BatchPolicy::kCoalesce;
-      req.debug_name = "NormalMatrices";
-      req.desc = engine::upload::UploadBufferDesc {
-        .dst = gpu_normals_buffer_,
-        .size_bytes = buffer_size,
-        .dst_offset = 0,
-      };
-      req.data = engine::upload::UploadDataView { std::as_bytes(
-        std::span<const glm::mat4>(normal_matrices_)) };
-      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      const auto bytes
+        = std::as_bytes(std::span<const glm::mat4>(normal_matrices_));
+      auto req = normals_ring_.BuildCopyAll(bytes, "NormalMatrices");
+      auto tickets = uploader_->SubmitMany(std::span { &req, 1 });
+      if (auto id = normals_ring_.FinalizeChunk()) {
+        normal_chunks_.push_back(
+          ChunkRecord { .id = *id, .tickets = std::move(tickets) });
+      }
     } else if (!dirty_indices_.empty()) {
       auto uploads = BuildSparseUploadRequests(dirty_indices_,
-        std::span<const glm::mat4>(normal_matrices_), gpu_normals_buffer_,
+        std::span<const glm::mat4>(normal_matrices_), normals_ring_,
         "NormalMatrices.sparse");
       if (!uploads.empty()) {
-        static_cast<void>(uploader_->SubmitMany(uploads));
+        auto tickets = uploader_->SubmitMany(uploads);
+        if (auto id = normals_ring_.FinalizeChunk()) {
+          normal_chunks_.push_back(
+            ChunkRecord { .id = *id, .tickets = std::move(tickets) });
+        }
       }
     }
   }
@@ -495,16 +473,16 @@ auto TransformUploader::UploadNormalMatrices() -> void
 
 auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
-  DCHECK_NOTNULL_F(gpu_normals_buffer_,
+  DCHECK_NOTNULL_F(normals_ring_.GetBuffer(),
     "EnsureFrameResources() must be called before GetNormalsSrvIndex()");
-  return normals_bindless_index_;
+  return normals_ring_.GetBindlessIndex();
 }
 
 auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 {
-  DCHECK_NOTNULL_F(gpu_world_buffer_,
+  DCHECK_NOTNULL_F(worlds_ring_.GetBuffer(),
     "EnsureFrameResources() must be called before GetWorldsSrvIndex()");
-  return worlds_bindless_index_;
+  return worlds_ring_.GetBindlessIndex();
 }
 
 auto TransformUploader::EnsureFrameResources() -> void
@@ -521,6 +499,38 @@ auto TransformUploader::EnsureFrameResources() -> void
   UploadWorldMatrices();
   UploadNormalMatrices();
   uploaded_ = true;
+}
+
+auto TransformUploader::ReclaimCompletedChunks() -> void
+{
+  // Worlds
+  while (!world_chunks_.empty()) {
+    const auto& front = world_chunks_.front();
+    const bool all_done = std::ranges::all_of(
+      front.tickets, [this](auto t) { return uploader_->IsComplete(t); });
+    if (!all_done) {
+      break; // keep FIFO order
+    }
+    if (worlds_ring_.TryReclaim(front.id)) {
+      world_chunks_.pop_front();
+    } else {
+      break; // ring not ready to reclaim out-of-order
+    }
+  }
+  // Normals
+  while (!normal_chunks_.empty()) {
+    const auto& front = normal_chunks_.front();
+    const bool all_done = std::ranges::all_of(
+      front.tickets, [this](auto t) { return uploader_->IsComplete(t); });
+    if (!all_done) {
+      break;
+    }
+    if (normals_ring_.TryReclaim(front.id)) {
+      normal_chunks_.pop_front();
+    } else {
+      break;
+    }
+  }
 }
 
 } // namespace oxygen::renderer::resources

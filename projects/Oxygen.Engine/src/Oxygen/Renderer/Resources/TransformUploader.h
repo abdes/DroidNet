@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <deque>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -18,6 +19,7 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/Upload/RingUploadBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -82,13 +84,19 @@ private:
   static auto ComputeNormalMatrix(const glm::mat4& world) noexcept -> glm::mat4;
 
   auto BuildSparseUploadRequests(const std::vector<std::uint32_t>& indices,
-    std::span<const glm::mat4> src,
-    const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
-    -> std::vector<engine::upload::UploadRequest>;
+    std::span<const glm::mat4> src, renderer::upload::RingUploadBuffer& ring,
+    const char* debug_name) const -> std::vector<engine::upload::UploadRequest>;
 
   //! Internal methods for resource preparation
   auto UploadWorldMatrices() -> void;
   auto UploadNormalMatrices() -> void;
+  //! Retire any completed upload chunks (FIFO) via UploadCoordinator tickets.
+  auto ReclaimCompletedChunks() -> void;
+
+  struct ChunkRecord {
+    renderer::upload::RingUploadBuffer::ChunkId id { 0 };
+    std::vector<engine::upload::UploadTicket> tickets;
+  };
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
@@ -114,17 +122,15 @@ private:
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
 
   // GPU resources (incremental)
-  std::shared_ptr<graphics::Buffer> gpu_world_buffer_;
-  // The existence of the corresponding buffer is the ultimate source of truth
-  // for validity.
-  ShaderVisibleIndex worlds_bindless_index_ { kInvalidShaderVisibleIndex };
-  std::shared_ptr<graphics::Buffer> gpu_normals_buffer_;
-  ShaderVisibleIndex normals_bindless_index_ { kInvalidShaderVisibleIndex };
+  renderer::upload::RingUploadBuffer worlds_ring_;
+  renderer::upload::RingUploadBuffer normals_ring_;
+  std::deque<ChunkRecord> world_chunks_;
+  std::deque<ChunkRecord> normal_chunks_;
   // Statistics
   // Number of times a transform lookup returned an existing handle (cache hit)
   std::uint64_t transform_reuse_count_ { 0U };
   // Number of times the transforms (world) GPU buffer was recreated/resized
-  std::uint64_t transforms_buffer_recreate_count_ { 0U };
+  std::uint64_t worlds_grow_count_ { 0U };
   // Total number of GetOrAllocate calls
   std::uint64_t total_get_calls_ { 0U };
   // Total number of allocations (new handles created)
