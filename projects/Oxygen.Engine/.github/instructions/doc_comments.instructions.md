@@ -18,6 +18,7 @@ specified.
 - Use `//!` for brief, single-line documentation above declarations.
 - Use `/*! ... */` for detailed, multi-line documentation blocks.
 - Use `@command` (not `\command`) for all Doxygen directives.
+- Markdown headings are allowed in doc comment blocks.
 - Do NOT use `//!<` inline comments (enforce 80-column limit).
 
 ## HEADER AND SECTION FORMATTING
