@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <expected>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -100,6 +101,11 @@ namespace oxygen::renderer::resources {
 */
 class GeometryUploader {
 public:
+  struct MeshShaderVisibleIndices {
+    ShaderVisibleIndex vertex_srv_index { kInvalidBindlessIndex };
+    ShaderVisibleIndex index_srv_index { kInvalidBindlessIndex };
+  };
+
   /*!
    @note GeometryUploader lifetime is entirely linked to the Renderer. We
          completely rely on the Renderer to handle the lifetime of the Graphics
@@ -138,19 +144,10 @@ public:
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
 
   //! Returns the bindless descriptor heap index for vertex buffer SRV.
-  //! REQUIRES: EnsureFrameResources() must have been called this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetVertexSrvIndex(
-    engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex;
-
-  //! Returns the bindless descriptor index for index buffer SRV.
-  //! REQUIRES: EnsureFrameResources() must have been called this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetIndexSrvIndex(
-    engine::sceneprep::GeometryHandle handle) const -> ShaderVisibleIndex;
-
-  [[nodiscard]] auto GetVertexSrvIndices() const noexcept
-    -> std::span<const ShaderVisibleIndex>;
-  [[nodiscard]] auto GetIndexSrvIndices() const noexcept
-    -> std::span<const ShaderVisibleIndex>;
+  //! Will automatically call EnsureFrameResources() if it hasn't been called
+  //! this frame.
+  OXGN_RNDR_NDAPI auto GetShaderVisibleIndices(
+    engine::sceneprep::GeometryHandle handle) -> MeshShaderVisibleIndices;
 
   //! Returns the number of pending upload operations.
   //! Useful for debugging and monitoring upload queue health.
@@ -173,23 +170,22 @@ private:
     Epoch epoch { epoch::kNever };
     bool is_dirty { true };
     bool is_critical { false };
-  };
 
-  static auto MakeGeometryKey(const data::Mesh& mesh) noexcept -> std::uint64_t;
+    mutable std::shared_ptr<graphics::Buffer> vertex_buffer { nullptr };
+    mutable std::shared_ptr<graphics::Buffer> index_buffer { nullptr };
+    mutable ShaderVisibleIndex vertex_srv_index { kInvalidBindlessIndex };
+    mutable ShaderVisibleIndex index_srv_index { kInvalidBindlessIndex };
+  };
 
   auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
     ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
-    const std::string& debug_label) -> bool;
+    uint32_t stride, const std::string& debug_label) -> bool;
 
   auto UploadBuffers() -> void;
-  auto UploadVertexBuffer(const GeometryEntry& dirty_entry, size_t at_index)
-    -> engine::upload::UploadRequest;
-  auto UploadIndexBuffer(const GeometryEntry& dirty_entry, size_t at_index)
-    -> engine::upload::UploadRequest;
-
-  //! Internal methods for resource preparation
-  auto PrepareVertexBuffers() -> void;
-  auto PrepareIndexBuffers() -> void;
+  auto UploadVertexBuffer(const GeometryEntry& dirty_entry)
+    -> std::expected<engine::upload::UploadRequest, bool>;
+  auto UploadIndexBuffer(const GeometryEntry& dirty_entry)
+    -> std::expected<engine::upload::UploadRequest, bool>;
 
   //! Clean up completed upload tickets
   auto RetireCompletedUploads() -> void;
@@ -199,30 +195,18 @@ private:
   [[nodiscard]] auto SelectBatchPolicy(std::uint64_t size_bytes,
     bool is_critical) const -> engine::upload::BatchPolicy;
 
-  // Deduplication and state
-  std::unordered_map<std::uint64_t, engine::sceneprep::GeometryHandle>
-    geometry_key_to_handle_;
-  std::vector<GeometryEntry> geometry_entries_;
-  std::vector<const data::Mesh*> meshes_;
-  std::vector<std::uint32_t> versions_;
-  std::vector<bool> is_critical_;
-  std::uint32_t global_version_ { 0U };
-  std::vector<Epoch> dirty_epoch_;
-  std::vector<std::uint32_t> dirty_indices_;
   Epoch current_epoch_ { 1 }; // 0 reserved for 'never'
-  engine::sceneprep::GeometryHandle next_handle_ { 0U };
 
-  // GPU upload dependencies
+  using MeshKey = std::uint64_t; // Simple hash key for deduplication
+  using GeometryHandle = engine::sceneprep::GeometryHandle;
+  std::unordered_map<MeshKey, GeometryHandle> mesh_to_handle_;
+  GeometryHandle next_handle_ { 0U };
+  std::vector<GeometryEntry> geometry_entries_;
+
   Graphics& gfx_;
-  observer_ptr<engine::upload::UploadCoordinator> uploader_;
-
-  // GPU resources per handle
-  std::vector<std::shared_ptr<graphics::Buffer>> vertex_buffers_;
-  std::vector<std::shared_ptr<graphics::Buffer>> index_buffers_;
-  std::vector<ShaderVisibleIndex> vertex_srv_indices_;
-  std::vector<ShaderVisibleIndex> index_srv_indices_;
 
   // Upload tracking
+  observer_ptr<engine::upload::UploadCoordinator> uploader_;
   std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
 
   // Frame lifecycle tracking
