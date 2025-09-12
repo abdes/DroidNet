@@ -118,30 +118,23 @@ TransformUploader::~TransformUploader()
   }
 
   {
-    LOG_SCOPE_F(1, "TransformUploader Statistics");
+    LOG_SCOPE_F(INFO, "TransformUploader Statistics");
     // High-level counters (aligned labels)
-    LOG_F(1, "total transforms         : {}", total_transforms);
-    LOG_F(1, "get() calls              : {}", total_get_calls_);
-    LOG_F(1, "new handle allocations   : {}", total_allocations_);
-    LOG_F(1, "transform cache reuses   : {}", transform_reuse_count_);
-    LOG_F(1, "buffers re-created       : {}", worlds_grow_count_);
+    LOG_F(INFO, "total transforms         : {}", total_transforms);
+    LOG_F(INFO, "get() calls              : {}", total_get_calls_);
+    LOG_F(INFO, "new handle allocations   : {}", total_allocations_);
+    LOG_F(INFO, "transform cache reuses   : {}", transform_reuse_count_);
 
     // Ring buffer telemetry (worlds)
     {
-      LOG_SCOPE_F(2, "Worlds Upload Ring Buffer");
-      LOG_F(2, "capacity (bytes)         : {}", worlds_ring_.CapacityBytes());
-      LOG_F(2, "used (bytes)             : {}", worlds_ring_.UsedBytes());
-      LOG_F(2, "free (bytes)             : {}", worlds_ring_.FreeBytes());
-      LOG_F(2, "is full                  : {}", worlds_ring_.IsFull());
+      LOG_SCOPE_F(INFO, "Worlds Upload Ring Buffer");
+      worlds_ring_.LogTelemetryStats();
     }
 
     // Ring buffer telemetry (normals)
     {
-      LOG_SCOPE_F(2, "Normals Upload Ring Buffer");
-      LOG_F(2, "capacity (bytes)         : {}", normals_ring_.CapacityBytes());
-      LOG_F(2, "used (bytes)             : {}", normals_ring_.UsedBytes());
-      LOG_F(2, "free (bytes)             : {}", normals_ring_.FreeBytes());
-      LOG_F(2, "is full                  : {}", normals_ring_.IsFull());
+      LOG_SCOPE_F(INFO, "Normals Upload Ring Buffer");
+      normals_ring_.LogTelemetryStats();
     }
   }
 }
@@ -377,7 +370,7 @@ auto TransformUploader::BuildSparseUploadRequests(
     const std::size_t count = last - first + 1;
     const std::size_t byte_count = count * sizeof(glm::mat4);
     const auto* src_ptr = reinterpret_cast<const std::byte*>(&src[first]);
-    uploads.emplace_back(ring.BuildCopyRange(
+    uploads.emplace_back(ring.MakeCopyRange(
       first, std::span<const std::byte>(src_ptr, byte_count), debug_name));
 
     run_begin = run_end + 1;
@@ -409,7 +402,7 @@ auto TransformUploader::UploadWorldMatrices() -> void
 
     if (do_full_upload) {
       const auto bytes = std::as_bytes(std::span<const glm::mat4>(transforms_));
-      auto req = worlds_ring_.BuildCopyAll(bytes, "WorldTransforms");
+      auto req = worlds_ring_.MakeCopyAll(bytes, "WorldTransforms");
       auto tickets = uploader_->SubmitMany(std::span { &req, 1 });
       if (auto id = worlds_ring_.FinalizeChunk()) {
         world_chunks_.push_back(
@@ -450,7 +443,7 @@ auto TransformUploader::UploadNormalMatrices() -> void
     if (do_full_upload) {
       const auto bytes
         = std::as_bytes(std::span<const glm::mat4>(normal_matrices_));
-      auto req = normals_ring_.BuildCopyAll(bytes, "NormalMatrices");
+      auto req = normals_ring_.MakeCopyAll(bytes, "NormalMatrices");
       auto tickets = uploader_->SubmitMany(std::span { &req, 1 });
       if (auto id = normals_ring_.FinalizeChunk()) {
         normal_chunks_.push_back(
