@@ -26,7 +26,7 @@ namespace oxygen {
 template <class T> void HashCombine(size_t& seed, const T& v)
 {
   // Magic constant for hash mixing, derived from the golden ratio.
-  constexpr size_t golden_ratio = 0x9e3779b9;
+  constexpr size_t golden_ratio = 0x9e3779b97f4a7c15ULL;
   // Number of bits to shift left in hash mixing.
   constexpr size_t shift_left = 6;
   // Number of bits to shift right in hash mixing.

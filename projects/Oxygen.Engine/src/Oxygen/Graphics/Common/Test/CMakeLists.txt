@@ -43,6 +43,13 @@ add_test(
 
 include(GTestHelpers)
 
+m_gtest_program(
+  Fakes
+  SOURCES
+    "Fakes/FakeResource.h"
+    "Fakes/FakeResource_test.cpp"
+)
+
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
 m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
 m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
@@ -65,7 +72,14 @@ m_gtest_program(
     "Bindless/BaseDescriptorAllocator_Init_test.cpp"
     "Bindless/BaseDescriptorAllocatorTest.h"
 )
-m_gtest_program(ResourceRegistry SOURCES "ResourceRegistry_test.cpp")
+m_gtest_program(
+  ResourceRegistry
+  SOURCES
+    "Fakes/FakeResource.h"
+    "ResourceRegistry_basic_test.cpp"
+    "ResourceRegistry_replace_test.cpp"
+    "ResourceRegistry_update_test.cpp"
+)
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
