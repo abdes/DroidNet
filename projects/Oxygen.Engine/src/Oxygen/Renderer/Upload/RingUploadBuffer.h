@@ -32,8 +32,6 @@ class UploadCoordinator;
 
 namespace oxygen::renderer::upload {
 
-//=== RingUploadBuffer -----------------------------------------------------//
-
 //! Device-local structured buffer supporting ring-style allocations.
 /*!
  This class manages a single GPU buffer and a shader-visible SRV range.
@@ -44,7 +42,7 @@ namespace oxygen::renderer::upload {
  Key behaviors:
  - Allocate() and the SRV-related methods operate in element units.
  - ReserveElements() grows the underlying buffer when needed.
- - Clients build upload requests with BuildCopyFor/BuildCopyRange/BuildCopyAll
+ - Clients build upload requests with MakeCopyFor/MakeCopyRange/MakeCopyAll
    and submit them via their upload subsystem.
  - FinalizeChunk() records allocations made since the last finalize and
    returns a chunk id. TryReclaim(id) reclaims the front chunk when the
@@ -58,7 +56,7 @@ namespace oxygen::renderer::upload {
  ring.SetActiveElements(N);
 
  if (auto alloc = ring.Allocate(elem_count)) {
-   auto req = ring.BuildCopyFor(*alloc, bytes, "MyStreamCopy");
+   auto req = ring.MakeCopyFor(*alloc, bytes, "MyStreamCopy");
    // Submit req via your upload coordinator
 
    if (auto id = ring.FinalizeChunk()) {
@@ -74,6 +72,13 @@ namespace oxygen::renderer::upload {
 */
 class RingUploadBuffer {
 public:
+  using ChunkId = std::uint64_t;
+
+  struct Allocation {
+    std::uint64_t element_offset { 0 };
+    std::uint64_t elements { 0 };
+  };
+
   OXGN_RNDR_API RingUploadBuffer(oxygen::Graphics& gfx,
     std::uint32_t element_stride, std::string debug_label);
 
@@ -81,21 +86,6 @@ public:
   OXYGEN_DEFAULT_MOVABLE(RingUploadBuffer)
 
   ~RingUploadBuffer() = default;
-
-  //! Ensure capacity for at least desired_elements; grows with slack factor.
-  //! Returns true if the underlying buffer was created or resized.
-  [[nodiscard]] OXGN_RNDR_API auto ReserveElements(
-    std::uint64_t desired_elements, float slack = 0.5f) -> bool;
-
-  [[nodiscard]] auto CapacityElements() const noexcept -> std::uint64_t
-  {
-    return capacity_elements_;
-  }
-
-  [[nodiscard]] auto Stride() const noexcept -> std::uint32_t
-  {
-    return element_stride_;
-  }
 
   [[nodiscard]] auto GetBuffer() const
     -> const std::shared_ptr<oxygen::graphics::Buffer>&
@@ -108,7 +98,10 @@ public:
     return bindless_index_;
   }
 
-  //=== Ring allocation and SRV range ---------------------------------------//
+  //! Ensure capacity for at least desired_elements; grows with slack factor.
+  //! Returns true if the underlying buffer was created or resized.
+  OXGN_RNDR_NDAPI auto ReserveElements(
+    std::uint64_t desired_elements, float slack = 0.5f) -> bool;
 
   //! Allocate a contiguous range in elements from the ring.
   //! Returns element offset and count on success.
@@ -122,28 +115,17 @@ public:
    @param elements Number of elements to allocate.
    @return Allocation with element offset and size, or std::nullopt on failure.
 
-  ### Performance Characteristics
-
-  - Time Complexity: O(1)
-  - Memory: No extra allocations.
-
   @warning Allocation fails if the ring is full or contiguous space is
            insufficient even if total free space exists (no defragmentation).
   */
-  struct Allocation {
-    std::uint64_t element_offset { 0 };
-    std::uint64_t elements { 0 };
-  };
-
-  [[nodiscard]] OXGN_RNDR_API auto Allocate(std::uint64_t elements)
+  OXGN_RNDR_NDAPI auto Allocate(std::uint64_t elements)
     -> std::optional<Allocation>;
 
   //! Update the SRV range to expose only the first active_elements.
   //! Returns false if the buffer/view could not be updated. The bindless
   //! index is left unchanged; callers may decide when to recreate or
   //! refresh the view (e.g., via ReserveElements) if failures persist.
-  [[nodiscard]] OXGN_RNDR_API auto SetActiveElements(
-    std::uint64_t active_elements) -> bool;
+  OXGN_RNDR_NDAPI auto SetActiveElements(std::uint64_t active_elements) -> bool;
 
   //! Update the SRV range with explicit base and count in elements.
   /*!
@@ -154,11 +136,9 @@ public:
    @param active_elements Number of visible elements.
    @return True if the view was updated; false otherwise.
   */
-  [[nodiscard]] OXGN_RNDR_API auto SetActiveRange(
+  OXGN_RNDR_NDAPI auto SetActiveRange(
     std::uint64_t base_element, std::uint64_t active_elements) -> bool;
 
-  //=== Chunk lifecycle (client-controlled reclamation) ---------------------//
-  using ChunkId = std::uint64_t;
   //! Finalize the current chunk (bytes allocated since last finalize).
   /*!
    Call after you’ve enqueued all copies that reference allocations taken
@@ -167,7 +147,7 @@ public:
 
    @return Chunk id if any bytes were recorded, or std::nullopt.
   */
-  [[nodiscard]] OXGN_RNDR_API auto FinalizeChunk() -> std::optional<ChunkId>;
+  OXGN_RNDR_NDAPI auto FinalizeChunk() -> std::optional<ChunkId>;
   //! Attempt to reclaim the front chunk if its id matches (FIFO only).
   /*!
    Reclaims space only when the provided id equals the front chunk id.
@@ -187,7 +167,7 @@ public:
    @param debug Debug label.
    @return UploadRequest targeting this buffer.
   */
-  [[nodiscard]] OXGN_RNDR_API auto BuildCopyAll(
+  OXGN_RNDR_NDAPI auto MakeCopyAll(
     std::span<const std::byte> bytes, std::string_view debug) const noexcept
     -> oxygen::engine::upload::UploadRequest;
 
@@ -198,7 +178,7 @@ public:
    @param debug Debug label.
    @return UploadRequest targeting this buffer.
   */
-  [[nodiscard]] OXGN_RNDR_API auto BuildCopyRange(std::uint64_t element_offset,
+  OXGN_RNDR_NDAPI auto MakeCopyRange(std::uint64_t element_offset,
     std::span<const std::byte> bytes, std::string_view debug) const noexcept
     -> oxygen::engine::upload::UploadRequest;
 
@@ -209,29 +189,44 @@ public:
    @param debug Debug label.
    @return UploadRequest targeting this buffer.
   */
-  [[nodiscard]] OXGN_RNDR_API auto BuildCopyFor(const Allocation& alloc,
+  OXGN_RNDR_NDAPI auto MakeCopyFor(const Allocation& alloc,
     std::span<const std::byte> bytes, std::string_view debug) const noexcept
     -> oxygen::engine::upload::UploadRequest;
 
-  // Telemetry
+  [[nodiscard]] auto Stride() const noexcept -> std::uint32_t
+  {
+    return element_stride_;
+  }
+
+  [[nodiscard]] auto CapacityElements() const noexcept -> std::uint64_t
+  {
+    return capacity_elements_;
+  }
+
   [[nodiscard]] auto CapacityBytes() const noexcept -> std::uint64_t
   {
     return buffer_ ? buffer_->GetSize() : 0ULL;
   }
+
   [[nodiscard]] auto UsedBytes() const noexcept -> std::uint64_t
   {
     return used_bytes_;
   }
+
   [[nodiscard]] auto FreeBytes() const noexcept -> std::uint64_t
   {
     const auto cap = CapacityBytes();
     return cap >= used_bytes_ ? (cap - used_bytes_) : 0ULL;
   }
+
   [[nodiscard]] auto IsFull() const noexcept -> bool
   {
     const auto cap = CapacityBytes();
     return cap > 0 && used_bytes_ >= cap;
   }
+
+  //! Log telemetry counters (INFO).
+  OXGN_RNDR_API auto LogTelemetryStats() const -> void;
 
 private:
   // Minimum elements to allocate on first growth to avoid tiny heaps
@@ -259,9 +254,13 @@ private:
 
   // Telemetry counters
   std::uint64_t max_used_bytes_ { 0 };
-  std::uint32_t allocations_this_frame_ { 0 };
+  // Number of allocations recorded for the current chunk (since last
+  // FinalizeChunk)
+  std::uint32_t curr_allocations_ { 0 };
+  // Exponential moving average of allocations per finalized chunk.
+  std::uint32_t avg_allocations_per_frame_ { 0 };
   std::uint32_t failed_allocations_ { 0 };
-  std::uint32_t total_reallocations_ { 0 };
+  std::uint32_t buffer_reallocations_ { 0 };
 };
 
 } // namespace oxygen::renderer::upload

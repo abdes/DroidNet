@@ -59,8 +59,20 @@ auto RingUploadBuffer::ReserveElements(
     return false;
   }
   capacity_elements_ = static_cast<std::uint64_t>(new_bytes / element_stride_);
-  ++total_reallocations_;
+  ++buffer_reallocations_;
   return true;
+}
+
+void RingUploadBuffer::LogTelemetryStats() const
+{
+  LOG_F(INFO, "buffer reallocations  : {}", buffer_reallocations_);
+  LOG_F(INFO, "curr allocations      : {}", curr_allocations_);
+  LOG_F(INFO, "capacity elements     : {}", CapacityElements());
+  LOG_F(INFO, "capacity bytes        : {} (bytes)", CapacityBytes());
+  LOG_F(INFO, "allocations per frame : {}", avg_allocations_per_frame_);
+  LOG_F(INFO, "failed allocations    : {}", failed_allocations_);
+  LOG_F(INFO, "max used              : {} (bytes)", max_used_bytes_);
+  LOG_F(INFO, "currently used        : {} (bytes)", FreeBytes());
 }
 
 auto RingUploadBuffer::SetActiveElements(const std::uint64_t active_elements)
@@ -83,7 +95,7 @@ auto RingUploadBuffer::SetActiveElements(const std::uint64_t active_elements)
     *buffer_, oxygen::bindless::Handle(bindless_index_.get()), view_desc);
 }
 
-auto RingUploadBuffer::BuildCopyAll(const std::span<const std::byte> bytes,
+auto RingUploadBuffer::MakeCopyAll(const std::span<const std::byte> bytes,
   const std::string_view debug) const noexcept -> UploadRequest
 {
   UploadRequest req;
@@ -99,7 +111,7 @@ auto RingUploadBuffer::BuildCopyAll(const std::span<const std::byte> bytes,
   return req;
 }
 
-auto RingUploadBuffer::BuildCopyRange(const std::uint64_t element_offset,
+auto RingUploadBuffer::MakeCopyRange(const std::uint64_t element_offset,
   const std::span<const std::byte> bytes,
   const std::string_view debug) const noexcept -> UploadRequest
 {
@@ -117,11 +129,11 @@ auto RingUploadBuffer::BuildCopyRange(const std::uint64_t element_offset,
   return req;
 }
 
-auto RingUploadBuffer::BuildCopyFor(const Allocation& alloc,
+auto RingUploadBuffer::MakeCopyFor(const Allocation& alloc,
   const std::span<const std::byte> bytes,
   const std::string_view debug) const noexcept -> UploadRequest
 {
-  return BuildCopyRange(alloc.element_offset, bytes, debug);
+  return MakeCopyRange(alloc.element_offset, bytes, debug);
 }
 
 auto RingUploadBuffer::SetActiveRange(
@@ -175,7 +187,7 @@ auto RingUploadBuffer::Allocate(const std::uint64_t elements)
       used_bytes_ += bytes_needed;
       curr_frame_bytes_ += bytes_needed;
       max_used_bytes_ = (std::max)(max_used_bytes_, used_bytes_);
-      ++allocations_this_frame_;
+      ++curr_allocations_;
       return Allocation {
         .element_offset = offset_bytes / stride,
         .elements = elements,
@@ -187,7 +199,7 @@ auto RingUploadBuffer::Allocate(const std::uint64_t elements)
       used_bytes_ += bytes_needed;
       curr_frame_bytes_ += bytes_needed;
       max_used_bytes_ = (std::max)(max_used_bytes_, used_bytes_);
-      ++allocations_this_frame_;
+      ++curr_allocations_;
       return Allocation {
         .element_offset = 0,
         .elements = elements,
@@ -201,7 +213,7 @@ auto RingUploadBuffer::Allocate(const std::uint64_t elements)
       used_bytes_ += bytes_needed;
       curr_frame_bytes_ += bytes_needed;
       max_used_bytes_ = (std::max)(max_used_bytes_, used_bytes_);
-      ++allocations_this_frame_;
+      ++curr_allocations_;
       return Allocation {
         .element_offset = offset_bytes / stride,
         .elements = elements,
@@ -224,8 +236,24 @@ auto RingUploadBuffer::FinalizeChunk() -> std::optional<ChunkId>
     .tail = tail_bytes_,
     .size = curr_frame_bytes_,
   });
+
+  auto update_telemetry = [this]() noexcept {
+    // Integer exponential moving average with alpha = 1/4.
+    // new = round( (1/4)*curr + (3/4)*old ). Use 64-bit intermediate for
+    // safety and add 2 for rounding (i.e., (curr + 3*old + 2) / 4 ).
+    if (avg_allocations_per_frame_ == 0u) {
+      avg_allocations_per_frame_ = curr_allocations_;
+      return;
+    }
+    const std::uint64_t tmp = static_cast<std::uint64_t>(curr_allocations_)
+      + 3ULL * static_cast<std::uint64_t>(avg_allocations_per_frame_);
+    avg_allocations_per_frame_
+      = static_cast<std::uint32_t>((tmp + 2ULL) / 4ULL);
+  };
+  update_telemetry();
+
   curr_frame_bytes_ = 0;
-  allocations_this_frame_ = 0;
+  curr_allocations_ = 0;
   return id;
 }
 
