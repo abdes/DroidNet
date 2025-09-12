@@ -34,53 +34,43 @@ namespace oxygen::renderer::upload {
 
 //=== RingUploadBuffer -----------------------------------------------------//
 
-//! Grow-only device-local structured buffer with minimal upload helpers.
+//! Device-local structured buffer supporting ring-style allocations.
 /*!
- Implements a single-buffer ring (head/tail) in device-local memory and
- keeps a stable shader-visible SRV. Capacity may grow, but the SRV index is
- preserved. It does not submit uploads, manage staging or fences, or make
- assumptions about GPU completion.
+ This class manages a single GPU buffer and a shader-visible SRV range.
+ It implements a ring allocator (head/tail) in bytes while presenting an
+ element-oriented API to callers. The buffer can grow; the shader-visible
+ index used for the SRV is preserved across resizes.
 
- ### Responsibilities
+ Key behaviors:
+ - Allocate() and the SRV-related methods operate in element units.
+ - ReserveElements() grows the underlying buffer when needed.
+ - Clients build upload requests with BuildCopyFor/BuildCopyRange/BuildCopyAll
+   and submit them via their upload subsystem.
+ - FinalizeChunk() records allocations made since the last finalize and
+   returns a chunk id. TryReclaim(id) reclaims the front chunk when the
+   caller confirms GPU work referencing that chunk has completed. Reclamation
+   is client-driven and strictly FIFO.
 
- - Manage a single GPU buffer and its SRV range.
- - Provide a true ring allocation API in element units.
- - Allow clients to build upload requests targeting the buffer.
- - Expose a client-driven chunk lifecycle for precise reclamation.
-
- ### Non-responsibilities (by design)
-
- - Upload submission, batching, staging and persistent mapping.
- - Queue/fence/ticket management or scheduling decisions.
- - Multi-buffer growth and garbage collection.
-
- Use this with UploadCoordinator for copies and with a higher-level owner to
- call FinalizeChunk() and TryReclaim() when its tickets have completed.
-
- ### Usage Examples
+ Example usage:
 
  ```cpp
- // Ensure capacity and expose first N elements
  ring.ReserveElements(N);
  ring.SetActiveElements(N);
 
- // Streaming use-case with the ring allocator
- if (auto alloc = ring.Allocate(elem_count, align_elems)) {
+ if (auto alloc = ring.Allocate(elem_count)) {
    auto req = ring.BuildCopyFor(*alloc, bytes, "MyStreamCopy");
-   auto tickets = uploader.SubmitMany({req});
+   // Submit req via your upload coordinator
 
-   // When all tickets for this chunk are complete:
    if (auto id = ring.FinalizeChunk()) {
-     // Save id with your tickets; later when complete, reclaim:
-     ring.TryReclaim(*id); // strictly FIFO
+     // Save id and, once uploads complete, call:
+     ring.TryReclaim(*id);
    }
  }
  ```
 
- @warning Ring reclamation is strictly client-driven and FIFO. The buffer will
- never reclaim implicitly. Call FinalizeChunk() after enqueuing all copies
- that reference allocations since the last finalize, and later call
- TryReclaim(id) only when you have verified completion via your tickets.
+ @warning Reclamation is strictly client-driven and FIFO. Call FinalizeChunk()
+ after enqueuing all copies for the current chunk, and call TryReclaim(id)
+ only when you have externally verified completion for that chunk's uploads.
 */
 class RingUploadBuffer {
 public:
@@ -124,11 +114,12 @@ public:
   //! Returns element offset and count on success.
   /*!
    Allocates a contiguous region using ring head/tail. Placement tries the
-   [tail..end) space first, then wraps to [0..head). Alignment is in element
-   units and must be a power of two.
+   [tail..end) space first, then wraps to [0..head). Allocations are aligned
+   to the element stride (Stride()). Callers provide sizes in element units;
+   the allocator converts to bytes using the stride and aligns allocations to
+   the stride boundary.
 
    @param elements Number of elements to allocate.
-   @param align_elements Power-of-two alignment in elements (default 1).
    @return Allocation with element offset and size, or std::nullopt on failure.
 
   ### Performance Characteristics
@@ -144,8 +135,8 @@ public:
     std::uint64_t elements { 0 };
   };
 
-  [[nodiscard]] OXGN_RNDR_API auto Allocate(std::uint64_t elements,
-    std::uint64_t align_elements = 1) -> std::optional<Allocation>;
+  [[nodiscard]] OXGN_RNDR_API auto Allocate(std::uint64_t elements)
+    -> std::optional<Allocation>;
 
   //! Update the SRV range to expose only the first active_elements.
   //! Returns false if the buffer/view could not be updated. The bindless
