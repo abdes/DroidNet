@@ -19,13 +19,13 @@ auto oxygen::graphics::detail::to_string(const Barrier& barrier) -> std::string
       using T = std::decay_t<TDescriptor>;
       std::ostringstream oss;
       if constexpr (std::is_same_v<T, MemoryBarrierDesc>) {
-        oss << "Memory Barrier for resource " << desc.resource.AsInteger();
+        oss << "Memory Barrier for resource " << desc.resource->AsInteger();
       } else if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
-        oss << "Buffer Barrier for resource " << desc.resource.AsInteger()
+        oss << "Buffer Barrier for resource " << desc.resource->AsInteger()
             << ": " << nostd::to_string(desc.before) << " -> "
             << nostd::to_string(desc.after);
       } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
-        oss << "Texture Barrier for resource " << desc.resource.AsInteger()
+        oss << "Texture Barrier for resource " << desc.resource->AsInteger()
             << ": " << nostd::to_string(desc.before) << " -> "
             << nostd::to_string(desc.after);
       }

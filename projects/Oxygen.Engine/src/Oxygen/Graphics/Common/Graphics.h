@@ -6,7 +6,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -14,13 +13,13 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/ParkingLot.h>
 
 namespace oxygen {
 
@@ -39,7 +38,6 @@ namespace graphics {
   struct FramebufferDesc;
   class Framebuffer;
   class IShaderByteCode;
-  class NativeObject;
   class QueuesStrategy;
   class ResourceRegistry;
   class Surface;
@@ -199,7 +197,7 @@ public:
 
   [[nodiscard]] virtual auto CreateTextureFromNativeObject(
     const graphics::TextureDesc& desc,
-    const graphics::NativeObject& native) const
+    const graphics::NativeResource& native) const
     -> std::shared_ptr<graphics::Texture>
     = 0;
 

@@ -180,7 +180,7 @@ auto CommandQueue::Submit(
 auto CommandQueue::Flush() const -> void
 {
   // Wait for all pending submissions to be consumed. We loop because
-  // Signal() may be called concurrently and we want to wait until
+  // Signal() may be called concurrently, and we want to wait until
   // pending_submissions_ reaches zero and completed_value_ reflects
   // the latest signaled value.
   std::unique_lock lk(mutex_);

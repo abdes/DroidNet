@@ -28,7 +28,7 @@ namespace oxygen::graphics::headless {
  - Mapping/Unmapping of the backing store via `Map()`/`UnMap()`.
  - Region updates via `Update()` and direct read/write helpers
    (`ReadBacking()` / `WriteBacking()`).
- - Creation of small view payloads (CBV/SRV/UAV) returned as `NativeObject`
+ - Creation of small view payloads (CBV/SRV/UAV) returned as `NativeView`
    pointers that reference payloads owned by the `Buffer` instance.
 
  ### Key semantics and guarantees:
@@ -44,16 +44,16 @@ namespace oxygen::graphics::headless {
  - Update/Read semantics: `Update()` / `ReadBacking()` / `WriteBacking()` are
    bounds-checked and will clamp writes/reads to the allocated backing size.
    Invalid parameters (null pointers or zero sizes) are ignored.
- - View payload ownership: view payloads (returned as `NativeObject`) are
+ - View payload ownership: view payloads (returned as `NativeView`) are
    small POD structs allocated and owned by the `Buffer` and remain valid for
    the lifetime of the `Buffer` (they are stored in `owned_view_payloads_`).
-   The returned `NativeObject` is a non-owning pointer into that storage and
+   The returned `NativeView` is a non-owning pointer into that storage and
    must not be deleted by the caller.
 
  ### Lifetime and registry notes:
 
  - The `Buffer` does not attempt to cache or deduplicate views. If a
-   `ResourceRegistry` or other system caches `NativeObject` pointers to view
+   `ResourceRegistry` or other system caches `NativeView` pointers to view
    payloads, it must ensure those payloads remain alive for as long as the
    registry expects to reference them (for example, by unregistering views
    before destroying the `Buffer` or by taking ownership of the payload).
@@ -79,11 +79,11 @@ namespace oxygen::graphics::headless {
  buf->ReadBacking(tmp.data(), 0, buf->GetSize());
  ```
 
- @warning Ensure any systems that cache view `NativeObject` pointers do not
+ @warning Ensure any systems that cache view `NativeView` pointers do not
  hold them past the `Buffer`'s destruction, or transfer ownership of the
  payloads to the cacher. See `Create*View()` methods for details on the
  returned payload type.
- @see ResourceRegistry, NativeObject
+ @see ResourceRegistry, NativeView
 */
 class Buffer final : public graphics::Buffer {
 public:
@@ -104,7 +104,7 @@ public:
 
   // Buffer interface
   OXGN_HDLS_NDAPI auto GetDescriptor() const noexcept -> BufferDesc override;
-  OXGN_HDLS_NDAPI auto GetNativeResource() const -> NativeObject override;
+  OXGN_HDLS_NDAPI auto GetNativeResource() const -> NativeResource override;
   OXGN_HDLS_NDAPI auto Map(size_t offset = 0, uint64_t size = 0)
     -> void* override;
   OXGN_HDLS_NDAPI auto UnMap() -> void override;
@@ -127,13 +127,13 @@ public:
 protected:
   [[nodiscard]] auto CreateConstantBufferView(
     const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-    -> NativeObject override;
+    -> NativeView override;
   [[nodiscard]] auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeObject override;
+    uint32_t stride = 0) const -> NativeView override;
   [[nodiscard]] auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeObject override;
+    uint32_t stride = 0) const -> NativeView override;
 
 private:
   BufferDesc desc_ {};
@@ -146,7 +146,7 @@ private:
   // multi-threaded helpers.
   mutable std::mutex data_mutex_;
 
-  // Owned view payloads to keep NativeObject pointers valid without leaking.
+  // Owned view payloads to keep NativeView pointers valid without leaking.
   // Use a custom deleter type (function pointer) because deleting an
   // incomplete type with the default deleter is undefined. We allocate the
   // payloads with operator new and destroy with operator delete via the

@@ -50,10 +50,8 @@ public:
 
   auto Begin() -> void override;
 
-  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc desc)
-    -> void override;
-  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc desc)
-    -> void override;
+  auto SetPipelineState(GraphicsPipelineDesc desc) -> void override;
+  auto SetPipelineState(ComputePipelineDesc desc) -> void override;
   auto SetGraphicsRootConstantBufferView(uint32_t root_parameter_index,
     uint64_t buffer_gpu_address) -> void override;
 
@@ -66,8 +64,8 @@ public:
   auto SetComputeRoot32BitConstant(uint32_t root_parameter_index,
     uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void override;
 
-  OXGN_D3D12_API auto SetRenderTargets(std::span<NativeObject> rtvs,
-    std::optional<NativeObject> dsv) -> void override;
+  OXGN_D3D12_API auto SetRenderTargets(
+    std::span<NativeView> rtvs, std::optional<NativeView> dsv) -> void override;
   auto SetViewport(const ViewPort& viewport) -> void override;
   auto SetScissors(const Scissors& scissors) -> void override;
 
@@ -100,7 +98,7 @@ public:
          set, the depth and stencil values will be ignored and the clear
          values, derived from the texture's format, will be used instead.
    */
-  auto ClearDepthStencilView(const Texture& texture, const NativeObject& dsv,
+  auto ClearDepthStencilView(const Texture& texture, const NativeView& dsv,
     ClearFlags clear_flags, float depth, uint8_t stencil) -> void override;
 
   auto CopyBuffer(

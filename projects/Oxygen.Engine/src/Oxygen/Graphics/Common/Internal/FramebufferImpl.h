@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 
 namespace oxygen {
 class Graphics;
@@ -22,8 +23,7 @@ class FramebufferImpl final : public Framebuffer {
   using Base = Framebuffer;
 
 public:
-  FramebufferImpl(
-    FramebufferDesc desc, std::weak_ptr<oxygen::Graphics> gfx_weak);
+  FramebufferImpl(FramebufferDesc desc, std::weak_ptr<Graphics> gfx_weak);
   ~FramebufferImpl() override;
 
   OXYGEN_MAKE_NON_COPYABLE(FramebufferImpl)
@@ -41,12 +41,12 @@ public:
     -> void override;
 
   [[nodiscard]] auto GetRenderTargetViews() const
-    -> std::span<const NativeObject> override
+    -> std::span<const NativeView> override
   {
     return std::span(rtvs_.data(), rtvs_.size());
   }
 
-  [[nodiscard]] auto GetDepthStencilView() const -> NativeObject override
+  [[nodiscard]] auto GetDepthStencilView() const -> NativeView override
   {
     return dsv_;
   }
@@ -56,8 +56,8 @@ private:
   std::weak_ptr<Graphics> gfx_weak_;
 
   StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets> textures_ {};
-  StaticVector<NativeObject, kMaxRenderTargets> rtvs_ {};
-  NativeObject dsv_ {};
+  StaticVector<NativeView, kMaxRenderTargets> rtvs_ {};
+  NativeView dsv_ {};
 
   uint32_t rt_width_ { 0 };
   uint32_t rt_height_ { 0 };

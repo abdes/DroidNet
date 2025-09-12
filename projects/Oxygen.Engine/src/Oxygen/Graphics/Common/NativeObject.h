@@ -6,12 +6,14 @@
 
 #pragma once
 
+#include <compare>
 #include <cstdint>
 #include <stdexcept>
 #include <type_traits>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -161,6 +163,24 @@ public:
   {
     return !(*this == other);
   }
+
+  //! Three-way comparison operator. Compares based on owner type ID and handle.
+  /*!
+   Provides ordering for `NativeObject` instances by first comparing owner type
+   IDs, then the integer handles. This enables use in ordered containers and
+   sorting algorithms.
+
+   @param other The other `NativeObject` to compare against
+   @return std::strong_ordering result of the comparison
+  */
+  constexpr auto operator<=>(const NativeObject& other) const noexcept
+    -> std::strong_ordering
+  {
+    if (const auto cmp = owner_type_id_ <=> other.owner_type_id_; cmp != 0) {
+      return cmp;
+    }
+    return integer <=> other.integer;
+  }
 };
 
 // C++20 concept to identify resources that can have barriers
@@ -170,7 +190,123 @@ concept HoldsNativeResource = requires(T obj) {
 };
 
 //! Converts a `NativeObject` to a string representation.
-OXGN_GFX_API auto to_string(const NativeObject& obj) -> std::string;
+OXGN_GFX_API auto to_string(const NativeObject& value) -> std::string;
+
+//! Type-safe wrapper for NativeObject representing a native resource (i.e.
+//! Buffer or Texture...). Can be implicitly converted to NativeObject but must
+//! be explicitly constructed from one.
+class NativeResource : public NamedType<NativeObject, struct NativeResourceTag,
+                         // clang-format off
+  FunctionCallable,
+  MethodCallable,
+  Hashable,
+  Comparable> // clang-format on
+{
+  using Base = NamedType<NativeObject, struct NativeResourceTag,
+    // clang-format off
+    oxygen::FunctionCallable,
+    oxygen::MethodCallable,
+    oxygen::Hashable,
+    oxygen::Comparable>; // clang-format on
+
+public:
+  // Inherit base constructors
+  using Base::Base;
+
+  //! Default constructor; creates an invalid `NativeResource`.
+  constexpr NativeResource() noexcept = default;
+
+  //! Constructs a `NativeResource` with an integer handle.
+  /*!
+   \param handle The integer handle of the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeResource(const uint64_t handle, const TypeId type_id) noexcept
+    : Base(NativeObject(handle, type_id))
+  {
+  }
+
+  //! Constructs a `NativeResource` with a non-const pointer.
+  /*!
+   \param _pointer The pointer to the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeResource(void* _pointer, const TypeId type_id) noexcept
+    : Base(NativeObject(_pointer, type_id))
+  {
+  }
+
+  //! Constructs a `NativeResource` with a const pointer.
+  /*!
+   \param _pointer The const pointer to the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeResource(const void* _pointer, const TypeId type_id) noexcept
+    : Base(NativeObject(_pointer, type_id))
+  {
+  }
+};
+
+//! Converts a `NativeResource` to a string representation.
+OXGN_GFX_API auto to_string(const NativeResource& value) -> std::string;
+
+//! Type-safe wrapper for NativeObject representing a native view descriptor.
+//! Can be implicitly converted to NativeObject but must be explicitly
+//! constructed from one.
+class NativeView : public NamedType<NativeObject, struct NativeViewTag,
+                     // clang-format off
+  FunctionCallable,
+  MethodCallable,
+  Hashable,
+  Comparable> // clang-format on
+{
+  using Base = NamedType<NativeObject, struct NativeViewTag,
+    // clang-format off
+    oxygen::FunctionCallable,
+    oxygen::MethodCallable,
+    oxygen::Hashable,
+    oxygen::Comparable>; // clang-format on
+
+public:
+  // Inherit base constructors
+  using Base::Base;
+
+  //! Default constructor; creates an invalid `NativeView`.
+  constexpr NativeView() noexcept = default;
+
+  //! Constructs a `NativeView` with an integer handle.
+  /*!
+   \param handle The integer handle of the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeView(const uint64_t handle, const TypeId type_id) noexcept
+    : Base(NativeObject(handle, type_id))
+  {
+  }
+
+  //! Constructs a `NativeView` with a non-const pointer.
+  /*!
+   \param _pointer The pointer to the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeView(void* _pointer, const TypeId type_id) noexcept
+    : Base(NativeObject(_pointer, type_id))
+  {
+  }
+
+  //! Constructs a `NativeView` with a const pointer.
+  /*!
+   \param _pointer The const pointer to the native object.
+   \param type_id The type ID of the owning graphics object.
+  */
+  constexpr NativeView(const void* _pointer, const TypeId type_id) noexcept
+    : Base(NativeObject(_pointer, type_id))
+  {
+  }
+};
+
+//! Converts a `NativeView` to a string representation.
+OXGN_GFX_API auto to_string(const NativeView& value) -> std::string;
 
 } // namespace oxygen::graphics
 
@@ -187,5 +323,29 @@ template <> struct std::hash<oxygen::graphics::NativeObject> {
     oxygen::HashCombine(seed, obj.OwnerTypeId());
     oxygen::HashCombine(seed, obj.AsInteger());
     return seed;
+  }
+};
+
+//! Provides a hash function for `NativeResource`.
+/*!
+ * Delegates to the `NativeObject` hash function by using the underlying value.
+ */
+template <> struct std::hash<oxygen::graphics::NativeResource> {
+  auto operator()(const oxygen::graphics::NativeResource& obj) const noexcept
+    -> size_t
+  {
+    return std::hash<oxygen::graphics::NativeObject> {}(obj.get());
+  }
+};
+
+//! Provides a hash function for `NativeView`.
+/*!
+ * Delegates to the `NativeObject` hash function by using the underlying value.
+ */
+template <> struct std::hash<oxygen::graphics::NativeView> {
+  auto operator()(const oxygen::graphics::NativeView& obj) const noexcept
+    -> size_t
+  {
+    return std::hash<oxygen::graphics::NativeObject> {}(obj.get());
   }
 };

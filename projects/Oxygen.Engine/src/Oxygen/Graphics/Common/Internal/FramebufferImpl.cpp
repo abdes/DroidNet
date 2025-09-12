@@ -74,7 +74,7 @@ FramebufferImpl::FramebufferImpl(
 
     auto rtv = resource_registry.RegisterView(
       *texture, std::move(rtv_handle), view_desc);
-    if (!rtv.IsValid()) {
+    if (!rtv->IsValid()) {
       resource_registry.UnRegisterResource(*texture);
       throw std::runtime_error(fmt::format(
         "Failed to register RTV view for texture `{}`", texture->GetName()));
@@ -113,7 +113,7 @@ FramebufferImpl::FramebufferImpl(
 
     auto dsv = resource_registry.RegisterView(
       *texture, std::move(dsv_handle), view_desc);
-    if (!dsv.IsValid()) {
+    if (!dsv->IsValid()) {
       resource_registry.UnRegisterResource(*texture);
       throw std::runtime_error(fmt::format(
         "Failed to register DSV view for texture `{}`", texture->GetName()));
@@ -150,7 +150,7 @@ auto FramebufferImpl::GetFramebufferInfo() const -> const FramebufferInfo&
   return info;
 }
 
-void FramebufferImpl::PrepareForRender(CommandRecorder& recorder)
+auto FramebufferImpl::PrepareForRender(CommandRecorder& recorder) -> void
 {
   const auto& desc = GetDescriptor();
   for (const auto& attachment : desc.color_attachments) {

@@ -36,7 +36,7 @@ namespace d3d12 {
 
     OXGN_D3D12_NDAPI auto GetDescriptor() const noexcept -> BufferDesc override;
 
-    OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeObject override;
+    OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeResource override;
 
     OXGN_D3D12_NDAPI auto GetResource() const -> ID3D12Resource*;
     OXGN_D3D12_NDAPI auto Map(size_t offset = 0, size_t size = 0)
@@ -59,17 +59,15 @@ namespace d3d12 {
     // --- New view creation methods ---
     [[nodiscard]] auto CreateConstantBufferView(
       const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-      -> NativeObject override;
+      -> NativeView override;
 
     [[nodiscard]] auto CreateShaderResourceView(
       const DescriptorHandle& view_handle, Format format,
-      BufferRange range = {}, uint32_t stride = 0) const
-      -> NativeObject override;
+      BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
 
     [[nodiscard]] auto CreateUnorderedAccessView(
       const DescriptorHandle& view_handle, Format format,
-      BufferRange range = {}, uint32_t stride = 0) const
-      -> NativeObject override;
+      BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
 
   private:
     auto CurrentDevice() const -> dx::IDevice*;

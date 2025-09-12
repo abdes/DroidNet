@@ -14,29 +14,29 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 
-namespace oxygen::graphics {
+namespace oxygen {
 class Graphics;
-class CommandQueue;
-class ResourceRegistry;
-namespace detail {
-  class ResourceStateTracker;
-}
-}
+namespace graphics {
+  class CommandQueue;
+  class ResourceRegistry;
+  namespace detail {
+    class ResourceStateTracker;
+  }
+} // namespace graphics
+} // namespace oxygen
 
 namespace oxygen::graphics::headless {
 
 struct CommandContext {
-  observer_ptr<oxygen::graphics::Graphics> graphics = nullptr;
-  observer_ptr<oxygen::graphics::CommandQueue> queue = nullptr;
-  observer_ptr<oxygen::graphics::ResourceRegistry> registry = nullptr;
-  oxygen::graphics::detail::ResourceStateTracker* state_tracker = nullptr;
-  std::unordered_map<::oxygen::graphics::NativeObject,
-    ::oxygen::graphics::ResourceStates>
-    observed_states;
+  observer_ptr<Graphics> graphics = nullptr;
+  observer_ptr<CommandQueue> queue = nullptr;
+  observer_ptr<ResourceRegistry> registry = nullptr;
+  detail::ResourceStateTracker* state_tracker = nullptr;
+  std::unordered_map<NativeResource, ResourceStates> observed_states;
   uint64_t submission_id = 0;
   std::atomic<bool>* cancel_flag = nullptr;
 
-  bool IsCancelled() const noexcept
+  auto IsCancelled() const noexcept -> bool
   {
     return cancel_flag && cancel_flag->load(std::memory_order_acquire);
   }

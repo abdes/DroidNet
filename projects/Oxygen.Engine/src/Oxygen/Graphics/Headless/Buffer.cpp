@@ -27,9 +27,9 @@ Buffer::Buffer(const BufferDesc& desc)
 
 auto Buffer::GetDescriptor() const noexcept -> BufferDesc { return desc_; }
 
-auto Buffer::GetNativeResource() const -> NativeObject
+auto Buffer::GetNativeResource() const -> NativeResource
 {
-  return NativeObject(const_cast<Buffer*>(this), ClassTypeId());
+  return NativeResource(const_cast<Buffer*>(this), ClassTypeId());
 }
 
 auto Buffer::Map(uint64_t /*offset*/, uint64_t /*size*/) -> void*
@@ -115,7 +115,7 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
   // Return a stable fake GPU virtual address for headless testing. Use the
   // pointer value of the object as a deterministic unique address.
   const auto ptr = reinterpret_cast<uintptr_t>(this);
-  return static_cast<uint64_t>(ptr);
+  return ptr;
 }
 
 //! View payloads created here are owned by the Buffer instance.
@@ -127,57 +127,54 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
  registry if views must outlive the resource.
 */
 auto Buffer::CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
-  const BufferRange& /*range*/) const -> NativeObject
+  const BufferRange& /*range*/) const -> NativeView
 {
   // Allocate raw memory for payload and construct in-place. Use a
   // function-pointer deleter that calls operator delete for the raw
   // allocation to avoid deleting an incomplete type with default deleter.
-  void* raw = operator new(sizeof(Buffer::CBV));
-  auto typed
-    = new (raw) Buffer::CBV { this, BufferRange {}, Format::kUnknown, 0 };
+  void* raw = operator new(sizeof(CBV));
+  auto typed = new (raw) CBV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
       // Explicitly call destructor and free raw memory
-      static_cast<Buffer::CBV*>(p)->~CBV();
+      static_cast<CBV*>(p)->~CBV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Buffer::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
   Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
-  -> NativeObject
+  -> NativeView
 {
-  void* raw = operator new(sizeof(Buffer::SRV));
-  auto typed
-    = new (raw) Buffer::SRV { this, BufferRange {}, Format::kUnknown, 0 };
+  void* raw = operator new(sizeof(SRV));
+  auto typed = new (raw) SRV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Buffer::SRV*>(p)->~SRV();
+      static_cast<SRV*>(p)->~SRV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Buffer::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
   Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
-  -> NativeObject
+  -> NativeView
 {
-  void* raw = operator new(sizeof(Buffer::UAV));
-  auto typed
-    = new (raw) Buffer::UAV { this, BufferRange {}, Format::kUnknown, 0 };
+  void* raw = operator new(sizeof(UAV));
+  auto typed = new (raw) UAV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Buffer::UAV*>(p)->~UAV();
+      static_cast<UAV*>(p)->~UAV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

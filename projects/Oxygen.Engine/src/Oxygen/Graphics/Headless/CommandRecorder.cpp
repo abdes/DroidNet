@@ -45,7 +45,7 @@ auto CommandRecorder::ExecuteBarriers(std::span<const detail::Barrier> barriers)
   // be executed by the CommandQueue worker and is responsible for updating
   // the execution-time observed state (CommandContext). The recorder must not
   // perform execution-time validation here.
-  std::vector<::oxygen::graphics::detail::Barrier> v;
+  std::vector<detail::Barrier> v;
   v.reserve(barriers.size());
   for (const auto& b : barriers) {
     v.push_back(b);
@@ -81,22 +81,21 @@ auto CommandRecorder::ClearFramebuffer(const Framebuffer& fb,
     std::move(color_clear_values), depth_clear_value, stencil_clear_value));
 }
 
-auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
-  const NativeObject& dsv, ClearFlags flags, float depth, uint8_t stencil)
-  -> void
+auto CommandRecorder::ClearDepthStencilView(const Texture& texture,
+  const NativeView& dsv, ClearFlags flags, float depth, uint8_t stencil) -> void
 {
   QueueCommand(std::make_shared<ClearDepthStencilCommand>(
     &texture, dsv, flags, depth, stencil));
 }
 
 auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
-  const TextureUploadRegion& region, graphics::Texture& dst) -> void
+  const TextureUploadRegion& region, Texture& dst) -> void
 {
   QueueCommand(std::make_shared<BufferToTextureCommand>(&src, region, &dst));
 }
 
 auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
-  std::span<const TextureUploadRegion> regions, graphics::Texture& dst) -> void
+  std::span<const TextureUploadRegion> regions, Texture& dst) -> void
 {
   for (const auto& r : regions) {
     QueueCommand(std::make_shared<BufferToTextureCommand>(&src, r, &dst));

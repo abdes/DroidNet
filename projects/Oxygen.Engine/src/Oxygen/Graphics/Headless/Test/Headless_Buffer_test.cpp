@@ -66,8 +66,9 @@ NOLINT_TEST(HeadlessBufferTest, UpdateReadWrite_BoundsChecks)
 
   // Act: prepare source data and update
   std::vector<uint8_t> src(16);
-  for (auto i = 0u; i < src.size(); ++i)
+  for (auto i = 0u; i < src.size(); ++i) {
     src[i] = static_cast<uint8_t>(0xA0 + i);
+  }
   buf.Update(src.data(), src.size(), 8);
 
   // Assert: read back
@@ -138,20 +139,20 @@ NOLINT_TEST(HeadlessBufferTest, CreateViewsAndNativeObject)
   oxygen::graphics::BufferViewDescription cbv_desc;
   cbv_desc.view_type = oxygen::graphics::ResourceViewType::kConstantBuffer;
   auto cbv = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, cbv_desc);
-  EXPECT_TRUE(cbv.IsValid());
-  EXPECT_TRUE(cbv.IsPointerHandle());
+  EXPECT_TRUE(cbv->IsValid());
+  EXPECT_TRUE(cbv->IsPointerHandle());
 
   // Act / Assert: SRV
   oxygen::graphics::BufferViewDescription srv_desc;
   srv_desc.view_type = oxygen::graphics::ResourceViewType::kRawBuffer_SRV;
   auto srv = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, srv_desc);
-  EXPECT_TRUE(srv.IsValid());
+  EXPECT_TRUE(srv->IsValid());
 
   // Act / Assert: UAV
   oxygen::graphics::BufferViewDescription uav_desc;
   uav_desc.view_type = oxygen::graphics::ResourceViewType::kRawBuffer_UAV;
   auto uav = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, uav_desc);
-  EXPECT_TRUE(uav.IsValid());
+  EXPECT_TRUE(uav->IsValid());
 }
 
 } // namespace

@@ -19,8 +19,8 @@ using oxygen::engine::upload::UploadRequest;
 
 namespace oxygen::renderer::upload {
 
-RingUploadBuffer::RingUploadBuffer(oxygen::Graphics& gfx,
-  const std::uint32_t element_stride, std::string debug_label)
+RingUploadBuffer::RingUploadBuffer(
+  Graphics& gfx, const std::uint32_t element_stride, std::string debug_label)
   : gfx_(gfx)
   , element_stride_(element_stride)
   , debug_label_(std::move(debug_label))
@@ -36,7 +36,7 @@ auto RingUploadBuffer::ReserveElements(
   const auto current = buffer_ ? buffer_->GetSize() : 0ULL;
   if (current >= desired) {
     // Keep capacity elements consistent if created externally
-    capacity_elements_ = static_cast<std::uint64_t>(current / element_stride_);
+    capacity_elements_ = current / element_stride_;
     return false;
   }
 
@@ -51,19 +51,19 @@ auto RingUploadBuffer::ReserveElements(
       desired + static_cast<std::uint64_t>(desired * s));
   }
 
-  const auto result = renderer::resources::internal::EnsureBufferAndSrv(
+  const auto result = resources::internal::EnsureBufferAndSrv(
     gfx_, buffer_, bindless_index_, new_bytes, element_stride_, debug_label_);
   if (!result) {
     LOG_F(ERROR, "RingUploadBuffer: EnsureBufferAndSrv failed for '{}'",
       debug_label_);
     return false;
   }
-  capacity_elements_ = static_cast<std::uint64_t>(new_bytes / element_stride_);
+  capacity_elements_ = new_bytes / element_stride_;
   ++buffer_reallocations_;
   return true;
 }
 
-void RingUploadBuffer::LogTelemetryStats() const
+auto RingUploadBuffer::LogTelemetryStats() const -> void
 {
   LOG_F(INFO, "buffer reallocations  : {}", buffer_reallocations_);
   LOG_F(INFO, "curr allocations      : {}", curr_allocations_);
@@ -72,7 +72,7 @@ void RingUploadBuffer::LogTelemetryStats() const
   LOG_F(INFO, "allocations per frame : {}", avg_allocations_per_frame_);
   LOG_F(INFO, "failed allocations    : {}", failed_allocations_);
   LOG_F(INFO, "max used              : {} (bytes)", max_used_bytes_);
-  LOG_F(INFO, "currently used        : {} (bytes)", FreeBytes());
+  LOG_F(INFO, "currently used        : {} (bytes)", UsedBytes());
 }
 
 auto RingUploadBuffer::SetActiveElements(const std::uint64_t active_elements)
@@ -83,16 +83,16 @@ auto RingUploadBuffer::SetActiveElements(const std::uint64_t active_elements)
   }
   const auto clamped = (std::min)(active_elements, capacity_elements_);
 
-  oxygen::graphics::BufferViewDescription view_desc {
-    .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+  graphics::BufferViewDescription view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .range = { 0, clamped * element_stride_ },
     .stride = element_stride_,
   };
 
   auto& registry = gfx_.GetResourceRegistry();
   return registry.UpdateView(
-    *buffer_, oxygen::bindless::Handle(bindless_index_.get()), view_desc);
+    *buffer_, bindless::Handle(bindless_index_.get()), view_desc);
 }
 
 auto RingUploadBuffer::MakeCopyAll(const std::span<const std::byte> bytes,
@@ -103,7 +103,7 @@ auto RingUploadBuffer::MakeCopyAll(const std::span<const std::byte> bytes,
   req.debug_name = std::string(debug);
   UploadBufferDesc desc {
     .dst = buffer_,
-    .size_bytes = static_cast<std::uint64_t>(bytes.size()),
+    .size_bytes = (bytes.size()),
     .dst_offset = 0,
   };
   req.desc = desc;
@@ -120,7 +120,7 @@ auto RingUploadBuffer::MakeCopyRange(const std::uint64_t element_offset,
   req.debug_name = std::string(debug);
   UploadBufferDesc desc {
     .dst = buffer_,
-    .size_bytes = static_cast<std::uint64_t>(bytes.size()),
+    .size_bytes = (bytes.size()),
     .dst_offset = static_cast<std::uint64_t>(element_offset)
       * static_cast<std::uint64_t>(element_stride_),
   };
@@ -146,9 +146,9 @@ auto RingUploadBuffer::SetActiveRange(
   const auto base = (std::min)(base_element, max_elems);
   const auto count = (std::min)(active_elements, max_elems - base);
 
-  oxygen::graphics::BufferViewDescription view_desc {
-    .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+  graphics::BufferViewDescription view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .range = {
       base * static_cast<std::uint64_t>(element_stride_),
       count * static_cast<std::uint64_t>(element_stride_),
@@ -158,7 +158,7 @@ auto RingUploadBuffer::SetActiveRange(
 
   auto& registry = gfx_.GetResourceRegistry();
   return registry.UpdateView(
-    *buffer_, oxygen::bindless::Handle(bindless_index_.get()), view_desc);
+    *buffer_, bindless::Handle(bindless_index_.get()), view_desc);
 }
 
 auto RingUploadBuffer::Allocate(const std::uint64_t elements)

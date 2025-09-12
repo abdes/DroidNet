@@ -99,7 +99,7 @@ public:
   MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
-  MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeObject&), (const, override));
+  MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeResource&), (const, override));
   MOCK_METHOD((std::shared_ptr<Buffer>), CreateBuffer, (const BufferDesc&), (const, override));
   MOCK_METHOD((std::unique_ptr<CommandList>), CreateCommandListImpl, (QueueRole, std::string_view), (override));
   MOCK_METHOD((std::unique_ptr<CommandRecorder>), CreateCommandRecorder, (std::shared_ptr<CommandList>, observer_ptr<CommandQueue>), (override));
@@ -217,8 +217,9 @@ public:
 
   [[nodiscard]] auto KeyFor(const QueueRole role) const -> QueueKey override
   {
-    if (role == Role::kGraphics)
+    if (role == Role::kGraphics) {
       return gfx_key_;
+    }
     return QueueKey { "__invalid__" };
   }
 
@@ -312,7 +313,7 @@ NOLINT_TEST(QueuesStrategy,
 //! per unique CommandQueue
 NOLINT_TEST(QueuesStrategy, ForEachQueue_VisitsEachUniqueQueueOnce)
 {
-  using ::testing::NiceMock;
+  using testing::NiceMock;
   NiceMock<MockGraphics> gfx("test-gfx");
 
   // Prepare three specs: two names that will map to the same created object
@@ -365,15 +366,13 @@ NOLINT_TEST(QueuesStrategy, ForEachQueue_VisitsEachUniqueQueueOnce)
   // Directly iterate the manager's unique command queues and record each
   // visited pointer. The test asserts iteration visits each unique created
   // queue exactly once and does not depend on side-effects like Flush.
-  auto& qm = gfx.GetComponent<oxygen::graphics::internal::QueueManager>();
-  std::vector<const oxygen::graphics::CommandQueue*> visited;
-  qm.ForEachQueue([&](oxygen::graphics::CommandQueue& q) {
-    visited.push_back(std::addressof(q));
-  });
+  auto& qm = gfx.GetComponent<internal::QueueManager>();
+  std::vector<const CommandQueue*> visited;
+  qm.ForEachQueue(
+    [&](CommandQueue& q) { visited.push_back(std::addressof(q)); });
 
   // Deduplicate and verify we visited exactly the two unique created objects.
-  std::unordered_set<const oxygen::graphics::CommandQueue*> uniq(
-    visited.begin(), visited.end());
+  std::unordered_set<const CommandQueue*> uniq(visited.begin(), visited.end());
   EXPECT_EQ(uniq.size(), 2u);
   EXPECT_TRUE(uniq.count(q_universal.get()));
   EXPECT_TRUE(uniq.count(q_named.get()));
@@ -729,7 +728,7 @@ NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenKeyForInvalidRole_ReturnsEmpty)
   gfx.CreateCommandQueues(strat);
 
   // Use a role value outside the defined enum values.
-  const auto invalid_role = static_cast<Role>(0x7F);
+  constexpr auto invalid_role = static_cast<Role>(0x7F);
   const auto q = gfx.GetCommandQueue(strat.KeyFor(invalid_role));
   ASSERT_EQ(q.get(), nullptr);
 }

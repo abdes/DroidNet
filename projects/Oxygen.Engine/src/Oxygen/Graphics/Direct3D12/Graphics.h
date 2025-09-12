@@ -64,7 +64,7 @@ public:
     -> std::shared_ptr<graphics::Texture> override;
 
   OXGN_D3D12_NDAPI auto CreateTextureFromNativeObject(
-    const TextureDesc& desc, const NativeObject& native) const
+    const TextureDesc& desc, const NativeResource& native) const
     -> std::shared_ptr<graphics::Texture> override;
 
   OXGN_D3D12_NDAPI auto CreateBuffer(const BufferDesc& desc) const
@@ -89,13 +89,11 @@ public:
 
   //=== Pipeline State Management ===--------------------------------------//
 
-  OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(
-    oxygen::graphics::GraphicsPipelineDesc desc, size_t hash)
-    -> detail::PipelineStateCache::Entry;
+  OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,
+    size_t hash) -> detail::PipelineStateCache::Entry;
 
   OXGN_D3D12_NDAPI auto GetOrCreateComputePipeline(
-    oxygen::graphics::ComputePipelineDesc desc, size_t hash)
-    -> detail::PipelineStateCache::Entry;
+    ComputePipelineDesc desc, size_t hash) -> detail::PipelineStateCache::Entry;
 
 protected:
   OXGN_D3D12_NDAPI auto CreateCommandRecorder(

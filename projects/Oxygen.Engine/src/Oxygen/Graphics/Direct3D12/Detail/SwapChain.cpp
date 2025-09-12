@@ -39,7 +39,7 @@ SwapChain::~SwapChain() noexcept
   ReleaseSwapChain();
 }
 
-void SwapChain::Present() const
+auto SwapChain::Present() const -> void
 {
   DCHECK_NOTNULL_F(swap_chain_);
   // Use sync_interval of 1 for V-Sync enabled, 0 for V-Sync disabled
@@ -48,8 +48,8 @@ void SwapChain::Present() const
   current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
-void SwapChain::UpdateDependencies(
-  const std::function<Component&(TypeId)>& get_component) noexcept
+auto SwapChain::UpdateDependencies(
+  const std::function<Component&(TypeId)>& get_component) noexcept -> void
 {
   using WindowComponent = graphics::detail::WindowComponent;
   window_ = &static_cast<WindowComponent&>(
@@ -62,7 +62,7 @@ void SwapChain::UpdateDependencies(
   }
 }
 
-void SwapChain::CreateSwapChain()
+auto SwapChain::CreateSwapChain() -> void
 {
   // This method may be called multiple times; therefore, we need to ensure
   // that any remaining resources from previous calls are released first.
@@ -108,13 +108,13 @@ void SwapChain::CreateSwapChain()
   ObjectRelease(swap_chain);
 }
 
-void SwapChain::ReleaseSwapChain()
+auto SwapChain::ReleaseSwapChain() -> void
 {
   ReleaseRenderTargets();
   ObjectRelease(swap_chain_);
 }
 
-void SwapChain::Resize()
+auto SwapChain::Resize() -> void
 {
   DCHECK_NOTNULL_F(graphics_);
   DCHECK_NOTNULL_F(swap_chain_);
@@ -138,7 +138,7 @@ void SwapChain::Resize()
   CreateRenderTargets();
 }
 
-void SwapChain::CreateRenderTargets()
+auto SwapChain::CreateRenderTargets() -> void
 {
   DCHECK_F(swap_chain_ != nullptr);
   DCHECK_F(render_targets_.size() == 0);
@@ -163,11 +163,11 @@ void SwapChain::CreateRenderTargets()
         .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
         .initial_state = ResourceStates::kPresent,
       },
-      NativeObject(back_buffer, ClassTypeId()), graphics_);
+      NativeResource(back_buffer, ClassTypeId()), graphics_);
   }
 }
 
-void SwapChain::ReleaseRenderTargets()
+auto SwapChain::ReleaseRenderTargets() -> void
 {
   DCHECK_F(swap_chain_ != nullptr);
   render_targets_.clear();

@@ -22,7 +22,7 @@ namespace {
 class DummyTexture : public oxygen::graphics::Texture {
 public:
   explicit DummyTexture(const oxygen::graphics::TextureDesc& d)
-    : oxygen::graphics::Texture("DummyTex")
+    : Texture("DummyTex")
     , desc_(d)
   {
   }
@@ -30,38 +30,38 @@ public:
   {
     return desc_;
   }
-  auto GetNativeResource() const -> oxygen::graphics::NativeObject override
+  auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeObject(const_cast<DummyTexture*>(this),
-      oxygen::graphics::Texture::ClassTypeId());
+    return oxygen::graphics::NativeResource(
+      const_cast<DummyTexture*>(this), ClassTypeId());
   }
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }

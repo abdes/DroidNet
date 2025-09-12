@@ -33,7 +33,7 @@ namespace d3d12 {
     OXGN_D3D12_API explicit Texture(TextureDesc desc, const Graphics* gfx);
 
     OXGN_D3D12_API Texture(
-      TextureDesc desc, const NativeObject& native, const Graphics* gfx);
+      TextureDesc desc, const NativeResource& native, const Graphics* gfx);
 
     OXGN_D3D12_API ~Texture() override;
 
@@ -45,7 +45,7 @@ namespace d3d12 {
     OXGN_D3D12_API auto SetName(std::string_view name) noexcept
       -> void override;
 
-    OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeObject override;
+    OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeResource override;
 
     OXGN_D3D12_NDAPI auto GetDescriptor() const -> const TextureDesc& override
     {
@@ -57,21 +57,21 @@ namespace d3d12 {
     OXGN_D3D12_NDAPI auto CreateShaderResourceView(
       const DescriptorHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
-      -> NativeObject override;
+      -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateUnorderedAccessView(
       const DescriptorHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
-      -> NativeObject override;
+      -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateRenderTargetView(
       const DescriptorHandle& view_handle, Format format,
-      TextureSubResourceSet sub_resources) const -> NativeObject override;
+      TextureSubResourceSet sub_resources) const -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateDepthStencilView(
       const DescriptorHandle& view_handle, Format format,
       TextureSubResourceSet sub_resources, bool is_read_only) const
-      -> NativeObject override;
+      -> NativeView override;
 
   private:
     // Abstract method implementations from base class

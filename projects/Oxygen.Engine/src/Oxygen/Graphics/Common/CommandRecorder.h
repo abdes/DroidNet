@@ -42,7 +42,7 @@ class IShaderByteCode;
 class Buffer;
 class Texture;
 class Framebuffer;
-class NativeObject;
+class NativeView;
 
 class CommandRecorder {
 public:
@@ -128,7 +128,7 @@ public:
   //=== Render State ===----------------------------------------------------//
 
   virtual auto SetRenderTargets(
-    std::span<NativeObject> rtvs, std::optional<NativeObject> dsv) -> void
+    std::span<NativeView> rtvs, std::optional<NativeView> dsv) -> void
     = 0;
 
   virtual auto SetViewport(const ViewPort& viewport) -> void = 0;
@@ -172,8 +172,8 @@ public:
           does not include `ClearFlags::kStencil`.
    */
   virtual auto ClearDepthStencilView(const Texture& texture,
-    const NativeObject& dsv, ClearFlags clear_flags, float depth,
-    uint8_t stencil) -> void
+    const NativeView& dsv, ClearFlags clear_flags, float depth, uint8_t stencil)
+    -> void
     = 0;
 
   //! Clears color and depth/stencil (DSV) attachments of the specified

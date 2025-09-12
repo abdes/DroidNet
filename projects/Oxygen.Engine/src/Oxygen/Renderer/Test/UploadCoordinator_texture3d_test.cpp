@@ -67,38 +67,38 @@ public:
   }
 
   [[nodiscard]] auto GetNativeResource() const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeObject(const_cast<FakeTexture3D*>(this),
-      oxygen::graphics::Texture::ClassTypeId());
+    return oxygen::graphics::NativeResource(
+      const_cast<FakeTexture3D*>(this), Texture::ClassTypeId());
   }
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -118,10 +118,10 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_RecordsRegionAndCompletes)
   // total = 4096 * 8 = 32768
   auto tex = std::make_shared<FakeTexture3D>(
     "DstTex3D", 32, 16, 8, oxygen::Format::kRGBA8UNorm);
-  const uint64_t row_pitch = 256;
-  const uint64_t slice_pitch = row_pitch * 16; // 4096
-  const uint64_t total = slice_pitch * 8; // 32768
-  std::vector<std::byte> data(static_cast<size_t>(total));
+  constexpr uint64_t row_pitch = 256;
+  constexpr uint64_t slice_pitch = row_pitch * 16; // 4096
+  constexpr uint64_t total = slice_pitch * 8; // 32768
+  std::vector<std::byte> data(total);
 
   UploadRequest req { .kind = UploadKind::kTexture3D,
     .batch_policy = {},

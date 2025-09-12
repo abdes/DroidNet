@@ -85,7 +85,7 @@ Texture::Texture(const TextureDesc& desc)
   const uint64_t bytes = static_cast<uint64_t>(per_slice) * layers;
   constexpr uint64_t kMaxBacking = 1024ull * 1024ull * 128ull; // 128MB cap
   if (bytes > 0 && bytes <= kMaxBacking) {
-    data_.resize(static_cast<size_t>(bytes));
+    data_.resize(bytes);
   }
   // Instantiate strategy (same type as layout_tmp)
   layout_strategy_ = std::make_unique<ContiguousLayout>();
@@ -102,8 +102,7 @@ auto Texture::ReadBacking(void* dst, uint32_t src_offset, uint32_t size) const
     LOG_F(WARNING, "Texture::ReadBacking: src_offset out of range");
     return;
   }
-  const uint32_t to_copy = static_cast<uint32_t>(
-    std::min<uint32_t>(size, static_cast<uint32_t>(avail - src_offset)));
+  const uint32_t to_copy = std::min<uint32_t>(size, avail - src_offset);
   std::memcpy(dst, data_.data() + src_offset, to_copy);
 }
 
@@ -118,8 +117,7 @@ auto Texture::WriteBacking(const void* src, uint32_t dst_offset, uint32_t size)
     LOG_F(WARNING, "Texture::WriteBacking: dst_offset out of range");
     return;
   }
-  const uint32_t to_copy = static_cast<uint32_t>(
-    std::min<uint32_t>(size, static_cast<uint32_t>(avail - dst_offset)));
+  const uint32_t to_copy = std::min<uint32_t>(size, avail - dst_offset);
   std::memcpy(data_.data() + dst_offset, src, to_copy);
 }
 
@@ -132,9 +130,9 @@ auto Texture::GetBackingSize() const -> uint32_t
   return static_cast<uint32_t>(sz);
 }
 
-auto Texture::GetNativeResource() const -> NativeObject
+auto Texture::GetNativeResource() const -> NativeResource
 {
-  return NativeObject(const_cast<Texture*>(this), ClassTypeId());
+  return NativeResource(const_cast<Texture*>(this), ClassTypeId());
 }
 
 auto Texture::GetLayoutStrategy() const -> const TextureLayoutStrategy&
@@ -152,7 +150,7 @@ auto Texture::GetLayoutStrategy() const -> const TextureLayoutStrategy&
 */
 auto Texture::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
   Format /*format*/, TextureType /*dimension*/,
-  TextureSubResourceSet sub_resources) const -> NativeObject
+  TextureSubResourceSet sub_resources) const -> NativeView
 {
   // Resolve subresource set to concrete ranges and compute byte ranges.
   const auto resolved
@@ -171,22 +169,22 @@ auto Texture::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
   }
   (void)total_size; // debug log removed
 
-  void* raw = operator new(sizeof(Texture::SRV));
-  auto typed = new (raw) Texture::SRV { this, Format::kUnknown,
-    TextureType::kTexture2D, resolved, base_offset, total_size };
+  void* raw = operator new(sizeof(SRV));
+  auto typed = new (raw) SRV { this, Format::kUnknown, TextureType::kTexture2D,
+    resolved, base_offset, total_size };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Texture::SRV*>(p)->~SRV();
+      static_cast<SRV*>(p)->~SRV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
   Format /*format*/, TextureType /*dimension*/,
-  TextureSubResourceSet sub_resources) const -> NativeObject
+  TextureSubResourceSet sub_resources) const -> NativeView
 {
   const auto resolved
     = sub_resources.Resolve(desc_, /*single_mip_level=*/false);
@@ -201,53 +199,53 @@ auto Texture::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
     }
   }
 
-  void* raw = operator new(sizeof(Texture::UAV));
-  auto typed = new (raw) Texture::UAV { this, Format::kUnknown,
-    TextureType::kTexture2D, resolved, base_offset, total_size };
+  void* raw = operator new(sizeof(UAV));
+  auto typed = new (raw) UAV { this, Format::kUnknown, TextureType::kTexture2D,
+    resolved, base_offset, total_size };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Texture::UAV*>(p)->~UAV();
+      static_cast<UAV*>(p)->~UAV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateRenderTargetView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, TextureSubResourceSet sub_resources) const -> NativeObject
+  Format /*format*/, TextureSubResourceSet sub_resources) const -> NativeView
 {
   // Resolve subresources for RTV (often entire texture or a single mip)
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
-  void* raw = operator new(sizeof(Texture::RTV));
+  void* raw = operator new(sizeof(RTV));
   auto typed = new (raw)
-    Texture::RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
+    RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Texture::RTV*>(p)->~RTV();
+      static_cast<RTV*>(p)->~RTV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateDepthStencilView(const DescriptorHandle& /*view_handle*/,
   Format /*format*/, TextureSubResourceSet sub_resources,
-  bool is_read_only) const -> NativeObject
+  bool is_read_only) const -> NativeView
 {
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
-  void* raw = operator new(sizeof(Texture::DSV));
-  auto typed = new (raw) Texture::DSV { this, Format::kUnknown,
-    TextureType::kTexture2D, resolved, is_read_only };
+  void* raw = operator new(sizeof(DSV));
+  auto typed = new (raw) DSV { this, Format::kUnknown, TextureType::kTexture2D,
+    resolved, is_read_only };
   const void* payload_ptr = typed;
   owned_view_payloads_.emplace_back(raw, [](void* p) {
     if (p) {
-      static_cast<Texture::DSV*>(p)->~DSV();
+      static_cast<DSV*>(p)->~DSV();
       operator delete(p);
     }
   });
-  return NativeObject(const_cast<void*>(payload_ptr), ClassTypeId());
+  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

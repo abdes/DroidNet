@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -23,6 +24,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+#include <Oxygen/Renderer/Resources/GeometryUploader.h>
+#include <Oxygen/Renderer/Resources/MaterialBinder.h>
+#include <Oxygen/Renderer/Resources/TransformUploader.h>
+#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 using oxygen::View;
 
@@ -63,10 +70,39 @@ protected:
     proto_.emplace(node_.GetObject()->get());
 
     ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
+    // Initialize fake graphics and upload coordinator for resource managers
+    gfx_
+      = std::make_shared<oxygen::tests::uploadhelpers::FakeGraphics_Buffer>();
+    gfx_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+    upload_coord_
+      = std::make_unique<oxygen::engine::upload::UploadCoordinator>(*gfx_);
+
+    // Create resource managers and give ownership to ScenePrepState so
+    // Extractors can rely on a non-null material binder during tests.
+    auto geom_uploader
+      = std::make_unique<oxygen::renderer::resources::GeometryUploader>(
+        *gfx_, oxygen::observer_ptr(upload_coord_.get()));
+    auto transform_uploader
+      = std::make_unique<oxygen::renderer::resources::TransformUploader>(
+        *gfx_, oxygen::observer_ptr(upload_coord_.get()));
+    auto material_binder
+      = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
+        *gfx_, oxygen::observer_ptr(upload_coord_.get()));
+
+    state_ = std::make_unique<ScenePrepState>(std::move(geom_uploader),
+      std::move(transform_uploader), std::move(material_binder));
+
     ctx_.emplace(0, view_, *scene_);
   }
 
-  auto TearDown() -> void override { scene_.reset(); }
+  auto TearDown() -> void override
+  {
+    // Release owned resources
+    state_.reset();
+    upload_coord_.reset();
+    gfx_.reset();
+    scene_.reset();
+  }
 
   auto ConfigurePerspectiveView(glm::vec3 eye, glm::vec3 center,
     glm::vec3 up = { 0, 1, 0 }, float fovy_deg = 60.0f, float aspect = 1.0f,
@@ -133,12 +169,11 @@ protected:
     desc.bounding_box_max[1] = 1.0f;
     desc.bounding_box_max[2] = 1.0f;
     auto mesh = MakeMeshWithSubmeshes(0, submesh_count);
-    return std::make_shared<GeometryAsset>(
-      desc, std::vector<std::shared_ptr<oxygen::data::Mesh>> { mesh });
+    return std::make_shared<GeometryAsset>(desc, std::vector { mesh });
   }
 
   auto& Context() { return *ctx_; }
-  auto& State() { return state_; }
+  auto& State() { return *state_; }
   auto& Proto() { return *proto_; }
   auto& Node() { return node_; }
   auto& Flags() { return node_.GetFlags()->get(); }
@@ -150,16 +185,16 @@ private:
     std::vector<Vertex> verts(3);
     std::vector<uint32_t> idx = { 0, 1, 2 };
     auto mat = MaterialAsset::CreateDefault();
-    std::shared_ptr<Mesh> mesh = MeshBuilder()
-                                   .WithVertices(verts)
-                                   .WithIndices(idx)
-                                   .BeginSubMesh("s", mat)
-                                   .WithMeshView({ .first_index = 0,
-                                     .index_count = 3,
-                                     .first_vertex = 0,
-                                     .vertex_count = 3 })
-                                   .EndSubMesh()
-                                   .Build();
+    std::shared_ptr mesh = MeshBuilder()
+                             .WithVertices(verts)
+                             .WithIndices(idx)
+                             .BeginSubMesh("s", mat)
+                             .WithMeshView({ .first_index = 0,
+                               .index_count = 3,
+                               .first_vertex = 0,
+                               .vertex_count = 3 })
+                             .EndSubMesh()
+                             .Build();
 
     pak::GeometryAssetDesc desc {};
     desc.lod_count = 1;
@@ -175,7 +210,9 @@ private:
   SceneNode node_;
   View view_ { View::Params {} };
   std::optional<ScenePrepContext> ctx_;
-  ScenePrepState state_;
+  std::unique_ptr<ScenePrepState> state_;
+  std::shared_ptr<oxygen::tests::uploadhelpers::FakeGraphics_Buffer> gfx_;
+  std::unique_ptr<oxygen::engine::upload::UploadCoordinator> upload_coord_;
   std::optional<RenderItemProto> proto_;
 };
 
@@ -258,8 +295,8 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MaterialOverride_TakesPrecedence)
 
   // Assert: find submesh 1 item and check material ptr
   const auto& items = State().CollectedItems();
-  auto it = std::find_if(items.begin(), items.end(),
-    [](const auto& r) { return r.submesh_index == 1u; });
+  auto it = std::ranges::find_if(
+    items, [](const auto& r) { return r.submesh_index == 1u; });
   ASSERT_NE(it, items.end());
   EXPECT_EQ(it->material, override_mat);
 }
@@ -282,8 +319,8 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MeshMaterial_UsedWhenNoOverride)
 
   // Assert: find submesh 0 item and check material ptr equals mesh material
   const auto& items = State().CollectedItems();
-  auto it = std::find_if(items.begin(), items.end(),
-    [](const auto& r) { return r.submesh_index == 0u; });
+  auto it = std::ranges::find_if(
+    items, [](const auto& r) { return r.submesh_index == 0u; });
   ASSERT_NE(it, items.end());
   EXPECT_EQ(it->material, mesh_material);
 }

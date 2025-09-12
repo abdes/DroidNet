@@ -340,9 +340,9 @@ public:
   [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
 
   //! Gets the native resource handle for the texture.
-  [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+  [[nodiscard]] virtual auto GetNativeResource() const -> NativeResource = 0;
   OXGN_GFX_NDAPI auto GetNativeView(const DescriptorHandle& view_handle,
-    const TextureViewDescription& view_desc) const -> NativeObject;
+    const TextureViewDescription& view_desc) const -> NativeView;
 
   //! Gets the name of the texture.
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -360,26 +360,25 @@ protected:
   //! Gets a shader resource view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeObject
+    TextureSubResourceSet sub_resources) const -> NativeView
     = 0;
 
   //! Gets an unordered access view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeObject
+    TextureSubResourceSet sub_resources) const -> NativeView
     = 0;
 
   //! Gets a render target view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateRenderTargetView(
     const DescriptorHandle& view_handle, Format format,
-    TextureSubResourceSet sub_resources) const -> NativeObject
+    TextureSubResourceSet sub_resources) const -> NativeView
     = 0;
 
   //! Gets a depth stencil view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateDepthStencilView(
     const DescriptorHandle& view_handle, Format format,
-    TextureSubResourceSet sub_resources, bool is_read_only) const
-    -> NativeObject
+    TextureSubResourceSet sub_resources, bool is_read_only) const -> NativeView
     = 0;
 };
 

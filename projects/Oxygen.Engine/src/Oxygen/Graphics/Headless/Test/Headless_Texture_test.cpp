@@ -84,7 +84,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_SRVContainsCorrectOffsets)
     = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
 
   // Assert (SRV only)
-  const auto* srv_payload = srv_native.AsPointer<const Texture::SRV>();
+  const auto* srv_payload = srv_native->AsPointer<const Texture::SRV>();
   ASSERT_NE(srv_payload, nullptr);
   EXPECT_EQ(srv_payload->texture, texture.get());
 
@@ -129,7 +129,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_UAVContainsCorrectOffsets)
     = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
 
   // Assert (UAV only)
-  const auto* uav_payload = uav_native.AsPointer<const Texture::UAV>();
+  const auto* uav_payload = uav_native->AsPointer<const Texture::UAV>();
   ASSERT_NE(uav_payload, nullptr);
   EXPECT_EQ(uav_payload->texture, texture.get());
 
@@ -186,7 +186,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_CrossMipIsolation)
   // Use a small pattern so the test doesn't depend on the texture backing
   // allocating every mip's full data. This test verifies isolation: a write
   // to mip1 must not clobber data previously written to mip0.
-  const uint8_t small_pattern = 4;
+  constexpr uint8_t small_pattern = 4;
   std::vector<uint8_t> mip0(small_pattern, 0x11);
   std::vector<uint8_t> mip1(small_pattern, 0x22);
 
@@ -235,7 +235,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_ViewPayloadBoundsWithinBacking)
   // Act
   auto native
     = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
-  const auto* srv = native.AsPointer<const Texture::SRV>();
+  const auto* srv = native->AsPointer<const Texture::SRV>();
   ASSERT_NE(srv, nullptr);
 
   // Compute expected offsets
@@ -310,7 +310,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_BC1_BlockSizeAndOffsets)
 
   const auto native
     = tex.GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
-  const auto* srv = native.AsPointer<const Texture::SRV>();
+  const auto* srv = native->AsPointer<const Texture::SRV>();
   ASSERT_NE(srv, nullptr);
 
   const auto backing = tex.GetBackingSize();

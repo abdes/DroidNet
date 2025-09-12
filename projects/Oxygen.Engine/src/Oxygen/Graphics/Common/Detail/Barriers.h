@@ -23,7 +23,7 @@ namespace oxygen::graphics::detail {
  without requiring explicit state transitions.
 */
 struct MemoryBarrierDesc {
-  NativeObject resource;
+  NativeResource resource;
 
   auto operator==(const MemoryBarrierDesc& other) const -> bool
   {
@@ -37,7 +37,7 @@ struct MemoryBarrierDesc {
  between different GPU operations (e.g., from vertex buffer to UAV).
 */
 struct BufferBarrierDesc {
-  NativeObject resource;
+  NativeResource resource;
   ResourceStates before;
   ResourceStates after;
 
@@ -54,7 +54,7 @@ struct BufferBarrierDesc {
  between different GPU operations (rendering, sampling, copying, etc.).
 */
 struct TextureBarrierDesc {
-  NativeObject resource;
+  NativeResource resource;
   ResourceStates before;
   ResourceStates after;
   // Could add additional texture-specific fields like mip levels, array slices,
@@ -101,10 +101,10 @@ public:
     return descriptor_;
   }
 
-  [[nodiscard]] auto GetResource() const -> NativeObject
+  [[nodiscard]] auto GetResource() const -> NativeResource
   {
     return std::visit(
-      [](auto&& desc) -> NativeObject { return desc.resource; }, descriptor_);
+      [](auto&& desc) -> NativeResource { return desc.resource; }, descriptor_);
   }
 
   auto GetStateBefore() -> ResourceStates

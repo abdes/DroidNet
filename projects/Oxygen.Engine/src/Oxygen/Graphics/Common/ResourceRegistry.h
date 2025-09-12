@@ -83,7 +83,7 @@ public:
    \param desc The view description. Must be hashable and comparable.
 
    \return A handle to the native view, newly created or from the cache.
-           Returns an invalid NativeObject if the view is invalid.
+           Returns an invalid NativeView if the view is invalid.
 
    \throws std::runtime_error if the resource is not registered, or a view
            with a compatible descriptor exists in the cache.
@@ -91,11 +91,11 @@ public:
   template <ResourceWithViews Resource>
   auto RegisterView(Resource& resource, DescriptorHandle view_handle,
     const typename Resource::ViewDescriptionT& desc)
-    -> NativeObject // TODO: document exceptions
+    -> NativeView // TODO: document exceptions
   {
     auto view = resource.GetNativeView(view_handle, desc);
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-    return RegisterView(NativeObject { &resource, Resource::ClassTypeId() },
+    return RegisterView(NativeResource { &resource, Resource::ClassTypeId() },
       std::move(view), std::move(view_handle), std::any(desc), key,
       desc.view_type, desc.visibility);
   }
@@ -130,15 +130,15 @@ public:
            with a compatible descriptor exists in the cache.
   */
   template <ResourceWithViews Resource>
-  auto RegisterView(Resource& resource, NativeObject view,
+  auto RegisterView(Resource& resource, NativeView view,
     DescriptorHandle view_handle,
     const typename Resource::ViewDescriptionT& desc) -> bool
   {
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-    return RegisterView(NativeObject { &resource, Resource::ClassTypeId() },
+    return RegisterView(NativeResource { &resource, Resource::ClassTypeId() },
       std::move(view), std::move(view_handle), std::any(desc), key,
       desc.view_type, desc.visibility)
-      .IsValid();
+      ->IsValid();
   }
 
   //! Update a registered view in-place, keeping the same descriptor slot.
@@ -172,7 +172,7 @@ public:
       = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
 
     // Ensure destination resource is registered
-    const NativeObject new_res_obj { &resource, Resource::ClassTypeId() };
+    const NativeResource new_res_obj { &resource, Resource::ClassTypeId() };
     const auto new_res_it = resources_.find(new_res_obj);
     if (new_res_it == resources_.end()) {
       return false;
@@ -180,8 +180,8 @@ public:
 
     // Find existing owner and take ownership of the descriptor handle entry
     DescriptorHandle owned_descriptor;
-    NativeObject old_view_obj; // for cache purge
-    NativeObject old_res_obj; // original owner
+    NativeView old_view_obj; // for cache purge
+    NativeResource old_res_obj; // original owner
     if (const auto owner_it = descriptor_to_resource_.find(index);
       owner_it != descriptor_to_resource_.end()) {
       old_res_obj = owner_it->second;
@@ -208,14 +208,14 @@ public:
     // Create the new native view at the same descriptor slot using the owned
     // descriptor handle.
     auto new_view = resource.GetNativeView(owned_descriptor, desc);
-    if (!new_view.IsValid()) {
+    if (!new_view->IsValid()) {
       // Failure -> release the temporary descriptor and purge old cache; the
       // index becomes free and no registration remains for it.
       if (owned_descriptor.IsValid()) {
         owned_descriptor.Release();
       }
       // Remove any cache entry for the old view object if present.
-      if (old_view_obj.IsValid()) {
+      if (old_view_obj->IsValid()) {
         std::erase_if(view_cache_, [&](const auto& it) {
           return it.first.resource == old_res_obj
             && it.second.view_object == old_view_obj;
@@ -226,17 +226,24 @@ public:
 
     // Attach descriptor to the new resource and update caches/mappings.
     auto& new_descriptors = new_res_it->second.descriptors;
-    new_descriptors[index] = ResourceEntry::ViewEntry { .view_object = new_view,
-      .descriptor = std::move(owned_descriptor) };
+    new_descriptors[index] = ResourceEntry::ViewEntry {
+      .view_object = new_view,
+      .descriptor = std::move(owned_descriptor),
+    };
     descriptor_to_resource_[index] = new_res_obj;
 
     // Update cache entry
-    ViewCacheEntry cache_entry { .view_object = new_view,
-      .view_description = std::any(desc) };
-    const CacheKey new_cache_key { .resource = new_res_obj, .hash = key_hash };
+    ViewCacheEntry cache_entry {
+      .view_object = new_view,
+      .view_description = std::any(desc),
+    };
+    const CacheKey new_cache_key {
+      .resource = new_res_obj,
+      .view_desc_hash = key_hash,
+    };
     view_cache_[new_cache_key] = std::move(cache_entry);
     // Remove any cache entry for the old view object (previous owner)
-    if (old_view_obj.IsValid()) {
+    if (old_view_obj->IsValid()) {
       std::erase_if(view_cache_, [&](const auto& it) {
         return it.first.resource == old_res_obj
           && it.second.view_object == old_view_obj;
@@ -316,7 +323,7 @@ public:
 
     std::lock_guard lock(registry_mutex_);
 
-    const NativeObject old_obj { const_cast<Resource*>(&old_resource),
+    const NativeResource old_obj { const_cast<Resource*>(&old_resource),
       Resource::ClassTypeId() };
     const auto old_it = resources_.find(old_obj);
     if (old_it == resources_.end()) {
@@ -326,7 +333,8 @@ public:
 
     DLOG_SCOPE_FUNCTION(2);
 
-    const NativeObject new_obj { new_resource.get(), Resource::ClassTypeId() };
+    const NativeResource new_obj { new_resource.get(),
+      Resource::ClassTypeId() };
     auto new_it = resources_.find(new_obj);
     if (new_it == resources_.end()) {
       // Inline registration to avoid re-entrant lock in Register().
@@ -356,7 +364,7 @@ public:
 
       // Helper to find cached description for a given view object.
       const auto find_desc_any
-        = [&](const NativeObject& view_obj) -> std::optional<std::any> {
+        = [&](const NativeView& view_obj) -> std::optional<std::any> {
         for (const auto& [key, entry] : view_cache_) {
           if (key.resource == old_obj && entry.view_object == view_obj) {
             return entry.view_description;
@@ -372,7 +380,7 @@ public:
         }
 
         DescriptorHandle owned_descriptor = std::move(ve_it->second.descriptor);
-        const NativeObject view_obj = ve_it->second.view_object;
+        const NativeView view_obj = ve_it->second.view_object;
 
         DLOG_F(2, "replacing view: {}. {}", view_obj, owned_descriptor);
 
@@ -393,7 +401,7 @@ public:
           if (auto next_desc = updater(typed_desc); next_desc.has_value()) {
             auto new_view
               = new_resource->GetNativeView(owned_descriptor, *next_desc);
-            if (new_view.IsValid()) {
+            if (new_view->IsValid()) {
               const auto key_hash = std::hash<
                 std::remove_cvref_t<typename Resource::ViewDescriptionT>> {}(
                 *next_desc);
@@ -435,7 +443,7 @@ public:
   template <ResourceWithViews Resource>
   [[nodiscard]] auto Contains(const Resource& resource) const -> bool
   {
-    return Contains(NativeObject(&resource, Resource::ClassTypeId()));
+    return Contains(NativeResource(&resource, Resource::ClassTypeId()));
   }
 
   template <ResourceWithViews Resource>
@@ -444,86 +452,97 @@ public:
   {
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
     return Contains(
-      NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()),
+      NativeResource {
+        const_cast<Resource*>(&resource),
+        Resource::ClassTypeId(),
+      },
       key);
   }
 
   template <ResourceWithViews Resource>
   [[nodiscard]] auto Find(const Resource& resource,
-    const typename Resource::ViewDescriptionT& desc) const -> NativeObject
+    const typename Resource::ViewDescriptionT& desc) const -> NativeView
   {
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
     return Find(
-      NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()),
+      NativeResource {
+        const_cast<Resource*>(&resource),
+        Resource::ClassTypeId(),
+      },
       key);
   }
 
   template <SupportedResource Resource>
-  auto UnRegisterView(const Resource& resource, const NativeObject& view)
-    -> void
+  auto UnRegisterView(const Resource& resource, const NativeView& view) -> void
   {
-    UnRegisterView(NativeObject { const_cast<Resource*>(&resource),
-                     Resource::ClassTypeId() },
+    UnRegisterView(
+      NativeResource {
+        const_cast<Resource*>(&resource),
+        Resource::ClassTypeId(),
+      },
       view);
   }
 
   template <SupportedResource Resource>
   auto UnRegisterResource(const Resource& resource) -> void
   {
-    UnRegisterResource(NativeObject {
-      const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+    UnRegisterResource(NativeResource {
+      const_cast<Resource*>(&resource),
+      Resource::ClassTypeId(),
+    });
   }
 
   //! Release all views for a resource
   template <SupportedResource Resource>
   auto UnRegisterViews(const Resource& resource) -> void
   {
-    UnRegisterResourceViews(NativeObject {
-      const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+    UnRegisterResourceViews(NativeResource {
+      const_cast<Resource*>(&resource),
+      Resource::ClassTypeId(),
+    });
   }
 
 private:
   OXGN_GFX_API auto Register(std::shared_ptr<void> resource, TypeId type_id)
     -> void;
 
-  OXGN_GFX_API auto RegisterView(NativeObject resource, NativeObject view,
+  OXGN_GFX_API auto RegisterView(NativeResource resource, NativeView view,
     DescriptorHandle view_handle, std::any view_description_for_cache,
     size_t key, ResourceViewType view_type, DescriptorVisibility visibility)
-    -> NativeObject;
+    -> NativeView;
 
   OXGN_GFX_API auto UnRegisterView(
-    const NativeObject& resource, const NativeObject& view) -> void;
+    const NativeResource& resource, const NativeView& view) -> void;
 
-  OXGN_GFX_API auto UnRegisterResource(const NativeObject& resource) -> void;
-  OXGN_GFX_API auto UnRegisterResourceViews(const NativeObject& resource)
+  OXGN_GFX_API auto UnRegisterResource(const NativeResource& resource) -> void;
+  OXGN_GFX_API auto UnRegisterResourceViews(const NativeResource& resource)
     -> void;
 
   auto UnRegisterViewNoLock(
-    const NativeObject& resource, const NativeObject& view) -> void;
-  OXGN_GFX_API auto UnRegisterResourceViewsNoLock(const NativeObject& resource)
-    -> void;
+    const NativeResource& resource, const NativeView& view) -> void;
+  OXGN_GFX_API auto UnRegisterResourceViewsNoLock(
+    const NativeResource& resource) -> void;
 
   // Internal helpers (assume registry_mutex_ is held)
   //! Remove all cached views for a resource. Assumes registry_mutex_ held.
-  OXGN_GFX_API auto PurgeCachedViewsForResource(const NativeObject& resource)
+  OXGN_GFX_API auto PurgeCachedViewsForResource(const NativeResource& resource)
     -> void;
   //! Attach a descriptor and associate a native view and cache entry.
   //! Assumes registry_mutex_ held.
-  OXGN_GFX_API auto AttachDescriptorWithView(const NativeObject& dst_resource,
+  OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
     bindless::Handle index, DescriptorHandle descriptor_handle,
-    const NativeObject& view, std::any description, std::size_t key_hash)
-    -> void;
+    const NativeView& view, std::any description, std::size_t key_hash) -> void;
   //! Collect all descriptor indices owned by a resource. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_NDAPI auto CollectDescriptorIndicesForResource(
-    const NativeObject& resource) const -> std::vector<bindless::Handle>;
+    const NativeResource& resource) const -> std::vector<bindless::Handle>;
 
-  OXGN_GFX_NDAPI auto Contains(const NativeObject& resource) const -> bool;
+  OXGN_GFX_NDAPI auto Contains(const NativeResource& resource) const -> bool;
   OXGN_GFX_NDAPI auto Contains(
-    const NativeObject& resource, size_t key_hash) const -> bool;
+    const NativeResource& resource, size_t key_hash) const -> bool;
 
-  OXGN_GFX_NDAPI auto Find(const NativeObject& resource, size_t key_hash) const
-    -> NativeObject;
+  OXGN_GFX_NDAPI auto Find(
+    const NativeResource& resource, size_t key_hash) const -> NativeView;
 
   // Thread safety
   mutable std::mutex registry_mutex_;
@@ -536,7 +555,7 @@ private:
 
     // Descriptors associated with this resource
     struct ViewEntry {
-      NativeObject view_object; // Native view object
+      NativeView view_object; // Native view object
       DescriptorHandle descriptor; // Handle to descriptor heap entry
     };
 
@@ -544,20 +563,21 @@ private:
     std::unordered_map<bindless::Handle, ViewEntry> descriptors;
   };
 
-  // Primary storage - Resource NativeObject to resource entry
-  std::unordered_map<NativeObject, ResourceEntry> resources_;
+  // Primary storage
+  std::unordered_map<NativeResource, ResourceEntry> resources_;
 
   // Map from descriptor index to owning resource
-  std::unordered_map<bindless::Handle, NativeObject> descriptor_to_resource_;
+  std::unordered_map<bindless::Handle, NativeResource> descriptor_to_resource_;
 
   // Unified view cache
   struct CacheKey {
-    NativeObject resource; // The resource object
-    std::size_t hash; // Hash of the view description
+    NativeResource resource; // The resource object
+    std::size_t view_desc_hash; // Hash of the view description
 
     auto operator==(const CacheKey& other) const -> bool
     {
-      return hash == other.hash && resource == other.resource;
+      return view_desc_hash == other.view_desc_hash
+        && resource == other.resource;
     }
   };
 
@@ -565,15 +585,15 @@ private:
   struct CacheKeyHasher {
     auto operator()(const CacheKey& k) const noexcept -> std::size_t
     {
-      std::size_t result = std::hash<NativeObject> {}(k.resource);
-      HashCombine(result, k.hash);
+      std::size_t result = std::hash<NativeResource> {}(k.resource);
+      HashCombine(result, k.view_desc_hash);
       return result;
     }
   };
 
   //! View cache entry that stores both the view and its description.
   struct ViewCacheEntry {
-    NativeObject view_object; //!< The native object holding the view.
+    NativeView view_object; //!< The native object holding the view.
     std::any view_description; //!< The original view description.
   };
 

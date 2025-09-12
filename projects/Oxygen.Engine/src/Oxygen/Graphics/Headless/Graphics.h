@@ -32,7 +32,7 @@ public:
     -> std::shared_ptr<Texture> override;
 
   OXGN_HDLS_NDAPI auto CreateTextureFromNativeObject(const TextureDesc& desc,
-    const NativeObject& native) const -> std::shared_ptr<Texture> override;
+    const NativeResource& native) const -> std::shared_ptr<Texture> override;
 
   OXGN_HDLS_NDAPI auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override;

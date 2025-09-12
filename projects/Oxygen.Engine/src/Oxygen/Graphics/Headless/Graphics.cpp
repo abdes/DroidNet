@@ -75,7 +75,7 @@ auto Graphics::CreateTexture(const TextureDesc& desc) const
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
-  const NativeObject& /*native*/) const -> std::shared_ptr<graphics::Texture>
+  const NativeResource& /*native*/) const -> std::shared_ptr<graphics::Texture>
 {
   return std::make_shared<Texture>(desc);
 }

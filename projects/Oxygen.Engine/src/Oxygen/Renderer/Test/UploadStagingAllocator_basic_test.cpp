@@ -39,17 +39,18 @@ public:
     return desc_;
   }
   [[nodiscard]] auto GetNativeResource() const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeResource override
   {
-    return {};
+    return oxygen::graphics::NativeResource();
   }
   auto Map(uint64_t offset = 0, uint64_t size = 0) -> void* override
   {
     (void)offset;
-    if (mapped_)
+    if (mapped_) {
       return mapped_ptr_;
+    }
     const auto bytes = size == 0 ? desc_.size_bytes : size;
-    storage_.resize(static_cast<size_t>(bytes));
+    storage_.resize(bytes);
     mapped_ptr_ = storage_.data();
     mapped_ = true;
     return mapped_ptr_;
@@ -64,7 +65,7 @@ public:
   {
     auto b = static_cast<const std::byte*>(data);
     if (offset + size <= storage_.size()) {
-      std::memcpy(storage_.data() + offset, b, static_cast<size_t>(size));
+      std::memcpy(storage_.data() + offset, b, size);
     }
   }
   [[nodiscard]] auto GetSize() const noexcept -> uint64_t override
@@ -92,7 +93,7 @@ protected:
   [[nodiscard]] auto CreateConstantBufferView(
     const oxygen::graphics::DescriptorHandle&,
     const oxygen::graphics::BufferRange&) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -100,7 +101,7 @@ protected:
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -108,7 +109,7 @@ protected:
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -124,7 +125,7 @@ private:
 class FakeGraphics : public oxygen::Graphics {
 public:
   FakeGraphics()
-    : oxygen::Graphics("FakeGraphics")
+    : Graphics("FakeGraphics")
   {
   }
 
@@ -148,14 +149,13 @@ public:
   }
   [[nodiscard]] auto CreateTextureFromNativeObject(
     const oxygen::graphics::TextureDesc&,
-    const oxygen::graphics::NativeObject&) const
+    const oxygen::graphics::NativeResource&) const
     -> std::shared_ptr<oxygen::graphics::Texture> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateBuffer(
-    const oxygen::graphics::BufferDesc& desc) const
-    -> std::shared_ptr<oxygen::graphics::Buffer> override
+  [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
+    -> std::shared_ptr<Buffer> override
   {
     return std::make_shared<FakeBuffer>("Staging", desc.size_bytes);
   }
@@ -198,7 +198,7 @@ NOLINT_TEST(UploadStagingAllocator, AllocateMapsAndSizes)
   auto gfx = std::make_shared<FakeGraphics>();
   StagingAllocator alloc(gfx);
 
-  const uint64_t size = 1024;
+  constexpr uint64_t size = 1024;
   auto a = alloc.Allocate(Bytes { size }, "alloc1");
 
   ASSERT_NE(a.buffer, nullptr);
@@ -236,9 +236,9 @@ NOLINT_TEST(UploadStagingAllocator, MultipleAllocationsAreIndependent)
   auto gfx = std::make_shared<FakeGraphics>();
   StagingAllocator alloc(gfx);
 
-  const uint64_t s1 = 256;
-  const uint64_t s2 = 1024;
-  const uint64_t s3 = 4096;
+  constexpr uint64_t s1 = 256;
+  constexpr uint64_t s2 = 1024;
+  constexpr uint64_t s3 = 4096;
 
   auto a1 = alloc.Allocate(Bytes { s1 }, "a1");
   auto a2 = alloc.Allocate(Bytes { s2 }, "a2");
@@ -285,7 +285,7 @@ NOLINT_TEST(UploadStagingAllocator, SizeEdgeCases_ZeroAndLarge)
   // either.
 
   // Large allocation: keep it moderate to avoid test flakiness (8 MiB)
-  const uint64_t big = 8ull * 1024 * 1024;
+  constexpr uint64_t big = 8ull * 1024 * 1024;
   auto large = alloc.Allocate(Bytes { big }, "large");
   ASSERT_NE(large.buffer, nullptr);
   ASSERT_NE(large.ptr, nullptr);

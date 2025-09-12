@@ -180,7 +180,7 @@ auto Buffer::Map(const size_t offset, const size_t size) -> void*
   return static_cast<uint8_t*>(mapped) + offset;
 }
 
-void Buffer::UnMap()
+auto Buffer::UnMap() -> void
 {
   if (!mapped_) {
     return;
@@ -198,7 +198,8 @@ void Buffer::UnMap()
   mapped_ = false;
 }
 
-void Buffer::Update(const void* data, const size_t size, const size_t offset)
+auto Buffer::Update(const void* data, const size_t size, const size_t offset)
+  -> void
 {
   if (size == 0) {
     return;
@@ -235,20 +236,20 @@ auto Buffer::IsMapped() const noexcept -> bool { return mapped_; }
 
 auto Buffer::GetDescriptor() const noexcept -> BufferDesc { return desc_; }
 
-auto Buffer::GetNativeResource() const -> NativeObject
+auto Buffer::GetNativeResource() const -> NativeResource
 {
   // Use the pointer constructor and the class type id for d3d12::Buffer
   return { GetResource(), ClassTypeId() };
 }
 
-void Buffer::SetName(const std::string_view name) noexcept
+auto Buffer::SetName(const std::string_view name) noexcept -> void
 {
   Base::SetName(name);
   GetComponent<GraphicResource>().SetName(name);
 }
 
 auto Buffer::CreateConstantBufferView(const DescriptorHandle& view_handle,
-  const BufferRange& range) const -> NativeObject
+  const BufferRange& range) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -283,7 +284,7 @@ auto Buffer::CreateConstantBufferView(const DescriptorHandle& view_handle,
 }
 
 auto Buffer::CreateShaderResourceView(const DescriptorHandle& view_handle,
-  Format format, BufferRange range, uint32_t stride) const -> NativeObject
+  Format format, BufferRange range, uint32_t stride) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -358,7 +359,7 @@ auto Buffer::CreateShaderResourceView(const DescriptorHandle& view_handle,
 }
 
 auto Buffer::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
-  Format format, BufferRange range, uint32_t stride) const -> NativeObject
+  Format format, BufferRange range, uint32_t stride) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");

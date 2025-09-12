@@ -43,8 +43,8 @@ public:
   }
 
   // Render state
-  auto SetRenderTargets(std::span<NativeObject> /*rtvs*/,
-    std::optional<NativeObject> /*dsv*/) -> void override
+  auto SetRenderTargets(std::span<NativeView> /*rtvs*/,
+    std::optional<NativeView> /*dsv*/) -> void override
   {
   }
   auto SetViewport(const ViewPort& /*viewport*/) -> void override { }
@@ -62,7 +62,7 @@ public:
 
   // Framebuffer / resource ops
   auto BindFrameBuffer(const Framebuffer&) -> void override { }
-  OXGN_HDLS_API auto ClearDepthStencilView(const Texture&, const NativeObject&,
+  OXGN_HDLS_API auto ClearDepthStencilView(const Texture&, const NativeView&,
     ClearFlags, float, uint8_t) -> void override;
   OXGN_HDLS_API auto ClearFramebuffer(const Framebuffer&,
     std::optional<std::vector<std::optional<Color>>> /*color_clear_values*/,
@@ -81,13 +81,13 @@ public:
   // recorded command executes in OnSubmitted(), it will call
   // `target_queue->QueueSignalCommand(value)` and thus advance the queue's
   // completed value at the point of execution (GPU-like semantics).
-  OXGN_HDLS_API auto RecordQueueSignal(uint64_t value) -> void;
+  OXGN_HDLS_API auto RecordQueueSignal(uint64_t value) -> void override;
 
   // Record a GPU-side queue wait into the command stream. When executed in
   // OnSubmitted(), the recorded command will call
   // `target_queue->QueueWaitCommand(value)` so the wait occurs at the recorded
   // point in the stream (GPU-like semantics).
-  OXGN_HDLS_API auto RecordQueueWait(uint64_t value) -> void;
+  OXGN_HDLS_API auto RecordQueueWait(uint64_t value) -> void override;
 
 protected:
   OXGN_HDLS_API auto ExecuteBarriers(
@@ -100,7 +100,7 @@ private:
   // the base CommandRecorder produces a list of pending barriers which is
   // passed into ExecuteBarriers; this member keeps the last-known state per
   // native resource for validation and simulation of transitions.
-  std::unordered_map<NativeObject, ResourceStates> observed_states_;
+  std::unordered_map<NativeResource, ResourceStates> observed_states_;
 
   // Helper to perform a single copy immediately (kept for utility).
   auto PerformCopy(graphics::Buffer& dst, size_t dst_offset,

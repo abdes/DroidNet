@@ -69,38 +69,38 @@ public:
   }
 
   [[nodiscard]] auto GetNativeResource() const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeObject(
-      const_cast<FakeTexture*>(this), oxygen::graphics::Texture::ClassTypeId());
+    return oxygen::graphics::NativeResource(
+      const_cast<FakeTexture*>(this), Texture::ClassTypeId());
   }
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -181,8 +181,8 @@ NOLINT_TEST(UploadCoordinator, Texture2D_MipChainTwoRegions_AlignedOffsets)
 
   // Expected pitches: mip0 row=64*4=256 (already aligned), slice=256*32=8192
   // mip1 row=32*4=128 -> aligned to 256, slice=256*16=4096; offsets: 0, 8192
-  const uint64_t total = 8192 + 4096; // 12288
-  std::vector<std::byte> data(static_cast<size_t>(total));
+  constexpr uint64_t total = 8192 + 4096; // 12288
+  std::vector<std::byte> data(total);
 
   UploadRequest req {
     .kind = UploadKind::kTexture2D,
@@ -241,8 +241,8 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_WithProducer_Completes)
   constexpr uint32_t w = 128;
   constexpr uint32_t h = 64;
   constexpr uint32_t bpp = 4; // RGBA8
-  const uint64_t expected_row = w * bpp; // 512, already aligned
-  const uint64_t expected_slice = expected_row * h; // 32768
+  constexpr uint64_t expected_row = w * bpp; // 512, already aligned
+  constexpr uint64_t expected_slice = expected_row * h; // 32768
 
   bool producer_ran = false;
   std::move_only_function<bool(std::span<std::byte>)> prod

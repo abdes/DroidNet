@@ -149,12 +149,12 @@ private:
 
   // Helper methods for Execute()
   virtual auto PrepareDepthStencilView(
-    const graphics::Texture& depth_texture_ref) -> graphics::NativeObject;
+    const graphics::Texture& depth_texture_ref) -> graphics::NativeView;
   virtual auto ClearDepthStencilView(
     graphics::CommandRecorder& command_recorder,
-    const graphics::NativeObject& dsv_handle) const -> void;
+    const graphics::NativeView& dsv_handle) const -> void;
   virtual auto SetupRenderTargets(graphics::CommandRecorder& command_recorder,
-    const graphics::NativeObject& dsv) const -> void;
+    const graphics::NativeView& dsv) const -> void;
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;
 

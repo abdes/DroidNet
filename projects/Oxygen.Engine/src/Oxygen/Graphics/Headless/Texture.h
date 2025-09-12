@@ -83,7 +83,7 @@ struct TextureLayoutStrategy {
    tests and do not model GPU-side transfer or synchronization semantics.
  - **View payloads**: `Create*View()` allocates small POD view payloads
    (SRV/UAV/RTV/DSV) via raw allocation and stores them in
-   `owned_view_payloads_`. Returned `NativeObject` values are non-owning
+   `owned_view_payloads_`. Returned `NativeView` values are non-owning
    pointers into that storage and remain valid for the lifetime of the `Texture`
    instance.
 
@@ -118,7 +118,7 @@ struct TextureLayoutStrategy {
  @note The class is optimized for determinism and predictability in tests, not
  for runtime performance of production renderers.
 
- @warning If an external `ResourceRegistry` caches `NativeObject` pointers to
+ @warning If an external `ResourceRegistry` caches `NativeView` pointers to
  view payloads, ensure those payloads remain valid (unregister views before
  destroying the `Texture` or transfer ownership of payloads to the registry).
 
@@ -128,7 +128,7 @@ class Texture final : public graphics::Texture {
 public:
   // Public POD payload types for view payloads owned by the Texture.
   // These are headless-only helpers and provide a small, stable contract for
-  // tests and the ResourceRegistry to interpret NativeObject pointers.
+  // tests and the ResourceRegistry to interpret NativeView pointers.
   struct ViewBase {
     const Texture* texture;
     Format format;
@@ -159,7 +159,7 @@ public:
   ~Texture() override = default;
 
   [[nodiscard]] auto GetDescriptor() const -> const TextureDesc& override;
-  [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
+  [[nodiscard]] auto GetNativeResource() const -> NativeResource override;
   OXGN_HDLS_NDAPI auto GetLayoutStrategy() const
     -> const TextureLayoutStrategy&;
 
@@ -173,7 +173,7 @@ private:
   // Headless-specific Contiguous layout strategy (owned by the texture)
   std::unique_ptr<TextureLayoutStrategy> layout_strategy_;
   // Owned view payloads. The Texture must keep payloads alive for any
-  // NativeObject pointers returned to callers. Use a function-pointer
+  // NativeView pointers returned to callers. Use a function-pointer
   // deleter to avoid deleting incomplete types with the default deleter.
   using ViewPayloadPtr = std::unique_ptr<void, void (*)(void*)>;
   mutable std::deque<ViewPayloadPtr> owned_view_payloads_;
@@ -197,20 +197,20 @@ public:
 protected:
   OXGN_HDLS_API [[nodiscard]] auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeObject override;
+    TextureSubResourceSet sub_resources) const -> NativeView override;
 
   OXGN_HDLS_API [[nodiscard]] auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeObject override;
+    TextureSubResourceSet sub_resources) const -> NativeView override;
 
   OXGN_HDLS_API [[nodiscard]] auto CreateRenderTargetView(
     const DescriptorHandle& view_handle, Format format,
-    TextureSubResourceSet sub_resources) const -> NativeObject override;
+    TextureSubResourceSet sub_resources) const -> NativeView override;
 
   OXGN_HDLS_API [[nodiscard]] auto CreateDepthStencilView(
     const DescriptorHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources, bool is_read_only) const
-    -> NativeObject override;
+    -> NativeView override;
 };
 
 } // namespace oxygen::graphics::headless

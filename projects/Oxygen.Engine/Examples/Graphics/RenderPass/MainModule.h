@@ -13,7 +13,7 @@
 #include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/NativeView.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -72,7 +72,7 @@ private:
     framebuffers_ {};
 
   std::shared_ptr<graphics::Buffer> constant_buffer_;
-  graphics::NativeObject index_mapping_cbv_ {};
+  graphics::NativeView index_mapping_cbv_ {};
 
   co::Nursery* nursery_ { nullptr };
   float rotation_angle_ { 0.0f };

@@ -10,36 +10,26 @@
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferViewDescription;
 
-auto Buffer::GetNativeView(
-    const DescriptorHandle& view_handle,
-    const BufferViewDescription& view_desc) const
-    -> NativeObject
+auto Buffer::GetNativeView(const DescriptorHandle& view_handle,
+  const BufferViewDescription& view_desc) const -> NativeView
 {
-    using oxygen::graphics::ResourceViewType;
+  using graphics::ResourceViewType;
 
-    switch (view_desc.view_type) {
-    case ResourceViewType::kConstantBuffer:
-        return CreateConstantBufferView(
-            view_handle,
-            view_desc.range);
-    case ResourceViewType::kRawBuffer_SRV:
-    case ResourceViewType::kTypedBuffer_SRV:
-    case ResourceViewType::kStructuredBuffer_SRV:
-        return CreateShaderResourceView(
-            view_handle,
-            view_desc.format,
-            view_desc.range,
-            view_desc.stride);
-    case ResourceViewType::kRawBuffer_UAV:
-    case ResourceViewType::kTypedBuffer_UAV:
-    case ResourceViewType::kStructuredBuffer_UAV:
-        return CreateUnorderedAccessView(
-            view_handle,
-            view_desc.format,
-            view_desc.range,
-            view_desc.stride);
-    default:
-        // Unknown or unsupported view type
-        return {};
-    }
+  switch (view_desc.view_type) {
+  case ResourceViewType::kConstantBuffer:
+    return CreateConstantBufferView(view_handle, view_desc.range);
+  case ResourceViewType::kRawBuffer_SRV:
+  case ResourceViewType::kTypedBuffer_SRV:
+  case ResourceViewType::kStructuredBuffer_SRV:
+    return CreateShaderResourceView(
+      view_handle, view_desc.format, view_desc.range, view_desc.stride);
+  case ResourceViewType::kRawBuffer_UAV:
+  case ResourceViewType::kTypedBuffer_UAV:
+  case ResourceViewType::kStructuredBuffer_UAV:
+    return CreateUnorderedAccessView(
+      view_handle, view_desc.format, view_desc.range, view_desc.stride);
+  default:
+    // Unknown or unsupported view type
+    return {};
+  }
 }
