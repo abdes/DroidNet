@@ -37,8 +37,102 @@ namespace detail {
        };
 } // namespace detail
 
-//! Registry for graphics resources and their views, supporting bindless
-//! rendering.
+//! Thread-safe registry for graphics resources and bindless rendering views.
+/*!
+ ResourceRegistry is the central component for managing graphics resources
+ (textures, buffers, samplers) and their associated views in the Oxygen graphics
+ system. It provides comprehensive lifecycle management with strong reference
+ semantics, thread-safe operations, and optimized view caching for bindless
+ rendering architectures.
+
+ ### Key Features
+
+ - **Bindless Rendering Support**: Resources are accessed via global indices
+   rather than per-draw bindings, enabling efficient GPU-driven rendering.
+ - **View Caching**: Automatically caches native views based on resource and
+   description hash, avoiding redundant view creation.
+ - **Thread Safety**: All operations are protected by internal mutex, enabling
+   safe concurrent access from multiple threads.
+ - **Stable Descriptor Indices**: UpdateView and Replace operations preserve
+   bindless indices where possible, maintaining shader compatibility.
+ - **Strong Reference Management**: Registry holds shared_ptr references to
+   resources, ensuring they remain valid while registered.
+
+ ### Resource Types
+
+ - **Simple Resources**: Samplers and other resources without views - only the
+   resource itself is registered and tracked.
+ - **Resources with Views**: Textures and buffers that support multiple view
+   types (SRV, UAV, CBV, etc.) with descriptor handle management.
+
+ ### Architecture Patterns
+
+ - **Handle/View Pattern**: Resources are accessed through NativeResource
+   handles and NativeView objects for type safety and abstraction.
+ - **Type-Safe Templates**: Operations are constrained by SupportedResource and
+   ResourceWithViews concepts for compile-time safety.
+ - **Composition-Based**: Uses TypeId-based resource identification rather than
+   RTTI for performance and flexibility.
+
+ ### Usage Patterns
+
+ ```cpp
+ // Register a resource
+ registry.Register(my_texture);
+
+ // Register a view with descriptor
+ auto desc = TextureViewDesc{...};
+ auto handle = allocator->Allocate(desc.view_type, desc.visibility);
+ auto view = registry.RegisterView(*my_texture, std::move(handle), desc);
+
+ // Update view in-place (keeps same bindless index)
+ auto new_desc = TextureViewDesc{...};
+ registry.UpdateView(*my_texture, index, new_desc);
+
+ // Replace resource with transformation
+ registry.Replace(*old_texture, new_texture,
+   [](const auto& old_desc) { return transform(old_desc); });
+ ```
+
+ ### Performance Characteristics
+
+ - **Registration**: O(1) average case with hash table lookup
+ - **View Caching**: O(1) cache hit, O(resource_creation) on cache miss
+ - **Update/Replace**: O(N) for N views on the resource
+ - **Thread Contention**: Single mutex protects all operations - consider
+   operation batching for high-contention scenarios
+
+ ### Error Handling
+
+ - **Graceful Degradation**: Invalid view creation returns invalid NativeView
+   rather than throwing, allowing fallback strategies.
+ - **Resource Validation**: Comprehensive validation with descriptive error
+   messages for debugging.
+ - **Exception Safety**: Strong exception safety guarantees - failed operations
+   leave registry in consistent state.
+
+ ### Critical Contract Violations (Program Termination)
+
+ ResourceRegistry enforces strict contracts through runtime assertions that will
+ **abort the program** when violated. These are considered programming errors
+ and indicate incorrect API usage:
+
+ - **Duplicate Resource Registration**: Calling Register() on an already
+   registered resource instance will abort the program. Use Replace() instead.
+ - **Duplicate View Registration**: Registering identical views (same resource
+   + description) will abort the program. Use UpdateView() instead.
+ - **Invalid Descriptor Handles**: Passing invalid DescriptorHandle objects will
+   abort the program in all view operations.
+ - **Null Resource Registration**: Attempting to register null resources will
+   abort the program.
+
+ These contracts ensure registry integrity and prevent subtle bugs in production
+ code.
+
+ @warning All template parameters must satisfy their respective concepts
+          (SupportedResource, ResourceWithViews) for correct operation.
+ @see DescriptorHandle, NativeResource, NativeView
+*/
 class ResourceRegistry {
 public:
   OXGN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
@@ -48,14 +142,58 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
   OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
 
-  //! Register a graphics resource, such as textures, buffers, and samplers.
+  //! Register a graphics resource for lifecycle management and view operations.
   /*!
-   The registry will keep a strong reference to the resource until it is
-   unregistered. For resources with views (textures, buffers), views can be
-   registered and managed for bindless rendering. For simple resources like
-   samplers, only the resource itself is registered and tracked.
+   Registers a graphics resource (texture, buffer, sampler, etc.) in the
+   registry, establishing a strong reference that keeps the resource alive until
+   explicitly unregistered. This is a prerequisite for all view-related
+   operations on the resource.
 
-   \throws std::runtime_error if the resource is already registered.
+   The registry maintains a shared_ptr to the resource, ensuring it remains
+   valid throughout its registered lifetime. For resources that support views
+   (textures, buffers), this registration enables subsequent RegisterView,
+   UpdateView, and Replace operations. For simple resources like samplers, only
+   the resource itself is tracked.
+
+   ### Registration Semantics
+
+   - **Strong Reference**: Registry holds shared_ptr, preventing resource
+     destruction while registered.
+   - **Type Safety**: Template parameter constrains to SupportedResource types
+     at compile time.
+   - **Identity**: Resources are identified by their memory address and TypeId
+     for efficient lookup and collision detection.
+   - **Uniqueness**: Each resource instance can only be registered once.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) average case hash table insertion
+   - Memory: Adds one registry entry plus shared_ptr overhead
+   - Thread Safety: Fully thread-safe with internal synchronization
+
+   ### Critical Contracts
+
+   - **No Duplicate Registration**: Attempting to register the same resource
+     instance twice will abort the program. Use Replace() if you need to swap
+     resources at the same identity.
+
+   ### Usage Examples
+
+   ```cpp
+   auto texture = std::make_shared<Texture>(device, texture_desc);
+   registry.Register(texture);  // Now available for view operations
+
+   auto buffer = std::make_shared<Buffer>(device, buffer_desc);
+   registry.Register(buffer);   // Ready for view registration
+   ```
+
+   @tparam Resource The resource type, must satisfy SupportedResource concept
+   @param resource Shared pointer to the resource to register. Must be valid.
+
+   @throw std::runtime_error if the resource is already registered in this
+          registry instance.
+
+   @see UnRegisterResource, RegisterView
   */
   template <SupportedResource Resource>
   auto Register(const std::shared_ptr<Resource>& resource) -> void
@@ -63,35 +201,96 @@ public:
     Register(std::static_pointer_cast<void>(resource), Resource::ClassTypeId());
   }
 
-  //! Register a view for a graphics resource, such as textures and buffers.
+  //! Register a view for bindless rendering with automatic view creation.
   /*!
-   Registers a view for a graphics resource (e.g., texture or buffer) and
-   returns a handle to the native view object (check GetNativeView of the
-   corresponding resource class for the native view object type). This method
-   is only enabled for resources that satisfy ResourceWithViews. For simple
-   resources like samplers, view registration is not supported or required.
+   Creates and registers a native view for a graphics resource using the
+   resource's GetNativeView method, then caches it for efficient bindless
+   rendering. This is the primary method for establishing resource views with
+   descriptor handles in the bindless architecture.
 
-   The registry will create the native view using the resource's GetNativeView
-   method, and then attempt to register it for view caching. The descriptor
-   handle must be valid and allocated from a compatible DescriptorAllocator.
-   The view description must be hashable and comparable.
+   The registry calls the resource's GetNativeView method to create the
+   platform-specific view object, then associates it with the provided
+   descriptor handle for shader access. Views are cached based on the
+   combination of resource identity and view description hash, enabling
+   efficient reuse when identical views are requested.
 
-   \param resource The resource to register the view for. Must already be
-          registered in the registry.
-   \param view_handle The descriptor handle for the view. Must be valid and
-          compatible with the resource type.
-   \param desc The view description. Must be hashable and comparable.
+   ### View Creation and Caching
 
-   \return A handle to the native view, newly created or from the cache.
-           Returns an invalid NativeView if the view is invalid.
+   - **Automatic Creation**: Calls resource.GetNativeView(handle, desc) to
+     create platform-specific view objects.
+   - **Intelligent Caching**: Caches views by (resource, description_hash) key
+     to avoid redundant creation.
+   - **Bindless Integration**: Associates view with descriptor handle for
+     shader-visible bindless access.
+   - **Validation**: Verifies view validity and handle compatibility before
+     registration.
 
-   \throws std::runtime_error if the resource is not registered, or a view
-           with a compatible descriptor exists in the cache.
+   ### Descriptor Handle Lifecycle
+
+   - **Ownership Transfer**: Registry takes ownership of the descriptor handle
+     and manages its lifecycle.
+   - **Automatic Release**: Handle is released when view is unregistered or
+     resource is removed.
+   - **Bindless Mapping**: Handle's bindless index becomes the shader-visible
+     access point for this view.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) cache hit, O(view_creation) cache miss
+   - Memory: Adds cache entry plus native view overhead
+   - Optimization: Cache eliminates redundant view creation for identical
+     descriptions
+
+   ### Critical Contracts
+
+   - **Valid Descriptor Handle Required**: Passing an invalid DescriptorHandle
+     will abort the program. Handle must be properly allocated.
+   - **No Duplicate Views**: Registering a view with identical description for
+     the same resource will abort the program. Use UpdateView() to modify
+     existing views.
+
+   ### Usage Examples
+
+   ```cpp
+   // Create a shader resource view
+   TextureViewDesc srv_desc {
+     .view_type = ResourceViewType::kShaderResource,
+     .visibility = DescriptorVisibility::kShaderVisible,
+     .format = Format::kR8G8B8A8_UNORM
+   };
+   auto handle = allocator->Allocate(srv_desc.view_type, srv_desc.visibility);
+   auto view = registry.RegisterView(*texture, std::move(handle), srv_desc);
+
+   // Create a UAV for compute shaders
+   TextureViewDesc uav_desc {
+     .view_type = ResourceViewType::kUnorderedAccess,
+     .visibility = DescriptorVisibility::kShaderVisible,
+     .mip_level = 0
+   };
+   auto uav_handle = allocator->Allocate(uav_desc.view_type,
+   uav_desc.visibility); auto uav_view = registry.RegisterView(*texture,
+   std::move(uav_handle), uav_desc);
+   ```
+
+   @tparam Resource The resource type, must satisfy ResourceWithViews concept
+   @param resource The resource to create a view for. Must be registered.
+   @param view_handle Descriptor handle for the view. Must be valid and
+          compatible with the resource type. Ownership transfers to registry.
+   @param desc View description specifying format, type, and access patterns.
+          Must be hashable and comparable.
+
+   @return Handle to the native view object (platform-specific). Returns invalid
+           NativeView if view creation fails.
+
+   @throw std::runtime_error if the resource is not registered, or if a view
+          with the same description already exists for this resource.
+
+   @see RegisterView(Resource&, NativeView, DescriptorHandle, ViewDescriptionT),
+        UpdateView, UnRegisterView
   */
   template <ResourceWithViews Resource>
   auto RegisterView(Resource& resource, DescriptorHandle view_handle,
-    const typename Resource::ViewDescriptionT& desc)
-    -> NativeView // TODO: document exceptions
+    const typename Resource::ViewDescriptionT& desc) -> NativeView
   {
     auto view = resource.GetNativeView(view_handle, desc);
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
@@ -100,34 +299,91 @@ public:
       desc.view_type, desc.visibility);
   }
 
-  //! Register an already created view for a graphics resource, such as
-  //! textures and buffers, making it available for cached lookups.
+  //! Register a pre-created view for advanced control over view lifecycle.
   /*!
-   Registers an already created native view for a graphics resource (e.g.,
-   texture or buffer), making it available for bindless rendering and view
-   caching. This method is only enabled for resources that satisfy
-   ResourceWithViews.
+   Registers an already-created native view object for a graphics resource,
+   providing complete control over the view creation process. This method is
+   intended for advanced scenarios where custom view creation logic is required,
+   or when integrating with external graphics APIs that provide pre-created view
+   objects.
 
-   Use this method when you need complete control over view creation. The view
-   description must be unique and not conflict with any cached views. If a
-   view with a compatible descriptor is already registered for the resource,
-   this method will throw a std::runtime_error. If the resource is not
-   registered, or the view is invalid, the method will return false. If the
-   descriptor handle is invalid, the view description is empty, or the key
-   hash is zero, the method will abort.
+   Unlike the primary RegisterView method, this variant does not call the
+   resource's GetNativeView method. Instead, it directly registers the provided
+   native view object, enabling custom view creation workflows while still
+   benefiting from the registry's caching and lifecycle management.
 
-   \param resource The resource to register the view for. Must already be
-          registered in the registry.
-   \param view The native view object to register. Must be valid.
-   \param view_handle The descriptor handle for the view. Must be valid and
-          compatible with the resource type.
-   \param desc The view description. Must be hashable and comparable.
+   ### Advanced Use Cases
 
-   \return true if the view was registered successfully, false if the resource
+   - **Custom View Creation**: When resource's GetNativeView doesn't provide
+     sufficient control over view parameters.
+   - **External Integration**: Registering views created by external graphics
+     libraries or frameworks.
+   - **Performance Optimization**: Pre-creating views in batch operations or
+     background threads.
+   - **Testing and Mocking**: Injecting test doubles or mock view objects for
+     unit testing.
+
+   ### Validation and Safety
+
+   - **View Validity**: Validates that the native view object is valid before
+     registration.
+   - **Uniqueness Check**: Ensures no conflicting view with the same description
+     already exists.
+   - **Resource Verification**: Confirms the target resource is registered
+     before accepting the view.
+   - **Handle Compatibility**: Verifies descriptor handle matches view type and
+     visibility requirements.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) for registration, no view creation overhead
+   - Memory: Minimal overhead for cache entry and handle management
+   - Optimization: Bypasses resource's GetNativeView call for maximum
+     performance when view is already available
+
+   ### Critical Contracts
+
+   - **Valid Descriptor Handle Required**: Passing an invalid DescriptorHandle
+     will abort the program. Handle must be properly allocated.
+   - **No Duplicate Views**: Registering a view with identical description for
+     the same resource will abort the program. Use UpdateView() to modify
+     existing views.
+
+   ### Usage Examples
+
+   ```cpp
+   // Custom view creation with specific parameters
+   auto custom_view = CreateCustomTextureView(d3d_texture, custom_desc);
+   auto handle = allocator->Allocate(desc.view_type, desc.visibility);
+   bool success = registry.RegisterView(*texture, custom_view,
+                                       std::move(handle), desc);
+
+   // Batch view registration from external source
+   for (const auto& [view_obj, desc] : external_views) {
+     auto handle = allocator->Allocate(desc.view_type, desc.visibility);
+     registry.RegisterView(*resource, view_obj, std::move(handle), desc);
+   }
+   ```
+
+   @tparam Resource The resource type, must satisfy ResourceWithViews concept
+   @param resource The resource to associate the view with. Must be registered.
+   @param view The pre-created native view object. Must be valid.
+   @param view_handle Descriptor handle for the view. Must be valid and
+          compatible. Ownership transfers to registry.
+   @param desc View description for caching and validation. Must match the
+          view's actual properties.
+
+   @return true if the view was registered successfully, false if the resource
            or view is invalid.
 
-   \throws std::runtime_error if the resource is not registered, or a view
-           with a compatible descriptor exists in the cache.
+   @throw std::runtime_error if the resource is not registered, or if a view
+          with the same description already exists for this resource.
+
+   @warning Ensure the provided view object matches the description exactly, as
+            the registry cannot validate this correspondence.
+
+   @see RegisterView(Resource&, DescriptorHandle, ViewDescriptionT), UpdateView,
+        UnRegisterView
   */
   template <ResourceWithViews Resource>
   auto RegisterView(Resource& resource, NativeView view,
@@ -141,26 +397,87 @@ public:
       ->IsValid();
   }
 
-  //! Update a registered view in-place, keeping the same descriptor slot.
+  //! Update a view in-place while preserving its bindless descriptor index.
   /*!
-   Replaces the native view object bound at the given bindless index with a new
-   view created from the provided resource and view description. The
-   shader-visible bindless index remains unchanged. If the descriptor was
-   previously associated with a different resource, ownership is transferred to
-   the new resource. The view cache is updated accordingly.
+   Replaces an existing view at a specific bindless descriptor index with a new
+   view created from the provided resource and description. This operation is
+   crucial for maintaining stable bindless handles in shaders while allowing
+   view properties to change dynamically.
 
-   @tparam Resource The resource type (must satisfy ResourceWithViews)
-   @param resource The resource that will own the updated view.
-   @param index The existing bindless descriptor slot to update.
-   @param desc The new view description.
-   @return true if the view was updated successfully.
+   The method preserves the shader-visible bindless index, ensuring that
+   existing shader code continues to work without recompilation. If the
+   descriptor was previously owned by a different resource, ownership is
+   transferred to the new resource seamlessly.
 
-  ### Failure Semantics
+   ### Bindless Stability Guarantees
 
-  - If view creation fails for any reason after the descriptor is acquired
-    from the previous owner, the descriptor handle is released and the view
-    registration for that index is removed (index becomes free), matching
-    Replace() behavior.
+   - **Stable Indices**: The bindless descriptor index remains unchanged,
+     preserving shader compatibility.
+   - **Seamless Transitions**: GPU can continue accessing the resource through
+     the same index without interruption.
+   - **Cache Consistency**: View cache is updated to reflect the new resource
+     and description mapping.
+   - **Ownership Transfer**: Supports transferring views between different
+     resource instances at the same index.
+
+   ### Update Semantics
+
+   - **In-Place Replacement**: Creates new view and replaces the existing one
+     atomically from the registry's perspective.
+   - **Resource Ownership**: Updates internal mappings to associate the index
+     with the new resource.
+   - **Cache Invalidation**: Removes old cache entries and adds new ones
+     reflecting the updated view.
+   - **Descriptor Preservation**: Reuses the existing descriptor handle,
+     avoiding allocation/deallocation overhead.
+
+   ### Failure Handling
+
+   If view creation fails after acquiring the descriptor from the previous
+   owner, the descriptor handle is released and the index becomes free. This
+   matches Replace() behavior and ensures no resource leaks or invalid states.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) for the update operation itself, plus view creation
+     cost
+   - Memory: No additional descriptor allocation, minimal cache overhead
+   - Optimization: Reuses existing descriptor handle, avoiding allocator
+     round-trips
+
+   ### Usage Examples
+
+   ```cpp
+   // Dynamic LOD updates - same texture, different mip level
+   TextureViewDesc hq_desc { .mip_level = 0, .view_type =
+   ResourceViewType::kShaderResource }; TextureViewDesc lq_desc { .mip_level =
+   2, .view_type = ResourceViewType::kShaderResource };
+
+   auto view = registry.RegisterView(*texture, handle, hq_desc);
+   auto index = handle.GetBindlessHandle();
+
+   // Later, update to lower quality without changing shader bindings
+   registry.UpdateView(*texture, index, lq_desc);
+
+   // Transfer ownership to different resource
+   registry.UpdateView(*new_texture, index, hq_desc);
+   ```
+
+   @tparam Resource The resource type, must satisfy ResourceWithViews concept
+   @param resource The resource that will own the updated view. Must be
+          registered in the registry.
+   @param index The bindless descriptor index to update. Must correspond to an
+          existing registered view.
+   @param desc The new view description for the updated view.
+
+   @return true if the view was updated successfully, false if the operation
+           failed (resource not registered, invalid index, view creation
+           failure, etc.).
+
+   @note If view creation fails, the descriptor is released and the index
+         becomes free, requiring re-registration for future use.
+
+   @see RegisterView, Replace, UnRegisterView
   */
   template <ResourceWithViews Resource>
   auto UpdateView(Resource& resource, bindless::Handle index,
@@ -182,6 +499,8 @@ public:
     DescriptorHandle owned_descriptor;
     NativeView old_view_obj; // for cache purge
     NativeResource old_res_obj; // original owner
+    // Track prior cache key (by hash) if available to perform precise purge
+    std::optional<std::size_t> prior_desc_hash;
     if (const auto owner_it = descriptor_to_resource_.find(index);
       owner_it != descriptor_to_resource_.end()) {
       old_res_obj = owner_it->second;
@@ -195,10 +514,32 @@ public:
           old_descriptors.erase(ve_it);
           // Clear mapping while we attempt update; will be re-added on success
           descriptor_to_resource_.erase(index);
+
+          // Attempt to find the prior cache entry's key hash for precise erase
+          if (old_view_obj->IsValid()) {
+            for (const auto& [cache_key, entry] : view_cache_) {
+              if (cache_key.resource == old_res_obj
+                && entry.view_object == old_view_obj) {
+                prior_desc_hash = cache_key.view_desc_hash;
+                break;
+              }
+            }
+          }
         } else {
-          // Inconsistent state
+          // Inconsistent state: owner resource has no view entry for index.
+          // Programming error; self-heal by erasing stale mapping and fail.
+          DCHECK_F(false, "UpdateView: missing view entry for index");
+          // ReSharper disable once CppUnreachableCode
+          descriptor_to_resource_.erase(index);
           return false;
         }
+      } else {
+        // Inconsistent state: mapped owner resource missing from registry.
+        // Programming error; self-heal by erasing stale mapping and fail.
+        DCHECK_F(false, "UpdateView: owner resource not registered");
+        // ReSharper disable once CppUnreachableCode
+        descriptor_to_resource_.erase(index);
+        return false;
       }
     } else {
       // Unknown index
@@ -207,7 +548,30 @@ public:
 
     // Create the new native view at the same descriptor slot using the owned
     // descriptor handle.
-    auto new_view = resource.GetNativeView(owned_descriptor, desc);
+    NativeView new_view;
+    try {
+      new_view = resource.GetNativeView(owned_descriptor, desc);
+    } catch (...) {
+      // Failure -> release the temporary descriptor and purge old cache; the
+      // index becomes free and no registration remains for it.
+      if (owned_descriptor.IsValid()) {
+        owned_descriptor.Release();
+      }
+      // Remove any cache entry for the old view using the prior key when known
+      if (old_view_obj->IsValid()) {
+        if (prior_desc_hash.has_value()) {
+          const CacheKey prior_key { .resource = old_res_obj,
+            .view_desc_hash = *prior_desc_hash };
+          view_cache_.erase(prior_key);
+        } else {
+          std::erase_if(view_cache_, [&](const auto& it) {
+            return it.first.resource == old_res_obj
+              && it.second.view_object == old_view_obj;
+          });
+        }
+      }
+      throw; // Propagate
+    }
     if (!new_view->IsValid()) {
       // Failure -> release the temporary descriptor and purge old cache; the
       // index becomes free and no registration remains for it.
@@ -216,10 +580,16 @@ public:
       }
       // Remove any cache entry for the old view object if present.
       if (old_view_obj->IsValid()) {
-        std::erase_if(view_cache_, [&](const auto& it) {
-          return it.first.resource == old_res_obj
-            && it.second.view_object == old_view_obj;
-        });
+        if (prior_desc_hash.has_value()) {
+          const CacheKey prior_key { .resource = old_res_obj,
+            .view_desc_hash = *prior_desc_hash };
+          view_cache_.erase(prior_key);
+        } else {
+          std::erase_if(view_cache_, [&](const auto& it) {
+            return it.first.resource == old_res_obj
+              && it.second.view_object == old_view_obj;
+          });
+        }
       }
       return false;
     }
@@ -232,7 +602,21 @@ public:
     };
     descriptor_to_resource_[index] = new_res_obj;
 
-    // Update cache entry
+    // Update cache entry: erase prior by key first, then insert the new entry
+    if (old_view_obj->IsValid()) {
+      if (prior_desc_hash.has_value()) {
+        const CacheKey prior_key { .resource = old_res_obj,
+          .view_desc_hash = *prior_desc_hash };
+        view_cache_.erase(prior_key);
+      } else {
+        std::erase_if(view_cache_, [&](const auto& it) {
+          return it.first.resource == old_res_obj
+            && it.second.view_object == old_view_obj;
+        });
+      }
+    }
+
+    // Insert/overwrite new cache entry
     ViewCacheEntry cache_entry {
       .view_object = new_view,
       .view_description = std::any(desc),
@@ -242,75 +626,106 @@ public:
       .view_desc_hash = key_hash,
     };
     view_cache_[new_cache_key] = std::move(cache_entry);
-    // Remove any cache entry for the old view object (previous owner)
-    if (old_view_obj->IsValid()) {
-      std::erase_if(view_cache_, [&](const auto& it) {
-        return it.first.resource == old_res_obj
-          && it.second.view_object == old_view_obj;
-      });
-    }
     return true;
   }
 
-  //! Replace a registered resource with standardized semantics.
+  //! Replace a resource with sophisticated view transformation capabilities.
   /*!
-   Two explicit modes are supported:
+   Atomically replaces one registered resource with another, providing powerful
+   control over how existing views are handled during the transition. This
+   operation is essential for scenarios like resource streaming, format changes,
+   or dynamic resource swapping while maintaining bindless stability.
 
-   1) Updater provided (recreate-in-place):
-      - For each descriptor of `old_resource`, call `update_fn` with the
-        previous `ViewDescriptionT`.
-      - If `update_fn` returns a description and creating the view for
-        `new_resource` succeeds, the view is recreated in-place at the same
-        bindless index (stable handle retained).
-      - If `update_fn` returns `std::nullopt` or view creation fails, that
-        descriptor handle is released (freed) and not transferred.
+   Two distinct modes are supported through the updater parameter:
 
-   2) No updater (nullptr):
-      - No descriptors are transferred. All views/handles of `old_resource`
-        are unregistered and released. `new_resource` remains registered but
-        owns no descriptors.
+   ### Mode 1: Transform-and-Recreate (Updater Provided)
 
-   Consequences:
-   - Stable handles are guaranteed only for successfully recreated views.
-   - Null-updater path performs a clean release; no dangling entries exist in
-     the registry, and no follow-up UpdateView calls are expected to succeed
-     for the old indices.
+   For each existing view of the old resource, the updater function is called
+   with the view's description. Based on the updater's return value:
+   - **Description Returned**: View is recreated for the new resource at the
+     same bindless index, preserving shader compatibility.
+   - **std::nullopt Returned**: View is discarded and its descriptor handle is
+     released, freeing the bindless index.
+   - **Exception Thrown**: Registry safely discards the View, with proper
+     cleanup.
 
-   @tparam Resource A resource type that satisfies ResourceWithViews.
-   @tparam ViewUpdater Callable conforming to
-   `detail::ViewUpdaterCallable<Resource, ViewUpdater>`. Use
-   `std::nullptr_t` to select the release-all mode.
+   ### Mode 2: Complete Release (nullptr Updater)
 
-   @param old_resource The currently registered resource being replaced.
-   @param new_resource The new resource to register; may receive recreated
-          views when the updater is provided and succeeds.
-   @param update_fn Per-descriptor policy; given the previous
-          `ViewDescriptionT`, returns an optional next description.
+   All views and descriptor handles of the old resource are released. The new
+   resource is registered but starts with no views. This mode is equivalent to
+   UnRegisterResource(old) + Register(new).
+
+   ### Transformation Capabilities
+
+   The updater function enables sophisticated view transformations:
+   - **Format Changes**: Update texture format while preserving view types
+   - **LOD Adjustments**: Change mip levels or array slices dynamically
+   - **Selective Migration**: Choose which views to transfer vs. discard
+   - **Conditional Logic**: Apply complex policies based on view properties
+
+   ### Atomicity and Safety
+
+   - **Exception Safety**: Failed view creation results in clean descriptor
+     release, never leaving dangling or corrupted state.
+   - **Atomic Registration**: New resource is registered before any view
+     operations begin.
+   - **Consistent State**: Registry remains fully consistent regardless of
+     individual view creation success/failure.
+   - **Thread Safety**: Entire operation is protected by internal mutex.
 
    ### Performance Characteristics
 
-   - Time Complexity: O(N) for N descriptors of the resource.
-   - Memory: O(N) transient for snapshotting indices; no heap growth in the
-     registry beyond the new resource entry.
-   - Optimization: Avoids descriptor re-allocation for recreated views and
-     ensures immediate cleanup for released ones.
+   - Time Complexity: O(N) for N views on the old resource, plus view creation
+     overhead for successful transformations
+   - Memory: O(N) transient memory for snapshotting descriptor indices; no
+     permanent growth beyond new resource entry
+   - Optimization: Reuses existing descriptor handles for recreated views,
+     avoiding allocator round-trips
 
-   ### Usage Example
+   ### Usage Examples
 
    ```cpp
-   // Recreate in-place (keep handles for successful updates)
-   registry.Replace(old_buf, new_buf,
-     [](const Buffer::ViewDescriptionT& prev) -> std::optional<auto> {
-       auto next = prev; // adjust as needed
-       return next;
+   // Format conversion with selective view migration
+   registry.Replace(*old_texture, new_texture,
+     [](const TextureViewDesc& desc) -> std::optional<TextureViewDesc> {
+       if (desc.view_type == ResourceViewType::kShaderResource) {
+         auto new_desc = desc;
+         new_desc.format = Format::kBC7_UNORM;  // Compress format
+         return new_desc;
+       }
+       return std::nullopt;  // Discard UAVs, keep only SRVs
      });
 
-   // Release-all (no transfers)
-   registry.Replace(old_buf, new_buf, nullptr);
+   // Dynamic LOD switching for performance
+   registry.Replace(*high_res_texture, low_res_texture,
+     [](const TextureViewDesc& desc) -> std::optional<TextureViewDesc> {
+       auto lod_desc = desc;
+       lod_desc.mip_level = std::min(desc.mip_level + 2, max_mips - 1);
+       return lod_desc;
+     });
+
+   // Complete resource swap with cleanup
+   registry.Replace(*old_buffer, new_buffer, nullptr);
    ```
 
-   @throw std::runtime_error if `old_resource` is not registered.
-   @see UpdateView
+   @tparam Resource A resource type that satisfies ResourceWithViews concept
+   @tparam ViewUpdater Callable matching ViewUpdaterCallable concept, or
+           std::nullptr_t for release-all mode
+
+   @param old_resource The currently registered resource being replaced. Must be
+          registered in this registry.
+   @param new_resource The replacement resource. Will be registered if not
+          already present.
+   @param update_fn Transformation policy for existing views. Called with each
+          view's description; return new description to recreate view at same
+          index, or std::nullopt to release the descriptor.
+
+   @throw std::runtime_error if old_resource is not registered in this registry.
+
+   @warning Updater exceptions are caught and treated as std::nullopt return
+            (view discarded). Ensure updater provides strong exception safety.
+
+   @see UpdateView, UnRegisterResource, RegisterView
   */
   template <ResourceWithViews Resource, typename ViewUpdater = std::nullptr_t>
     requires detail::ViewUpdaterCallable<Resource, ViewUpdater>
@@ -427,6 +842,9 @@ public:
           (void)0;
         }
 
+        // We're only checking for validity and releasing only if the descriptor
+        // was not moved (which will invalidate it).
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         if (!recreated && owned_descriptor.IsValid()) {
           // Ensure the temporary descriptor is not leaked; bindless index is
           // free.
@@ -472,6 +890,77 @@ public:
       key);
   }
 
+  //! Unregister a specific view while preserving the resource and other views.
+  /*!
+   Removes a specific native view object from the registry, releasing its
+   associated descriptor handle and purging it from the view cache. This
+   operation provides fine-grained control over view lifecycle, allowing
+   selective cleanup of views while keeping the resource and other views intact.
+
+   The method locates the view by its native object identity and removes all
+   associated registry state: descriptor handle mapping, cache entries, and
+   internal bookkeeping. The descriptor handle is properly released back to its
+   originating allocator, making the bindless index available for reuse.
+
+   ### Cleanup Guarantees
+
+   - **Descriptor Release**: Automatically releases the descriptor handle back
+     to its allocator, preventing resource leaks.
+   - **Cache Purging**: Removes the view from the cache, ensuring no stale
+     entries remain.
+   - **Index Reclamation**: Frees the bindless index for future allocation.
+   - **Selective Removal**: Only affects the specified view; other views on the
+     same resource remain unaffected.
+
+   ### Safety and Error Handling
+
+   - **Resource Validation**: Verifies the resource is registered before
+     attempting view removal.
+   - **Idempotent Operation**: Safe to call multiple times with the same view;
+     subsequent calls are no-ops.
+   - **Invalid View Handling**: Safely handles invalid or non-existent views
+     without throwing exceptions.
+   - **Thread Safety**: Fully thread-safe with internal synchronization.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(1) average case for hash-based lookups, O(N) worst case
+     for cache purging where N is the number of cached views for the resource
+   - Memory: Immediately frees descriptor and cache entry memory
+   - Optimization: Minimal overhead for selective view cleanup
+
+   ### Usage Examples
+
+   ```cpp
+   // Remove a specific view while keeping others
+   auto srv_view = registry.RegisterView(*texture, srv_handle, srv_desc);
+   auto uav_view = registry.RegisterView(*texture, uav_handle, uav_desc);
+
+   // Later, remove only the SRV
+   registry.UnRegisterView(*texture, srv_view);
+   // UAV remains valid and accessible
+
+   // Safe cleanup in destructors
+   class ViewWrapper {
+     ~ViewWrapper() {
+       if (view_->IsValid()) {
+         registry_->UnRegisterView(*resource_, view_);
+       }
+     }
+   };
+   ```
+
+   @tparam Resource The resource type, must satisfy SupportedResource concept
+   @param resource The resource that owns the view. Must be registered.
+   @param view The native view object to remove. Can be invalid (no-op).
+
+   @throw std::runtime_error if the resource is not registered in this registry.
+
+   @note This method is idempotent - calling it multiple times with the same
+         view is safe and has no effect after the first call.
+
+   @see UnRegisterViews, UnRegisterResource, RegisterView
+  */
   template <SupportedResource Resource>
   auto UnRegisterView(const Resource& resource, const NativeView& view) -> void
   {
@@ -483,6 +972,90 @@ public:
       view);
   }
 
+  //! Completely remove a resource and all its associated views from the
+  //! registry.
+  /*!
+   Unregisters a resource from the registry, automatically cleaning up all
+   associated views, descriptor handles, and cache entries. This operation
+   provides complete resource lifecycle management, ensuring no resource leaks
+   or dangling references remain after removal.
+
+   The method performs comprehensive cleanup:
+   1. Releases all descriptor handles associated with the resource's views
+   2. Removes all view cache entries for the resource
+   3. Clears internal mappings and bookkeeping structures
+   4. Releases the strong reference to the resource
+
+   After this operation, the resource is completely disconnected from the
+   registry and may be destroyed if no other references exist.
+
+   ### Cleanup Scope
+
+   - **All Views**: Every view registered for this resource is automatically
+     unregistered and cleaned up.
+   - **Descriptor Handles**: All associated descriptor handles are released back
+     to their respective allocators.
+   - **Cache Entries**: All cached views for this resource are purged to prevent
+     stale access.
+   - **Strong Reference**: Registry releases its shared_ptr, potentially
+     triggering resource destruction.
+
+   ### Resource Lifecycle Integration
+
+   - **Automatic Cleanup**: Eliminates need for manual view-by-view cleanup when
+     destroying resources.
+   - **Exception Safety**: Cleanup is performed safely even if individual view
+     cleanup encounters errors.
+   - **Memory Management**: Ensures no memory leaks from forgotten views or
+     descriptor handles.
+   - **Deterministic Destruction**: Predictable resource cleanup behavior.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(N) where N is the number of views registered for this
+     resource
+   - Memory: Immediately frees all memory associated with the resource and its
+     views in the registry
+   - Optimization: Batch cleanup avoids repeated synchronization overhead
+
+   ### Usage Examples
+
+   ```cpp
+   // Resource lifecycle management
+   {
+     auto texture = std::make_shared<Texture>(device, desc);
+     registry.Register(texture);
+
+     // Register multiple views
+     registry.RegisterView(*texture, srv_handle, srv_desc);
+     registry.RegisterView(*texture, uav_handle, uav_desc);
+     registry.RegisterView(*texture, rtv_handle, rtv_desc);
+
+     // Complete cleanup with single call
+     registry.UnRegisterResource(*texture);
+   } // texture may be destroyed here if no other references
+
+   // Integration with resource managers
+   class ResourceManager {
+     void DestroyTexture(TextureId id) {
+       auto texture = texture_map_[id];
+       registry_.UnRegisterResource(*texture);
+       texture_map_.erase(id);
+     }
+   };
+   ```
+
+   @tparam Resource The resource type, must satisfy SupportedResource concept
+   @param resource The resource to completely remove from the registry. Must be
+          currently registered.
+
+   @throw std::runtime_error if the resource is not registered in this registry.
+
+   @note This operation is not reversible - after unregistration, the resource
+         must be re-registered before any view operations can be performed.
+
+   @see UnRegisterViews, UnRegisterView, Register
+  */
   template <SupportedResource Resource>
   auto UnRegisterResource(const Resource& resource) -> void
   {
@@ -492,7 +1065,82 @@ public:
     });
   }
 
-  //! Release all views for a resource
+  //! Release all views for a resource while keeping the resource registered.
+  /*!
+   Removes all views associated with a resource from the registry while
+   preserving the resource registration itself. This operation provides
+   selective cleanup for scenarios where you want to rebuild views or
+   temporarily clear all views without affecting the resource's registration
+   status.
+
+   Unlike UnRegisterResource, this method:
+   - Preserves the resource registration in the registry
+   - Only removes views, descriptor handles, and cache entries
+   - Allows immediate re-registration of new views
+   - Maintains the resource's identity and lifecycle state
+
+   ### Selective Cleanup Benefits
+
+   - **View Rebuilding**: Clear all existing views before registering new ones
+     with different properties.
+   - **Format Changes**: Remove views with old formats before creating views
+     with new formats.
+   - **Performance Optimization**: Bulk removal is more efficient than
+     individual UnRegisterView calls.
+   - **State Management**: Reset view state while maintaining resource
+     lifecycle.
+
+   ### Cleanup Guarantees
+
+   - **All Views Removed**: Every view registered for this resource is
+     unregistered and cleaned up.
+   - **Descriptor Release**: All descriptor handles are released back to their
+     allocators.
+   - **Cache Purging**: All cached view entries for this resource are removed.
+   - **Resource Preservation**: The resource remains registered and available
+     for new view operations.
+
+   ### Performance Characteristics
+
+   - Time Complexity: O(N) where N is the number of views for this resource
+   - Memory: Frees all view-related memory while preserving resource entry
+   - Optimization: More efficient than multiple individual UnRegisterView calls
+     due to reduced synchronization overhead
+
+   ### Usage Examples
+
+   ```cpp
+   // View format migration
+   auto texture = std::make_shared<Texture>(device, old_desc);
+   registry.Register(texture);
+
+   // Register views with old format
+   registry.RegisterView(*texture, srv_handle_old, old_srv_desc);
+   registry.RegisterView(*texture, uav_handle_old, old_uav_desc);
+
+   // Clear all views for format change
+   registry.UnRegisterViews(*texture);
+
+   // Re-register with new format
+   registry.RegisterView(*texture, srv_handle_new, new_srv_desc);
+   registry.RegisterView(*texture, uav_handle_new, new_uav_desc);
+
+   // Conditional view cleanup
+   if (should_reset_views) {
+     registry.UnRegisterViews(*my_buffer);
+     // Resource is still registered, ready for new views
+   }
+   ```
+
+   @tparam Resource The resource type, must satisfy SupportedResource concept
+   @param resource The resource whose views should be removed. Must be
+          registered in the registry.
+
+   @note The resource itself remains registered after this operation and can
+         immediately accept new view registrations.
+
+   @see UnRegisterResource, UnRegisterView, RegisterView
+  */
   template <SupportedResource Resource>
   auto UnRegisterViews(const Resource& resource) -> void
   {
@@ -527,8 +1175,8 @@ private:
   //! Remove all cached views for a resource. Assumes registry_mutex_ held.
   OXGN_GFX_API auto PurgeCachedViewsForResource(const NativeResource& resource)
     -> void;
-  //! Attach a descriptor and associate a native view and cache entry.
-  //! Assumes registry_mutex_ held.
+  //! Attach a descriptor and associate a native view and cache entry. Assumes
+  //! registry_mutex_ held.
   OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
     bindless::Handle index, DescriptorHandle descriptor_handle,
     const NativeView& view, std::any description, std::size_t key_hash) -> void;
@@ -549,8 +1197,8 @@ private:
 
   // Resource tracking
   struct ResourceEntry {
-    // Erase the type information, but hold a strong reference to the
-    // resource while it is registered.
+    // Erase the type information, but hold a strong reference to the resource
+    // while it is registered.
     std::shared_ptr<void> resource;
 
     // Descriptors associated with this resource

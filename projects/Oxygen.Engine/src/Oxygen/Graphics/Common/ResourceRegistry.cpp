@@ -73,17 +73,15 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   std::lock_guard lock(registry_mutex_);
 
   LOG_SCOPE_F(1, "Register resource");
-  DLOG_F(3, "resource: {}, type id: {}", fmt::ptr(resource.get()),
-    nostd::to_string(type_id));
+  DLOG_F(2, "resource : {}", fmt::ptr(resource.get()));
+  DLOG_F(2, "type id  : {}", type_id);
 
   const NativeResource key { resource.get(), type_id };
   if (const auto cache_it = resources_.find(key);
     cache_it != resources_.end()) {
-    DLOG_F(4, "cache hit ({})-> ", fmt::ptr(resource.get()));
-    DLOG_F(4,
-      "resource already registered, "
-      "use Replace() to replace the resource and its views");
-    throw std::runtime_error("Resource already registered");
+    DLOG_F(2, "cache hit ({})", fmt::ptr(resource.get()));
+    // This is a programming error, abort.
+    ABORT_F("-failed- use Replace() to replace registered resources");
   }
 
   ResourceEntry entry {
@@ -98,13 +96,14 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   DescriptorHandle view_handle, std::any view_description, size_t key_hash,
   ResourceViewType view_type, DescriptorVisibility visibility) -> NativeView
 {
-  CHECK_F(view_description.has_value(), "View description must be valid");
-  CHECK_F(key_hash != 0, "Key hash must be valid");
-  CHECK_F(view_handle.IsValid(), "View handle must be valid");
-
   // The resource native object is constructed from a reference to the resource
   // and its type ID. It must be valid.
+  CHECK_F(view_handle.IsValid(), "View handle must be valid");
+
+  // These values are ensured by the ResourceRegistry wrapper methods.
   DCHECK_F(resource->IsValid(), "invalid resource used for view registration");
+  DCHECK_F(view_description.has_value(), "View description must be valid");
+  DCHECK_F(key_hash != 0, "Key hash must be valid");
 
   std::lock_guard lock(registry_mutex_);
 
@@ -112,19 +111,20 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   DLOG_F(1, "resource: {}", nostd::to_string(resource));
   DLOG_F(1, "view: {}", nostd::to_string(view));
   DLOG_F(1, "view handle: {}", nostd::to_string(view_handle));
-  DLOG_F(3, "view type: {}, visibility: {}", nostd::to_string(view_type),
-    nostd::to_string(visibility));
+  DLOG_F(3, "view type: {}, visibility: {}", view_type, visibility);
   DLOG_F(3, "key hash: {}", key_hash);
 
+  // View native object is obtained from the Graphics API, and this may fail for
+  // various reasons.
   if (!view->IsValid()) {
-    LOG_F(ERROR, "invalid view used for view registration");
+    LOG_F(ERROR, "-failed- invalid view used for view registration");
     return {};
   }
 
   // Check if resource exists
   const auto resource_it = resources_.find(resource);
   if (resource_it == resources_.end()) {
-    LOG_F(WARNING, "resource not found -> failed");
+    LOG_F(ERROR, "-failed- resource not found");
     return {};
   }
 
@@ -132,12 +132,9 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
   if (const auto cache_it = view_cache_.find(cache_key);
     cache_it != view_cache_.end()) {
-    DLOG_F(
-      4, "cache hit ({})-> ", nostd::to_string(cache_it->second.view_object));
-    DLOG_F(4,
-      "view already registered, "
-      "use UpdateView() to update while keeping the same descriptor");
-    throw std::runtime_error("View already registered");
+    DLOG_F(2, "cache hit ({})", cache_it->second.view_object);
+    // This is a programming error, abort.
+    ABORT_F("-failed- use UpdateView() to update registered views");
   }
 
   // Store in maps
@@ -145,7 +142,9 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   auto& descriptors = resource_it->second.descriptors;
   auto [desc_it, inserted] = descriptors.emplace(index,
     ResourceEntry::ViewEntry {
-      .view_object = view, .descriptor = std::move(view_handle) });
+      .view_object = view,
+      .descriptor = std::move(view_handle),
+    });
   DLOG_F(4, "updated descriptors map with index {} ({})", index,
     inserted ? "inserted" : "reused");
   descriptor_to_resource_[index] = resource;
@@ -160,8 +159,7 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   DLOG_F(4, "updated cache");
 
   // Return the view
-  DLOG_F(
-    3, "returning view {}", nostd::to_string(view), nostd::to_string(resource));
+  DLOG_F(3, "returning view {}", view, resource);
   return view;
 }
 
@@ -205,8 +203,8 @@ auto ResourceRegistry::UnRegisterViewNoLock(
   const NativeResource& resource, const NativeView& view) -> void
 {
   LOG_SCOPE_F(3, "UnRegister view");
-  DLOG_F(3, "resource: {}", nostd::to_string(resource));
-  DLOG_F(3, "view: {}", nostd::to_string(view));
+  DLOG_F(3, "resource : {}", resource);
+  DLOG_F(3, "view     : {}", view);
 
   const auto it = resources_.find(resource);
   if (it == resources_.end()) {
@@ -236,8 +234,7 @@ auto ResourceRegistry::UnRegisterViewNoLock(
           && cache_pair.second.view_object == view;
       });
   DCHECK_EQ_F(erased_count, 1,
-    "Cache entry not found for resource {} and view {}",
-    nostd::to_string(resource), nostd::to_string(view));
+    "Cache entry not found for resource {} and view {}", resource, view);
 }
 
 auto ResourceRegistry::UnRegisterResource(const NativeResource& resource)
@@ -248,15 +245,14 @@ auto ResourceRegistry::UnRegisterResource(const NativeResource& resource)
   if (it == resources_.end()) {
     DLOG_F(3,
       "UnRegisterResource: resource {} not found (already unregistered)",
-      nostd::to_string(resource));
+      resource);
     return;
   }
-  DLOG_F(2, "UnRegisterResource: removing resource {} and all its views",
-    nostd::to_string(resource));
+  DLOG_F(
+    2, "UnRegisterResource: removing resource {} and all its views", resource);
   UnRegisterResourceViewsNoLock(resource);
   resources_.erase(it);
-  DLOG_F(
-    3, "UnRegisterResource: resource {} removed", nostd::to_string(resource));
+  DLOG_F(3, "UnRegisterResource: resource {} removed", resource);
 }
 
 auto ResourceRegistry::UnRegisterResourceViews(const NativeResource& resource)
@@ -273,11 +269,15 @@ auto ResourceRegistry::UnRegisterResourceViews(const NativeResource& resource)
 auto ResourceRegistry::UnRegisterResourceViewsNoLock(
   const NativeResource& resource) -> void
 {
-  LOG_SCOPE_F(3, "UnRegister all views for resource");
-  DLOG_F(3, "resource: {}", nostd::to_string(resource));
+  LOG_SCOPE_F(3, "UnRegisterResourceViews");
+  DLOG_F(2, "resource : {}", resource);
 
   const auto it = resources_.find(resource);
   if (it == resources_.end()) {
+    // Contrarily to UnRegisterView, this is not an error. We just log and
+    // return. We consider that when unregistering a specific view, there is an
+    // implicit assumption that the resource is still there and may have other
+    // views.
     DLOG_F(3, "resource not found -> nothing to un-register");
     return;
   }
@@ -289,11 +289,11 @@ auto ResourceRegistry::UnRegisterResourceViewsNoLock(
   }
 
   const size_t view_count = descriptors.size();
-  DLOG_F(4, "{} view{} to un-register", view_count, view_count == 1 ? "" : "s");
+  DLOG_F(2, "{} view{} to un-register", view_count, view_count == 1 ? "" : "s");
 
   // Release all descriptors and remove from descriptor_to_resource_ map
   for (auto& [index, view_entry] : descriptors) {
-    DLOG_F(4, "view for index {}", view_entry.descriptor.GetBindlessHandle());
+    DLOG_F(3, "view for index {}", view_entry.descriptor.GetBindlessHandle());
     if (view_entry.descriptor.IsValid()) {
       view_entry.descriptor.Release();
       descriptor_to_resource_.erase(index);
@@ -328,7 +328,7 @@ auto ResourceRegistry::AttachDescriptorWithView(
   DCHECK_F(view->IsValid(), "invalid native view object");
   const auto it = resources_.find(dst_resource);
   DCHECK_F(it != resources_.end(), "destination resource not registered: {}",
-    nostd::to_string(dst_resource));
+    dst_resource);
   it->second.descriptors[index]
     = ResourceEntry::ViewEntry { .view_object = view,
         .descriptor = std::move(descriptor_handle) };
