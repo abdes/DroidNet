@@ -149,37 +149,29 @@ auto RingUploadBuffer::SetActiveRange(
     *buffer_, oxygen::bindless::Handle(bindless_index_.get()), view_desc);
 }
 
-auto RingUploadBuffer::Allocate(const std::uint64_t elements,
-  const std::uint64_t align_elements) -> std::optional<Allocation>
+auto RingUploadBuffer::Allocate(const std::uint64_t elements)
+  -> std::optional<Allocation>
 {
   if (!buffer_) {
     return std::nullopt;
   }
   const auto stride = static_cast<std::uint64_t>(element_stride_);
-  const auto align_e = (std::max)(1ULL, align_elements);
-  // Require power-of-two alignment in elements.
-  DCHECK_F(
-    (align_e & (align_e - 1)) == 0, "align_elements must be power-of-two");
-
+  // Allocations are expressed in elements and thus are multiples of the
+  // element stride. We therefore keep offsets in bytes and don't need an
+  // explicit align-up step: tail_bytes_ is always advanced by multiples of
+  // the stride so it remains stride-aligned.
   const auto bytes_needed = elements * stride;
-  const auto align_bytes = align_e * stride;
   const auto cap = CapacityBytes();
   if (bytes_needed == 0 || cap == 0 || bytes_needed > cap) {
     ++failed_allocations_;
     return std::nullopt;
   }
-
-  auto align_up = [](std::uint64_t v, std::uint64_t a) noexcept {
-    return (v + (a - 1)) & ~(a - 1);
-  };
-
   // Try allocate at tail -> end.
-  const auto tail_aligned = align_up(tail_bytes_, align_bytes);
-  if (tail_aligned >= head_bytes_) {
-    // [head ... tail_aligned ... cap)
-    if (tail_aligned + bytes_needed <= cap) {
-      const auto offset_bytes = tail_aligned;
-      tail_bytes_ = tail_aligned + bytes_needed;
+  if (tail_bytes_ >= head_bytes_) {
+    // [head ... tail_bytes_ ... cap)
+    if (tail_bytes_ + bytes_needed <= cap) {
+      const auto offset_bytes = tail_bytes_;
+      tail_bytes_ = tail_bytes_ + bytes_needed;
       used_bytes_ += bytes_needed;
       curr_frame_bytes_ += bytes_needed;
       max_used_bytes_ = (std::max)(max_used_bytes_, used_bytes_);
@@ -201,10 +193,11 @@ auto RingUploadBuffer::Allocate(const std::uint64_t elements,
         .elements = elements,
       };
     }
-  } else { // tail < head: free space is [tail_aligned .. head)
-    if (tail_aligned + bytes_needed <= head_bytes_) {
-      const auto offset_bytes = tail_aligned;
-      tail_bytes_ = tail_aligned + bytes_needed;
+  } else {
+    // tail < head: free space is [tail_bytes_ .. head)
+    if (tail_bytes_ + bytes_needed <= head_bytes_) {
+      const auto offset_bytes = tail_bytes_;
+      tail_bytes_ = tail_bytes_ + bytes_needed;
       used_bytes_ += bytes_needed;
       curr_frame_bytes_ += bytes_needed;
       max_used_bytes_ = (std::max)(max_used_bytes_, used_bytes_);
