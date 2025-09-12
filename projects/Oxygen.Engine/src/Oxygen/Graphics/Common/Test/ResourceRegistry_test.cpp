@@ -20,7 +20,7 @@
 
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
-using oxygen::graphics::NativeObject;
+using oxygen::graphics::NativeView;
 using oxygen::graphics::RegisteredResource;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
@@ -52,7 +52,7 @@ public:
 
   // Required by resource registry
   [[maybe_unused]] auto GetNativeView(const DescriptorHandle& /*view_handle*/,
-    const ViewDescriptionT& desc) -> NativeObject
+    const ViewDescriptionT& desc) -> NativeView
   {
     // Use the resource pointer and view id to make each view unique per
     // resource and description
@@ -69,10 +69,10 @@ class ThrowingTestResource final : public RegisteredResource,
 public:
   using ViewDescriptionT = TestViewDesc;
 
-  void SetThrowOnId(std::optional<int> id) { throw_on_id_ = id; }
+  auto SetThrowOnId(std::optional<int> id) -> void { throw_on_id_ = id; }
 
   [[maybe_unused]] auto GetNativeView(const DescriptorHandle& /*view_handle*/,
-    const ViewDescriptionT& desc) -> NativeObject
+    const ViewDescriptionT& desc) -> NativeView
   {
     if (throw_on_id_.has_value() && desc.id == *throw_on_id_) {
       throw std::runtime_error("ThrowingTestResource: GetNativeView fail");
@@ -94,7 +94,7 @@ public:
   using ViewDescriptionT = TestViewDesc;
 
   [[maybe_unused]] auto GetNativeView(const DescriptorHandle& /*view_handle*/,
-    const ViewDescriptionT& /*desc*/) -> NativeObject
+    const ViewDescriptionT& /*desc*/) -> NativeView
   {
     return {}; // invalid view
   }
@@ -113,16 +113,15 @@ template <> struct std::hash<TestViewDesc> {
 
 namespace {
 
-class ResourceRegistryTest : public ::testing::Test {
+class ResourceRegistryTest : public testing::Test {
 protected:
   std::shared_ptr<MockDescriptorAllocator> allocator_;
   std::unique_ptr<ResourceRegistry> registry_;
   std::shared_ptr<TestResource> resource_;
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    allocator_
-      = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>();
+    allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
     allocator_->ext_segment_factory_
       = [](auto capacity, auto base_index, auto view_type, auto visibility) {
           return std::make_unique<FixedDescriptorSegment>(
@@ -134,7 +133,7 @@ protected:
     registry_->Register(resource_);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     registry_->UnRegisterResource(*resource_);
     resource_.reset();
@@ -142,7 +141,7 @@ protected:
     allocator_.reset();
   }
 
-  auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeObject
+  auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeView
   {
     // Allocate a descriptor
     DescriptorHandle descriptor
@@ -200,7 +199,7 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewAlreadyRegistered)
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 42 };
   const auto view1 = RegisterView(*resource_, desc);
-  EXPECT_TRUE(view1.IsValid());
+  EXPECT_TRUE(view1->IsValid());
   EXPECT_TRUE(registry_->Contains(*resource_, desc));
 
   // Registering the same view again should throw a runtime error
@@ -222,8 +221,8 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewDifferentDescriptions)
     .id = 2 };
   const auto view1 = RegisterView(*resource_, desc1);
   const auto view2 = RegisterView(*resource_, desc2);
-  EXPECT_TRUE(view1.IsValid());
-  EXPECT_TRUE(view2.IsValid());
+  EXPECT_TRUE(view1->IsValid());
+  EXPECT_TRUE(view2->IsValid());
   EXPECT_NE(view1, view2)
     << "Different descriptions should yield different views";
 }
@@ -244,7 +243,7 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewCacheEviction)
   const auto resource2 = std::make_shared<TestResource>();
   registry_->Register(resource2);
   const auto view2 = RegisterView(*resource2, desc);
-  EXPECT_TRUE(view2.IsValid());
+  EXPECT_TRUE(view2->IsValid());
   EXPECT_NE(view1, view2)
     << "Cache should be cleared after UnRegisterViews, "
        "new view should be created for new resource instance";
@@ -266,8 +265,8 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewMultipleResources)
     .id = 123 };
   const auto view1 = RegisterView(*resource_, desc);
   const auto view2 = RegisterView(*resource2, desc);
-  EXPECT_TRUE(view1.IsValid());
-  EXPECT_TRUE(view2.IsValid());
+  EXPECT_TRUE(view1->IsValid());
+  EXPECT_TRUE(view2->IsValid());
   EXPECT_NE(view1, view2)
     << "Same description on different resources should yield different views";
 
@@ -292,7 +291,7 @@ NOLINT_TEST_F(
   resource_ = std::make_shared<TestResource>();
   registry_->Register(resource_);
   const auto view2 = RegisterView(*resource_, desc);
-  EXPECT_TRUE(view2.IsValid());
+  EXPECT_TRUE(view2->IsValid());
   EXPECT_NE(view1, view2) << "Re-registering with a new resource instance "
                              "should not return stale view";
 }
@@ -311,7 +310,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewForUnregisteredResource)
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 99 };
   const auto view_object = RegisterView(*unregistered_resource, desc);
-  EXPECT_FALSE(view_object.IsValid());
+  EXPECT_FALSE(view_object->IsValid());
 }
 
 /*!
@@ -325,7 +324,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, FindViewForUnregisteredResource)
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 100 };
   EXPECT_FALSE(registry_->Contains(*unregistered_resource, desc));
-  EXPECT_FALSE(registry_->Find(*unregistered_resource, desc).IsValid());
+  EXPECT_FALSE(registry_->Find(*unregistered_resource, desc)->IsValid());
 }
 
 /*!
@@ -353,7 +352,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewWithInvalidView)
     .id = 202 };
   DescriptorHandle descriptor
     = allocator_->Allocate(desc.view_type, desc.visibility);
-  NativeObject invalid_view; // default constructed, invalid
+  NativeView invalid_view; // default constructed, invalid
   // Should return false (not throw or abort)
   bool result = registry_->RegisterView(
     *resource_, invalid_view, std::move(descriptor), desc);
@@ -390,14 +389,15 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest, ConcurrentRegisterAndUnregister)
           .visibility = DescriptorVisibility::kShaderVisible,
           .id = i };
         auto view = RegisterView(*resources[t], desc);
-        EXPECT_TRUE(view.IsValid());
+        EXPECT_TRUE(view->IsValid());
         registry_->UnRegisterResource(*resources[t]);
       }
     });
   }
   start_flag = true;
-  for (auto& th : threads)
+  for (auto& th : threads) {
     th.join();
+  }
 }
 
 // --- View Un-registration Tests ---
@@ -409,10 +409,10 @@ protected:
   TestViewDesc desc2_ { .view_type = ResourceViewType::kConstantBuffer,
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 2 };
-  NativeObject view1_;
-  NativeObject view2_;
+  NativeView view1_;
+  NativeView view2_;
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
     ResourceRegistryTest::SetUp();
     view1_ = RegisterView(*resource_, desc1_);
@@ -459,14 +459,14 @@ NOLINT_TEST_F(ResourceRegistryViewUnRegisterTest, UnregisterAllViews)
 */
 NOLINT_TEST_F(ResourceRegistryViewUnRegisterTest, UnregisterNonExistentView)
 {
-  constexpr NativeObject invalid_view {};
-  EXPECT_FALSE(invalid_view.IsValid());
+  constexpr NativeView invalid_view {};
+  EXPECT_FALSE(invalid_view->IsValid());
   // Unregistering a non-existent view should not throw
   NOLINT_EXPECT_NO_THROW(registry_->UnRegisterView(*resource_, invalid_view));
 }
 
 // --- Resource Lifecycle Tests ---
-class ResourceRegistryLifecycleTest : public ::testing::Test {
+class ResourceRegistryLifecycleTest : public testing::Test {
 protected:
   std::shared_ptr<MockDescriptorAllocator> allocator_;
   std::unique_ptr<ResourceRegistry> registry_;
@@ -475,10 +475,9 @@ protected:
   // Capture the segment used for descriptor allocations to verify no leaks.
   FixedDescriptorSegment* last_segment_ { nullptr };
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    allocator_
-      = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>();
+    allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
     allocator_->ext_segment_factory_ = [this](auto capacity, auto base_index,
                                          auto view_type, auto visibility) {
       auto seg = std::make_unique<FixedDescriptorSegment>(
@@ -492,7 +491,7 @@ protected:
     registry_->Register(resource1_);
     registry_->Register(resource2_);
   }
-  void TearDown() override
+  auto TearDown() -> void override
   {
     registry_->UnRegisterResource(*resource1_);
     registry_->UnRegisterResource(*resource2_);
@@ -502,7 +501,7 @@ protected:
     allocator_.reset();
   }
 
-  auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeObject
+  auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeView
   {
     // Allocate a descriptor
     DescriptorHandle descriptor
@@ -573,7 +572,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, Replace_RecreateViewAndKeepIndex)
 
   const auto old_view
     = registry_->RegisterView(*resource1_, std::move(descriptor), desc);
-  ASSERT_TRUE(old_view.IsValid());
+  ASSERT_TRUE(old_view->IsValid());
   EXPECT_TRUE(registry_->Contains(*resource1_, desc));
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 1U)
@@ -590,7 +589,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, Replace_RecreateViewAndKeepIndex)
   EXPECT_FALSE(registry_->Contains(*resource1_, desc));
   EXPECT_TRUE(registry_->Contains(*resource2_, desc));
   const auto new_view = registry_->Find(*resource2_, desc);
-  EXPECT_TRUE(new_view.IsValid());
+  EXPECT_TRUE(new_view->IsValid());
   EXPECT_NE(new_view, old_view);
 
   // Index stability: we can still update that exact descriptor index
@@ -631,7 +630,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, Replace_UpdaterNullopt_Releases)
 
   const auto old_view
     = registry_->RegisterView(*resource1_, std::move(descriptor), desc);
-  ASSERT_TRUE(old_view.IsValid());
+  ASSERT_TRUE(old_view->IsValid());
   EXPECT_TRUE(registry_->Contains(*resource1_, desc));
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 1U)
@@ -689,7 +688,7 @@ NOLINT_TEST_F(
 
   const auto old_view
     = registry_->RegisterView(*resource1_, std::move(descriptor), desc);
-  ASSERT_TRUE(old_view.IsValid());
+  ASSERT_TRUE(old_view->IsValid());
   EXPECT_TRUE(registry_->Contains(*resource1_, desc));
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 1U)
@@ -706,7 +705,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(registry_->Contains(*resource1_, desc));
   EXPECT_TRUE(registry_->Contains(*resource2_, desc));
   const auto new_view = registry_->Find(*resource2_, desc);
-  EXPECT_TRUE(new_view.IsValid());
+  EXPECT_TRUE(new_view->IsValid());
   EXPECT_NE(new_view, old_view);
 
   // Index stability: can still update that exact descriptor index
@@ -751,7 +750,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest,
 
   const auto old_view
     = registry_->RegisterView(*resource1_, std::move(descriptor), desc);
-  ASSERT_TRUE(old_view.IsValid());
+  ASSERT_TRUE(old_view->IsValid());
   EXPECT_TRUE(registry_->Contains(*resource1_, desc));
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 1U)
@@ -808,8 +807,8 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, Replace_NullUpdater_ReleasesAll)
   const auto i2 = h2.GetBindlessHandle();
   auto v1 = registry_->RegisterView(*resource1_, std::move(h1), desc1);
   auto v2 = registry_->RegisterView(*resource1_, std::move(h2), desc2);
-  ASSERT_TRUE(v1.IsValid());
-  ASSERT_TRUE(v2.IsValid());
+  ASSERT_TRUE(v1->IsValid());
+  ASSERT_TRUE(v2->IsValid());
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 2U)
       << "Two descriptors allocated";
@@ -850,7 +849,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, UpdateView_InvalidView_Releases)
   ASSERT_TRUE(h.IsValid());
   const auto idx = h.GetBindlessHandle();
   auto v = registry_->RegisterView(*resource1_, std::move(h), desc);
-  ASSERT_TRUE(v.IsValid());
+  ASSERT_TRUE(v->IsValid());
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 1U);
   }
@@ -900,8 +899,8 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest,
   const auto i2 = h2.GetBindlessHandle();
   auto v1 = registry_->RegisterView(*resource1_, std::move(h1), d1);
   auto v2 = registry_->RegisterView(*resource1_, std::move(h2), d2);
-  ASSERT_TRUE(v1.IsValid());
-  ASSERT_TRUE(v2.IsValid());
+  ASSERT_TRUE(v1->IsValid());
+  ASSERT_TRUE(v2->IsValid());
 
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 2U)
@@ -942,7 +941,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest,
 }
 
 // Fixture using ThrowingTestResource to simulate GetNativeView exceptions
-class ResourceRegistryLifecycleThrowingTest : public ::testing::Test {
+class ResourceRegistryLifecycleThrowingTest : public testing::Test {
 protected:
   std::shared_ptr<MockDescriptorAllocator> allocator_;
   std::unique_ptr<ResourceRegistry> registry_;
@@ -950,10 +949,9 @@ protected:
   std::shared_ptr<ThrowingTestResource> resource2_;
   FixedDescriptorSegment* last_segment_ { nullptr };
 
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    allocator_
-      = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>();
+    allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
     allocator_->ext_segment_factory_ = [this](auto capacity, auto base_index,
                                          auto view_type, auto visibility) {
       auto seg = std::make_unique<FixedDescriptorSegment>(
@@ -968,7 +966,7 @@ protected:
     registry_->Register(resource2_);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     registry_->UnRegisterResource(*resource1_);
     registry_->UnRegisterResource(*resource2_);
@@ -1005,8 +1003,8 @@ NOLINT_TEST_F(ResourceRegistryLifecycleThrowingTest,
   const auto i2 = h2.GetBindlessHandle();
   auto v1 = registry_->RegisterView(*resource1_, std::move(h1), d1);
   auto v2 = registry_->RegisterView(*resource1_, std::move(h2), d2);
-  ASSERT_TRUE(v1.IsValid());
-  ASSERT_TRUE(v2.IsValid());
+  ASSERT_TRUE(v1->IsValid());
+  ASSERT_TRUE(v2->IsValid());
 
   if (last_segment_ && last_segment_->GetCapacity().get() > 0) {
     EXPECT_EQ(last_segment_->GetAllocatedCount().get(), 2U)

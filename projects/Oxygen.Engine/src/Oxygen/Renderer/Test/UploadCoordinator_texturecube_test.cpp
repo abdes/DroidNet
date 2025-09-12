@@ -67,38 +67,38 @@ public:
     return desc_;
   }
   [[nodiscard]] auto GetNativeResource() const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeObject(const_cast<FakeTextureCube*>(this),
-      oxygen::graphics::Texture::ClassTypeId());
+    return oxygen::graphics::NativeResource(
+      const_cast<FakeTextureCube*>(this), Texture::ClassTypeId());
   }
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -117,9 +117,9 @@ NOLINT_TEST(UploadCoordinator, TextureCube_FullUpload_RecordsRegionAndCompletes)
   // 64x64 RGBA8: row = 64*4 = 256 (aligned); slice = 256*64 = 16384
   auto tex = std::make_shared<FakeTextureCube>(
     "DstTexCube", 64, 64, oxygen::Format::kRGBA8UNorm);
-  const uint64_t row_pitch = 256;
-  const uint64_t slice_pitch = row_pitch * 64; // 16384
-  std::vector<std::byte> data(static_cast<size_t>(slice_pitch));
+  constexpr uint64_t row_pitch = 256;
+  constexpr uint64_t slice_pitch = row_pitch * 64; // 16384
+  std::vector<std::byte> data(slice_pitch);
 
   UploadRequest req { .kind = UploadKind::kTextureCube,
     .batch_policy = {},

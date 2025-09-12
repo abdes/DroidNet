@@ -130,7 +130,7 @@ auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
     nostd::to_string(desc.before).c_str(),
     nostd::to_string(desc.after).c_str());
 
-  auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
+  auto* p_resource = desc.resource->AsPointer<ID3D12Resource>();
   DCHECK_NOTNULL_F(
     p_resource, "Transition barrier (Buffer) cannot have a null resource.");
 
@@ -154,7 +154,7 @@ auto ProcessBarrierDesc(const TextureBarrierDesc& desc)
     nostd::to_string(desc.before).c_str(),
     nostd::to_string(desc.after).c_str());
 
-  auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
+  auto* p_resource = desc.resource->AsPointer<ID3D12Resource>();
   DCHECK_NOTNULL_F(
     p_resource, "Transition barrier (Texture) cannot have a null resource.");
 
@@ -179,8 +179,8 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
     = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
         .UAV = {
-          .pResource = desc.resource.AsPointer<ID3D12Resource>() != nullptr
-            ? desc.resource.AsPointer<ID3D12Resource>()
+          .pResource = desc.resource->AsPointer<ID3D12Resource>() != nullptr
+            ? desc.resource->AsPointer<ID3D12Resource>()
             : nullptr,
         } };
   return d3d12_barrier;
@@ -202,7 +202,7 @@ CommandRecorder::~CommandRecorder()
   DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
 }
 
-void CommandRecorder::Begin() { graphics::CommandRecorder::Begin(); }
+auto CommandRecorder::Begin() -> void { graphics::CommandRecorder::Begin(); }
 
 namespace {
 // Modern bindless root signature layout:
@@ -214,8 +214,8 @@ constexpr UINT kRootIndex_SceneConstants_CBV = 1;
 constexpr UINT kRootIndex_MaterialConstants_CBV = 2;
 } // namespace
 
-void CommandRecorder::SetupDescriptorTables(
-  const std::span<const detail::ShaderVisibleHeapInfo> heaps) const
+auto CommandRecorder::SetupDescriptorTables(
+  const std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void
 {
   // Modern bindless approach: Bind the single unbounded SRV descriptor table.
   // The heap(s) bound here must be the same as those used to allocate CBV/SRV
@@ -284,18 +284,16 @@ void CommandRecorder::SetupDescriptorTables(
       DLOG_F(WARNING,
         "Sampler descriptor heap detected but no sampler table in root "
         "signature");
-      continue;
     } else {
       DLOG_F(WARNING,
         "Unsupported descriptor heap type for root table binding: {}",
         static_cast<std::underlying_type_t<D3D12_DESCRIPTOR_HEAP_TYPE>>(
           heap_info.heap_type));
-      continue;
     }
   }
 }
 
-void CommandRecorder::SetViewport(const ViewPort& viewport)
+auto CommandRecorder::SetViewport(const ViewPort& viewport) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
@@ -312,7 +310,7 @@ void CommandRecorder::SetViewport(const ViewPort& viewport)
   command_list.GetCommandList()->RSSetViewports(1, &d3d_viewport);
 }
 
-void CommandRecorder::SetScissors(const Scissors& scissors)
+auto CommandRecorder::SetScissors(const Scissors& scissors) -> void
 {
   const auto& command_list = GetConcreteCommandList();
 
@@ -324,9 +322,9 @@ void CommandRecorder::SetScissors(const Scissors& scissors)
   command_list.GetCommandList()->RSSetScissorRects(1, &rect);
 }
 
-void CommandRecorder::SetVertexBuffers(const uint32_t num,
+auto CommandRecorder::SetVertexBuffers(const uint32_t num,
   const std::shared_ptr<graphics::Buffer>* vertex_buffers,
-  const uint32_t* strides) const
+  const uint32_t* strides) const -> void
 {
   const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
@@ -345,9 +343,9 @@ void CommandRecorder::SetVertexBuffers(const uint32_t num,
     0, num, vertex_buffer_views.data());
 }
 
-void CommandRecorder::Draw(const uint32_t vertex_num,
+auto CommandRecorder::Draw(const uint32_t vertex_num,
   const uint32_t instances_num, const uint32_t vertex_offset,
-  const uint32_t instance_offset)
+  const uint32_t instance_offset) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
@@ -361,8 +359,8 @@ void CommandRecorder::Draw(const uint32_t vertex_num,
     vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
-void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
-  uint32_t thread_group_count_y, uint32_t thread_group_count_z)
+auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
+  uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
@@ -372,15 +370,13 @@ void CommandRecorder::Dispatch(uint32_t thread_group_count_x,
     thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
-void CommandRecorder::SetPipelineState(
-  oxygen::graphics::GraphicsPipelineDesc desc)
+auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
 {
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto debug_name = desc.GetName(); // Save before moving desc
-  graphics_pipeline_hash_
-    = std::hash<oxygen::graphics::GraphicsPipelineDesc> {}(desc);
+  graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
 
   auto [pipeline_state, root_signature] = graphics->GetOrCreateGraphicsPipeline(
     std::move(desc), graphics_pipeline_hash_);
@@ -400,15 +396,13 @@ void CommandRecorder::SetPipelineState(
   d3d12_command_list->SetPipelineState(pipeline_state);
 }
 
-void CommandRecorder::SetPipelineState(
-  oxygen::graphics::ComputePipelineDesc desc)
+auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
 {
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto debug_name = desc.GetName(); // Save before moving desc
-  compute_pipeline_hash_
-    = std::hash<oxygen::graphics::ComputePipelineDesc> {}(desc);
+  compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
 
   auto [pipeline_state, root_signature] = graphics->GetOrCreateComputePipeline(
     std::move(desc), compute_pipeline_hash_);
@@ -430,8 +424,8 @@ void CommandRecorder::SetPipelineState(
   d3d12_command_list->SetPipelineState(pipeline_state);
 }
 
-void CommandRecorder::SetGraphicsRootConstantBufferView(
-  uint32_t root_parameter_index, uint64_t buffer_gpu_address)
+auto CommandRecorder::SetGraphicsRootConstantBufferView(
+  uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
@@ -439,8 +433,8 @@ void CommandRecorder::SetGraphicsRootConstantBufferView(
     root_parameter_index, buffer_gpu_address);
 }
 
-void CommandRecorder::SetComputeRootConstantBufferView(
-  uint32_t root_parameter_index, uint64_t buffer_gpu_address)
+auto CommandRecorder::SetComputeRootConstantBufferView(
+  uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
@@ -448,9 +442,9 @@ void CommandRecorder::SetComputeRootConstantBufferView(
     root_parameter_index, buffer_gpu_address);
 }
 
-void CommandRecorder::SetGraphicsRoot32BitConstant(
+auto CommandRecorder::SetGraphicsRoot32BitConstant(
   uint32_t root_parameter_index, uint32_t src_data,
-  uint32_t dest_offset_in_32bit_values)
+  uint32_t dest_offset_in_32bit_values) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
@@ -458,8 +452,8 @@ void CommandRecorder::SetGraphicsRoot32BitConstant(
     root_parameter_index, src_data, dest_offset_in_32bit_values);
 }
 
-void CommandRecorder::SetComputeRoot32BitConstant(uint32_t root_parameter_index,
-  uint32_t src_data, uint32_t dest_offset_in_32bit_values)
+auto CommandRecorder::SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+  uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
@@ -467,7 +461,8 @@ void CommandRecorder::SetComputeRoot32BitConstant(uint32_t root_parameter_index,
     root_parameter_index, src_data, dest_offset_in_32bit_values);
 }
 
-void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
+auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
+  -> void
 {
   if (barriers.empty()) {
     return;
@@ -506,18 +501,18 @@ auto CommandRecorder::GetConcreteCommandList() const -> CommandList&
 }
 
 // TODO: legacy - should be replaced once render passes are implemented
-void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
+auto CommandRecorder::BindFrameBuffer(const Framebuffer& framebuffer) -> void
 {
   // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
   const auto& fb = static_cast<const Framebuffer&>(framebuffer);
   StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
   for (const auto& rtv : fb.GetRenderTargetViews()) {
-    rtvs.emplace_back(rtv.AsInteger());
+    rtvs.emplace_back(rtv->AsInteger());
   }
 
   D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
   if (fb.GetDescriptor().depth_attachment.IsValid()) {
-    dsv.ptr = fb.GetDepthStencilView().AsInteger();
+    dsv.ptr = fb.GetDepthStencilView()->AsInteger();
   }
 
   const auto& command_list_impl = GetConcreteCommandList();
@@ -529,10 +524,10 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
     fb.GetDescriptor().depth_attachment.IsValid() ? &dsv : nullptr);
 }
 
-void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
+auto CommandRecorder::ClearFramebuffer(const Framebuffer& framebuffer,
   const std::optional<std::vector<std::optional<Color>>> color_clear_values,
   const std::optional<float> depth_clear_value,
-  const std::optional<uint8_t> stencil_clear_value)
+  const std::optional<uint8_t> stencil_clear_value) -> void
 {
   using graphics::detail::GetFormatInfo;
 
@@ -553,7 +548,8 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
     if (format_info.has_depth || format_info.has_stencil) {
       continue;
     }
-    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle { .ptr = rtvs[i].AsInteger() };
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle { .ptr
+      = rtvs[i]->AsInteger() };
     const Color clear_color = attachment.ResolveClearColor(
       color_clear_values && i < color_clear_values->size()
         ? (*color_clear_values)[i]
@@ -566,7 +562,7 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
   // Clear depth/stencil attachment
   if (desc.depth_attachment.IsValid()) {
     const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr
-      = fb.GetDepthStencilView().AsInteger() };
+      = fb.GetDepthStencilView()->AsInteger() };
     const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
 
     auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(
@@ -587,8 +583,9 @@ void CommandRecorder::ClearFramebuffer(const graphics::Framebuffer& framebuffer,
   }
 }
 
-void CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
+auto CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
   const graphics::Buffer& src, const size_t src_offset, const size_t size)
+  -> void
 {
   // Expectations:
   // - src must be in D3D12_RESOURCE_STATE_COPY_SOURCE
@@ -710,17 +707,16 @@ void CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
 // be considered best-effort and primarily suitable for tightly-packed
 // uploads where the caller ensures buffer pitches match device footprints.
 // ---------------------------------------------------------------------------
-void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
-  const graphics::TextureUploadRegion& region, graphics::Texture& dst)
+auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  const TextureUploadRegion& region, graphics::Texture& dst) -> void
 {
   // Single-region wrapper
   CopyBufferToTexture(
-    src, std::span<const graphics::TextureUploadRegion>(&region, 1), dst);
+    src, std::span<const TextureUploadRegion>(&region, 1), dst);
 }
 
-void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
-  std::span<const graphics::TextureUploadRegion> regions,
-  graphics::Texture& dst)
+auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
+  std::span<const TextureUploadRegion> regions, graphics::Texture& dst) -> void
 {
   // Expectations: caller ensured resource states (src is COPY_SOURCE, dst is
   // COPY_DEST)
@@ -729,11 +725,11 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto& src_buf = static_cast<const d3d12::Buffer&>(src);
+  const auto& src_buf = static_cast<const Buffer&>(src);
   // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
 
   auto* src_resource = src_buf.GetResource();
-  auto* dst_native = dst.GetNativeResource().AsPointer<ID3D12Resource>();
+  auto* dst_native = dst.GetNativeResource()->AsPointer<ID3D12Resource>();
   DCHECK_NOTNULL_F(src_resource);
   DCHECK_NOTNULL_F(dst_native);
 
@@ -748,10 +744,10 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
     auto dst_slice = region.dst_slice.Resolve(desc);
     auto subresources = region.dst_subresources.Resolve(desc, true);
 
-    const UINT first_sub = static_cast<UINT>(
-      dst_slice.array_slice * desc.mip_levels + dst_slice.mip_level);
-    const UINT num_sub = static_cast<UINT>(
-      subresources.num_array_slices * subresources.num_mip_levels);
+    const UINT first_sub
+      = dst_slice.array_slice * desc.mip_levels + dst_slice.mip_level;
+    const UINT num_sub
+      = subresources.num_array_slices * subresources.num_mip_levels;
 
     std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(num_sub);
     std::vector<UINT> row_counts(num_sub);
@@ -785,8 +781,8 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
         dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         dst_loc.pResource = dst_native;
         const UINT dst_subresource_index
-          = static_cast<UINT>((dst_slice.array_slice + si) * desc.mip_levels
-            + (dst_slice.mip_level + mi));
+          = (dst_slice.array_slice + si) * desc.mip_levels
+          + (dst_slice.mip_level + mi);
         dst_loc.SubresourceIndex = dst_subresource_index;
 
         // Copy the full subresource as defined by the footprint
@@ -798,9 +794,9 @@ void CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
 }
 
 // D3D12 specific command implementations
-void CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
-  const NativeObject& dsv, const ClearFlags clear_flags, const float depth,
-  const uint8_t stencil)
+auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
+  const NativeView& dsv, const ClearFlags clear_flags, const float depth,
+  const uint8_t stencil) -> void
 {
   const auto& command_list_impl = GetConcreteCommandList();
   auto* d3d12_command_list = command_list_impl.GetCommandList();
@@ -820,7 +816,7 @@ void CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
     : stencil;
 
   const auto d3d12_clear_flags = detail::ConvertClearFlags(clear_flags);
-  const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv.AsInteger() };
+  const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv->AsInteger() };
   d3d12_command_list->ClearDepthStencilView(
     dsv_handle, d3d12_clear_flags, clear_depth, clear_stencil,
     0, // NumRects
@@ -828,8 +824,8 @@ void CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   );
 }
 
-void CommandRecorder::SetRenderTargets(
-  const std::span<NativeObject> rtvs, const std::optional<NativeObject> dsv)
+auto CommandRecorder::SetRenderTargets(
+  const std::span<NativeView> rtvs, const std::optional<NativeView> dsv) -> void
 {
   DCHECK_F(!rtvs.empty() || dsv.has_value(),
     "At least one render target must be specified.");
@@ -839,21 +835,21 @@ void CommandRecorder::SetRenderTargets(
   std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtv_handles;
   rtv_handles.reserve(rtvs.size());
   for (const auto& rtv : rtvs) {
-    if (!rtv.IsValid()) {
+    if (!rtv->IsValid()) {
       LOG_F(ERROR, "invalid render target view: {} view, skipped",
         nostd::to_string(rtv).c_str());
       continue; // Skip invalid RTVs
     }
-    rtv_handles.push_back({ .ptr = rtv.AsInteger() });
+    rtv_handles.push_back({ .ptr = rtv->AsInteger() });
   }
 
   const D3D12_CPU_DESCRIPTOR_HANDLE* dsv_handle_ptr { nullptr };
   if (dsv.has_value()) {
-    if (!dsv->IsValid()) {
+    if (!(*dsv)->IsValid()) {
       LOG_F(ERROR, "invalid depth/stencil view: {}, dropped",
         nostd::to_string(*dsv).c_str());
     } else {
-      D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv->AsInteger() };
+      D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = (*dsv)->AsInteger() };
       dsv_handle_ptr = &dsv_handle;
     }
   }
@@ -866,14 +862,14 @@ void CommandRecorder::SetRenderTargets(
     rtv_handles.data(), dsv_handle_ptr != nullptr ? 1 : 0, dsv_handle_ptr);
 }
 
-void CommandRecorder::BindIndexBuffer(
-  const graphics::Buffer& buffer, Format format)
+auto CommandRecorder::BindIndexBuffer(
+  const graphics::Buffer& buffer, Format format) -> void
 {
   const auto& command_list = GetConcreteCommandList();
   DCHECK_EQ_F(
     command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
-  const auto* d3d12_buffer = static_cast<const d3d12::Buffer*>(&buffer);
+  const auto* d3d12_buffer = static_cast<const Buffer*>(&buffer);
   DCHECK_NOTNULL_F(d3d12_buffer, "Buffer must be a D3D12 buffer");
 
   D3D12_INDEX_BUFFER_VIEW ib_view = {};

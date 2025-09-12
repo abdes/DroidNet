@@ -168,7 +168,7 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
 }
 
 Texture::Texture(
-  TextureDesc desc, const NativeObject& native, const Graphics* gfx)
+  TextureDesc desc, const NativeResource& native, const Graphics* gfx)
   : Base(desc.debug_name)
   , gfx_(gfx)
   , desc_(std::move(desc))
@@ -176,7 +176,7 @@ Texture::Texture(
   DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
 
   static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
-  auto* resource = native.AsPointer<ID3D12Resource>();
+  auto* resource = native->AsPointer<ID3D12Resource>();
   CHECK_NOTNULL_F(resource, "Invalid native object");
 
   AddComponent<GraphicResource>(desc_.debug_name, resource,
@@ -217,7 +217,7 @@ auto Texture::SetName(const std::string_view name) noexcept -> void
   GetComponent<GraphicResource>().SetName(name);
 }
 
-auto Texture::GetNativeResource() const -> NativeObject
+auto Texture::GetNativeResource() const -> NativeResource
 {
   return { GetComponent<GraphicResource>().GetResource(), ClassTypeId() };
 }
@@ -229,7 +229,7 @@ auto Texture::CurrentDevice() const -> dx::IDevice*
 
 auto Texture::CreateShaderResourceView(const DescriptorHandle& view_handle,
   const Format format, const TextureType dimension,
-  const TextureSubResourceSet sub_resources) const -> NativeObject
+  const TextureSubResourceSet sub_resources) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -244,7 +244,7 @@ auto Texture::CreateShaderResourceView(const DescriptorHandle& view_handle,
 
 auto Texture::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
   const Format format, const TextureType dimension,
-  const TextureSubResourceSet sub_resources) const -> NativeObject
+  const TextureSubResourceSet sub_resources) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -259,7 +259,7 @@ auto Texture::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
 
 auto Texture::CreateRenderTargetView(const DescriptorHandle& view_handle,
   const Format format, const TextureSubResourceSet sub_resources) const
-  -> NativeObject
+  -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -273,7 +273,7 @@ auto Texture::CreateRenderTargetView(const DescriptorHandle& view_handle,
 
 auto Texture::CreateDepthStencilView(const DescriptorHandle& view_handle,
   const Format format, const TextureSubResourceSet sub_resources,
-  const bool is_read_only) const -> NativeObject
+  const bool is_read_only) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -367,7 +367,7 @@ auto Texture::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   }
 
   CurrentDevice()->CreateShaderResourceView(
-    GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh_cpu);
+    GetNativeResource()->AsPointer<ID3D12Resource>(), &srv_desc, dh_cpu);
 }
 
 auto Texture::CreateUnorderedAccessView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
@@ -427,7 +427,7 @@ auto Texture::CreateUnorderedAccessView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   }
 
   CurrentDevice()->CreateUnorderedAccessView(
-    GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &uav_desc,
+    GetNativeResource()->AsPointer<ID3D12Resource>(), nullptr, &uav_desc,
     dh_cpu);
 }
 
@@ -488,7 +488,7 @@ auto Texture::CreateRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   }
 
   CurrentDevice()->CreateRenderTargetView(
-    GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh_cpu);
+    GetNativeResource()->AsPointer<ID3D12Resource>(), &rtv_desc, dh_cpu);
 }
 
 auto Texture::CreateDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
@@ -554,5 +554,5 @@ auto Texture::CreateDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   }
 
   CurrentDevice()->CreateDepthStencilView(
-    GetNativeResource().AsPointer<ID3D12Resource>(), &dsv_desc, dh_cpu);
+    GetNativeResource()->AsPointer<ID3D12Resource>(), &dsv_desc, dh_cpu);
 }

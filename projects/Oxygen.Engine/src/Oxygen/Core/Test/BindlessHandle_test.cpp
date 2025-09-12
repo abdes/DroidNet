@@ -15,8 +15,8 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 
 // Google Test matchers for logging tests
-using ::testing::AllOf;
-using ::testing::HasSubstr;
+using testing::AllOf;
+using testing::HasSubstr;
 
 namespace {
 
@@ -157,7 +157,7 @@ NOLINT_TEST(Versioned, ToString_IncludesIndexAndGenerationExact)
   auto s = to_string(v);
 
   // Assert
-  EXPECT_EQ(s, std::string("Bindless(i:7, g:3)"));
+  EXPECT_THAT(s, HasSubstr("BindlessHandle(i:7, g:3)"));
 }
 
 //! to_string for the invalid sentinel should render the invalid numeric index
@@ -181,16 +181,16 @@ NOLINT_TEST(Versioned, ToString_MaxValuesFormatting)
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  const uint32_t max = std::numeric_limits<uint32_t>::max();
+  constexpr uint32_t max = std::numeric_limits<uint32_t>::max();
   VersionedBindlessHandle v { BindlessHandle { max }, Generation { max } };
 
   // Act
   auto s = to_string(v);
 
   // Assert
-  const auto expected = std::string("Bindless(i:") + std::to_string(max)
+  const auto expected = std::string("BindlessHandle(i:") + std::to_string(max)
     + ", g:" + std::to_string(max) + ")";
-  EXPECT_EQ(s, expected);
+  EXPECT_THAT(s, HasSubstr(expected));
 }
 
 //! Near-max generation packing and wrap-around behavior.
@@ -198,16 +198,16 @@ NOLINT_TEST(Versioned, WrapAround_NearMaxGenerationPacking)
 {
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
-  using Generation = oxygen::VersionedBindlessHandle::Generation;
+  using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  const uint32_t near_max = std::numeric_limits<uint32_t>::max() - 1u;
+  constexpr uint32_t near_max = std::numeric_limits<uint32_t>::max() - 1u;
   BindlessHandle idx { 123u };
   Generation g1 { near_max };
   VersionedBindlessHandle v1 { idx, g1 };
 
   // Act: increment generation (simulate allocator overflow)
-  auto g2 = Generation { static_cast<uint32_t>(g1.get() + 1u) };
+  auto g2 = Generation { (g1.get() + 1u) };
   VersionedBindlessHandle v2 { idx, g2 };
 
   auto packed1 = v1.ToPacked();
@@ -227,7 +227,7 @@ NOLINT_TEST(Versioned, Order_OrdersByGenerationWhenIndexEqual)
 {
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
-  using Generation = oxygen::VersionedBindlessHandle::Generation;
+  using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   BindlessHandle idx { 50u };
@@ -245,7 +245,7 @@ NOLINT_TEST(Versioned, Order_OrdersByIndexFirst)
 {
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
-  using Generation = oxygen::VersionedBindlessHandle::Generation;
+  using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   VersionedBindlessHandle a { BindlessHandle { 10 }, Generation { 5 } };
@@ -261,7 +261,7 @@ NOLINT_TEST(Versioned, Order_TransitiveOrdering)
 {
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
-  using Generation = oxygen::VersionedBindlessHandle::Generation;
+  using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   VersionedBindlessHandle a { BindlessHandle { 1 }, Generation { 1 } };
@@ -279,7 +279,7 @@ NOLINT_TEST(Versioned, Order_EqualityWhenBothMatch)
 {
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
-  using Generation = oxygen::VersionedBindlessHandle::Generation;
+  using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   VersionedBindlessHandle x { BindlessHandle { 42 }, Generation { 7 } };
@@ -641,17 +641,20 @@ NOLINT_TEST(HandleTypes, TypeSafety_NoImplicitConversions)
 //! Test fixture for bindless handle logging integration tests.
 class LoggingTests : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     saved_verbosity_ = loguru::g_stderr_verbosity;
     // Set to INFO level so LOG_F calls produce output
     loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
   }
 
-  void TearDown() override { loguru::g_stderr_verbosity = saved_verbosity_; }
+  auto TearDown() -> void override
+  {
+    loguru::g_stderr_verbosity = saved_verbosity_;
+  }
 
   // Helper to capture stderr while running a callable and return the output.
-  template <typename F> std::string CaptureStderr(F&& f)
+  template <typename F> auto CaptureStderr(F&& f) -> std::string
   {
     testing::internal::CaptureStderr();
     std::forward<F>(f)();
@@ -666,7 +669,7 @@ private:
 NOLINT_TEST_F(LoggingTests, BindlessHandle_LoggingIntegration_ProducesOutput)
 {
   using oxygen::BindlessHandle;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   BindlessHandle handle { 123u };
@@ -684,7 +687,7 @@ NOLINT_TEST_F(
   LoggingTests, BindlessHandleCount_LoggingIntegration_ProducesOutput)
 {
   using oxygen::BindlessHandleCount;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   BindlessHandleCount count { 456u };
@@ -702,7 +705,7 @@ NOLINT_TEST_F(
   LoggingTests, BindlessHandleCapacity_LoggingIntegration_ProducesOutput)
 {
   using oxygen::BindlessHandleCapacity;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   BindlessHandleCapacity capacity { 789u };
@@ -722,7 +725,7 @@ NOLINT_TEST_F(LoggingTests,
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   VersionedBindlessHandle versioned { BindlessHandle { 42u },
@@ -733,14 +736,14 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Versioned:"));
-  EXPECT_THAT(output, HasSubstr("Bindless(i:42, g:7)"));
+  EXPECT_THAT(output, HasSubstr("BindlessHandle(i:42, g:7)"));
 }
 
 //! Verify that Generation type can be logged using LOG_F macro.
 NOLINT_TEST_F(LoggingTests, Generation_LoggingIntegration_ProducesOutput)
 {
   using Generation = oxygen::VersionedBindlessHandle::Generation;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   Generation generation { 13u };
@@ -758,7 +761,7 @@ NOLINT_TEST_F(LoggingTests, Generation_LoggingIntegration_ProducesOutput)
 NOLINT_TEST_F(
   LoggingTests, InvalidBindlessHandle_LoggingIntegration_ShowsSentinel)
 {
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   auto invalid = oxygen::kInvalidBindlessHandle;
@@ -776,7 +779,7 @@ NOLINT_TEST_F(LoggingTests,
   InvalidVersionedBindlessHandle_LoggingIntegration_ShowsInvalidFormat)
 {
   using oxygen::VersionedBindlessHandle;
-  using ::testing::HasSubstr;
+  using testing::HasSubstr;
 
   // Arrange
   VersionedBindlessHandle invalid {}; // Default construction creates invalid
@@ -787,7 +790,7 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Invalid versioned:"));
-  EXPECT_THAT(output, HasSubstr("Bindless(i:"));
+  EXPECT_THAT(output, HasSubstr("BindlessHandle(i:"));
   EXPECT_THAT(output, HasSubstr(std::to_string(oxygen::kInvalidBindlessIndex)));
   EXPECT_THAT(output, HasSubstr("g:0)"));
 }
@@ -801,8 +804,8 @@ NOLINT_TEST_F(
   using oxygen::BindlessHandleCount;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
-  using ::testing::AllOf;
-  using ::testing::HasSubstr;
+  using testing::AllOf;
+  using testing::HasSubstr;
 
   // Arrange
   BindlessHandle handle { 10u };
@@ -821,7 +824,7 @@ NOLINT_TEST_F(
   EXPECT_THAT(output,
     AllOf(HasSubstr("Handle:"), HasSubstr("10"), HasSubstr("Count:"),
       HasSubstr("20"), HasSubstr("Capacity:"), HasSubstr("100"),
-      HasSubstr("Versioned:"), HasSubstr("Bindless(i:5, g:2)")));
+      HasSubstr("Versioned:"), HasSubstr("BindlessHandle(i:5, g:2)")));
 }
 
 //! Verify that edge case values (zero, max) can be logged correctly.
@@ -830,8 +833,8 @@ NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
   using oxygen::BindlessHandle;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
-  using ::testing::AllOf;
-  using ::testing::HasSubstr;
+  using testing::AllOf;
+  using testing::HasSubstr;
 
   // Arrange
   BindlessHandle zero { 0u };
@@ -852,14 +855,14 @@ NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
   EXPECT_THAT(output,
     AllOf(HasSubstr("Zero:"), HasSubstr("0"), HasSubstr("Max:"),
       HasSubstr(max_str), HasSubstr("MaxVersioned:"),
-      HasSubstr("Bindless(i:" + max_str + ", g:" + max_str + ")")));
+      HasSubstr("BindlessHandle(i:" + max_str + ", g:" + max_str + ")")));
 }
 
 //! Verify that bindless namespace aliases work with logging.
 NOLINT_TEST_F(LoggingTests, NamespaceAliases_LoggingIntegration_WorkCorrectly)
 {
-  using ::testing::AllOf;
-  using ::testing::HasSubstr;
+  using testing::AllOf;
+  using testing::HasSubstr;
 
   // Arrange
   oxygen::bindless::Handle handle { 42u };

@@ -8,8 +8,6 @@
 
 #include <concepts>
 
-#include <Oxygen/Graphics/Common/NativeObject.h>
-
 namespace oxygen::graphics {
 
 class Buffer;

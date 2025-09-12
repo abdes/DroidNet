@@ -71,7 +71,7 @@ public:
   {
     // Calling BeginTrackingResourceState on a resource that is already being
     // tracked will throw an exception.
-    NativeObject native_object = resource.GetNativeResource();
+    NativeResource native_object = resource.GetNativeResource();
     auto it = tracking_.find(native_object);
     if (it != tracking_.end()) {
       throw std::runtime_error("Resource is already being tracked");
@@ -210,7 +210,7 @@ private:
   // description
   using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
 
-  OXGN_GFX_API auto GetTrackingInfo(const NativeObject& resource)
+  OXGN_GFX_API auto GetTrackingInfo(const NativeResource& resource)
     -> TrackingInfo&;
   OXGN_GFX_API auto RequireBufferState(const Buffer& buffer,
     ResourceStates required_state, bool is_permanent) -> void;
@@ -237,10 +237,10 @@ private:
   // Attempts to merge a new state transition with an existing pending barrier
   // Returns true if successfully merged, false if a new barrier is needed
   template <typename BarrierDescType>
-  auto TryMergeWithExistingTransition(const NativeObject& native_object,
+  auto TryMergeWithExistingTransition(const NativeResource& native_object,
     ResourceStates& current_state, ResourceStates required_state) -> bool;
 
-  std::unordered_map<NativeObject, TrackingInfo> tracking_;
+  std::unordered_map<NativeResource, TrackingInfo> tracking_;
   std::vector<Barrier> pending_barriers_;
 };
 

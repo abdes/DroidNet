@@ -11,7 +11,7 @@
 namespace oxygen::graphics::headless {
 
 ClearDepthStencilCommand::ClearDepthStencilCommand(
-  const graphics::Texture* texture, const NativeObject& dsv, ClearFlags flags,
+  const graphics::Texture* texture, const NativeView& dsv, ClearFlags flags,
   float depth, uint8_t stencil)
   : texture_(texture)
   , dsv_(dsv)

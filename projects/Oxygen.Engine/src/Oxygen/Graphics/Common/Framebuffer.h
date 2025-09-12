@@ -15,6 +15,7 @@
 #include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -257,10 +258,10 @@ public:
     = 0;
 
   OXGN_GFX_NDAPI virtual auto GetRenderTargetViews() const
-    -> std::span<const NativeObject>
+    -> std::span<const NativeView>
     = 0;
 
-  OXGN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeObject = 0;
+  OXGN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeView = 0;
 };
 
 } // namespace oxygen::graphics

@@ -20,8 +20,6 @@
 
 namespace oxygen::graphics {
 
-class Graphics;
-
 namespace internal {
 
   class Commander : public Component {

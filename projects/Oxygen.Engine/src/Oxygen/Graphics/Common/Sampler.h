@@ -65,7 +65,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Sampler)
 
   //! Gets the native resource handle for the texture.
-  [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+  [[nodiscard]] virtual auto GetNativeResource() const -> NativeResource = 0;
 
   //! Gets the descriptor for this texture.
   [[nodiscard]] virtual auto GetDescriptor() const -> const SamplerDesc& = 0;

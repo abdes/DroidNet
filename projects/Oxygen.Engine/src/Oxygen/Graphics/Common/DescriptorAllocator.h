@@ -19,7 +19,6 @@
 
 namespace oxygen::graphics {
 
-class NativeObject;
 class CommandRecorder;
 
 //! Describes the properties of a descriptor heap or pool.

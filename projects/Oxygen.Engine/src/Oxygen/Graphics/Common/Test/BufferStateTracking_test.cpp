@@ -19,7 +19,8 @@ using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::BufferViewDescription;
 using oxygen::graphics::DescriptorHandle;
-using oxygen::graphics::NativeObject;
+using oxygen::graphics::NativeResource;
+using oxygen::graphics::NativeView;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::ResourceStateTracker;
@@ -34,7 +35,7 @@ public:
     , native_ { id, ClassTypeId() }
   {
   }
-  auto GetNativeResource() const -> NativeObject override { return native_; }
+  auto GetNativeResource() const -> NativeResource override { return native_; }
   auto Map(size_t /*offset*/, size_t /*size*/) -> void* override
   {
     return nullptr;
@@ -57,32 +58,32 @@ public:
   auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
   auto SetName(std::string_view /*name*/) noexcept -> void override { }
   auto CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
-    const BufferRange& /*range*/ = {}) const -> NativeObject override
+    const BufferRange& /*range*/ = {}) const -> NativeView override
   {
     return {};
   }
   auto CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
     Format /*format*/, BufferRange /*range*/ = {},
-    uint32_t /*stride*/ = 0) const -> NativeObject override
+    uint32_t /*stride*/ = 0) const -> NativeView override
   {
     return {};
   }
   auto CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
     Format /*format*/, BufferRange /*range*/ = {},
-    uint32_t /*stride*/ = 0) const -> NativeObject override
+    uint32_t /*stride*/ = 0) const -> NativeView override
   {
     return {};
   }
 
   auto GetNativeView(const DescriptorHandle& /*view_handle*/,
-    const BufferViewDescription& /*view_desc*/) const -> NativeObject override
+    const BufferViewDescription& /*view_desc*/) const -> NativeView override
   {
     return {};
   }
   auto GetGPUVirtualAddress() const -> uint64_t override { return 0ULL; }
 
 private:
-  NativeObject native_;
+  NativeResource native_;
 };
 
 struct BufferStateTrackingTest : testing::Test {
@@ -117,8 +118,8 @@ NOLINT_TEST_F(
   tracker.RequireResourceState(buffer1, ResourceStates::kUnorderedAccess);
   const auto& barriers = tracker.GetPendingBarriers();
   ASSERT_EQ(barriers.size(), 1);
-  EXPECT_EQ(barriers[0].GetResource().AsInteger(),
-    buffer1.GetNativeResource().AsInteger());
+  EXPECT_EQ(barriers[0].GetResource()->AsInteger(),
+    buffer1.GetNativeResource()->AsInteger());
 }
 
 NOLINT_TEST_F(BufferStateTrackingTest, TransitionToSameState_NoBarrier)
@@ -192,8 +193,8 @@ NOLINT_TEST_F(BufferStateTrackingTest, MultipleBuffers_TrackedIndependently)
   tracker.RequireResourceState(buffer1, ResourceStates::kUnorderedAccess);
   const auto& barriers = tracker.GetPendingBarriers();
   ASSERT_EQ(barriers.size(), 1);
-  EXPECT_EQ(barriers[0].GetResource().AsInteger(),
-    buffer1.GetNativeResource().AsInteger());
+  EXPECT_EQ(barriers[0].GetResource()->AsInteger(),
+    buffer1.GetNativeResource()->AsInteger());
 }
 
 // --- Auto Memory Barrier Insertion (Auto Mode) ---

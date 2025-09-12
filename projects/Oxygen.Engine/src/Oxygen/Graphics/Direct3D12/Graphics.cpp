@@ -255,7 +255,7 @@ auto Graphics::CreateTexture(const TextureDesc& desc) const
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
-  const NativeObject& native) const -> std::shared_ptr<graphics::Texture>
+  const NativeResource& native) const -> std::shared_ptr<graphics::Texture>
 {
   return std::make_shared<Texture>(desc, native, this);
 }
@@ -266,20 +266,16 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
   return std::make_shared<Buffer>(desc, this);
 }
 
-auto Graphics::GetOrCreateGraphicsPipeline(
-  oxygen::graphics::GraphicsPipelineDesc desc, const size_t hash)
-  -> detail::PipelineStateCache::Entry
+auto Graphics::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,
+  const size_t hash) -> detail::PipelineStateCache::Entry
 {
   auto& cache = GetComponent<detail::PipelineStateCache>();
-  return cache.GetOrCreatePipeline<oxygen::graphics::GraphicsPipelineDesc>(
-    std::move(desc), hash);
+  return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
 }
 
-auto Graphics::GetOrCreateComputePipeline(
-  oxygen::graphics::ComputePipelineDesc desc, const size_t hash)
-  -> detail::PipelineStateCache::Entry
+auto Graphics::GetOrCreateComputePipeline(ComputePipelineDesc desc,
+  const size_t hash) -> detail::PipelineStateCache::Entry
 {
   auto& cache = GetComponent<detail::PipelineStateCache>();
-  return cache.GetOrCreatePipeline<oxygen::graphics::ComputePipelineDesc>(
-    std::move(desc), hash);
+  return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }

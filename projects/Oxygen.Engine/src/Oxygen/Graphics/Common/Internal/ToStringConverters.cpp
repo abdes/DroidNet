@@ -24,28 +24,64 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
-auto oxygen::graphics::to_string(const NativeObject& obj) -> std::string
+auto oxygen::graphics::to_string(const NativeObject& value) -> std::string
 {
-  if (obj.IsValid()) {
-    if (obj.IsPointerHandle()) {
-      auto* pointer = obj.AsPointer<void*>();
+  if (value.IsValid()) {
+    if (value.IsPointerHandle()) {
+      auto* pointer = value.AsPointer<void*>();
       // format pointer as 0x00000000
       return fmt::format("NativeObject{{type_id: {}, pointer: {:p}}}",
-        obj.OwnerTypeId(), fmt::ptr(pointer));
+        value.OwnerTypeId(), fmt::ptr(pointer));
     }
-    if (obj.IsIntegerHandle()) {
+    if (value.IsIntegerHandle()) {
       return fmt::format("NativeObject{{type_id: {}, handle: {}}}",
-        obj.OwnerTypeId(), obj.AsInteger());
+        value.OwnerTypeId(), value.AsInteger());
     }
   }
-  return "NativeObject{invalid}";
+  return "NativeObject{__Invalid__}";
+}
+
+auto oxygen::graphics::to_string(const NativeView& value) -> std::string
+{
+  const auto& underlying = value.get();
+  if (underlying.IsValid()) {
+    if (underlying.IsPointerHandle()) {
+      auto* pointer = underlying.AsPointer<void*>();
+      // format pointer as 0x00000000
+      return fmt::format("NativeView{{type_id: {}, pointer: {:p}}}",
+        underlying.OwnerTypeId(), fmt::ptr(pointer));
+    }
+    if (underlying.IsIntegerHandle()) {
+      return fmt::format("NativeView{{type_id: {}, handle: {}}}",
+        underlying.OwnerTypeId(), underlying.AsInteger());
+    }
+  }
+  return "NativeView{__Invalid__}";
+}
+
+auto oxygen::graphics::to_string(const NativeResource& value) -> std::string
+{
+  const auto& underlying = value.get();
+  if (underlying.IsValid()) {
+    if (underlying.IsPointerHandle()) {
+      auto* pointer = underlying.AsPointer<void*>();
+      // format pointer as 0x00000000
+      return fmt::format("NativeResource{{type_id: {}, pointer: {:p}}}",
+        underlying.OwnerTypeId(), fmt::ptr(pointer));
+    }
+    if (underlying.IsIntegerHandle()) {
+      return fmt::format("NativeResource{{type_id: {}, handle: {}}}",
+        underlying.OwnerTypeId(), underlying.AsInteger());
+    }
+  }
+  return "NativeResource{__Invalid__}";
 }
 
 auto oxygen::graphics::to_string(const DescriptorHandle& handle) -> std::string
 {
   return fmt::format(
     "DescriptorHandle{}{{index: {}, view_type: {}, visibility: {}}}",
-    handle.IsValid() ? "" : " (invalid)", handle.GetBindlessHandle().get(),
+    handle.IsValid() ? "" : " (__Invalid__)", handle.GetBindlessHandle().get(),
     nostd::to_string(handle.GetViewType()),
     nostd::to_string(handle.GetVisibility()));
 }

@@ -167,10 +167,10 @@ public:
   OXGN_GFX_NDAPI virtual auto GetDescriptor() const noexcept -> BufferDesc = 0;
 
   //! Returns the native backend resource handle.
-  OXGN_GFX_NDAPI virtual auto GetNativeResource() const -> NativeObject = 0;
+  OXGN_GFX_NDAPI virtual auto GetNativeResource() const -> NativeResource = 0;
 
   OXGN_GFX_NDAPI virtual auto GetNativeView(const DescriptorHandle& view_handle,
-    const BufferViewDescription& view_desc) const -> NativeObject;
+    const BufferViewDescription& view_desc) const -> NativeView;
 
   //! Maps the buffer memory for CPU access.
   /*! \param offset Byte offset to start mapping.
@@ -228,23 +228,23 @@ protected:
    *
    * @param range The range of the buffer to view. Defaults to the entire
    * buffer.
-   * @return NativeObject The constant buffer view as a native object
+   * @return NativeView The constant buffer view as a native object
    */
   [[nodiscard]] virtual auto CreateConstantBufferView(
     const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-    -> NativeObject
+    -> NativeView
     = 0;
 
   //! Returns a shader resource view (SRV) for this buffer.
   [[nodiscard]] virtual auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeObject
+    uint32_t stride = 0) const -> NativeView
     = 0;
 
   //! Returns an unordered access view (UAV) for this buffer.
   [[nodiscard]] virtual auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeObject
+    uint32_t stride = 0) const -> NativeView
     = 0;
 };
 

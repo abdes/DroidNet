@@ -107,9 +107,9 @@ auto TextureSubResourceSet::IsEntireTexture(const TextureDesc& desc) const
 Texture::~Texture() { }
 
 auto Texture::GetNativeView(const DescriptorHandle& view_handle,
-  const TextureViewDescription& view_desc) const -> NativeObject
+  const TextureViewDescription& view_desc) const -> NativeView
 {
-  using oxygen::graphics::ResourceViewType;
+  using graphics::ResourceViewType;
 
   switch (view_desc.view_type) {
   case ResourceViewType::kTexture_SRV:

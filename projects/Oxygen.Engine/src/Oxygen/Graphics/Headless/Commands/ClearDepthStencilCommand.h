@@ -14,7 +14,7 @@ namespace oxygen::graphics::headless {
 
 class ClearDepthStencilCommand : public Command {
 public:
-  ClearDepthStencilCommand(const Texture* texture, const NativeObject& dsv,
+  ClearDepthStencilCommand(const Texture* texture, const NativeView& dsv,
     ClearFlags flags, float depth, uint8_t stencil);
 
   [[nodiscard]] auto GetName() const noexcept -> const char* override
@@ -28,7 +28,7 @@ protected:
 
 private:
   const Texture* texture_ = nullptr;
-  NativeObject dsv_ {};
+  NativeView dsv_ {};
   ClearFlags flags_ {};
   float depth_ = 1.0f;
   uint8_t stencil_ = 0;

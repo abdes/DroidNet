@@ -60,10 +60,10 @@ public:
     return desc_;
   }
   [[nodiscard]] auto GetNativeResource() const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeObject(
-      const_cast<FakeBuffer*>(this), oxygen::graphics::Buffer::ClassTypeId());
+    return oxygen::graphics::NativeResource(
+      const_cast<FakeBuffer*>(this), ClassTypeId());
   }
   auto Map(uint64_t, uint64_t) -> void* override { return nullptr; }
   auto UnMap() -> void override { }
@@ -93,21 +93,21 @@ protected:
   [[nodiscard]] auto CreateConstantBufferView(
     const oxygen::graphics::DescriptorHandle&,
     const oxygen::graphics::BufferRange&) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateShaderResourceView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
     const oxygen::graphics::DescriptorHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeObject override
+    -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -129,8 +129,9 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_MockedPath_Completes)
     = std::make_shared<FakeBuffer>("Dst", /*size*/ 1024, BufferUsage::kVertex);
 
   std::array<std::byte, 64> data {};
-  for (size_t i = 0; i < data.size(); ++i)
+  for (size_t i = 0; i < data.size(); ++i) {
     data[i] = static_cast<std::byte>(i);
+  }
 
   UploadRequest req { .kind = UploadKind::kBuffer,
     .batch_policy = {},
@@ -238,11 +239,13 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_CoalescesAndCompletes)
   auto dst_b = std::make_shared<FakeBuffer>("DstB", 2048, BufferUsage::kVertex);
 
   std::array<std::byte, 64> data_a {};
-  for (size_t i = 0; i < data_a.size(); ++i)
+  for (size_t i = 0; i < data_a.size(); ++i) {
     data_a[i] = static_cast<std::byte>(i);
+  }
   std::array<std::byte, 80> data_b {};
-  for (size_t i = 0; i < data_b.size(); ++i)
+  for (size_t i = 0; i < data_b.size(); ++i) {
     data_b[i] = static_cast<std::byte>(0xAA);
+  }
 
   UploadRequest ra { .kind = UploadKind::kBuffer,
     .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,

@@ -53,7 +53,7 @@ public:
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (std::shared_ptr<oxygen::graphics::CommandList>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (const oxygen::graphics::TextureDesc&), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeObject&), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeResource&), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Buffer>, CreateBuffer, (const oxygen::graphics::BufferDesc&), (const, override));
   // NOLINTEND(modernize-use-trailing-return-type)
   // clang-format on

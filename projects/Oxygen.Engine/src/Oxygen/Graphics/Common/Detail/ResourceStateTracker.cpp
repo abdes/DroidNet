@@ -14,7 +14,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
-using oxygen::graphics::NativeObject;
+using oxygen::graphics::NativeResource;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::MemoryBarrierDesc;
@@ -24,7 +24,7 @@ using oxygen::graphics::detail::TextureBarrierDesc;
 namespace {
 
 // Create a barrier descriptor for buffer resources
-auto CreateBufferBarrierDesc(const NativeObject& native_object,
+auto CreateBufferBarrierDesc(const NativeResource& native_object,
   const ResourceStates before, const ResourceStates after) -> BufferBarrierDesc
 {
   return BufferBarrierDesc {
@@ -35,7 +35,7 @@ auto CreateBufferBarrierDesc(const NativeObject& native_object,
 }
 
 // Create a barrier descriptor for texture resources
-auto CreateTextureBarrierDesc(const NativeObject& native_object,
+auto CreateTextureBarrierDesc(const NativeResource& native_object,
   const ResourceStates before, const ResourceStates after) -> TextureBarrierDesc
 {
   return TextureBarrierDesc {
@@ -67,7 +67,7 @@ auto ResourceStateTracker::HandlePermanentState(
 
 template <typename BarrierDescType>
 auto ResourceStateTracker::TryMergeWithExistingTransition(
-  const NativeObject& native_object, ResourceStates& current_state,
+  const NativeResource& native_object, ResourceStates& current_state,
   const ResourceStates required_state) -> bool
 {
   for (auto& pending_barrier : std::ranges::reverse_view(pending_barriers_)) {
@@ -93,15 +93,15 @@ auto ResourceStateTracker::TryMergeWithExistingTransition(
 // Explicit instantiations for the template specializations we need
 template auto
 ResourceStateTracker::TryMergeWithExistingTransition<BufferBarrierDesc>(
-  const NativeObject& native_object, ResourceStates& current_state,
-  const ResourceStates required_state) -> bool;
+  const NativeResource& native_object, ResourceStates& current_state,
+  ResourceStates required_state) -> bool;
 
 template auto
 ResourceStateTracker::TryMergeWithExistingTransition<TextureBarrierDesc>(
-  const NativeObject& native_object, ResourceStates& current_state,
-  const ResourceStates required_state) -> bool;
+  const NativeResource& native_object, ResourceStates& current_state,
+  ResourceStates required_state) -> bool;
 
-auto ResourceStateTracker::GetTrackingInfo(const NativeObject& resource)
+auto ResourceStateTracker::GetTrackingInfo(const NativeResource& resource)
   -> TrackingInfo&
 {
   if (const auto it = tracking_.find(resource); it != tracking_.end()) {
@@ -110,12 +110,11 @@ auto ResourceStateTracker::GetTrackingInfo(const NativeObject& resource)
   throw std::runtime_error("Resource not being tracked");
 }
 
-void ResourceStateTracker::RequireBufferState(const Buffer& buffer,
-  const ResourceStates required_state, const bool is_permanent)
+auto ResourceStateTracker::RequireBufferState(const Buffer& buffer,
+  const ResourceStates required_state, const bool is_permanent) -> void
 {
-  const NativeObject native_object = buffer.GetNativeResource();
-  LOG_F(2, "buffer: require state 0x{:X} = {} {}",
-    reinterpret_cast<uintptr_t>(native_object.AsPointer<void>()),
+  const NativeResource native_object = buffer.GetNativeResource();
+  LOG_F(2, "buffer: require state 0x{:X} = {} {}", native_object,
     nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
   auto& tracking_info = GetTrackingInfo(native_object);
   DCHECK_F(std::holds_alternative<BufferTrackingInfo>(tracking_info),
@@ -147,10 +146,10 @@ void ResourceStateTracker::RequireBufferState(const Buffer& buffer,
   tracking.current_state = required_state;
 }
 
-void ResourceStateTracker::RequireTextureState(
-  const Texture& texture, ResourceStates required_state, bool is_permanent)
+auto ResourceStateTracker::RequireTextureState(const Texture& texture,
+  ResourceStates required_state, bool is_permanent) -> void
 {
-  const NativeObject native_object = texture.GetNativeResource();
+  const NativeResource native_object = texture.GetNativeResource();
 
   LOG_F(2, "texture: require state {} = {} {}", nostd::to_string(native_object),
     nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
@@ -193,7 +192,7 @@ void ResourceStateTracker::RequireTextureState(
   tracking.current_state = required_state;
 }
 
-void ResourceStateTracker::Clear()
+auto ResourceStateTracker::Clear() -> void
 {
   LOG_F(2, " => clearing all tracking");
   if (!pending_barriers_.empty()) {
@@ -202,13 +201,13 @@ void ResourceStateTracker::Clear()
   tracking_.clear();
 }
 
-void ResourceStateTracker::ClearPendingBarriers()
+auto ResourceStateTracker::ClearPendingBarriers() -> void
 {
   LOG_F(2, "clearing pending barriers");
   pending_barriers_.clear();
 }
 
-void ResourceStateTracker::OnCommandListClosed()
+auto ResourceStateTracker::OnCommandListClosed() -> void
 {
   LOG_F(2, "cmd list closed => restore initial states if needed");
   for (auto& [native_object, tracking] : tracking_) {

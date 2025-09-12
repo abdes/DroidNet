@@ -211,7 +211,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   }
 
   const auto dsv = PrepareDepthStencilView(GetDepthTexture());
-  DCHECK_F(dsv.IsValid(), "DepthStencilView must be valid after preparation");
+  DCHECK_F(dsv->IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
   ClearDepthStencilView(recorder, dsv);
@@ -222,14 +222,14 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // blended (would produce the previously observed inverted transparency).
   // Only PassMaskBit::kOpaqueOrMasked are accepted here.
   uint32_t transparent_saw = 0;
-  const bool emitted = IssueDrawCalls(
-    recorder, [&transparent_saw](const engine::DrawMetadata& md) {
-      if (md.flags.IsSet(PassMaskBit::kTransparent)) {
-        ++transparent_saw; // counted for debug stats; not emitted
-        return false;
-      }
-      return (md.flags.IsSet(PassMaskBit::kOpaqueOrMasked));
-    });
+  const bool emitted
+    = IssueDrawCalls(recorder, [&transparent_saw](const DrawMetadata& md) {
+        if (md.flags.IsSet(PassMaskBit::kTransparent)) {
+          ++transparent_saw; // counted for debug stats; not emitted
+          return false;
+        }
+        return (md.flags.IsSet(PassMaskBit::kOpaqueOrMasked));
+      });
   DLOG_F(2,
     "DepthPrePass emitted depth draws (opaque/masked only): emitted_any={} "
     "transparent_seen={}",
@@ -251,7 +251,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 // --- Private helper implementations for Execute() ---
 
 auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
-  -> NativeObject
+  -> graphics::NativeView
 {
   using graphics::DescriptorHandle;
   using graphics::DescriptorVisibility;
@@ -281,7 +281,7 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
 
   // 2. Check with ResourceRegistry::FindView
   if (const auto dsv = registry.Find(depth_texture_ref, dsv_view_desc);
-    dsv.IsValid()) {
+    dsv->IsValid()) {
     return dsv;
   }
   // View not found (cache miss), create and register it
@@ -297,7 +297,7 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
     const_cast<Texture&>(depth_texture_ref), // Added const_cast
     std::move(dsv_desc_handle), dsv_view_desc);
 
-  if (!dsv.IsValid()) {
+  if (!dsv->IsValid()) {
     throw std::runtime_error("Failed to register DSV with resource registry "
                              "even after successful allocation.");
   }
@@ -306,17 +306,17 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
 }
 
 auto DepthPrePass::ClearDepthStencilView(CommandRecorder& command_recorder,
-  const NativeObject& dsv_handle) const -> void
+  const graphics::NativeView& dsv_handle) const -> void
 {
   // only depth, as the depth pre-pass does not use the stencil buffer
   command_recorder.ClearDepthStencilView(
     GetDepthTexture(), dsv_handle, graphics::ClearFlags::kDepth, 1.0f, 0);
 }
 
-auto DepthPrePass::SetupRenderTargets(
-  CommandRecorder& command_recorder, const NativeObject& dsv) const -> void
+auto DepthPrePass::SetupRenderTargets(CommandRecorder& command_recorder,
+  const graphics::NativeView& dsv) const -> void
 {
-  DCHECK_F(dsv.IsValid(),
+  DCHECK_F(dsv->IsValid(),
     "DepthStencilView must be valid before setting render targets");
 
   command_recorder.SetRenderTargets({}, dsv);
@@ -360,6 +360,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::DirectBufferBinding;
   using graphics::FillMode;
   using graphics::FramebufferLayoutDesc;
+  using graphics::MakeShaderIdentifier;
   using graphics::PrimitiveType;
   using graphics::PushConstantsBinding;
   using graphics::RasterizerStateDesc;
@@ -367,7 +368,6 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::RootBindingItem;
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
-  using oxygen::graphics::MakeShaderIdentifier;
 
   constexpr RasterizerStateDesc raster_desc {
     .fill_mode = FillMode::kSolid,
@@ -414,7 +414,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .SetDepthStencilState(ds_desc)
     .SetBlendState({})
     .SetFramebufferLayout(fb_layout_desc)
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
+    .SetRootBindings(std::span<const RootBindingItem>(
       generated_bindings.data(), generated_bindings.size()))
     .Build();
 }

@@ -87,7 +87,7 @@ namespace {
 // Helper to prepare a render target view for the color texture, mirroring
 // DepthPrePass::PrepareDepthStencilView
 auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
-  DescriptorAllocator& allocator) -> NativeObject
+  DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
 {
   using oxygen::TextureType;
 
@@ -106,7 +106,7 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
     .is_read_only_dsv = false };
 
   if (const auto rtv = registry.Find(color_texture, rtv_view_desc);
-    rtv.IsValid()) {
+    rtv->IsValid()) {
     return rtv;
   }
   auto rtv_desc_handle = allocator.Allocate(
@@ -117,7 +117,7 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   }
   const auto rtv = registry.RegisterView(
     color_texture, std::move(rtv_desc_handle), rtv_view_desc);
-  if (!rtv.IsValid()) {
+  if (!rtv->IsValid()) {
     throw std::runtime_error("Failed to register RTV with resource registry "
                              "even after successful allocation.");
   }
@@ -126,7 +126,7 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
 
 // Helper to prepare a depth stencil view for the depth texture
 auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
-  DescriptorAllocator& allocator) -> NativeObject
+  DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
 {
   using oxygen::TextureType;
 
@@ -146,7 +146,7 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
   };
 
   if (const auto dsv = registry.Find(depth_texture, dsv_view_desc);
-    dsv.IsValid()) {
+    dsv->IsValid()) {
     return dsv;
   }
   auto dsv_desc_handle = allocator.Allocate(
@@ -157,7 +157,7 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
   }
   const auto dsv = registry.RegisterView(
     depth_texture, std::move(dsv_desc_handle), dsv_view_desc);
-  if (!dsv.IsValid()) {
+  if (!dsv->IsValid()) {
     throw std::runtime_error("Failed to register DSV with resource registry "
                              "even after successful allocation.");
   }
@@ -177,7 +177,7 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   std::array rtvs { color_rtv };
 
   // Prepare DSV if depth attachment is present
-  NativeObject dsv = {};
+  graphics::NativeView dsv = {};
   const auto* fb = GetFramebuffer();
   if (fb && fb->GetDescriptor().depth_attachment.IsValid()
     && fb->GetDescriptor().depth_attachment.texture) {
@@ -186,7 +186,7 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   }
 
   // Bind both RTV(s) and DSV if present
-  if (dsv.IsValid()) {
+  if (dsv->IsValid()) {
     recorder.SetRenderTargets(std::span(rtvs), dsv);
   } else {
     recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
@@ -205,14 +205,14 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   SetupRenderTargets(recorder);
   // Emit only opaque/masked draws; exclude transparent (handled later).
   uint32_t skipped_transparent = 0;
-  const bool emitted = IssueDrawCalls(
-    recorder, [&skipped_transparent](const engine::DrawMetadata& md) {
-      if (md.flags.IsSet(PassMaskBit::kTransparent)) {
-        ++skipped_transparent;
-        return false;
-      }
-      return md.flags.IsSet(PassMaskBit::kOpaqueOrMasked);
-    });
+  const bool emitted
+    = IssueDrawCalls(recorder, [&skipped_transparent](const DrawMetadata& md) {
+        if (md.flags.IsSet(PassMaskBit::kTransparent)) {
+          ++skipped_transparent;
+          return false;
+        }
+        return md.flags.IsSet(PassMaskBit::kOpaqueOrMasked);
+      });
   DLOG_F(2,
     "ShaderPass emitted opaque/masked draws: emitted_any={} "
     "skipped_transparent={}",
@@ -300,6 +300,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::DirectBufferBinding;
   using graphics::FillMode;
   using graphics::FramebufferLayoutDesc;
+  using graphics::GraphicsPipelineDesc;
   using graphics::PrimitiveType;
   using graphics::PushConstantsBinding;
   using graphics::RasterizerStateDesc;
@@ -307,7 +308,6 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::RootBindingItem;
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
-  using oxygen::graphics::GraphicsPipelineDesc;
 
   // Set up rasterizer and blend state for standard color rendering
   constexpr RasterizerStateDesc raster_desc {
@@ -379,7 +379,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .SetDepthStencilState(ds_desc)
     .SetBlendState({})
     .SetFramebufferLayout(fb_layout_desc)
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
+    .SetRootBindings(std::span<const RootBindingItem>(
       generated_bindings.data(), generated_bindings.size()))
     .Build();
 }

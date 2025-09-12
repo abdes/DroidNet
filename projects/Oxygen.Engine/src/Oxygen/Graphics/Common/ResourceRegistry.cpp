@@ -76,7 +76,7 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   DLOG_F(3, "resource: {}, type id: {}", fmt::ptr(resource.get()),
     nostd::to_string(type_id));
 
-  const NativeObject key { resource.get(), type_id };
+  const NativeResource key { resource.get(), type_id };
   if (const auto cache_it = resources_.find(key);
     cache_it != resources_.end()) {
     DLOG_F(4, "cache hit ({})-> ", fmt::ptr(resource.get()));
@@ -94,9 +94,9 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   DLOG_F(3, "{} resources in registry", resources_.size());
 }
 
-auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
+auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   DescriptorHandle view_handle, std::any view_description, size_t key_hash,
-  ResourceViewType view_type, DescriptorVisibility visibility) -> NativeObject
+  ResourceViewType view_type, DescriptorVisibility visibility) -> NativeView
 {
   CHECK_F(view_description.has_value(), "View description must be valid");
   CHECK_F(key_hash != 0, "Key hash must be valid");
@@ -104,7 +104,7 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
 
   // The resource native object is constructed from a reference to the resource
   // and its type ID. It must be valid.
-  DCHECK_F(resource.IsValid(), "invalid resource used for view registration");
+  DCHECK_F(resource->IsValid(), "invalid resource used for view registration");
 
   std::lock_guard lock(registry_mutex_);
 
@@ -116,7 +116,7 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
     nostd::to_string(visibility));
   DLOG_F(3, "key hash: {}", key_hash);
 
-  if (!view.IsValid()) {
+  if (!view->IsValid()) {
     LOG_F(ERROR, "invalid view used for view registration");
     return {};
   }
@@ -129,7 +129,7 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
   }
 
   // Check view cache first
-  const CacheKey cache_key { .resource = resource, .hash = key_hash };
+  const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
   if (const auto cache_it = view_cache_.find(cache_key);
     cache_it != view_cache_.end()) {
     DLOG_F(
@@ -165,44 +165,44 @@ auto ResourceRegistry::RegisterView(NativeObject resource, NativeObject view,
   return view;
 }
 
-auto ResourceRegistry::Contains(const NativeObject& resource) const -> bool
+auto ResourceRegistry::Contains(const NativeResource& resource) const -> bool
 {
   std::lock_guard lock(registry_mutex_);
   return resources_.contains(resource);
 }
 
 auto ResourceRegistry::Contains(
-  const NativeObject& resource, const size_t key_hash) const -> bool
+  const NativeResource& resource, const size_t key_hash) const -> bool
 {
   std::lock_guard lock(registry_mutex_);
 
-  const CacheKey cache_key { .resource = resource, .hash = key_hash };
+  const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
   return view_cache_.contains(cache_key);
 }
 
 auto ResourceRegistry::Find(
-  const NativeObject& resource, const size_t key_hash) const -> NativeObject
+  const NativeResource& resource, const size_t key_hash) const -> NativeView
 {
   std::lock_guard lock(registry_mutex_);
 
-  const CacheKey cache_key { .resource = resource, .hash = key_hash };
+  const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
 
   if (const auto it = view_cache_.find(cache_key); it != view_cache_.end()) {
     return it->second.view_object;
   }
 
-  return {}; // Return invalid NativeObject
+  return {}; // Return invalid NativeView
 }
 
 auto ResourceRegistry::UnRegisterView(
-  const NativeObject& resource, const NativeObject& view) -> void
+  const NativeResource& resource, const NativeView& view) -> void
 {
   std::lock_guard lock(registry_mutex_);
   UnRegisterViewNoLock(resource, view);
 }
 
 auto ResourceRegistry::UnRegisterViewNoLock(
-  const NativeObject& resource, const NativeObject& view) -> void
+  const NativeResource& resource, const NativeView& view) -> void
 {
   LOG_SCOPE_F(3, "UnRegister view");
   DLOG_F(3, "resource: {}", nostd::to_string(resource));
@@ -240,7 +240,8 @@ auto ResourceRegistry::UnRegisterViewNoLock(
     nostd::to_string(resource), nostd::to_string(view));
 }
 
-auto ResourceRegistry::UnRegisterResource(const NativeObject& resource) -> void
+auto ResourceRegistry::UnRegisterResource(const NativeResource& resource)
+  -> void
 {
   std::lock_guard lock(registry_mutex_);
   const auto it = resources_.find(resource);
@@ -258,7 +259,7 @@ auto ResourceRegistry::UnRegisterResource(const NativeObject& resource) -> void
     3, "UnRegisterResource: resource {} removed", nostd::to_string(resource));
 }
 
-auto ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
+auto ResourceRegistry::UnRegisterResourceViews(const NativeResource& resource)
   -> void
 {
   std::lock_guard lock(registry_mutex_);
@@ -270,7 +271,7 @@ auto ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
 
 // Private helper to avoid lock duplication
 auto ResourceRegistry::UnRegisterResourceViewsNoLock(
-  const NativeObject& resource) -> void
+  const NativeResource& resource) -> void
 {
   LOG_SCOPE_F(3, "UnRegister all views for resource");
   DLOG_F(3, "resource: {}", nostd::to_string(resource));
@@ -310,8 +311,8 @@ auto ResourceRegistry::UnRegisterResourceViewsNoLock(
 
 //=== Internal helpers ----------------------------------------------------//
 
-auto ResourceRegistry::PurgeCachedViewsForResource(const NativeObject& resource)
-  -> void
+auto ResourceRegistry::PurgeCachedViewsForResource(
+  const NativeResource& resource) -> void
 {
   // Remove all relevant entries from view_cache_ in a single pass
   std::erase_if(view_cache_, [&resource](const auto& cache_entry) {
@@ -320,11 +321,11 @@ auto ResourceRegistry::PurgeCachedViewsForResource(const NativeObject& resource)
 }
 
 auto ResourceRegistry::AttachDescriptorWithView(
-  const NativeObject& dst_resource, const bindless::Handle index,
-  DescriptorHandle descriptor_handle, const NativeObject& view,
+  const NativeResource& dst_resource, const bindless::Handle index,
+  DescriptorHandle descriptor_handle, const NativeView& view,
   std::any description, const std::size_t key_hash) -> void
 {
-  DCHECK_F(view.IsValid(), "invalid native view object");
+  DCHECK_F(view->IsValid(), "invalid native view object");
   const auto it = resources_.find(dst_resource);
   DCHECK_F(it != resources_.end(), "destination resource not registered: {}",
     nostd::to_string(dst_resource));
@@ -336,12 +337,13 @@ auto ResourceRegistry::AttachDescriptorWithView(
   // Update cache entry
   ViewCacheEntry cache_entry { .view_object = view,
     .view_description = std::move(description) };
-  const CacheKey new_cache_key { .resource = dst_resource, .hash = key_hash };
+  const CacheKey new_cache_key { .resource = dst_resource,
+    .view_desc_hash = key_hash };
   view_cache_[new_cache_key] = std::move(cache_entry);
 }
 
 auto ResourceRegistry::CollectDescriptorIndicesForResource(
-  const NativeObject& resource) const -> std::vector<bindless::Handle>
+  const NativeResource& resource) const -> std::vector<bindless::Handle>
 {
   const auto it = resources_.find(resource);
   if (it == resources_.end()) {

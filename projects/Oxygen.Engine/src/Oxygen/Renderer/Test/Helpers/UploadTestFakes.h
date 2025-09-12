@@ -22,18 +22,18 @@
 
 namespace oxygen::tests::uploadhelpers {
 
-using oxygen::graphics::Buffer;
-using oxygen::graphics::BufferDesc;
-using oxygen::graphics::BufferMemory;
-using oxygen::graphics::BufferUsage;
-using oxygen::graphics::CommandList;
-using oxygen::graphics::CommandQueue;
-using oxygen::graphics::CommandRecorder;
-using oxygen::graphics::QueueKey;
-using oxygen::graphics::QueueRole;
-using oxygen::graphics::Texture;
-using oxygen::graphics::TextureDesc;
-using oxygen::graphics::TextureUploadRegion;
+using graphics::Buffer;
+using graphics::BufferDesc;
+using graphics::BufferMemory;
+using graphics::BufferUsage;
+using graphics::CommandList;
+using graphics::CommandQueue;
+using graphics::CommandRecorder;
+using graphics::QueueKey;
+using graphics::QueueRole;
+using graphics::Texture;
+using graphics::TextureDesc;
+using graphics::TextureUploadRegion;
 
 // --- Buffer copy logging ---------------------------------------------------
 // //
@@ -103,19 +103,15 @@ private:
 class FakeCommandRecorder_Buffer final : public CommandRecorder {
 public:
   FakeCommandRecorder_Buffer(std::shared_ptr<CommandList> cl,
-    oxygen::observer_ptr<CommandQueue> q, BufferCommandLog* log)
+    observer_ptr<CommandQueue> q, BufferCommandLog* log)
     : CommandRecorder(std::move(cl), q)
     , log_(log)
   {
   }
 
   // No-op API
-  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc) -> void override
-  {
-  }
-  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc) -> void override
-  {
-  }
+  auto SetPipelineState(graphics::GraphicsPipelineDesc) -> void override { }
+  auto SetPipelineState(graphics::ComputePipelineDesc) -> void override { }
   auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override {
   }
   auto SetComputeRootConstantBufferView(uint32_t, uint64_t) -> void override { }
@@ -127,28 +123,26 @@ public:
     -> void override
   {
   }
-  auto SetRenderTargets(std::span<oxygen::graphics::NativeObject>,
-    std::optional<oxygen::graphics::NativeObject>) -> void override
+  auto SetRenderTargets(std::span<graphics::NativeView>,
+    std::optional<graphics::NativeView>) -> void override
   {
   }
-  auto SetViewport(const oxygen::ViewPort&) -> void override { }
-  auto SetScissors(const oxygen::Scissors&) -> void override { }
+  auto SetViewport(const ViewPort&) -> void override { }
+  auto SetScissors(const Scissors&) -> void override { }
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<Buffer>*,
     const uint32_t*) const -> void override
   {
   }
-  auto BindIndexBuffer(const Buffer&, oxygen::Format) -> void override { }
-  auto BindFrameBuffer(const oxygen::graphics::Framebuffer&) -> void override {
-  }
-  auto ClearDepthStencilView(const oxygen::graphics::Texture&,
-    const oxygen::graphics::NativeObject&, oxygen::graphics::ClearFlags, float,
-    uint8_t) -> void override
+  auto BindIndexBuffer(const Buffer&, Format) -> void override { }
+  auto BindFrameBuffer(const graphics::Framebuffer&) -> void override { }
+  auto ClearDepthStencilView(const Texture&, const graphics::NativeView&,
+    graphics::ClearFlags, float, uint8_t) -> void override
   {
   }
-  auto ClearFramebuffer(const oxygen::graphics::Framebuffer&,
-    std::optional<std::vector<std::optional<oxygen::graphics::Color>>>,
+  auto ClearFramebuffer(const graphics::Framebuffer&,
+    std::optional<std::vector<std::optional<graphics::Color>>>,
     std::optional<float>, std::optional<uint8_t>) -> void override
   {
   }
@@ -156,8 +150,9 @@ public:
   auto CopyBuffer(Buffer& dst, size_t dst_offset, const Buffer& src,
     size_t src_offset, size_t size) -> void override
   {
-    if (!log_)
+    if (!log_) {
       return;
+    }
     log_->copy_called = true;
     log_->copy_dst = &dst;
     log_->copy_dst_offset = dst_offset;
@@ -170,19 +165,17 @@ public:
       .src_offset = src_offset,
       .size = size });
   }
-  auto CopyBufferToTexture(const Buffer&,
-    const oxygen::graphics::TextureUploadRegion&, oxygen::graphics::Texture&)
+  auto CopyBufferToTexture(const Buffer&, const TextureUploadRegion&, Texture&)
     -> void override
   {
   }
-  auto CopyBufferToTexture(const Buffer&,
-    std::span<const oxygen::graphics::TextureUploadRegion>,
-    oxygen::graphics::Texture&) -> void override
+  auto CopyBufferToTexture(const Buffer&, std::span<const TextureUploadRegion>,
+    Texture&) -> void override
   {
   }
 
 protected:
-  auto ExecuteBarriers(std::span<const oxygen::graphics::detail::Barrier>)
+  auto ExecuteBarriers(std::span<const graphics::detail::Barrier>)
     -> void override
   {
   }
@@ -191,44 +184,41 @@ private:
   BufferCommandLog* log_ { nullptr };
 };
 
-class FakeGraphics_Buffer final : public oxygen::Graphics {
+class FakeGraphics_Buffer final : public Graphics {
 public:
   FakeGraphics_Buffer()
-    : oxygen::Graphics("FakeGraphics")
+    : Graphics("FakeGraphics")
   {
   }
   auto GetDescriptorAllocator() const
-    -> const oxygen::graphics::DescriptorAllocator& override
+    -> const graphics::DescriptorAllocator& override
   {
-    static const oxygen::graphics::DescriptorAllocator* dummy = nullptr;
+    static const graphics::DescriptorAllocator* dummy = nullptr;
     return *dummy;
   }
-  [[nodiscard]] auto CreateSurface(std::weak_ptr<oxygen::platform::Window>,
-    oxygen::observer_ptr<oxygen::graphics::CommandQueue>) const
-    -> std::shared_ptr<oxygen::graphics::Surface> override
+  [[nodiscard]] auto CreateSurface(
+    std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>) const
+    -> std::shared_ptr<graphics::Surface> override
   {
     return {};
   }
   [[nodiscard]] auto GetShader(std::string_view) const
-    -> std::shared_ptr<oxygen::graphics::IShaderByteCode> override
+    -> std::shared_ptr<graphics::IShaderByteCode> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateTexture(const oxygen::graphics::TextureDesc&) const
-    -> std::shared_ptr<oxygen::graphics::Texture> override
+  [[nodiscard]] auto CreateTexture(const TextureDesc&) const
+    -> std::shared_ptr<Texture> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateTextureFromNativeObject(
-    const oxygen::graphics::TextureDesc&,
-    const oxygen::graphics::NativeObject&) const
-    -> std::shared_ptr<oxygen::graphics::Texture> override
+  [[nodiscard]] auto CreateTextureFromNativeObject(const TextureDesc&,
+    const graphics::NativeResource&) const -> std::shared_ptr<Texture> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateBuffer(
-    const oxygen::graphics::BufferDesc& desc) const
-    -> std::shared_ptr<oxygen::graphics::Buffer> override
+  [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
+    -> std::shared_ptr<Buffer> override
   {
     class FakeStagingBuffer final : public Buffer {
       OXYGEN_TYPED(FakeStagingBuffer)
@@ -245,16 +235,15 @@ public:
         return desc_;
       }
       [[nodiscard]] auto GetNativeResource() const
-        -> oxygen::graphics::NativeObject override
+        -> graphics::NativeResource override
       {
-        return oxygen::graphics::NativeObject(
-          const_cast<FakeStagingBuffer*>(this),
-          oxygen::graphics::Buffer::ClassTypeId());
+        return graphics::NativeResource(
+          const_cast<FakeStagingBuffer*>(this), Buffer::ClassTypeId());
       }
       auto Map(uint64_t, uint64_t) -> void* override
       {
         if (!mapped_) {
-          storage_.resize(static_cast<size_t>(desc_.size_bytes));
+          storage_.resize(desc_.size_bytes);
           mapped_ = true;
         }
         return storage_.data();
@@ -268,8 +257,7 @@ public:
         -> void override
       {
         if (offset + size <= storage_.size()) {
-          std::memcpy(
-            storage_.data() + offset, data, static_cast<size_t>(size));
+          std::memcpy(storage_.data() + offset, data, size);
         }
       }
       [[nodiscard]] auto GetSize() const noexcept -> uint64_t override
@@ -295,23 +283,20 @@ public:
 
     protected:
       [[nodiscard]] auto CreateConstantBufferView(
-        const oxygen::graphics::DescriptorHandle&,
-        const oxygen::graphics::BufferRange&) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, const graphics::BufferRange&) const
+        -> graphics::NativeView override
       {
         return {};
       }
       [[nodiscard]] auto CreateShaderResourceView(
-        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
-        oxygen::graphics::BufferRange, uint32_t) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, Format, graphics::BufferRange,
+        uint32_t) const -> graphics::NativeView override
       {
         return {};
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
-        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
-        oxygen::graphics::BufferRange, uint32_t) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, Format, graphics::BufferRange,
+        uint32_t) const -> graphics::NativeView override
       {
         return {};
       }
@@ -323,7 +308,7 @@ public:
     };
     return std::make_shared<FakeStagingBuffer>("Staging", desc.size_bytes);
   }
-  auto CreateCommandQueues(const oxygen::graphics::QueuesStrategy& strat)
+  auto CreateCommandQueues(const graphics::QueuesStrategy& strat)
     -> void override
   {
     const auto copy_key = strat.KeyFor(QueueRole::kTransfer);
@@ -334,19 +319,21 @@ public:
       = std::make_shared<FakeCommandQueue>("GfxQ", QueueRole::kGraphics);
   }
   auto GetCommandQueue(const QueueKey& key) const
-    -> oxygen::observer_ptr<CommandQueue> override
+    -> observer_ptr<CommandQueue> override
   {
     auto it = queues_.find(key);
-    if (it == queues_.end())
+    if (it == queues_.end()) {
       return {};
+    }
     return oxygen::observer_ptr<CommandQueue>(it->second.get());
   }
   auto GetCommandQueue(QueueRole role) const
-    -> oxygen::observer_ptr<CommandQueue> override
+    -> observer_ptr<CommandQueue> override
   {
     for (auto& [k, v] : queues_) {
-      if (v->GetQueueRole() == role)
+      if (v->GetQueueRole() == role) {
         return oxygen::observer_ptr<CommandQueue>(v.get());
+      }
     }
     return {};
   }
@@ -362,7 +349,6 @@ public:
     return { raw, [](CommandRecorder* p) { delete p; } };
   }
 
-public:
   BufferCommandLog buffer_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_ {};
 
@@ -377,9 +363,8 @@ protected:
   {
     return {};
   }
-  [[nodiscard]] auto CreateCommandRecorder(
-    std::shared_ptr<CommandList>, oxygen::observer_ptr<CommandQueue>)
-    -> std::unique_ptr<CommandRecorder> override
+  [[nodiscard]] auto CreateCommandRecorder(std::shared_ptr<CommandList>,
+    observer_ptr<CommandQueue>) -> std::unique_ptr<CommandRecorder> override
   {
     return {};
   }
@@ -398,19 +383,15 @@ struct TextureCommandLog {
 class FakeCommandRecorder_Texture final : public CommandRecorder {
 public:
   FakeCommandRecorder_Texture(std::shared_ptr<CommandList> cl,
-    oxygen::observer_ptr<CommandQueue> q, TextureCommandLog* log)
+    observer_ptr<CommandQueue> q, TextureCommandLog* log)
     : CommandRecorder(std::move(cl), q)
     , log_(log)
   {
   }
 
   // No-op API
-  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc) -> void override
-  {
-  }
-  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc) -> void override
-  {
-  }
+  auto SetPipelineState(graphics::GraphicsPipelineDesc) -> void override { }
+  auto SetPipelineState(graphics::ComputePipelineDesc) -> void override { }
   auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override {
   }
   auto SetComputeRootConstantBufferView(uint32_t, uint64_t) -> void override { }
@@ -422,28 +403,26 @@ public:
     -> void override
   {
   }
-  auto SetRenderTargets(std::span<oxygen::graphics::NativeObject>,
-    std::optional<oxygen::graphics::NativeObject>) -> void override
+  auto SetRenderTargets(std::span<graphics::NativeView>,
+    std::optional<graphics::NativeView>) -> void override
   {
   }
-  auto SetViewport(const oxygen::ViewPort&) -> void override { }
-  auto SetScissors(const oxygen::Scissors&) -> void override { }
+  auto SetViewport(const ViewPort&) -> void override { }
+  auto SetScissors(const Scissors&) -> void override { }
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<Buffer>*,
     const uint32_t*) const -> void override
   {
   }
-  auto BindIndexBuffer(const Buffer&, oxygen::Format) -> void override { }
-  auto BindFrameBuffer(const oxygen::graphics::Framebuffer&) -> void override {
-  }
-  auto ClearDepthStencilView(const oxygen::graphics::Texture&,
-    const oxygen::graphics::NativeObject&, oxygen::graphics::ClearFlags, float,
-    uint8_t) -> void override
+  auto BindIndexBuffer(const Buffer&, Format) -> void override { }
+  auto BindFrameBuffer(const graphics::Framebuffer&) -> void override { }
+  auto ClearDepthStencilView(const Texture&, const graphics::NativeView&,
+    graphics::ClearFlags, float, uint8_t) -> void override
   {
   }
-  auto ClearFramebuffer(const oxygen::graphics::Framebuffer&,
-    std::optional<std::vector<std::optional<oxygen::graphics::Color>>>,
+  auto ClearFramebuffer(const graphics::Framebuffer&,
+    std::optional<std::vector<std::optional<graphics::Color>>>,
     std::optional<float>, std::optional<uint8_t>) -> void override
   {
   }
@@ -452,23 +431,23 @@ public:
   {
   }
 
-  auto CopyBufferToTexture(const Buffer& src,
-    const oxygen::graphics::TextureUploadRegion& r,
-    oxygen::graphics::Texture& dst) -> void override
+  auto CopyBufferToTexture(const Buffer& src, const TextureUploadRegion& r,
+    Texture& dst) -> void override
   {
-    if (!log_)
+    if (!log_) {
       return;
+    }
     log_->copy_called = true;
     log_->src = &src;
     log_->dst = &dst;
     log_->regions = { r };
   }
   auto CopyBufferToTexture(const Buffer& src,
-    std::span<const oxygen::graphics::TextureUploadRegion> regions,
-    oxygen::graphics::Texture& dst) -> void override
+    std::span<const TextureUploadRegion> regions, Texture& dst) -> void override
   {
-    if (!log_)
+    if (!log_) {
       return;
+    }
     log_->copy_called = true;
     log_->src = &src;
     log_->dst = &dst;
@@ -476,7 +455,7 @@ public:
   }
 
 protected:
-  auto ExecuteBarriers(std::span<const oxygen::graphics::detail::Barrier>)
+  auto ExecuteBarriers(std::span<const graphics::detail::Barrier>)
     -> void override
   {
   }
@@ -485,44 +464,41 @@ private:
   TextureCommandLog* log_ { nullptr };
 };
 
-class FakeGraphics_Texture final : public oxygen::Graphics {
+class FakeGraphics_Texture final : public Graphics {
 public:
   FakeGraphics_Texture()
-    : oxygen::Graphics("FakeGraphics")
+    : Graphics("FakeGraphics")
   {
   }
   auto GetDescriptorAllocator() const
-    -> const oxygen::graphics::DescriptorAllocator& override
+    -> const graphics::DescriptorAllocator& override
   {
-    static const oxygen::graphics::DescriptorAllocator* dummy = nullptr;
+    static const graphics::DescriptorAllocator* dummy = nullptr;
     return *dummy;
   }
-  [[nodiscard]] auto CreateSurface(std::weak_ptr<oxygen::platform::Window>,
-    oxygen::observer_ptr<oxygen::graphics::CommandQueue>) const
-    -> std::shared_ptr<oxygen::graphics::Surface> override
+  [[nodiscard]] auto CreateSurface(
+    std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>) const
+    -> std::shared_ptr<graphics::Surface> override
   {
     return {};
   }
   [[nodiscard]] auto GetShader(std::string_view) const
-    -> std::shared_ptr<oxygen::graphics::IShaderByteCode> override
+    -> std::shared_ptr<graphics::IShaderByteCode> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateTexture(const oxygen::graphics::TextureDesc&) const
-    -> std::shared_ptr<oxygen::graphics::Texture> override
+  [[nodiscard]] auto CreateTexture(const TextureDesc&) const
+    -> std::shared_ptr<Texture> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateTextureFromNativeObject(
-    const oxygen::graphics::TextureDesc&,
-    const oxygen::graphics::NativeObject&) const
-    -> std::shared_ptr<oxygen::graphics::Texture> override
+  [[nodiscard]] auto CreateTextureFromNativeObject(const TextureDesc&,
+    const graphics::NativeResource&) const -> std::shared_ptr<Texture> override
   {
     return {};
   }
-  [[nodiscard]] auto CreateBuffer(
-    const oxygen::graphics::BufferDesc& desc) const
-    -> std::shared_ptr<oxygen::graphics::Buffer> override
+  [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
+    -> std::shared_ptr<Buffer> override
   {
     class FakeStagingBuffer final : public Buffer {
       OXYGEN_TYPED(FakeStagingBuffer)
@@ -539,16 +515,15 @@ public:
         return desc_;
       }
       [[nodiscard]] auto GetNativeResource() const
-        -> oxygen::graphics::NativeObject override
+        -> graphics::NativeResource override
       {
-        return oxygen::graphics::NativeObject(
-          const_cast<FakeStagingBuffer*>(this),
-          oxygen::graphics::Buffer::ClassTypeId());
+        return graphics::NativeResource(
+          const_cast<FakeStagingBuffer*>(this), Buffer::ClassTypeId());
       }
       auto Map(uint64_t, uint64_t) -> void* override
       {
         if (!mapped_) {
-          storage_.resize(static_cast<size_t>(desc_.size_bytes));
+          storage_.resize(desc_.size_bytes);
           mapped_ = true;
         }
         return storage_.data();
@@ -562,8 +537,7 @@ public:
         -> void override
       {
         if (offset + size <= storage_.size()) {
-          std::memcpy(
-            storage_.data() + offset, data, static_cast<size_t>(size));
+          std::memcpy(storage_.data() + offset, data, size);
         }
       }
       [[nodiscard]] auto GetSize() const noexcept -> uint64_t override
@@ -589,23 +563,20 @@ public:
 
     protected:
       [[nodiscard]] auto CreateConstantBufferView(
-        const oxygen::graphics::DescriptorHandle&,
-        const oxygen::graphics::BufferRange&) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, const graphics::BufferRange&) const
+        -> graphics::NativeView override
       {
         return {};
       }
       [[nodiscard]] auto CreateShaderResourceView(
-        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
-        oxygen::graphics::BufferRange, uint32_t) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, Format, graphics::BufferRange,
+        uint32_t) const -> graphics::NativeView override
       {
         return {};
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
-        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
-        oxygen::graphics::BufferRange, uint32_t) const
-        -> oxygen::graphics::NativeObject override
+        const graphics::DescriptorHandle&, Format, graphics::BufferRange,
+        uint32_t) const -> graphics::NativeView override
       {
         return {};
       }
@@ -617,7 +588,7 @@ public:
     };
     return std::make_shared<FakeStagingBuffer>("Staging", desc.size_bytes);
   }
-  auto CreateCommandQueues(const oxygen::graphics::QueuesStrategy& strat)
+  auto CreateCommandQueues(const graphics::QueuesStrategy& strat)
     -> void override
   {
     const auto copy_key = strat.KeyFor(QueueRole::kTransfer);
@@ -628,19 +599,21 @@ public:
       = std::make_shared<FakeCommandQueue>("GfxQ", QueueRole::kGraphics);
   }
   auto GetCommandQueue(const QueueKey& key) const
-    -> oxygen::observer_ptr<CommandQueue> override
+    -> observer_ptr<CommandQueue> override
   {
     auto it = queues_.find(key);
-    if (it == queues_.end())
+    if (it == queues_.end()) {
       return {};
+    }
     return oxygen::observer_ptr<CommandQueue>(it->second.get());
   }
   auto GetCommandQueue(QueueRole role) const
-    -> oxygen::observer_ptr<CommandQueue> override
+    -> observer_ptr<CommandQueue> override
   {
     for (auto& [k, v] : queues_) {
-      if (v->GetQueueRole() == role)
+      if (v->GetQueueRole() == role) {
         return oxygen::observer_ptr<CommandQueue>(v.get());
+      }
     }
     return {};
   }
@@ -656,7 +629,6 @@ public:
     return { raw, [](CommandRecorder* p) { delete p; } };
   }
 
-public:
   TextureCommandLog texture_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_ {};
 
@@ -671,9 +643,8 @@ protected:
   {
     return {};
   }
-  [[nodiscard]] auto CreateCommandRecorder(
-    std::shared_ptr<CommandList>, oxygen::observer_ptr<CommandQueue>)
-    -> std::unique_ptr<CommandRecorder> override
+  [[nodiscard]] auto CreateCommandRecorder(std::shared_ptr<CommandList>,
+    observer_ptr<CommandQueue>) -> std::unique_ptr<CommandRecorder> override
   {
     return {};
   }

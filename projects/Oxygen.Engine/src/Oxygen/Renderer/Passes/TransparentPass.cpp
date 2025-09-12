@@ -13,14 +13,13 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
@@ -52,10 +51,10 @@ auto TransparentPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
   // Transition targets (color RT for render, depth read if provided)
   recorder.RequireResourceState(
-    *config_->color_texture, oxygen::graphics::ResourceStates::kRenderTarget);
+    *config_->color_texture, graphics::ResourceStates::kRenderTarget);
   if (config_->depth_texture) {
     recorder.RequireResourceState(
-      *config_->depth_texture, oxygen::graphics::ResourceStates::kDepthRead);
+      *config_->depth_texture, graphics::ResourceStates::kDepthRead);
   }
   recorder.FlushBarriers();
   co_return;
@@ -73,21 +72,21 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   const auto& color_tex = *config_->color_texture;
   const auto& color_desc = color_tex.GetDescriptor();
-  oxygen::graphics::TextureViewDescription rtv_desc { .view_type
-    = ResourceViewType::kTexture_RTV,
+  graphics::TextureViewDescription rtv_desc {
+    .view_type = ResourceViewType::kTexture_RTV,
     .visibility = DescriptorVisibility::kCpuOnly,
     .format = color_desc.format,
     .dimension = color_desc.texture_type,
     .sub_resources = { .base_mip_level = 0,
       .num_mip_levels = color_desc.mip_levels,
       .base_array_slice = 0,
-      .num_array_slices
-      = (color_desc.texture_type == oxygen::TextureType::kTexture3D
+      .num_array_slices = (color_desc.texture_type == TextureType::kTexture3D
           ? color_desc.depth
           : color_desc.array_size) },
-    .is_read_only_dsv = false };
-  NativeObject rtv;
-  if (auto found = registry.Find(color_tex, rtv_desc); found.IsValid()) {
+    .is_read_only_dsv = false,
+  };
+  graphics::NativeView rtv;
+  if (auto found = registry.Find(color_tex, rtv_desc); found->IsValid()) {
     rtv = found;
   } else {
     auto handle = allocator.Allocate(
@@ -100,11 +99,11 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       const_cast<Texture&>(color_tex), std::move(handle), rtv_desc);
   }
 
-  NativeObject dsv;
+  graphics::NativeView dsv;
   if (config_->depth_texture) {
     const auto& depth_tex = *config_->depth_texture;
     const auto& depth_desc = depth_tex.GetDescriptor();
-    oxygen::graphics::TextureViewDescription dsv_desc { .view_type
+    graphics::TextureViewDescription dsv_desc { .view_type
       = ResourceViewType::kTexture_DSV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = depth_desc.format,
@@ -112,12 +111,11 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       .sub_resources = { .base_mip_level = 0,
         .num_mip_levels = depth_desc.mip_levels,
         .base_array_slice = 0,
-        .num_array_slices
-        = (depth_desc.texture_type == oxygen::TextureType::kTexture3D
+        .num_array_slices = (depth_desc.texture_type == TextureType::kTexture3D
             ? depth_desc.depth
             : depth_desc.array_size) },
       .is_read_only_dsv = true };
-    if (auto found = registry.Find(depth_tex, dsv_desc); found.IsValid()) {
+    if (auto found = registry.Find(depth_tex, dsv_desc); found->IsValid()) {
       dsv = found;
     } else {
       auto handle = allocator.Allocate(
@@ -131,7 +129,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     }
   }
 
-  if (dsv.IsValid()) {
+  if (dsv->IsValid()) {
     recorder.SetRenderTargets(std::span(&rtv, 1), dsv);
   } else {
     recorder.SetRenderTargets(std::span(&rtv, 1), std::nullopt);
@@ -142,14 +140,14 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // transparent partition; current order is deterministic but not depth-sorted
   // which can cause incorrect blending for overlapping transparent geometry.
   uint32_t emitted_count = 0;
-  const bool emitted = IssueDrawCalls(
-    recorder, [&emitted_count](const engine::DrawMetadata& md) {
-      if (!md.flags.IsSet(PassMaskBit::kTransparent)) {
-        return false;
-      }
-      ++emitted_count;
-      return true;
-    });
+  const bool emitted
+    = IssueDrawCalls(recorder, [&emitted_count](const DrawMetadata& md) {
+        if (!md.flags.IsSet(PassMaskBit::kTransparent)) {
+          return false;
+        }
+        ++emitted_count;
+        return true;
+      });
   if (emitted) {
     DLOG_F(2, "TransparentPass emitted {} draw(s)", emitted_count);
   }
@@ -194,7 +192,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   const auto& color_desc = GetColorTexture().GetDescriptor();
   auto sample_count = color_desc.sample_count;
-  auto depth_format = oxygen::Format::kUnknown;
+  auto depth_format = Format::kUnknown;
   if (auto* depth = GetDepthTexture()) {
     depth_format = depth->GetDescriptor().format;
     sample_count = depth->GetDescriptor().sample_count;
@@ -209,12 +207,10 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   // NOTE: Reuse existing bindless mesh shader (see ShaderPass rationale).
   return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(graphics::ShaderStageDesc {
-      .shader = MakeShaderIdentifier(
-        oxygen::ShaderType::kVertex, "FullScreenTriangle.hlsl") })
-    .SetPixelShader(graphics::ShaderStageDesc {
-      .shader = MakeShaderIdentifier(
-        oxygen::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
+    .SetVertexShader(graphics::ShaderStageDesc { .shader
+      = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
+    .SetPixelShader(graphics::ShaderStageDesc { .shader
+      = MakeShaderIdentifier(ShaderType::kPixel, "FullScreenTriangle.hlsl") })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)
     .SetDepthStencilState(ds_desc)
@@ -224,15 +220,15 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     //   Color:   SrcColor * SrcAlpha + DestColor * (1 - SrcAlpha)
     //   Alpha:   SrcAlpha * 1 + DestAlpha * (1 - SrcAlpha)
     // If/when premultiplied alpha is adopted switch src_blend to kOne.
-    .SetBlendState({ oxygen::graphics::BlendTargetDesc {
+    .SetBlendState({ graphics::BlendTargetDesc {
       .blend_enable = true,
-      .src_blend = oxygen::graphics::BlendFactor::kSrcAlpha,
-      .dest_blend = oxygen::graphics::BlendFactor::kInvSrcAlpha,
-      .blend_op = oxygen::graphics::BlendOp::kAdd,
-      .src_blend_alpha = oxygen::graphics::BlendFactor::kOne,
-      .dest_blend_alpha = oxygen::graphics::BlendFactor::kInvSrcAlpha,
-      .blend_op_alpha = oxygen::graphics::BlendOp::kAdd,
-      .write_mask = oxygen::graphics::ColorWriteMask::kAll,
+      .src_blend = graphics::BlendFactor::kSrcAlpha,
+      .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+      .blend_op = graphics::BlendOp::kAdd,
+      .src_blend_alpha = graphics::BlendFactor::kOne,
+      .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
+      .blend_op_alpha = graphics::BlendOp::kAdd,
+      .write_mask = graphics::ColorWriteMask::kAll,
     } })
     .SetFramebufferLayout(fb_layout_desc)
     .SetRootBindings(std::span<const graphics::RootBindingItem>(

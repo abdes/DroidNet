@@ -10,7 +10,6 @@
 #include <span>
 
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>

@@ -29,30 +29,22 @@
 
 //=== External Dependencies ===-----------------------------------------------//
 
-// Note: This test file is a unit test and does not require external graphics
-// backends. All graphics functionality is mocked.
-
-namespace {
-
 // Consolidated GoogleTest/GoogleMock using aliases for tests
-using ::testing::_;
-using ::testing::A;
-using ::testing::NiceMock;
-using ::testing::Return;
-using ::testing::StrictMock;
-using ::testing::Test;
-using ::testing::Throw;
+using testing::NiceMock;
+using testing::Return;
+using testing::Test;
+using testing::Throw;
 
 using Role = oxygen::graphics::QueueRole;
-using Alloc = oxygen::graphics::QueueAllocationPreference;
-using Share = oxygen::graphics::QueueSharingPreference;
 using oxygen::graphics::CommandList;
 using oxygen::graphics::CommandQueue;
+using oxygen::graphics::NativeView;
 using oxygen::graphics::QueueKey;
-using oxygen::graphics::QueueSpecification;
 using oxygen::graphics::detail::DeferredReclaimer;
 using CommandListPtr = std::shared_ptr<CommandList>;
 using CommandListSpan = std::span<CommandListPtr>;
+
+namespace {
 
 //=== Mock Classes for Commander Testing ===----------------------------------//
 
@@ -104,7 +96,7 @@ public:
   MOCK_METHOD(void, SetComputeRootConstantBufferView, (std::uint32_t, std::uint64_t), (override));
   MOCK_METHOD(void, SetGraphicsRoot32BitConstant, (std::uint32_t, std::uint32_t, std::uint32_t), (override));
   MOCK_METHOD(void, SetComputeRoot32BitConstant, (std::uint32_t, std::uint32_t, std::uint32_t), (override));
-  MOCK_METHOD(void, SetRenderTargets, (std::span<oxygen::graphics::NativeObject>, std::optional<oxygen::graphics::NativeObject>), (override));
+  MOCK_METHOD(void, SetRenderTargets, (std::span<oxygen::graphics::NativeView>, std::optional<oxygen::graphics::NativeView>), (override));
   MOCK_METHOD(void, SetViewport, (const oxygen::ViewPort&), (override));
   MOCK_METHOD(void, SetScissors, (const oxygen::Scissors&), (override));
   MOCK_METHOD(void, Draw, (std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t), (override));
@@ -112,7 +104,7 @@ public:
   MOCK_METHOD(void, SetVertexBuffers, (std::uint32_t, const std::shared_ptr<oxygen::graphics::Buffer>*, const std::uint32_t*), (const, override));
   MOCK_METHOD(void, BindIndexBuffer, (const oxygen::graphics::Buffer&, oxygen::Format), (override));
   MOCK_METHOD(void, BindFrameBuffer, (const oxygen::graphics::Framebuffer&), (override));
-  MOCK_METHOD(void, ClearDepthStencilView, (const oxygen::graphics::Texture&, const oxygen::graphics::NativeObject&, oxygen::graphics::ClearFlags, float, std::uint8_t), (override));
+  MOCK_METHOD(void, ClearDepthStencilView, (const oxygen::graphics::Texture&, const oxygen::graphics::NativeView&, oxygen::graphics::ClearFlags, float, std::uint8_t), (override));
   MOCK_METHOD(void, ClearFramebuffer, (const oxygen::graphics::Framebuffer&, std::optional<std::vector<std::optional<oxygen::graphics::Color>>>, std::optional<float>, std::optional<std::uint8_t>), (override));
   MOCK_METHOD(void, CopyBuffer, (oxygen::graphics::Buffer&, std::size_t, const oxygen::graphics::Buffer&, std::size_t, std::size_t), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, const oxygen::graphics::TextureUploadRegion&, oxygen::graphics::Texture&), (override));
