@@ -42,17 +42,6 @@ namespace oxygen::renderer::upload {
  element-oriented API to callers. The buffer can grow; the shader-visible index
  is preserved across resizes.
 
- N-Partition contract:
- - ReserveElements() grows the underlying buffer when needed.
- - SetActivePartition(slot) switches to the partition for the given frame slot,
-   automatically resetting it if safe (frame cycling ensures old partitions are
- unused).
- - Allocate(elements) returns a contiguous region with absolute indices in the
- buffer.
- - Build upload requests using MakeCopyFor (full allocation) or MakeCopyAt
-   (subrange within the returned Allocation) and submit via your upload
- subsystem.
-
  @warning Allocation indices are absolute to the entire buffer and remain stable
  within the full cycle of frames in flight. Frame N+1 will not overwrite data
  from frame N until the GPU has finished with frame N.

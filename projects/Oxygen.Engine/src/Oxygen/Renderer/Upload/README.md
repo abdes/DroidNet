@@ -1,223 +1,146 @@
-# Upload Module – High-Level Overview
+# Upload Module – Concise Overview
 
-The Upload module provides a unified, testable system for staging, batching, and submitting buffer and texture uploads to the GPU. It is designed for deterministic, renderer-internal use, replacing ad-hoc upload logic with a robust, extensible, and coroutine-friendly API.
-
----
-
-## TODOs & Enhancement Summary
-
-| Area                | Status / Limitation                                   | Planned Action / Note                                 |
-|---------------------|------------------------------------------------------|-------------------------------------------------------|
-| Thread-safe pending queue | Not implemented; Submit* records immediately         | Add MPSC queue; move planning/staging/recording to `Flush()` |
-| Batch splitting     | No splitting by policy thresholds or priority         | Extend planner/batcher for max regions/bytes, sort by priority |
-| Staging allocator   | Per-allocation persistent map; RetireCompleted not wired | Implement arena/ring buffer; wire recycling           |
-| Large batch splitting | Not implemented (max regions/bytes/timeouts)        | Extend planner/batcher for splitting                  |
-| Diagnostics         | Minimal (counts, bytes)                              | Add per-frame latency, arena usage, debug labels      |
-| Producer callback   | Only boolean-fill supported                          | Add streaming/offset-based producer variant           |
-| Test coverage       | Good (see `Test/`), but always extend for new features | Add/maintain tests for new planner, allocator, etc.   |
+The Upload module provides a unified, deterministic path to stage and submit
+buffer/texture uploads to the GPU. It centralizes footprint planning, staging
+allocation, command recording, submission, and completion tracking behind a
+small API that is renderer-internal and coroutine-friendly.
 
 ---
 
-## Architecture Overview
+## What it does (at a glance)
 
-The Upload module is composed of several focused components:
+- Plans copy footprints/regions: `UploadPlanner` (buffers, 2D/3D/cube).
+- Allocates CPU-visible staging: `StagingProvider` (persistently mapped).
+  - Default providers: `SingleBufferStaging` (pinned/per-op) and
+    `RingBufferStaging` (partitioned, per-frame bump allocator; requires
+    explicit alignment set by the caller, typically the element stride).
+- Records and submits copy commands on a transfer- or graphics-queue.
+- Tracks completion and stats via fence values: `UploadTracker`.
+- Policy-driven alignment/limits: `UploadPolicy`.
 
-- **UploadCoordinator**: Facade API for submitting upload requests, flushing, retiring, and tracking completion. See [`UploadCoordinator.h`](../Upload/UploadCoordinator.h).
-- **UploadPlanner**: Computes copy regions and staging footprints for buffer and texture uploads. See [`UploadPlanner.h`](../Upload/UploadPlanner.h).
-- **StagingAllocator**: Manages CPU-visible upload memory, currently per-allocation, with future plans for arena/ring buffer. See [`StagingAllocator.h`](../Upload/StagingAllocator.h).
-- **UploadTracker**: Tracks tickets, fence values, and results; supports both blocking and coroutine-friendly waiting. See [`UploadTracker.h`](../Upload/UploadTracker.h).
-- **UploadPolicy**: Centralizes batching, alignment, and limit policies. See [`UploadPolicy.h`](../Upload/UploadPolicy.h).
-- **UploadDiagnostics**: Provides lightweight stats and (future) debug labeling. See [`UploadDiagnostics.h`](../Upload/UploadDiagnostics.h).
-
-### Integration
-
-- The module is used internally by the `Renderer` (see `Renderer.cpp`), e.g., for geometry, material, and transform uploads.
-- Not an EngineModule: avoids extra lifecycle/scheduling complexity.
+Flow: Submit → Plan → Stage/Fill → Record copy → Submit → Register ticket →
+RetireCompleted advances fence and recycles staging (future arena).
 
 ---
 
-## API Highlights
+## API highlights
 
-- **Submission**: `UploadCoordinator::Submit`, `SubmitMany` for buffer/texture uploads. Returns `UploadTicket` for tracking.
-- **Sync & Polling**: `IsComplete`, `TryGetResult`, `Await`, `AwaitAll`.
-- **Coroutine Support**: `SubmitAsync`, `AwaitAsync`, `AwaitAllAsync` for non-blocking integration.
-- **Frame Control**: `Flush` (submit pending work), `RetireCompleted` (advance fence, recycle memory).
-- **Diagnostics**: `GetStats` for basic counters.
+- Submit: `UploadCoordinator::Submit`, `SubmitMany` → `UploadTicket`.
+- Wait: `IsComplete`, `TryGetResult`, `Await`, `AwaitAll`.
+- Coroutines: `SubmitAsync`, `AwaitAsync`, `AwaitAllAsync`.
+- Frame control: `Flush()` (ensure submission), `RetireCompleted()` (advance
+  completed fence; staging recycling in future arena).
+- Stats: `GetStats()` returns submitted/completed/in-flight and bytes.
 
-See [`UploadCoordinator.h`](../Upload/UploadCoordinator.h) for full API.
+See [`UploadCoordinator.h`](../Upload/UploadCoordinator.h) for the full API.
 
 ---
 
-## Usage Models
+## Components
 
-The Upload module supports several usage patterns for flexibility and performance:
+- **UploadCoordinator**: Orchestrates planning, staging, recording, submit,
+  and tracking.
+- **UploadPlanner**: Computes buffer coalescing and texture subresource
+  regions with alignment from `UploadPolicy`.
+- **StagingProvider**: Minimal contract used by the coordinator to obtain
+  mapped CPU-visible staging regions and retire completed work.
+  - Provided implementations:
+    - `SingleBufferStaging`: single upload buffer with pinned or per-op map.
+    - `RingBufferStaging`: single mapped upload buffer partitioned by
+      frames-in-flight; per-partition bump allocator; owner calls
+      `SetActivePartition(slot)` each frame.
+  - Providers do NOT manage GPU device-local buffers or SRVs; subsystems like
+    `TransformUploader` own destination buffers and bindless indices.
+- **UploadTracker**: Fence-based ticketing with blocking and coroutine waits;
+  collects lightweight stats and supports best-effort cancellation.
+- **UploadPolicy**: Alignments (row/placement/buffer), batching thresholds
+  scaffolding (for future splitting/coalescing).
 
-### 1. Synchronous Upload (Direct Data)
+---
 
-For small or immediate uploads, provide data directly:
+## Minimal example
 
 ```cpp
-std::vector<std::byte> data = ...;
+// Synchronous buffer upload using a direct data view
+std::vector<std::byte> data = /* fill */;
 UploadRequest req = {
   .kind = UploadKind::kBuffer,
   .desc = UploadBufferDesc{ .dst = buffer, .size_bytes = data.size(), .dst_offset = 0 },
   .data = UploadDataView{ std::span<const std::byte>(data) },
-  .debug_name = "MyBufferUpload"
+  .debug_name = "MyBufferUpload",
 };
-auto ticket = upload.Submit(req);
+auto t = upload.Submit(req);
 upload.Flush();
-auto result = upload.Await(ticket);
-```
-
-### 2. Coroutine-Based Upload
-
-For non-blocking, frame-overlapped uploads:
-
-```cpp
-co::Co<void> UploadAsync(UploadCoordinator& upload, UploadRequest req) {
-  co_await upload.SubmitAsync(req);
-  // ...continue after upload completes
-}
-```
-
-### 3. Producer Callback (Streaming/Large Data)
-
-For large assets or streaming, provide a producer callback to fill staging memory on demand:
-
-```cpp
-UploadRequest req = {
-  .kind = UploadKind::kBuffer,
-  .desc = UploadBufferDesc{ .dst = buffer, .size_bytes = N, .dst_offset = 0 },
-  .data = std::move_only_function<bool(std::span<std::byte>)>{
-    [](std::span<std::byte> dst) {
-      // Fill 'dst' with data (e.g., from file, decompression, etc.)
-      return FillBuffer(dst);
-    }
-  },
-  .debug_name = "StreamedUpload"
-};
-auto ticket = upload.Submit(req);
-upload.Flush();
-auto result = upload.Await(ticket);
-```
-
-### 4. Batch/Multi-Request Upload
-
-Batch multiple requests for efficient submission:
-
-```cpp
-std::vector<UploadRequest> reqs = BuildRequests(...);
-auto tickets = upload.SubmitMany(reqs);
-upload.Flush();
-auto results = upload.AwaitAll(tickets);
+auto r = upload.Await(t);
 ```
 
 ---
 
-## Diagrams
+## Known limitations (current implementation)
 
-### Upload Request Flow
+These reflect the actual code paths and are targeted for iteration:
 
-```plantuml
-@startuml
-title Upload Request Lifecycle
-actor Client
-participant UploadCoordinator
-participant UploadPlanner
-participant StagingAllocator
-participant Graphics
-participant UploadTracker
+1) TransformUploader still builds upload requests via `RingUploadBuffer`
+  (legacy path) instead of owning device-local buffers and using
+  `StagingProvider` directly for staging. SRV/bindless ownership needs to
+  move fully into `TransformUploader`.
+2) Queue selection is fixed to a simple “prefer transfer, else graphics”
+   strategy; it isn’t policy-driven nor integrated with renderer config.
+3) Buffer uploads select a steady post-copy state from usage flags, but
+   textures use minimal state handling (no per-usage steady-state selection).
+4) Staging providers rely on the caller to select the active partition per
+  frame (`RingBufferStaging::SetActivePartition`). There is no centralized
+  frame-tick integration yet.
+5) `RingBufferStaging` requires explicit alignment (no default). Callers must
+  pass a power-of-two alignment (e.g., element stride for structured buffers).
+6) Unit tests for provider behaviors and coordinator-provider integration are
+  minimal.
 
-Client -> UploadCoordinator: Submit/SubmitMany(req)
-UploadCoordinator -> UploadPlanner: Plan regions/footprints
-UploadCoordinator -> StagingAllocator: Allocate staging memory
-UploadCoordinator -> Graphics: Acquire CommandRecorder, record copy
-UploadCoordinator -> Graphics: Submit to queue, signal fence
-UploadCoordinator -> UploadTracker: Register ticket
-Client -> UploadCoordinator: Flush()
-UploadCoordinator -> Graphics: SubmitDeferredCommandLists
-Client -> UploadCoordinator: RetireCompleted()
-UploadCoordinator -> Graphics: Query completed fence
-UploadCoordinator -> UploadTracker: Mark tickets complete
-Client -> UploadCoordinator: Await/AwaitAll(ticket)
-UploadCoordinator -> UploadTracker: Await ticket completion
-@enduml
-```
+Existing constraints retained by design:
 
-### Module Components
-
-```plantuml
-@startuml
-title Upload Module Components
-package "Upload Module" {
-  class UploadCoordinator
-  class UploadPlanner
-  class StagingAllocator
-  class UploadTracker
-  class UploadPolicy
-  class UploadDiagnostics
-}
-UploadCoordinator --> UploadPlanner : uses
-UploadCoordinator --> StagingAllocator : uses
-UploadCoordinator --> UploadTracker : uses
-UploadCoordinator --> UploadPolicy : uses
-UploadCoordinator --> UploadDiagnostics : uses (optional)
-UploadCoordinator --> Graphics : interacts
-UploadPlanner --> UploadPolicy : reads
-StagingAllocator --> UploadPolicy : reads
-UploadTracker --> UploadDiagnostics : updates
-@enduml
-```
+- Submission is immediate; there’s no pending, thread-safe queue yet.
+- Cancellation is best-effort: it doesn’t prevent GPU copy if already queued.
 
 ---
 
-- **Deterministic, Renderer-Driven**: All planning, staging, and command recording are performed on the renderer thread for predictability.
-- **Batching & Coalescing**: Planner groups compatible buffer uploads, computes texture subresource regions, and minimizes allocations.
-- **Staging Memory**: Allocator provides persistently mapped upload buffers; future work will introduce arenas/ring buffers for efficiency.
-- **Ticket Lifecycle**: Each upload returns a ticket, which can be polled, awaited, or canceled (best-effort).
-- **Coroutine Integration**: Uses `co::Value<FenceValue>` for efficient, multi-waiter coroutine synchronization.
-- **Error Handling**: All results are explicit (`UploadResult`), with error codes and messages.
-- **Testability**: The module is covered by unit tests (see `Test/Upload*`), including buffer, texture, planner, and tracker tests.
+## TODOs & enhancement summary
 
----
+| Area                         | Status / Limitation                                                | Planned Action / Note                                        |
+|------------------------------|--------------------------------------------------------------------|--------------------------------------------------------------|
+| Thread-safe pending queue    | Not implemented; Submit* records immediately                       | Add MPSC queue; move plan/stage/record into `Flush()`        |
+| Batch splitting              | No splitting by thresholds or priority                             | Extend batcher for max regions/bytes; sort by priority       |
+| Staging providers            | Providers exist (SingleBufferStaging, RingBufferStaging) but API rough edges | Make alignment explicit (no default) in RingBufferStaging; add asserts and docs; expose capacity/usage stats |
+| Large batch splitting        | Not implemented (max regions/bytes/time-slice)                     | Split by `UploadPolicy::Batching` and `Timeouts`             |
+| Diagnostics                  | Minimal (counts, bytes)                                            | Add per-frame latency, arena usage, queue/fence labeling     |
+| Producer callback            | Only boolean-fill supported                                        | Add streaming/offset-based producer variant                  |
+| Test coverage                | Good, but extend as features evolve                                | Add planner/allocator/queue-strategy test cases              |
+| Queue strategy (NEW)         | Fixed heuristic; not policy/config-integrated                      | Introduce policy-driven `QueueStrategy`; device capability checks |
+| Texture steady states (NEW)  | Minimal post-copy state handling for textures                      | Add per-usage texture state transitions post-copy            |
+| Texture batching (NEW)       | `SubmitMany` coalesces buffers; textures remain per-request        | Group by dst/mip/format to record multi-region copies per CL |
 
-## Example Usage
+## Migration plan reference
 
-**Buffer Upload (synchronous):**
+For the authoritative migration plan for `TransformUploader` (resident atlas +
+upload ring + dynamic SRV, indirection table, and fence-keyed reclamation),
+see the enhanced solution document: [upload-enhanced-solution.md](./upload-enhanced-solution.md).
+That document tracks the step-by-step TODOs and acceptance criteria. This
+README keeps the high-level module overview concise and defers detailed plan
+and rationale there.
 
-```cpp
-UploadRequest req = { ... };
-auto ticket = uploadCoordinator.Submit(req);
-uploadCoordinator.Flush();
-uploadCoordinator.RetireCompleted();
-auto result = uploadCoordinator.TryGetResult(ticket);
-```
 
-**Coroutine-based Upload:**
+## Notes on correctness
 
-```cpp
-co::Co<void> MyUploadCoroutine(UploadCoordinator& upload, UploadRequest req) {
-  co_await upload.SubmitAsync(req);
-  // ...continue after upload completes
-}
-```
-
-See [`Test/UploadCoordinator_buffer_test.cpp`](../Test/UploadCoordinator_buffer_test.cpp) for more examples.
-
----
-
-## Testing
-
-- Unit tests cover all major code paths: buffer/texture uploads, batching, error handling, and ticket lifecycle.
-- Tests are located in [`Test/`](../Test/), e.g., `UploadCoordinator_buffer_test.cpp`, `UploadPlanner_basic_test.cpp`.
-
----
-
-## Rationale & Limitations
-
-- **Not an EngineModule**: Upload is an internal renderer service, not exposed as a standalone engine phase.
-- **No background threads**: All work is performed on the renderer thread for simplicity and determinism.
-- **Extensible**: The design allows for future enhancements (e.g., more advanced batching, diagnostics, and memory management) without breaking API contracts.
+- Planner uses `UploadPolicy` alignments (row/placement/buffer) and
+  `FormatInfo` to compute row/slice pitches and total staging bytes.
+- Staging buffer is created with `BufferMemory::kUpload`, mapped once, and
+  unmap is guaranteed by RAII in `Allocation`.
+  A custom provider must also return CPU-visible (upload) memory and guarantee
+  mapped lifetime for the returned span.
+- Buffer post-copy steady state is derived from `BufferUsage` flags; textures
+  are copied with minimal state handling (see TODO above).
+- Fences are registered per submission; `RetireCompleted()` advances the
+  completed fence and finalizes tickets. Cancellation marks tickets completed
+  with `kCanceled` but cannot stop in-flight GPU copies.
 
 ---
 
@@ -225,12 +148,10 @@ See [`Test/UploadCoordinator_buffer_test.cpp`](../Test/UploadCoordinator_buffer_
 
 - [UploadCoordinator.h](../Upload/UploadCoordinator.h)
 - [UploadPlanner.h](../Upload/UploadPlanner.h)
-- [StagingAllocator.h](../Upload/StagingAllocator.h)
 - [UploadTracker.h](../Upload/UploadTracker.h)
 - [UploadPolicy.h](../Upload/UploadPolicy.h)
 - [UploadDiagnostics.h](../Upload/UploadDiagnostics.h)
-- [Test/UploadCoordinator_buffer_test.cpp](../Test/UploadCoordinator_buffer_test.cpp)
+- [StagingProvider.h](../Upload/StagingProvider.h)
+- Tests: see `../Test/Upload*`
 
----
-
-For implementation details, see the respective `.cpp` files and the integration points in `Renderer.cpp`.
+For implementation details, see the corresponding `.cpp` files.

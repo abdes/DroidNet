@@ -63,9 +63,9 @@ m_gtest_program(UploadTracker SOURCES "UploadTracker_basic_test.cpp")
 
 # StagingAllocator unit tests (backend-free)
 m_gtest_program(
-  UploadStagingAllocator
+  UploadStaging
   SOURCES
-    "UploadStagingAllocator_basic_test.cpp"
+    "SingleBufferStaging_test.cpp"
 )
 
 # UploadPlanner unit tests (backend-free)
