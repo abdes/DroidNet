@@ -201,5 +201,6 @@
   "powershell.codeFormatting.preset": "OTBS",
   "chat.instructionsFilesLocations": {
     ".github": true
-  }
+  },
+  "github.copilot.chat.codesearch.enabled": true
 }
