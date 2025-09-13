@@ -75,8 +75,8 @@ private:
     -> std::uint64_t;
 
   //! Check if two matrices are approximately equal
-  static auto MatrixAlmostEqual(
-    const glm::mat4& a, const glm::mat4& b, float eps = 1e-5f) noexcept -> bool;
+  static auto MatrixAlmostEqual(const glm::mat4& a, const glm::mat4& b) noexcept
+    -> bool;
 
   // Core state
   Graphics& gfx_;
@@ -89,8 +89,16 @@ private:
   // Transform storage and deduplication
   std::vector<glm::mat4> transforms_;
   std::vector<glm::mat4> normal_matrices_;
-  std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
-    key_to_handle_;
+
+  // Structure for cached transform entries. Storing the index into
+  // transforms_ allows validating the stored matrix to avoid false
+  // positives from quantization or hash collisions.
+  struct TransformCacheEntry {
+    engine::sceneprep::TransformHandle handle;
+    std::uint32_t index;
+  };
+
+  std::unordered_map<std::uint64_t, TransformCacheEntry> key_to_handle_;
 
   // Simple dirty tracking
   std::vector<std::uint32_t> dirty_epoch_;
