@@ -15,10 +15,19 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/Upload/StagingAllocator.h>
+// Provider-aware staging
+#include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
 // Format helpers for bytes-per-block and block size
 #include <Oxygen/Core/Detail/FormatUtils.h>
+
+#include <algorithm>
+#include <functional>
+#include <span>
+#include <unordered_set>
+#include <variant>
+#include <vector>
 
 namespace {
 
@@ -76,7 +85,7 @@ auto ChooseUploadQueueKey(oxygen::Graphics& gfx) -> QueueKey
 // Minimal synchronous Submit: buffer uploads only.
 // Follows Renderer.cpp pattern and uses SingleQueueStrategy for now.
 auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
-  const UploadPolicy& policy, UploadTracker& tracker) -> UploadTicket
+  UploadTracker& tracker, StagingProvider& provider) -> UploadTicket
 {
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
   const auto size = desc.size_bytes;
@@ -84,8 +93,8 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
     return {};
   }
 
-  StagingAllocator allocator(gfx.shared_from_this());
-  auto staging = allocator.Allocate(Bytes { size }, req.debug_name);
+  // Allocate staging directly from the provider
+  auto staging = provider.Allocate(Bytes { size }, req.debug_name);
 
   // Fill staging from the provided data view or producer
   if (std::holds_alternative<UploadDataView>(req.data)) {
@@ -113,6 +122,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto key = ChooseUploadQueueKey(gfx);
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffer");
+  // Begin tracking once per recorder for this destination
   recorder->BeginTrackingResourceState(
     *desc.dst, ResourceStates::kCommon, false);
   recorder->RequireResourceState(*desc.dst, ResourceStates::kCopyDest);
@@ -137,7 +147,8 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
 }
 
 auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
-  const UploadPolicy& policy, UploadTracker& tracker) -> UploadTicket
+  const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
+  -> UploadTicket
 {
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
   if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0) {
@@ -148,8 +159,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   auto plan = UploadPlanner::PlanTexture2D(tdesc, req.subresources, policy);
   const uint64_t total_bytes = plan.total_bytes;
 
-  StagingAllocator allocator(gfx.shared_from_this());
-  auto staging = allocator.Allocate(Bytes { total_bytes }, req.debug_name);
+  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
 
   // Fill staging
   if (std::holds_alternative<UploadDataView>(req.data)) {
@@ -202,7 +212,8 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 }
 
 auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
-  const UploadPolicy& policy, UploadTracker& tracker) -> UploadTicket
+  const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
+  -> UploadTicket
 {
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
   if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0 || tdesc.depth == 0) {
@@ -211,8 +222,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   auto plan = UploadPlanner::PlanTexture3D(tdesc, req.subresources, policy);
   const uint64_t total_bytes = plan.total_bytes;
-  StagingAllocator allocator(gfx.shared_from_this());
-  auto staging = allocator.Allocate(Bytes { total_bytes }, req.debug_name);
+  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
 
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
@@ -262,7 +272,8 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 }
 
 auto SubmitTextureCube(oxygen::Graphics& gfx, const UploadRequest& req,
-  const UploadPolicy& policy, UploadTracker& tracker) -> UploadTicket
+  const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
+  -> UploadTicket
 {
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
   if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0) {
@@ -271,8 +282,7 @@ auto SubmitTextureCube(oxygen::Graphics& gfx, const UploadRequest& req,
 
   auto plan = UploadPlanner::PlanTextureCube(tdesc, req.subresources, policy);
   const uint64_t total_bytes = plan.total_bytes;
-  StagingAllocator allocator(gfx.shared_from_this());
-  auto staging = allocator.Allocate(Bytes { total_bytes }, req.debug_name);
+  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
 
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
@@ -331,23 +341,28 @@ UploadCoordinator::UploadCoordinator(Graphics& gfx, UploadPolicy policy)
 {
 }
 
-auto UploadCoordinator::Submit(const UploadRequest& req) -> UploadTicket
+auto UploadCoordinator::Submit(const UploadRequest& req,
+  std::shared_ptr<StagingProvider> provider) -> UploadTicket
 {
   switch (req.kind) {
   case UploadKind::kBuffer:
-    return SubmitBuffer(gfx_, req, policy_, tracker_);
+    TrackProvider_(provider);
+    return SubmitBuffer(gfx_, req, tracker_, *provider);
   case UploadKind::kTexture2D:
-    return SubmitTexture2D(gfx_, req, policy_, tracker_);
+    TrackProvider_(provider);
+    return SubmitTexture2D(gfx_, req, policy_, tracker_, *provider);
   case UploadKind::kTexture3D:
-    return SubmitTexture3D(gfx_, req, policy_, tracker_);
+    TrackProvider_(provider);
+    return SubmitTexture3D(gfx_, req, policy_, tracker_, *provider);
   case UploadKind::kTextureCube:
-    return SubmitTextureCube(gfx_, req, policy_, tracker_);
+    TrackProvider_(provider);
+    return SubmitTextureCube(gfx_, req, policy_, tracker_, *provider);
   }
   return {};
 }
 
-auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
-  -> std::vector<UploadTicket>
+auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
+  std::shared_ptr<StagingProvider> provider) -> std::vector<UploadTicket>
 {
   std::vector<UploadTicket> out;
   out.reserve(reqs.size());
@@ -364,7 +379,7 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
     }
     const bool have_run = (i > start);
     if (!have_run) {
-      out.emplace_back(Submit(reqs[i]));
+      out.emplace_back(Submit(reqs[i], provider));
       ++i;
       continue;
     }
@@ -375,13 +390,13 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
     if (plan.total_bytes == 0 || plan.buffer_regions.empty()) {
       // No valid buffers in the run; submit individually for error accounting.
       for (size_t j = start; j < i; ++j) {
-        out.emplace_back(Submit(reqs[j]));
+        out.emplace_back(Submit(reqs[j], provider));
       }
       continue;
     }
 
-    StagingAllocator allocator(gfx_.shared_from_this());
-    auto staging = allocator.Allocate(
+    TrackProvider_(provider);
+    auto staging = provider->Allocate(
       Bytes { plan.total_bytes }, "UploadCoordinator.BufferBatch");
 
     // Fill staging: concatenate views/producers; track failures per request.
@@ -412,21 +427,40 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
     auto recorder = gfx_.AcquireCommandRecorder(
       key, "UploadCoordinator.SubmitBuffersBatch");
 
-    // Record all copies and state transitions.
-    for (const auto& br : plan.buffer_regions) {
+    // Record all copies and state transitions, grouping by destination.
+    // PlanBuffers returns regions sorted by (dst, dst_offset).
+    std::shared_ptr<oxygen::graphics::Buffer> current_dst;
+    for (size_t idx = 0; idx < plan.buffer_regions.size(); ++idx) {
+      const auto& br = plan.buffer_regions[idx];
       if (!ok[br.request_index - start]) {
         continue; // skip failed
       }
-      recorder->BeginTrackingResourceState(
-        *br.dst, ResourceStates::kCommon, false);
-      recorder->RequireResourceState(*br.dst, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
+
+      const bool first_for_dst
+        = (!current_dst) || (current_dst.get() != br.dst.get());
+      if (first_for_dst) {
+        // Close out previous dst by restoring its steady state (done below
+        // when leaving the group). Start tracking for the new destination.
+        current_dst = br.dst;
+        recorder->BeginTrackingResourceState(
+          *current_dst, ResourceStates::kCommon, false);
+        recorder->RequireResourceState(*current_dst, ResourceStates::kCopyDest);
+        recorder->FlushBarriers();
+      }
+
       recorder->CopyBuffer(*br.dst, br.dst_offset, *staging.buffer,
         staging.offset + br.src_offset, br.size);
-      // Choose steady-state based on declared buffer usage
-      recorder->RequireResourceState(
-        *br.dst, UsageToTargetState(br.dst->GetUsage()));
-      recorder->FlushBarriers();
+
+      // If next region is a different destination (or end), transition this
+      // destination to its steady-state now.
+      const bool is_last = (idx + 1 == plan.buffer_regions.size());
+      const bool next_diff
+        = !is_last && (plan.buffer_regions[idx + 1].dst.get() != br.dst.get());
+      if (is_last || next_diff) {
+        recorder->RequireResourceState(
+          *br.dst, UsageToTargetState(br.dst->GetUsage()));
+        recorder->FlushBarriers();
+      }
     }
 
     // Defer unmap-then-release for the batched staging buffer
@@ -464,10 +498,59 @@ auto UploadCoordinator::RetireCompleted() -> void
     q->Flush();
     const auto completed = FenceValue { q->GetCompletedValue() };
     tracker_.MarkFenceCompleted(completed);
+    // Allow providers to recycle now that fence advanced
+    for (auto it = providers_.begin(); it != providers_.end();) {
+      if (auto sp = it->lock()) {
+        sp->RetireCompleted(completed);
+        ++it;
+      } else {
+        it = providers_.erase(it);
+      }
+    }
   }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto UploadCoordinator::Flush() -> void { gfx_.SubmitDeferredCommandLists(); }
+
+// Default-provider overloads for convenience/compatibility
+auto UploadCoordinator::Submit(const UploadRequest& req) -> UploadTicket
+{
+  auto provider = std::make_shared<SingleBufferStaging>(
+    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
+  return Submit(req, std::move(provider));
+}
+
+auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
+  -> std::vector<UploadTicket>
+{
+  auto provider = std::make_shared<SingleBufferStaging>(
+    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
+  return SubmitMany(reqs, std::move(provider));
+}
+
+void UploadCoordinator::TrackProvider_(
+  const std::shared_ptr<StagingProvider>& provider)
+{
+  if (provider) {
+    providers_.emplace_back(provider);
+  }
+}
+
+auto UploadCoordinator::SubmitAsync(const UploadRequest& req)
+  -> co::Co<UploadResult>
+{
+  auto provider = std::make_shared<SingleBufferStaging>(
+    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
+  co_return co_await SubmitAsync(req, std::move(provider));
+}
+
+auto UploadCoordinator::SubmitManyAsync(std::span<const UploadRequest> reqs)
+  -> co::Co<std::vector<UploadResult>>
+{
+  auto provider = std::make_shared<SingleBufferStaging>(
+    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
+  co_return co_await SubmitManyAsync(reqs, std::move(provider));
+}
 
 } // namespace oxygen::engine::upload

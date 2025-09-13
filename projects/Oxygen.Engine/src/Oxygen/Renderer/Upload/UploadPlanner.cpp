@@ -29,9 +29,12 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
 
   const uint64_t align
     = UploadPolicy::AlignmentPolicy::kBufferCopyAlignment.get();
-  plan.buffer_regions.reserve(requests.size());
-
-  uint64_t running = 0;
+  // Collect valid buffer requests first (preserving request_index), then
+  // sort/group by destination buffer and dst_offset so recording can batch
+  // state transitions per resource. Staging offsets (src_offset) are assigned
+  // according to this sorted order.
+  std::vector<UploadPlan::BufferCopyRegion> regions;
+  regions.reserve(requests.size());
   for (size_t i = 0; i < requests.size(); ++i) {
     const auto& r = requests[i];
     if (r.kind != UploadKind::kBuffer)
@@ -42,17 +45,58 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
     if (!bdesc.dst || bdesc.size_bytes == 0)
       continue;
 
-    const uint64_t offset = AlignUp(running, align);
     UploadPlan::BufferCopyRegion br;
     br.dst = bdesc.dst;
     br.dst_offset = bdesc.dst_offset;
     br.size = bdesc.size_bytes;
-    br.src_offset = offset;
+    br.src_offset = 0; // assign after sorting
     br.request_index = i;
-    plan.buffer_regions.emplace_back(br);
-    running = offset + bdesc.size_bytes;
+    regions.emplace_back(br);
   }
+
+  // Sort by destination identity then by destination offset to maximize
+  // coalescing potential and allow single transition per destination.
+  std::sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) {
+    const auto ap = a.dst.get();
+    const auto bp = b.dst.get();
+    if (ap == bp) {
+      return a.dst_offset < b.dst_offset;
+    }
+    return ap < bp;
+  });
+
+  // Assign contiguous src offsets in sorted order with required alignment.
+  uint64_t running = 0;
+  for (auto& br : regions) {
+    const uint64_t offset = AlignUp(running, align);
+    br.src_offset = offset;
+    running = offset + br.size;
+  }
+
+  // Optional optimization: merge contiguous regions targeting the same dst
+  // when both destination offsets and assigned src offsets are contiguous.
+  std::vector<UploadPlan::BufferCopyRegion> merged;
+  merged.reserve(regions.size());
+  for (size_t i = 0; i < regions.size(); ++i) {
+    auto cur = regions[i];
+    while (i + 1 < regions.size()) {
+      const auto& nxt = regions[i + 1];
+      const bool same_dst = (cur.dst.get() == nxt.dst.get());
+      const bool dst_contig = (cur.dst_offset + cur.size == nxt.dst_offset);
+      const bool src_contig = (cur.src_offset + cur.size == nxt.src_offset);
+      if (!(same_dst && dst_contig && src_contig)) {
+        break;
+      }
+      // Merge nxt into cur
+      cur.size += nxt.size;
+      // Keep cur.request_index as the representative for the merged copy.
+      ++i;
+    }
+    merged.emplace_back(cur);
+  }
+
   plan.total_bytes = running;
+  plan.buffer_regions = std::move(merged);
   // Touch policy to avoid unused warnings when compiled with empty batch.
   (void)policy;
   return plan;

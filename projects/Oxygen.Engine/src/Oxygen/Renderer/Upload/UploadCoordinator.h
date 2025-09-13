@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -22,6 +23,8 @@ class Graphics;
 } // namespace oxygen
 
 namespace oxygen::engine::upload {
+
+class StagingProvider; // fwd
 
 class UploadCoordinator {
 public:
@@ -40,6 +43,13 @@ public:
 
   ~UploadCoordinator() = default;
 
+  // Provider-aware submissions
+  OXGN_RNDR_API auto Submit(const UploadRequest& req,
+    std::shared_ptr<StagingProvider> provider) -> UploadTicket;
+  OXGN_RNDR_API auto SubmitMany(std::span<const UploadRequest> reqs,
+    std::shared_ptr<StagingProvider> provider) -> std::vector<UploadTicket>;
+
+  // Legacy convenience: uses a default internal staging strategy
   OXGN_RNDR_API auto Submit(const UploadRequest& req) -> UploadTicket;
   OXGN_RNDR_API auto SubmitMany(std::span<const UploadRequest> reqs)
     -> std::vector<UploadTicket>;
@@ -74,17 +84,19 @@ public:
   }
 
   // OxCo helpers
-  auto SubmitAsync(const UploadRequest& req) -> co::Co<UploadResult>
+  auto SubmitAsync(const UploadRequest& req,
+    std::shared_ptr<StagingProvider> provider) -> co::Co<UploadResult>
   {
-    auto t = Submit(req);
+    auto t = Submit(req, std::move(provider));
     co_await AwaitAsync(t);
     co_return *TryGetResult(t);
   }
 
-  auto SubmitManyAsync(std::span<const UploadRequest> reqs)
+  auto SubmitManyAsync(std::span<const UploadRequest> reqs,
+    std::shared_ptr<StagingProvider> provider)
     -> co::Co<std::vector<UploadResult>>
   {
-    auto tickets = SubmitMany(reqs);
+    auto tickets = SubmitMany(reqs, std::move(provider));
     co_await AwaitAllAsync(tickets);
     std::vector<UploadResult> out;
     out.reserve(tickets.size());
@@ -93,6 +105,11 @@ public:
     }
     co_return out;
   }
+
+  // Legacy async overloads (default SingleBufferStaging)
+  auto SubmitAsync(const UploadRequest& req) -> co::Co<UploadResult>;
+  auto SubmitManyAsync(std::span<const UploadRequest> reqs)
+    -> co::Co<std::vector<UploadResult>>;
 
   auto AwaitAsync(UploadTicket t) -> co::Co<void>
   {
@@ -119,6 +136,10 @@ private:
   Graphics& gfx_;
   UploadPolicy policy_;
   UploadTracker tracker_;
+  // Providers used by in-flight submissions; retired on RetireCompleted().
+  std::vector<std::weak_ptr<StagingProvider>> providers_;
+
+  void TrackProvider_(const std::shared_ptr<StagingProvider>& provider);
 };
 
 } // namespace oxygen::engine::upload

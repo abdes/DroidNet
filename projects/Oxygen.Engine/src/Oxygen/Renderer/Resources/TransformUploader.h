@@ -19,19 +19,20 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Upload/RingUploadBuffer.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::renderer::resources {
 
-//! Manages transform matrix uploads to GPU with deduplication and ring
-//! buffering
+//! Manages transform matrix uploads to GPU with per-frame deduplication.
 class TransformUploader {
 public:
-  OXGN_RNDR_API TransformUploader(
-    Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader);
+  OXGN_RNDR_API TransformUploader(Graphics& gfx,
+    observer_ptr<engine::upload::UploadCoordinator> uploader,
+    std::shared_ptr<engine::upload::StagingProvider> provider = {});
 
   OXYGEN_MAKE_NON_COPYABLE(TransformUploader)
   OXYGEN_MAKE_NON_MOVABLE(TransformUploader)
@@ -81,10 +82,15 @@ private:
   // Core state
   Graphics& gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
+  // Staging provider used for transform uploads (persistently mapped ring)
+  std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
 
-  // Ring buffers for GPU upload
-  renderer::upload::RingUploadBuffer worlds_ring_;
-  renderer::upload::RingUploadBuffer normals_ring_;
+  // Phase 1+: Future migration target – resident atlases (not yet wired)
+  std::unique_ptr<AtlasBuffer> worlds_atlas_;
+  std::unique_ptr<AtlasBuffer> normals_atlas_;
+  // Atlas element refs stored per transform when atlas path is enabled
+  std::vector<AtlasBuffer::ElementRef> world_refs_;
+  std::vector<AtlasBuffer::ElementRef> normal_refs_;
 
   // Transform storage and deduplication
   std::vector<glm::mat4> transforms_;
@@ -104,6 +110,9 @@ private:
   std::vector<std::uint32_t> dirty_epoch_;
   std::uint32_t current_epoch_ { 1U };
   bool uploaded_this_frame_ { false };
+  // Per-frame write cursor to reuse existing slots in call order and avoid
+  // unbounded growth when transforms are dynamic. Reset at OnFrameStart.
+  std::uint32_t frame_write_count_ { 0U };
 
   // Cache lifecycle tracking
   std::optional<oxygen::frame::Slot> cache_creation_slot_;
