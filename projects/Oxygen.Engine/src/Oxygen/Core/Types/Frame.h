@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 
 #include <Oxygen/Base/NamedType.h>
@@ -20,6 +21,7 @@ namespace oxygen {
 using FrameSlotNumber = NamedType<uint32_t, struct FrameSlotNumberTag,
   // clang-format off
   DefaultInitialized,
+  ImplicitlyConvertibleTo<uint32_t>::templ,
   PreIncrementable,
   PostIncrementable,
   Addable,
@@ -32,12 +34,56 @@ using FrameSlotNumber = NamedType<uint32_t, struct FrameSlotNumberTag,
 OXGN_CORE_NDAPI auto to_string(FrameSlotNumber s) -> std::string;
 
 // Strong type representing a count of frame slots (engine-level type).
-using FrameSlotCount = NamedType<uint32_t, struct FrameSlotCountTag,
-  // clang-format off
-  DefaultInitialized,
-  Comparable,
-  Printable,
-  Hashable>; // clang-format on
+/*!
+ A thin wrapper around NamedType that enforces a minimum value of 1 and
+ default-initializes to 1. This preserves the same traits used by the
+ previous typedef (Comparable, Printable, Hashable) while adding runtime
+ validation for construction and assignment.
+*/
+class FrameSlotCount
+  : public NamedType<uint32_t, struct FrameSlotCountTag,
+      // clang-format off
+      DefaultInitialized,
+      oxygen::ImplicitlyConvertibleTo<uint32_t>::templ,
+      Comparable,
+      Printable,
+      Hashable> // clang-format on
+{
+public:
+  using Base = NamedType<uint32_t, struct FrameSlotCountTag,
+    // clang-format off
+    oxygen::DefaultInitialized,
+    oxygen::ImplicitlyConvertibleTo<uint32_t>::templ,
+    oxygen::Comparable,
+    oxygen::Printable,
+    oxygen::Hashable>; // clang-format on
+
+  // Default construct to 1 (one frame slot) rather than zero.
+  constexpr FrameSlotCount() noexcept
+    : Base { 1u }
+  {
+  }
+
+  // Construct from an explicit value; enforce value >= 1.
+  explicit constexpr FrameSlotCount(uint32_t v)
+    : Base { [](uint32_t v) {
+      if (v >= 1u)
+        return v;
+      throw std::invalid_argument("FrameSlotCount must be >= 1");
+    }(v) }
+  {
+  }
+
+  // Allow implicit conversion from Base where safe via explicit factory.
+  static constexpr FrameSlotCount FromUnderlying(uint32_t v)
+  {
+    return FrameSlotCount { v };
+  }
+
+  // Keep the base's get() accessible.
+  using Base::get;
+  using Base::ref;
+};
 
 //! Convert a FrameSlotCount to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(FrameSlotCount sc) -> std::string;
