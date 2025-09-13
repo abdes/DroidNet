@@ -7,12 +7,18 @@
 #include "MainModule.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <numbers>
+#include <random>
+#include <string>
+#include <vector>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -234,6 +240,65 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
 }
 
+// ----------------- Camera spline helpers (closed Catmull-Rom)
+// -----------------
+
+// Evaluate closed Catmull-Rom spline at parameter u in [0,1). Control points
+// must have size >= 4
+static glm::vec3 EvalClosedCatmullRom(
+  const std::vector<glm::vec3>& pts, double u)
+{
+  const size_t n = pts.size();
+  if (n == 0)
+    return glm::vec3(0.0f);
+  if (n < 4)
+    return pts[0];
+  // Map u to segment index
+  const double total = u * static_cast<double>(n);
+  int i0 = static_cast<int>(std::floor(total));
+  double local_t = total - static_cast<double>(i0);
+  i0 = i0 % static_cast<int>(n);
+  if (i0 < 0)
+    i0 += static_cast<int>(n);
+
+  const int i1 = (i0 + 1) % static_cast<int>(n);
+  const int i_1 = (i0 - 1 + static_cast<int>(n)) % static_cast<int>(n);
+  const int i2 = (i0 + 2) % static_cast<int>(n);
+
+  const glm::dvec3 P0 = glm::dvec3(pts[i_1]);
+  const glm::dvec3 P1 = glm::dvec3(pts[i0]);
+  const glm::dvec3 P2 = glm::dvec3(pts[i1]);
+  const glm::dvec3 P3 = glm::dvec3(pts[i2]);
+
+  const double t = local_t;
+  const double t2 = t * t;
+  const double t3 = t2 * t;
+
+  // Catmull-Rom basis
+  const glm::dvec3 res = 0.5
+    * ((2.0 * P1) + (-P0 + P2) * t + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * t2
+      + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * t3);
+  return glm::vec3(static_cast<float>(res.x), static_cast<float>(res.y),
+    static_cast<float>(res.z));
+}
+
+// Approximate path length by sampling
+static double ApproximatePathLength(
+  const std::vector<glm::vec3>& pts, int samples = 256)
+{
+  if (pts.empty())
+    return 0.0;
+  double len = 0.0;
+  glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
+  for (int i = 1; i <= samples; ++i) {
+    double u = static_cast<double>(i) / static_cast<double>(samples);
+    glm::vec3 p = EvalClosedCatmullRom(pts, u);
+    len += glm::length(p - prev);
+    prev = p;
+  }
+  return len;
+}
+
 //! Update camera position along a smooth orbit.
 // Fixed camera: positioned on a circle at 45deg pitch looking at origin.
 auto SetupFixedCamera(oxygen::scene::SceneNode& camera_node) -> void
@@ -252,16 +317,47 @@ auto SetupFixedCamera(oxygen::scene::SceneNode& camera_node) -> void
   transform.SetLocalRotation(glm::quatLookAtRH(dir, up));
 }
 
-// Orbit sphere around origin on XZ plane.
-auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, float t) -> void
+// Convert hue [0,1] to an RGB color (simple H->RGB approx)
+static glm::vec3 ColorFromHue(double h)
 {
-  constexpr float radius = 4.0F;
-  constexpr float angular_speed = 0.6F; // radians per second
-  const float angle = angular_speed * t;
-  const glm::vec3 pos(radius * std::cos(angle), 0.0F, radius * std::sin(angle));
-  if (sphere_node.IsAlive()) {
-    sphere_node.GetTransform().SetLocalPosition(pos);
+  // h in [0,1)
+  const double hh = std::fmod(h, 1.0);
+  const double r = std::abs(hh * 6.0 - 3.0) - 1.0;
+  const double g = 2.0 - std::abs(hh * 6.0 - 2.0);
+  const double b = 2.0 - std::abs(hh * 6.0 - 4.0);
+  return glm::vec3(static_cast<float>(std::clamp(r, 0.0, 1.0)),
+    static_cast<float>(std::clamp(g, 0.0, 1.0)),
+    static_cast<float>(std::clamp(b, 0.0, 1.0)));
+}
+
+// Orbit sphere around origin on XZ plane with custom radius.
+auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
+  double radius, double inclination, double spin_angle) -> void
+{
+  // Position in XY plane first (XZ orbit, y=0)
+  const double x = radius * std::cos(angle);
+  const double z = radius * std::sin(angle);
+  // Tilt the orbital plane by applying a rotation around the X axis
+  const glm::dvec3 pos_local(x, 0.0, z);
+  const double ci = std::cos(inclination);
+  const double si = std::sin(inclination);
+  // Rotation matrix for tilt around X: [1 0 0; 0 ci -si; 0 si ci]
+  const glm::dvec3 pos_tilted(pos_local.x, pos_local.y * ci - pos_local.z * si,
+    pos_local.y * si + pos_local.z * ci);
+  const glm::vec3 pos(static_cast<float>(pos_tilted.x),
+    static_cast<float>(pos_tilted.y), static_cast<float>(pos_tilted.z));
+
+  if (!sphere_node.IsAlive()) {
+    return;
   }
+
+  // Set translation
+  sphere_node.GetTransform().SetLocalPosition(pos);
+
+  // Apply self-rotation (spin) around local Y axis
+  const glm::quat spin_quat = glm::angleAxis(
+    static_cast<float>(spin_angle), glm::vec3(0.0f, 1.0f, 0.0f));
+  sphere_node.GetTransform().SetLocalRotation(spin_quat);
 }
 
 } // namespace
@@ -344,6 +440,360 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   context.SetScene(observer_ptr { scene_.get() });
 }
 
+// Initialize a default looping flight path over the scene (few control points)
+void MainModule::InitializeDefaultFlightPath()
+{
+  if (!camera_drone_.path_points.empty())
+    return;
+
+  camera_drone_.path_points.clear();
+  camera_drone_.pois.clear();
+
+  // Larger looping trajectory that circles the scene with altitude changes
+  // and wide turns. We'll create a path that starts with a high sweep,
+  // descends for inspection passes, then climbs again to loop smoothly.
+  const float r1 = 24.0f; // outer sweep radius (expanded)
+  const float r2 = 12.0f; // mid radius
+  const float r3 = 4.5f; // inner pass
+
+  // High sweeping passes to establish a cinematic vantage
+  camera_drone_.path_points.push_back(glm::vec3(-r1, 8.0f, -r1 * 0.3f));
+  camera_drone_.path_points.push_back(glm::vec3(r1, 9.5f, -r1 * 0.5f));
+  camera_drone_.path_points.push_back(glm::vec3(r1 * 6.6f, 11.0f, r1));
+  camera_drone_.path_points.push_back(glm::vec3(-r1 * 3.4f, 10.0f, r1 * 0.9f));
+  camera_drone_.path_points.push_back(glm::vec3(-r1 * 1.4f, 10.0f, r1 * 0.9f));
+
+  // Mid-level approaches that sweep closer to the scene for context
+  camera_drone_.path_points.push_back(glm::vec3(-r2, 7.5f, 0.0f));
+  camera_drone_.path_points.push_back(glm::vec3(0.0f, 6.5f, r2));
+  camera_drone_.path_points.push_back(glm::vec3(r2, 6.8f, 0.0f));
+
+  // Inner pass/inspection points (lower altitude for surveying POIs)
+  camera_drone_.path_points.push_back(glm::vec3(r3, 4.8f, -r3 * 0.5f));
+  camera_drone_.path_points.push_back(glm::vec3(0.0f, 4.2f, -r3));
+
+  // Final smoothing point back near start (gentle climb)
+  camera_drone_.path_points.push_back(glm::vec3(-r1 * 0.6f, 9.0f, -r1));
+
+  // Populate points of interest near the origin and around the multisubmesh
+  // Raise POI heights slightly so the camera can come down and inspect them
+  camera_drone_.pois.push_back(glm::vec3(0.0f, 2.5f, 0.0f)); // center POI
+  camera_drone_.pois.push_back(glm::vec3(6.0f, 2.8f, 8.0f));
+  camera_drone_.pois.push_back(glm::vec3(-2.5f, 2.2f, 2.5f));
+
+  camera_drone_.path_length = ApproximatePathLength(camera_drone_.path_points);
+  if (camera_drone_.path_length <= 0.0)
+    camera_drone_.path_length = 1.0;
+  camera_drone_.path_u = 0.0;
+
+  // Initialize drone current pose to the farthest/high start so the very
+  // first frame reads as 'looking from far away' rather than snapping.
+  if (!camera_drone_.path_points.empty()) {
+    const glm::vec3 start
+      = EvalClosedCatmullRom(camera_drone_.path_points, camera_drone_.path_u);
+    camera_drone_.current_pos = start + glm::vec3(0.0f, 0.0f, -0.0f);
+    // orient to look at origin from the start pos
+    const glm::vec3 dir
+      = glm::normalize(glm::vec3(0.0f, 1.5f, 0.0f) - camera_drone_.current_pos);
+    camera_drone_.current_rot
+      = glm::quatLookAtRH(dir, glm::vec3(0.0f, 1.0f, 0.0f));
+    camera_drone_.initialized = true; // avoid snapping on first Update
+  }
+}
+
+auto MainModule::UpdateCameraDrone(double delta_time) -> void
+{
+  // Helper that advances and smooths the camera drone state. Uses
+  // camera_drone_ stored in the module state.
+  auto& d = camera_drone_;
+  if (!d.enabled) {
+    static bool initialized = false;
+    if (!initialized) {
+      SetupFixedCamera(main_camera_);
+      initialized = true;
+    }
+    return;
+  }
+  // update ramp (prevents initial rush)
+  if (d.ramp_elapsed < d.ramp_time) {
+    d.ramp_elapsed += delta_time;
+    if (d.ramp_elapsed > d.ramp_time)
+      d.ramp_elapsed = d.ramp_time;
+  }
+  const double ramp_t
+    = (d.ramp_time > 0.0) ? (d.ramp_elapsed / d.ramp_time) : 1.0;
+
+  // advance orbit angle, scaled by ramp factor so we don't snap to full speed
+  d.angle += d.speed * delta_time * std::min(1.0, 0.5 + 0.5 * ramp_t);
+  const double two_pi = static_cast<double>(glm::two_pi<float>());
+  if (d.angle > two_pi) {
+    d.angle = std::fmod(d.angle, two_pi);
+  }
+  // elapsed time for procedural noise/bob
+  const double elapsed = std::chrono::duration<double>(
+    std::chrono::steady_clock::now() - start_time_)
+                           .count();
+
+  glm::dvec3 cam_pos_d(0.0, 0.0, 0.0);
+  // If a flight path is configured, follow it. Otherwise fall back to orbital
+  // motion.
+  if (!d.path_points.empty()) {
+    // Modulate speed to slow down near POIs: compute a multiplier in
+    // [0.45..1.0]
+    double poi_slow = 1.0;
+    // compute current world position (rough) for distance checks
+    const glm::vec3 sample_pos = EvalClosedCatmullRom(d.path_points, d.path_u);
+    for (const auto& poi : d.pois) {
+      const double dist_to_poi = glm::distance(sample_pos, poi);
+      const double engage_radius = 5.0; // base engagement radius
+      if (dist_to_poi < engage_radius * 1.6) {
+        const double t
+          = glm::clamp(dist_to_poi / (engage_radius * 1.6), 0.0, 1.0);
+        const double m = glm::mix(0.45, 1.0, t);
+        poi_slow = std::min(poi_slow, m);
+      }
+    }
+
+    // Advance path parameter by distance = speed * dt * poi_slow, convert to u
+    // increment
+    const double dist
+      = d.path_speed * poi_slow * delta_time * (0.5 + 0.5 * ramp_t);
+    const double du = (d.path_length > 0.0) ? (dist / d.path_length) : 0.0;
+    d.path_u = std::fmod(d.path_u + du, 1.0);
+    if (d.path_u < 0.0)
+      d.path_u += 1.0;
+
+    // sample position and a forward tangent slightly ahead for orientation
+    const double eps = 1e-3;
+    const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
+    const glm::vec3 p_a
+      = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
+    const glm::vec3 tangent = glm::normalize(p_a - p);
+    cam_pos_d = glm::dvec3(p.x, p.y, p.z);
+
+    // apply a small procedural bob relative to path height
+    const double bob = (d.bob_amp * ramp_t)
+      * std::sin(
+        2.0 * static_cast<double>(glm::pi<float>()) * d.bob_freq * elapsed);
+    cam_pos_d.y += bob;
+    // lateral noise in camera-local axes (use tangent/right vector)
+    const glm::vec3 right
+      = glm::normalize(glm::cross(tangent, glm::vec3(0.0f, 1.0f, 0.0f)));
+    const double raw_noise_x
+      = (d.noise_amp * ramp_t) * std::sin(elapsed * 0.7 + 1.3);
+    const double raw_noise_z
+      = (d.noise_amp * ramp_t) * std::cos(elapsed * 0.9 + 2.1);
+    const float noise_dt = static_cast<float>(std::min(0.05, delta_time));
+    const float noise_alpha = 1.0f - std::exp(-d.noise_response * noise_dt);
+    d.noise_state.x
+      = glm::mix(d.noise_state.x, static_cast<float>(raw_noise_x), noise_alpha);
+    d.noise_state.y
+      = glm::mix(d.noise_state.y, static_cast<float>(raw_noise_z), noise_alpha);
+    const double noise_x = d.noise_state.x;
+    const double noise_z = d.noise_state.y;
+    cam_pos_d += glm::dvec3(right * static_cast<float>(noise_x));
+    cam_pos_d
+      += glm::dvec3(glm::vec3(0.0f, 0.0f, 1.0f) * static_cast<float>(noise_z));
+  } else {
+    // subtle radius breathing to make the path feel organic
+    const double radius_variation = 0.18 * std::sin(elapsed * 0.37);
+    const double effective_radius = d.radius * (1.0 + radius_variation);
+
+    // base orbital position (tilted by inclination + small time-varying noise)
+    // inclination noise scaled by ramp to introduce tilt gradually
+    const double incl_noise = (0.02 * std::sin(elapsed * 0.41 + 0.5)) * ramp_t;
+    const double incl = d.inclination + incl_noise;
+    const double ca = std::cos(d.angle);
+    const double sa = std::sin(d.angle);
+    const double x = effective_radius * ca;
+    const double z = effective_radius * sa;
+    const double ci = std::cos(incl);
+    const double si = std::sin(incl);
+    cam_pos_d = glm::dvec3(static_cast<double>(x),
+      static_cast<double>(0.0 * ci - z * si),
+      static_cast<double>(0.0 * si + z * ci));
+
+    // bob and lateral jitter
+    const double bob = (d.bob_amp * ramp_t)
+      * std::sin(
+        2.0 * static_cast<double>(glm::pi<float>()) * d.bob_freq * elapsed);
+    const double raw_noise_x
+      = (d.noise_amp * ramp_t) * std::sin(elapsed * 0.7 + 1.3);
+    const double raw_noise_z
+      = (d.noise_amp * ramp_t) * std::cos(elapsed * 0.9 + 2.1);
+    const float noise_dt = static_cast<float>(std::min(0.05, delta_time));
+    const float noise_alpha = 1.0f - std::exp(-d.noise_response * noise_dt);
+    d.noise_state.x
+      = glm::mix(d.noise_state.x, static_cast<float>(raw_noise_x), noise_alpha);
+    d.noise_state.y
+      = glm::mix(d.noise_state.y, static_cast<float>(raw_noise_z), noise_alpha);
+    const double noise_x = d.noise_state.x;
+    const double noise_z = d.noise_state.y;
+    cam_pos_d.y += bob;
+    cam_pos_d.x += noise_x;
+    cam_pos_d.z += noise_z;
+  }
+
+  const glm::vec3 cam_pos(static_cast<float>(cam_pos_d.x),
+    static_cast<float>(cam_pos_d.y), static_cast<float>(cam_pos_d.z));
+
+  // desired rotation: look forward along the flight path (tangent) rather
+  // than always looking at the scene center. Fall back to a small look-ahead
+  // sample for the orbital case. This produces a forward-facing camera that
+  // tracks the path direction while still allowing banking.
+  glm::vec3 forward_dir(0.0f, 0.0f, 1.0f);
+  // If we sampled a tangent while following a spline, prefer that one.
+  // Otherwise compute a tiny look-ahead tangent for the orbital fallback.
+  if (!d.path_points.empty()) {
+    // We computed tangent earlier in the spline branch; recompute a tiny
+    // forward sample to be robust in case of refactors
+    const double eps = 1e-3;
+    const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
+    const glm::vec3 p_a
+      = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
+    const glm::vec3 tangent = glm::normalize(p_a - p);
+    if (glm::length(tangent) > 1e-6f)
+      forward_dir = tangent;
+  } else {
+    // Orbital fallback: compute a small-angle advance to get path tangent
+    const double eps_angle = 1e-3;
+    const double angle_a = d.angle + eps_angle;
+    // recompute a small future position using the same orbital math used
+    // above so the tangent matches the orbital motion
+    const double radius_variation = 0.18 * std::sin(elapsed * 0.37);
+    const double effective_radius = d.radius * (1.0 + radius_variation);
+    const double incl_noise = (0.02 * std::sin(elapsed * 0.41 + 0.5))
+      * (d.ramp_time > 0.0 ? (d.ramp_elapsed / d.ramp_time) : 1.0);
+    const double incl = d.inclination + incl_noise;
+    const double ca = std::cos(d.angle);
+    const double sa = std::sin(d.angle);
+    const double x = effective_radius * ca;
+    const double z = effective_radius * sa;
+    const double ci = std::cos(incl);
+    const double si = std::sin(incl);
+    const glm::dvec3 p(static_cast<double>(x),
+      static_cast<double>(0.0 * ci - z * si),
+      static_cast<double>(0.0 * si + z * ci));
+
+    const double ca2 = std::cos(angle_a);
+    const double sa2 = std::sin(angle_a);
+    const double x2 = effective_radius * ca2;
+    const double z2 = effective_radius * sa2;
+    const glm::dvec3 p2(static_cast<double>(x2),
+      static_cast<double>(0.0 * ci - z2 * si),
+      static_cast<double>(0.0 * si + z2 * ci));
+    const glm::vec3 tangent = glm::normalize(glm::vec3(p2 - p));
+    if (glm::length(tangent) > 1e-6f)
+      forward_dir = tangent;
+  }
+  const glm::vec3 base_up(0.0f, 1.0f, 0.0f);
+  // Ensure forward is valid and normalized. If forward_dir is degenerate,
+  // fall back to using the previous rotation's forward or +Z.
+  glm::vec3 fwd = forward_dir;
+  const float fwd_len = glm::length(fwd);
+  if (fwd_len < 1e-6f) {
+    // derive a forward from current_rot if available
+    fwd = glm::normalize(d.current_rot * glm::vec3(0.0f, 0.0f, 1.0f));
+    if (glm::length(fwd) < 1e-6f) {
+      fwd = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+  } else {
+    fwd /= fwd_len;
+  }
+
+  // Compute a small look-at target so the camera doesn't stare too far ahead.
+  // Blend the path-forward vector with a look-at-to-focus vector. This keeps
+  // the camera forward-facing while tilting it gently toward the scene.
+  const float focus_x = static_cast<float>(d.focus_offset.x)
+    + 0.5f * static_cast<float>(std::sin(elapsed * 0.2));
+  const float focus_z = static_cast<float>(d.focus_offset.y)
+    + 0.5f * static_cast<float>(std::cos(elapsed * 0.17));
+  const glm::vec3 focus_target(focus_x, d.focus_height, focus_z);
+  glm::vec3 look_vec = focus_target - cam_pos;
+  float look_len = glm::length(look_vec);
+  if (look_len > 1e-6f) {
+    look_vec /= look_len;
+  } else {
+    look_vec = glm::vec3(0.0f, 0.0f, 1.0f);
+  }
+
+  // Distance-weighted look blend: when far away, bias strongly toward
+  // the scene center (look-from-far). As we approach, reduce the look-at
+  // bias so the camera faces more forward along its path.
+  const float dist_to_focus = glm::length(focus_target - cam_pos);
+  // map distance to a [0,1] factor where >10 units is 'far'
+  const float dist_factor
+    = glm::clamp((dist_to_focus - 2.0f) / 10.0f, 0.0f, 1.0f);
+  const float base_blend = 0.36f * static_cast<float>(ramp_t);
+  const float look_blend
+    = glm::mix(0.95f * base_blend, base_blend, dist_factor);
+  glm::vec3 final_fwd = glm::normalize(glm::mix(fwd, look_vec, look_blend));
+  if (glm::length(final_fwd) < 1e-6f) {
+    final_fwd = glm::vec3(0.0f, 0.0f, 1.0f);
+  }
+
+  glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
+
+  // estimate velocity for banking; guard against tiny delta_time
+  const glm::vec3 prev_pos = d.current_pos;
+  const float safe_dt = static_cast<float>(std::max(1e-6, delta_time));
+  // raw desired velocity towards new cam_pos
+  const glm::vec3 raw_vel
+    = (d.initialized) ? (cam_pos - prev_pos) / safe_dt : glm::vec3(0.0f);
+  // clamp instantaneous speed to avoid an initial rush
+  const float raw_speed = glm::length(raw_vel);
+  const float max_allowed = static_cast<float>(d.max_speed);
+  const glm::vec3 vel = (raw_speed > max_allowed)
+    ? (raw_vel * (max_allowed / raw_speed))
+    : raw_vel;
+  const glm::vec2 lateral_vel2(vel.x, vel.z);
+  const float lateral_speed
+    = glm::length(lateral_vel2) * static_cast<float>(ramp_t);
+  // determine sign of lateral turning: cross(forward, vel) in XZ gives sign
+  const glm::vec3 forward = final_fwd;
+  const float cross_z
+    = vel.x * forward.z - vel.z * forward.x; // 2D cross magnitude
+  const float lateral_sign = (cross_z >= 0.0f) ? 1.0f : -1.0f;
+  // bank strength scaled by ramp so initial frames don't over-roll
+  float bank = static_cast<float>(d.bank_factor * lateral_speed) * lateral_sign;
+  bank = glm::clamp(
+    bank, -static_cast<float>(d.max_bank), static_cast<float>(d.max_bank));
+  // Ensure bank axis is normalized to avoid NaN when bank is tiny
+  const glm::vec3 bank_axis = (glm::length(forward) > 1e-6f)
+    ? glm::normalize(forward)
+    : glm::vec3(0.0f, 0.0f, 1.0f);
+  const glm::quat bank_quat = glm::angleAxis(bank, bank_axis);
+  desired_rot = bank_quat * desired_rot;
+
+  // smoothing (critically damped-like feel controlled by damping)
+  const double tau = 1.0 / (d.damping + 1e-6);
+  // smoothing factor may be slightly reduced while ramping for a gentler start
+  const double ramp_smooth = 0.5 + 0.5 * ramp_t;
+  const float t
+    = static_cast<float>((1.0 - std::exp(-delta_time / tau)) * ramp_smooth);
+  if (!d.initialized) {
+    // initialize state gently: set current_pos slightly towards cam_pos instead
+    // of snapping
+    d.current_pos = glm::mix(d.current_pos, cam_pos, 0.25f);
+    d.current_rot = desired_rot;
+    d.initialized = true;
+  } else {
+    // Use velocity-assisted interpolation for position to avoid sudden jumps
+    const glm::vec3 target_pos = cam_pos;
+    // Slight lateral oscillation based on elapsed time to keep view interesting
+    const float lateral_osc
+      = d.lateral_osc_amp * static_cast<float>(std::sin(elapsed * 0.6));
+    glm::vec3 oscillation = glm::vec3(lateral_osc, 0.0f, 0.0f);
+    const glm::vec3 pos_with_osc = target_pos + oscillation;
+    d.current_pos = glm::mix(d.current_pos, pos_with_osc, t);
+    // smooth rotation
+    d.current_rot = glm::slerp(d.current_rot, desired_rot, t);
+  }
+
+  main_camera_.GetTransform().SetLocalPosition(d.current_pos);
+  main_camera_.GetTransform().SetLocalRotation(d.current_rot);
+}
+
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(2, "MainModule::OnSceneMutation");
@@ -362,9 +812,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   // Handle scene mutations (material overrides, visibility changes)
-  const auto now = std::chrono::steady_clock::now();
-  const float time_seconds = std::chrono::duration<float>(now - start_time_).count();
-  UpdateSceneMutations(time_seconds);
+  // Use the engine-provided frame start time so all modules use a
+  // consistent timestamp for this frame. This avoids micro-jitter caused
+  // by sampling the clock at slightly different moments inside the frame
+  // pipeline.
+  const auto now = context.GetFrameStartTime();
+  const float delta_time
+    = std::chrono::duration<float>(now - start_time_).count();
+  UpdateSceneMutations(delta_time);
 
   co_return;
 }
@@ -375,9 +830,31 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   LOG_SCOPE_F(2, "MainModule::OnTransformPropagation");
 
   // Update animations and transforms (no scene mutations)
-  const auto now = std::chrono::steady_clock::now();
-  const float time_seconds = std::chrono::duration<float>(now - start_time_).count();
-  UpdateAnimations(time_seconds);
+  // Compute per-frame delta from engine frame timestamp. Clamp delta to a
+  // reasonable maximum to avoid large jumps when the app was paused or a
+  // long hiccup occurred.
+  const auto now = context.GetFrameStartTime();
+  double delta_seconds = 0.0;
+  if (last_frame_time_.time_since_epoch().count() == 0) {
+    // First frame observed by module: initialize last_frame_time_
+    last_frame_time_ = now;
+    delta_seconds = 0.0;
+  } else {
+    delta_seconds
+      = std::chrono::duration<double>(now - last_frame_time_).count();
+  }
+  // Cap delta to, e.g., 50ms to avoid teleporting when resuming from pause.
+  constexpr double kMaxDelta = 0.05;
+  if (delta_seconds > kMaxDelta) {
+    delta_seconds = kMaxDelta;
+  }
+
+  // Compute per-frame delta_time and forward to UpdateAnimations (double)
+  const double delta_time = delta_seconds;
+  UpdateAnimations(delta_time);
+
+  // Store last frame timestamp for next update
+  last_frame_time_ = now;
 
   co_return;
 }
@@ -572,23 +1049,84 @@ auto MainModule::EnsureExampleScene() -> void
   auto sphere_geo = BuildSphereLodAsset();
   auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
 
-  // Sphere with distance-based LOD; initial position will be set by orbit
-  sphere_distance_ = scene_->CreateNode("SphereDistance");
-  sphere_distance_.GetRenderable().SetGeometry(sphere_geo);
+  // Create multiple spheres with distance-based LOD; initial positions will be
+  // set by orbit. Use a small number for performance while still demonstrating
+  // the behavior (tweak N as desired).
+  constexpr std::size_t kNumSpheres = 16;
+  spheres_.reserve(kNumSpheres);
+  // Seeded RNG for reproducible variation across runs
+  std::mt19937 rng(123456789);
+  std::uniform_real_distribution<double> speed_dist(0.2, 1.2);
+  std::uniform_real_distribution<double> radius_dist(2.0, 8.0);
+  std::uniform_real_distribution<double> phase_jitter(-0.25, 0.25);
+  std::uniform_real_distribution<double> hue_dist(0.0, 1.0);
+  std::uniform_real_distribution<double> incl_dist(-0.9, 0.9); // ~-51..51 deg
+  std::uniform_real_distribution<double> spin_dist(-2.0, 2.0); // rad/s
+  std::uniform_real_distribution<double> transp_dist(0.0, 1.0);
 
-  // Enlarge sphere to better showcase transparency layering against background
-  if (sphere_distance_.IsAlive()) {
-    sphere_distance_.GetTransform().SetLocalScale(glm::vec3(3.0F));
-  }
+  for (std::size_t i = 0; i < kNumSpheres; ++i) {
+    const std::string name = std::string("Sphere_") + std::to_string(i);
+    auto node = scene_->CreateNode(name.c_str());
+    node.GetRenderable().SetGeometry(sphere_geo);
 
-  // Configure LOD policy
-  if (auto obj = sphere_distance_.GetObject()) {
-    auto& r
-      = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
-    DistancePolicy pol;
-    pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
-    pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
-    r.SetLodPolicy(std::move(pol));
+    // Enlarge sphere to better showcase transparency layering against
+    // background
+    if (node.IsAlive()) {
+      node.GetTransform().SetLocalScale(glm::vec3(3.0F));
+    }
+
+    // Configure LOD policy per-sphere
+    if (auto obj = node.GetObject()) {
+      auto& r
+        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+      DistancePolicy pol;
+      pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
+      pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
+      r.SetLodPolicy(std::move(pol));
+    }
+
+    // Randomized parameters: seed ensures reproducible runs
+    const double two_pi = static_cast<double>(glm::two_pi<float>());
+    const double base_phase
+      = (two_pi * static_cast<double>(i)) / static_cast<double>(kNumSpheres);
+    const double jitter = phase_jitter(rng);
+    const double init_angle = base_phase + jitter;
+    const double speed = speed_dist(rng);
+    const double radius = radius_dist(rng);
+    const double hue = hue_dist(rng);
+
+    // Apply per-sphere material override (transparent glass-like)
+    if (auto obj = node.GetObject()) {
+      auto& r
+        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+      const std::string mat_name
+        = std::string("SphereMat_") + std::to_string(i);
+      const auto rgb = ColorFromHue(hue);
+      const bool is_transparent = (transp_dist(rng) < 0.5);
+      const float alpha = is_transparent ? 0.35f : 1.0f;
+      const auto domain = is_transparent
+        ? oxygen::data::MaterialDomain::kAlphaBlended
+        : oxygen::data::MaterialDomain::kOpaque;
+      const glm::vec4 color(static_cast<float>(rgb.x),
+        static_cast<float>(rgb.y), static_cast<float>(rgb.z), alpha);
+      const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
+      // Apply override for submesh index 0 across all LODs so switching LOD
+      // retains the material override. Use EffectiveLodCount() to iterate.
+      const auto lod_count = r.EffectiveLodCount();
+      for (std::size_t lod = 0; lod < lod_count; ++lod) {
+        r.SetMaterialOverride(lod, 0, mat);
+      }
+    }
+
+    SphereState s;
+    s.node = node;
+    s.angle = init_angle;
+    s.speed = speed;
+    s.radius = radius;
+    s.inclination = incl_dist(rng);
+    s.spin_speed = spin_dist(rng);
+    s.spin_angle = 0.0;
+    spheres_.push_back(std::move(s));
   }
 
   // Multi-submesh quad centered at origin facing +Z (already in XY plane)
@@ -596,6 +1134,8 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
+  // Set up a default flight path for the camera drone
+  InitializeDefaultFlightPath();
 
   LOG_F(
     INFO, "Scene created: SphereDistance (LOD) and MultiSubmesh (per-submesh)");
@@ -641,21 +1181,44 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
   }
 }
 
-auto MainModule::UpdateAnimations(const float time_seconds) -> void
+auto MainModule::UpdateAnimations(double delta_time) -> void
 {
-  // Sphere orbit
-  AnimateSphereOrbit(sphere_distance_, time_seconds);
-  // Fixed camera (set once when created; ensure orientation remains stable)
-  if (main_camera_.IsAlive()) {
-    static bool initialized = false;
-    if (!initialized) {
-      SetupFixedCamera(main_camera_);
-      initialized = true;
+  // delta_time is the elapsed time since last frame in seconds (double).
+  // Clamp large deltas to avoid jumps after pause/hitch (50 ms max)
+  constexpr double kMaxDelta = 0.05;
+  const double effective_dt = (delta_time > kMaxDelta) ? kMaxDelta : delta_time;
+
+  const double two_pi = static_cast<double>(glm::two_pi<float>());
+
+  // Advance each sphere's angle using its own speed and apply orbit
+  for (auto& s : spheres_) {
+    s.angle += s.speed * effective_dt;
+    if (s.angle > two_pi) {
+      s.angle = std::fmod(s.angle, two_pi);
     }
+    // Advance self-rotation (spin)
+    s.spin_angle += s.spin_speed * effective_dt;
+    if (s.spin_angle > two_pi) {
+      s.spin_angle = std::fmod(s.spin_angle, two_pi);
+    }
+    AnimateSphereOrbit(s.node, s.angle, s.radius, s.inclination, s.spin_angle);
+  }
+
+  // Periodic lightweight logging to inspect very small deltas (avoid spam)
+  static int dbg_counter = 0;
+  ++dbg_counter;
+  if ((dbg_counter % 120) == 0) {
+    LOG_F(INFO, "[Anim] delta_time={}ms spheres={}", delta_time * 1000.0,
+      static_cast<int>(spheres_.size()));
+  }
+
+  // Camera update (drone) - encapsulated in helper
+  if (main_camera_.IsAlive()) {
+    UpdateCameraDrone(effective_dt);
   }
 }
 
-auto MainModule::UpdateSceneMutations(const float time_seconds) -> void
+auto MainModule::UpdateSceneMutations(const float delta_time) -> void
 {
   // Toggle per-submesh visibility and material override over time
   if (multisubmesh_.IsAlive()) {
@@ -664,7 +1227,7 @@ auto MainModule::UpdateSceneMutations(const float time_seconds) -> void
       constexpr std::size_t lod = 0;
 
       // Every 2 seconds, toggle submesh 0 visibility
-      int vis_phase = static_cast<int>(time_seconds) / 2;
+      int vis_phase = static_cast<int>(delta_time) / 2;
       if (vis_phase != last_vis_toggle_) {
         last_vis_toggle_ = vis_phase;
         const bool visible = (vis_phase % 2) == 0;
@@ -674,7 +1237,7 @@ auto MainModule::UpdateSceneMutations(const float time_seconds) -> void
 
       // Every second, toggle an override on submesh 1 (use blue instead of
       // green)
-      int ovr_phase = static_cast<int>(time_seconds);
+      int ovr_phase = static_cast<int>(delta_time);
       if (ovr_phase != last_ovr_toggle_) {
         last_ovr_toggle_ = ovr_phase;
         const bool apply_override = (ovr_phase % 2) == 1;
@@ -814,7 +1377,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
     },
     render_context, context);
 
-  LOG_F(INFO, "Command recording completed for frame {}", current_frame);
+  LOG_F(2, "Command recording completed for frame {}", current_frame);
 
   co_return;
 }

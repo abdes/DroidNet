@@ -19,6 +19,8 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Scene/Scene.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace oxygen {
 
@@ -133,8 +135,11 @@ namespace examples::async {
     //! Scene and rendering functions.
     auto EnsureExampleScene() -> void;
     auto EnsureMainCamera(int width, int height) -> void;
-    auto UpdateAnimations(float time_seconds) -> void;
-    auto UpdateSceneMutations(float time_seconds) -> void;
+    // delta_time used to be absolute time; module now expects a per-frame
+    // delta (seconds) for update integration. Use double precision here to
+    // preserve granularity at high FPS.
+    auto UpdateAnimations(double delta_time) -> void;
+    auto UpdateSceneMutations(float delta_time) -> void;
 
     //! Frame graph setup (configure render passes).
     auto SetupRenderPasses() -> void;
@@ -170,15 +175,79 @@ namespace examples::async {
     //! State tracking.
     bool initialized_ { false };
     std::chrono::steady_clock::time_point start_time_;
+    // Last engine frame timestamp observed by this module. Used to compute
+    // per-frame delta time for smooth integration of animations.
+    std::chrono::steady_clock::time_point last_frame_time_ {};
+    // Per-sphere animation state (multiple spheres with different speeds)
+    struct SphereState {
+      scene::SceneNode node;
+      double angle { 0.0 };
+      double speed { 0.6 }; // radians/sec
+      double radius { 4.0 }; // orbit radius in world units
+      double inclination { 0.5 }; // tilt of orbital plane (radians)
+      double spin_speed { 0.0 }; // self-rotation speed (radians/sec)
+      double spin_angle { 0.0 }; // self-rotation accumulator
+    };
+
+    std::vector<SphereState> spheres_;
 
     //! Scene nodes for the example.
-    scene::SceneNode sphere_distance_; // LOD policy: Distance
     scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
     scene::SceneNode main_camera_; // "MainCamera"
 
     //! Animation state (quad rotation removed; sphere orbits, camera fixed).
     int last_vis_toggle_ { -1 };
     int last_ovr_toggle_ { -1 };
+    // Encapsulated camera drone state and behavior
+    struct CameraDrone {
+      bool enabled { true };
+      double angle { 0.0 };
+      double radius { 15.0 };
+      double speed { 0.2 }; // radians/sec
+      double inclination { 0.15 }; // tilt in radians
+
+      // Drone-style dynamics
+      glm::vec3 current_pos { 0.0f, 0.0f, 0.0f };
+      glm::quat current_rot { 1.0f, 0.0f, 0.0f, 0.0f };
+      bool initialized { false };
+      // Maximum allowed linear speed (world units per second) to cap sudden
+      // motion
+      double max_speed { 7.0 };
+      // Ramp parameters to smoothly introduce drone motion
+      double ramp_time { 2.0 }; // seconds during which motion ramps up
+      double ramp_elapsed { 0.0 }; // internal accumulator
+      // Focus point offsets: camera will look at (focus_offset.x, focus_height,
+      // focus_offset.y)
+      glm::vec2 focus_offset { 0.0f, 0.0f };
+      float focus_height { 0.8f }; // target height to look at (world units)
+      // Flight path spline (closed Catmull-Rom control points in world space)
+      std::vector<glm::vec3> path_points;
+      double path_length { 0.0 }; // cached approximate length
+      double path_speed {
+        3.0
+      }; // world units per second along path (slower nominal)
+      double path_u { 0.0 }; // current parameter along path [0,1)
+      // (streamlined) gimbal dynamics were removed to keep the demo focused
+      // on a single body-controlled camera with gentle smoothing and banking.
+      // Points of interest the camera may slow near for inspection
+      std::vector<glm::vec3> pois;
+      double damping { 8.0 }; // higher = stiffer follow
+      double bob_amp {
+        0.06
+      }; // vertical bob amplitude (reduced to avoid vibration)
+      double bob_freq { 1.6 }; // bob frequency (Hz)
+      double noise_amp { 0.03 }; // lateral jitter amplitude (reduced)
+      double bank_factor { 0.045 }; // how much bank per linear speed
+      double max_bank { 0.45 }; // max roll in radians
+      // Procedural noise smoothing state to reduce high-frequency vibration
+      glm::vec2 noise_state { 0.0f, 0.0f };
+      float noise_response { 8.0f }; // responsiveness for noise smoothing (Hz)
+      float lateral_osc_amp { 0.03f }; // lateral oscillation magnitude
+    } camera_drone_;
+
+    // Camera update helper
+    void InitializeDefaultFlightPath();
+    auto UpdateCameraDrone(double delta_time) -> void;
   };
 
 } // namespace examples::async
