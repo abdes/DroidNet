@@ -13,6 +13,8 @@
 
 #include <glm/mat4x4.hpp>
 
+#include <limits>
+
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -110,11 +112,23 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
 {
   DCHECK_F(IsFinite(transform), "GetOrAllocate received non-finite matrix");
 
-  // Check for existing transform using hash-based deduplication
+  // Check for existing transform using hash-based deduplication. We first
+  // compute a quantized key. If the key exists we verify that the actual
+  // stored matrix is nearly equal to avoid false positives from quantization
+  // or hash collisions.
   const auto key = MakeTransformKey(transform);
   if (const auto it = key_to_handle_.find(key); it != key_to_handle_.end()) {
-    ++cache_hits_;
-    return it->second;
+    const auto& entry = it->second;
+    const auto cached_handle = entry.handle;
+    const auto index = entry.index;
+    if (index < transforms_.size()) {
+      const auto& stored = transforms_[index];
+      if (MatrixAlmostEqual(stored, transform)) {
+        ++cache_hits_;
+        return cached_handle;
+      }
+      // Fall through if not nearly-equal: collision or quantization mismatch
+    }
   }
 
   // Store transform locally
@@ -137,8 +151,11 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
     static_cast<std::uint32_t>(world_alloc->first_index)
   };
 
-  // Cache for deduplication
-  key_to_handle_[key] = handle;
+  // Cache for deduplication: store handle and the index into transforms_
+  // so we can verify exact matrix matches later.
+  const std::uint32_t stored_index
+    = static_cast<std::uint32_t>(transforms_.size() - 1);
+  key_to_handle_[key] = TransformCacheEntry { handle, stored_index };
   ++total_allocations_;
   return handle;
 }
@@ -148,8 +165,8 @@ auto TransformUploader::IsValidHandle(
 {
   // Check if the handle corresponds to an allocated transform
   // Since we clear state each frame, check if handle matches any cached handle
-  for (const auto& [key, cached_handle] : key_to_handle_) {
-    if (cached_handle.get() == handle.get()) {
+  for (const auto& [key, cached_entry] : key_to_handle_) {
+    if (cached_entry.handle == handle) {
       return true;
     }
   }
@@ -256,6 +273,8 @@ auto TransformUploader::MakeTransformKey(const glm::mat4& m) noexcept
   -> std::uint64_t
 {
   // Quantize the first 3 rows of each column (12 floats total)
+  // Increase scale to reduce accidental collisions for similar-but-different
+  // matrices. Balance between memory and sensitivity.
   constexpr float scale = 1024.0f;
   std::array<std::int32_t, 12> quantized;
 
@@ -272,18 +291,24 @@ auto TransformUploader::MakeTransformKey(const glm::mat4& m) noexcept
 }
 
 auto TransformUploader::MatrixAlmostEqual(
-  const glm::mat4& a, const glm::mat4& b, const float eps) noexcept -> bool
+  const glm::mat4& a, const glm::mat4& b) noexcept -> bool
 {
+  // Use standard float epsilon as the base.
+  // std::numeric_limits<float>::epsilon() is ~1.19e-7; scale it up to be
+  // comparable to the previous default of 1e-5.
+  constexpr float kEps
+    = std::numeric_limits<float>::epsilon() * 100.0f; // ~1.19e-5
+
   for (int c = 0; c < 4; ++c) {
     for (int r = 0; r < 4; ++r) {
       const float av = a[c][r];
       const float bv = b[c][r];
       const float diff = std::fabs(av - bv);
-      if (diff <= eps) {
+      if (diff <= kEps) {
         continue;
       }
       const float max_abs = std::max(std::fabs(av), std::fabs(bv));
-      if (diff <= eps * std::max(1.0f, max_abs)) {
+      if (diff <= kEps * std::max(1.0f, max_abs)) {
         continue;
       }
       return false;
