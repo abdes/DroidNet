@@ -28,7 +28,7 @@
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
-#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 using oxygen::View;
@@ -71,8 +71,7 @@ protected:
 
     ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
     // Initialize fake graphics and upload coordinator for resource managers
-    gfx_
-      = std::make_shared<oxygen::tests::uploadhelpers::FakeGraphics_Buffer>();
+    gfx_ = std::make_shared<oxygen::renderer::testing::FakeGraphics>();
     gfx_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
     upload_coord_
       = std::make_unique<oxygen::engine::upload::UploadCoordinator>(*gfx_);
@@ -211,7 +210,7 @@ private:
   View view_ { View::Params {} };
   std::optional<ScenePrepContext> ctx_;
   std::unique_ptr<ScenePrepState> state_;
-  std::shared_ptr<oxygen::tests::uploadhelpers::FakeGraphics_Buffer> gfx_;
+  std::shared_ptr<oxygen::renderer::testing::FakeGraphics> gfx_;
   std::unique_ptr<oxygen::engine::upload::UploadCoordinator> upload_coord_;
   std::optional<RenderItemProto> proto_;
 };

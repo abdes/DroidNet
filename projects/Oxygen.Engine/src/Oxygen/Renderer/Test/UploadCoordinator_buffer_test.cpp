@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -14,17 +19,12 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
-#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <vector>
-
 namespace {
+
 using oxygen::engine::upload::Bytes;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadCoordinator;
@@ -41,7 +41,8 @@ using oxygen::graphics::CommandQueue;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::QueueKey;
 using oxygen::graphics::QueueRole;
-using oxygen::tests::uploadhelpers::FakeGraphics_Buffer;
+using oxygen::renderer::testing::BufferCommandLog;
+using oxygen::renderer::testing::FakeGraphics;
 
 // --- Minimal test fakes --------------------------------------------------//
 
@@ -121,7 +122,7 @@ private:
 NOLINT_TEST(UploadCoordinator, BufferUpload_MockedPath_Completes)
 {
   // Arrange
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   // Destination buffer (vertex usage to trigger VB state transition branch)
@@ -175,7 +176,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_MockedPath_Completes)
 NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Completes)
 {
   // Arrange
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto dst
@@ -232,7 +233,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Completes)
 NOLINT_TEST(UploadCoordinator, BufferSubmitMany_CoalescesAndCompletes)
 {
   // Arrange
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto dst_a = std::make_shared<FakeBuffer>("DstA", 2048, BufferUsage::kVertex);
@@ -315,7 +316,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_CoalescesAndCompletes)
 NOLINT_TEST(UploadCoordinator, BufferSubmitMany_Producers_CoalescesAndCompletes)
 {
   // Arrange
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto dst_a = std::make_shared<FakeBuffer>("DstA", 2048, BufferUsage::kVertex);
@@ -402,7 +403,7 @@ NOLINT_TEST(UploadCoordinator, BufferSubmitMany_Producers_CoalescesAndCompletes)
 //! Producer returns false: coordinator reports failure and records no copy.
 NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Fails_NoCopy)
 {
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto dst = std::make_shared<FakeBuffer>("Dst", 1024, BufferUsage::kVertex);
@@ -446,7 +447,7 @@ NOLINT_TEST(UploadCoordinator, BufferUpload_WithProducer_Fails_NoCopy)
 NOLINT_TEST(
   UploadCoordinator, BufferSubmitMany_ProducerSecondFails_PartialSubmit)
 {
-  auto gfx = std::make_shared<FakeGraphics_Buffer>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto dst_a = std::make_shared<FakeBuffer>("DstA", 2048, BufferUsage::kVertex);

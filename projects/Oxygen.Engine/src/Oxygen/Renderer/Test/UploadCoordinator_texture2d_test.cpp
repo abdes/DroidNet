@@ -3,6 +3,11 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+#include <algorithm>
+#include <cstring>
+#include <map>
+#include <memory>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -16,18 +21,12 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
-#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
-#include <algorithm>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <vector>
-
 namespace {
+
 using oxygen::engine::upload::Bytes;
 using oxygen::engine::upload::UploadCoordinator;
 using oxygen::engine::upload::UploadDataView;
@@ -46,7 +45,8 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::Texture;
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::TextureUploadRegion;
-using oxygen::tests::uploadhelpers::FakeGraphics_Texture;
+using oxygen::renderer::testing::FakeGraphics;
+using oxygen::renderer::testing::TextureCommandLog;
 
 // --- Minimal test fakes --------------------------------------------------//
 
@@ -113,7 +113,7 @@ private:
 //! pitches.
 NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_RecordsRegionAndCompletes)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTexture>(
@@ -173,7 +173,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_RecordsRegionAndCompletes)
 //! placement alignment.
 NOLINT_TEST(UploadCoordinator, Texture2D_MipChainTwoRegions_AlignedOffsets)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTexture>(
@@ -232,7 +232,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_MipChainTwoRegions_AlignedOffsets)
 //! completion.
 NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_WithProducer_Completes)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTexture>(
@@ -290,7 +290,7 @@ NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_WithProducer_Completes)
 //! Producer returns false: no CopyBufferToTexture and failed result.
 NOLINT_TEST(UploadCoordinator, Texture2D_FullUpload_ProducerFails_NoCopy)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTexture>(

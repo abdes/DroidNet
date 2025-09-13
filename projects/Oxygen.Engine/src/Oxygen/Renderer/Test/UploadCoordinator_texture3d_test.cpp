@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -16,17 +21,12 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
-#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <vector>
-
 namespace {
+
 using oxygen::engine::upload::UploadCoordinator;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadKind;
@@ -44,7 +44,8 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::Texture;
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::TextureUploadRegion;
-using oxygen::tests::uploadhelpers::FakeGraphics_Texture;
+using oxygen::renderer::testing::FakeGraphics;
+using oxygen::renderer::testing::TextureCommandLog;
 
 class FakeTexture3D final : public Texture {
   OXYGEN_TYPED(FakeTexture3D)
@@ -111,7 +112,7 @@ private:
 //! and that the ticket completes with total bytes = slice_pitch * depth.
 NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_RecordsRegionAndCompletes)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   // 32x16x8 RGBA8: row = 32*4=128 -> aligned to 256; slice = 256*16=4096;
@@ -172,7 +173,7 @@ NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_RecordsRegionAndCompletes)
 //! an immediate failed ticket with UploadError::kProducerFailed.
 NOLINT_TEST(UploadCoordinator, Texture3D_FullUpload_ProducerFails_NoCopy)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTexture3D>(

@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -16,17 +21,12 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
-#include <Oxygen/Renderer/Test/Helpers/UploadTestFakes.h>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <vector>
-
 namespace {
+
 using oxygen::engine::upload::UploadCoordinator;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadKind;
@@ -44,7 +44,8 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::Texture;
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::TextureUploadRegion;
-using oxygen::tests::uploadhelpers::FakeGraphics_Texture;
+using oxygen::renderer::testing::FakeGraphics;
+using oxygen::renderer::testing::TextureCommandLog;
 
 class FakeTextureCube final : public Texture {
   OXYGEN_TYPED(FakeTextureCube)
@@ -111,7 +112,7 @@ private:
 //! region and correct row/slice pitches and ticket completion.
 NOLINT_TEST(UploadCoordinator, TextureCube_FullUpload_RecordsRegionAndCompletes)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   // 64x64 RGBA8: row = 64*4 = 256 (aligned); slice = 256*64 = 16384
@@ -181,7 +182,7 @@ NOLINT_TEST(UploadCoordinator, TextureCube_FullUpload_RecordsRegionAndCompletes)
 //! immediate failed ticket with UploadError::kProducerFailed.
 NOLINT_TEST(UploadCoordinator, TextureCube_FullUpload_ProducerFails_NoCopy)
 {
-  auto gfx = std::make_shared<FakeGraphics_Texture>();
+  auto gfx = std::make_shared<FakeGraphics>();
   gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
   auto tex = std::make_shared<FakeTextureCube>(

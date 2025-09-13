@@ -47,13 +47,11 @@ m_gtest_program(
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
 )
 
-set(upload_helpers_sources "Helpers/UploadTestFakes.h")
-
-# UploadCoordinator (buffer path) mocked tests
+  # UploadCoordinator (buffer path) mocked tests
 m_gtest_program(
   UploadCoordinator
   SOURCES
-    ${upload_helpers_sources}
+    "Fakes/Graphics.h"
     "UploadCoordinator_buffer_test.cpp"
     "UploadCoordinator_texture2d_test.cpp"
     "UploadCoordinator_texture3d_test.cpp"
