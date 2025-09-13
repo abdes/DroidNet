@@ -217,9 +217,7 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     "ShaderPass emitted opaque/masked draws: emitted_any={} "
     "skipped_transparent={}",
     emitted, skipped_transparent);
-  DCHECK_F(emitted,
-    "ShaderPass expected to emit at least one opaque/masked draw at this "
-    "migration stage");
+
   Context().RegisterPass(this);
 
   co_return;

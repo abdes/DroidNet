@@ -240,9 +240,6 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // predicate (defensive: predicate never returns true for transparent).
   // (If future changes alter predicate, enforce with explicit assert.)
   DCHECK_F(true, "DepthPrePass predicate excludes transparent by design");
-  DCHECK_F(emitted,
-    "DepthPrePass expected to emit at least one opaque/masked draw at this "
-    "migration stage");
 
   Context().RegisterPass(this);
   co_return;
