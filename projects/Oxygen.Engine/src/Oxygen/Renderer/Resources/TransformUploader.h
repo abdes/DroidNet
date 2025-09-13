@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <deque>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Upload/RingUploadBuffer.h>
@@ -25,15 +26,10 @@
 
 namespace oxygen::renderer::resources {
 
+//! Manages transform matrix uploads to GPU with deduplication and ring
+//! buffering
 class TransformUploader {
 public:
-  /*!
-   @note TransformUploader lifetime is entirely linked to the Renderer. We
-         completely rely on the Renderer to handle the lifetime of the Graphics
-         backend, and we assume that for as long as we are alive, the Graphics
-         backend is stable. When it is no longer stable, the Renderer is
-         responsible for destroying and re-creating the TransformUploader.
-  */
   OXGN_RNDR_API TransformUploader(
     Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader);
 
@@ -42,99 +38,71 @@ public:
 
   OXGN_RNDR_API ~TransformUploader();
 
-  //! Release a previously allocated transform handle. After release the
-  //! handle may be reused by future allocations.
-  auto Release(engine::sceneprep::TransformHandle handle) -> void;
+  //! Start a new frame - must be called once per frame before any operations
+  OXGN_RNDR_API auto OnFrameStart(oxygen::frame::Slot slot) -> void;
 
-  auto OnFrameStart() -> void;
-
-  // Deduplication and handle management
-  OXGN_RNDR_NDAPI auto GetOrAllocate(const glm::mat4& transform)
+  //! Get or allocate a handle for the given transform matrix
+  OXGN_RNDR_API auto GetOrAllocate(const glm::mat4& transform)
     -> engine::sceneprep::TransformHandle;
 
-  auto Update(engine::sceneprep::TransformHandle handle,
-    const glm::mat4& transform) -> void;
-
-  [[nodiscard]] auto IsValidHandle(
+  //! Check if a handle is valid
+  OXGN_RNDR_NDAPI auto IsValidHandle(
     engine::sceneprep::TransformHandle handle) const -> bool;
 
-  [[nodiscard]] auto GetWorldMatrices() const noexcept
-    -> std::span<const glm::mat4>;
-  [[nodiscard]] auto GetNormalMatrices() const noexcept
-    -> std::span<const glm::mat4>;
-  [[nodiscard]] auto GetDirtyIndices() const noexcept
-    -> std::span<const std::uint32_t>;
-
-  //! Ensures all transform GPU resources are prepared for the current frame.
-  //! MUST be called after BeginFrame() and before any Get*SrvIndex() calls.
-  //! Safe to call multiple times per frame - internally optimized.
+  //! Upload transforms to GPU - must be called after OnFrameStart()
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
 
-  //! Returns the bindless descriptor heap index for the world transforms SRV.
-  //! REQUIRES: EnsureFrameResources() must have been called this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetWorldsSrvIndex() const
-    -> ShaderVisibleIndex;
+  //! Get the shader-visible index for world transforms buffer
+  OXGN_RNDR_NDAPI auto GetWorldsSrvIndex() const -> ShaderVisibleIndex;
 
-  //! Returns the bindless descriptor index for the normal matrices SRV.
-  //! REQUIRES: EnsureFrameResources() must have been called this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetNormalsSrvIndex() const
-    -> ShaderVisibleIndex;
+  //! Get the shader-visible index for normal matrices buffer
+  OXGN_RNDR_NDAPI auto GetNormalsSrvIndex() const -> ShaderVisibleIndex;
+
+  //! Get read-only access to world matrices for debugging
+  OXGN_RNDR_NDAPI auto GetWorldMatrices() const noexcept
+    -> std::span<const glm::mat4>;
+
+  //! Get read-only access to normal matrices for debugging
+  OXGN_RNDR_NDAPI auto GetNormalMatrices() const noexcept
+    -> std::span<const glm::mat4>;
 
 private:
+  //! Compute normal matrix (inverse transpose of upper 3x3)
   static auto ComputeNormalMatrix(const glm::mat4& world) noexcept -> glm::mat4;
 
-  auto BuildSparseUploadRequests(const std::vector<std::uint32_t>& indices,
-    std::span<const glm::mat4> src, renderer::upload::RingUploadBuffer& ring,
-    const char* debug_name) const -> std::vector<engine::upload::UploadRequest>;
+  //! Generate hash key for transform deduplication
+  static auto MakeTransformKey(const glm::mat4& transform) noexcept
+    -> std::uint64_t;
 
-  //! Internal methods for resource preparation
-  auto UploadWorldMatrices() -> void;
-  auto UploadNormalMatrices() -> void;
-  //! Retire any completed upload chunks (FIFO) via UploadCoordinator tickets.
-  auto ReclaimCompletedChunks() -> void;
+  //! Check if two matrices are approximately equal
+  static auto MatrixAlmostEqual(
+    const glm::mat4& a, const glm::mat4& b, float eps = 1e-5f) noexcept -> bool;
 
-  struct ChunkRecord {
-    renderer::upload::RingUploadBuffer::ChunkId id { 0 };
-    std::vector<engine::upload::UploadTicket> tickets;
-  };
-
-  // Deduplication and state
-  std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
-    transform_key_to_handle_;
-  // Free-list of released handle indices for reuse.
-  std::vector<std::uint32_t> free_handles_;
-  // Reverse mapping from index -> key to allow O(1) removal during Release().
-  // Uses std::numeric_limits<uint64_t>::max() as sentinel for 'no key'.
-  std::vector<std::uint64_t> index_to_key_;
-  std::vector<glm::mat4> transforms_;
-  std::vector<glm::mat4> normal_matrices_;
-  std::vector<std::uint32_t> world_versions_;
-  std::vector<std::uint32_t> normal_versions_;
-  std::uint32_t global_version_ { 0U };
-  std::vector<std::uint32_t> dirty_epoch_;
-  std::vector<std::uint32_t> dirty_indices_;
-  std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
-  engine::sceneprep::TransformHandle next_handle_ { 0U };
-  bool uploaded_ { false };
-
-  // GPU upload dependencies
+  // Core state
   Graphics& gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
 
-  // GPU resources (incremental)
+  // Ring buffers for GPU upload
   renderer::upload::RingUploadBuffer worlds_ring_;
   renderer::upload::RingUploadBuffer normals_ring_;
-  std::deque<ChunkRecord> world_chunks_;
-  std::deque<ChunkRecord> normal_chunks_;
+
+  // Transform storage and deduplication
+  std::vector<glm::mat4> transforms_;
+  std::vector<glm::mat4> normal_matrices_;
+  std::unordered_map<std::uint64_t, engine::sceneprep::TransformHandle>
+    key_to_handle_;
+
+  // Simple dirty tracking
+  std::vector<std::uint32_t> dirty_epoch_;
+  std::uint32_t current_epoch_ { 1U };
+  bool uploaded_this_frame_ { false };
+
+  // Cache lifecycle tracking
+  std::optional<oxygen::frame::Slot> cache_creation_slot_;
+
   // Statistics
-  // Number of times a transform lookup returned an existing handle (cache hit)
-  std::uint64_t transform_reuse_count_ { 0U };
-  // Number of times the transforms (world) GPU buffer was recreated/resized
-  std::uint64_t worlds_grow_count_ { 0U };
-  // Total number of GetOrAllocate calls
-  std::uint64_t total_get_calls_ { 0U };
-  // Total number of allocations (new handles created)
   std::uint64_t total_allocations_ { 0U };
+  std::uint64_t cache_hits_ { 0U };
 };
 
 } // namespace oxygen::renderer::resources
