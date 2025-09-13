@@ -7,14 +7,15 @@
 #pragma once
 
 #include <cstdint>
-#include <deque>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -32,55 +33,42 @@ class UploadCoordinator;
 
 namespace oxygen::renderer::upload {
 
-//! Device-local structured buffer supporting ring-style allocations.
+//! Device-local structured buffer with N-partition ring allocator for frames in
+//! flight.
 /*!
- This class manages a single GPU buffer and a shader-visible SRV range.
- It implements a ring allocator (head/tail) in bytes while presenting an
- element-oriented API to callers. The buffer can grow; the shader-visible
- index used for the SRV is preserved across resizes.
+ This class manages a single GPU buffer with N partitions (one per frame in
+ flight) and a single shader-visible SRV that exposes the entire buffer. It
+ implements a ring allocator (head/tail) per partition while presenting an
+ element-oriented API to callers. The buffer can grow; the shader-visible index
+ is preserved across resizes.
 
- Key behaviors:
- - Allocate() and the SRV-related methods operate in element units.
+ N-Partition contract:
  - ReserveElements() grows the underlying buffer when needed.
- - Clients build upload requests with MakeCopyFor/MakeCopyRange/MakeCopyAll
-   and submit them via their upload subsystem.
- - FinalizeChunk() records allocations made since the last finalize and
-   returns a chunk id. TryReclaim(id) reclaims the front chunk when the
-   caller confirms GPU work referencing that chunk has completed. Reclamation
-   is client-driven and strictly FIFO.
+ - SetActivePartition(slot) switches to the partition for the given frame slot,
+   automatically resetting it if safe (frame cycling ensures old partitions are
+ unused).
+ - Allocate(elements) returns a contiguous region with absolute indices in the
+ buffer.
+ - Build upload requests using MakeCopyFor (full allocation) or MakeCopyAt
+   (subrange within the returned Allocation) and submit via your upload
+ subsystem.
 
- Example usage:
-
- ```cpp
- ring.ReserveElements(N);
- ring.SetActiveElements(N);
-
- if (auto alloc = ring.Allocate(elem_count)) {
-   auto req = ring.MakeCopyFor(*alloc, bytes, "MyStreamCopy");
-   // Submit req via your upload coordinator
-
-   if (auto id = ring.FinalizeChunk()) {
-     // Save id and, once uploads complete, call:
-     ring.TryReclaim(*id);
-   }
- }
- ```
-
- @warning Reclamation is strictly client-driven and FIFO. Call FinalizeChunk()
- after enqueuing all copies for the current chunk, and call TryReclaim(id)
- only when you have externally verified completion for that chunk's uploads.
+ @warning Allocation indices are absolute to the entire buffer and remain stable
+ within the full cycle of frames in flight. Frame N+1 will not overwrite data
+ from frame N until the GPU has finished with frame N.
 */
 class RingUploadBuffer {
 public:
-  using ChunkId = std::uint64_t;
-
   struct Allocation {
-    std::uint64_t element_offset { 0 };
-    std::uint64_t elements { 0 };
+    // Absolute first index in the structured buffer (from start of buffer)
+    std::uint64_t first_index { 0 };
+    // Number of elements in the allocation
+    std::uint64_t count { 0 };
   };
 
   OXGN_RNDR_API RingUploadBuffer(oxygen::Graphics& gfx,
-    std::uint32_t element_stride, std::string debug_label);
+    frame::SlotCount partitions, std::uint32_t element_stride,
+    std::string debug_label);
 
   OXYGEN_MAKE_NON_COPYABLE(RingUploadBuffer)
   OXYGEN_DEFAULT_MOVABLE(RingUploadBuffer)
@@ -103,84 +91,36 @@ public:
   OXGN_RNDR_NDAPI auto ReserveElements(
     std::uint64_t desired_elements, float slack = 0.5f) -> bool;
 
-  //! Allocate a contiguous range in elements from the ring.
-  //! Returns element offset and count on success.
+  //! Allocate a contiguous range in elements from the active partition.
   /*!
-   Allocates a contiguous region using ring head/tail. Placement tries the
-   [tail..end) space first, then wraps to [0..head). Allocations are aligned
-   to the element stride (Stride()). Callers provide sizes in element units;
-   the allocator converts to bytes using the stride and aligns allocations to
-   the stride boundary.
+   Allocates a contiguous region using ring head/tail within the active
+   partition. Placement tries the [tail..end) space first, then wraps to
+   [0..head). Allocations are aligned to the element stride (Stride()). Callers
+   provide sizes in element units; the allocator converts to bytes using the
+   stride.
 
    @param elements Number of elements to allocate.
-   @return Allocation with element offset and size, or std::nullopt on failure.
+   @return Allocation with absolute element index and count, or std::nullopt on
+   failure.
 
-  @warning Allocation fails if the ring is full or contiguous space is
-           insufficient even if total free space exists (no defragmentation).
+   @warning Allocation fails if the active partition's ring is full or
+   contiguous space is insufficient even if total free space exists (no
+   defragmentation). Returns absolute indices that remain stable within the
+   frame cycling period.
   */
   OXGN_RNDR_NDAPI auto Allocate(std::uint64_t elements)
     -> std::optional<Allocation>;
 
-  //! Update the SRV range to expose only the first active_elements.
-  //! Returns false if the buffer/view could not be updated. The bindless
-  //! index is left unchanged; callers may decide when to recreate or
-  //! refresh the view (e.g., via ReserveElements) if failures persist.
-  OXGN_RNDR_NDAPI auto SetActiveElements(std::uint64_t active_elements) -> bool;
-
-  //! Update the SRV range with explicit base and count in elements.
+  //! Select which frame-partition subsequent operations target.
   /*!
-   Updates the SRV base and size in bytes to expose [base, base+count) in
-   elements.
+   Sets the active frame slot and resets the target partition if it's safe
+   (frame cycling ensures old partitions are no longer referenced by GPU).
 
-   @param base_element First element visible to shaders.
-   @param active_elements Number of visible elements.
-   @return True if the view was updated; false otherwise.
+   @param slot Frame slot to activate.
+   @warning Logs error and maintains current partition if slot is invalid.
   */
-  OXGN_RNDR_NDAPI auto SetActiveRange(
-    std::uint64_t base_element, std::uint64_t active_elements) -> bool;
-
-  //! Finalize the current chunk (bytes allocated since last finalize).
-  /*!
-   Call after you’ve enqueued all copies that reference allocations taken
-   since the last finalize. Returns a monotonically increasing id you can
-   associate with your upload tickets.
-
-   @return Chunk id if any bytes were recorded, or std::nullopt.
-  */
-  OXGN_RNDR_NDAPI auto FinalizeChunk() -> std::optional<ChunkId>;
-  //! Attempt to reclaim the front chunk if its id matches (FIFO only).
-  /*!
-   Reclaims space only when the provided id equals the front chunk id.
-   Use your UploadCoordinator tickets to determine completion and call this
-   when safe. Advances the ring head and frees the corresponding bytes.
-
-   @param id Chunk id previously returned by FinalizeChunk().
-   @return True if reclaimed; false if not the front or no chunks pending.
-  */
-  OXGN_RNDR_API auto TryReclaim(ChunkId id) -> bool;
-
-  //! Build an upload request to copy the entire payload to the start.
-  /*!
-   Convenience for full-buffer copy to offset 0.
-
-   @param bytes Source payload.
-   @param debug Debug label.
-   @return UploadRequest targeting this buffer.
-  */
-  OXGN_RNDR_NDAPI auto MakeCopyAll(
-    std::span<const std::byte> bytes, std::string_view debug) const noexcept
-    -> oxygen::engine::upload::UploadRequest;
-
-  //! Build an upload request to copy bytes at element offset.
-  /*!
-   @param element_offset Destination element offset.
-   @param bytes Source payload.
-   @param debug Debug label.
-   @return UploadRequest targeting this buffer.
-  */
-  OXGN_RNDR_NDAPI auto MakeCopyRange(std::uint64_t element_offset,
-    std::span<const std::byte> bytes, std::string_view debug) const noexcept
-    -> oxygen::engine::upload::UploadRequest;
+  OXGN_RNDR_API auto SetActivePartition(oxygen::frame::Slot slot) noexcept
+    -> void;
 
   //! Build an upload request targeting a prior Allocate() result.
   /*!
@@ -193,6 +133,17 @@ public:
     std::span<const std::byte> bytes, std::string_view debug) const noexcept
     -> oxygen::engine::upload::UploadRequest;
 
+  //! Build an upload request covering all allocations in the active partition.
+  /*!
+   @param bytes Source payload covering all allocated elements sequentially.
+   @param debug Debug label.
+   @return UploadRequest targeting the range of all allocations, or nullopt if
+   no allocations.
+  */
+  OXGN_RNDR_NDAPI auto MakeUploadRequestForAllocatedRange(
+    std::span<const std::byte> bytes, std::string_view debug) const noexcept
+    -> std::optional<oxygen::engine::upload::UploadRequest>;
+
   [[nodiscard]] auto Stride() const noexcept -> std::uint32_t
   {
     return element_stride_;
@@ -200,7 +151,7 @@ public:
 
   [[nodiscard]] auto CapacityElements() const noexcept -> std::uint64_t
   {
-    return capacity_elements_;
+    return capacity_elements_per_partition_;
   }
 
   [[nodiscard]] auto CapacityBytes() const noexcept -> std::uint64_t
@@ -210,19 +161,25 @@ public:
 
   [[nodiscard]] auto UsedBytes() const noexcept -> std::uint64_t
   {
-    return used_bytes_;
+    DCHECK_F(active_partition_ < used_bytes_.size());
+    return used_bytes_[active_partition_];
   }
 
   [[nodiscard]] auto FreeBytes() const noexcept -> std::uint64_t
   {
-    const auto cap = CapacityBytes();
-    return cap >= used_bytes_ ? (cap - used_bytes_) : 0ULL;
+    const auto stride = static_cast<std::uint64_t>(element_stride_);
+    const auto cap_single
+      = static_cast<std::uint64_t>(capacity_elements_per_partition_) * stride;
+    const auto used = UsedBytes();
+    return cap_single >= used ? (cap_single - used) : 0ULL;
   }
 
   [[nodiscard]] auto IsFull() const noexcept -> bool
   {
-    const auto cap = CapacityBytes();
-    return cap > 0 && used_bytes_ >= cap;
+    const auto stride = static_cast<std::uint64_t>(element_stride_);
+    const auto cap_single
+      = static_cast<std::uint64_t>(capacity_elements_per_partition_) * stride;
+    return cap_single > 0 && UsedBytes() >= cap_single;
   }
 
   //! Log telemetry counters (INFO).
@@ -234,33 +191,28 @@ private:
 
   oxygen::Graphics& gfx_;
   std::uint32_t element_stride_ { 0 };
-  std::uint64_t capacity_elements_ { 0 };
+  std::uint64_t capacity_elements_per_partition_ { 0 };
   std::shared_ptr<oxygen::graphics::Buffer> buffer_;
+  // Single shader-visible index for the SRV
   ShaderVisibleIndex bindless_index_ { kInvalidShaderVisibleIndex };
   std::string debug_label_;
 
-  // Ring state (bytes)
-  std::uint64_t head_bytes_ { 0 };
-  std::uint64_t tail_bytes_ { 0 };
-  std::uint64_t used_bytes_ { 0 };
-  std::uint64_t curr_frame_bytes_ { 0 };
-  struct FrameTail {
-    ChunkId id;
-    std::uint64_t tail;
-    std::uint64_t size;
-  };
-  std::deque<FrameTail> completed_frames_;
-  ChunkId next_chunk_id_ { 1 };
+  // Frame-partitioning
+  frame::SlotCount partitions_count_;
+  frame::Slot active_partition_ { 0 };
+
+  // Ring state per partition (bytes)
+  std::vector<std::uint64_t> head_bytes_ {};
+  std::vector<std::uint64_t> tail_bytes_ {};
+  std::vector<std::uint64_t> used_bytes_ {};
 
   // Telemetry counters
   std::uint64_t max_used_bytes_ { 0 };
-  // Number of allocations recorded for the current chunk (since last
-  // FinalizeChunk)
-  std::uint32_t curr_allocations_ { 0 };
-  // Exponential moving average of allocations per finalized chunk.
-  std::uint32_t avg_allocations_per_frame_ { 0 };
   std::uint32_t failed_allocations_ { 0 };
   std::uint32_t buffer_reallocations_ { 0 };
+
+  // Helper methods
+  auto UpdatePerFrameTelemetry() -> void;
 };
 
 } // namespace oxygen::renderer::upload

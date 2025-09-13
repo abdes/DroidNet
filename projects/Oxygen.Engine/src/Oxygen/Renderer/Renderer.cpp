@@ -709,7 +709,7 @@ auto Renderer::GetSceneConstants() const -> const SceneConstants&
   return scene_const_cpu_;
 }
 
-auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
+auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
   // Retire staging resources from previous frame uploads
   if (uploader_) {
@@ -717,7 +717,8 @@ auto Renderer::OnFrameStart(FrameContext& /*context*/) -> void
   }
 
   // Reset transform manager for the new frame
-  scene_prep_state_->GetTransformUploader()->OnFrameStart();
+  scene_prep_state_->GetTransformUploader()->OnFrameStart(
+    context.GetFrameSlot());
 
   // Reset geometry uploader for the new frame
   scene_prep_state_->GetGeometryUploader()->OnFrameStart();
