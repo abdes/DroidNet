@@ -45,7 +45,7 @@ auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer> new_buffer;
   try {
     new_buffer = gfx.CreateBuffer(desc);
-    if (!new_buffer) {
+    if (!new_buffer || new_buffer->GetSize() != size_bytes) {
       LOG_F(ERROR, "-failed- to create new buffer resource");
       return std::unexpected(
         make_error_code(GraphicsError::kResourceCreationFailed));
@@ -77,6 +77,12 @@ auto EnsureBufferAndSrv(Graphics& gfx,
       view_handle
         = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
           graphics::DescriptorVisibility::kShaderVisible);
+      // Validate that we received a valid descriptor handle
+      if (!view_handle.IsValid()) {
+        LOG_F(ERROR, "-failed- to allocate valid SRV descriptor handle");
+        return std::unexpected(
+          make_error_code(GraphicsError::kDescriptorAllocationFailed));
+      }
       sv_index = allocator.GetShaderVisibleIndex(view_handle);
     } catch (const std::exception& e) {
       LOG_F(ERROR, "-failed- to allocate SRV with exception: {}", e.what());
@@ -84,6 +90,10 @@ auto EnsureBufferAndSrv(Graphics& gfx,
         make_error_code(GraphicsError::kDescriptorAllocationFailed));
     }
 
+    // Register resource and view with ResourceRegistry.
+    // Note: ResourceRegistry contract violations (like duplicate registration
+    // or invalid handles) will abort the program rather than throw exceptions.
+    // Our validation above should prevent such violations.
     try {
       registry.Register(new_buffer);
       registry.RegisterView(*new_buffer, std::move(view_handle), view_desc);
@@ -101,6 +111,8 @@ auto EnsureBufferAndSrv(Graphics& gfx,
 
   // Resize path: keep the same bindless index by replacing resource and
   // recreating the SRV in-place via the callback-based Replace.
+  // Note: ResourceRegistry.Replace() handles resource swapping atomically and
+  // preserves bindless indices as required for the resize use case.
   try {
     registry.Replace(
       *buffer, new_buffer, [&](const graphics::BufferViewDescription&) {
