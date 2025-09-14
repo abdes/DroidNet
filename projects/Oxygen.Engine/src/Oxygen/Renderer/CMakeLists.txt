@@ -87,8 +87,6 @@ set(
   "Resources/TransformUploader.h"
   "Resources/UploadHelpers.cpp"
   "Resources/UploadHelpers.h"
-  "Upload/RingUploadBuffer.cpp"
-  "Upload/RingUploadBuffer.h"
   "Upload/RingBufferStaging.h"
   "Upload/RingBufferStaging.cpp"
   "ScenePrep/Concepts.h"
