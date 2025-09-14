@@ -113,8 +113,9 @@ public:
          backend is stable. When it is no longer stable, the Renderer is
          responsible for destroying and re-creating the GeometryUploader.
   */
-  OXGN_RNDR_API GeometryUploader(Graphics& graphics,
-    observer_ptr<engine::upload::UploadCoordinator> uploader);
+  OXGN_RNDR_API GeometryUploader(observer_ptr<Graphics> gfx,
+    observer_ptr<engine::upload::UploadCoordinator> uploader,
+    observer_ptr<engine::upload::StagingProvider> provider);
 
   OXYGEN_MAKE_NON_COPYABLE(GeometryUploader)
   OXYGEN_MAKE_NON_MOVABLE(GeometryUploader)
@@ -194,10 +195,11 @@ private:
   GeometryHandle next_handle_ { 0U };
   std::vector<GeometryEntry> geometry_entries_;
 
-  Graphics& gfx_;
+  observer_ptr<Graphics> gfx_;
 
   // Upload tracking
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
   std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
 
   // Frame lifecycle tracking

@@ -48,7 +48,13 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ScenePrepState)
   OXYGEN_MAKE_NON_MOVABLE(ScenePrepState)
 
-  ~ScenePrepState() = default;
+  ~ScenePrepState()
+  {
+    // Ordered destruction of members
+    material_binder_.reset();
+    transform_mgr_.reset();
+    geometry_uploader_.reset();
+  }
 
   auto ReserveCapacityForItems(const std::size_t item_count) -> void
   {

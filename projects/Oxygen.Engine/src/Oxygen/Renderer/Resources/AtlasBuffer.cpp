@@ -13,18 +13,19 @@ namespace oxygen::renderer::resources {
 // Define the tag used to gate ElementRef construction
 struct ElementRefTag { };
 
-AtlasBuffer::AtlasBuffer(
-  Graphics& gfx, const std::uint32_t stride, std::string debug_label)
-  : gfx_(gfx)
+AtlasBuffer::AtlasBuffer(observer_ptr<Graphics> gfx, const std::uint32_t stride,
+  std::string debug_label)
+  : gfx_(std::move(gfx))
   , debug_label_(std::move(debug_label))
   , stride_(stride)
 {
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
 }
 
 AtlasBuffer::~AtlasBuffer()
 {
   if (primary_buffer_) {
-    gfx_.GetResourceRegistry().UnRegisterResource(*primary_buffer_);
+    gfx_->GetResourceRegistry().UnRegisterResource(*primary_buffer_);
   }
 }
 
@@ -43,8 +44,8 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
 
   using internal::EnsureBufferResult;
   if (!primary_buffer_ || target_bytes > current_bytes) {
-    auto result = internal::EnsureBufferAndSrv(
-      gfx_, primary_buffer_, primary_srv_, target_bytes, stride_, debug_label_);
+    auto result = internal::EnsureBufferAndSrv(*gfx_, primary_buffer_,
+      primary_srv_, target_bytes, stride_, debug_label_);
     if (!result) {
       return std::unexpected(result.error());
     }

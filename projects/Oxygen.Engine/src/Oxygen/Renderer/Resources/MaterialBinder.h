@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -101,8 +102,9 @@ public:
          backend is stable. When it is no longer stable, the Renderer is
          responsible for destroying and re-creating the MaterialBinder.
   */
-  OXGN_RNDR_API MaterialBinder(Graphics& graphics,
-    observer_ptr<engine::upload::UploadCoordinator> uploader);
+  OXGN_RNDR_API MaterialBinder(observer_ptr<Graphics> gfx,
+    observer_ptr<engine::upload::UploadCoordinator> uploader,
+    observer_ptr<engine::upload::StagingProvider> provider);
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialBinder)
   OXYGEN_MAKE_NON_MOVABLE(MaterialBinder)
@@ -220,8 +222,9 @@ private:
   engine::sceneprep::MaterialHandle next_handle_ { 0U };
 
   // GPU upload dependencies
-  Graphics& gfx_;
+  observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
   // GPU resources
   std::shared_ptr<graphics::Buffer> gpu_materials_buffer_;

@@ -4,10 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
-
+#include <algorithm>
 #include <cstring>
+#include <functional>
+#include <span>
+#include <unordered_set>
+#include <variant>
+#include <vector>
 
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -15,19 +20,24 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-// Provider-aware staging
+#include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 #include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
-// Format helpers for bytes-per-block and block size
-#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-#include <algorithm>
-#include <functional>
-#include <span>
-#include <unordered_set>
-#include <variant>
-#include <vector>
+// Implementation of UploaderTagFactory. Provides access to UploaderTag
+// capability tokens, only from the engine core. When building tests, allow
+// tests to override by defining OXYGEN_ENGINE_TESTING.
+#if !defined(OXYGEN_ENGINE_TESTING)
+namespace oxygen::engine::upload::internal {
+auto UploaderTagFactory::Get() noexcept -> UploaderTag
+{
+  return UploaderTag {};
+}
+} // namespace oxygen::engine::upload::internal
+#endif
 
 namespace {
 
@@ -335,34 +345,51 @@ auto SubmitTextureCube(oxygen::Graphics& gfx, const UploadRequest& req,
 
 namespace oxygen::engine::upload {
 
-UploadCoordinator::UploadCoordinator(Graphics& gfx, UploadPolicy policy)
+UploadCoordinator::UploadCoordinator(
+  observer_ptr<Graphics> gfx, UploadPolicy policy)
   : gfx_(gfx)
   , policy_(policy)
 {
+  DCHECK_NOTNULL_F(gfx_);
 }
 
-auto UploadCoordinator::Submit(const UploadRequest& req,
-  std::shared_ptr<StagingProvider> provider) -> UploadTicket
+auto UploadCoordinator::CreateSingleBufferStaging(
+  StagingProvider::MapPolicy policy, float slack)
+  -> std::shared_ptr<StagingProvider>
+{
+  auto provider = std::make_shared<SingleBufferStaging>(
+    internal::UploaderTagFactory::Get(), gfx_, policy, slack);
+  providers_.push_back(provider);
+  return provider;
+}
+
+auto UploadCoordinator::CreateRingBufferStaging(frame::SlotCount partitions,
+  std::uint32_t alignment, float slack) -> std::shared_ptr<StagingProvider>
+{
+  auto provider = std::make_shared<RingBufferStaging>(
+    internal::UploaderTagFactory::Get(), gfx_, partitions, alignment, slack);
+  providers_.push_back(provider);
+  return provider;
+}
+
+auto UploadCoordinator::Submit(
+  const UploadRequest& req, StagingProvider& provider) -> UploadTicket
 {
   switch (req.kind) {
   case UploadKind::kBuffer:
-    TrackProvider_(provider);
-    return SubmitBuffer(gfx_, req, tracker_, *provider);
+    return SubmitBuffer(*gfx_, req, tracker_, provider);
   case UploadKind::kTexture2D:
-    TrackProvider_(provider);
-    return SubmitTexture2D(gfx_, req, policy_, tracker_, *provider);
+    return SubmitTexture2D(*gfx_, req, policy_, tracker_, provider);
   case UploadKind::kTexture3D:
-    TrackProvider_(provider);
-    return SubmitTexture3D(gfx_, req, policy_, tracker_, *provider);
+    return SubmitTexture3D(*gfx_, req, policy_, tracker_, provider);
   case UploadKind::kTextureCube:
-    TrackProvider_(provider);
-    return SubmitTextureCube(gfx_, req, policy_, tracker_, *provider);
+    return SubmitTextureCube(*gfx_, req, policy_, tracker_, provider);
   }
   return {};
 }
 
 auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
-  std::shared_ptr<StagingProvider> provider) -> std::vector<UploadTicket>
+  StagingProvider& provider) -> std::vector<UploadTicket>
 {
   std::vector<UploadTicket> out;
   out.reserve(reqs.size());
@@ -395,8 +422,7 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
       continue;
     }
 
-    TrackProvider_(provider);
-    auto staging = provider->Allocate(
+    auto staging = provider.Allocate(
       Bytes { plan.total_bytes }, "UploadCoordinator.BufferBatch");
 
     // Fill staging: concatenate views/producers; track failures per request.
@@ -423,13 +449,13 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
       }
     }
 
-    const auto key = ChooseUploadQueueKey(gfx_);
-    auto recorder = gfx_.AcquireCommandRecorder(
+    const auto key = ChooseUploadQueueKey(*gfx_);
+    auto recorder = gfx_->AcquireCommandRecorder(
       key, "UploadCoordinator.SubmitBuffersBatch");
 
     // Record all copies and state transitions, grouping by destination.
     // PlanBuffers returns regions sorted by (dst, dst_offset).
-    std::shared_ptr<oxygen::graphics::Buffer> current_dst;
+    std::shared_ptr<Buffer> current_dst;
     for (size_t idx = 0; idx < plan.buffer_regions.size(); ++idx) {
       const auto& br = plan.buffer_regions[idx];
       if (!ok[br.request_index - start]) {
@@ -464,8 +490,8 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
     }
 
     // Defer unmap-then-release for the batched staging buffer
-    DeferUnmapThenRelease(gfx_.GetDeferredReclaimer(), staging.buffer);
-    auto queue = gfx_.GetCommandQueue(key);
+    DeferUnmapThenRelease(gfx_->GetDeferredReclaimer(), staging.buffer);
+    auto queue = gfx_->GetCommandQueue(key);
     const auto fence_raw = queue->Signal();
     recorder->RecordQueueSignal(fence_raw);
 
@@ -487,14 +513,8 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
 auto UploadCoordinator::RetireCompleted() -> void
 {
   // Poll the same queue role used for uploads (transfer preferred)
-  const auto key = ChooseUploadQueueKey(gfx_);
-  if (auto q = gfx_.GetCommandQueue(key); q) {
-    // Headless queues execute asynchronously on a worker thread when
-    // SubmitDeferredCommandLists() is called. Ensure all pending submissions
-    // for the chosen queue have been consumed so the GPU-side (executor)
-    // QueueSignalCommand has a chance to advance the fence before we sample
-    // it. This mirrors the pattern used in Headless_Smoke_test
-    // (Queue::Wait/Flush).
+  const auto key = ChooseUploadQueueKey(*gfx_);
+  if (auto q = gfx_->GetCommandQueue(key); q) {
     q->Flush();
     const auto completed = FenceValue { q->GetCompletedValue() };
     tracker_.MarkFenceCompleted(completed);
@@ -509,48 +529,20 @@ auto UploadCoordinator::RetireCompleted() -> void
     }
   }
 }
-
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto UploadCoordinator::Flush() -> void { gfx_.SubmitDeferredCommandLists(); }
-
-// Default-provider overloads for convenience/compatibility
-auto UploadCoordinator::Submit(const UploadRequest& req) -> UploadTicket
+auto UploadCoordinator::OnFrameStart(frame::Slot slot) -> void
 {
-  auto provider = std::make_shared<SingleBufferStaging>(
-    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
-  return Submit(req, std::move(provider));
-}
-
-auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs)
-  -> std::vector<UploadTicket>
-{
-  auto provider = std::make_shared<SingleBufferStaging>(
-    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
-  return SubmitMany(reqs, std::move(provider));
-}
-
-void UploadCoordinator::TrackProvider_(
-  const std::shared_ptr<StagingProvider>& provider)
-{
-  if (provider) {
-    providers_.emplace_back(provider);
+  for (auto it = providers_.begin(); it != providers_.end();) {
+    if (auto sp = it->lock()) {
+      sp->OnFrameStart(slot);
+      ++it;
+    } else {
+      it = providers_.erase(it);
+    }
   }
 }
 
-auto UploadCoordinator::SubmitAsync(const UploadRequest& req)
-  -> co::Co<UploadResult>
-{
-  auto provider = std::make_shared<SingleBufferStaging>(
-    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
-  co_return co_await SubmitAsync(req, std::move(provider));
-}
-
-auto UploadCoordinator::SubmitManyAsync(std::span<const UploadRequest> reqs)
-  -> co::Co<std::vector<UploadResult>>
-{
-  auto provider = std::make_shared<SingleBufferStaging>(
-    gfx_.shared_from_this(), SingleBufferStaging::MapPolicy::kPinned);
-  co_return co_await SubmitManyAsync(reqs, std::move(provider));
-}
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto UploadCoordinator::Flush() -> void { gfx_->SubmitDeferredCommandLists(); }
 
 } // namespace oxygen::engine::upload

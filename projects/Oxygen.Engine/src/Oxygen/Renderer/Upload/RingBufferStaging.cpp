@@ -17,7 +17,7 @@ using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 
-namespace oxygen::renderer::upload {
+namespace oxygen::engine::upload {
 
 auto RingBufferStaging::Allocate(Bytes size, std::string_view debug_name)
   -> Allocation
@@ -96,4 +96,4 @@ void RingBufferStaging::EnsureCapacity_(
   // Preserve existing head for the active partition; others remain intact
 }
 
-} // namespace oxygen::renderer::upload
+} // namespace oxygen::engine::upload

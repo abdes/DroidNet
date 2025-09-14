@@ -19,13 +19,16 @@
 namespace oxygen::engine::upload {
 
 // Single buffer provider with configurable mapping policy.
+// Must be created via UploadCoordinator::CreateSingleBufferStaging.
 class SingleBufferStaging final : public StagingProvider {
-public:
-  enum class MapPolicy : uint8_t { kPinned, kPerOp };
+  friend class UploadCoordinator;
 
-  explicit SingleBufferStaging(std::shared_ptr<oxygen::Graphics> gfx,
-    MapPolicy policy = MapPolicy::kPinned, float slack = 0.5f)
-    : gfx_(std::move(gfx))
+public:
+  explicit SingleBufferStaging(UploaderTag tag,
+    observer_ptr<oxygen::Graphics> gfx, MapPolicy policy = MapPolicy::kPinned,
+    float slack = 0.5f)
+    : StagingProvider(tag)
+    , gfx_(gfx)
     , policy_(policy)
     , slack_(slack)
   {
@@ -58,7 +61,7 @@ public:
   auto GetStats() const -> StagingStats override { return stats_; }
 
 private:
-  void EnsureCapacity_(uint64_t desired, std::string_view name)
+  auto EnsureCapacity_(uint64_t desired, std::string_view name) -> void
   {
     stats_.ensure_capacity_calls++;
     if (buffer_ && buffer_->GetSize() >= desired) {
@@ -71,10 +74,10 @@ private:
       = current > 0 ? static_cast<uint64_t>(current * (1.0 + slack_)) : desired;
     const uint64_t size_bytes = std::max(desired, grow);
 
-    oxygen::graphics::BufferDesc desc;
+    graphics::BufferDesc desc;
     desc.size_bytes = size_bytes;
-    desc.usage = oxygen::graphics::BufferUsage::kNone;
-    desc.memory = oxygen::graphics::BufferMemory::kUpload;
+    desc.usage = graphics::BufferUsage::kNone;
+    desc.memory = graphics::BufferMemory::kUpload;
     desc.debug_name = std::string(name);
 
     Unmap_();
@@ -91,10 +94,11 @@ private:
     }
   }
 
-  std::byte* Map_()
+  auto Map_() -> std::byte*
   {
-    if (!buffer_)
+    if (!buffer_) {
       return nullptr;
+    }
     if (!buffer_->IsMapped()) {
       mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
       stats_.map_calls++;
@@ -102,7 +106,7 @@ private:
     return mapped_ptr_;
   }
 
-  void Unmap_()
+  auto Unmap_() -> void
   {
     if (buffer_ && buffer_->IsMapped()) {
       buffer_->UnMap();
@@ -111,10 +115,10 @@ private:
     mapped_ptr_ = nullptr;
   }
 
-  std::shared_ptr<oxygen::Graphics> gfx_;
+  observer_ptr<Graphics> gfx_;
   MapPolicy policy_ { MapPolicy::kPinned };
   float slack_ { 0.5f };
-  std::shared_ptr<oxygen::graphics::Buffer> buffer_;
+  std::shared_ptr<graphics::Buffer> buffer_;
   std::byte* mapped_ptr_ { nullptr };
   StagingStats stats_ {};
 };

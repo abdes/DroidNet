@@ -250,6 +250,7 @@ private:
 
   // Upload coordinator: manages buffer/texture uploads and completion.
   std::unique_ptr<upload::UploadCoordinator> uploader_;
+  std::shared_ptr<upload::StagingProvider> staging_provider_;
 };
 
 } // namespace oxygen::engine

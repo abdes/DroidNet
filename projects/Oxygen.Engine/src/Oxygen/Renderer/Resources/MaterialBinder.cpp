@@ -158,18 +158,23 @@ auto SerializeMaterialConstants(
 
 namespace oxygen::renderer::resources {
 
-MaterialBinder::MaterialBinder(
-  Graphics& gfx, observer_ptr<engine::upload::UploadCoordinator> uploader)
+MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
+  observer_ptr<engine::upload::UploadCoordinator> uploader,
+  observer_ptr<engine::upload::StagingProvider> provider)
   : gfx_(gfx)
   , uploader_(uploader)
+  , staging_provider_(provider)
 {
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
+  DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
 }
 
 MaterialBinder::~MaterialBinder()
 {
   // Best-effort cleanup: unregister our GPU buffer from the registry so it
   // doesn't linger until registry destruction.
-  auto& registry = gfx_.GetResourceRegistry();
+  auto& registry = gfx_->GetResourceRegistry();
   if (gpu_materials_buffer_) {
     registry.UnRegisterResource(*gpu_materials_buffer_);
   }
@@ -369,8 +374,8 @@ auto MaterialBinder::EnsureBufferAndSrv(
   }
 
   if (needs_new_buffer) {
-    auto& registry = gfx_.GetResourceRegistry();
-    auto& allocator = gfx_.GetDescriptorAllocator();
+    auto& registry = gfx_->GetResourceRegistry();
+    auto& allocator = gfx_->GetDescriptorAllocator();
 
     // Unregister old buffer if it exists
     if (buffer) {
@@ -384,7 +389,7 @@ auto MaterialBinder::EnsureBufferAndSrv(
     desc.memory = graphics::BufferMemory::kDeviceLocal;
     desc.debug_name = debug_label;
 
-    buffer = gfx_.CreateBuffer(desc);
+    buffer = gfx_->CreateBuffer(desc);
 
     // Register buffer and create SRV
     registry.Register(buffer);
@@ -479,7 +484,7 @@ auto MaterialBinder::PrepareMaterialConstants() -> void
       buffer_size, 0 };
     req.data = engine::upload::UploadDataView { std::span<const std::byte>(
       upload_data.data(), buffer_size) };
-    auto ticket = uploader_->Submit(req);
+    auto ticket = uploader_->Submit(req, *staging_provider_);
     pending_upload_tickets_.push_back(ticket);
   } else if (!dirty_indices_.empty()) {
     LOG_F(1,
@@ -493,7 +498,7 @@ auto MaterialBinder::PrepareMaterialConstants() -> void
       gpu_materials_buffer_, "MaterialConstants");
 
     for (auto& req : upload_requests) {
-      auto ticket = uploader_->Submit(req);
+      auto ticket = uploader_->Submit(req, *staging_provider_);
       pending_upload_tickets_.push_back(ticket);
     }
   } else {
