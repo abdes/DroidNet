@@ -1,39 +1,56 @@
 # Upload-enhanced solution — resident atlas + upload ring + dynamic SRV
 
-This document summarizes a hybrid design for managing transforms, materials
+This document summarizes a hybrid design for managing transforms, materials,
 and similar per-draw data in a bindless renderer. It favors a simple C++
 runtime and relies on the existing N-partitioned upload ring for delta
 uploads and safe reclamation.
 
-Goals
+## At a glance
 
-- Minimize per-frame CPU->GPU upload bandwidth for stable entries (transforms
+- [Goals](#goals)
+- [Architecture](#architecture)
+- [Implementation notes (D3D12)](#implementation-notes-d3d12-specifics)
+- [Phase 1 progress](#phase-1-progress-current-state)
+- [Workflow](#workflow)
+- [Indirection and shader access](#indirection-and-shader-access)
+- Lifetime & memory:
+  - [Reclamation](#reclamation-simple-and-fence-keyed)
+  - [Stability heuristics](#stability-heuristics-practical-minimal-tuning)
+  - [Atlas growth](#atlas-growth-hybrid-primary-resize-then-overflow-chunks)
+- [Detailed migration plan](#detailed-migration-plan-transformuploader)
+- [Provider/API hardening](#providerapi-hardening)
+- [Acceptance criteria](#acceptance-criteria)
+- [Verification plan](#verification-plan-usage-of-provider-and-coordinator)
+
+## Goals
+
+- Minimize per-frame CPU→GPU upload bandwidth for stable entries (transforms
   and material constants).
 - Preserve absolute bindless indices exposed to shaders.
 - Keep shaders simple; prefer C++ bookkeeping and straight SRV reads.
 - Keep implementation KISS: correct first, optimize when measurable wins
   justify complexity.
 
-  ## Remaining TODOs summary
+## Remaining TODOs summary
 
-  Phase 1 (Atlas-only)
+Phase 1 (Atlas-only)
 
-  | Item | Status |
-  |---|---|
-  | Add OnFrameEnd hooks across TransformUploader, StagingProvider, and UploadCoordinator | Pending |
-  | Remove legacy RingUploadBuffer code paths (if any remain) | Pending |
-  | Unit tests: AtlasBuffer allocator, provider alignment, planner/coordinator grouping | Optional |
-  | Refactor shared math/hash helpers out of TransformUploader | Optional |
+| Item | Status |
+|---|---|
+| Unit tests: AtlasBuffer allocator, provider alignment, planner/coordinator grouping | Optional |
+| Refactor shared math/hash helpers out of TransformUploader | Optional |
 
-  Phase 2 (Dynamic SRV + mixing)
+Phase 2 (Dynamic SRV + mixing)
 
-  | Item | Status |
-  |---|---|
-  | Implement dynamic per-frame buffers and descriptor update strategy | Pending |
-  | Enable LUT mixing (bit flag) and promotion/demotion heuristics | Pending |
-  | Extend tests for promotion/demotion and dynamic path | Pending |
+| Item | Status |
+|---|---|
+| Implement dynamic per-frame buffers and descriptor update strategy | Pending |
+| Enable LUT mixing (bit flag) and promotion/demotion heuristics | Pending |
+| Extend tests for promotion/demotion and dynamic path | Pending |
 
-Core components
+## Architecture
+
+### Core components
 
 - Atlas (resident buffer): DEFAULT-heap structured buffer, indexable by
   absolute bindless index. Holds stable entries (transform or material structs).
@@ -45,11 +62,11 @@ Core components
   entries updated every frame (e.g., skinned bones, animated parameters) to
   avoid heavy atlas churn. Exposed via the bindless SRV table as well; update
   its descriptor once per frame to point at the current buffer.
-- Indirection table (small SRV): maps logical/bindless index -> (location,
+- Indirection table (small SRV): maps logical/bindless index → (location,
   slot). Location indicates atlas or dynamic slot. Kept stable and updated by
   C++ when entries move.
 
-Reusable component: AtlasBuffer
+### Reusable component: AtlasBuffer
 
 - Purpose: Own one primary DEFAULT-heap structured buffer (single SRV index)
   and optionally additional overflow chunks (each with its own SRV index)
@@ -77,13 +94,13 @@ Reusable component: AtlasBuffer
   - (No staging/submission APIs; clients build UploadRequests and call
     UploadCoordinator.)
 
-Implementation notes (D3D12 specifics)
+## Implementation notes (D3D12 specifics)
 
 - Atlas buffers: HEAP_TYPE_DEFAULT with SRV as `StructuredBuffer<T>` (or
   `ByteAddressBuffer` when packing). Sampling states:
   `RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | RESOURCE_STATE_PIXEL_SHADER_RESOURCE`.
 - Upload ring: HEAP_TYPE_UPLOAD, persistently mapped. All CPU writes go here;
-  copies go Upload -> DEFAULT via CopyBufferRegion (4-byte alignment rule).
+  copies go Upload → DEFAULT via CopyBufferRegion (4-byte alignment rule).
 - Dynamic buffers: triple-buffered DEFAULT resources sized for the expected
   per-frame dynamic traffic. One SRV descriptor per kind is updated per
   frame to the current buffer.
@@ -96,14 +113,14 @@ Implementation notes (D3D12 specifics)
     for the previous frame signals. Do not overwrite a descriptor while it may
     still be referenced by in-flight work.
 - Barriers: for each destination buffer, do two transitions per frame:
-  SRV->COPY_DEST, batch all copies, then COPY_DEST->SRV. Avoid per-entry
+  SRV → COPY_DEST, batch all copies, then COPY_DEST → SRV. Avoid per-entry
   transitions (buffers transition as a whole in D3D12).
 - Copy queue (optional): Start with DIRECT. Consider COPY queue and queue
   synchronization only if profiling shows a DIRECT bottleneck.
 
 ## Phase 1 progress (current state)
 
-What’s done:
+### What’s done
 
 - Reusable AtlasBuffer in place for worlds and normals (DEFAULT-heap, stable
   SRV index). Stats exposed (ensure/alloc/release/capacity/free list/next).
@@ -113,45 +130,43 @@ What’s done:
   aligned src offsets, and merges contiguous regions.
 - UploadCoordinator records per-destination transitions (CopyDest → batched
   copies → steady) and emits a single signal per batch; renderer owns queue
-  sync. Flush() retained.
-- StagingProvider interface extended with OnFrameStart(slot) (default no-op);
-  RingBufferStaging overrides it to set the active partition without RTTI.
+  sync. `Flush()` retained.
+- StagingProvider interface extended with `OnFrameStart(slot)` (default no-op);
+  `RingBufferStaging` overrides it to set the active partition without RTTI.
 - Telemetry integrated: AtlasBuffer and StagingProvider expose Stats;
   TransformUploader prints aligned, scoped summaries.
 
-Pending for Phase 1:
+### Pending for Phase 1
 
-- Add OnFrameEnd hooks across TransformUploader, StagingProvider, and
-  UploadCoordinator to complement OnFrameStart for end-of-frame bookkeeping
-  and optional maintenance.
 - Optional: unit tests for AtlasBuffer allocator and planner/coordinator
   grouping logic (mocked).
 - Optional: move math/hash helpers from TransformUploader into a shared util.
 
-Impact:
+### Impact
 
 - Fewer CopyBufferRegion calls (contiguous merges), minimal barriers (two per
   destination buffer per batch), and reduced signal spam (one per batch).
   Stable entries upload only on change.
 
-Workflow (simple)
+## Workflow
 
 1. Create entry (logical index assigned): allocate an atlas element index from
-  the atlas allocator. Build an UploadRequest targeting the atlas at
-  `element_index * stride` and submit via UploadCoordinator (which stages, records, and
-  submits the copy).
+   the atlas allocator. Build an UploadRequest targeting the atlas at
+   `element_index * stride` and submit via UploadCoordinator (which stages,
+   records, and submits the copy).
 2. Update entry (infrequent): build and submit an UploadRequest to the atlas at
-  `element_index * stride`.
-  No per-frame copies for stable entries.
+   `element_index * stride`. No per-frame copies for stable entries.
 3. Dynamic per-frame updates (Phase 2): build and submit UploadRequests to the
-  current-frame dynamic buffer; update the dynamic SRV descriptor accordingly.
+   current-frame dynamic buffer; update the dynamic SRV descriptor accordingly.
 4. Read: shaders index indirection table by logical index and then SRV-read
    the atlas or dynamic buffer slot indicated.
 
-Indirection table (packed and minimal)
+## Indirection and shader access
 
-- Use one table per data kind (transforms, materials, …). That keeps entries
-  small and avoids a "kind" field.
+### Indirection table (packed and minimal)
+
+- Use one table per data kind (transforms, materials, …) to keep entries
+  small and avoid a “kind” field.
 - Phase 1 (exact current path): No LUT required. Keep a single transforms SRV
   bound in the global descriptor table and index it directly with the
   existing transform index.
@@ -168,10 +183,9 @@ Indirection table (packed and minimal)
   - two tables (srv table and element table). Phase 1 may keep the simple
     32-bit atlas-only form and upgrade later when overflow chunks are enabled.
 - The indirection table lives in DEFAULT memory and is updated via the upload
-  ring using the same copy scheduling. Optionally keep a CPU mirror for fast
-  reads (not required).
+  ring using the same copy scheduling. Optional CPU mirror is not required.
 
-Shader read pattern (HLSL)
+### Shader read pattern (HLSL)
 
 ```hlsl
 StructuredBuffer<Transform> g_Transforms;     // atlas (single-buffer)
@@ -182,12 +196,12 @@ Transform LoadTransform(uint logicalIndex)
 {
     const uint e = g_TransformLUT[logicalIndex];
     const bool isDyn = (e & 0x80000000u) != 0u;
-  const uint elem  = (e & 0x7fffffffu); // element index within the buffer
-  return isDyn ? g_DynTransforms[elem] : g_Transforms[elem];
+    const uint elem  = (e & 0x7fffffffu); // element index within the buffer
+    return isDyn ? g_DynTransforms[elem] : g_Transforms[elem];
 }
 ```
 
-Hybrid shader (descriptor indexing) example
+### Hybrid shader (descriptor indexing) example
 
 ```hlsl
 // If/when overflow chunks are enabled, use a descriptor-indexed array:
@@ -203,42 +217,42 @@ Transform LoadTransform2(uint logicalIndex)
 }
 ```
 
-Reclamation (simple and fence-keyed)
+## Lifetime and memory management
+
+### Reclamation (simple and fence-keyed)
 
 - Use frame-fence keyed retire lists instead of per-element fences: when an
   entry is destroyed at frame F, push its atlas element index to
-  retire_list[F % N]. When the
-  renderer advances to frame K and the fence for K completes, move
-  retire_list[K % N] to the free pool. This leverages the same lifetime as the
-  upload ring without coupling allocation to ring internals.
+  `retire_list[F % N]`. When the renderer advances to frame K and the fence for
+  K completes, move `retire_list[K % N]` to the free pool. This leverages the
+  same lifetime as the upload ring without coupling allocation to ring internals.
 - Avoid immediate reuse of slots in the same frame by construction.
 
-Stability heuristics (practical, minimal tuning)
+### Stability heuristics (practical, minimal tuning)
 
-- Explicit hint: highest priority — creators may declare entries static or
-  dynamic at allocation time. Static => place in atlas and never auto-reclaim
-  unless explicitly destroyed.
+- Explicit hint: creators may declare entries static or dynamic at allocation
+  time. Static ⇒ place in atlas and never auto-reclaim unless explicitly destroyed.
 - Age promotion: default policy for runtime entries.
   - Start as dynamic (no atlas allocation) or allocate in atlas but mark
-    transient. Track last_update_frame per entry.
+    transient. Track `last_update_frame` per entry.
   - Promote to stable (eligible for long residency) if not updated for
-    promote_threshold frames (example: 30 frames ~= 0.5s at 60Hz).
-  - Demote to dynamic if updated frequently: if updates_in_window > demote_thresh
+    `promote_threshold` frames (example: 30 frames ≈ 0.5s at 60Hz).
+  - Demote to dynamic if updated frequently: if `updates_in_window > demote_threshold`
     (example: >5 updates in last 8 frames).
 - Shared-use bias: prefer stability for entries referenced by many instances
-  (maintain instance_count per logical entry). Large instance_count lowers
-  promotion threshold.
+  (maintain `instance_count` per logical entry). Larger counts lower promotion
+  threshold.
 
-When to reclaim stable entries
+### When to reclaim stable entries
 
 - Reclaim only when explicitly released or when eviction is needed to free
-  atlas capacity. For eviction, prefer LRU or a cost-based eviction that
-  considers: instance_count (lower prefer reclaim), last_update_frame, and
-  allocation cost.
-- Do not automatically evict stable entries solely based on age. Prefer
-  explicit release or eviction under memory pressure.
+  atlas capacity. For eviction, prefer LRU or a cost-based policy that
+  considers: `instance_count` (lower preferred for reclaim), `last_update_frame`,
+  and allocation cost.
+- Do not automatically evict solely based on age. Prefer explicit release or
+  eviction under memory pressure.
 
-Atlas growth (hybrid: primary resize then overflow chunks)
+### Atlas growth (hybrid: primary resize then overflow chunks)
 
 - Prefer primary-buffer replacement up to a threshold: allocate a larger
   primary, copy live slots (or re-upload), then update the primary SRV
@@ -249,8 +263,9 @@ Atlas growth (hybrid: primary resize then overflow chunks)
 - Optional maintenance pass can compact from overflow back into a larger
   primary during idle windows and update LUT entries for moved elements.
 
-Simple allocation / reclaim pseudocode (C++ sketch)
+### Simple allocation / reclaim pseudocode (C++ sketch)
 
+```cpp
 // Called by user/renderer to create or update an entry (conceptual)
 void UpdateEntry(LogicalIndex id, const EntryData &data) {
   if (entryTable[id].state == State::Dynamic) { // Phase 2
@@ -274,8 +289,9 @@ void ReleaseEntry(LogicalIndex id) {
   // retire on the fence of the frame in which this is destroyed
   retireLists[frameIndex % N].push_back(slot);
 }
+```
 
-Why this design (rationale)
+## Rationale
 
 - Bindless indices remain absolute and stable: the indirection table keeps
   shader-visible indices small and stable while allowing C++ to remap or
@@ -288,15 +304,15 @@ Why this design (rationale)
   descriptors per frame. Shaders branch on a single bit.
 - KISS: keep complex logic in allocator and indirection table in C++.
 
-Operational knobs (tuning parameters)
+## Operational parameters
 
-- promote_threshold: number of frames without updates before promoting to
+- `promote_threshold`: number of frames without updates before promoting to
   stable (default 30).
-- demote_threshold: updates per window to demote a stable entry (default 5 in
+- `demote_threshold`: updates per window to demote a stable entry (default 5 in
   8 frames).
-- eviction_policy: LRU or cost-based; invoked only under memory pressure.
+- `eviction_policy`: LRU or cost-based; invoked only under memory pressure.
 
-Operational guidance and metrics
+## Operational guidance and metrics
 
 - Schedule uploads early in the frame; batch per-buffer barriers (2 per
   buffer per frame) and coalesce adjacent CopyBufferRegion calls.
@@ -308,115 +324,101 @@ Operational guidance and metrics
 
 ## Detailed migration plan: TransformUploader
 
-Phasing
+### Phasing
 
 - Phase 1 (now): Treat all transforms as stable and store in the resident
   atlas. Defer the dynamic per-frame SRV path and LUT mixing semantics to
   Phase 2. No LUT is required in Phase 1; shaders may keep indexing the single
-  transforms SRV directly. Keep APIs and structures future-proof but only the atlas path is
-  exercised.
+  transforms SRV directly. Keep APIs and structures future-proof but only the
+  atlas path is exercised.
 - Phase 2 (later): Add dynamic SRV buffers and descriptor switching; enable
   LUT mixing (atlas vs dynamic) and promotion/demotion heuristics.
 
 This migration makes `TransformUploader` use the reusable `AtlasBuffer`
 component for worlds and normals in Phase 1 (and later other data kinds).
 In Phase 1 it may optionally own an indirection table; in Phase 2 it adds
-dynamic buffers. The staging provider is only
-to obtain mapped UPLOAD memory for copies. Bindless SRV indices remain stable
-and are managed by `TransformUploader` via `ResourceRegistry`.
+dynamic buffers. The staging provider is only to obtain mapped UPLOAD memory
+for copies. Bindless SRV indices remain stable and are managed by
+`TransformUploader` via `ResourceRegistry`.
 
-1. Resources and descriptors (via AtlasBuffer)
+### 1) Resources and descriptors (via AtlasBuffer)
 
 - Worlds and normals are each backed by an `AtlasBuffer` instance.
 - Strides: `sizeof(glm::mat4)` for worlds; `sizeof(glm::mat3)` (or packed
-    3x4/quat) for normals. AtlasBuffer computes offsets as
-    `element_index * stride`.
+  3x4/quat) for normals. AtlasBuffer computes offsets as
+  `element_index * stride`.
 - Initial capacity: power-of-two. `AtlasBuffer::EnsureCapacity()` calls
-    `EnsureBufferAndSrv()` and returns `EnsureBufferResult`.
+  `EnsureBufferAndSrv()` and returns `EnsureBufferResult`.
 - On `kResized`/`kCreated`, TransformUploader re-uploads live content via
-    UploadCoordinator (descriptor index remains stable as SRV is updated
-    in-place by `EnsureBufferAndSrv()`).
+  UploadCoordinator (descriptor index remains stable as SRV is updated
+  in-place by `EnsureBufferAndSrv()`).
 - Indirection table:
-  - DEFAULT-heap `StructuredBuffer<uint>` (packed entry as described
-      above). One table per kind (transforms). Optional CPU mirror.
+  - DEFAULT-heap `StructuredBuffer<uint>` (packed entry as described above).
+    One table per kind (transforms). Optional CPU mirror.
   - Bindless SRV index reserved and kept stable; updates go through the
-      upload path like any other buffer.
+    upload path like any other buffer.
   - Hybrid note: Phase 1 may keep the 32-bit (location|element) form since
     only the primary atlas buffer is used. When overflow chunks are enabled,
     migrate to `uint2{srv_index, element}` (or a packed 64-bit) and use a
     descriptor-indexed SRV array in shaders.
-- Dynamic buffers (per-frame):
-  - Deferred to Phase 2.
+- Dynamic buffers (per-frame): deferred to Phase 2.
 
-1. Element allocation and lifecycle (atlas via AtlasBuffer)
+### 2) Element allocation and lifecycle (atlas via AtlasBuffer)
 
 - `AtlasBuffer` maintains free list + N retire lists keyed by frame slot.
 - `AtlasBuffer::OnFrameStart(frame_slot)` recycles retirees into free list.
 - Allocation returns stable element indices; clients may track metadata like
-    `last_update_frame` or `instance_count` as needed.
+  `last_update_frame` or `instance_count` as needed.
 - Growth: Phase 1 uses full re-upload after `kResized`. Phase 2 may add a
-    maintenance path for device-to-device copies of live ranges.
+  maintenance path for device-to-device copies of live ranges.
 
-1. Frame partitioning and staging
+### 3) Frame partitioning and staging
 
 - Continue using the existing N-partitioned staging provider:
-    `RingBufferStaging::SetActivePartition(frame_slot)` must be called at
-    frame start. The staging alignment must equal the destination element
-    stride (power-of-two enforced by provider ctor).
+  `RingBufferStaging::SetActivePartition(frame_slot)` must be called at
+  frame start. The staging alignment must equal the destination element
+  stride (power-of-two enforced by provider ctor).
 - The atlas itself is not partitioned. Only the staging upload memory is.
 - Dynamic buffers selection is deferred to Phase 2.
 
-1. Update and submit path (using UploadCoordinator)
+### 4) Update and submit path (using UploadCoordinator)
 
 - Stable entries (atlas):
   - When created/changed, call `atlasBuffer.MakeUploadDesc(ref, stride)` to
     obtain an `UploadBufferDesc`, then build an `UploadRequest` with the
     returned desc and a data view containing `stride` bytes.
-    - `ref` is `ElementRef{ srv, element }`. In Phase 1, `srv` will equal the
-      primary SRV; when overflow chunks are enabled, `srv` may point to a
-      different SRV.
+    - `ref` is `ElementRef{ srv, element }`. In Phase 1, `srv` equals the
+      primary SRV; with overflow chunks, `srv` may point to a different SRV.
   - Do not perform barriers or command recording in `TransformUploader`.
-      Submit requests to `UploadCoordinator`, which owns planning, staging
-      via `StagingProvider::Allocate`, recording, and barriers.
+    Submit requests to `UploadCoordinator`, which owns planning, staging via
+    `StagingProvider::Allocate`, recording, and barriers.
 - Dynamic entries: deferred to Phase 2.
 - Indirection table updates:
   - If used in Phase 1, entries always point to the atlas (bit=0). Stage a
-      4-byte LUT write as needed exactly like other buffer updates. Using a
-      LUT in Phase 1 is optional; the current single-SRV pattern can be kept.
+    4-byte LUT write as needed exactly like other buffer updates. Using a LUT
+    in Phase 1 is optional; the current single-SRV pattern can be kept.
 - Submission: Call `UploadCoordinator::SubmitMany(requests, provider)`.
 
-1. Frame start and retirement
+### 5) Frame start and retirement
 
 - `OnFrameStart(frame_slot)` responsibilities:
   - Set the active staging partition on `RingBufferStaging`.
   - Recycle `retire[frame_slot]` element indices into the atlas free list.
   - Call `UploadCoordinator::RetireCompleted()` once per frame to advance
-      fences, complete tickets, and recycle staging (which calls
-      `StagingProvider::RetireCompleted()` internally).
+    fences, complete tickets, and recycle staging (which calls
+    `StagingProvider::RetireCompleted()` internally).
   - Optionally update telemetry snapshots.
 
-1. Telemetry and diagnostics
+### 6) Telemetry and diagnostics
 
 - Track per-frame: bytes staged, copies recorded, barriers issued, atlas
-    capacity and free elements, dynamic buffer occupancy, promotions/demotions.
+  capacity and free elements, dynamic buffer occupancy, promotions/demotions.
 - Expose provider diagnostics via getters (alignment, per-partition/total
-    capacity). AtlasBuffer exposes stride, capacity, and allocator counters.
+  capacity). AtlasBuffer exposes stride, capacity, and allocator counters.
 
-1. Cleanup
-
-- Remove `RingUploadBuffer` usage and code paths after achieving parity.
-- Keep commit small and verifiable: switch reads/writes to the new path
-    behind a flag until stable, then delete legacy.
-
-### Concrete TODO checklist (authoritative)
+## Concrete TODO checklist (authoritative)
 
 Phase 1 (Atlas-only)
-
-1) Add OnFrameEnd hooks across TransformUploader, StagingProvider, and
-UploadCoordinator to complement OnFrameStart for end-of-frame bookkeeping.
-
-1) Remove legacy `RingUploadBuffer` code paths (if any remain) after
-verifying parity in real scenes.
 
 1) Unit tests (optional but recommended): AtlasBuffer allocator
 (allocate/free/recycle), provider alignment, planner/coordinator grouping and
@@ -431,7 +433,7 @@ outlined in Stability heuristics.
 3) Extend tests for promotion/demotion and dynamic path (including descriptor
 update lifetime rules).
 
-### Provider/API hardening
+## Provider/API hardening
 
 1) RingBufferStaging
    - Constructor already requires `alignment` and `partitions`.
@@ -447,9 +449,9 @@ update lifetime rules).
    - Add unit tests: partition isolation, growth behavior preserving old
      allocations, alignment correctness, and coordinator integration.
 
-### Acceptance criteria
+## Acceptance criteria
 
-Phase 1
+### Phase 1
 
 - Functional
   - Stable bindless indices for atlas (worlds, normals) resources.
@@ -463,21 +465,24 @@ Phase 1
   - Growth path preserves data and maintains SRV indices.
   - Tests cover allocator and coordinator/provider integration.
 
-Phase 2
+### Phase 2
 
 - Functional: dynamic path correctness; LUT mixing.
 - Performance: only frequently changing entries go to dynamic buffers.
 - Robustness: descriptor hazards avoided per chosen strategy.
 
-### Verification plan (usage of provider and coordinator)
+## Verification plan (usage of provider and coordinator)
 
-- StagingProvider usage
-  - Pass `RingBufferStaging` to every `UploadCoordinator::Submit*` call.
-  - Call `RingBufferStaging::SetActivePartition(frame_slot)` at frame start.
-  - `UploadCoordinator` will invoke `StagingProvider::Allocate()` during
-    submission and `StagingProvider::RetireCompleted()` during retirement.
-- UploadCoordinator usage
-  - Use `SubmitMany` to batch all atlas updates for the frame.
-  - Call `RetireCompleted()` once per frame to advance the fence and recycle
-    staging provider state.
-  - Do not perform barriers or copy recording in `TransformUploader`.
+### StagingProvider usage
+
+- Pass `RingBufferStaging` to every `UploadCoordinator::Submit*` call.
+- Call `RingBufferStaging::SetActivePartition(frame_slot)` at frame start.
+- `UploadCoordinator` will invoke `StagingProvider::Allocate()` during
+  submission and `StagingProvider::RetireCompleted()` during retirement.
+
+### UploadCoordinator usage
+
+- Use `SubmitMany` to batch all atlas updates for the frame.
+- Call `RetireCompleted()` once per frame to advance the fence and recycle
+  staging provider state.
+- Do not perform barriers or copy recording in `TransformUploader`.
