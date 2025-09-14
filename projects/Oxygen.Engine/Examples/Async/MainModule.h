@@ -224,8 +224,8 @@ namespace examples::async {
       std::vector<glm::vec3> path_points;
       double path_length { 0.0 }; // cached approximate length
       double path_speed {
-        3.0
-      }; // world units per second along path (slower nominal)
+        6.0
+      }; // world units per second along path (increased for quicker survey)
       double path_u { 0.0 }; // current parameter along path [0,1)
       // (streamlined) gimbal dynamics were removed to keep the demo focused
       // on a single body-controlled camera with gentle smoothing and banking.

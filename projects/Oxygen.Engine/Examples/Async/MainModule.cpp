@@ -449,37 +449,27 @@ void MainModule::InitializeDefaultFlightPath()
   camera_drone_.path_points.clear();
   camera_drone_.pois.clear();
 
-  // Larger looping trajectory that circles the scene with altitude changes
-  // and wide turns. We'll create a path that starts with a high sweep,
-  // descends for inspection passes, then climbs again to loop smoothly.
-  const float r1 = 24.0f; // outer sweep radius (expanded)
-  const float r2 = 12.0f; // mid radius
-  const float r3 = 4.5f; // inner pass
+  // Figure-eight (horizontal) path using a Gerono lemniscate pattern.
+  // Produces a horizontal 8-loop at a fixed altitude that loops seamlessly.
+  const int points = 96; // control polygon resolution
+  const float a = 36.0f; // horizontal scale (half-width of loops)
+  const float altitude = 14.0f; // fixed altitude for the 8-loop
 
-  // High sweeping passes to establish a cinematic vantage
-  camera_drone_.path_points.push_back(glm::vec3(-r1, 8.0f, -r1 * 0.3f));
-  camera_drone_.path_points.push_back(glm::vec3(r1, 9.5f, -r1 * 0.5f));
-  camera_drone_.path_points.push_back(glm::vec3(r1 * 6.6f, 11.0f, r1));
-  camera_drone_.path_points.push_back(glm::vec3(-r1 * 3.4f, 10.0f, r1 * 0.9f));
-  camera_drone_.path_points.push_back(glm::vec3(-r1 * 1.4f, 10.0f, r1 * 0.9f));
+  camera_drone_.path_points.reserve(points + 4);
+  for (int i = 0; i < points; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(points);
+    const float ang = t * glm::two_pi<float>();
+    // Gerono lemniscate parameterization (horizontal figure-eight):
+    // x = a * cos(ang), z = a * sin(ang) * cos(ang)
+    const float x = a * std::cos(ang);
+    const float z = a * std::sin(ang) * std::cos(ang);
+    camera_drone_.path_points.push_back(glm::vec3(x, altitude, z));
+  }
 
-  // Mid-level approaches that sweep closer to the scene for context
-  camera_drone_.path_points.push_back(glm::vec3(-r2, 7.5f, 0.0f));
-  camera_drone_.path_points.push_back(glm::vec3(0.0f, 6.5f, r2));
-  camera_drone_.path_points.push_back(glm::vec3(r2, 6.8f, 0.0f));
-
-  // Inner pass/inspection points (lower altitude for surveying POIs)
-  camera_drone_.path_points.push_back(glm::vec3(r3, 4.8f, -r3 * 0.5f));
-  camera_drone_.path_points.push_back(glm::vec3(0.0f, 4.2f, -r3));
-
-  // Final smoothing point back near start (gentle climb)
-  camera_drone_.path_points.push_back(glm::vec3(-r1 * 0.6f, 9.0f, -r1));
-
-  // Populate points of interest near the origin and around the multisubmesh
-  // Raise POI heights slightly so the camera can come down and inspect them
-  camera_drone_.pois.push_back(glm::vec3(0.0f, 2.5f, 0.0f)); // center POI
-  camera_drone_.pois.push_back(glm::vec3(6.0f, 2.8f, 8.0f));
-  camera_drone_.pois.push_back(glm::vec3(-2.5f, 2.2f, 2.5f));
+  // Close the loop by repeating the first control point at the end
+  if (camera_drone_.path_points.size() >= 4) {
+    camera_drone_.path_points.push_back(camera_drone_.path_points.front());
+  }
 
   camera_drone_.path_length = ApproximatePathLength(camera_drone_.path_points);
   if (camera_drone_.path_length <= 0.0)
@@ -491,20 +481,57 @@ void MainModule::InitializeDefaultFlightPath()
   if (!camera_drone_.path_points.empty()) {
     const glm::vec3 start
       = EvalClosedCatmullRom(camera_drone_.path_points, camera_drone_.path_u);
-    camera_drone_.current_pos = start + glm::vec3(0.0f, 0.0f, -0.0f);
-    // orient to look at origin from the start pos
-    const glm::vec3 dir
-      = glm::normalize(glm::vec3(0.0f, 1.5f, 0.0f) - camera_drone_.current_pos);
+    camera_drone_.current_pos = start;
+
+    // Compute tangent at start for forward-facing orientation and rotate it
+    // toward the scene center by up to 45 degrees so the camera remains
+    // forward-looking but as focused as possible on the scene.
+    const double eps = 1e-3;
+    const glm::vec3 p_a = EvalClosedCatmullRom(
+      camera_drone_.path_points, std::fmod(camera_drone_.path_u + eps, 1.0));
+    glm::vec3 tangent = glm::normalize(p_a - start);
+    if (glm::length(tangent) < 1e-6f)
+      tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+
+    const glm::vec3 center = glm::vec3(0.0f, 2.5f, 0.0f);
+    glm::vec3 to_center = center - camera_drone_.current_pos;
+    if (glm::length(to_center) > 1e-6f)
+      to_center = glm::normalize(to_center);
+    else
+      to_center = tangent;
+
+    // Rotate tangent toward the center by at most 45 degrees
+    auto RotateTowardByAngle
+      = [](glm::vec3 from, glm::vec3 to, float max_angle) {
+          const float eps_axis = 1e-6f;
+          const float dotv = glm::clamp(glm::dot(from, to), -1.0f, 1.0f);
+          const float ang = std::acos(dotv);
+          // focus_strength controls how strongly we bias toward the target.
+          const float focus_strength = 0.6f; // in [0,1]
+          const float apply_angle = glm::min(max_angle, ang * focus_strength);
+          glm::vec3 axis = glm::cross(from, to);
+          if (glm::length(axis) < eps_axis) {
+            // degenerate (parallel or anti-parallel): pick an arbitrary axis
+            axis = glm::vec3(0.0f, 1.0f, 0.0f);
+          } else {
+            axis = glm::normalize(axis);
+          }
+          const glm::quat q = glm::angleAxis(apply_angle, axis);
+          return glm::normalize(q * from);
+        };
+
+    // For the very first frame, force an exact look-at toward the scene
+    // focal point so we never start looking away from the scene (this can
+    // trigger renderer-side assumptions when starting far away).
+    glm::vec3 init_fwd = to_center; // exact look-at on initialization
     camera_drone_.current_rot
-      = glm::quatLookAtRH(dir, glm::vec3(0.0f, 1.0f, 0.0f));
+      = glm::quatLookAtRH(init_fwd, glm::vec3(0.0f, 1.0f, 0.0f));
     camera_drone_.initialized = true; // avoid snapping on first Update
   }
 }
 
 auto MainModule::UpdateCameraDrone(double delta_time) -> void
 {
-  // Helper that advances and smooths the camera drone state. Uses
-  // camera_drone_ stored in the module state.
   auto& d = camera_drone_;
   if (!d.enabled) {
     static bool initialized = false;
@@ -514,280 +541,93 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
     }
     return;
   }
-  // update ramp (prevents initial rush)
-  if (d.ramp_elapsed < d.ramp_time) {
-    d.ramp_elapsed += delta_time;
-    if (d.ramp_elapsed > d.ramp_time)
-      d.ramp_elapsed = d.ramp_time;
-  }
-  const double ramp_t
-    = (d.ramp_time > 0.0) ? (d.ramp_elapsed / d.ramp_time) : 1.0;
 
-  // advance orbit angle, scaled by ramp factor so we don't snap to full speed
-  d.angle += d.speed * delta_time * std::min(1.0, 0.5 + 0.5 * ramp_t);
-  const double two_pi = static_cast<double>(glm::two_pi<float>());
-  if (d.angle > two_pi) {
-    d.angle = std::fmod(d.angle, two_pi);
-  }
-  // elapsed time for procedural noise/bob
-  const double elapsed = std::chrono::duration<double>(
-    std::chrono::steady_clock::now() - start_time_)
-                           .count();
+  // Simple clamp for delta to avoid large jumps
+  const double dt = std::min(delta_time, 0.05);
 
-  glm::dvec3 cam_pos_d(0.0, 0.0, 0.0);
-  // If a flight path is configured, follow it. Otherwise fall back to orbital
-  // motion.
-  if (!d.path_points.empty()) {
-    // Modulate speed to slow down near POIs: compute a multiplier in
-    // [0.45..1.0]
-    double poi_slow = 1.0;
-    // compute current world position (rough) for distance checks
-    const glm::vec3 sample_pos = EvalClosedCatmullRom(d.path_points, d.path_u);
-    for (const auto& poi : d.pois) {
-      const double dist_to_poi = glm::distance(sample_pos, poi);
-      const double engage_radius = 5.0; // base engagement radius
-      if (dist_to_poi < engage_radius * 1.6) {
-        const double t
-          = glm::clamp(dist_to_poi / (engage_radius * 1.6), 0.0, 1.0);
-        const double m = glm::mix(0.45, 1.0, t);
-        poi_slow = std::min(poi_slow, m);
-      }
+  // If no path, keep a fixed camera
+  if (d.path_points.empty()) {
+    SetupFixedCamera(main_camera_);
+    return;
+  }
+
+  // Advance along the path uniformly
+  if (d.path_length <= 0.0)
+    d.path_length = 1.0;
+  const double du = (d.path_speed * dt) / d.path_length;
+  d.path_u = std::fmod(d.path_u + du, 1.0);
+  if (d.path_u < 0.0)
+    d.path_u += 1.0;
+
+  // Sample position and tangent
+  const double eps = 1e-3;
+  const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
+  const glm::vec3 p_a
+    = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
+  glm::vec3 tangent = p_a - p;
+  if (glm::length(tangent) > 1e-6f)
+    tangent = glm::normalize(tangent);
+  else
+    tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+
+  const glm::vec3 cam_pos = p;
+
+  // Compute a forward vector biased toward the scene focal point but within
+  // rotation constraints (max 45 degrees). Keep camera primarily forward.
+  const glm::vec3 focus_target(static_cast<float>(d.focus_offset.x),
+    d.focus_height, static_cast<float>(d.focus_offset.y));
+  glm::vec3 focus_dir = focus_target - cam_pos;
+  if (glm::length(focus_dir) > 1e-6f)
+    focus_dir = glm::normalize(focus_dir);
+  else
+    focus_dir = tangent;
+
+  const float max_rot = glm::radians(180.0f);
+  const float focus_strength = 0.8f; // how strongly to bias toward focus
+  const float dotv = glm::clamp(glm::dot(tangent, focus_dir), -1.0f, 1.0f);
+  const float ang = std::acos(dotv);
+  const float apply_angle = glm::min(max_rot, ang * focus_strength);
+  glm::vec3 axis = glm::cross(tangent, focus_dir);
+  if (glm::length(axis) < 1e-6f)
+    axis = glm::vec3(0.0f, 1.0f, 0.0f);
+  else
+    axis = glm::normalize(axis);
+  const glm::quat rot = glm::angleAxis(apply_angle, axis);
+  glm::vec3 final_fwd = glm::normalize(rot * tangent);
+
+  // Clamp pitch to +/-45 degrees
+  auto ClampForwardPitch = [](glm::vec3 fwd) {
+    const float max_pitch = glm::radians(45.0f);
+    glm::vec3 horiz = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
+    if (glm::length(horiz) < 1e-6f)
+      return fwd;
+    const float current_pitch = std::asin(glm::clamp(fwd.y, -1.0f, 1.0f));
+    if (current_pitch > max_pitch) {
+      const float y = std::sin(max_pitch);
+      const float scale = std::cos(max_pitch);
+      return glm::normalize(glm::vec3(horiz.x * scale, y, horiz.z * scale));
+    } else if (current_pitch < -max_pitch) {
+      const float y = std::sin(-max_pitch);
+      const float scale = std::cos(-max_pitch);
+      return glm::normalize(glm::vec3(horiz.x * scale, y, horiz.z * scale));
     }
+    return fwd;
+  };
+  final_fwd = ClampForwardPitch(final_fwd);
 
-    // Advance path parameter by distance = speed * dt * poi_slow, convert to u
-    // increment
-    const double dist
-      = d.path_speed * poi_slow * delta_time * (0.5 + 0.5 * ramp_t);
-    const double du = (d.path_length > 0.0) ? (dist / d.path_length) : 0.0;
-    d.path_u = std::fmod(d.path_u + du, 1.0);
-    if (d.path_u < 0.0)
-      d.path_u += 1.0;
-
-    // sample position and a forward tangent slightly ahead for orientation
-    const double eps = 1e-3;
-    const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
-    const glm::vec3 p_a
-      = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
-    const glm::vec3 tangent = glm::normalize(p_a - p);
-    cam_pos_d = glm::dvec3(p.x, p.y, p.z);
-
-    // apply a small procedural bob relative to path height
-    const double bob = (d.bob_amp * ramp_t)
-      * std::sin(
-        2.0 * static_cast<double>(glm::pi<float>()) * d.bob_freq * elapsed);
-    cam_pos_d.y += bob;
-    // lateral noise in camera-local axes (use tangent/right vector)
-    const glm::vec3 right
-      = glm::normalize(glm::cross(tangent, glm::vec3(0.0f, 1.0f, 0.0f)));
-    const double raw_noise_x
-      = (d.noise_amp * ramp_t) * std::sin(elapsed * 0.7 + 1.3);
-    const double raw_noise_z
-      = (d.noise_amp * ramp_t) * std::cos(elapsed * 0.9 + 2.1);
-    const float noise_dt = static_cast<float>(std::min(0.05, delta_time));
-    const float noise_alpha = 1.0f - std::exp(-d.noise_response * noise_dt);
-    d.noise_state.x
-      = glm::mix(d.noise_state.x, static_cast<float>(raw_noise_x), noise_alpha);
-    d.noise_state.y
-      = glm::mix(d.noise_state.y, static_cast<float>(raw_noise_z), noise_alpha);
-    const double noise_x = d.noise_state.x;
-    const double noise_z = d.noise_state.y;
-    cam_pos_d += glm::dvec3(right * static_cast<float>(noise_x));
-    cam_pos_d
-      += glm::dvec3(glm::vec3(0.0f, 0.0f, 1.0f) * static_cast<float>(noise_z));
-  } else {
-    // subtle radius breathing to make the path feel organic
-    const double radius_variation = 0.18 * std::sin(elapsed * 0.37);
-    const double effective_radius = d.radius * (1.0 + radius_variation);
-
-    // base orbital position (tilted by inclination + small time-varying noise)
-    // inclination noise scaled by ramp to introduce tilt gradually
-    const double incl_noise = (0.02 * std::sin(elapsed * 0.41 + 0.5)) * ramp_t;
-    const double incl = d.inclination + incl_noise;
-    const double ca = std::cos(d.angle);
-    const double sa = std::sin(d.angle);
-    const double x = effective_radius * ca;
-    const double z = effective_radius * sa;
-    const double ci = std::cos(incl);
-    const double si = std::sin(incl);
-    cam_pos_d = glm::dvec3(static_cast<double>(x),
-      static_cast<double>(0.0 * ci - z * si),
-      static_cast<double>(0.0 * si + z * ci));
-
-    // bob and lateral jitter
-    const double bob = (d.bob_amp * ramp_t)
-      * std::sin(
-        2.0 * static_cast<double>(glm::pi<float>()) * d.bob_freq * elapsed);
-    const double raw_noise_x
-      = (d.noise_amp * ramp_t) * std::sin(elapsed * 0.7 + 1.3);
-    const double raw_noise_z
-      = (d.noise_amp * ramp_t) * std::cos(elapsed * 0.9 + 2.1);
-    const float noise_dt = static_cast<float>(std::min(0.05, delta_time));
-    const float noise_alpha = 1.0f - std::exp(-d.noise_response * noise_dt);
-    d.noise_state.x
-      = glm::mix(d.noise_state.x, static_cast<float>(raw_noise_x), noise_alpha);
-    d.noise_state.y
-      = glm::mix(d.noise_state.y, static_cast<float>(raw_noise_z), noise_alpha);
-    const double noise_x = d.noise_state.x;
-    const double noise_z = d.noise_state.y;
-    cam_pos_d.y += bob;
-    cam_pos_d.x += noise_x;
-    cam_pos_d.z += noise_z;
-  }
-
-  const glm::vec3 cam_pos(static_cast<float>(cam_pos_d.x),
-    static_cast<float>(cam_pos_d.y), static_cast<float>(cam_pos_d.z));
-
-  // desired rotation: look forward along the flight path (tangent) rather
-  // than always looking at the scene center. Fall back to a small look-ahead
-  // sample for the orbital case. This produces a forward-facing camera that
-  // tracks the path direction while still allowing banking.
-  glm::vec3 forward_dir(0.0f, 0.0f, 1.0f);
-  // If we sampled a tangent while following a spline, prefer that one.
-  // Otherwise compute a tiny look-ahead tangent for the orbital fallback.
-  if (!d.path_points.empty()) {
-    // We computed tangent earlier in the spline branch; recompute a tiny
-    // forward sample to be robust in case of refactors
-    const double eps = 1e-3;
-    const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
-    const glm::vec3 p_a
-      = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
-    const glm::vec3 tangent = glm::normalize(p_a - p);
-    if (glm::length(tangent) > 1e-6f)
-      forward_dir = tangent;
-  } else {
-    // Orbital fallback: compute a small-angle advance to get path tangent
-    const double eps_angle = 1e-3;
-    const double angle_a = d.angle + eps_angle;
-    // recompute a small future position using the same orbital math used
-    // above so the tangent matches the orbital motion
-    const double radius_variation = 0.18 * std::sin(elapsed * 0.37);
-    const double effective_radius = d.radius * (1.0 + radius_variation);
-    const double incl_noise = (0.02 * std::sin(elapsed * 0.41 + 0.5))
-      * (d.ramp_time > 0.0 ? (d.ramp_elapsed / d.ramp_time) : 1.0);
-    const double incl = d.inclination + incl_noise;
-    const double ca = std::cos(d.angle);
-    const double sa = std::sin(d.angle);
-    const double x = effective_radius * ca;
-    const double z = effective_radius * sa;
-    const double ci = std::cos(incl);
-    const double si = std::sin(incl);
-    const glm::dvec3 p(static_cast<double>(x),
-      static_cast<double>(0.0 * ci - z * si),
-      static_cast<double>(0.0 * si + z * ci));
-
-    const double ca2 = std::cos(angle_a);
-    const double sa2 = std::sin(angle_a);
-    const double x2 = effective_radius * ca2;
-    const double z2 = effective_radius * sa2;
-    const glm::dvec3 p2(static_cast<double>(x2),
-      static_cast<double>(0.0 * ci - z2 * si),
-      static_cast<double>(0.0 * si + z2 * ci));
-    const glm::vec3 tangent = glm::normalize(glm::vec3(p2 - p));
-    if (glm::length(tangent) > 1e-6f)
-      forward_dir = tangent;
-  }
   const glm::vec3 base_up(0.0f, 1.0f, 0.0f);
-  // Ensure forward is valid and normalized. If forward_dir is degenerate,
-  // fall back to using the previous rotation's forward or +Z.
-  glm::vec3 fwd = forward_dir;
-  const float fwd_len = glm::length(fwd);
-  if (fwd_len < 1e-6f) {
-    // derive a forward from current_rot if available
-    fwd = glm::normalize(d.current_rot * glm::vec3(0.0f, 0.0f, 1.0f));
-    if (glm::length(fwd) < 1e-6f) {
-      fwd = glm::vec3(0.0f, 0.0f, 1.0f);
-    }
-  } else {
-    fwd /= fwd_len;
-  }
+  const glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
 
-  // Compute a small look-at target so the camera doesn't stare too far ahead.
-  // Blend the path-forward vector with a look-at-to-focus vector. This keeps
-  // the camera forward-facing while tilting it gently toward the scene.
-  const float focus_x = static_cast<float>(d.focus_offset.x)
-    + 0.5f * static_cast<float>(std::sin(elapsed * 0.2));
-  const float focus_z = static_cast<float>(d.focus_offset.y)
-    + 0.5f * static_cast<float>(std::cos(elapsed * 0.17));
-  const glm::vec3 focus_target(focus_x, d.focus_height, focus_z);
-  glm::vec3 look_vec = focus_target - cam_pos;
-  float look_len = glm::length(look_vec);
-  if (look_len > 1e-6f) {
-    look_vec /= look_len;
-  } else {
-    look_vec = glm::vec3(0.0f, 0.0f, 1.0f);
-  }
-
-  // Distance-weighted look blend: when far away, bias strongly toward
-  // the scene center (look-from-far). As we approach, reduce the look-at
-  // bias so the camera faces more forward along its path.
-  const float dist_to_focus = glm::length(focus_target - cam_pos);
-  // map distance to a [0,1] factor where >10 units is 'far'
-  const float dist_factor
-    = glm::clamp((dist_to_focus - 2.0f) / 10.0f, 0.0f, 1.0f);
-  const float base_blend = 0.36f * static_cast<float>(ramp_t);
-  const float look_blend
-    = glm::mix(0.95f * base_blend, base_blend, dist_factor);
-  glm::vec3 final_fwd = glm::normalize(glm::mix(fwd, look_vec, look_blend));
-  if (glm::length(final_fwd) < 1e-6f) {
-    final_fwd = glm::vec3(0.0f, 0.0f, 1.0f);
-  }
-
-  glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
-
-  // estimate velocity for banking; guard against tiny delta_time
-  const glm::vec3 prev_pos = d.current_pos;
-  const float safe_dt = static_cast<float>(std::max(1e-6, delta_time));
-  // raw desired velocity towards new cam_pos
-  const glm::vec3 raw_vel
-    = (d.initialized) ? (cam_pos - prev_pos) / safe_dt : glm::vec3(0.0f);
-  // clamp instantaneous speed to avoid an initial rush
-  const float raw_speed = glm::length(raw_vel);
-  const float max_allowed = static_cast<float>(d.max_speed);
-  const glm::vec3 vel = (raw_speed > max_allowed)
-    ? (raw_vel * (max_allowed / raw_speed))
-    : raw_vel;
-  const glm::vec2 lateral_vel2(vel.x, vel.z);
-  const float lateral_speed
-    = glm::length(lateral_vel2) * static_cast<float>(ramp_t);
-  // determine sign of lateral turning: cross(forward, vel) in XZ gives sign
-  const glm::vec3 forward = final_fwd;
-  const float cross_z
-    = vel.x * forward.z - vel.z * forward.x; // 2D cross magnitude
-  const float lateral_sign = (cross_z >= 0.0f) ? 1.0f : -1.0f;
-  // bank strength scaled by ramp so initial frames don't over-roll
-  float bank = static_cast<float>(d.bank_factor * lateral_speed) * lateral_sign;
-  bank = glm::clamp(
-    bank, -static_cast<float>(d.max_bank), static_cast<float>(d.max_bank));
-  // Ensure bank axis is normalized to avoid NaN when bank is tiny
-  const glm::vec3 bank_axis = (glm::length(forward) > 1e-6f)
-    ? glm::normalize(forward)
-    : glm::vec3(0.0f, 0.0f, 1.0f);
-  const glm::quat bank_quat = glm::angleAxis(bank, bank_axis);
-  desired_rot = bank_quat * desired_rot;
-
-  // smoothing (critically damped-like feel controlled by damping)
-  const double tau = 1.0 / (d.damping + 1e-6);
-  // smoothing factor may be slightly reduced while ramping for a gentler start
-  const double ramp_smooth = 0.5 + 0.5 * ramp_t;
-  const float t
-    = static_cast<float>((1.0 - std::exp(-delta_time / tau)) * ramp_smooth);
+  // Simple smoothing for position and rotation
+  const float smooth_t
+    = static_cast<float>(glm::clamp(1.0 - std::exp(-dt * d.damping), 0.0, 1.0));
   if (!d.initialized) {
-    // initialize state gently: set current_pos slightly towards cam_pos instead
-    // of snapping
-    d.current_pos = glm::mix(d.current_pos, cam_pos, 0.25f);
+    d.current_pos = cam_pos;
     d.current_rot = desired_rot;
     d.initialized = true;
   } else {
-    // Use velocity-assisted interpolation for position to avoid sudden jumps
-    const glm::vec3 target_pos = cam_pos;
-    // Slight lateral oscillation based on elapsed time to keep view interesting
-    const float lateral_osc
-      = d.lateral_osc_amp * static_cast<float>(std::sin(elapsed * 0.6));
-    glm::vec3 oscillation = glm::vec3(lateral_osc, 0.0f, 0.0f);
-    const glm::vec3 pos_with_osc = target_pos + oscillation;
-    d.current_pos = glm::mix(d.current_pos, pos_with_osc, t);
-    // smooth rotation
-    d.current_rot = glm::slerp(d.current_rot, desired_rot, t);
+    d.current_pos = glm::mix(d.current_pos, cam_pos, smooth_t);
+    d.current_rot = glm::slerp(d.current_rot, desired_rot, smooth_t);
   }
 
   main_camera_.GetTransform().SetLocalPosition(d.current_pos);
