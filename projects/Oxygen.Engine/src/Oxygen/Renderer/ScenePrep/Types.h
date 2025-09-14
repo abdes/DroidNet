@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <type_traits>
 
@@ -49,6 +50,12 @@ using TransformHandle
   struct TransformHandleTag,
   Arithmetic>; // clang-format on
 
+//! Invalid TransformHandle sentinel value.
+//! TODO: Replace with proper invalid handle constant once VersionedHandle is
+//! implemented
+inline constexpr TransformHandle kInvalidTransformHandle { (
+  std::numeric_limits<std::uint32_t>::max)() };
+
 constexpr auto to_string(TransformHandle h)
 {
   return "TransH(" + std::to_string(h.get()) + ")";
@@ -67,6 +74,12 @@ using MaterialHandle
                         // clang-format off
   struct MaterialHandleTag,
   Arithmetic>; // clang-format on
+
+//! Invalid MaterialHandle sentinel value.
+//! TODO: Replace with proper invalid handle constant once VersionedHandle is
+//! implemented
+inline constexpr MaterialHandle kInvalidMaterialHandle { (
+  std::numeric_limits<std::uint32_t>::max)() };
 
 constexpr auto to_string(MaterialHandle h)
 {
@@ -87,6 +100,12 @@ using GeometryHandle
                         // clang-format off
   struct GeometryHandleTag,
   Arithmetic>; // clang-format on
+
+//! Invalid GeometryHandle sentinel value.
+//! TODO: Replace with proper invalid handle constant once VersionedHandle is
+//! implemented
+inline constexpr GeometryHandle kInvalidGeometryHandle { (
+  std::numeric_limits<std::uint32_t>::max)() };
 
 constexpr auto to_string(GeometryHandle h)
 {

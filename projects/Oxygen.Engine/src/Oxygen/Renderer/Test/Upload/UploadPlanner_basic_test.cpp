@@ -89,7 +89,9 @@ TEST(UploadPlanner, Texture2D_Full)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  const auto plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   EXPECT_EQ(r.buffer_offset, 0u);
@@ -119,7 +121,10 @@ TEST(UploadPlanner, Texture2D_TwoMips)
     UploadSubresource { .mip = 0, .array_slice = 0 },
     UploadSubresource { .mip = 1, .array_slice = 0 },
   };
-  const auto plan = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);
   const auto& r0 = plan.regions[0];
   EXPECT_EQ(r0.buffer_offset, 0u);
@@ -151,7 +156,9 @@ TEST(UploadPlanner, Texture2D_BC3_Full)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  const auto plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   // blocks_x = 128/4 = 32 -> row = 32 * 16 = 512 (already 256 aligned)
@@ -189,7 +196,10 @@ TEST(UploadPlanner, Texture2D_PartialRegion)
       .height = 20,
       .depth = 1 },
   };
-  const auto plan = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   // RGBA8: bytes_per_pixel=4, width=50 -> row=200 -> align to 256
@@ -222,7 +232,10 @@ TEST(UploadPlanner, Texture2D_ArrayTwoSlices)
     UploadSubresource { .mip = 0, .array_slice = 0 },
     UploadSubresource { .mip = 0, .array_slice = 1 },
   };
-  const auto plan = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);
   const auto& r0 = plan.regions[0];
   const auto& r1 = plan.regions[1];
@@ -251,7 +264,9 @@ TEST(UploadPlanner, Texture3D_Full)
   req.height = td.height;
   req.depth = td.depth;
   req.format = td.format;
-  const auto plan = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy {});
+  const auto exp_plan = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   // RGBA8: row = 32*4=128 -> align 256; slice = 256*16=4096; total = 4096*8
@@ -288,7 +303,10 @@ TEST(UploadPlanner, Texture3D_PartialRegion)
       .height = 9,
       .depth = 5 },
   };
-  const auto plan = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   // RGBA8: row = 17*4=68 -> align 256; slice = 256*9=2304; total adds * depth
@@ -325,7 +343,10 @@ TEST(UploadPlanner, TextureCube_TwoFaces)
     UploadSubresource { .mip = 0, .array_slice = 0 },
     UploadSubresource { .mip = 0, .array_slice = 3 },
   };
-  const auto plan = UploadPlanner::PlanTextureCube(req, subs, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTextureCube(req, subs, UploadPolicy {});
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);
   const auto& r0 = plan.regions[0];
   const auto& r1 = plan.regions[1];

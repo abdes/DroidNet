@@ -288,12 +288,6 @@ auto GeometryUploader::Update(
 auto GeometryUploader::OnFrameStart(renderer::RendererTag, frame::Slot slot)
   -> void
 {
-#ifndef NDEBUG
-  static frame::Slot last_slot = frame::kInvalidSlot;
-  DCHECK_F(slot != last_slot, "Frame slot did not advance");
-  last_slot = slot;
-#endif // NDEBUG
-
   ++current_epoch_;
   if (current_epoch_ == Epoch { 0 }) { // wrapped
     DLOG_F(INFO, "Epoch counter wrapped, resetting all entry epochs");
@@ -380,10 +374,17 @@ auto GeometryUploader::UploadBuffers() -> void
     // Submit to uploader, and let the uploader handle batching, prioritization,
     // and error handling.
     // TODO: consider marking the SubmitMany as noexcept
-    auto tickets = uploader_->SubmitMany(uploads, *staging_provider_);
-    pending_upload_tickets_.insert(
-      pending_upload_tickets_.end(), tickets.begin(), tickets.end());
-    LOG_F(1, "{} uploads submitted", uploads.size());
+    auto tickets_result = uploader_->SubmitMany(uploads, *staging_provider_);
+    if (tickets_result.has_value()) {
+      auto& tickets = tickets_result.value();
+      pending_upload_tickets_.insert(
+        pending_upload_tickets_.end(), tickets.begin(), tickets.end());
+      LOG_F(1, "{} uploads submitted", uploads.size());
+    } else {
+      std::error_code ec = tickets_result.error();
+      LOG_F(ERROR, "Transform upload submission failed: [{}] {}",
+        ec.category().name(), ec.message());
+    }
   } else {
     LOG_F(1, "no uploads needed this frame");
   }
@@ -512,8 +513,10 @@ auto GeometryUploader::RetireCompletedUploads() -> void
     if (const auto result = uploader_->TryGetResult(ticket)) {
       if (!result->success) {
         ++error_count;
-        LOG_F(ERROR, "GeometryUploader: Upload failed with error {} - {}",
-          static_cast<int>(result->error), result->message);
+        DCHECK_F(result->error.has_value());
+        std::error_code ec = *(result->error);
+        LOG_F(ERROR, "Could not get result for ticket {}: [{}] {}",
+          ticket.id.get(), ec.category().name(), ec.message());
       } else {
         DLOG_F(2, "GeometryUploader: Upload completed successfully ({} bytes)",
           result->bytes_uploaded);

@@ -33,16 +33,16 @@ NOLINT_TEST(UploadTracker, RegisterAndComplete)
   const auto t2 = tracker.Register(f2, /*bytes*/ 256, "t2");
 
   // Assert pre-completion
-  EXPECT_FALSE(tracker.IsComplete(t1.id));
-  EXPECT_FALSE(tracker.IsComplete(t2.id));
+  EXPECT_FALSE(tracker.IsComplete(t1.id).value_or(true));
+  EXPECT_FALSE(tracker.IsComplete(t2.id).value_or(true));
   EXPECT_FALSE(tracker.TryGetResult(t1.id).has_value());
 
   // Act: complete up to f1
   tracker.MarkFenceCompleted(FenceValue { 5 });
 
   // Assert: t1 completed, t2 pending
-  EXPECT_TRUE(tracker.IsComplete(t1.id));
-  EXPECT_FALSE(tracker.IsComplete(t2.id));
+  EXPECT_TRUE(tracker.IsComplete(t1.id).value_or(false));
+  EXPECT_FALSE(tracker.IsComplete(t2.id).value_or(true));
   const auto r1 = tracker.TryGetResult(t1.id);
   if (!r1.has_value()) {
     FAIL() << "expected a value";
@@ -54,7 +54,7 @@ NOLINT_TEST(UploadTracker, RegisterAndComplete)
   tracker.MarkFenceCompleted(FenceValue { 7 });
 
   // Assert: t2 completed
-  EXPECT_TRUE(tracker.IsComplete(t2.id));
+  EXPECT_TRUE(tracker.IsComplete(t2.id).value_or(false));
   const auto r2 = tracker.TryGetResult(t2.id);
   if (!r2.has_value()) {
     FAIL() << "expected a value";
@@ -77,7 +77,9 @@ NOLINT_TEST(UploadTracker, AwaitSingle)
   });
 
   // Assert: Await returns populated result
-  const auto r = tracker.Await(t.id);
+  const auto await_result = tracker.Await(t.id);
+  ASSERT_TRUE(await_result.has_value()) << "Await should succeed";
+  const auto r = await_result.value();
   EXPECT_TRUE(r.success);
   EXPECT_EQ(r.bytes_uploaded, 42u);
 
@@ -96,8 +98,8 @@ NOLINT_TEST(UploadTracker, AwaitAllMaxFence)
 
   // Act: complete first, ensure not all done yet
   tracker.MarkFenceCompleted(FenceValue { 2 });
-  EXPECT_TRUE(tracker.IsComplete(t1.id));
-  EXPECT_FALSE(tracker.IsComplete(t2.id));
+  EXPECT_TRUE(tracker.IsComplete(t1.id).value_or(false));
+  EXPECT_FALSE(tracker.IsComplete(t2.id).value_or(true));
 
   // In another thread, complete later
   std::thread worker([&tracker]() {
@@ -105,7 +107,10 @@ NOLINT_TEST(UploadTracker, AwaitAllMaxFence)
     tracker.MarkFenceCompleted(FenceValue { 5 });
   });
 
-  const auto results = tracker.AwaitAll(std::span<const UploadTicket>(tickets));
+  const auto await_all_result
+    = tracker.AwaitAll(std::span<const UploadTicket>(tickets));
+  ASSERT_TRUE(await_all_result.has_value()) << "AwaitAll should succeed";
+  const auto results = await_all_result.value();
   ASSERT_EQ(results.size(), 2u);
   EXPECT_EQ(results[0].bytes_uploaded, 10u);
   EXPECT_EQ(results[1].bytes_uploaded, 20u);
@@ -147,10 +152,12 @@ NOLINT_TEST(UploadTracker, Cancel_Pending_MarksCanceled)
   // Register a ticket with a future fence
   const auto t = tracker.Register(FenceValue { 100 }, 123, "to-cancel");
   // Cancel before completion
-  const bool canceled = tracker.Cancel(t.id);
+  const auto cancel_result = tracker.Cancel(t.id);
+  ASSERT_TRUE(cancel_result.has_value()) << "Cancel should succeed";
+  const bool canceled = cancel_result.value();
   EXPECT_TRUE(canceled);
   // Should be complete now with Canceled error
-  EXPECT_TRUE(tracker.IsComplete(t.id));
+  EXPECT_TRUE(tracker.IsComplete(t.id).value_or(false));
   auto r = tracker.TryGetResult(t.id);
   if (!r.has_value()) {
     FAIL() << "expected a value";

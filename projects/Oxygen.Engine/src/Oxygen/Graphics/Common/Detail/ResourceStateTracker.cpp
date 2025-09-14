@@ -114,8 +114,8 @@ auto ResourceStateTracker::RequireBufferState(const Buffer& buffer,
   const ResourceStates required_state, const bool is_permanent) -> void
 {
   const NativeResource native_object = buffer.GetNativeResource();
-  LOG_F(2, "buffer: require state 0x{:X} = {} {}", native_object,
-    nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
+  LOG_F(2, "buffer: require state {} = {} {}", native_object, required_state,
+    is_permanent ? " (permanent)" : "");
   auto& tracking_info = GetTrackingInfo(native_object);
   DCHECK_F(std::holds_alternative<BufferTrackingInfo>(tracking_info),
     "Resource is not a buffer or not tracked as a buffer");

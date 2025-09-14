@@ -4,53 +4,136 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Upload/UploadPlanner.h>
-
 #include <algorithm>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Upload/UploadPlanner.h>
+
+using oxygen::graphics::TextureUploadRegion;
+using oxygen::graphics::detail::FormatInfo;
+
+namespace {
+
+using oxygen::engine::upload::BufferUploadPlan;
+using oxygen::engine::upload::TextureUploadPlan;
+using oxygen::engine::upload::UploadError;
+using Align = oxygen::engine::upload::UploadPolicy::AlignmentPolicy;
+
+inline auto AlignUp(uint64_t v, uint64_t a) -> uint64_t
+{
+  return (v + (a - 1ULL)) & ~(a - 1ULL);
+}
+
+// Helper to compute per-2D-slice footprint for a given region size
+auto ComputeSlice(const FormatInfo& info, uint32_t region_w, uint32_t region_h)
+{
+  const auto row_align = Align::kRowPitchAlignment.get();
+  const auto blocks_x = (region_w + info.block_size - 1U) / info.block_size;
+  const auto blocks_y = (region_h + info.block_size - 1U) / info.block_size;
+  const auto row_pitch = AlignUp(blocks_x * info.bytes_per_block, row_align);
+  const auto slice_pitch = row_pitch * blocks_y;
+  return std::pair<uint64_t, uint64_t> { row_pitch, slice_pitch };
+};
+
+//! Build a BufferUploadPlan or return an UploadError when the computed
+//! regions are empty.
+inline auto MakeBufferPlanOrError(
+  uint64_t total_size, std::vector<BufferUploadPlan::CopyRegion>&& regions)
+  -> std::expected<BufferUploadPlan, UploadError>
+{
+  // We have requests, but none were valid. This is something we cannot
+  // gracefully ignore.
+  if (regions.empty()) {
+    DLOG_F(ERROR, "-failed- no upload request was valid");
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+  DLOG_F(
+    2, "plan summary: {} regions, {} bytes total", regions.size(), total_size);
+  return BufferUploadPlan {
+    .total_bytes = total_size,
+    .regions = std::move(regions),
+  };
+}
+
+//! Build a TextureUploadPlan or return an UploadError when the computed
+//! regions are empty.
+inline auto MakeTexturePlanOrError(
+  uint64_t total_size, std::vector<TextureUploadRegion>&& regions)
+  -> std::expected<TextureUploadPlan, UploadError>
+{
+  // We have requests, but none were valid. This is something we cannot
+  // gracefully ignore.
+  if (regions.empty()) {
+    DLOG_F(ERROR, "-failed- no upload request was valid");
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+  DLOG_F(
+    2, "plan summary: {} regions, {} bytes total", regions.size(), total_size);
+  return TextureUploadPlan {
+    .total_bytes = total_size,
+    .regions = std::move(regions),
+  };
+}
+
+} // anonymous namespace
 
 namespace oxygen::engine::upload {
 
-namespace {
-  inline auto AlignUp(uint64_t v, uint64_t a) -> uint64_t
-  {
-    return (v + (a - 1ull)) & ~(a - 1ull);
-  }
-}
-
 auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
-  const UploadPolicy& policy) -> UploadPlan
+  const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>
 {
-  UploadPlan plan {};
-  if (requests.empty())
-    return plan;
+  if (requests.empty()) {
+    // Not an error; just nothing to do.
+    return {};
+  }
 
-  const uint64_t align
-    = UploadPolicy::AlignmentPolicy::kBufferCopyAlignment.get();
+  (void)policy; // FIXME: use policy
+  using Policy = UploadPolicy::AlignmentPolicy;
+
+  DLOG_SCOPE_FUNCTION(2);
+  DLOG_F(2, "{} requests", requests.size());
+
+  const uint64_t align = Policy::kBufferCopyAlignment.get();
   // Collect valid buffer requests first (preserving request_index), then
   // sort/group by destination buffer and dst_offset so recording can batch
   // state transitions per resource. Staging offsets (src_offset) are assigned
   // according to this sorted order.
-  std::vector<UploadPlan::BufferCopyRegion> regions;
+  std::vector<BufferUploadPlan::CopyRegion> regions;
   regions.reserve(requests.size());
-  for (size_t i = 0; i < requests.size(); ++i) {
-    const auto& r = requests[i];
-    if (r.kind != UploadKind::kBuffer)
+  for (size_t idx = 0; idx < requests.size(); ++idx) {
+    const auto& r = requests[idx];
+    if (r.kind != UploadKind::kBuffer) {
       continue;
-    if (!std::holds_alternative<UploadBufferDesc>(r.desc))
+    }
+    DLOG_SCOPE_F(3, fmt::format("request[{}] : {}", idx, r.debug_name).c_str());
+    // Request is for a buffer upload, but the descriptor is not. Definitiely
+    // programming logic error.
+    if (!std::holds_alternative<UploadBufferDesc>(r.desc)) {
+      LOG_F(WARNING, "-skip- request is for a buffer upload, but desc is not");
       continue;
+    }
     const auto& bdesc = std::get<UploadBufferDesc>(r.desc);
-    if (!bdesc.dst || bdesc.size_bytes == 0)
+    if (!bdesc.dst || bdesc.size_bytes == 0) {
+      LOG_F(WARNING, "-skip- null or empty upload destination");
       continue;
+    }
+    auto bound = bdesc.dst_offset + bdesc.size_bytes;
+    if (bound > bdesc.dst->GetDescriptor().size_bytes) {
+      DLOG_SCOPE_F(3, "offset     : {}", bdesc.dst_offset);
+      DLOG_SCOPE_F(3, "size bytes : {}", bdesc.size_bytes);
+      LOG_F(WARNING, "-skip- request would overflow destination buffer");
+      continue;
+    }
 
-    UploadPlan::BufferCopyRegion br;
-    br.dst = bdesc.dst;
-    br.dst_offset = bdesc.dst_offset;
-    br.size = bdesc.size_bytes;
-    br.src_offset = 0; // assign after sorting
-    br.request_index = i;
+    BufferUploadPlan::CopyRegion br {
+      .dst = bdesc.dst,
+      .dst_offset = bdesc.dst_offset,
+      .size = bdesc.size_bytes,
+      .src_offset = 0, // assign after sorting
+      .request_index = idx,
+    };
     regions.emplace_back(br);
   }
 
@@ -75,12 +158,12 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
 
   // Optional optimization: merge contiguous regions targeting the same dst
   // when both destination offsets and assigned src offsets are contiguous.
-  std::vector<UploadPlan::BufferCopyRegion> merged;
+  std::vector<BufferUploadPlan::CopyRegion> merged;
   merged.reserve(regions.size());
-  for (size_t i = 0; i < regions.size(); ++i) {
-    auto cur = regions[i];
-    while (i + 1 < regions.size()) {
-      const auto& nxt = regions[i + 1];
+  for (size_t idx = 0; idx < regions.size(); ++idx) {
+    auto cur = regions[idx];
+    while (idx + 1 < regions.size()) {
+      const auto& nxt = regions[idx + 1];
       const bool same_dst = (cur.dst.get() == nxt.dst.get());
       const bool dst_contig = (cur.dst_offset + cur.size == nxt.dst_offset);
       const bool src_contig = (cur.src_offset + cur.size == nxt.src_offset);
@@ -90,299 +173,315 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
       // Merge nxt into cur
       cur.size += nxt.size;
       // Keep cur.request_index as the representative for the merged copy.
-      ++i;
+      ++idx;
     }
     merged.emplace_back(cur);
   }
 
-  plan.total_bytes = running;
-  plan.buffer_regions = std::move(merged);
-  // Touch policy to avoid unused warnings when compiled with empty batch.
-  (void)policy;
-  return plan;
+  return MakeBufferPlanOrError(running, std::move(merged));
 }
 
 auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
   std::span<const UploadSubresource> subresources, const UploadPolicy& policy)
-  -> UploadPlan
+  -> std::expected<TextureUploadPlan, UploadError>
 {
-  UploadPlan plan {};
-  if (!desc.dst)
-    return plan;
+  if (!desc.dst) {
+    return {};
+  }
+
+  DLOG_SCOPE_FUNCTION(2);
+
+  // Programming logic error. Should not happen if used correctly.
+  DCHECK_NOTNULL_F(desc.dst);
 
   const auto& dst_desc = desc.dst->GetDescriptor();
-  const auto fmt = dst_desc.format;
-  const auto info = oxygen::graphics::detail::GetFormatInfo(fmt);
-  const uint64_t row_align
-    = UploadPolicy::AlignmentPolicy::kRowPitchAlignment.get();
+  DLOG_F(2, "dst: {}x{} format={} subresources={}", dst_desc.width,
+    dst_desc.height, static_cast<int>(dst_desc.format), subresources.size());
+
+  // Fatal if descriptor is not valid
+  if (dst_desc.width == 0 || dst_desc.height == 0) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  // Fatal if format info is invalid
+  const auto info = oxygen::graphics::detail::GetFormatInfo(dst_desc.format);
+  if (info.bytes_per_block == 0 || info.block_size == 0) {
+    DLOG_F(ERROR, "unsupported or invalid texture format: {}", dst_desc.format);
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  (void)policy; // FIXME: use policy
   const uint64_t place_align
     = UploadPolicy::AlignmentPolicy::kPlacementAlignment.get();
 
   if (subresources.empty()) {
-    const uint32_t w = dst_desc.width;
-    const uint32_t h = dst_desc.height;
-    const uint64_t blocks_x = (w + info.block_size - 1u) / info.block_size;
-    const uint64_t blocks_y = (h + info.block_size - 1u) / info.block_size;
-    const uint64_t row_pitch
-      = AlignUp(blocks_x * info.bytes_per_block, row_align);
-    const uint64_t slice_pitch = row_pitch * blocks_y;
+    const auto [row_pitch, slice_pitch]
+      = ComputeSlice(info, dst_desc.width, dst_desc.height);
 
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = 0; // planner-relative; caller adds staging.offset
-    r.buffer_row_pitch = row_pitch;
-    r.buffer_slice_pitch = slice_pitch;
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = 0,
-      .y = 0,
-      .z = 0,
-      .width = static_cast<uint32_t>(-1),
-      .height = static_cast<uint32_t>(-1),
-      .depth = 1,
-      .mip_level = 0,
-      .array_slice = 0 };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = 0,
-          .num_mip_levels = 1,
-          .base_array_slice = 0,
-          .num_array_slices = 1 };
-    plan.total_bytes = slice_pitch;
-    plan.regions.emplace_back(r);
-    return plan;
+    oxygen::graphics::TextureUploadRegion r{
+      .buffer_offset = 0, // planner-relative; caller adds staging.offset
+      .buffer_row_pitch = row_pitch,
+      .buffer_slice_pitch = slice_pitch,
+      .dst_slice = oxygen::graphics::TextureSlice{
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .width = (std::numeric_limits<uint32_t>::max)(),
+        .height = (std::numeric_limits<uint32_t>::max)(),
+        .depth = 1,
+        .mip_level = 0,
+        .array_slice = 0,
+      },
+      .dst_subresources = oxygen::graphics::TextureSubResourceSet{
+        .base_mip_level = 0,
+        .num_mip_levels = 1,
+        .base_array_slice = 0,
+        .num_array_slices = 1,
+      },
+    };
+    return TextureUploadPlan {
+      .total_bytes = slice_pitch,
+      .regions = { r },
+    };
   }
 
-  plan.regions.reserve(subresources.size());
+  std::vector<TextureUploadRegion> regions;
+  regions.reserve(subresources.size());
   uint64_t running = 0;
+  size_t idx = 0;
   for (const auto& sr : subresources) {
+    DLOG_SCOPE_F(3, fmt::format("subresource[{}]", idx).c_str());
+    DLOG_F(3, "mip={}, array slice={}", sr.mip, sr.array_slice);
+    DLOG_F(3, "x,y={},{} w,h={}", idx, sr.x, sr.y, sr.width, sr.height);
+    ++idx;
     const uint32_t mip = sr.mip;
-    const uint32_t mip_w = (std::max)(dst_desc.width >> mip, 1u);
-    const uint32_t mip_h = (std::max)(dst_desc.height >> mip, 1u);
+    // Validate mip/array indices
+    if (mip >= dst_desc.mip_levels) {
+      LOG_F(WARNING, "-skip- subresource mip is out of range (mips={})",
+        dst_desc.mip_levels);
+      continue;
+    }
+    if (sr.array_slice >= dst_desc.array_size) {
+      LOG_F(WARNING,
+        "-skip- subresource array slice is out of range (arrays={})",
+        dst_desc.array_size);
+      continue;
+    }
 
     // If width/height are 0, it indicates full subresource.
-    const bool full = (sr.width == 0u) || (sr.height == 0u);
+    const bool full = (sr.width == 0U) || (sr.height == 0U);
+
+    const uint32_t mip_w = (std::max)(dst_desc.width >> mip, 1U);
+    const uint32_t mip_h = (std::max)(dst_desc.height >> mip, 1U);
+
     const uint32_t region_w = full ? mip_w : sr.width;
     const uint32_t region_h = full ? mip_h : sr.height;
 
-    // Compute block counts for region width/height (handles BC formats too).
-    const uint64_t blocks_x
-      = (region_w + info.block_size - 1u) / info.block_size;
-    const uint64_t blocks_y
-      = (region_h + info.block_size - 1u) / info.block_size;
-    const uint64_t row_pitch
-      = AlignUp(blocks_x * info.bytes_per_block, row_align);
-    const uint64_t slice_pitch = row_pitch * blocks_y;
+    // Bounds check
+    if (!full && (sr.x + region_w > mip_w || sr.y + region_h > mip_h)) {
+      LOG_F(WARNING, "-skip- subresource region out of bounds");
+      continue;
+    }
 
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = AlignUp(running, place_align);
-    r.buffer_row_pitch = row_pitch;
-    r.buffer_slice_pitch = slice_pitch;
-    // Destination region in texels; 0 size means full in API, but we fill.
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = full ? 0u : sr.x,
-      .y = full ? 0u : sr.y,
-      .z = 0u,
-      .width = full ? static_cast<uint32_t>(-1) : region_w,
-      .height = full ? static_cast<uint32_t>(-1) : region_h,
-      .depth = 1u,
-      .mip_level = sr.mip,
-      .array_slice = sr.array_slice };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = sr.mip,
-          .num_mip_levels = 1,
-          .base_array_slice = sr.array_slice,
-          .num_array_slices = 1 };
+    // Block compressed formats must be block-aligned for offsets and sizes.
+    if (info.block_size > 1) {
+      DLOG_F(3, "subresource uses BC format (block size {})", info.block_size);
+      if ((!full
+            && ((sr.x % info.block_size) != 0 || (sr.y % info.block_size) != 0))
+        || (region_w % info.block_size) != 0
+        || (region_h % info.block_size) != 0) {
+        LOG_F(WARNING, "-skip- subresource not aligned to block size");
+        continue;
+      }
+    }
 
-    plan.regions.emplace_back(r);
+    const auto [row_pitch, slice_pitch]
+      = ComputeSlice(info, region_w, region_h);
+
+    oxygen::graphics::TextureUploadRegion r{
+      .buffer_offset = AlignUp(running, place_align),
+      .buffer_row_pitch = row_pitch,
+      .buffer_slice_pitch = slice_pitch,
+      // Destination region in texels; 0 size means full in API, but we fill.
+      .dst_slice = oxygen::graphics::TextureSlice{
+        .x = full ? 0U : sr.x,
+        .y = full ? 0U : sr.y,
+        .z = 0U,
+        .width = full ? (std::numeric_limits<uint32_t>::max)() : region_w,
+        .height = full ? (std::numeric_limits<uint32_t>::max)() : region_h,
+        .depth = 1U,
+        .mip_level = sr.mip,
+        .array_slice = sr.array_slice,
+      },
+      .dst_subresources = oxygen::graphics::TextureSubResourceSet{
+        .base_mip_level = sr.mip,
+        .num_mip_levels = 1,
+        .base_array_slice = sr.array_slice,
+        .num_array_slices = 1,
+      },
+    };
+
+    regions.emplace_back(r);
     running = r.buffer_offset + slice_pitch;
   }
-  plan.total_bytes = running;
-  // Touch policy to avoid unused warnings in translation units where
-  // constexpr members are not considered sufficient usage.
-  (void)policy;
-  return plan;
+
+  return MakeTexturePlanOrError(running, std::move(regions));
 }
 
 auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
   std::span<const UploadSubresource> subresources, const UploadPolicy& policy)
-  -> UploadPlan
+  -> std::expected<TextureUploadPlan, UploadError>
 {
-  UploadPlan plan {};
-  if (!desc.dst)
-    return plan;
+  if (!desc.dst) {
+    return {};
+  }
+
+  DLOG_SCOPE_FUNCTION(2);
+
+  // Programming logic error. Should not happen if used correctly.
+  DCHECK_NOTNULL_F(desc.dst);
 
   const auto& dst_desc = desc.dst->GetDescriptor();
-  const auto fmt = dst_desc.format;
-  const auto info = oxygen::graphics::detail::GetFormatInfo(fmt);
-  const uint64_t row_align
-    = UploadPolicy::AlignmentPolicy::kRowPitchAlignment.get();
+  DLOG_F(2, "dst: {}x{}x{} format={} subresources={}", dst_desc.width,
+    dst_desc.height, dst_desc.depth, static_cast<int>(dst_desc.format),
+    subresources.size());
+
+  if (dst_desc.width == 0 || dst_desc.height == 0 || dst_desc.depth == 0) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  if (dst_desc.depth == 0) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  const auto info = oxygen::graphics::detail::GetFormatInfo(dst_desc.format);
+  if (info.bytes_per_block == 0 || info.block_size == 0) {
+    DLOG_F(ERROR, "unsupported or invalid texture format: {}", dst_desc.format);
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  (void)policy; // FIXME: use policy
   const uint64_t place_align
     = UploadPolicy::AlignmentPolicy::kPlacementAlignment.get();
-
-  // Helper to compute per-2D-slice footprint for a given region size
-  auto compute_slice = [&](uint32_t region_w, uint32_t region_h) {
-    const uint64_t blocks_x
-      = (region_w + info.block_size - 1u) / info.block_size;
-    const uint64_t blocks_y
-      = (region_h + info.block_size - 1u) / info.block_size;
-    const uint64_t row_pitch
-      = AlignUp(blocks_x * info.bytes_per_block, row_align);
-    const uint64_t slice_pitch = row_pitch * blocks_y;
-    return std::pair<uint64_t, uint64_t> { row_pitch, slice_pitch };
-  };
 
   // Full upload default (mip 0, all depth)
   if (subresources.empty()) {
-    const uint32_t w = dst_desc.width;
-    const uint32_t h = dst_desc.height;
-    const uint32_t d = dst_desc.depth;
-    const auto [row_pitch, slice_pitch] = compute_slice(w, h);
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = 0;
-    r.buffer_row_pitch = row_pitch;
-    r.buffer_slice_pitch = slice_pitch;
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = 0,
-      .y = 0,
-      .z = 0,
-      .width = static_cast<uint32_t>(-1),
-      .height = static_cast<uint32_t>(-1),
-      .depth = static_cast<uint32_t>(-1),
-      .mip_level = 0,
-      .array_slice = 0 };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = 0,
-          .num_mip_levels = 1,
-          .base_array_slice = 0,
-          .num_array_slices = 1 };
-    plan.total_bytes = static_cast<uint64_t>(slice_pitch) * d;
-    plan.regions.emplace_back(r);
-    return plan;
+    const auto [row_pitch, slice_pitch]
+      = ComputeSlice(info, dst_desc.width, dst_desc.height);
+    oxygen::graphics::TextureUploadRegion r{
+      .buffer_offset = 0,
+      .buffer_row_pitch = row_pitch,
+      .buffer_slice_pitch = slice_pitch,
+      .dst_slice = oxygen::graphics::TextureSlice{
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .width = (std::numeric_limits<uint32_t>::max)(),
+        .height = (std::numeric_limits<uint32_t>::max)(),
+        .depth = (std::numeric_limits<uint32_t>::max)(),
+        .mip_level = 0,
+        .array_slice = 0,
+      },
+      .dst_subresources = oxygen::graphics::TextureSubResourceSet{
+        .base_mip_level = 0,
+        .num_mip_levels = 1,
+        .base_array_slice = 0,
+        .num_array_slices = 1,
+      },
+    };
+    return TextureUploadPlan {
+      .total_bytes = slice_pitch * dst_desc.depth,
+      .regions = { r },
+    };
   }
 
-  plan.regions.reserve(subresources.size());
+  std::vector<TextureUploadRegion> regions;
+  regions.reserve(subresources.size());
   uint64_t running = 0;
+  size_t idx = 0;
   for (const auto& sr : subresources) {
+    DLOG_SCOPE_F(3, fmt::format("subresource[{}]", idx).c_str());
+    DLOG_F(3, "mip={}, array slice={}", sr.mip, sr.array_slice);
+    DLOG_F(3, "x,y={},{} w,h={}", idx, sr.x, sr.y, sr.width, sr.height);
+    DLOG_F(3, "depth={}", sr.depth);
     const uint32_t mip = sr.mip;
-    const uint32_t mip_w = (std::max)(dst_desc.width >> mip, 1u);
-    const uint32_t mip_h = (std::max)(dst_desc.height >> mip, 1u);
-    const uint32_t mip_d = (std::max)(dst_desc.depth >> mip, 1u);
-    const bool full_xy = (sr.width == 0u) || (sr.height == 0u);
-    const bool full_z = (sr.depth == 0u);
-    const uint32_t region_w = full_xy ? mip_w : sr.width;
-    const uint32_t region_h = full_xy ? mip_h : sr.height;
-    const uint32_t region_d = full_z ? mip_d : sr.depth;
+    if (mip >= dst_desc.mip_levels) {
+      LOG_F(WARNING, "-skip- subresource is out of range (mips={})",
+        dst_desc.mip_levels);
+      continue;
+    }
+    if (sr.array_slice >= dst_desc.array_size) {
+      LOG_F(WARNING,
+        "-skip- subresource array slice is out of range (arrays={})",
+        dst_desc.array_size);
+      continue;
+    }
 
-    const auto [row_pitch, slice_pitch] = compute_slice(region_w, region_h);
+    const auto mip_w = (std::max)(dst_desc.width >> mip, 1U);
+    const auto mip_h = (std::max)(dst_desc.height >> mip, 1U);
+    const auto mip_d = (std::max)(dst_desc.depth >> mip, 1U);
+    const auto full_xy = (sr.width == 0U) || (sr.height == 0U);
+    const auto full_z = (sr.depth == 0U);
+    const auto region_w = full_xy ? mip_w : sr.width;
+    const auto region_h = full_xy ? mip_h : sr.height;
+    const auto region_d = full_z ? mip_d : sr.depth;
 
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = AlignUp(running, place_align);
-    r.buffer_row_pitch = row_pitch;
-    // For 3D, buffer_slice_pitch is 2D-slice pitch; total bytes multiply by D
-    r.buffer_slice_pitch = slice_pitch;
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = full_xy ? 0u : sr.x,
-      .y = full_xy ? 0u : sr.y,
-      .z = full_z ? 0u : sr.z,
-      .width = full_xy ? static_cast<uint32_t>(-1) : region_w,
-      .height = full_xy ? static_cast<uint32_t>(-1) : region_h,
-      .depth = full_z ? static_cast<uint32_t>(-1) : region_d,
-      .mip_level = sr.mip,
-      .array_slice = sr.array_slice };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = sr.mip,
-          .num_mip_levels = 1,
-          .base_array_slice = sr.array_slice,
-          .num_array_slices = 1 };
+    if (!full_xy) {
+      if (sr.x + region_w > mip_w || sr.y + region_h > mip_h) {
+        LOG_F(WARNING,
+          "-skip- subresource region out of bounds (mip {} size {}x{})", mip,
+          mip_w, mip_h);
+        continue;
+      }
+    }
+    if (!full_z && (sr.z + region_d > mip_d)) {
+      LOG_F(WARNING, "-skip- subresource depth out of bounds");
+      continue;
+    }
 
-    plan.regions.emplace_back(r);
+    // Block alignment checks for BC formats
+    if (info.block_size > 1) {
+      DLOG_F(3, "subresource uses BC format (block size {})", info.block_size);
+      if ((!full_xy
+            && ((sr.x % info.block_size) != 0 || (sr.y % info.block_size) != 0))
+        || (region_w % info.block_size) != 0
+        || (region_h % info.block_size) != 0) {
+        LOG_F(WARNING, "-skip- subresource not aligned to block size");
+        continue;
+      }
+    }
+
+    const auto [row_pitch, slice_pitch]
+      = ComputeSlice(info, region_w, region_h);
+
+    oxygen::graphics::TextureUploadRegion r{
+      .buffer_offset = AlignUp(running, place_align),
+      .buffer_row_pitch = row_pitch,
+      // For 3D, buffer_slice_pitch is 2D-slice pitch; total bytes multiply by D
+      .buffer_slice_pitch = slice_pitch,
+      .dst_slice = oxygen::graphics::TextureSlice{
+        .x = full_xy ? 0U : sr.x,
+        .y = full_xy ? 0U : sr.y,
+        .z = full_z ? 0U : sr.z,
+        .width = full_xy ? (std::numeric_limits<uint32_t>::max)() : region_w,
+        .height = full_xy ? (std::numeric_limits<uint32_t>::max)() : region_h,
+        .depth = full_z ? (std::numeric_limits<uint32_t>::max)() : region_d,
+        .mip_level = sr.mip,
+        .array_slice = sr.array_slice,
+      },
+      .dst_subresources = oxygen::graphics::TextureSubResourceSet{
+        .base_mip_level = sr.mip,
+        .num_mip_levels = 1,
+        .base_array_slice = sr.array_slice,
+        .num_array_slices = 1,
+      },
+    };
+
+    regions.emplace_back(r);
     running = r.buffer_offset + (slice_pitch * region_d);
   }
-  plan.total_bytes = running;
-  (void)policy;
-  return plan;
-}
 
-auto UploadPlanner::PlanTextureCube(const UploadTextureDesc& desc,
-  std::span<const UploadSubresource> subresources, const UploadPolicy& policy)
-  -> UploadPlan
-{
-  // Treat as 2D array; use PlanTexture2D math and just respect array_slice.
-  // We still implement here to make API explicit and allow future divergence.
-  UploadPlan plan {};
-  if (!desc.dst)
-    return plan;
-
-  const auto& dst_desc = desc.dst->GetDescriptor();
-  const auto info = oxygen::graphics::detail::GetFormatInfo(dst_desc.format);
-  const uint64_t row_align
-    = UploadPolicy::AlignmentPolicy::kRowPitchAlignment.get();
-  const uint64_t place_align
-    = UploadPolicy::AlignmentPolicy::kPlacementAlignment.get();
-
-  auto compute_row_slice = [&](uint32_t w, uint32_t h) {
-    const uint64_t blocks_x = (w + info.block_size - 1u) / info.block_size;
-    const uint64_t blocks_y = (h + info.block_size - 1u) / info.block_size;
-    const uint64_t row_pitch
-      = AlignUp(blocks_x * info.bytes_per_block, row_align);
-    const uint64_t slice_pitch = row_pitch * blocks_y;
-    return std::pair<uint64_t, uint64_t> { row_pitch, slice_pitch };
-  };
-
-  if (subresources.empty()) {
-    const auto [row_pitch, slice_pitch]
-      = compute_row_slice(dst_desc.width, dst_desc.height);
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = 0;
-    r.buffer_row_pitch = row_pitch;
-    r.buffer_slice_pitch = slice_pitch;
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = 0,
-      .y = 0,
-      .z = 0,
-      .width = static_cast<uint32_t>(-1),
-      .height = static_cast<uint32_t>(-1),
-      .depth = 1,
-      .mip_level = 0,
-      .array_slice = 0 };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = 0,
-          .num_mip_levels = 1,
-          .base_array_slice = 0,
-          .num_array_slices = 1 };
-    plan.total_bytes = slice_pitch;
-    plan.regions.emplace_back(r);
-    return plan;
-  }
-
-  plan.regions.reserve(subresources.size());
-  uint64_t running = 0;
-  for (const auto& sr : subresources) {
-    const uint32_t mip = sr.mip;
-    const uint32_t mip_w = (std::max)(dst_desc.width >> mip, 1u);
-    const uint32_t mip_h = (std::max)(dst_desc.height >> mip, 1u);
-    const bool full_xy = (sr.width == 0u) || (sr.height == 0u);
-    const uint32_t region_w = full_xy ? mip_w : sr.width;
-    const uint32_t region_h = full_xy ? mip_h : sr.height;
-    const auto [row_pitch, slice_pitch] = compute_row_slice(region_w, region_h);
-
-    oxygen::graphics::TextureUploadRegion r;
-    r.buffer_offset = AlignUp(running, place_align);
-    r.buffer_row_pitch = row_pitch;
-    r.buffer_slice_pitch = slice_pitch;
-    r.dst_slice = oxygen::graphics::TextureSlice { .x = full_xy ? 0u : sr.x,
-      .y = full_xy ? 0u : sr.y,
-      .z = 0u,
-      .width = full_xy ? static_cast<uint32_t>(-1) : region_w,
-      .height = full_xy ? static_cast<uint32_t>(-1) : region_h,
-      .depth = 1u,
-      .mip_level = sr.mip,
-      .array_slice = sr.array_slice };
-    r.dst_subresources
-      = oxygen::graphics::TextureSubResourceSet { .base_mip_level = sr.mip,
-          .num_mip_levels = 1,
-          .base_array_slice = sr.array_slice,
-          .num_array_slices = 1 };
-
-    plan.regions.emplace_back(r);
-    running = r.buffer_offset + slice_pitch;
-  }
-  plan.total_bytes = running;
-  (void)policy;
-  return plan;
+  return MakeTexturePlanOrError(running, std::move(regions));
 }
 
 } // namespace oxygen::engine::upload

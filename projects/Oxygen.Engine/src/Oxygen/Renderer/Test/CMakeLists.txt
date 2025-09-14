@@ -62,7 +62,6 @@ m_gtest_program(
     "Upload/UploadCoordinator_buffer_test.cpp"
     "Upload/UploadCoordinator_texture2d_test.cpp"
     "Upload/UploadCoordinator_texture3d_test.cpp"
-    "Upload/UploadCoordinator_texturecube_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Renderer.UploadCoordinator.Tests

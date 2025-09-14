@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Test/Upload/UploadCoordinatorTest.h>
 #include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
@@ -20,6 +21,12 @@ auto UploaderTagFactory::Get() noexcept -> UploaderTag
   return UploaderTag {};
 }
 } // namespace oxygen::engine::upload::internal
+namespace oxygen::renderer::internal {
+auto RendererTagFactory::Get() noexcept -> RendererTag
+{
+  return RendererTag {};
+}
+} // namespace oxygen::renderer::internal
 #endif
 
 namespace oxygen::engine::upload::testing {

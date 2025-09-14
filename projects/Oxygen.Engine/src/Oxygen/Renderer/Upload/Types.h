@@ -10,15 +10,18 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
+#include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -70,16 +73,6 @@ enum class UploadKind : uint8_t {
   kTextureCube,
 };
 
-enum class UploadError : uint8_t {
-  kNone,
-  kStagingAllocFailed,
-  kRecordingFailed,
-  kSubmitFailed,
-  kDeviceLost,
-  kProducerFailed,
-  kCanceled,
-};
-
 enum class BatchPolicy : uint8_t {
   kImmediate,
   kCoalesce,
@@ -129,16 +122,38 @@ struct UploadRequest {
     data;
 };
 
+//! Represents a valid GPU upload operation that can be tracked for completion.
+/*!
+ A ticket is issued for every successful upload submission and provides a way to
+ query completion status and retrieve results. All tickets are guaranteed to be
+ valid and represent actual upload operations.
+
+ @see UploadCoordinator::Submit(), UploadTracker::IsComplete()
+*/
 struct UploadTicket {
-  TicketId id { 0 };
-  FenceValue fence { graphics::fence::kInvalidValue };
+  TicketId id;
+  FenceValue fence;
+
+  // Non-default constructible - all tickets must be explicitly created with
+  // valid values
+  UploadTicket() = delete;
+  UploadTicket(TicketId ticket_id, FenceValue fence_value)
+    : id(ticket_id)
+    , fence(fence_value)
+  {
+  }
+
+  // Rule of 5: explicit copy/move semantics
+  OXYGEN_DEFAULT_COPYABLE(UploadTicket)
+  OXYGEN_DEFAULT_MOVABLE(UploadTicket)
+
+  ~UploadTicket() = default;
 };
 
 struct UploadResult {
   bool success { false };
   uint64_t bytes_uploaded { 0 };
-  UploadError error { UploadError::kNone };
-  std::string message;
+  std::optional<UploadError> error;
 };
 
 } // namespace oxygen::engine::upload
