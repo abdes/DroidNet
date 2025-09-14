@@ -32,6 +32,8 @@ ticket → RetireCompleted polls fence and notifies providers for recycling.
 - UploadPlanner
   - Computes buffer coalescing and texture subresource regions using
     `UploadPolicy` row/placement alignment and `FormatInfo`.
+  - Merges contiguous regions and groups by destination buffer, minimizing copy
+    operations and state transitions.
   - Source: `UploadPlanner.h/.cpp`.
 - StagingProvider (abstract)
   - Contract for CPU-visible staging allocations; returns an `Allocation`
@@ -48,6 +50,8 @@ ticket → RetireCompleted polls fence and notifies providers for recycling.
 - UploadTracker
   - Fence-based ticketing with blocking and coroutine-friendly waits;
     aggregates `UploadStats`.
+  - Frame-slot-based cleanup: discards all entries created for the same frame
+    slot than the current one, but ina previous frame cycle.
   - Source: `UploadTracker.h/.cpp`, `UploadDiagnostics.h`.
 - UploadPolicy
   - Policy constants: batch limits, row/placement/buffer copy alignments,

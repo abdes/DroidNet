@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -40,7 +41,8 @@ public:
   OXGN_RNDR_API ~TransformUploader();
 
   //! Start a new frame - must be called once per frame before any operations
-  OXGN_RNDR_API auto OnFrameStart(oxygen::frame::Slot slot) -> void;
+  OXGN_RNDR_API auto OnFrameStart(
+    renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
   //! Get or allocate a handle for the given transform matrix
   OXGN_RNDR_API auto GetOrAllocate(const glm::mat4& transform)
@@ -113,12 +115,22 @@ private:
   // unbounded growth when transforms are dynamic. Reset at OnFrameStart.
   std::uint32_t frame_write_count_ { 0U };
 
-  // Cache lifecycle tracking
-  std::optional<oxygen::frame::Slot> cache_creation_slot_;
+  // Current frame slot for atlas element retirement
+  oxygen::frame::Slot current_frame_slot_ { oxygen::frame::kInvalidSlot };
 
   // Statistics
+  //! Total number of new logical transforms allocated (grows monotonically)
   std::uint64_t total_allocations_ { 0U };
+  //! Number of cache hits where existing transforms were reused (performance
+  //! metric)
   std::uint64_t cache_hits_ { 0U };
+  //! Total number of GetOrAllocate() calls made (usage metric)
+  std::uint64_t total_calls_ { 0U };
+  //! Total number of logical transform allocations (each requires world+normal
+  //! pair)
+  std::uint64_t atlas_allocations_ { 0U };
+  //! Total number of upload operations submitted to staging provider
+  std::uint64_t upload_operations_ { 0U };
 };
 
 } // namespace oxygen::renderer::resources

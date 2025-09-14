@@ -63,8 +63,11 @@ TransformUploader::TransformUploader(observer_ptr<Graphics> gfx,
 TransformUploader::~TransformUploader()
 {
   LOG_SCOPE_F(INFO, "TransformUploader Statistics");
+  LOG_F(INFO, "total calls       : {}", total_calls_);
   LOG_F(INFO, "total allocations : {}", total_allocations_);
   LOG_F(INFO, "cache hits        : {}", cache_hits_);
+  LOG_F(INFO, "atlas allocations : {}", atlas_allocations_);
+  LOG_F(INFO, "upload operations : {}", upload_operations_);
   LOG_F(INFO, "transforms stored : {}", transforms_.size());
 
   if (worlds_atlas_) {
@@ -90,35 +93,32 @@ TransformUploader::~TransformUploader()
   }
 }
 
-auto TransformUploader::OnFrameStart(oxygen::frame::Slot slot) -> void
+auto TransformUploader::OnFrameStart(
+  renderer::RendererTag, oxygen::frame::Slot slot) -> void
 {
+#ifndef NDEBUG
+  static frame::Slot last_slot = frame::kInvalidSlot;
+  DCHECK_F(slot != last_slot, "Frame slot did not advance");
+  last_slot = slot;
+#endif // NDEBUG
+
   ++current_epoch_;
   if (current_epoch_ == 0U) {
     current_epoch_ = 1U;
   }
   frame_write_count_ = 0U;
-  // Value-key map is per-frame for intra-frame dedup/coalescing only.
-  key_to_handle_.clear();
+  current_frame_slot_ = slot;
+  // Phase 1: Keep cache across frames for stable element indices.
+  // Cache clearing violated Phase 1 "stable entries" requirement.
 
-  // Clear cache only when we complete a full cycle (same slot as cache
-  // creation)
-  const bool should_clear_cache
-    = cache_creation_slot_.has_value() && cache_creation_slot_.value() == slot;
-
-  if (should_clear_cache || key_to_handle_.empty()) {
-    // Keep resident cache; reset per-frame value map for intra-frame dedupe.
-    key_to_handle_.clear();
-    cache_creation_slot_ = slot; // Record new cache creation slot
-  }
+  // IMPORTANT: Do NOT clear the deduplication map based on frame slots!
+  // Clearing key_to_handle_ breaks handle stability and causes transforms
+  // to get new handles each cycle. The deduplication map should only be
+  // cleared for intra-frame deduplication, not cross-frame stability.
 
   uploaded_this_frame_ = false;
   // Phase 1 (atlas path): we do not track first_new_index_. We upload
   // all cached transforms every frame and keep indices stable.
-
-  // Notify staging provider of frame slot; ring providers will partition.
-  if (staging_provider_) {
-    staging_provider_->OnFrameStart(slot);
-  }
 
   // Prepare atlases lifecycle (recycle any retired elements for this slot)
   if (worlds_atlas_) {
@@ -132,6 +132,8 @@ auto TransformUploader::OnFrameStart(oxygen::frame::Slot slot) -> void
 auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   -> engine::sceneprep::TransformHandle
 {
+  ++total_calls_;
+
   DCHECK_F(IsFinite(transform), "GetOrAllocate received non-finite matrix");
 
   // Check for existing transform using hash-based deduplication. We first
@@ -211,6 +213,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
       DCHECK_F(nref.has_value(), "Failed to allocate normal matrix (atlas)");
       world_refs_.push_back(*wref);
       normal_refs_.push_back(*nref);
+      ++atlas_allocations_; // Count logical transform allocation (world+normal
+                            // pair)
     }
   }
 
@@ -221,6 +225,16 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   // Cache for deduplication (intra-frame): map value key to this handle and
   // the index into CPU arrays used to verify near-equality.
   std::uint32_t mapped_index = index;
+
+  // Release old atlas allocation if we're replacing an existing cache entry
+  if (auto it = key_to_handle_.find(key); it != key_to_handle_.end()) {
+    const auto old_index = it->second.index;
+    if (old_index < world_refs_.size()) {
+      worlds_atlas_->Release(world_refs_[old_index], current_frame_slot_);
+      normals_atlas_->Release(normal_refs_[old_index], current_frame_slot_);
+    }
+  }
+
   key_to_handle_[key] = TransformCacheEntry { handle, mapped_index };
   if (is_new_logical) {
     ++total_allocations_;
@@ -256,12 +270,13 @@ auto TransformUploader::EnsureFrameResources() -> void
 
   // Emit naive per-element requests for dirty entries; coordinator will batch
   // and coalesce (including contiguous merges) across all buffer requests.
+  // Phase 1: Upload all transforms every frame (ignore dirty tracking)
   for (std::uint32_t i = 0; i < count; ++i) {
-    const bool is_dirty
-      = (i < dirty_epoch_.size()) && (dirty_epoch_[i] == current_epoch_);
-    if (!is_dirty) {
-      continue;
-    }
+    // Phase 1 behavior: Upload all transforms every frame regardless of dirty
+    // status const bool is_dirty = (i < dirty_epoch_.size()) &&
+    // (dirty_epoch_[i] == current_epoch_); if (!is_dirty) {
+    //   continue;
+    // }
     // World matrix
     if (auto desc = worlds_atlas_->MakeUploadDesc(world_refs_[i], stride)) {
       oxygen::engine::upload::UploadRequest req;
@@ -271,6 +286,9 @@ auto TransformUploader::EnsureFrameResources() -> void
       req.data = oxygen::engine::upload::UploadDataView { std::as_bytes(
         std::span<const glm::mat4>(&transforms_[i], 1)) };
       requests.push_back(std::move(req));
+    } else {
+      LOG_F(
+        ERROR, "Failed to create upload descriptor for world transform {}", i);
     }
 
     // Normal matrix
@@ -282,12 +300,16 @@ auto TransformUploader::EnsureFrameResources() -> void
       req.data = oxygen::engine::upload::UploadDataView { std::as_bytes(
         std::span<const glm::mat4>(&normal_matrices_[i], 1)) };
       requests.push_back(std::move(req));
+    } else {
+      LOG_F(
+        ERROR, "Failed to create upload descriptor for normal matrix {}", i);
     }
   }
 
   if (!requests.empty()) {
     const auto tickets = uploader_->SubmitMany(
       std::span { requests.data(), requests.size() }, *staging_provider_);
+    upload_operations_ += requests.size(); // Track number of upload operations
     (void)tickets; // tickets unused in this path
   }
   // Leave resident; only dirty parts updated.
@@ -311,7 +333,7 @@ auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(normals_atlas_.get(), "Atlas not initialized");
-  if (normals_atlas_->GetBinding().srv == ShaderVisibleIndex {}) {
+  if (normals_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
     (void)normals_atlas_->EnsureCapacity(
       std::max<std::uint32_t>(
         1U, static_cast<std::uint32_t>(transforms_.size())),

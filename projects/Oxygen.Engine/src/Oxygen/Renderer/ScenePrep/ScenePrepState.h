@@ -133,19 +133,6 @@ public:
     pass_masks.clear();
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
-  auto OnFrameStart(const oxygen::frame::Slot slot) -> void
-  {
-    // Reset transform manager for the new frame
-    transform_mgr_->OnFrameStart(slot);
-
-    // Reset geometry uploader for the new frame
-    geometry_uploader_->OnFrameStart();
-
-    // Reset material binder for the new frame
-    material_binder_->OnFrameStart();
-  }
-
 private:
   //! Raw items collected during scene traversal.
   std::vector<RenderItemData> collected_items_;

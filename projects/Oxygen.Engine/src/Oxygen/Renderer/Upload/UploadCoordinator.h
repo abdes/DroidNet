@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Value.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadDiagnostics.h>
@@ -46,9 +47,8 @@ public:
   // Factory methods for staging providers
   // Returns a shared_ptr to the created provider and tracks it for lifecycle
   // management
-  auto CreateSingleBufferStaging(
-    StagingProvider::MapPolicy policy = StagingProvider::MapPolicy::kPinned,
-    float slack = 0.5f) -> std::shared_ptr<StagingProvider>;
+  auto CreateSingleBufferStaging(float slack = 0.5f)
+    -> std::shared_ptr<StagingProvider>;
 
   auto CreateRingBufferStaging(
     frame::SlotCount partitions, std::uint32_t alignment, float slack = 0.5f)
@@ -75,9 +75,6 @@ public:
     return tracker_.AwaitAll(tickets);
   }
 
-  OXGN_RNDR_API auto Flush() -> void;
-  OXGN_RNDR_API auto RetireCompleted() -> void;
-
   /*!
    * All staging providers must be created via UploadCoordinator factory
    * methods. This ensures correct lifecycle management, frame notifications,
@@ -85,7 +82,7 @@ public:
    * CreateSingleBufferStaging or CreateRingBufferStaging.
    */
   // Notify all tracked providers of frame slot change
-  auto OnFrameStart(frame::Slot slot) -> void;
+  auto OnFrameStart(renderer::RendererTag, frame::Slot slot) -> void;
 
   // Diagnostics and control
   OXGN_RNDR_API auto GetStats() const -> UploadStats
@@ -147,6 +144,8 @@ public:
   }
 
 private:
+  OXGN_RNDR_API auto RetireCompleted() -> void;
+
   observer_ptr<Graphics> gfx_;
   UploadPolicy policy_;
   UploadTracker tracker_;

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -14,8 +15,11 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -47,22 +51,36 @@ namespace oxygen::renderer::resources {
 
  ## Handle Allocation:
 
- Handles are allocated sequentially starting from 0. The first two handles are
- reserved for default and debug materials which are pre-registered during
- construction.
+ Handles are allocated using frame-aware slot reuse to prevent unbounded
+ growth with dynamic materials. Within each frame, slots are reused in call
+ order. Cross-frame deduplication uses content-based hashing for efficiency.
 
  ## Performance Characteristics:
 
  - O(1) handle allocation and lookup after initial setup
- - Persistent caching eliminates redundant GPU resource creation
- - Batch uploads minimize GPU submission overhead
- - Frame-coherent dirty tracking reduces unnecessary work
+ - Cross-frame cache persistence enables stable handle allocation
+ - Per-frame slot reuse prevents unbounded growth with dynamic materials
+ - Sparse uploads for dirty materials only via UploadCoordinator batching
+ - Content-based deduplication reduces redundant GPU resource creation
+ - Fire-and-forget upload coordination eliminates synchronization overhead
+
+ ## Statistics Tracking:
+
+ MaterialBinder maintains comprehensive telemetry for performance analysis:
+ - **total_calls_**: Total GetOrAllocate/Update method invocations
+ - **cache_hits_**: Number of cache hits (material already exists)
+ - **total_allocations_**: Number of logical material allocations
+ - **atlas_allocations_**: Number of atlas element allocations (1 per material)
+ - **upload_operations_**: Number of upload operations to staging provider
+
+ Cache hit rate = cache_hits_ / total_calls_ (higher is better for perf)
+ Atlas efficiency = atlas_allocations_ / total_allocations_ (should be 1:1)
 
  ## Usage Pattern:
 
  ```cpp
- // Frame setup (once per frame)
- material_binder->OnFrameStart();
+ // Frame setup (once per frame with frame slot)
+ material_binder->OnFrameStart(frame_slot);
 
  // Register materials (as needed)
  auto handle = material_binder->GetOrAllocate(material);
@@ -74,17 +92,16 @@ namespace oxygen::renderer::resources {
  auto srv_index = material_binder->GetMaterialsSrvIndex();
  ```
 
- ## Upload Timing Control:
+ ## Upload Architecture:
 
- The Renderer controls upload timing via UploadCoordinator methods:
- - **Non-blocking**: Call `EnsureFrameResources()` - uploads happen
- asynchronously
- - **Blocking**: Call `uploader_->AwaitAll(tickets)` after
- `EnsureFrameResources()`
+ Uses UploadCoordinator's fire-and-forget approach with automatic batching
+ and coalescing. Only dirty materials are uploaded per frame, with the
+ coordinator handling efficient merging of contiguous updates.
 
  ## Frame Lifecycle Requirements:
 
- 1. `OnFrameStart()` must be called once per frame before any other operations
+ 1. `OnFrameStart(slot)` must be called once per frame before any other
+ operations
  2. `EnsureFrameResources()` must be called before accessing SRV indices
  3. SRV indices remain stable within a frame but may change between frames
 
@@ -112,7 +129,8 @@ public:
   OXGN_RNDR_API ~MaterialBinder();
 
   //! Must be called once per frame before any other operations.
-  auto OnFrameStart() -> void;
+  OXGN_RNDR_API auto OnFrameStart(
+    renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
   //! Get or allocate a material handle with content-based deduplication.
   /*!
@@ -186,55 +204,53 @@ public:
   [[nodiscard]] OXGN_RNDR_API auto GetMaterialsSrvIndex() const
     -> ShaderVisibleIndex;
 
-  //! Returns span of pending upload tickets for synchronous waiting.
-  //! Used by Renderer to wait for all uploads to complete this frame.
-  [[nodiscard]] auto GetPendingUploadTickets() const
-    -> std::span<const engine::upload::UploadTicket>
-  {
-    return pending_upload_tickets_;
-  }
-
 private:
-  //! Ensure GPU buffer and SRV are allocated and registered.
-  auto EnsureBufferAndSrv(std::shared_ptr<graphics::Buffer>& buffer,
-    ShaderVisibleIndex& bindless_index, std::uint64_t size_bytes,
-    const char* debug_label) -> bool;
-
-  //! Build sparse upload requests for changed materials.
-  auto BuildSparseUploadRequests(const std::vector<std::uint32_t>& indices,
-    std::span<const engine::MaterialConstants> src,
-    const std::shared_ptr<graphics::Buffer>& dst, const char* debug_name) const
-    -> std::vector<engine::upload::UploadRequest>;
-
-  //! Internal resource preparation method.
-  auto PrepareMaterialConstants() -> void;
+  // Structure for cached material entries. Storing the index into
+  // materials_ allows validating the stored material to avoid false
+  // positives from quantization or hash collisions.
+  struct MaterialCacheEntry {
+    engine::sceneprep::MaterialHandle handle;
+    std::uint32_t index;
+  };
 
   // Deduplication and state
-  std::unordered_map<std::uint64_t, engine::sceneprep::MaterialHandle>
-    material_key_to_handle_;
+  std::unordered_map<std::uint64_t, MaterialCacheEntry> material_key_to_handle_;
   std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
   std::vector<engine::MaterialConstants> material_constants_;
-  std::vector<std::uint32_t> versions_;
-  std::uint32_t global_version_ { 0U };
   std::vector<std::uint32_t> dirty_epoch_;
   std::vector<std::uint32_t> dirty_indices_;
   std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
-  engine::sceneprep::MaterialHandle next_handle_ { 0U };
+
+  // Frame lifecycle management
+  std::uint32_t frame_write_count_ { 0U };
+
+  // Statistics tracking
+  //! Total number of GetOrAllocate/Update calls made
+  std::uint64_t total_calls_ { 0U };
+  //! Number of cache hits (material already exists with same content)
+  std::uint64_t cache_hits_ { 0U };
+  //! Number of logical material allocations (new materials created)
+  std::uint64_t total_allocations_ { 0U };
+  //! Number of atlas element allocations (1 per material)
+  std::uint64_t atlas_allocations_ { 0U };
+  //! Number of upload operations submitted to staging provider
+  std::uint64_t upload_operations_ { 0U };
 
   // GPU upload dependencies
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
-  // GPU resources
-  std::shared_ptr<graphics::Buffer> gpu_materials_buffer_;
-  ShaderVisibleIndex materials_bindless_index_ { kInvalidShaderVisibleIndex };
+  // Atlas-based material storage (Phase 1+)
+  std::unique_ptr<AtlasBuffer> materials_atlas_;
+  // Atlas element refs stored per material when atlas path is enabled
+  std::vector<AtlasBuffer::ElementRef> material_refs_;
 
-  // Upload tracking
-  std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
+  // Current frame slot for atlas element retirement
+  oxygen::frame::Slot current_frame_slot_ { oxygen::frame::kInvalidSlot };
 
   // Frame resource tracking
-  bool frame_resources_ensured_ { false };
+  bool uploaded_this_frame_ { false };
 };
 
 } // namespace oxygen::renderer::resources

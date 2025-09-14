@@ -227,6 +227,11 @@ Transform LoadTransform2(uint logicalIndex)
   K completes, move `retire_list[K % N]` to the free pool. This leverages the
   same lifetime as the upload ring without coupling allocation to ring internals.
 - Avoid immediate reuse of slots in the same frame by construction.
+- **Memory Leak Prevention**: UploadTracker implements frame-slot-based cleanup
+  using `creation_slot` tracking and `std::erase_if` to remove all entries
+  created in cycling slots. This bounds memory to the number of frames in flight
+  worth instead of infinite growth, preventing performance degradation from hash
+  table bloat.
 
 ### Stability heuristics (practical, minimal tuning)
 

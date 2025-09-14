@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
@@ -36,6 +37,18 @@
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Scene/Scene.h>
+
+// Implementation of RendererTagFactory. Provides access to RendererTag
+// capability tokens, only from the engine core. When building tests, allow
+// tests to override by defining OXYGEN_ENGINE_TESTING.
+#if !defined(OXYGEN_ENGINE_TESTING)
+namespace oxygen::renderer::internal {
+auto RendererTagFactory::Get() noexcept -> RendererTag
+{
+  return RendererTag {};
+}
+} // namespace oxygen::renderer::internal
+#endif
 
 using oxygen::Graphics;
 using oxygen::data::Mesh;
@@ -89,14 +102,15 @@ Renderer::~Renderer()
   if (staging_provider_) {
     const auto ps = staging_provider_->GetStats();
     LOG_SCOPE_F(INFO, "Staging Provider");
-    LOG_F(INFO, "allocations       : {}", ps.allocations);
-    LOG_F(INFO, "bytes requested   : {}", ps.bytes_requested);
-    LOG_F(INFO, "ensure capacity   : {}", ps.ensure_capacity_calls);
-    LOG_F(INFO, "buffers created   : {}", ps.buffers_created);
-    LOG_F(INFO, "map calls         : {}", ps.map_calls);
-    LOG_F(INFO, "unmap calls       : {}", ps.unmap_calls);
-    LOG_F(INFO, "peak buffer size  : {}", ps.peak_buffer_size);
-    LOG_F(INFO, "current buf size  : {}", ps.current_buffer_size);
+    LOG_F(INFO, "total allocations : {}", ps.total_allocations);
+    LOG_F(INFO, "allocations/frame : {}", ps.allocations_this_frame);
+    LOG_F(INFO, "avg alloc size    : {} bytes", ps.avg_allocation_size);
+    LOG_F(INFO, "buffer grown      : {} times", ps.buffer_growth_count);
+    LOG_F(INFO, "buffer size       : {} bytes", ps.current_buffer_size);
+    LOG_F(INFO, "map/unmap calls   : {}/{}", ps.map_calls, ps.unmap_calls);
+    if (!ps.implementation_info.empty()) {
+      LOG_F(INFO, "{}", ps.implementation_info);
+    }
   }
 
   scene_prep_state_.reset();
@@ -734,20 +748,16 @@ auto Renderer::GetSceneConstants() const -> const SceneConstants&
 
 auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
-  // Retire staging resources from previous frame uploads
-  if (uploader_) {
-    uploader_->RetireCompleted();
-  }
+  auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+  auto frame_slot = context.GetFrameSlot();
 
-  // Reset transform manager for the new frame
-  scene_prep_state_->GetTransformUploader()->OnFrameStart(
-    context.GetFrameSlot());
-
-  // Reset geometry uploader for the new frame
-  scene_prep_state_->GetGeometryUploader()->OnFrameStart();
-
-  // Reset material binder for the new frame
-  scene_prep_state_->GetMaterialBinder()->OnFrameStart();
+  // Initialize Upload Coordinator and its staging providers for the new frame
+  // slot BEFORE any uploaders start allocating from them.
+  uploader_->OnFrameStart(tag, frame_slot);
+  // then uploaders
+  scene_prep_state_->GetTransformUploader()->OnFrameStart(tag, frame_slot);
+  scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);
+  scene_prep_state_->GetMaterialBinder()->OnFrameStart(tag, frame_slot);
 }
 
 /*!

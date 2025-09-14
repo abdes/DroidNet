@@ -285,8 +285,15 @@ auto GeometryUploader::Update(
   }
 }
 
-auto GeometryUploader::OnFrameStart() -> void
+auto GeometryUploader::OnFrameStart(renderer::RendererTag, frame::Slot slot)
+  -> void
 {
+#ifndef NDEBUG
+  static frame::Slot last_slot = frame::kInvalidSlot;
+  DCHECK_F(slot != last_slot, "Frame slot did not advance");
+  last_slot = slot;
+#endif // NDEBUG
+
   ++current_epoch_;
   if (current_epoch_ == Epoch { 0 }) { // wrapped
     DLOG_F(INFO, "Epoch counter wrapped, resetting all entry epochs");

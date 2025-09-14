@@ -58,6 +58,7 @@ set(
   "Passes/TransparentPass.h"
   "PreparedSceneFrame.h"
   "RenderContext.h"
+  "RendererTag.h"
   "Renderer.h"
   "ScenePrep/CollectionConfig.h"
   "ScenePrep/FinalizationConfig.h"

@@ -24,12 +24,10 @@ class SingleBufferStaging final : public StagingProvider {
   friend class UploadCoordinator;
 
 public:
-  explicit SingleBufferStaging(UploaderTag tag,
-    observer_ptr<oxygen::Graphics> gfx, MapPolicy policy = MapPolicy::kPinned,
-    float slack = 0.5f)
+  explicit SingleBufferStaging(
+    UploaderTag tag, observer_ptr<oxygen::Graphics> gfx, float slack = 0.5f)
     : StagingProvider(tag)
     , gfx_(gfx)
-    , policy_(policy)
     , slack_(slack)
   {
   }
@@ -46,24 +44,45 @@ public:
     out.offset = 0;
     out.size = size.get();
     out.ptr = mapped_ptr_ ? mapped_ptr_ : Map_();
-    stats_.allocations++;
-    stats_.bytes_requested += out.size;
+
+    // Update telemetry
+    UpdateAllocationStats_(size.get());
+
     return out;
   }
 
-  auto RetireCompleted(FenceValue /*completed*/) -> void override
+  auto RetireCompleted(UploaderTag, FenceValue /*completed*/) -> void override
   {
-    if (policy_ == MapPolicy::kPerOp) {
-      Unmap_();
+    // Always using pinned mapping - nothing to do here
+  }
+
+  auto GetStats() const -> StagingStats override
+  {
+    auto stats = stats_;
+    stats.implementation_info = "SingleBuffer: PINNED mapping";
+    return stats;
+  }
+
+private:
+  auto UpdateAllocationStats_(std::uint64_t size) -> void
+  {
+    stats_.total_allocations++;
+    stats_.total_bytes_allocated += size;
+    stats_.allocations_this_frame++;
+
+    // Update moving average (simple exponential moving average with alpha=0.1)
+    constexpr double alpha = 0.1;
+    if (stats_.avg_allocation_size == 0) {
+      stats_.avg_allocation_size = static_cast<std::uint32_t>(size);
+    } else {
+      const auto new_avg = alpha * static_cast<double>(size)
+        + (1.0 - alpha) * static_cast<double>(stats_.avg_allocation_size);
+      stats_.avg_allocation_size = static_cast<std::uint32_t>(new_avg);
     }
   }
 
-  auto GetStats() const -> StagingStats override { return stats_; }
-
-private:
   auto EnsureCapacity_(uint64_t desired, std::string_view name) -> void
   {
-    stats_.ensure_capacity_calls++;
     if (buffer_ && buffer_->GetSize() >= desired) {
       stats_.current_buffer_size = buffer_->GetSize();
       return;
@@ -82,16 +101,12 @@ private:
 
     Unmap_();
     buffer_ = gfx_->CreateBuffer(desc);
-    stats_.buffers_created++;
+    stats_.buffer_growth_count++;
     stats_.current_buffer_size = buffer_->GetSize();
-    stats_.peak_buffer_size
-      = std::max(stats_.peak_buffer_size, stats_.current_buffer_size);
-    if (policy_ == MapPolicy::kPinned) {
-      mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-      stats_.map_calls++;
-    } else {
-      mapped_ptr_ = nullptr;
-    }
+
+    // Always use pinned mapping
+    mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
+    stats_.map_calls++;
   }
 
   auto Map_() -> std::byte*
@@ -116,7 +131,6 @@ private:
   }
 
   observer_ptr<Graphics> gfx_;
-  MapPolicy policy_ { MapPolicy::kPinned };
   float slack_ { 0.5f };
   std::shared_ptr<graphics::Buffer> buffer_;
   std::byte* mapped_ptr_ { nullptr };

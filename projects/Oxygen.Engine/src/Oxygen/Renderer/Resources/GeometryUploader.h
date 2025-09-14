@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/BindlessHandle.h>
 #include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -123,7 +124,8 @@ public:
   OXGN_RNDR_API ~GeometryUploader();
 
   //! Called once per frame to reset dirty tracking and advance epoch
-  auto OnFrameStart() -> void;
+  OXGN_RNDR_API auto OnFrameStart(
+    renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
   //! Deduplication and handle management
   auto GetOrAllocate(const data::Mesh& mesh)
