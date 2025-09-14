@@ -353,12 +353,11 @@ UploadCoordinator::UploadCoordinator(
   DCHECK_NOTNULL_F(gfx_);
 }
 
-auto UploadCoordinator::CreateSingleBufferStaging(
-  StagingProvider::MapPolicy policy, float slack)
+auto UploadCoordinator::CreateSingleBufferStaging(float slack)
   -> std::shared_ptr<StagingProvider>
 {
   auto provider = std::make_shared<SingleBufferStaging>(
-    internal::UploaderTagFactory::Get(), gfx_, policy, slack);
+    internal::UploaderTagFactory::Get(), gfx_, slack);
   providers_.push_back(provider);
   return provider;
 }
@@ -519,9 +518,10 @@ auto UploadCoordinator::RetireCompleted() -> void
     const auto completed = FenceValue { q->GetCompletedValue() };
     tracker_.MarkFenceCompleted(completed);
     // Allow providers to recycle now that fence advanced
+    auto tag = internal::UploaderTagFactory::Get();
     for (auto it = providers_.begin(); it != providers_.end();) {
       if (auto sp = it->lock()) {
-        sp->RetireCompleted(completed);
+        sp->RetireCompleted(tag, completed);
         ++it;
       } else {
         it = providers_.erase(it);
@@ -530,19 +530,29 @@ auto UploadCoordinator::RetireCompleted() -> void
   }
 }
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto UploadCoordinator::OnFrameStart(frame::Slot slot) -> void
+auto UploadCoordinator::OnFrameStart(renderer::RendererTag, frame::Slot slot)
+  -> void
 {
+  static auto tag = internal::UploaderTagFactory::Get();
+
+#ifndef NDEBUG
+  static frame::Slot last_slot = frame::kInvalidSlot;
+  DCHECK_F(slot != last_slot, "Frame slot did not advance");
+  last_slot = slot;
+#endif // NDEBUG
+
+  RetireCompleted();
+
+  tracker_.OnFrameStart(tag, slot);
+
   for (auto it = providers_.begin(); it != providers_.end();) {
     if (auto sp = it->lock()) {
-      sp->OnFrameStart(slot);
+      sp->OnFrameStart(tag, slot);
       ++it;
     } else {
       it = providers_.erase(it);
     }
   }
 }
-
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto UploadCoordinator::Flush() -> void { gfx_->SubmitDeferredCommandLists(); }
 
 } // namespace oxygen::engine::upload

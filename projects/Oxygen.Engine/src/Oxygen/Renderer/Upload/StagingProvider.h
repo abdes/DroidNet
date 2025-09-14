@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
@@ -51,8 +52,6 @@ namespace oxygen::engine::upload {
 */
 class StagingProvider {
 public:
-  enum class MapPolicy : uint8_t { kPinned, kPerOp };
-
   //! Represents an allocation of upload memory.
   struct Allocation {
     std::shared_ptr<graphics::Buffer> buffer;
@@ -60,13 +59,26 @@ public:
     std::uint64_t size { 0 };
     std::byte* ptr { nullptr }; // pointer to (buffer + offset)
     FenceValue fence { graphics::fence::kInvalidValue };
+  };
 
-    ~Allocation()
-    {
-      if (buffer && buffer->IsMapped()) {
-        buffer->UnMap();
-      }
-    }
+  //! Statistics for telemetry and diagnostics.
+  struct StagingStats {
+    // Core allocation metrics
+    std::uint64_t total_allocations { 0 };
+    std::uint64_t total_bytes_allocated { 0 };
+    std::uint32_t allocations_this_frame { 0 };
+    std::uint32_t avg_allocation_size { 0 }; // Moving average in bytes
+
+    // Buffer management
+    std::uint32_t buffer_growth_count { 0 }; // How many times buffer grew
+    std::uint64_t current_buffer_size { 0 };
+
+    // Map/unmap tracking
+    std::uint32_t map_calls { 0 };
+    std::uint32_t unmap_calls { 0 };
+
+    // Implementation-specific data (partition info, etc.)
+    std::string implementation_info;
   };
 
   StagingProvider(UploaderTag) { }
@@ -81,23 +93,11 @@ public:
     = 0;
 
   //! Retire allocations whose GPU fence has completed (for recycling).
-  virtual auto RetireCompleted(FenceValue completed) -> void = 0;
+  virtual auto RetireCompleted(UploaderTag, FenceValue completed) -> void = 0;
 
   //! Optional lifecycle notification for frame slot changes. Default no-op
   //! allows non-partitioned providers to ignore it.
-  virtual auto OnFrameStart(frame::Slot /*slot*/) -> void { }
-
-  //! Statistics for telemetry and diagnostics.
-  struct StagingStats {
-    std::uint64_t allocations { 0 };
-    std::uint64_t bytes_requested { 0 };
-    std::uint64_t ensure_capacity_calls { 0 };
-    std::uint64_t buffers_created { 0 };
-    std::uint64_t map_calls { 0 };
-    std::uint64_t unmap_calls { 0 };
-    std::uint64_t peak_buffer_size { 0 };
-    std::uint64_t current_buffer_size { 0 };
-  };
+  virtual auto OnFrameStart(UploaderTag, frame::Slot /*slot*/) -> void { }
 
   //! Optional telemetry; providers may override to expose stats.
   [[nodiscard]] virtual auto GetStats() const -> StagingStats { return {}; }

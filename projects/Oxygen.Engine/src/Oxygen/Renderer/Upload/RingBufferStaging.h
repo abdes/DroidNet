@@ -52,20 +52,35 @@ public:
       "RingBufferStaging alignment must be power-of-two, got %u", alignment_);
     heads_.assign(partitions_count_.get(), 0ULL);
   }
-  ~RingBufferStaging() override = default;
+  ~RingBufferStaging() override;
 
   auto Allocate(Bytes size, std::string_view debug_name) -> Allocation override;
 
-  auto RetireCompleted(FenceValue /*completed*/) -> void override;
+  auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
 
   // Notify of frame slot change without RTTI
-  auto OnFrameStart(frame::Slot slot) -> void override
+  auto OnFrameStart(UploaderTag, frame::Slot slot) -> void override
   {
     SetActivePartition(slot);
+    stats_.allocations_this_frame = 0; // Reset frame counter
   }
 
-  auto GetStats() const -> StagingStats override { return stats_; }
+  auto GetStats() const -> StagingStats override
+  {
+    auto stats = stats_;
 
+    // Add partition utilization info
+    const auto partition_used
+      = heads_.empty() ? 0ULL : heads_[active_partition_];
+    stats.implementation_info = "RingBuffer: Partition "
+      + std::to_string(active_partition_) + "/"
+      + std::to_string(partitions_count_.get()) + ", "
+      + std::to_string(partition_used) + "/"
+      + std::to_string(capacity_per_partition_) + " bytes used";
+    return stats;
+  }
+
+private:
   // Select active partition (frame slot) and reset its bump pointer.
   auto SetActivePartition(frame::Slot slot) noexcept -> void
   {
@@ -73,11 +88,12 @@ public:
       return;
     }
     active_partition_ = slot;
-    // Reset this partition for the new frame epoch
+
+    // When we cycle back to this partition, all GPU work for it has completed
+    // so we can safely reclaim the space by resetting the head
     heads_[active_partition_] = 0ULL;
   }
 
-private:
   auto EnsureCapacity_(std::uint64_t required, std::string_view debug_name)
     -> void;
   static constexpr auto AlignUp_(std::uint64_t v, std::uint64_t a)

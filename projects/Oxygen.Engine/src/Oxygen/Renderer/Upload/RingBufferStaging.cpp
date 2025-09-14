@@ -44,13 +44,27 @@ auto RingBufferStaging::Allocate(Bytes size, std::string_view debug_name)
   out.offset = offset;
   out.size = bytes; // requested size (not aligned)
   out.ptr = mapped_ptr_ + offset;
-  // Telemetry
-  stats_.allocations++;
-  stats_.bytes_requested += out.size;
+
+  // Update telemetry
+  stats_.total_allocations++;
+  stats_.total_bytes_allocated += bytes;
+  stats_.allocations_this_frame++;
+
+  // Update moving average (simple exponential moving average with alpha=0.1)
+  constexpr double alpha = 0.1;
+  if (stats_.avg_allocation_size == 0) {
+    stats_.avg_allocation_size = static_cast<std::uint32_t>(bytes);
+  } else {
+    const auto new_avg = alpha * static_cast<double>(bytes)
+      + (1.0 - alpha) * static_cast<double>(stats_.avg_allocation_size);
+    stats_.avg_allocation_size = static_cast<std::uint32_t>(new_avg);
+  }
+
   return out;
 }
 
-auto RingBufferStaging::RetireCompleted(FenceValue /*completed*/) -> void
+auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue /*completed*/)
+  -> void
 {
   // No-op: partition reset happens via SetActivePartition per frame.
 }
@@ -58,7 +72,6 @@ auto RingBufferStaging::RetireCompleted(FenceValue /*completed*/) -> void
 void RingBufferStaging::EnsureCapacity_(
   std::uint64_t required, std::string_view debug_name)
 {
-  stats_.ensure_capacity_calls++;
   const auto head = heads_.empty() ? 0ULL : heads_[active_partition_];
   if (capacity_per_partition_ >= head + required && buffer_) {
     stats_.current_buffer_size = buffer_->GetSize();
@@ -69,7 +82,7 @@ void RingBufferStaging::EnsureCapacity_(
   const auto grow = current > 0
     ? static_cast<std::uint64_t>(current * (1.0 + static_cast<double>(slack_)))
     : required;
-  const auto new_per_partition = std::max(required + head, grow);
+  const auto new_per_partition = std::max(required, grow);
   const auto aligned_per_partition = AlignUp_(new_per_partition, alignment_);
   const auto total_capacity
     = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
@@ -85,15 +98,22 @@ void RingBufferStaging::EnsureCapacity_(
     stats_.unmap_calls++;
   }
   buffer_ = gfx_->CreateBuffer(desc);
-  stats_.buffers_created++;
+  stats_.buffer_growth_count++;
   mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
   stats_.map_calls++;
   capacity_per_partition_ = aligned_per_partition;
   capacity_ = total_capacity;
   stats_.current_buffer_size = buffer_->GetSize();
-  stats_.peak_buffer_size
-    = (std::max)(stats_.peak_buffer_size, stats_.current_buffer_size);
-  // Preserve existing head for the active partition; others remain intact
+}
+
+RingBufferStaging::~RingBufferStaging()
+{
+  if (buffer_ && buffer_->IsMapped()) {
+    buffer_->UnMap();
+    stats_.unmap_calls++;
+  }
+  buffer_.reset();
+  mapped_ptr_ = nullptr;
 }
 
 } // namespace oxygen::engine::upload
