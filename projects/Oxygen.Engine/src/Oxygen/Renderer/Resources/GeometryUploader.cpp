@@ -149,18 +149,23 @@ auto SelectBatchPolicy(const std::uint64_t size_bytes, const bool is_critical)
 
 namespace oxygen::renderer::resources {
 
-GeometryUploader::GeometryUploader(
-  Graphics& gfx, const observer_ptr<engine::upload::UploadCoordinator> uploader)
+GeometryUploader::GeometryUploader(observer_ptr<Graphics> gfx,
+  const observer_ptr<engine::upload::UploadCoordinator> uploader,
+  observer_ptr<engine::upload::StagingProvider> provider)
   : gfx_(gfx)
   , uploader_(uploader)
+  , staging_provider_(provider)
 {
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
+  DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
 }
 
 GeometryUploader::~GeometryUploader()
 {
   // Best-effort cleanup: unregister our GPU buffers from the registry so they
   // don't linger until registry destruction.
-  auto& registry = gfx_.GetResourceRegistry();
+  auto& registry = gfx_->GetResourceRegistry();
 
   auto unregister_buffers = [&](auto& entry) {
     if (entry.vertex_buffer) {
@@ -368,7 +373,7 @@ auto GeometryUploader::UploadBuffers() -> void
     // Submit to uploader, and let the uploader handle batching, prioritization,
     // and error handling.
     // TODO: consider marking the SubmitMany as noexcept
-    auto tickets = uploader_->SubmitMany(uploads);
+    auto tickets = uploader_->SubmitMany(uploads, *staging_provider_);
     pending_upload_tickets_.insert(
       pending_upload_tickets_.end(), tickets.begin(), tickets.end());
     LOG_F(1, "{} uploads submitted", uploads.size());
@@ -393,7 +398,7 @@ auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry)
 
   DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
   if (!internal::EnsureBufferAndSrv(
-        gfx_, vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
+        *gfx_, vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
     // logging is done in the helper
     return std::unexpected { false };
   }
@@ -437,7 +442,7 @@ auto GeometryUploader::UploadIndexBuffer(const GeometryEntry& dirty_entry)
 
   DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
   if (!internal::EnsureBufferAndSrv(
-        gfx_, index_buffer, srv_index, buffer_size, stride, "IndexBuffer")) {
+        *gfx_, index_buffer, srv_index, buffer_size, stride, "IndexBuffer")) {
     return std::unexpected { false };
   }
   DCHECK_NOTNULL_F(index_buffer);

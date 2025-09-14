@@ -14,23 +14,19 @@
 #include <thread>
 
 namespace {
+
 using oxygen::engine::upload::FenceValue;
 using oxygen::engine::upload::TicketId;
-using oxygen::engine::upload::UploadResult;
 using oxygen::engine::upload::UploadTicket;
 using oxygen::engine::upload::UploadTracker;
-
-using ::testing::AllOf;
-using ::testing::Ge;
-using ::testing::Le;
 
 //! Verify registration and marking fence completion propagates to tickets.
 NOLINT_TEST(UploadTracker, RegisterAndComplete)
 {
   // Arrange
   UploadTracker tracker;
-  const FenceValue f1 { 5 };
-  const FenceValue f2 { 7 };
+  constexpr FenceValue f1 { 5 };
+  constexpr FenceValue f2 { 7 };
 
   // Act
   const auto t1 = tracker.Register(f1, /*bytes*/ 128, "t1");
@@ -48,7 +44,9 @@ NOLINT_TEST(UploadTracker, RegisterAndComplete)
   EXPECT_TRUE(tracker.IsComplete(t1.id));
   EXPECT_FALSE(tracker.IsComplete(t2.id));
   const auto r1 = tracker.TryGetResult(t1.id);
-  ASSERT_TRUE(r1.has_value());
+  if (!r1.has_value()) {
+    FAIL() << "expected a value";
+  }
   EXPECT_TRUE(r1->success);
   EXPECT_EQ(r1->bytes_uploaded, 128u);
 
@@ -58,7 +56,9 @@ NOLINT_TEST(UploadTracker, RegisterAndComplete)
   // Assert: t2 completed
   EXPECT_TRUE(tracker.IsComplete(t2.id));
   const auto r2 = tracker.TryGetResult(t2.id);
-  ASSERT_TRUE(r2.has_value());
+  if (!r2.has_value()) {
+    FAIL() << "expected a value";
+  }
   EXPECT_TRUE(r2->success);
   EXPECT_EQ(r2->bytes_uploaded, 256u);
 }
@@ -152,7 +152,9 @@ NOLINT_TEST(UploadTracker, Cancel_Pending_MarksCanceled)
   // Should be complete now with Canceled error
   EXPECT_TRUE(tracker.IsComplete(t.id));
   auto r = tracker.TryGetResult(t.id);
-  ASSERT_TRUE(r.has_value());
+  if (!r.has_value()) {
+    FAIL() << "expected a value";
+  }
   EXPECT_FALSE(r->success);
   EXPECT_EQ(r->error, UploadError::kCanceled);
   EXPECT_EQ(r->bytes_uploaded, 0u);
@@ -161,8 +163,8 @@ NOLINT_TEST(UploadTracker, Cancel_Pending_MarksCanceled)
 NOLINT_TEST(UploadTracker, GetStats_Counters_Advance)
 {
   UploadTracker tracker;
-  const auto t1 = tracker.Register(FenceValue { 1 }, 10, "a");
-  const auto t2 = tracker.Register(FenceValue { 2 }, 20, "b");
+  [[maybe_unused]] const auto t1 = tracker.Register(FenceValue { 1 }, 10, "a");
+  [[maybe_unused]] const auto t2 = tracker.Register(FenceValue { 2 }, 20, "b");
   auto stats = tracker.GetStats();
   EXPECT_EQ(stats.submitted, 2u);
   EXPECT_EQ(stats.in_flight, 2u);

@@ -19,6 +19,7 @@ using oxygen::engine::upload::UploadSubresource;
 using oxygen::engine::upload::UploadTextureDesc;
 
 namespace {
+
 class DummyTexture : public oxygen::graphics::Texture {
 public:
   explicit DummyTexture(const oxygen::graphics::TextureDesc& d)

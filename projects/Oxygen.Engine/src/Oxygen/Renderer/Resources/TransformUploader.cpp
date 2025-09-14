@@ -42,24 +42,16 @@ namespace {
 
 namespace oxygen::renderer::resources {
 
-TransformUploader::TransformUploader(Graphics& gfx,
+TransformUploader::TransformUploader(observer_ptr<Graphics> gfx,
   observer_ptr<engine::upload::UploadCoordinator> uploader,
-  std::shared_ptr<engine::upload::StagingProvider> provider)
-  : gfx_(gfx)
-  , uploader_(uploader)
+  observer_ptr<engine::upload::StagingProvider> provider)
+  : gfx_(std::move(gfx))
+  , uploader_(std::move(uploader))
+  , staging_provider_(std::move(provider))
 {
-  DCHECK_NOTNULL_F(
-    uploader_.get(), "TransformUploader requires UploadCoordinator");
-  // Provider injection (optional). Default to a ring provider for matrices.
-  if (provider) {
-    staging_provider_ = std::move(provider);
-  } else {
-    auto ring = std::make_shared<oxygen::renderer::upload::RingBufferStaging>(
-      gfx_.shared_from_this(), frame::kFramesInFlight,
-      /*alignment*/ static_cast<std::uint32_t>(sizeof(glm::mat4)),
-      /*slack*/ 0.5f);
-    staging_provider_ = ring;
-  }
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
+  DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
 
   // Prepare atlas buffers (not yet used for uploads in Phase 1 wiring step)
   worlds_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
@@ -95,19 +87,6 @@ TransformUploader::~TransformUploader()
     LOG_F(INFO, "capacity elements : {}", ns.capacity_elements);
     LOG_F(INFO, "next index        : {}", ns.next_index);
     LOG_F(INFO, "free list size    : {}", ns.free_list_size);
-  }
-
-  if (staging_provider_) {
-    const auto ps = staging_provider_->GetStats();
-    LOG_SCOPE_F(INFO, "Staging Provider");
-    LOG_F(INFO, "allocations       : {}", ps.allocations);
-    LOG_F(INFO, "bytes requested   : {}", ps.bytes_requested);
-    LOG_F(INFO, "ensure capacity   : {}", ps.ensure_capacity_calls);
-    LOG_F(INFO, "buffers created   : {}", ps.buffers_created);
-    LOG_F(INFO, "map calls         : {}", ps.map_calls);
-    LOG_F(INFO, "unmap calls       : {}", ps.unmap_calls);
-    LOG_F(INFO, "peak buffer size  : {}", ps.peak_buffer_size);
-    LOG_F(INFO, "current buf size  : {}", ps.current_buffer_size);
   }
 }
 
@@ -308,7 +287,7 @@ auto TransformUploader::EnsureFrameResources() -> void
 
   if (!requests.empty()) {
     const auto tickets = uploader_->SubmitMany(
-      std::span { requests.data(), requests.size() }, staging_provider_);
+      std::span { requests.data(), requests.size() }, *staging_provider_);
     (void)tickets; // tickets unused in this path
   }
   // Leave resident; only dirty parts updated.

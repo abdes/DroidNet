@@ -10,8 +10,10 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Value.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadDiagnostics.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
@@ -24,35 +26,39 @@ class Graphics;
 
 namespace oxygen::engine::upload {
 
-class StagingProvider; // fwd
-
 class UploadCoordinator {
 public:
   /*!
    @note UploadCoordinator lifetime is entirely linked to the Renderer. We
          completely rely on the Renderer to handle the lifetime of the Graphics
-         backend and we assume that for as long as we are alive, the Graphics
+         backend, and we assume that for as long as we are alive, the Graphics
          backend is stable. When it is no longer stable, the Renderer is
          responsible for destroying and re-creating the UploadCoordinator.
   */
   OXGN_RNDR_API explicit UploadCoordinator(
-    Graphics& gfx, UploadPolicy policy = DefaultUploadPolicy());
+    observer_ptr<Graphics> gfx, UploadPolicy policy = DefaultUploadPolicy());
 
   OXYGEN_MAKE_NON_COPYABLE(UploadCoordinator)
   OXYGEN_DEFAULT_MOVABLE(UploadCoordinator)
 
   ~UploadCoordinator() = default;
 
-  // Provider-aware submissions
-  OXGN_RNDR_API auto Submit(const UploadRequest& req,
-    std::shared_ptr<StagingProvider> provider) -> UploadTicket;
-  OXGN_RNDR_API auto SubmitMany(std::span<const UploadRequest> reqs,
-    std::shared_ptr<StagingProvider> provider) -> std::vector<UploadTicket>;
+  // Factory methods for staging providers
+  // Returns a shared_ptr to the created provider and tracks it for lifecycle
+  // management
+  auto CreateSingleBufferStaging(
+    StagingProvider::MapPolicy policy = StagingProvider::MapPolicy::kPinned,
+    float slack = 0.5f) -> std::shared_ptr<StagingProvider>;
 
-  // Legacy convenience: uses a default internal staging strategy
-  OXGN_RNDR_API auto Submit(const UploadRequest& req) -> UploadTicket;
-  OXGN_RNDR_API auto SubmitMany(std::span<const UploadRequest> reqs)
-    -> std::vector<UploadTicket>;
+  auto CreateRingBufferStaging(
+    frame::SlotCount partitions, std::uint32_t alignment, float slack = 0.5f)
+    -> std::shared_ptr<StagingProvider>;
+
+  // Provider-aware submissions
+  OXGN_RNDR_API auto Submit(const UploadRequest& req, StagingProvider& provider)
+    -> UploadTicket;
+  OXGN_RNDR_API auto SubmitMany(std::span<const UploadRequest> reqs,
+    StagingProvider& provider) -> std::vector<UploadTicket>;
 
   auto IsComplete(UploadTicket t) const -> bool
   {
@@ -72,6 +78,15 @@ public:
   OXGN_RNDR_API auto Flush() -> void;
   OXGN_RNDR_API auto RetireCompleted() -> void;
 
+  /*!
+   * All staging providers must be created via UploadCoordinator factory
+   * methods. This ensures correct lifecycle management, frame notifications,
+   * and retirement. Do not construct providers directly; always use
+   * CreateSingleBufferStaging or CreateRingBufferStaging.
+   */
+  // Notify all tracked providers of frame slot change
+  auto OnFrameStart(frame::Slot slot) -> void;
+
   // Diagnostics and control
   OXGN_RNDR_API auto GetStats() const -> UploadStats
   {
@@ -84,19 +99,18 @@ public:
   }
 
   // OxCo helpers
-  auto SubmitAsync(const UploadRequest& req,
-    std::shared_ptr<StagingProvider> provider) -> co::Co<UploadResult>
+  auto SubmitAsync(const UploadRequest& req, StagingProvider& provider)
+    -> co::Co<UploadResult>
   {
-    auto t = Submit(req, std::move(provider));
+    auto t = Submit(req, provider);
     co_await AwaitAsync(t);
     co_return *TryGetResult(t);
   }
 
   auto SubmitManyAsync(std::span<const UploadRequest> reqs,
-    std::shared_ptr<StagingProvider> provider)
-    -> co::Co<std::vector<UploadResult>>
+    StagingProvider& provider) -> co::Co<std::vector<UploadResult>>
   {
-    auto tickets = SubmitMany(reqs, std::move(provider));
+    auto tickets = SubmitMany(reqs, provider);
     co_await AwaitAllAsync(tickets);
     std::vector<UploadResult> out;
     out.reserve(tickets.size());
@@ -133,13 +147,11 @@ public:
   }
 
 private:
-  Graphics& gfx_;
+  observer_ptr<Graphics> gfx_;
   UploadPolicy policy_;
   UploadTracker tracker_;
-  // Providers used by in-flight submissions; retired on RetireCompleted().
-  std::vector<std::weak_ptr<StagingProvider>> providers_;
 
-  void TrackProvider_(const std::shared_ptr<StagingProvider>& provider);
+  std::vector<std::weak_ptr<StagingProvider>> providers_;
 };
 
 } // namespace oxygen::engine::upload

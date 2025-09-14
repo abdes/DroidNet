@@ -77,7 +77,7 @@ public:
   };
 
   OXGN_RNDR_API AtlasBuffer(
-    Graphics& gfx, std::uint32_t stride, std::string debug_label);
+    observer_ptr<Graphics> gfx, std::uint32_t stride, std::string debug_label);
 
   OXYGEN_MAKE_NON_COPYABLE(AtlasBuffer)
   OXYGEN_MAKE_NON_MOVABLE(AtlasBuffer)
@@ -146,7 +146,7 @@ public:
   OXGN_RNDR_NDAPI auto GetStats() const noexcept -> Stats { return stats_; }
 
 private:
-  Graphics& gfx_;
+  observer_ptr<Graphics> gfx_;
   std::string debug_label_;
   std::uint32_t stride_ { 0 };
 

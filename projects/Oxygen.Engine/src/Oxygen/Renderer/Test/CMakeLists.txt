@@ -46,27 +46,35 @@ m_gtest_program(
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
 )
+target_compile_definitions(
+  Oxygen.Renderer.ScenePrep.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
 
-  # UploadCoordinator (buffer path) mocked tests
+# UploadCoordinator (buffer path) mocked tests
 m_gtest_program(
   UploadCoordinator
   SOURCES
     "Fakes/Graphics.h"
-    "UploadCoordinator_buffer_test.cpp"
-    "UploadCoordinator_texture2d_test.cpp"
-    "UploadCoordinator_texture3d_test.cpp"
-    "UploadCoordinator_texturecube_test.cpp"
+    "Upload/UploadCoordinatorTest.cpp"
+    "Upload/UploadCoordinatorTest.h"
+    "Upload/UploadCoordinator_buffer_test.cpp"
+    "Upload/UploadCoordinator_texture2d_test.cpp"
+    "Upload/UploadCoordinator_texture3d_test.cpp"
+    "Upload/UploadCoordinator_texturecube_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.UploadCoordinator.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
 )
 
 # Upload unit tests (no backend dependency)
-m_gtest_program(UploadTracker SOURCES "UploadTracker_basic_test.cpp")
+m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
 
 # StagingAllocator unit tests (backend-free)
-m_gtest_program(
-  UploadStaging
-  SOURCES
-    "SingleBufferStaging_test.cpp"
-)
+m_gtest_program(UploadStaging SOURCES "Upload/SingleBufferStaging_test.cpp")
 
 # UploadPlanner unit tests (backend-free)
-m_gtest_program(UploadPlanner SOURCES "UploadPlanner_basic_test.cpp")
+m_gtest_program(UploadPlanner SOURCES "Upload/UploadPlanner_basic_test.cpp")

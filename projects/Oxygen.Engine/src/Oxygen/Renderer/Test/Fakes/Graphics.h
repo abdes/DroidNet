@@ -235,10 +235,66 @@ public:
   {
     return {};
   }
-  [[nodiscard]] auto CreateTexture(const TextureDesc&) const
+  [[nodiscard]] auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override
   {
-    return {};
+    //! In-memory texture used by the fake graphics for uploads.
+    class FakeTexture final : public Texture {
+      OXYGEN_TYPED(FakeTexture)
+    public:
+      FakeTexture(std::string_view name, const TextureDesc& desc)
+        : Texture(name)
+        , desc_(desc)
+      {
+      }
+
+      [[nodiscard]] auto GetDescriptor() const -> const TextureDesc& override
+      {
+        return desc_;
+      }
+
+      [[nodiscard]] auto GetNativeResource() const
+        -> oxygen::graphics::NativeResource override
+      {
+        return oxygen::graphics::NativeResource(
+          const_cast<FakeTexture*>(this), Texture::ClassTypeId());
+      }
+
+    protected:
+      [[nodiscard]] auto CreateShaderResourceView(
+        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+        oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
+        -> oxygen::graphics::NativeView override
+      {
+        return {};
+      }
+      [[nodiscard]] auto CreateUnorderedAccessView(
+        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+        oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
+        -> oxygen::graphics::NativeView override
+      {
+        return {};
+      }
+      [[nodiscard]] auto CreateRenderTargetView(
+        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+        oxygen::graphics::TextureSubResourceSet) const
+        -> oxygen::graphics::NativeView override
+      {
+        return {};
+      }
+      [[nodiscard]] auto CreateDepthStencilView(
+        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+        oxygen::graphics::TextureSubResourceSet, bool) const
+        -> oxygen::graphics::NativeView override
+      {
+        return {};
+      }
+
+    private:
+      TextureDesc desc_ {};
+    };
+
+    return std::make_shared<FakeTexture>("FakeTexture", desc);
   }
   [[nodiscard]] auto CreateTextureFromNativeObject(const TextureDesc&,
     const graphics::NativeResource&) const -> std::shared_ptr<Texture> override
@@ -249,15 +305,16 @@ public:
     -> std::shared_ptr<Buffer> override
   {
     //! In-memory staging buffer used by the fake graphics for uploads.
-    class FakeStagingBuffer final : public Buffer {
-      OXYGEN_TYPED(FakeStagingBuffer)
+    class FakeBuffer final : public Buffer {
+      OXYGEN_TYPED(FakeBuffer)
     public:
-      FakeStagingBuffer(std::string_view name, uint64_t size)
+      FakeBuffer(std::string_view name, uint64_t size, BufferUsage usage,
+        BufferMemory memory)
         : Buffer(name)
       {
         desc_.size_bytes = size;
-        desc_.usage = BufferUsage::kNone;
-        desc_.memory = BufferMemory::kUpload;
+        desc_.usage = usage;
+        desc_.memory = memory;
       }
       [[nodiscard]] auto GetDescriptor() const noexcept -> BufferDesc override
       {
@@ -267,20 +324,7 @@ public:
         -> graphics::NativeResource override
       {
         return graphics::NativeResource(
-          const_cast<FakeStagingBuffer*>(this), Buffer::ClassTypeId());
-      }
-      auto Map(uint64_t, uint64_t) -> void* override
-      {
-        if (!mapped_) {
-          storage_.resize(desc_.size_bytes);
-          mapped_ = true;
-        }
-        return storage_.data();
-      }
-      auto UnMap() -> void override
-      {
-        mapped_ = false;
-        storage_.clear();
+          const_cast<FakeBuffer*>(this), Buffer::ClassTypeId());
       }
       auto Update(const void* data, uint64_t size, uint64_t offset)
         -> void override
@@ -311,6 +355,21 @@ public:
       }
 
     protected:
+      auto DoMap(uint64_t, uint64_t) -> void* override
+      {
+        if (!mapped_) {
+          storage_.resize(desc_.size_bytes);
+          mapped_ = true;
+        }
+        return storage_.data();
+      }
+
+      auto DoUnMap() -> void override
+      {
+        mapped_ = false;
+        // Don't clear storage_ to maintain data integrity for testing
+      }
+
       [[nodiscard]] auto CreateConstantBufferView(
         const graphics::DescriptorHandle&, const graphics::BufferRange&) const
         -> graphics::NativeView override
@@ -335,7 +394,8 @@ public:
       bool mapped_ { false };
       std::vector<std::byte> storage_ {};
     };
-    return std::make_shared<FakeStagingBuffer>("Staging", desc.size_bytes);
+    return std::make_shared<FakeBuffer>(
+      "Staging", desc.size_bytes, desc.usage, desc.memory);
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& strat)
     -> void override

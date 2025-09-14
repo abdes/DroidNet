@@ -63,23 +63,45 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
 {
   LOG_F(
     2, "Renderer::Renderer [this={}] - constructor", static_cast<void*>(this));
+
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
+  auto gfx = gfx_weak_.lock();
 
-  auto& gfx = *gfx_weak_.lock();
-
-  uploader_ = std::make_unique<upload::UploadCoordinator>(gfx);
+  uploader_
+    = std::make_unique<upload::UploadCoordinator>(observer_ptr { gfx.get() });
+  staging_provider_
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
 
   scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
     std::make_unique<renderer::resources::GeometryUploader>(
-      gfx, observer_ptr { uploader_.get() }),
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { staging_provider_.get() }),
     std::make_unique<renderer::resources::TransformUploader>(
-      gfx, observer_ptr { uploader_.get() }),
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { staging_provider_.get() }),
     std::make_unique<renderer::resources::MaterialBinder>(
-      gfx, observer_ptr { uploader_.get() }));
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { staging_provider_.get() }));
 }
 
 Renderer::~Renderer()
 {
+  if (staging_provider_) {
+    const auto ps = staging_provider_->GetStats();
+    LOG_SCOPE_F(INFO, "Staging Provider");
+    LOG_F(INFO, "allocations       : {}", ps.allocations);
+    LOG_F(INFO, "bytes requested   : {}", ps.bytes_requested);
+    LOG_F(INFO, "ensure capacity   : {}", ps.ensure_capacity_calls);
+    LOG_F(INFO, "buffers created   : {}", ps.buffers_created);
+    LOG_F(INFO, "map calls         : {}", ps.map_calls);
+    LOG_F(INFO, "unmap calls       : {}", ps.unmap_calls);
+    LOG_F(INFO, "peak buffer size  : {}", ps.peak_buffer_size);
+    LOG_F(INFO, "current buf size  : {}", ps.current_buffer_size);
+  }
+
+  scene_prep_state_.reset();
+  staging_provider_.reset();
+
   // Proactively unregister bindless structured buffers from the registry to
   // avoid late destruction during Graphics shutdown.
   if (auto g = gfx_weak_.lock()) {
@@ -208,7 +230,8 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
         .dst_offset = 0,
       };
       req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
-      static_cast<void>(uploader_->SubmitMany(std::span { &req, 1 }));
+      static_cast<void>(
+        uploader_->SubmitMany(std::span { &req, 1 }, *staging_provider_));
       draw_metadata_.ClearDirty();
     }
   }

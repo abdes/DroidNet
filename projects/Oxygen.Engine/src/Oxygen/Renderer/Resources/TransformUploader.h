@@ -30,9 +30,9 @@ namespace oxygen::renderer::resources {
 //! Manages transform matrix uploads to GPU with per-frame deduplication.
 class TransformUploader {
 public:
-  OXGN_RNDR_API TransformUploader(Graphics& gfx,
+  OXGN_RNDR_API TransformUploader(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
-    std::shared_ptr<engine::upload::StagingProvider> provider = {});
+    observer_ptr<engine::upload::StagingProvider> provider);
 
   OXYGEN_MAKE_NON_COPYABLE(TransformUploader)
   OXYGEN_MAKE_NON_MOVABLE(TransformUploader)
@@ -80,10 +80,9 @@ private:
     -> bool;
 
   // Core state
-  Graphics& gfx_;
+  observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
-  // Staging provider used for transform uploads (persistently mapped ring)
-  std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
   // Phase 1+: Future migration target – resident atlases (not yet wired)
   std::unique_ptr<AtlasBuffer> worlds_atlas_;
