@@ -173,14 +173,10 @@ public:
     const BufferViewDescription& view_desc) const -> NativeView;
 
   //! Maps the buffer memory for CPU access.
-  /*! \param offset Byte offset to start mapping.
-      \param size Number of bytes to map (0 = entire buffer).
-      \return Pointer to mapped memory.
-  */
-  virtual auto Map(uint64_t offset = 0, uint64_t size = 0) -> void* = 0;
+  OXGN_GFX_NDAPI auto Map(uint64_t offset = 0, uint64_t size = 0) -> void*;
 
   //! Un-maps the buffer memory from CPU access.
-  virtual auto UnMap() -> void = 0;
+  OXGN_GFX_API auto UnMap() -> void;
 
   //! Updates the buffer contents from CPU memory.
   /*! \param data Pointer to source data.
@@ -219,6 +215,9 @@ public:
   [[nodiscard]] virtual auto GetGPUVirtualAddress() const -> uint64_t = 0;
 
 protected:
+  virtual auto DoMap(uint64_t offset = 0, uint64_t size = 0) -> void* = 0;
+  virtual auto DoUnMap() -> void = 0;
+
   /**
    * @brief Get a constant buffer view (CBV) for this buffer
    *

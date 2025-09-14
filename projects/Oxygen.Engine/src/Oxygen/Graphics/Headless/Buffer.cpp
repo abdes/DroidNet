@@ -8,7 +8,6 @@
 #include <cstring>
 
 #include <Oxygen/Graphics/Headless/Buffer.h>
-#include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
 
@@ -32,8 +31,10 @@ auto Buffer::GetNativeResource() const -> NativeResource
   return NativeResource(const_cast<Buffer*>(this), ClassTypeId());
 }
 
-auto Buffer::Map(uint64_t /*offset*/, uint64_t /*size*/) -> void*
+auto Buffer::DoMap(uint64_t /*offset*/, uint64_t /*size*/) -> void*
 {
+  DCHECK_F(!IsMapped()); // Guaranteed by the base class
+
   std::lock_guard lk(data_mutex_);
   // Mapping when empty returns nullptr (no backing allocated) - allowed.
   if (data_.empty()) {
@@ -45,7 +46,11 @@ auto Buffer::Map(uint64_t /*offset*/, uint64_t /*size*/) -> void*
   return data_.data();
 }
 
-auto Buffer::UnMap() -> void { mapped_ = false; }
+auto Buffer::DoUnMap() -> void
+{
+  DCHECK_F(IsMapped()); // Guaranteed by the base class
+  mapped_ = false;
+}
 
 auto Buffer::Update(const void* data, uint64_t size, uint64_t offset) -> void
 {

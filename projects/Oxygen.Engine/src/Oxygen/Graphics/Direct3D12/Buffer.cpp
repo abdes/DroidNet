@@ -159,8 +159,10 @@ auto Buffer::MemoryAllocator() const -> D3D12MA::Allocator*
   return gfx_->GetAllocator();
 }
 
-auto Buffer::Map(const size_t offset, const size_t size) -> void*
+auto Buffer::DoMap(const size_t offset, const size_t size) -> void*
 {
+  DCHECK_F(!IsMapped()); // Guaranteed by the base class
+
   // Validate buffer can be mapped
   if (desc_.memory == BufferMemory::kDeviceLocal) {
     LOG_F(ERROR, "Cannot map device-local buffer {} directly", Base::GetName());
@@ -180,11 +182,9 @@ auto Buffer::Map(const size_t offset, const size_t size) -> void*
   return static_cast<uint8_t*>(mapped) + offset;
 }
 
-auto Buffer::UnMap() -> void
+auto Buffer::DoUnMap() -> void
 {
-  if (!mapped_) {
-    return;
-  }
+  DCHECK_F(IsMapped()); // Guaranteed by the base class
 
   // For upload buffers, we specify the written range
   // For read-back buffers, we use nullptr as we don't write

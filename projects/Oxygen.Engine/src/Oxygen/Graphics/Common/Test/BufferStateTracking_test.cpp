@@ -36,11 +36,6 @@ public:
   {
   }
   auto GetNativeResource() const -> NativeResource override { return native_; }
-  auto Map(size_t /*offset*/, size_t /*size*/) -> void* override
-  {
-    return nullptr;
-  }
-  auto UnMap() -> void override { }
   auto Update(const void* /*data*/, size_t /*size*/, size_t /*offset*/)
     -> void override
   {
@@ -57,6 +52,21 @@ public:
   auto IsMapped() const noexcept -> bool override { return false; }
   auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
   auto SetName(std::string_view /*name*/) noexcept -> void override { }
+
+  auto GetNativeView(const DescriptorHandle& /*view_handle*/,
+    const BufferViewDescription& /*view_desc*/) const -> NativeView override
+  {
+    return {};
+  }
+  auto GetGPUVirtualAddress() const -> uint64_t override { return 0ULL; }
+
+protected:
+  auto DoMap(size_t /*offset*/, size_t /*size*/) -> void* override
+  {
+    return nullptr;
+  }
+  auto DoUnMap() -> void override { }
+
   auto CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
     const BufferRange& /*range*/ = {}) const -> NativeView override
   {
@@ -74,13 +84,6 @@ public:
   {
     return {};
   }
-
-  auto GetNativeView(const DescriptorHandle& /*view_handle*/,
-    const BufferViewDescription& /*view_desc*/) const -> NativeView override
-  {
-    return {};
-  }
-  auto GetGPUVirtualAddress() const -> uint64_t override { return 0ULL; }
 
 private:
   NativeResource native_;

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -105,9 +104,6 @@ public:
   // Buffer interface
   OXGN_HDLS_NDAPI auto GetDescriptor() const noexcept -> BufferDesc override;
   OXGN_HDLS_NDAPI auto GetNativeResource() const -> NativeResource override;
-  OXGN_HDLS_NDAPI auto Map(size_t offset = 0, uint64_t size = 0)
-    -> void* override;
-  OXGN_HDLS_NDAPI auto UnMap() -> void override;
   OXGN_HDLS_NDAPI auto Update(
     const void* data, uint64_t size, uint64_t offset = 0) -> void override;
   OXGN_HDLS_NDAPI auto GetSize() const noexcept -> uint64_t override;
@@ -125,6 +121,10 @@ public:
     const void* src, uint64_t dst_offset, uint64_t size) -> void;
 
 protected:
+  OXGN_HDLS_NDAPI auto DoMap(size_t offset = 0, uint64_t size = 0)
+    -> void* override;
+  OXGN_HDLS_NDAPI auto DoUnMap() -> void override;
+
   [[nodiscard]] auto CreateConstantBufferView(
     const DescriptorHandle& view_handle, const BufferRange& range = {}) const
     -> NativeView override;

@@ -33,3 +33,19 @@ auto Buffer::GetNativeView(const DescriptorHandle& view_handle,
     return {};
   }
 }
+
+auto Buffer::Map(const uint64_t offset, const uint64_t size) -> void*
+{
+  if (IsMapped()) {
+    throw std::runtime_error("Buffer is already mapped");
+  }
+  return DoMap(offset, size);
+}
+
+auto Buffer::UnMap() -> void
+{
+  if (!IsMapped()) {
+    return;
+  }
+  DoUnMap();
+}

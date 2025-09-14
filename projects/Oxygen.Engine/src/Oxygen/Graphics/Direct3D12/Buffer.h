@@ -39,9 +39,6 @@ namespace d3d12 {
     OXGN_D3D12_NDAPI auto GetNativeResource() const -> NativeResource override;
 
     OXGN_D3D12_NDAPI auto GetResource() const -> ID3D12Resource*;
-    OXGN_D3D12_NDAPI auto Map(size_t offset = 0, size_t size = 0)
-      -> void* override;
-    OXGN_D3D12_API auto UnMap() -> void override;
     OXGN_D3D12_API auto Update(const void* data, size_t size, size_t offset = 0)
       -> void override;
     OXGN_D3D12_NDAPI auto GetSize() const noexcept -> size_t override;
@@ -56,6 +53,10 @@ namespace d3d12 {
     OXGN_D3D12_NDAPI auto GetGPUVirtualAddress() const -> uint64_t override;
 
   protected:
+    OXGN_D3D12_NDAPI auto DoMap(size_t offset = 0, size_t size = 0)
+      -> void* override;
+    OXGN_D3D12_API auto DoUnMap() -> void override;
+
     // --- New view creation methods ---
     [[nodiscard]] auto CreateConstantBufferView(
       const DescriptorHandle& view_handle, const BufferRange& range = {}) const
