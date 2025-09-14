@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -34,6 +35,7 @@ using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::QueueKey;
+namespace frame = oxygen::frame;
 
 //! Happy-path buffer upload: CopyBuffer and queue signal are recorded and
 //! ticket completes after retire.
@@ -71,9 +73,9 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert copy call captured
   const auto& log = GfxPtr()->buffer_log_;
@@ -84,8 +86,13 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
   EXPECT_EQ(log.copy_src_offset, 0u);
   EXPECT_EQ(log.copy_size, 64u);
 
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
   // Ticket completion
-  EXPECT_TRUE(uploader.IsComplete(ticket));
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -136,9 +143,9 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert
   EXPECT_TRUE(producer_ran);
@@ -150,7 +157,12 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
   EXPECT_EQ(log.copy_src_offset % 256u, 0u); // staging base alignment
   EXPECT_EQ(log.copy_size, size);
 
-  EXPECT_TRUE(uploader.IsComplete(ticket));
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -218,17 +230,22 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
   std::vector<UploadRequest> upload_requests;
   upload_requests.emplace_back(std::move(ra));
   upload_requests.emplace_back(std::move(rb));
-  auto tickets
+  auto tickets_result
     = uploader.SubmitMany(std::span<const UploadRequest>(
                             upload_requests.data(), upload_requests.size()),
       Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
 
   // Assert: two tickets, both complete with expected byte counts
   ASSERT_EQ(tickets.size(), 2u);
   for (const auto& t : tickets) {
-    EXPECT_TRUE(uploader.IsComplete(t));
+    auto complete_result = uploader.IsComplete(t);
+    ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+    EXPECT_TRUE(complete_result.value());
   }
   auto res_a = uploader.TryGetResult(tickets[0]);
   auto res_b = uploader.TryGetResult(tickets[1]);
@@ -325,21 +342,28 @@ NOLINT_TEST_F(
   std::vector<UploadRequest> upload_requests;
   upload_requests.emplace_back(std::move(ra));
   upload_requests.emplace_back(std::move(rb));
-  auto tickets
+  auto tickets_result
     = uploader.SubmitMany(std::span<const UploadRequest>(
                             upload_requests.data(), upload_requests.size()),
       Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
 
   // Assert producers ran
   EXPECT_TRUE(prod_a_ran);
   EXPECT_TRUE(prod_b_ran);
 
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
   // Assert tickets complete
   ASSERT_EQ(tickets.size(), 2u);
-  EXPECT_TRUE(uploader.IsComplete(tickets[0]));
-  EXPECT_TRUE(uploader.IsComplete(tickets[1]));
+  auto complete_result_0 = uploader.IsComplete(tickets[0]);
+  ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result_0.value());
+  auto complete_result_1 = uploader.IsComplete(tickets[1]);
+  ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result_1.value());
   auto res_a = uploader.TryGetResult(tickets[0]);
   auto res_b = uploader.TryGetResult(tickets[1]);
   if (!res_a.has_value()) {
@@ -401,15 +425,20 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
 
   auto& uploader = Uploader();
 
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   EXPECT_TRUE(prod_ran);
   const auto& log = GfxPtr()->buffer_log_;
   EXPECT_FALSE(log.copy_called);
 
-  ASSERT_TRUE(uploader.IsComplete(ticket));
+  // Simulate frame advance to complete fences (even for failed uploads)
+  SimulateFrameStart(frame::Slot { 1 });
+
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  ASSERT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -479,12 +508,12 @@ NOLINT_TEST_F(
   std::vector<UploadRequest> upload_requests;
   upload_requests.emplace_back(std::move(ra));
   upload_requests.emplace_back(std::move(rb));
-  auto tickets
+  auto tickets_result
     = uploader.SubmitMany(std::span<const UploadRequest>(
                             upload_requests.data(), upload_requests.size()),
       Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
 
   EXPECT_TRUE(prod_a_ran);
   EXPECT_TRUE(prod_b_ran);
@@ -494,9 +523,16 @@ NOLINT_TEST_F(
   ASSERT_EQ(log.copies.size(), 1u);
   EXPECT_EQ(log.copies[0].dst, dst_a.get());
 
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
   ASSERT_EQ(tickets.size(), 2u);
-  ASSERT_TRUE(uploader.IsComplete(tickets[0]));
-  ASSERT_TRUE(uploader.IsComplete(tickets[1]));
+  auto complete_result_0 = uploader.IsComplete(tickets[0]);
+  ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
+  ASSERT_TRUE(complete_result_0.value());
+  auto complete_result_1 = uploader.IsComplete(tickets[1]);
+  ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
+  ASSERT_TRUE(complete_result_1.value());
   auto r0 = uploader.TryGetResult(tickets[0]);
   auto r1 = uploader.TryGetResult(tickets[1]);
   if (!r0.has_value()) {

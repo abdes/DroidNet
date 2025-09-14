@@ -200,12 +200,6 @@ MaterialBinder::~MaterialBinder()
 auto MaterialBinder::OnFrameStart(
   renderer::RendererTag, oxygen::frame::Slot slot) -> void
 {
-#ifndef NDEBUG
-  static frame::Slot last_slot = frame::kInvalidSlot;
-  DCHECK_F(slot != last_slot, "Frame slot did not advance");
-  last_slot = slot;
-#endif // NDEBUG
-
   ++current_epoch_;
   if (current_epoch_ == 0U) {
     // Epoch overflow - reset all dirty tracking
@@ -241,18 +235,14 @@ auto MaterialBinder::GetOrAllocate(
 
   // Handle null materials - return invalid handle that will fail IsValidHandle
   if (!material) {
-    return engine::sceneprep::MaterialHandle {
-      std::numeric_limits<std::uint32_t>::max()
-    };
+    return engine::sceneprep::kInvalidMaterialHandle;
   }
 
   // Validate material
   std::string error_msg;
   if (!ValidateMaterial(*material, error_msg)) {
     LOG_F(ERROR, "Material validation failed: {}", error_msg);
-    return engine::sceneprep::MaterialHandle {
-      std::numeric_limits<std::uint32_t>::max()
-    };
+    return engine::sceneprep::kInvalidMaterialHandle;
   }
 
   const auto key = MakeMaterialKey(*material);
@@ -321,8 +311,13 @@ auto MaterialBinder::GetOrAllocate(
   }
 
   // Ensure atlas capacity and allocate one element
-  (void)materials_atlas_->EnsureCapacity(
-    static_cast<std::uint32_t>(materials_.size()), 0.5f);
+  if (const auto result = materials_atlas_->EnsureCapacity(
+        static_cast<std::uint32_t>(materials_.size()), 0.5f);
+    !result) {
+    LOG_F(ERROR, "Failed to ensure material atlas capacity: {}",
+      result.error().message());
+    return engine::sceneprep::kInvalidMaterialHandle;
+  }
 
   // Ensure element refs array is sized; allocate refs only when new
   if (material_refs_.size() < materials_.size()) {
@@ -429,9 +424,16 @@ auto MaterialBinder::EnsureFrameResources() -> void
   }
 
   // Ensure SRV exists even if there are no new uploads this frame
-  (void)materials_atlas_->EnsureCapacity(
-    std::max<std::uint32_t>(1U, static_cast<std::uint32_t>(materials_.size())),
-    0.5f);
+  if (const auto result = materials_atlas_->EnsureCapacity(
+        std::max<std::uint32_t>(
+          1U, static_cast<std::uint32_t>(materials_.size())),
+        0.5f);
+    !result) {
+    LOG_F(ERROR,
+      "Failed to ensure material atlas capacity for frame resources: {}",
+      result.error().message());
+    return; // Skip uploads if capacity cannot be ensured
+  }
 
   std::vector<oxygen::engine::upload::UploadRequest> requests;
   requests.reserve(8); // small, will grow if needed
@@ -471,7 +473,25 @@ auto MaterialBinder::EnsureFrameResources() -> void
     const auto tickets = uploader_->SubmitMany(
       std::span { requests.data(), requests.size() }, *staging_provider_);
     upload_operations_ += requests.size(); // Track number of upload operations
-    (void)tickets; // Fire-and-forget approach
+
+    // Handle upload submission result
+    if (!tickets.has_value()) {
+      std::error_code ec = tickets.error();
+      LOG_F(ERROR, "Transform upload submission failed: [{}] {}",
+        ec.category().name(), ec.message());
+      return; // Early return on submission failure
+    }
+
+    auto& ticket_vector = tickets.value();
+    // Validate upload tickets - if fewer tickets returned than requested, some
+    // failed
+    if (ticket_vector.size() != requests.size()) {
+      LOG_F(ERROR,
+        "Material upload submission failed: expected {} tickets, got {}. {} "
+        "uploads failed.",
+        requests.size(), ticket_vector.size(),
+        requests.size() - ticket_vector.size());
+    }
   }
 
   uploaded_this_frame_ = true;
@@ -481,10 +501,16 @@ auto MaterialBinder::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(materials_atlas_.get(), "Atlas not initialized");
   if (materials_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
-    (void)materials_atlas_->EnsureCapacity(
-      std::max<std::uint32_t>(
-        1U, static_cast<std::uint32_t>(materials_.size())),
-      0.5f);
+    if (const auto result = materials_atlas_->EnsureCapacity(
+          std::max<std::uint32_t>(
+            1U, static_cast<std::uint32_t>(materials_.size())),
+          0.5f);
+      !result) {
+      LOG_F(ERROR,
+        "Failed to ensure material atlas capacity for SRV creation: {}",
+        result.error().message());
+      return kInvalidShaderVisibleIndex;
+    }
   }
   return materials_atlas_->GetBinding().srv;
 }

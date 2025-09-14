@@ -13,6 +13,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
@@ -36,6 +37,7 @@ using oxygen::engine::upload::UploadTextureDesc;
 using oxygen::engine::upload::testing::UploadCoordinatorTest;
 using oxygen::graphics::QueueKey;
 using oxygen::graphics::TextureDesc;
+namespace frame = oxygen::frame;
 
 //! Single full-texture upload: verifies one region with aligned row/slice
 //! pitches.
@@ -83,9 +85,9 @@ NOLINT_TEST_F(
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert
   const auto& log = GfxPtr()->texture_log_;
@@ -105,7 +107,12 @@ NOLINT_TEST_F(
   EXPECT_EQ(r.dst_slice.mip_level, 0u);
   EXPECT_EQ(r.dst_slice.array_slice, 0u);
 
-  EXPECT_TRUE(uploader.IsComplete(ticket));
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -161,9 +168,9 @@ NOLINT_TEST_F(
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert
   const auto& log = GfxPtr()->texture_log_;
@@ -182,8 +189,13 @@ NOLINT_TEST_F(
   EXPECT_EQ(r1.buffer_offset, 8192u);
   EXPECT_EQ(r1.dst_slice.mip_level, 1u);
 
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
   // Ticket completion
-  EXPECT_TRUE(uploader.IsComplete(ticket));
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -244,9 +256,9 @@ NOLINT_TEST_F(
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert
   EXPECT_TRUE(producer_ran);
@@ -259,7 +271,12 @@ NOLINT_TEST_F(
   EXPECT_EQ(r.buffer_slice_pitch, expected_slice);
   EXPECT_EQ(r.buffer_offset % 512u, 0u);
 
-  EXPECT_TRUE(uploader.IsComplete(ticket));
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";
@@ -310,16 +327,21 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture2D_FullUpload_ProducerFails_NoCopy)
   auto& uploader = Uploader();
 
   // Act
-  auto ticket = uploader.Submit(req, Staging());
-  uploader.Flush();
-  uploader.RetireCompleted();
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
 
   // Assert
   EXPECT_TRUE(producer_ran);
   const auto& log = GfxPtr()->texture_log_;
   EXPECT_FALSE(log.copy_called);
 
-  ASSERT_TRUE(uploader.IsComplete(ticket));
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot { 1 });
+
+  auto complete_result = uploader.IsComplete(ticket);
+  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
+  ASSERT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
     FAIL() << "expected a value";

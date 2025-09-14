@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
   "CameraView.h"
+  "Upload/Errors.h"
   "Detail/BindlessStructuredBuffer.h"
   "Passes/DepthPrePass.h"
   "Passes/RenderPass.h"

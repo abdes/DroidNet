@@ -96,12 +96,6 @@ TransformUploader::~TransformUploader()
 auto TransformUploader::OnFrameStart(
   renderer::RendererTag, oxygen::frame::Slot slot) -> void
 {
-#ifndef NDEBUG
-  static frame::Slot last_slot = frame::kInvalidSlot;
-  DCHECK_F(slot != last_slot, "Frame slot did not advance");
-  last_slot = slot;
-#endif // NDEBUG
-
   ++current_epoch_;
   if (current_epoch_ == 0U) {
     current_epoch_ = 1U;
@@ -197,10 +191,20 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   // change needed here.
   // Ensure atlas capacity and allocate one element per kind
   // Ensure atlas capacity to hold current logical count
-  (void)worlds_atlas_->EnsureCapacity(
-    static_cast<std::uint32_t>(transforms_.size()), 0.5f);
-  (void)normals_atlas_->EnsureCapacity(
-    static_cast<std::uint32_t>(transforms_.size()), 0.5f);
+  if (const auto result = worlds_atlas_->EnsureCapacity(
+        static_cast<std::uint32_t>(transforms_.size()), 0.5f);
+    !result) {
+    LOG_F(ERROR, "Failed to ensure world atlas capacity: {}",
+      result.error().message());
+    return engine::sceneprep::kInvalidTransformHandle;
+  }
+  if (const auto result = normals_atlas_->EnsureCapacity(
+        static_cast<std::uint32_t>(transforms_.size()), 0.5f);
+    !result) {
+    LOG_F(ERROR, "Failed to ensure normal atlas capacity: {}",
+      result.error().message());
+    return engine::sceneprep::kInvalidTransformHandle;
+  }
 
   // Ensure element refs arrays are sized; allocate refs only when new
   if (world_refs_.size() < transforms_.size()) {
@@ -256,12 +260,26 @@ auto TransformUploader::EnsureFrameResources() -> void
     return;
   }
   // Ensure SRVs exist even if there are no new uploads this frame
-  (void)worlds_atlas_->EnsureCapacity(
-    std::max<std::uint32_t>(1U, static_cast<std::uint32_t>(transforms_.size())),
-    0.5f);
-  (void)normals_atlas_->EnsureCapacity(
-    std::max<std::uint32_t>(1U, static_cast<std::uint32_t>(transforms_.size())),
-    0.5f);
+  if (const auto result = worlds_atlas_->EnsureCapacity(
+        std::max<std::uint32_t>(
+          1U, static_cast<std::uint32_t>(transforms_.size())),
+        0.5f);
+    !result) {
+    LOG_F(ERROR,
+      "Failed to ensure world atlas capacity for frame resources: {}",
+      result.error().message());
+    return; // Skip uploads if capacity cannot be ensured
+  }
+  if (const auto result = normals_atlas_->EnsureCapacity(
+        std::max<std::uint32_t>(
+          1U, static_cast<std::uint32_t>(transforms_.size())),
+        0.5f);
+    !result) {
+    LOG_F(ERROR,
+      "Failed to ensure normal atlas capacity for frame resources: {}",
+      result.error().message());
+    return; // Skip uploads if capacity cannot be ensured
+  }
   std::vector<oxygen::engine::upload::UploadRequest> requests;
   requests.reserve(8); // small, will grow if needed
 
@@ -310,7 +328,26 @@ auto TransformUploader::EnsureFrameResources() -> void
     const auto tickets = uploader_->SubmitMany(
       std::span { requests.data(), requests.size() }, *staging_provider_);
     upload_operations_ += requests.size(); // Track number of upload operations
-    (void)tickets; // tickets unused in this path
+
+    // Handle upload submission result
+    if (!tickets.has_value()) {
+      std::error_code ec = tickets.error();
+      LOG_F(ERROR, "Transform upload submission failed: [{}] {}",
+        ec.category().name(), ec.message());
+      uploaded_this_frame_ = true; // Mark as uploaded to prevent retry loops
+      return;
+    }
+
+    auto& ticket_vector = tickets.value();
+    // Validate upload tickets - if fewer tickets returned than requested, some
+    // failed
+    if (ticket_vector.size() != requests.size()) {
+      LOG_F(ERROR,
+        "Transform upload submission failed: expected {} tickets, got {}. {} "
+        "uploads failed.",
+        requests.size(), ticket_vector.size(),
+        requests.size() - ticket_vector.size());
+    }
   }
   // Leave resident; only dirty parts updated.
 
@@ -322,10 +359,15 @@ auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
   DCHECK_NOTNULL_F(worlds_atlas_.get(), "Atlas not initialized");
   // Lazily ensure SRV is created before returning the bindless index
   if (worlds_atlas_->GetBinding().srv == ShaderVisibleIndex {}) {
-    (void)worlds_atlas_->EnsureCapacity(
-      std::max<std::uint32_t>(
-        1U, static_cast<std::uint32_t>(transforms_.size())),
-      0.5f);
+    if (const auto result = worlds_atlas_->EnsureCapacity(
+          std::max<std::uint32_t>(
+            1U, static_cast<std::uint32_t>(transforms_.size())),
+          0.5f);
+      !result) {
+      LOG_F(ERROR, "Failed to ensure world atlas capacity for SRV creation: {}",
+        result.error().message());
+      return kInvalidShaderVisibleIndex;
+    }
   }
   return worlds_atlas_->GetBinding().srv;
 }
@@ -334,10 +376,16 @@ auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(normals_atlas_.get(), "Atlas not initialized");
   if (normals_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
-    (void)normals_atlas_->EnsureCapacity(
-      std::max<std::uint32_t>(
-        1U, static_cast<std::uint32_t>(transforms_.size())),
-      0.5f);
+    if (const auto result = normals_atlas_->EnsureCapacity(
+          std::max<std::uint32_t>(
+            1U, static_cast<std::uint32_t>(transforms_.size())),
+          0.5f);
+      !result) {
+      LOG_F(ERROR,
+        "Failed to ensure normal atlas capacity for SRV creation: {}",
+        result.error().message());
+      return kInvalidShaderVisibleIndex;
+    }
   }
   return normals_atlas_->GetBinding().srv;
 }

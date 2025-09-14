@@ -10,6 +10,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -36,6 +37,13 @@ protected:
 
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto Staging() -> StagingProvider& { return *staging_provider_; }
+
+  auto SimulateFrameStart(frame::Slot slot) -> void
+  {
+    // Simulate frame advance to complete fences
+    uploader_->OnFrameStart(
+      renderer::internal::RendererTagFactory::Get(), slot);
+  }
 
 private:
   std::shared_ptr<renderer::testing::FakeGraphics> gfx_;

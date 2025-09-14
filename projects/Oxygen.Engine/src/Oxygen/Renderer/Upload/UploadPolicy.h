@@ -14,27 +14,24 @@ namespace oxygen::engine::upload {
 
 struct UploadPolicy {
   struct Batching {
-    static constexpr uint32_t kMaxRegionsPerCommandList = 256;
+    static constexpr uint32_t kMaxRegionsPerCommandList = 256U;
     static constexpr uint64_t kMaxBytesPerCommandList
-      = 64ull * 1024ull * 1024ull; // 64 MB
+      = 64ULL * 1024ULL * 1024ULL; // 64 MB
   };
   struct AlignmentPolicy {
     // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT / Vulkan row pitch alignment (bytes)
-    static constexpr Alignment kRowPitchAlignment { 256u };
+    static constexpr Alignment kRowPitchAlignment { 256U };
     // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT (bytes)
-    static constexpr Alignment kPlacementAlignment { 512u };
+    static constexpr Alignment kPlacementAlignment { 512U };
     // Generic buffer copy alignment (bytes)
-    static constexpr oxygen::engine::upload::Alignment kBufferCopyAlignment {
-      256u
-    };
+    static constexpr Alignment kBufferCopyAlignment { 256U };
   };
   struct Limits {
-    static constexpr uint64_t kSmallArenaBlockMin = 64ull * 1024ull; // 64 KB
-    static constexpr uint64_t kSmallArenaBlockMax
-      = 1ull * 1024ull * 1024ull; // 1 MB
+    static constexpr uint64_t kSmallArenaBlockMin = 64ULL * 1024ULL; // 64 KB
+    static constexpr uint64_t kSmallArenaBlockMax = 1024ULL * 1024ULL; // 1 MB
   };
   struct Timeouts {
-    static constexpr uint32_t kFlushTimeSliceMs = 2u;
+    static constexpr uint32_t kFlushTimeSliceMs = 2U;
   };
 };
 

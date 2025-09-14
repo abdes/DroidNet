@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <expected>
 #include <functional>
 #include <span>
 #include <unordered_set>
@@ -95,12 +96,13 @@ auto ChooseUploadQueueKey(oxygen::Graphics& gfx) -> QueueKey
 // Minimal synchronous Submit: buffer uploads only.
 // Follows Renderer.cpp pattern and uses SingleQueueStrategy for now.
 auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
-  UploadTracker& tracker, StagingProvider& provider) -> UploadTicket
+  UploadTracker& tracker, StagingProvider& provider)
+  -> std::expected<UploadTicket, UploadError>
 {
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
   const auto size = desc.size_bytes;
   if (!desc.dst || size == 0) {
-    return {};
+    return std::unexpected(UploadError::kInvalidRequest);
   }
 
   // Allocate staging directly from the provider
@@ -122,8 +124,8 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
       std::span<std::byte> dst(staging.ptr, size);
       if (!producer(dst)) {
         // Producer failed: return immediate failed ticket
-        return tracker.RegisterFailedImmediate(req.debug_name,
-          UploadError::kProducerFailed, "Producer returned false");
+        return tracker.RegisterFailedImmediate(
+          req.debug_name, UploadError::kProducerFailed);
       }
     }
   }
@@ -158,15 +160,15 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
 
 auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
-  -> UploadTicket
+  -> std::expected<UploadTicket, UploadError>
 {
-  const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
-  if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0) {
-    return {};
-  }
-
   // Use the planner to compute regions and total bytes.
-  auto plan = UploadPlanner::PlanTexture2D(tdesc, req.subresources, policy);
+  const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
+  auto exp_plan = UploadPlanner::PlanTexture2D(tdesc, req.subresources, policy);
+  if (!exp_plan.has_value()) {
+    return std::unexpected(exp_plan.error());
+  }
+  const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
 
   auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
@@ -186,8 +188,8 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
     if (producer) {
       std::span<std::byte> dst(staging.ptr, total_bytes);
       if (!producer(dst)) {
-        return tracker.RegisterFailedImmediate(req.debug_name,
-          UploadError::kProducerFailed, "Producer returned false");
+        return tracker.RegisterFailedImmediate(
+          req.debug_name, UploadError::kProducerFailed);
       }
     }
   }
@@ -223,14 +225,14 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
 auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
-  -> UploadTicket
+  -> std::expected<UploadTicket, UploadError>
 {
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
-  if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0 || tdesc.depth == 0) {
-    return {};
+  auto exp_plan = UploadPlanner::PlanTexture3D(tdesc, req.subresources, policy);
+  if (!exp_plan.has_value()) {
+    return std::unexpected(exp_plan.error());
   }
-
-  auto plan = UploadPlanner::PlanTexture3D(tdesc, req.subresources, policy);
+  const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
   auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
 
@@ -248,8 +250,8 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
     if (producer) {
       std::span<std::byte> dst(staging.ptr, total_bytes);
       if (!producer(dst)) {
-        return tracker.RegisterFailedImmediate(req.debug_name,
-          UploadError::kProducerFailed, "Producer returned false");
+        return tracker.RegisterFailedImmediate(
+          req.debug_name, UploadError::kProducerFailed);
       }
     }
   }
@@ -262,66 +264,6 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto key = ChooseUploadQueueKey(gfx);
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture3D");
-  recorder->BeginTrackingResourceState(
-    *tdesc.dst, ResourceStates::kCommon, false);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
-  recorder->FlushBarriers();
-  recorder->CopyBufferToTexture(
-    *staging.buffer, std::span { regions }, *tdesc.dst);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
-  recorder->FlushBarriers();
-
-  // Defer unmap-then-release of staging buffer once safe to reclaim
-  DeferUnmapThenRelease(gfx.GetDeferredReclaimer(), staging.buffer);
-
-  auto queue = gfx.GetCommandQueue(key);
-  const auto fence_raw = queue->Signal();
-  recorder->RecordQueueSignal(fence_raw);
-  return tracker.Register(
-    FenceValue { fence_raw }, total_bytes, req.debug_name);
-}
-
-auto SubmitTextureCube(oxygen::Graphics& gfx, const UploadRequest& req,
-  const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
-  -> UploadTicket
-{
-  const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
-  if (!tdesc.dst || tdesc.width == 0 || tdesc.height == 0) {
-    return {};
-  }
-
-  auto plan = UploadPlanner::PlanTextureCube(tdesc, req.subresources, policy);
-  const uint64_t total_bytes = plan.total_bytes;
-  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
-
-  if (std::holds_alternative<UploadDataView>(req.data)) {
-    auto view = std::get<UploadDataView>(req.data);
-    const auto to_copy = std::min<uint64_t>(total_bytes, view.bytes.size());
-    if (to_copy > 0) {
-      std::memcpy(staging.ptr, view.bytes.data(), to_copy);
-    }
-  } else {
-    auto& producer
-      = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-        std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-          req.data));
-    if (producer) {
-      std::span<std::byte> dst(staging.ptr, total_bytes);
-      if (!producer(dst)) {
-        return tracker.RegisterFailedImmediate(req.debug_name,
-          UploadError::kProducerFailed, "Producer returned false");
-      }
-    }
-  }
-
-  std::vector<TextureUploadRegion> regions = plan.regions;
-  for (auto& r : regions) {
-    r.buffer_offset += staging.offset;
-  }
-
-  const auto key = ChooseUploadQueueKey(gfx);
-  auto recorder
-    = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTextureCube");
   recorder->BeginTrackingResourceState(
     *tdesc.dst, ResourceStates::kCommon, false);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
@@ -371,8 +313,8 @@ auto UploadCoordinator::CreateRingBufferStaging(frame::SlotCount partitions,
   return provider;
 }
 
-auto UploadCoordinator::Submit(
-  const UploadRequest& req, StagingProvider& provider) -> UploadTicket
+auto UploadCoordinator::Submit(const UploadRequest& req,
+  StagingProvider& provider) -> std::expected<UploadTicket, UploadError>
 {
   switch (req.kind) {
   case UploadKind::kBuffer:
@@ -381,14 +323,13 @@ auto UploadCoordinator::Submit(
     return SubmitTexture2D(*gfx_, req, policy_, tracker_, provider);
   case UploadKind::kTexture3D:
     return SubmitTexture3D(*gfx_, req, policy_, tracker_, provider);
-  case UploadKind::kTextureCube:
-    return SubmitTextureCube(*gfx_, req, policy_, tracker_, provider);
   }
-  return {};
+  return std::unexpected(UploadError::kInvalidRequest);
 }
 
-auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
-  StagingProvider& provider) -> std::vector<UploadTicket>
+auto UploadCoordinator::SubmitMany(
+  std::span<const UploadRequest> reqs, StagingProvider& provider)
+  -> std::expected<std::vector<UploadTicket>, UploadError>
 {
   std::vector<UploadTicket> out;
   out.reserve(reqs.size());
@@ -405,18 +346,30 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
     }
     const bool have_run = (i > start);
     if (!have_run) {
-      out.emplace_back(Submit(reqs[i], provider));
+      auto submit_result = Submit(reqs[i], provider);
+      if (!submit_result.has_value()) {
+        return std::unexpected(submit_result.error());
+      }
+      out.emplace_back(submit_result.value());
       ++i;
       continue;
     }
 
     const auto span
       = std::span<const UploadRequest>(reqs.data() + start, i - start);
-    auto plan = UploadPlanner::PlanBuffers(span, policy_);
-    if (plan.total_bytes == 0 || plan.buffer_regions.empty()) {
+    auto exp_plan = UploadPlanner::PlanBuffers(span, policy_);
+    if (!exp_plan.has_value()) {
+      return std::unexpected(exp_plan.error());
+    }
+    auto plan = exp_plan.value();
+    if (plan.total_bytes == 0 || plan.regions.empty()) {
       // No valid buffers in the run; submit individually for error accounting.
       for (size_t j = start; j < i; ++j) {
-        out.emplace_back(Submit(reqs[j], provider));
+        auto submit_result = Submit(reqs[j], provider);
+        if (!submit_result.has_value()) {
+          return std::unexpected(submit_result.error());
+        }
+        out.emplace_back(submit_result.value());
       }
       continue;
     }
@@ -426,7 +379,7 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
 
     // Fill staging: concatenate views/producers; track failures per request.
     std::vector<bool> ok(span.size(), true);
-    for (const auto& br : plan.buffer_regions) {
+    for (const auto& br : plan.regions) {
       const auto& r = span[br.request_index - start];
       if (std::holds_alternative<UploadDataView>(r.data)) {
         auto view = std::get<UploadDataView>(r.data);
@@ -455,8 +408,8 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
     // Record all copies and state transitions, grouping by destination.
     // PlanBuffers returns regions sorted by (dst, dst_offset).
     std::shared_ptr<Buffer> current_dst;
-    for (size_t idx = 0; idx < plan.buffer_regions.size(); ++idx) {
-      const auto& br = plan.buffer_regions[idx];
+    for (size_t idx = 0; idx < plan.regions.size(); ++idx) {
+      const auto& br = plan.regions[idx];
       if (!ok[br.request_index - start]) {
         continue; // skip failed
       }
@@ -478,9 +431,9 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
 
       // If next region is a different destination (or end), transition this
       // destination to its steady-state now.
-      const bool is_last = (idx + 1 == plan.buffer_regions.size());
+      const bool is_last = (idx + 1 == plan.regions.size());
       const bool next_diff
-        = !is_last && (plan.buffer_regions[idx + 1].dst.get() != br.dst.get());
+        = !is_last && (plan.regions[idx + 1].dst.get() != br.dst.get());
       if (is_last || next_diff) {
         recorder->RequireResourceState(
           *br.dst, UsageToTargetState(br.dst->GetUsage()));
@@ -495,11 +448,11 @@ auto UploadCoordinator::SubmitMany(std::span<const UploadRequest> reqs,
     recorder->RecordQueueSignal(fence_raw);
 
     // Create tickets for each request in the run (same fence, per-size bytes)
-    for (const auto& br : plan.buffer_regions) {
+    for (const auto& br : plan.regions) {
       const auto& r = span[br.request_index - start];
       if (!ok[br.request_index - start]) {
-        out.emplace_back(tracker_.RegisterFailedImmediate(r.debug_name,
-          UploadError::kProducerFailed, "Producer returned false"));
+        out.emplace_back(tracker_.RegisterFailedImmediate(
+          r.debug_name, UploadError::kProducerFailed));
       } else {
         out.emplace_back(
           tracker_.Register(FenceValue { fence_raw }, br.size, r.debug_name));
@@ -529,17 +482,12 @@ auto UploadCoordinator::RetireCompleted() -> void
     }
   }
 }
+
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto UploadCoordinator::OnFrameStart(renderer::RendererTag, frame::Slot slot)
   -> void
 {
   static auto tag = internal::UploaderTagFactory::Get();
-
-#ifndef NDEBUG
-  static frame::Slot last_slot = frame::kInvalidSlot;
-  DCHECK_F(slot != last_slot, "Frame slot did not advance");
-  last_slot = slot;
-#endif // NDEBUG
 
   RetireCompleted();
 
@@ -553,6 +501,71 @@ auto UploadCoordinator::OnFrameStart(renderer::RendererTag, frame::Slot slot)
       it = providers_.erase(it);
     }
   }
+}
+
+auto UploadCoordinator::SubmitAsync(
+  const UploadRequest& req, StagingProvider& provider) -> co::Co<UploadResult>
+{
+  auto submit_result = Submit(req, provider);
+  if (!submit_result.has_value()) {
+    co_return UploadResult {
+      .success = false,
+      .error = submit_result.error(),
+    };
+  }
+  auto t = submit_result.value();
+  co_await AwaitAsync(t);
+  auto result = TryGetResult(t);
+  DCHECK_F(result.has_value(),
+    "Ticket result must be available after successful await");
+  co_return result.value();
+}
+
+auto UploadCoordinator::SubmitManyAsync(std::span<const UploadRequest> reqs,
+  StagingProvider& provider) -> co::Co<std::vector<UploadResult>>
+{
+  auto submit_result = SubmitMany(reqs, provider);
+  if (!submit_result.has_value()) {
+    co_return std::vector<UploadResult> {
+      UploadResult {
+        .success = false,
+        .error = submit_result.error(),
+      },
+    };
+  }
+  auto tickets = submit_result.value();
+  co_await AwaitAllAsync(tickets);
+  std::vector<UploadResult> out;
+  out.reserve(tickets.size());
+  for (auto t : tickets) {
+    auto result = TryGetResult(t);
+    DCHECK_F(result.has_value(),
+      "Ticket result must be available after successful AwaitAll");
+    out.emplace_back(result.value());
+  }
+  co_return out;
+}
+
+auto UploadCoordinator::AwaitAsync(UploadTicket t) -> co::Co<void>
+{
+  co_await Until(tracker_.CompletedFenceValue() >= t.fence);
+  co_return; // result can be queried if needed
+}
+
+auto UploadCoordinator::AwaitAllAsync(std::span<const UploadTicket> tickets)
+  -> co::Co<void>
+{
+  if (tickets.empty()) {
+    co_return;
+  }
+  FenceValue max_fence { 0 };
+  for (const auto& t : tickets) {
+    if (max_fence < t.fence) {
+      max_fence = t.fence;
+    }
+  }
+  co_await Until(tracker_.CompletedFenceValue() >= max_fence);
+  co_return;
 }
 
 } // namespace oxygen::engine::upload
