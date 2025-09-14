@@ -32,3 +32,15 @@
 #define TRACE_GCHECK_F(statement, message)                                     \
   TRACE_GCHECK_F_IMPL(statement, message) // NOLINT
 #define GCHECK_F(statement) TRACE_GCHECK_F_IMPL(statement, "") // NOLINT
+
+#if defined(__clang__)
+#  define ASSUME(x) __builtin_assume(x)
+#elif defined(_MSC_VER)
+#  define ASSUME(x) __assume(x)
+#else
+#  define ASSUME(x)                                                            \
+    do {                                                                       \
+      if (!(x))                                                                \
+        __builtin_unreachable();                                               \
+    } while (0)
+#endif
