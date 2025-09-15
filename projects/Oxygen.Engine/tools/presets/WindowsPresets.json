@@ -29,6 +29,11 @@
       "name": "windows-release",
       "inherits": "base-release",
       "configurePreset": "windows"
+    },
+    {
+      "name": "windows-relwithdebinfo",
+      "inherits": "base-relwithdebinfo",
+      "configurePreset": "windows"
     }
   ],
   "testPresets": [
