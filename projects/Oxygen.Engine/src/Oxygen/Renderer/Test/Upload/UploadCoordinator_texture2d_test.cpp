@@ -66,7 +66,6 @@ NOLINT_TEST_F(
 
   UploadRequest req {
     .kind = UploadKind::kTexture2D,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "TexUploadFull",
     .desc = UploadTextureDesc {
@@ -146,7 +145,6 @@ NOLINT_TEST_F(
 
   UploadRequest req {
     .kind = UploadKind::kTexture2D,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "TexUploadMips",
     .desc = UploadTextureDesc {
@@ -239,7 +237,6 @@ NOLINT_TEST_F(
 
   UploadRequest req {
     .kind = UploadKind::kTexture2D,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "TexUploadFullProd",
     .desc = UploadTextureDesc {
@@ -310,7 +307,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture2D_FullUpload_ProducerFails_NoCopy)
 
   UploadRequest req {
     .kind = UploadKind::kTexture2D,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "TexProdFail",
     .desc = UploadTextureDesc {

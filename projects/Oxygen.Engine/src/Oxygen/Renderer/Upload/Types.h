@@ -73,12 +73,6 @@ enum class UploadKind : uint8_t {
   kTextureCube,
 };
 
-enum class BatchPolicy : uint8_t {
-  kImmediate,
-  kCoalesce,
-  kBackground,
-};
-
 struct UploadBufferDesc {
   std::shared_ptr<graphics::Buffer> dst;
   uint64_t size_bytes { 0 };
@@ -109,7 +103,6 @@ struct UploadDataView {
 
 struct UploadRequest {
   UploadKind kind { UploadKind::kBuffer };
-  BatchPolicy batch_policy { BatchPolicy::kCoalesce };
   Priority priority { 0 };
   std::string debug_name;
 

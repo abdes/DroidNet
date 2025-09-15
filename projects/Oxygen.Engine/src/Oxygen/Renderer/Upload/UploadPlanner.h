@@ -17,6 +17,28 @@
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 #include <Oxygen/Renderer/api_export.h>
 
+// TODO: move to graphics module later
+
+namespace oxygen::graphics {
+
+//! Minimal, shared buffer region descriptor (no destination handle).
+/*! Describes a byte range copy from a single staging buffer into a
+    destination buffer. The destination buffer is resolved externally.
+
+  ### Invariants
+
+  - Offsets and size are in bytes.
+  - src_offset is assigned to respect alignment policy used by the planner.
+  - size > 0 for valid uploads.
+*/
+struct BufferUploadRegion {
+  std::uint64_t dst_offset { 0 }; //!< Destination byte offset
+  std::uint64_t src_offset { 0 }; //!< Source byte offset in the staging buffer
+  std::uint64_t size { 0 }; //!< Number of bytes to copy
+};
+
+} // namespace oxygen::graphics
+
 namespace oxygen::engine::upload {
 
 //! Plans copy regions and staging footprints for uploads.
@@ -25,17 +47,34 @@ struct TextureUploadPlan {
   std::vector<oxygen::graphics::TextureUploadRegion> regions;
 };
 
-//! Plans copy regions and staging footprints for uploads.
+//! Upload item mapping a region to the original requests it covers.
+/*! In the initial (non-coalesced) plan, each item covers exactly one request
+    (request_indices.size() == 1). After optimization, items may cover
+    multiple requests; indices refer to the input span passed to PlanBuffers.
+
+  ### Invariants
+
+  - region.size > 0
+  - request_indices is non-empty
+*/
+struct UploadItem {
+  oxygen::graphics::BufferUploadRegion region;
+  std::vector<std::size_t> request_indices;
+};
+
+//! Plans copy regions and staging footprint for buffer uploads.
+/*! Regions are sorted by destination identity (via request_indices[0]) and
+    then by dst_offset. src_offset is aligned according to policy.
+
+  ### Invariants
+
+  - total_bytes is the minimal size required to hold all regions given
+    assigned src_offset and sizes.
+  - uploads is empty iff total_bytes == 0.
+*/
 struct BufferUploadPlan {
-  struct CopyRegion {
-    std::shared_ptr<oxygen::graphics::Buffer> dst;
-    uint64_t dst_offset { 0 };
-    uint64_t size { 0 };
-    uint64_t src_offset { 0 }; // offset within staging buffer
-    size_t request_index { 0 }; // index in the input batch/span
-  };
+  std::vector<UploadItem> uploads;
   uint64_t total_bytes { 0 };
-  std::vector<CopyRegion> regions;
 };
 
 //! Compute buffer and texture footprints and regions from requests.
@@ -43,12 +82,21 @@ class UploadPlanner {
 public:
   //=== Buffer planning ------------------------------------------------------//
 
-  //! Plan a batch of buffer uploads into a single staging allocation.
-  /*! Packs valid buffer requests into a contiguous staging buffer abiding by
-   policy alignments. Returns per-request staging offsets for CopyBuffer.
-   Invalid requests (null dst or size==0) are skipped.
+  //! Stage 1: Plan a batch of buffer uploads into a single staging allocation.
+  /*! Packs valid requests, assigns aligned src_offset, no coalescing.
+   Invalid requests (null dst, size==0, out-of-bounds) are skipped.
   */
   OXGN_RNDR_API static auto PlanBuffers(std::span<const UploadRequest> requests,
+    const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>;
+
+  //! Stage 3: Coalesce contiguous regions targeting the same destination.
+  /*! Produces a new plan with fewer uploads by merging adjacent items when
+   both dst_offset and src_offset are contiguous. request_indices are
+   concatenated preserving order. The representative request for a merged
+   item is request_indices.front().
+  */
+  OXGN_RNDR_API static auto OptimizeBuffers(
+    std::span<const UploadRequest> requests, const BufferUploadPlan& plan,
     const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>;
 
   //=== Texture planning -----------------------------------------------------//

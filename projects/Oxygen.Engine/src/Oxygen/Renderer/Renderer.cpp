@@ -225,7 +225,6 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
     draw_metadata_.EnsureBufferAndSrv(graphics, "DrawResourceIndices"));
   // Upload via coordinator when marked dirty
   if (uploader_ && draw_metadata_.IsDirty()) {
-    using upload::BatchPolicy;
     using upload::UploadBufferDesc;
     using upload::UploadDataView;
     using upload::UploadKind;
@@ -236,7 +235,7 @@ auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
     if (size > 0 && draw_metadata_.GetBuffer()) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
-      req.batch_policy = BatchPolicy::kCoalesce;
+      // SubmitMany will coalesce buffer uploads automatically.
       req.debug_name = "DrawResourceIndices";
       req.desc = UploadBufferDesc {
         .dst = draw_metadata_.GetBuffer(),
