@@ -72,8 +72,5 @@ target_compile_definitions(
 # Upload unit tests (no backend dependency)
 m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
 
-# StagingAllocator unit tests (backend-free)
-m_gtest_program(UploadStaging SOURCES "Upload/SingleBufferStaging_test.cpp")
-
 # UploadPlanner unit tests (backend-free)
 m_gtest_program(UploadPlanner SOURCES "Upload/UploadPlanner_basic_test.cpp")

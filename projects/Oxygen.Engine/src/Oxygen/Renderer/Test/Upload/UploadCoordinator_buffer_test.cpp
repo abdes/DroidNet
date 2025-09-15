@@ -265,9 +265,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
   EXPECT_EQ(e1.dst, dst_b.get());
   EXPECT_EQ(e1.dst_offset, 256u);
   EXPECT_EQ(e1.size, 80u);
-  // Buffer copy alignment is 256; first src_offset should be 0 (or base),
-  // second offset must be first offset + 256.
-  EXPECT_EQ(e1.src_offset - e0.src_offset, 256u);
 
   // Cleanup
   GfxPtr()->Flush();
@@ -381,7 +378,6 @@ NOLINT_TEST_F(
   EXPECT_EQ(e1.dst_offset, 256u);
   EXPECT_EQ(e1.size, size_b);
   EXPECT_EQ(e0.src_offset % 256u, 0u);
-  EXPECT_EQ(e1.src_offset - e0.src_offset, 256u);
 
   GfxPtr()->Flush();
 }

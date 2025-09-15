@@ -101,8 +101,6 @@ set(
   "Types/SceneConstants.cpp"
   "Upload/RingBufferStaging.cpp"
   "Upload/RingBufferStaging.h"
-  "Upload/SingleBufferStaging.cpp"
-  "Upload/SingleBufferStaging.h"
   "Upload/StagingProvider.cpp"
   "Upload/StagingProvider.h"
   "Upload/Types.h"

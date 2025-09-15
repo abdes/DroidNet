@@ -15,6 +15,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -26,7 +27,6 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
-#include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 #include <Oxygen/Scene/Scene.h>
@@ -56,7 +56,6 @@ using oxygen::engine::sceneprep::RenderItemProto;
 using oxygen::engine::sceneprep::ScenePrepContext;
 using oxygen::engine::sceneprep::ScenePrepState;
 using oxygen::engine::sceneprep::SubMeshVisibilityFilter;
-using oxygen::engine::upload::SingleBufferStaging;
 using oxygen::engine::upload::StagingProvider;
 using oxygen::engine::upload::internal::UploaderTagFactory;
 using oxygen::scene::FixedPolicy;
@@ -91,8 +90,8 @@ protected:
     gfx_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
     uploader_ = std::make_unique<oxygen::engine::upload::UploadCoordinator>(
       observer_ptr { gfx_.get() });
-    staging_provider_ = std::make_shared<SingleBufferStaging>(
-      UploaderTagFactory::Get(), observer_ptr { gfx_.get() });
+    staging_provider_ = uploader_->CreateRingBufferStaging(
+      oxygen::frame::SlotCount { 1 }, 4, 0.5f);
 
     // Create resource managers and give ownership to ScenePrepState so
     // Extractors can rely on a non-null material binder during tests.
