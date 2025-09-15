@@ -140,42 +140,98 @@ auto RenderPass::BindDrawIndexConstant(
     0); // offset within the constant (0 for single 32-bit value)
 }
 
-auto RenderPass::IssueDrawCalls(CommandRecorder& recorder) const -> bool
+auto RenderPass::IssueDrawCallsOverPass(
+  CommandRecorder& recorder, PassMaskBit pass_bit) const noexcept -> void
 {
-  return IssueDrawCalls(
-    recorder, [](const engine::DrawMetadata&) noexcept { return true; });
+  try {
+    const auto psf = Context().prepared_frame;
+    if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
+      return; // nothing to do
+    }
+
+    const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
+      psf->draw_metadata_bytes.data());
+
+    uint32_t emitted_count = 0;
+    uint32_t skipped_invalid = 0;
+    uint32_t draw_errors = 0;
+
+    if (psf->partitions.empty()) {
+      // Defensive fallback: if partitions missing, iterate all and apply pass
+      // bit to preserve correctness.
+      const auto count
+        = psf->draw_metadata_bytes.size() / sizeof(engine::DrawMetadata);
+      for (uint32_t i = 0; i < count; ++i) {
+        const auto& md = records[i];
+        if (!md.flags.IsSet(pass_bit)) {
+          continue;
+        }
+        EmitDrawRange(recorder, records, i, i + 1, emitted_count,
+          skipped_invalid, draw_errors);
+      }
+      if (emitted_count > 0 || skipped_invalid > 0 || draw_errors > 0) {
+        DLOG_F(2,
+          "RenderPass '{}' pass {}: emitted={}, skipped_invalid={}, errors={} "
+          "(no partitions)",
+          GetName(), to_string(PassMask { pass_bit }), emitted_count,
+          skipped_invalid, draw_errors);
+      }
+      return;
+    }
+
+    for (const auto& pr : psf->partitions) {
+      if (pr.pass_mask.IsSet(pass_bit)) {
+        EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
+          skipped_invalid, draw_errors);
+      }
+    }
+    if (emitted_count > 0 || skipped_invalid > 0 || draw_errors > 0) {
+      DLOG_F(2,
+        "RenderPass '{}' pass {}: emitted={}, skipped_invalid={}, errors={}",
+        GetName(), to_string(PassMask { pass_bit }), emitted_count,
+        skipped_invalid, draw_errors);
+    }
+  } catch (const std::exception& ex) {
+    // Catch-all to honor noexcept: log and return
+    DLOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: {}",
+      GetName(), ex.what());
+  } catch (...) {
+    DLOG_F(ERROR,
+      "RenderPass '{}' IssueDrawCallsOverPass failed: unknown error",
+      GetName());
+  }
 }
 
-auto RenderPass::IssueDrawCalls(CommandRecorder& recorder,
-  const std::function<bool(const engine::DrawMetadata&)>& predicate) const
-  -> bool
+auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
+  const DrawMetadata* records, uint32_t begin, uint32_t end,
+  uint32_t& emitted_count, uint32_t& skipped_invalid,
+  uint32_t& draw_errors) const noexcept -> void
 {
-  const auto psf = Context().prepared_frame;
-  if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
-    return false;
-  }
-  const auto count
-    = psf->draw_metadata_bytes.size() / sizeof(engine::DrawMetadata);
-  DLOG_F(2, "RenderPass SoA metadata available: records={}", count);
-  const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
-    psf->draw_metadata_bytes.data());
-  bool emitted = false;
-  for (size_t draw_index = 0; draw_index < count; ++draw_index) {
+  for (uint32_t draw_index = begin; draw_index < end; ++draw_index) {
     const auto& md = records[draw_index];
-    if (!predicate || !predicate(md)) {
+    // Runtime guards (release-safe): skip invalid metadata
+    if ((md.is_indexed && md.index_count == 0)
+      || (!md.is_indexed && md.vertex_count == 0)) {
+      ++skipped_invalid;
       continue;
     }
-    if (md.is_indexed) {
-      DCHECK_F(md.index_count > 0, "Indexed draw requires index_count > 0");
-    } else {
-      DCHECK_F(
-        md.vertex_count > 0, "Non-indexed draw requires vertex_count > 0");
+    try {
+      BindDrawIndexConstant(recorder, draw_index);
+      recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count, 1, 0, 0);
+      ++emitted_count;
+    } catch (const std::exception& ex) {
+      ++draw_errors;
+      DLOG_F(ERROR, "RenderPass '{}' draw_index={} failed: {}. Draw dropped.",
+        GetName(), draw_index, ex.what());
+      continue;
+    } catch (...) {
+      ++draw_errors;
+      DLOG_F(ERROR,
+        "RenderPass '{}' draw_index={} failed: unknown error. Draw dropped.",
+        GetName(), draw_index);
+      continue;
     }
-    BindDrawIndexConstant(recorder, static_cast<uint32_t>(draw_index));
-    recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count, 1, 0, 0);
-    emitted = true;
   }
-  return emitted;
 }
 
 namespace {

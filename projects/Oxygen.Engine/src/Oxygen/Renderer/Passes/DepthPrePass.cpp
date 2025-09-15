@@ -221,25 +221,8 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // to prevent them from writing depth and later occluding opaque color when
   // blended (would produce the previously observed inverted transparency).
   // Only PassMaskBit::kOpaqueOrMasked are accepted here.
-  uint32_t transparent_saw = 0;
-  const bool emitted
-    = IssueDrawCalls(recorder, [&transparent_saw](const DrawMetadata& md) {
-        if (md.flags.IsSet(PassMaskBit::kTransparent)) {
-          ++transparent_saw; // counted for debug stats; not emitted
-          return false;
-        }
-        return (md.flags.IsSet(PassMaskBit::kOpaqueOrMasked));
-      });
-  DLOG_F(2,
-    "DepthPrePass emitted depth draws (opaque/masked only): emitted_any={} "
-    "transparent_seen={}",
-    emitted, transparent_saw);
-  // Debug guard: depth pre-pass must not emit transparent geometry.
-  DCHECK_F(transparent_saw >= 0, "Counter logic error");
-  // If any transparent were seen ensure none were emitted by construction of
-  // predicate (defensive: predicate never returns true for transparent).
-  // (If future changes alter predicate, enforce with explicit assert.)
-  DCHECK_F(true, "DepthPrePass predicate excludes transparent by design");
+  IssueDrawCallsOverPass(
+    recorder, oxygen::engine::PassMaskBit::kOpaqueOrMasked);
 
   Context().RegisterPass(this);
   co_return;

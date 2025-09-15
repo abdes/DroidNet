@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string_view>
 
@@ -14,6 +15,7 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -29,6 +31,8 @@ namespace oxygen::engine {
 struct RenderContext;
 struct RenderItem;
 struct DrawMetadata; // forward declaration for predicate signature
+
+// PassMaskBit is provided by PassMask.h include above
 
 //! Abstract base class for a modular, coroutine-based render pass.
 /*!
@@ -126,32 +130,26 @@ protected:
 
   static auto BuildRootBindings() -> std::vector<graphics::RootBindingItem>;
 
-  // Legacy AoS draw list path removed. Derived passes now implement
-  // IssueDrawCalls to emit draws; default helpers rely on PreparedSceneFrame.
-  // Issue draws using PreparedSceneFrame SoA DrawMetadata records. Returns
-  // true if any draws were emitted. Single unified path (legacy AoS removed).
-  auto IssueDrawCalls(graphics::CommandRecorder& recorder) const -> bool;
+  // Issue draw calls over a specific pass partition.
+  // Iterates PreparedSceneFrame partitions and emits draws only within the
+  // ranges whose pass_mask includes the requested bit. Logs emitted count.
+  auto IssueDrawCallsOverPass(graphics::CommandRecorder& recorder,
+    PassMaskBit pass_bit) const noexcept -> void;
 
-  //! Issue filtered draw calls using a predicate on DrawMetadata.
-  /*! Overload that iterates PreparedSceneFrame draw metadata and issues only
-      draws whose metadata satisfies the supplied predicate. Uses type-erased
-      std::function to keep implementation in translation unit (no template
-      bloat / linker issues for lambdas in multiple passes).
-
-      @param recorder Command recorder.
-      @param predicate bool(const DrawMetadata&) deciding inclusion.
-      @return true if >=1 draw emitted.
-  */
-  auto IssueDrawCalls(graphics::CommandRecorder& recorder,
-    const std::function<bool(const DrawMetadata&)>& predicate) const -> bool;
-
+private:
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
 
-private:
   auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
     -> void;
   auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;
+
+  //! Emit draws for a half-open [begin, end) range with robust error
+  //! handling. Increments counters for emitted, skipped invalid, and errors.
+  auto EmitDrawRange(graphics::CommandRecorder& recorder,
+    const DrawMetadata* records, uint32_t begin, uint32_t end,
+    uint32_t& emitted_count, uint32_t& skipped_invalid,
+    uint32_t& draw_errors) const noexcept -> void;
 
   //! Current render context.
   const RenderContext* context_ { nullptr };
