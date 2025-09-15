@@ -68,7 +68,7 @@ using oxygen::graphics::SingleQueueStrategy;
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   : gfx_weak_(std::move(graphics))
-  , scene_prep_pipeline_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
+  , scene_prep_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
         decltype(sceneprep::CreateBasicCollectionConfig()),
         decltype(sceneprep::CreateStandardFinalizationConfig())>>(
       sceneprep::CreateBasicCollectionConfig(),
@@ -257,33 +257,16 @@ auto Renderer::WireContext(RenderContext& context) -> void
 auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   -> std::size_t
 {
-  // Phase Mapping: This function orchestrates PhaseId::kFrameGraph duties:
-  //  * sequence number init
-  //  * scene prep collection
-  //  * SoA finalization (DrawMetadata, materials, partitions, sorting)
-  //  * view/scenec constants update
-  // Command recording happens later (PhaseId::kCommandRecord).
-
   auto scene_ptr = frame_context.GetScene();
   CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
   auto& scene = *scene_ptr;
 
-  const auto t_collect0 = std::chrono::high_resolution_clock::now();
-  scene_prep_pipeline_->Collect(scene, view,
-    frame_context.GetFrameSequenceNumber().get(), *scene_prep_state_, true);
-  const auto t_collect1 = std::chrono::high_resolution_clock::now();
-  last_finalize_stats_.collection_time
-    = std::chrono::duration_cast<std::chrono::microseconds>(
-      t_collect1 - t_collect0);
+  auto frame_seq = frame_context.GetFrameSequenceNumber();
+  scene_prep_->Collect(scene, view, frame_seq, *scene_prep_state_, true);
+  scene_prep_->Finalize();
 
-  DLOG_F(1, "ScenePrep collected {} items (nodes={}) time_collect_us={}",
-    scene_prep_state_->CollectedItems().size(), scene.GetNodes().Items().size(),
-    last_finalize_stats_.collection_time.count());
+  PublishPreparedFrameSpans();
 
-  // scene_prep_pipeline_->Finalize();
-
-  FinalizeScenePrepPhase(
-    *scene_prep_state_); // non-const: material registration
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
@@ -313,70 +296,11 @@ auto Renderer::PublishPreparedFrameSpans() -> void
   }
 }
 
-// Removed legacy UploadDrawMetadataBindless
-
-auto Renderer::UpdateFinalizeStatistics(
-  const sceneprep::ScenePrepState& prep_state,
-  std::chrono::high_resolution_clock::time_point t_begin) -> void
-{
-  const auto t_end = std::chrono::high_resolution_clock::now();
-  const auto us
-    = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_begin)
-        .count();
-  last_finalize_stats_.collected = prep_state.CollectedCount();
-  last_finalize_stats_.filtered = prep_state.RetainedCount();
-  last_finalize_stats_.finalized
-    = prep_state.RetainedCount(); // FIXME: same for now
-  last_finalize_stats_.finalize_time = std::chrono::microseconds(us);
-  DLOG_F(2,
-    "FinalizeScenePrepSoA: collected={} filtered={} finalized={} time_us={}",
-    last_finalize_stats_.collected, last_finalize_stats_.filtered,
-    last_finalize_stats_.finalized, last_finalize_stats_.finalize_time.count());
-  if (!prepared_frame_.partitions.empty()) {
-    for (std::size_t i = 0; i < prepared_frame_.partitions.size(); ++i) {
-      const auto& pr = prepared_frame_.partitions[i];
-      DLOG_F(3, "Partition[{}]: mask={} range=[{},{}] (count={})", i,
-        pr.pass_mask, pr.begin, pr.end, (pr.end - pr.begin));
-    }
-  } else {
-    DLOG_F(3, "Partition map empty (no draws)");
-  }
-}
-
 auto Renderer::BuildFrame(const CameraView& camera_view,
   const FrameContext& frame_context) -> std::size_t
 {
   const auto view = camera_view.Resolve();
   return BuildFrame(view, frame_context);
-}
-
-auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
-  -> void
-{
-  FinalizeScenePrepSoA(prep_state); // may allocate new material handles
-  DLOG_F(1,
-    "Renderer BuildFrame finalized SoA frame: collected={} filtered={} "
-    "draws={} partitions={}",
-    last_finalize_stats_.collected, last_finalize_stats_.filtered,
-    prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata),
-    prepared_frame_.partitions.size());
-}
-
-auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
-  -> void
-{
-  const auto t_begin = std::chrono::high_resolution_clock::now();
-
-  // Reset prepared view snapshot
-  prepared_frame_ = PreparedSceneFrame {};
-
-  // Run configured finalizers (geometry/transform/draw emitter stages)
-  scene_prep_pipeline_->Finalize();
-
-  // Always publish transform spans (world/normal matrices)
-  PublishPreparedFrameSpans();
-
-  UpdateFinalizeStatistics(prep_state, t_begin);
 }
 
 auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void

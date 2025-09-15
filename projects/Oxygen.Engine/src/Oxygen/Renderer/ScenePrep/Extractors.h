@@ -14,6 +14,7 @@
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/Concepts.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Renderer/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 
 namespace oxygen::engine::sceneprep {

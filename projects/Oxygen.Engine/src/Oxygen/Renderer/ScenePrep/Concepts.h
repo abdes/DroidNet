@@ -10,6 +10,7 @@
 
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Renderer/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 
