@@ -232,7 +232,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   }
 
   const auto t_sort_begin = std::chrono::high_resolution_clock::now();
-  const auto pre_sort_hash
+  last_pre_sort_hash_
     = oxygen::ComputeFNV1a64(keys_.data(), keys_.size() * sizeof(SortingKey));
 
   const size_t n = Cpu().size();
@@ -269,9 +269,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   Cpu().swap(reordered);
   keys_.swap(reordered_keys);
 
-  const auto post_sort_hash
+  last_order_hash_
     = oxygen::ComputeFNV1a64(keys_.data(), keys_.size() * sizeof(SortingKey));
-  last_order_hash_ = post_sort_hash;
 
   partitions_.clear();
   if (!Cpu().empty()) {
@@ -303,7 +302,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   DLOG_F(2,
     "DrawMetadataEmitter: pre=0x{:016X} post=0x{:016X} draws={} partitions={} "
     "keys_bytes={} sort_time_us={}",
-    pre_sort_hash, post_sort_hash, Cpu().size(), partitions_.size(),
+    last_pre_sort_hash_, last_order_hash_, Cpu().size(), partitions_.size(),
     keys_.size() * sizeof(SortingKey), last_sort_time_.count());
   ++sort_calls_count_;
   peak_draws_
@@ -318,10 +317,7 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
     return;
   }
 
-  // Ensure atlas capacity and element refs. Follow TransformUploader pattern:
-  // - Ensure capacity for current draw count (with minimal slack)
-  // - Allocate refs only when growing
-  // - Retire trailing refs by frame slot when shrinking
+  // Ensure atlas capacity for current draw count (with minimal slack).
   const auto required_elements
     = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(Cpu().size()));
   if (const auto result = atlas_->EnsureCapacity(required_elements, 0.5f);
@@ -329,23 +325,6 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
     LOG_F(ERROR, "Failed to ensure DrawMetadata atlas capacity: {}",
       result.error().message());
     return;
-  }
-
-  if (element_refs_.size() < Cpu().size()) {
-    const auto need
-      = static_cast<std::uint32_t>(Cpu().size() - element_refs_.size());
-    for (std::uint32_t i = 0; i < need; ++i) {
-      auto ref = atlas_->Allocate(1);
-      DCHECK_F(ref.has_value(), "Failed to allocate DrawMetadata element");
-      element_refs_.push_back(*ref);
-    }
-  }
-  // Retire surplus refs if draw count shrank
-  if (element_refs_.size() > Cpu().size()) {
-    for (std::size_t i = Cpu().size(); i < element_refs_.size(); ++i) {
-      atlas_->Release(element_refs_[i], current_frame_slot_);
-    }
-    element_refs_.resize(Cpu().size());
   }
 
   std::vector<UploadRequest> requests;
@@ -358,7 +337,7 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   // entire batch once. UploadPlanner will sort/pack/optimize the requests
   // (no emitter-side coalescing required).
   for (std::uint32_t idx = 0; idx < count; ++idx) {
-    if (auto desc = atlas_->MakeUploadDesc(element_refs_[idx], stride)) {
+    if (auto desc = atlas_->MakeUploadDescForIndex(idx, stride)) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
       req.debug_name = "DrawMetadata";

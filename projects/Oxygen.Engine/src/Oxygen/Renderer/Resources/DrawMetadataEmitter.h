@@ -41,13 +41,33 @@ class Mesh; // fwd
 
 namespace oxygen::renderer::resources {
 
-//! Builds and uploads per-draw metadata using an AtlasBuffer.
+//! Builds and uploads per-draw metadata using a dense, index-addressed SRV.
 /*!
  Holds a CPU vector of DrawMetadata for the current frame, applies stable
- sorting and partitioning, and uploads per-element into a persistent
- AtlasBuffer with a stable SRV. Elements are allocated once and retired by
- frame slot, mirroring TransformUploader/MaterialBinder patterns to ensure
- in-flight safety without over-allocating.
+ sorting and partitioning, then ensures an AtlasBuffer exists and uploads
+ each record to the element with the same index as its sorted position
+ (entry i is written to element i). The AtlasBuffer exposes a stable SRV
+ across growth via ResourceRegistry::Replace.
+
+ ### Key Points
+
+ - **Dense, index-addressed uploads**: No per-element handle/indirection is
+   used for DrawMetadata. The shader reads the structured buffer by index,
+   so the emitter writes by index to match consumption exactly.
+ - **No ElementRef management here**: We do not allocate or retire
+   per-element references for DrawMetadata. This avoids allocator free-list
+   permutations and guarantees that the CPU write order matches the GPU read
+   order every frame.
+ - **Stable SRV, per-frame content**: Capacity is ensured with minimal
+   slack; content is fully rewritten each frame. UploadPlanner performs
+   packing/coalescing; the emitter need not batch adjacent writes.
+
+ ### When to use ElementRef instead
+
+ If a future design introduces handle-addressed or sparse updates for
+ DrawMetadata, reintroduce per-element handles only together with a consumer
+ indirection layer (handle -> element index/chunk). Until then, dense
+ index-addressing is the intended contract for this buffer.
  */
 class DrawMetadataEmitter {
 public:
@@ -114,7 +134,6 @@ private:
   // CPU shadow storage and GPU atlas buffer for DrawMetadata
   std::vector<engine::DrawMetadata> cpu_;
   std::unique_ptr<AtlasBuffer> atlas_;
-  std::vector<AtlasBuffer::ElementRef> element_refs_;
 
   // Sorting & partitions
   std::vector<SortingKey> keys_;
@@ -123,6 +142,7 @@ private:
   // Telemetry
   std::chrono::microseconds last_sort_time_ { 0 };
   std::uint64_t last_order_hash_ { 0ULL };
+  std::uint64_t last_pre_sort_hash_ { 0ULL };
 
   // Frame lifecycle
   bool frame_started_ { false };
