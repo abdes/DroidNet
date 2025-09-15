@@ -18,7 +18,6 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Renderer/Upload/Types.h>
-#include <Oxygen/Renderer/Upload/UploadDiagnostics.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -64,8 +63,6 @@ public:
   OXGN_RNDR_API auto CompletedFenceValue() noexcept
     -> oxygen::co::Value<FenceValue>&;
 
-  // Diagnostics and control
-  OXGN_RNDR_API auto GetStats() const -> UploadStats;
   // Best-effort cancellation: if found and not yet completed, mark canceled.
   OXGN_RNDR_API auto Cancel(TicketId id) -> std::expected<bool, UploadError>;
   // Frame lifecycle management: cleanup entries for cycling slot
@@ -92,9 +89,6 @@ private:
   TicketId next_ticket_ { 1 };
   std::unordered_map<TicketId, Entry> entries_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
-
-  // Stats (not atomic; protected by mu_)
-  UploadStats stats_ {};
 };
 
 } // namespace oxygen::engine::upload

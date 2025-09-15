@@ -166,26 +166,3 @@ NOLINT_TEST(UploadTracker, Cancel_Pending_MarksCanceled)
   EXPECT_EQ(r->error, UploadError::kCanceled);
   EXPECT_EQ(r->bytes_uploaded, 0u);
 }
-
-NOLINT_TEST(UploadTracker, GetStats_Counters_Advance)
-{
-  UploadTracker tracker;
-  [[maybe_unused]] const auto t1 = tracker.Register(FenceValue { 1 }, 10, "a");
-  [[maybe_unused]] const auto t2 = tracker.Register(FenceValue { 2 }, 20, "b");
-  auto stats = tracker.GetStats();
-  EXPECT_EQ(stats.submitted, 2u);
-  EXPECT_EQ(stats.in_flight, 2u);
-  EXPECT_EQ(stats.bytes_submitted, 30u);
-
-  tracker.MarkFenceCompleted(FenceValue { 1 });
-  stats = tracker.GetStats();
-  EXPECT_EQ(stats.completed, 1u);
-  EXPECT_EQ(stats.in_flight, 1u);
-  EXPECT_EQ(stats.bytes_completed, 10u);
-
-  tracker.MarkFenceCompleted(FenceValue { 2 });
-  stats = tracker.GetStats();
-  EXPECT_EQ(stats.completed, 2u);
-  EXPECT_EQ(stats.in_flight, 0u);
-  EXPECT_EQ(stats.bytes_completed, 30u);
-}
