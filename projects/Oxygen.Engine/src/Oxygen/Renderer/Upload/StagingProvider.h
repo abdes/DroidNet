@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <string_view>
 
@@ -14,6 +15,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -53,13 +55,56 @@ namespace oxygen::engine::upload {
 */
 class StagingProvider {
 public:
+  //! Represents a valid allocation of upload memory.
+  /*!
+   An Allocation is returned only when the operation was successful. This
+   effectively eliminate the need to do any validation over a returned
+   Allocation object.
+
+   @see UploadCoordinator::Submit(), UploadTracker::IsComplete()
+  */
   //! Represents an allocation of upload memory.
-  struct Allocation {
-    std::shared_ptr<graphics::Buffer> buffer;
-    std::uint64_t offset { 0 };
-    std::uint64_t size { 0 };
-    std::byte* ptr { nullptr }; // pointer to (buffer + offset)
-    FenceValue fence { graphics::fence::kInvalidValue };
+  class Allocation final {
+  public:
+    // Non-default constructible - all tickets must be explicitly created with
+    // valid values
+    Allocation() = delete;
+
+    //! Construct a well-formed Allocation.
+    OXGN_RNDR_API Allocation(std::shared_ptr<graphics::Buffer> buf,
+      OffsetBytes offset, SizeBytes size, std::byte* ptr) noexcept;
+
+    // Rule of 5: explicit copy/move semantics
+    OXYGEN_MAKE_NON_COPYABLE(Allocation)
+    OXYGEN_DEFAULT_MOVABLE(Allocation)
+
+    ~Allocation() = default;
+
+    //! Access the backing buffer.
+    auto Buffer() const noexcept -> auto& { return *buffer; }
+
+    //! Access the byte offset within the buffer.
+    auto Offset() const noexcept { return offset; }
+
+    //! Access the size in bytes of the allocation.
+    auto Size() const noexcept { return size; }
+
+    //! Access the mapped pointer for CPU writes.
+    auto Ptr() const noexcept { return ptr; }
+
+    //! Update the fence value for this allocation.
+    auto SetFenceValue(FenceValue fence_v) noexcept -> void { fence = fence_v; }
+
+    //! Access the fence value associated with this allocation.
+    auto FenceValue() const noexcept { return fence; }
+
+  private:
+    std::shared_ptr<graphics::Buffer> buffer; //! Underlying upload buffer
+    OffsetBytes offset; //! Byte offset within the buffer
+    SizeBytes size; //! Size of the allocation in bytes
+    std::byte* ptr; //! Pointer to (buffer mapped address + offset)
+
+    graphics::FenceValue fence; //! Associated fence value for completion
   };
 
   //! Statistics for telemetry and diagnostics.
@@ -90,7 +135,8 @@ public:
   OXGN_RNDR_API virtual ~StagingProvider();
 
   //! Allocate a persistently mapped upload region of at least 'size' bytes.
-  virtual auto Allocate(Bytes size, std::string_view debug_name) -> Allocation
+  virtual auto Allocate(SizeBytes size, std::string_view debug_name)
+    -> std::expected<Allocation, UploadError>
     = 0;
 
   //! Retire allocations whose GPU fence has completed (for recycling).
