@@ -102,6 +102,7 @@ set(
   "Upload/RingBufferStaging.cpp"
   "Upload/RingBufferStaging.h"
   "Upload/SingleBufferStaging.h"
+  "Upload/StagingProvider.cpp"
   "Upload/StagingProvider.h"
   "Upload/Types.h"
   "Upload/UploadCoordinator.cpp"

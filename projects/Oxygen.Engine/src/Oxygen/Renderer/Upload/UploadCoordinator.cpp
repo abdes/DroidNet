@@ -18,7 +18,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -64,22 +63,6 @@ auto UsageToTargetState(BufferUsage usage) -> ResourceStates
     return ResourceStates::kShaderResource;
   }
   return ResourceStates::kCommon;
-}
-// Defers unmapping (if mapped) then releasing a staging buffer.
-auto DeferUnmapThenRelease(
-  detail::DeferredReclaimer& reclaimer, std::shared_ptr<Buffer>& buffer) -> void
-{
-  if (!buffer) {
-    return;
-  }
-  reclaimer.RegisterDeferredAction([buf = std::move(buffer)]() mutable {
-    if (buf) {
-      if (buf->IsMapped()) {
-        buf->UnMap();
-      }
-      buf.reset();
-    }
-  });
 }
 
 // Choose a queue key preferring the copy queue when available, otherwise
@@ -147,9 +130,6 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   recorder->RequireResourceState(*desc.dst, target_state);
   recorder->FlushBarriers();
 
-  // Keep staging alive until execution; ensure unmap-before-release on retire
-  DeferUnmapThenRelease(gfx.GetDeferredReclaimer(), staging.buffer);
-
   // Reserve a fence value on the target queue and record a GPU-side signal
   // into the command stream so completion is observed after the copy.
   auto queue = gfx.GetCommandQueue(key);
@@ -214,9 +194,6 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
   recorder->FlushBarriers();
 
-  // Defer unmap-then-release of staging buffer once safe to reclaim
-  DeferUnmapThenRelease(gfx.GetDeferredReclaimer(), staging.buffer);
-
   auto queue = gfx.GetCommandQueue(key);
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
@@ -273,9 +250,6 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
     *staging.buffer, std::span { regions }, *tdesc.dst);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
   recorder->FlushBarriers();
-
-  // Defer unmap-then-release of staging buffer once safe to reclaim
-  DeferUnmapThenRelease(gfx.GetDeferredReclaimer(), staging.buffer);
 
   auto queue = gfx.GetCommandQueue(key);
   const auto fence_raw = queue->Signal();
@@ -591,7 +565,6 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
     }
   }
 
-  DeferUnmapThenRelease(gfx_->GetDeferredReclaimer(), staging.buffer);
   auto queue = gfx_->GetCommandQueue(key);
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
