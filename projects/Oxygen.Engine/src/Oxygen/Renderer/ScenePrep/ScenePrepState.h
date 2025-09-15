@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
@@ -38,10 +39,13 @@ public:
   ScenePrepState(
     std::unique_ptr<renderer::resources::GeometryUploader> geometry,
     std::unique_ptr<renderer::resources::TransformUploader> transform,
-    std::unique_ptr<renderer::resources::MaterialBinder> material) noexcept
+    std::unique_ptr<renderer::resources::MaterialBinder> material,
+    std::unique_ptr<renderer::resources::DrawMetadataEmitter> draw_emitter
+    = nullptr) noexcept
     : geometry_uploader_(std::move(geometry))
     , transform_mgr_(std::move(transform))
     , material_binder_(std::move(material))
+    , draw_emitter_(std::move(draw_emitter))
   {
   }
 
@@ -51,6 +55,7 @@ public:
   ~ScenePrepState()
   {
     // Ordered destruction of members
+    draw_emitter_.reset();
     material_binder_.reset();
     transform_mgr_.reset();
     geometry_uploader_.reset();
@@ -124,6 +129,13 @@ public:
     return observer_ptr(material_binder_.get());
   }
 
+  //! Get non-owning observer to draw metadata emitter (maybe nullptr).
+  constexpr auto GetDrawMetadataEmitter() const noexcept
+    -> observer_ptr<renderer::resources::DrawMetadataEmitter>
+  {
+    return observer_ptr(draw_emitter_.get());
+  }
+
   //! Reset per-frame data while preserving persistent caches.
   auto ResetFrameData() -> void
   {
@@ -148,6 +160,9 @@ private:
 
   //! Persistent material deduplication and GPU buffer management.
   std::unique_ptr<renderer::resources::MaterialBinder> material_binder_;
+
+  //! Dynamic draw metadata builder and uploader (no atlas; fully dynamic)
+  std::unique_ptr<renderer::resources::DrawMetadataEmitter> draw_emitter_;
 };
 
 } // namespace oxygen::engine::sceneprep

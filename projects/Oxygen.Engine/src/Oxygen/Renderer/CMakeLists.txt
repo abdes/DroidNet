@@ -52,7 +52,6 @@ set(
   "api_export.h"
   "CameraView.h"
   "Upload/Errors.h"
-  "Detail/BindlessStructuredBuffer.h"
   "Passes/DepthPrePass.h"
   "Passes/RenderPass.h"
   "Passes/ShaderPass.h"
@@ -71,7 +70,6 @@ set(
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
   "CameraView.cpp"
-  "Detail/BindlessStructuredBuffer.cpp"
   "Internal/RenderScope.h"
   "Passes/DepthPrePass.cpp"
   "Passes/RenderPass.cpp"
@@ -85,6 +83,8 @@ set(
   "Resources/GeometryUploader.h"
   "Resources/MaterialBinder.cpp"
   "Resources/MaterialBinder.h"
+  "Resources/DrawMetadataEmitter.cpp"
+  "Resources/DrawMetadataEmitter.h"
   "Resources/TransformUploader.cpp"
   "Resources/TransformUploader.h"
   "Resources/UploadHelpers.cpp"

@@ -47,9 +47,6 @@ struct PreparedSceneFrame {
     uint32_t end = 0; // exclusive end draw index
   };
   std::span<const PartitionRange> partitions; // published ranges (may be empty)
-  const std::vector<PartitionRange>* partitions_storage = nullptr; // backing
-
-  // Future: material slots, geometry indices, additional indirection tables.
 
   [[nodiscard]] auto IsValid() const noexcept -> bool
   {

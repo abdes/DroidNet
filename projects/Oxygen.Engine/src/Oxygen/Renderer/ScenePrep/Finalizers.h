@@ -35,8 +35,6 @@ inline auto TransformUploadFinalizer(const ScenePrepState& state) -> void
   }
 }
 
-#if defined(LATER)
-
 //! Ensure material binder resources are ready for this frame.
 /*!
  Calls EnsureFrameResources() on the material binder stored in ScenePrepState.
@@ -44,15 +42,12 @@ inline auto TransformUploadFinalizer(const ScenePrepState& state) -> void
 
  @param state ScenePrep working state containing material_binder
  */
-inline auto MaterialUploadFinalizer(ScenePrepState& state) -> void
+inline auto MaterialUploadFinalizer(const ScenePrepState& state) -> void
 {
-  if (state.material_binder_) {
-    state.material_binder_->EnsureFrameResources();
+  if (state.GetMaterialBinder()) {
+    state.GetMaterialBinder()->EnsureFrameResources();
   }
 }
-#endif
-
-#if defined(LATER)
 
 //! Process draw metadata for a render item through the DrawMetadataEmitter.
 /*!
@@ -63,11 +58,11 @@ inline auto MaterialUploadFinalizer(ScenePrepState& state) -> void
  @param state ScenePrep working state containing draw_metadata_emitter
  @param item RenderItemData to process
  */
-inline auto DrawMetadataEmit(ScenePrepState& state, const RenderItemData& item)
-  -> void
+inline auto DrawMetadataEmitFinalizer(
+  const ScenePrepState& state, const RenderItemData& item) -> void
 {
-  if (state.draw_metadata_emitter) {
-    state.draw_metadata_emitter->EmitDrawMetadata(item);
+  if (state.GetDrawMetadataEmitter()) {
+    state.GetDrawMetadataEmitter()->EmitDrawMetadata(item);
   }
 }
 
@@ -78,30 +73,13 @@ inline auto DrawMetadataEmit(ScenePrepState& state, const RenderItemData& item)
 
  @param state ScenePrep working state containing draw_metadata_emitter
  */
-inline auto DrawMetadataSortAndPartition(ScenePrepState& state) -> void
+inline auto DrawMetadataSortAndPartitionFinalizer(const ScenePrepState& state)
+  -> void
 {
-  if (state.draw_metadata_emitter) {
-    state.draw_metadata_emitter->SortAndPartition();
+  if (state.GetDrawMetadataEmitter()) {
+    state.GetDrawMetadataEmitter()->SortAndPartition();
   }
 }
-
-#  if 0
-//! Resolve geometry SRV indices after geometry resources are ensured.
-/*!
- Calls ResolveGeometrySrvIndices() on the draw metadata emitter stored in
- ScenePrepState. This resolves the vertex and index buffer SRV indices that
- were deferred during EmitDrawMetadata, ensuring they are valid after
- GeometryUploader::EnsureFrameResources has been called.
-
- @param state ScenePrep working state containing draw_metadata_emitter
- */
-inline auto DrawMetadataResolveGeometrySrvIndices(ScenePrepState& state) -> void
-{
-  if (state.draw_metadata_emitter) {
-    state.draw_metadata_emitter->ResolveGeometrySrvIndices();
-  }
-}
-#  endif
 
 //! Upload draw metadata to GPU for bindless access.
 /*!
@@ -112,12 +90,11 @@ inline auto DrawMetadataResolveGeometrySrvIndices(ScenePrepState& state) -> void
 
  @param state ScenePrep working state containing draw_metadata_emitter
  */
-inline auto DrawMetadataUpload(ScenePrepState& state) -> void
+inline auto DrawMetadataUploadFinalizer(const ScenePrepState& state) -> void
 {
-  if (state.draw_metadata_emitter) {
-    state.draw_metadata_emitter->EnsureFrameResources();
+  if (state.GetDrawMetadataEmitter()) {
+    state.GetDrawMetadataEmitter()->EnsureFrameResources();
   }
 }
-#endif // defined(LATER)
 
 } // namespace oxygen::engine::sceneprep

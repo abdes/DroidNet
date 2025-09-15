@@ -85,29 +85,30 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   staging_provider_
     = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
 
-  scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
-    std::make_unique<renderer::resources::GeometryUploader>(
+  auto geom_uploader = std::make_unique<renderer::resources::GeometryUploader>(
+    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+    observer_ptr { staging_provider_.get() });
+  auto xform_uploader
+    = std::make_unique<renderer::resources::TransformUploader>(
       observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-      observer_ptr { staging_provider_.get() }),
-    std::make_unique<renderer::resources::TransformUploader>(
-      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-      observer_ptr { staging_provider_.get() }),
-    std::make_unique<renderer::resources::MaterialBinder>(
-      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-      observer_ptr { staging_provider_.get() }));
+      observer_ptr { staging_provider_.get() });
+  auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
+    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+    observer_ptr { staging_provider_.get() });
+  auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
+    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+    observer_ptr { staging_provider_.get() },
+    observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() });
+
+  scene_prep_state_
+    = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
+      std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
 }
 
 Renderer::~Renderer()
 {
   scene_prep_state_.reset();
   staging_provider_.reset();
-
-  // Proactively unregister bindless structured buffers from the registry to
-  // avoid late destruction during Graphics shutdown.
-  if (auto g = gfx_weak_.lock()) {
-    // Best-effort: ignore if already unregistered or null.
-    draw_metadata_.ReleaseGpuResources(*g);
-  }
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
@@ -133,9 +134,6 @@ auto Renderer::PreExecute(
   // transitional compatibility with any remaining callers; passes should now
   // consume prepared_frame / draw_metadata_bytes instead.
 
-  EnsureAndUploadDrawMetadataBuffer();
-  UpdateDrawMetadataSlotIfChanged();
-
   // Consolidated transform resource preparation
   if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
     const auto worlds_srv = transforms->GetWorldsSrvIndex();
@@ -149,13 +147,17 @@ auto Renderer::PreExecute(
 
   // Consolidated material resource preparation
   if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
-    materials
-      ->EnsureFrameResources(); // TODO: optimize to avoid redundant calls
-
     const auto materials_srv = materials->GetMaterialsSrvIndex();
     scene_const_cpu_.SetBindlessMaterialConstantsSlot(
       BindlessMaterialConstantsSlot(materials_srv.get()),
       SceneConstants::kRenderer);
+  }
+
+  // Publish draw-metadata bindless slot from the ScenePrep emitter
+  if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+    const auto slot = emitter->GetDrawMetadataSrvIndex();
+    scene_const_cpu_.SetBindlessDrawMetadataSlot(
+      BindlessDrawMetadataSlot(slot.get()), SceneConstants::kRenderer);
   }
 
   MaybeUpdateSceneConstants(frame_context);
@@ -193,72 +195,8 @@ auto Renderer::OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
 // PreExecute helper implementations
 //===----------------------------------------------------------------------===//
 
-auto Renderer::EnsureAndUploadDrawMetadataBuffer() -> void
-{
-  // Delegate lifecycle to bindless structured buffer helper
-  if (!draw_metadata_.HasData()) {
-    return; // optional feature not used this frame
-  }
-  const auto graphics_ptr = gfx_weak_.lock();
-  if (!graphics_ptr) {
-    LOG_F(ERROR, "Graphics expired while ensuring draw metadata buffer");
-    return;
-  }
-  auto& graphics = *graphics_ptr;
-  // Ensure SRV exists (device-local buffer) and register if needed
-  static_cast<void>(
-    draw_metadata_.EnsureBufferAndSrv(graphics, "DrawResourceIndices"));
-  // Upload via coordinator when marked dirty
-  if (uploader_ && draw_metadata_.IsDirty()) {
-    using upload::UploadBufferDesc;
-    using upload::UploadDataView;
-    using upload::UploadKind;
-    using upload::UploadRequest;
-
-    const auto& cpu = draw_metadata_.GetCpuData();
-    const uint64_t size = cpu.size() * sizeof(DrawMetadata);
-    if (size > 0 && draw_metadata_.GetBuffer()) {
-      UploadRequest req;
-      req.kind = UploadKind::kBuffer;
-      // SubmitMany will coalesce buffer uploads automatically.
-      req.debug_name = "DrawResourceIndices";
-      req.desc = UploadBufferDesc {
-        .dst = draw_metadata_.GetBuffer(),
-        .size_bytes = size,
-        .dst_offset = 0,
-      };
-      req.data = UploadDataView { std::as_bytes(std::span(cpu)) };
-      static_cast<void>(
-        uploader_->SubmitMany(std::span { &req, 1 }, *staging_provider_));
-      draw_metadata_.ClearDirty();
-    }
-  }
-}
-
 // Removed legacy draw-metadata helpers; lifecycle now handled by
-// BindlessStructuredBuffer<DrawMetadata>
-
-auto Renderer::UpdateDrawMetadataSlotIfChanged() -> void
-{
-  // DrawMetadata structured buffer now publishes its descriptor heap slot via
-  // SceneConstants.bindless_draw_metadata_slot (HLSL reads this dynamic slot).
-  // Legacy bindless_indices_slot fully removed (C++ & HLSL). Shaders use
-  // bindless_draw_metadata_slot exclusively. Docs pending sync (see work log).
-
-  auto new_draw_slot = BindlessDrawMetadataSlot(kInvalidDescriptorSlot);
-  if (draw_metadata_.HasData() && draw_metadata_.IsSlotAssigned()) {
-    new_draw_slot = BindlessDrawMetadataSlot(draw_metadata_.GetHeapSlot());
-  }
-
-  // Primary: set new draw-metadata slot
-  scene_const_cpu_.SetBindlessDrawMetadataSlot(
-    new_draw_slot, SceneConstants::kRenderer);
-
-  DLOG_F(2,
-    "UpdateDrawMetadataSlotIfChanged: draw_metadata_slot={} (legacy "
-    "indices_slot mirror={})",
-    new_draw_slot.value, new_draw_slot.value);
-}
+// DrawMetadataEmitter via ScenePrepState
 
 auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
   -> void
@@ -314,20 +252,7 @@ auto Renderer::WireContext(RenderContext& context) -> void
   context.SetRenderer(this, graphics_ptr.get());
 }
 
-auto Renderer::SetDrawMetadata(const DrawMetadata& indices) -> void
-{
-  // Set single-entry array in the bindless structured buffer and mark dirty
-  auto& cpu = draw_metadata_.GetCpuData();
-  cpu.assign(1, indices);
-  draw_metadata_.MarkDirty();
-}
-
-auto Renderer::GetDrawMetadata() const -> const DrawMetadata&
-{
-  const auto& cpu = draw_metadata_.GetCpuData();
-  DCHECK_F(!cpu.empty());
-  return cpu.front();
-}
+// Removed obsolete Set/GetDrawMetadata accessors
 
 auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   -> std::size_t
@@ -366,241 +291,6 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   return draw_count;
 }
 
-//===----------------------------------------------------------------------===//
-// SoA Finalization (Task 6 initial subset)
-//===----------------------------------------------------------------------===//
-
-auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
-  -> void
-{
-  const auto t_begin = std::chrono::high_resolution_clock::now();
-
-  GenerateDrawMetadata(prep_state);
-  BuildSortingAndPartitions();
-
-  // Ensure geometry uploader resources are ready for this frame
-  // prep_state.GetGeometryUploader()->EnsureFrameResources();
-  // prep_state.GetGeometryUploader()->UploadBuffers();
-  scene_prep_pipeline_->Finalize();
-
-  PublishPreparedFrameSpans();
-  UploadDrawMetadataBindless();
-  UpdateFinalizeStatistics(prep_state, t_begin);
-}
-
-auto Renderer::GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
-  -> void
-{
-  // Direct DrawMetadata generation (Task 6: native SoA path)
-  draw_metadata_cpu_soa_.clear();
-  draw_metadata_cpu_soa_.reserve(prep_state.RetainedCount());
-
-  auto ClassifyMaterialPassMask
-    = [&](const data::MaterialAsset* mat) -> PassMask {
-    if (!mat) {
-      return PassMask { PassMaskBit::kOpaqueOrMasked };
-    }
-    const auto domain = mat->GetMaterialDomain();
-    const auto base = mat->GetBaseColor();
-    const float alpha = base[3];
-    const bool is_opaque_domain = (domain == data::MaterialDomain::kOpaque);
-    const bool is_masked_domain = (domain == data::MaterialDomain::kMasked);
-    DLOG_F(2,
-      "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
-      "is_masked={}",
-      mat->GetAssetName(), static_cast<int>(domain), alpha, is_opaque_domain,
-      is_masked_domain);
-    if (is_opaque_domain && alpha >= 0.999f) {
-      return PassMask { PassMaskBit::kOpaqueOrMasked };
-    }
-    if (is_masked_domain) {
-      return PassMask { PassMaskBit::kOpaqueOrMasked };
-    }
-    DLOG_F(2,
-      " -> classified as Transparent (flags={}) due to domain {} and "
-      "alpha={:.3f}",
-      PassMask { PassMaskBit::kTransparent }, static_cast<int>(domain), alpha);
-    return PassMask { PassMaskBit::kTransparent };
-  };
-
-  for (const auto& item : prep_state.RetainedItems()) {
-    if (!item.geometry) {
-      continue;
-    }
-    const auto lod_index = item.lod_index;
-    const auto submesh_index = item.submesh_index;
-    const auto& geom = *item.geometry;
-    auto meshes_span = geom.Meshes();
-    if (lod_index >= meshes_span.size()) {
-      continue;
-    }
-    const auto& lod_mesh_ptr = meshes_span[lod_index];
-    if (!lod_mesh_ptr) {
-      continue;
-    }
-    const auto& lod = *lod_mesh_ptr;
-    auto submeshes_span = lod.SubMeshes();
-    if (submesh_index >= submeshes_span.size()) {
-      continue;
-    }
-    const auto& submesh = submeshes_span[submesh_index];
-    auto views_span = submesh.MeshViews();
-    if (views_span.empty()) {
-      continue;
-    }
-    for (const auto& view : views_span) {
-      DrawMetadata dm {};
-
-      // Get actual SRV indices for GPU access
-      const auto geometry = scene_prep_state_->GetGeometryUploader();
-      const auto mesh_handle = geometry->GetOrAllocate(*lod_mesh_ptr);
-      // Get the actual SRV indices for GPU access using structured bindings
-      auto [vertex_srv_index, index_srv_index]
-        = geometry->GetShaderVisibleIndices(mesh_handle);
-
-      dm.vertex_buffer_index = vertex_srv_index;
-      dm.index_buffer_index = index_srv_index;
-      const auto index_view = view.IndexBuffer();
-      const bool has_indices = index_view.Count() > 0;
-      if (has_indices) {
-        dm.first_index = view.FirstIndex();
-        dm.base_vertex = static_cast<int32_t>(view.FirstVertex());
-        dm.is_indexed = 1;
-        dm.index_count = static_cast<uint32_t>(index_view.Count());
-        dm.vertex_count = 0;
-      } else {
-        dm.is_indexed = 0;
-        dm.index_count = 0;
-        dm.vertex_count = view.VertexCount();
-      }
-      dm.instance_count = 1;
-      // Obtain stable handle from MaterialBinder
-      const auto stable_handle
-        = prep_state.GetMaterialBinder()->GetOrAllocate(item.material);
-      const auto stable_handle_value = stable_handle.get();
-
-      dm.material_handle = stable_handle_value;
-      // Use stable TransformHandle id instead of filtered order index.
-      const auto handle = item.transform_handle;
-      dm.transform_index = handle.get();
-      dm.instance_metadata_buffer_index = 0;
-      dm.instance_metadata_offset = 0;
-      dm.flags = ClassifyMaterialPassMask(item.material.get());
-      DCHECK_F(prep_state.GetTransformUploader()->IsValidHandle(handle),
-        "Invalid transform handle (id={}) while generating DrawMetadata",
-        dm.transform_index);
-      DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
-      draw_metadata_cpu_soa_.push_back(dm);
-    }
-  }
-  if (!draw_metadata_cpu_soa_.empty()) {
-    const std::size_t sample
-      = std::min<std::size_t>(draw_metadata_cpu_soa_.size(), 3);
-    for (std::size_t s = 0; s < sample; ++s) {
-      const auto& d = draw_metadata_cpu_soa_[s];
-      DLOG_F(3,
-        "DrawMetadata[{}]: vb={} ib={} first_index={} base_vertex={} "
-        "index_count={} vertex_count={} indexed={} transform_index={} "
-        "material_handle={}",
-        s, d.vertex_buffer_index, d.index_buffer_index, d.first_index,
-        d.base_vertex, d.index_count, d.vertex_count, d.is_indexed,
-        d.transform_index, d.material_handle);
-    }
-  }
-}
-
-auto Renderer::BuildSortingAndPartitions() -> void
-{
-  sorting_keys_cpu_soa_.clear();
-  sorting_keys_cpu_soa_.reserve(draw_metadata_cpu_soa_.size());
-  for (const auto& d : draw_metadata_cpu_soa_) {
-    sorting_keys_cpu_soa_.push_back(DrawSortingKey {
-      .pass_mask = d.flags,
-      .material_index = d.material_handle, // now stable MaterialHandle value
-      .geometry_vertex_srv = d.vertex_buffer_index,
-      .geometry_index_srv = d.index_buffer_index,
-    });
-  }
-  const auto t_sort_begin = std::chrono::high_resolution_clock::now();
-
-  const auto pre_sort_hash
-    = oxygen::ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
-      sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
-  const size_t draw_count = draw_metadata_cpu_soa_.size();
-  std::vector<uint32_t> permutation(draw_count);
-  for (uint32_t i = 0; i < draw_count; ++i) {
-    permutation[i] = i;
-  }
-  std::stable_sort(
-    permutation.begin(), permutation.end(), [&](uint32_t a, uint32_t b) {
-      const auto& ka = sorting_keys_cpu_soa_[a];
-      const auto& kb = sorting_keys_cpu_soa_[b];
-      if (ka.pass_mask != kb.pass_mask) {
-        return ka.pass_mask < kb.pass_mask;
-      }
-      if (ka.material_index != kb.material_index) {
-        return ka.material_index < kb.material_index;
-      }
-      if (ka.geometry_vertex_srv != kb.geometry_vertex_srv) {
-        return ka.geometry_vertex_srv < kb.geometry_vertex_srv;
-      }
-      if (ka.geometry_index_srv != kb.geometry_index_srv) {
-        return ka.geometry_index_srv < kb.geometry_index_srv;
-      }
-      return a < b;
-    });
-  std::vector<DrawMetadata> reordered_dm;
-  reordered_dm.reserve(draw_count);
-  std::vector<DrawSortingKey> reordered_keys;
-  reordered_keys.reserve(draw_count);
-  for (auto idx : permutation) {
-    reordered_dm.push_back(draw_metadata_cpu_soa_[idx]);
-    reordered_keys.push_back(sorting_keys_cpu_soa_[idx]);
-  }
-  draw_metadata_cpu_soa_.swap(reordered_dm);
-  sorting_keys_cpu_soa_.swap(reordered_keys);
-  const auto post_sort_hash
-    = oxygen::ComputeFNV1a64(sorting_keys_cpu_soa_.data(),
-      sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey));
-  last_draw_order_hash_ = post_sort_hash;
-  partitions_cpu_soa_.clear();
-  if (!draw_metadata_cpu_soa_.empty()) {
-    auto current_mask = draw_metadata_cpu_soa_.front().flags;
-    uint32_t range_begin = 0u;
-    for (uint32_t i = 1; i < draw_metadata_cpu_soa_.size(); ++i) {
-      const auto mask = draw_metadata_cpu_soa_[i].flags;
-      if (mask != current_mask) {
-        partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
-          .pass_mask = current_mask,
-          .begin = range_begin,
-          .end = i,
-        });
-        current_mask = mask;
-        range_begin = i;
-      }
-    }
-    partitions_cpu_soa_.push_back(PreparedSceneFrame::PartitionRange {
-      .pass_mask = current_mask,
-      .begin = range_begin,
-      .end = static_cast<uint32_t>(draw_metadata_cpu_soa_.size()),
-    });
-  }
-  prepared_frame_.partitions_storage = &partitions_cpu_soa_;
-  prepared_frame_.partitions
-    = std::span<const PreparedSceneFrame::PartitionRange>(
-      partitions_cpu_soa_.data(), partitions_cpu_soa_.size());
-  const auto t_sort_end = std::chrono::high_resolution_clock::now();
-  last_sort_time_ = std::chrono::duration_cast<std::chrono::microseconds>(
-    t_sort_end - t_sort_begin);
-  DLOG_F(2,
-    "DrawOrderSort: pre=0x{:016X} post=0x{:016X} draws={} partitions={} "
-    "keys_bytes={} sort_time_us={}",
-    pre_sort_hash, post_sort_hash, draw_metadata_cpu_soa_.size(),
-    partitions_cpu_soa_.size(),
-    sorting_keys_cpu_soa_.size() * sizeof(DrawSortingKey),
-    last_sort_time_.count());
-}
-
 auto Renderer::PublishPreparedFrameSpans() -> void
 {
   const auto transforms = scene_prep_state_->GetTransformUploader();
@@ -613,20 +303,17 @@ auto Renderer::PublishPreparedFrameSpans() -> void
     = std::span<const float>(reinterpret_cast<const float*>(normal_span.data()),
       normal_span.size() * 16u);
 
-  prepared_frame_.draw_metadata_bytes = std::span<const std::byte>(
-    reinterpret_cast<const std::byte*>(draw_metadata_cpu_soa_.data()),
-    draw_metadata_cpu_soa_.size() * sizeof(DrawMetadata));
+  // Publish draw metadata bytes and partitions from emitter accessors
+  if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+    prepared_frame_.draw_metadata_bytes = emitter->GetDrawMetadataBytes();
+    using PR = oxygen::engine::PreparedSceneFrame::PartitionRange;
+    const auto parts = emitter->GetPartitions();
+    prepared_frame_.partitions
+      = std::span<const PR>(parts.data(), parts.size());
+  }
 }
 
-auto Renderer::UploadDrawMetadataBindless() -> void
-{
-  if (draw_metadata_cpu_soa_.empty()) {
-    return;
-  }
-  auto& gpu_dm = draw_metadata_.GetCpuData();
-  gpu_dm.assign(draw_metadata_cpu_soa_.begin(), draw_metadata_cpu_soa_.end());
-  draw_metadata_.MarkDirty();
-}
+// Removed legacy UploadDrawMetadataBindless
 
 auto Renderer::UpdateFinalizeStatistics(
   const sceneprep::ScenePrepState& prep_state,
@@ -642,29 +329,17 @@ auto Renderer::UpdateFinalizeStatistics(
     = prep_state.RetainedCount(); // FIXME: same for now
   last_finalize_stats_.finalize_time = std::chrono::microseconds(us);
   DLOG_F(2,
-    "FinalizeScenePrepSoA: collected={} filtered={} finalized={} time_us={} "
-    "hw_mark={}",
+    "FinalizeScenePrepSoA: collected={} filtered={} finalized={} time_us={}",
     last_finalize_stats_.collected, last_finalize_stats_.filtered,
-    last_finalize_stats_.finalized, last_finalize_stats_.finalize_time.count(),
-    max_finalized_count_);
-  if (!partitions_cpu_soa_.empty()) {
-    for (std::size_t i = 0; i < partitions_cpu_soa_.size(); ++i) {
-      const auto& pr = partitions_cpu_soa_[i];
+    last_finalize_stats_.finalized, last_finalize_stats_.finalize_time.count());
+  if (!prepared_frame_.partitions.empty()) {
+    for (std::size_t i = 0; i < prepared_frame_.partitions.size(); ++i) {
+      const auto& pr = prepared_frame_.partitions[i];
       DLOG_F(3, "Partition[{}]: mask={} range=[{},{}] (count={})", i,
         pr.pass_mask, pr.begin, pr.end, (pr.end - pr.begin));
     }
   } else {
     DLOG_F(3, "Partition map empty (no draws)");
-  }
-  if (draw_metadata_.HasData()) {
-    const auto legacy_count = draw_metadata_.GetCpuData().size();
-    const auto soa_count = draw_metadata_cpu_soa_.size();
-    if (legacy_count != soa_count) {
-      DLOG_F(1,
-        "DrawMetadata direct-gen count differs legacy={} soa={} (expected "
-        "while transition)",
-        legacy_count, soa_count);
-    }
   }
 }
 
@@ -685,6 +360,23 @@ auto Renderer::FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state)
     last_finalize_stats_.collected, last_finalize_stats_.filtered,
     prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata),
     prepared_frame_.partitions.size());
+}
+
+auto Renderer::FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state)
+  -> void
+{
+  const auto t_begin = std::chrono::high_resolution_clock::now();
+
+  // Reset prepared view snapshot
+  prepared_frame_ = PreparedSceneFrame {};
+
+  // Run configured finalizers (geometry/transform/draw emitter stages)
+  scene_prep_pipeline_->Finalize();
+
+  // Always publish transform spans (world/normal matrices)
+  PublishPreparedFrameSpans();
+
+  UpdateFinalizeStatistics(prep_state, t_begin);
 }
 
 auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
@@ -725,6 +417,9 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   scene_prep_state_->GetTransformUploader()->OnFrameStart(tag, frame_slot);
   scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);
   scene_prep_state_->GetMaterialBinder()->OnFrameStart(tag, frame_slot);
+  if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+    emitter->OnFrameStart(tag, frame_slot);
+  }
 }
 
 /*!
