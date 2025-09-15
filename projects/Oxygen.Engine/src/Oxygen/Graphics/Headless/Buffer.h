@@ -123,7 +123,7 @@ public:
 protected:
   OXGN_HDLS_NDAPI auto DoMap(size_t offset = 0, uint64_t size = 0)
     -> void* override;
-  OXGN_HDLS_NDAPI auto DoUnMap() -> void override;
+  OXGN_HDLS_NDAPI auto DoUnMap() noexcept -> void override;
 
   [[nodiscard]] auto CreateConstantBufferView(
     const DescriptorHandle& view_handle, const BufferRange& range = {}) const

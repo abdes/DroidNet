@@ -55,7 +55,7 @@ namespace d3d12 {
   protected:
     OXGN_D3D12_NDAPI auto DoMap(size_t offset = 0, size_t size = 0)
       -> void* override;
-    OXGN_D3D12_API auto DoUnMap() -> void override;
+    OXGN_D3D12_API auto DoUnMap() noexcept -> void override;
 
     // --- New view creation methods ---
     [[nodiscard]] auto CreateConstantBufferView(

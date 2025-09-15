@@ -364,7 +364,7 @@ public:
         return storage_.data();
       }
 
-      auto DoUnMap() -> void override
+      auto DoUnMap() noexcept -> void override
       {
         mapped_ = false;
         // Don't clear storage_ to maintain data integrity for testing
