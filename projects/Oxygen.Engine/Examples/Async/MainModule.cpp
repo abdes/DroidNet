@@ -6,6 +6,7 @@
 
 #include "MainModule.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -105,13 +106,17 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   using oxygen::data::pak::GeometryAssetDesc;
   using oxygen::data::pak::MeshViewDesc;
 
+  // Diagnostic toggle: force single-LOD spheres to rule out LOD switch pops
+  // as a source of per-mesh stutter. Set to false to restore dual-LOD.
+  constexpr bool kUseSingleLodForTest = true;
+
   // Semi-transparent material (transparent domain) with lower alpha to
   // accentuate blending against background.
   const auto glass = MakeSolidColorMaterial("Glass",
     { 0.2f, 0.6f, 0.9f, 0.35f }, oxygen::data::MaterialDomain::kAlphaBlended);
 
   // LOD 0: higher tessellation
-  auto lod0_data = oxygen::data::MakeSphereMeshAsset(32, 64);
+  auto lod0_data = oxygen::data::MakeSphereMeshAsset(64, 64);
   CHECK_F(lod0_data.has_value());
   auto mesh0
     = MeshBuilder(0, "SphereLOD0")
@@ -127,26 +132,28 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
         .EndSubMesh()
         .Build();
 
-  // LOD 1: lower tessellation
-  auto lod1_data = oxygen::data::MakeSphereMeshAsset(12, 24);
-  CHECK_F(lod1_data.has_value());
-  auto mesh1
-    = MeshBuilder(1, "SphereLOD1")
-        .WithVertices(lod1_data->first)
-        .WithIndices(lod1_data->second)
-        .BeginSubMesh("full", glass)
-        .WithMeshView(MeshViewDesc {
-          .first_index = 0,
-          .index_count = static_cast<uint32_t>(lod1_data->second.size()),
-          .first_vertex = 0,
-          .vertex_count = static_cast<uint32_t>(lod1_data->first.size()),
-        })
-        .EndSubMesh()
-        .Build();
+  // Optionally create LOD1
+  std::shared_ptr<Mesh> mesh1;
+  if (!kUseSingleLodForTest) {
+    auto lod1_data = oxygen::data::MakeSphereMeshAsset(24, 24);
+    CHECK_F(lod1_data.has_value());
+    mesh1 = MeshBuilder(1, "SphereLOD1")
+              .WithVertices(lod1_data->first)
+              .WithIndices(lod1_data->second)
+              .BeginSubMesh("full", glass)
+              .WithMeshView(MeshViewDesc {
+                .first_index = 0,
+                .index_count = static_cast<uint32_t>(lod1_data->second.size()),
+                .first_vertex = 0,
+                .vertex_count = static_cast<uint32_t>(lod1_data->first.size()),
+              })
+              .EndSubMesh()
+              .Build();
+  }
 
   // Use LOD0 bounds for asset bounds
   GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = 2;
+  geo_desc.lod_count = kUseSingleLodForTest ? 1 : 2;
   const glm::vec3 bb_min = mesh0->BoundingBoxMin();
   const glm::vec3 bb_max = mesh0->BoundingBoxMax();
   geo_desc.bounding_box_min[0] = bb_min.x;
@@ -155,6 +162,11 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   geo_desc.bounding_box_max[0] = bb_max.x;
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
+
+  if (kUseSingleLodForTest) {
+    return std::make_shared<oxygen::data::GeometryAsset>(
+      geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh0) });
+  }
 
   return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
     std::vector<std::shared_ptr<Mesh>> { std::move(mesh0), std::move(mesh1) });
@@ -280,6 +292,63 @@ static glm::vec3 EvalClosedCatmullRom(
       + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * t3);
   return glm::vec3(static_cast<float>(res.x), static_cast<float>(res.y),
     static_cast<float>(res.z));
+}
+
+// Build an arc-length lookup table for a closed Catmull-Rom spline.
+// Returns cumulative lengths (s) and corresponding parameters (u).
+static void BuildArcLengthLut(const std::vector<glm::vec3>& pts, int samples,
+  std::vector<double>& out_u, std::vector<double>& out_s)
+{
+  out_u.clear();
+  out_s.clear();
+  if (pts.size() < 4 || samples < 2)
+    return;
+
+  out_u.reserve(static_cast<size_t>(samples) + 1);
+  out_s.reserve(static_cast<size_t>(samples) + 1);
+
+  double s = 0.0;
+  glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
+  out_u.push_back(0.0);
+  out_s.push_back(0.0);
+  for (int i = 1; i <= samples; ++i) {
+    const double u = static_cast<double>(i) / static_cast<double>(samples);
+    const glm::vec3 p = EvalClosedCatmullRom(pts, u);
+    s += glm::length(p - prev);
+    out_u.push_back(u);
+    out_s.push_back(s);
+    prev = p;
+  }
+}
+
+// Given an arc-length s in [0, total_len), find u in [0,1) using the LUT.
+static double ArcLengthToParamU(double s, const std::vector<double>& u_samples,
+  const std::vector<double>& s_samples)
+{
+  if (u_samples.empty() || s_samples.empty())
+    return 0.0;
+  const double total = s_samples.back();
+  if (total <= 0.0)
+    return 0.0;
+  // Wrap s into [0,total)
+  s = std::fmod(s, total);
+  if (s < 0.0)
+    s += total;
+
+  // Binary search for segment
+  auto it = std::lower_bound(s_samples.begin(), s_samples.end(), s);
+  size_t idx = static_cast<size_t>(std::distance(s_samples.begin(), it));
+  if (idx == 0)
+    return u_samples.front();
+  if (idx >= s_samples.size())
+    return u_samples.back();
+
+  const double s0 = s_samples[idx - 1];
+  const double s1 = s_samples[idx];
+  const double u0 = u_samples[idx - 1];
+  const double u1 = u_samples[idx];
+  const double t = (s1 > s0) ? ((s - s0) / (s1 - s0)) : 0.0;
+  return u0 + t * (u1 - u0);
 }
 
 // Approximate path length by sampling
@@ -466,29 +535,38 @@ void MainModule::InitializeDefaultFlightPath()
     camera_drone_.path_points.push_back(glm::vec3(x, altitude, z));
   }
 
-  // Close the loop by repeating the first control point at the end
-  if (camera_drone_.path_points.size() >= 4) {
-    camera_drone_.path_points.push_back(camera_drone_.path_points.front());
-  }
+  // Do NOT append a duplicate closing point; EvalClosedCatmullRom already
+  // wraps indices, and duplicating the first point can create seam artifacts.
 
   camera_drone_.path_length = ApproximatePathLength(camera_drone_.path_points);
   if (camera_drone_.path_length <= 0.0)
     camera_drone_.path_length = 1.0;
   camera_drone_.path_u = 0.0;
+  camera_drone_.path_s = 0.0;
+
+  // Build arc-length LUT for constant-speed traversal
+  constexpr int kLutSamples = 512;
+  BuildArcLengthLut(camera_drone_.path_points, kLutSamples,
+    camera_drone_.arc_lut.u_samples, camera_drone_.arc_lut.s_samples);
 
   // Initialize drone current pose to the farthest/high start so the very
   // first frame reads as 'looking from far away' rather than snapping.
   if (!camera_drone_.path_points.empty()) {
-    const glm::vec3 start
-      = EvalClosedCatmullRom(camera_drone_.path_points, camera_drone_.path_u);
+    // Evaluate start from arc-length s to ensure consistency
+    const double u0 = ArcLengthToParamU(camera_drone_.path_s,
+      camera_drone_.arc_lut.u_samples, camera_drone_.arc_lut.s_samples);
+    const glm::vec3 start = EvalClosedCatmullRom(camera_drone_.path_points, u0);
     camera_drone_.current_pos = start;
 
     // Compute tangent at start for forward-facing orientation and rotate it
     // toward the scene center by up to 45 degrees so the camera remains
     // forward-looking but as focused as possible on the scene.
-    const double eps = 1e-3;
-    const glm::vec3 p_a = EvalClosedCatmullRom(
-      camera_drone_.path_points, std::fmod(camera_drone_.path_u + eps, 1.0));
+    // Compute tangent using a small arc-length offset for numerical stability
+    const double eps_s = camera_drone_.path_length * 1e-3;
+    const double u_eps = ArcLengthToParamU(camera_drone_.path_s + eps_s,
+      camera_drone_.arc_lut.u_samples, camera_drone_.arc_lut.s_samples);
+    const glm::vec3 p_a
+      = EvalClosedCatmullRom(camera_drone_.path_points, u_eps);
     glm::vec3 tangent = glm::normalize(p_a - start);
     if (glm::length(tangent) < 1e-6f)
       tangent = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -532,6 +610,14 @@ void MainModule::InitializeDefaultFlightPath()
 
 auto MainModule::UpdateCameraDrone(double delta_time) -> void
 {
+  // Temporary toggle to disable drone flight for stutter diagnostics.
+  // Set to false to restore the flight behavior.
+  static constexpr bool kDisableDroneFlight = false;
+  if (kDisableDroneFlight) {
+    SetupFixedCamera(main_camera_);
+    return;
+  }
+
   auto& d = camera_drone_;
   if (!d.enabled) {
     static bool initialized = false;
@@ -551,19 +637,22 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
     return;
   }
 
-  // Advance along the path uniformly
+  // Advance along the path by distance (arc-length) for constant speed
   if (d.path_length <= 0.0)
     d.path_length = 1.0;
-  const double du = (d.path_speed * dt) / d.path_length;
-  d.path_u = std::fmod(d.path_u + du, 1.0);
-  if (d.path_u < 0.0)
-    d.path_u += 1.0;
+  d.path_s = std::fmod(d.path_s + d.path_speed * dt, d.path_length);
+  if (d.path_s < 0.0)
+    d.path_s += d.path_length;
+  const double u
+    = ArcLengthToParamU(d.path_s, d.arc_lut.u_samples, d.arc_lut.s_samples);
 
   // Sample position and tangent
-  const double eps = 1e-3;
-  const glm::vec3 p = EvalClosedCatmullRom(d.path_points, d.path_u);
-  const glm::vec3 p_a
-    = EvalClosedCatmullRom(d.path_points, std::fmod(d.path_u + eps, 1.0));
+  // Sample position and compute tangent using small arc-length offset
+  const glm::vec3 p = EvalClosedCatmullRom(d.path_points, u);
+  const double eps_s = d.path_length * 1e-3; // ~0.1% of path length
+  const double u_eps = ArcLengthToParamU(
+    d.path_s + eps_s, d.arc_lut.u_samples, d.arc_lut.s_samples);
+  const glm::vec3 p_a = EvalClosedCatmullRom(d.path_points, u_eps);
   glm::vec3 tangent = p_a - p;
   if (glm::length(tangent) > 1e-6f)
     tangent = glm::normalize(tangent);
@@ -889,9 +978,11 @@ auto MainModule::EnsureExampleScene() -> void
   auto sphere_geo = BuildSphereLodAsset();
   auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
 
-  // Create multiple spheres with distance-based LOD; initial positions will be
-  // set by orbit. Use a small number for performance while still demonstrating
-  // the behavior (tweak N as desired).
+  // Create multiple spheres; initial positions will be set by orbit.
+  // Diagnostic toggles:
+  constexpr bool kDisableSphereLodPolicy = true; // avoid LOD switch hitches
+  constexpr bool kForceOpaqueSpheres = false; // set true to avoid sorting
+  // Use a small number for performance while still demonstrating behavior.
   constexpr std::size_t kNumSpheres = 16;
   spheres_.reserve(kNumSpheres);
   // Seeded RNG for reproducible variation across runs
@@ -915,14 +1006,16 @@ auto MainModule::EnsureExampleScene() -> void
       node.GetTransform().SetLocalScale(glm::vec3(3.0F));
     }
 
-    // Configure LOD policy per-sphere
-    if (auto obj = node.GetObject()) {
-      auto& r
-        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
-      DistancePolicy pol;
-      pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
-      pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
-      r.SetLodPolicy(std::move(pol));
+    // Configure LOD policy per-sphere (disabled during diagnostics)
+    if (!kDisableSphereLodPolicy) {
+      if (auto obj = node.GetObject()) {
+        auto& r = obj->get()
+                    .GetComponent<oxygen::scene::detail::RenderableComponent>();
+        DistancePolicy pol;
+        pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
+        pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
+        r.SetLodPolicy(std::move(pol));
+      }
     }
 
     // Randomized parameters: seed ensures reproducible runs
@@ -942,7 +1035,8 @@ auto MainModule::EnsureExampleScene() -> void
       const std::string mat_name
         = std::string("SphereMat_") + std::to_string(i);
       const auto rgb = ColorFromHue(hue);
-      const bool is_transparent = (transp_dist(rng) < 0.5);
+      const bool is_transparent
+        = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
       const float alpha = is_transparent ? 0.35f : 1.0f;
       const auto domain = is_transparent
         ? oxygen::data::MaterialDomain::kAlphaBlended
@@ -960,12 +1054,12 @@ auto MainModule::EnsureExampleScene() -> void
 
     SphereState s;
     s.node = node;
-    s.angle = init_angle;
+    s.base_angle = init_angle;
     s.speed = speed;
     s.radius = radius;
     s.inclination = incl_dist(rng);
     s.spin_speed = spin_dist(rng);
-    s.spin_angle = 0.0;
+    s.base_spin_angle = 0.0;
     spheres_.push_back(std::move(s));
   }
 
@@ -1030,18 +1124,13 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
 
   const double two_pi = static_cast<double>(glm::two_pi<float>());
 
-  // Advance each sphere's angle using its own speed and apply orbit
+  // Absolute-time sampling for deterministic, jitter-free animation
+  anim_time_ += effective_dt;
   for (auto& s : spheres_) {
-    s.angle += s.speed * effective_dt;
-    if (s.angle > two_pi) {
-      s.angle = std::fmod(s.angle, two_pi);
-    }
-    // Advance self-rotation (spin)
-    s.spin_angle += s.spin_speed * effective_dt;
-    if (s.spin_angle > two_pi) {
-      s.spin_angle = std::fmod(s.spin_angle, two_pi);
-    }
-    AnimateSphereOrbit(s.node, s.angle, s.radius, s.inclination, s.spin_angle);
+    const double angle = std::fmod(s.base_angle + s.speed * anim_time_, two_pi);
+    const double spin
+      = std::fmod(s.base_spin_angle + s.spin_speed * anim_time_, two_pi);
+    AnimateSphereOrbit(s.node, angle, s.radius, s.inclination, spin);
   }
 
   // Periodic lightweight logging to inspect very small deltas (avoid spam)

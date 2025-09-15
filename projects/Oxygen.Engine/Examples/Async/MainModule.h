@@ -178,15 +178,19 @@ namespace examples::async {
     // Last engine frame timestamp observed by this module. Used to compute
     // per-frame delta time for smooth integration of animations.
     std::chrono::steady_clock::time_point last_frame_time_ {};
+    // Elapsed animation time in seconds since module start, computed from
+    // engine frame timestamp for stable sampling across phases.
+    double anim_time_ { 0.0 };
     // Per-sphere animation state (multiple spheres with different speeds)
     struct SphereState {
       scene::SceneNode node;
-      double angle { 0.0 };
+      // Base phases used for absolute-time evaluation (no per-frame drift)
+      double base_angle { 0.0 };
       double speed { 0.6 }; // radians/sec
       double radius { 4.0 }; // orbit radius in world units
       double inclination { 0.5 }; // tilt of orbital plane (radians)
       double spin_speed { 0.0 }; // self-rotation speed (radians/sec)
-      double spin_angle { 0.0 }; // self-rotation accumulator
+      double base_spin_angle { 0.0 }; // initial spin phase
     };
 
     std::vector<SphereState> spheres_;
@@ -227,6 +231,12 @@ namespace examples::async {
         6.0
       }; // world units per second along path (increased for quicker survey)
       double path_u { 0.0 }; // current parameter along path [0,1)
+      // Arc-length traversal state: advance by distance, not param u
+      double path_s { 0.0 }; // current arc-length position in [0, path_length)
+      struct ArcLengthLut {
+        std::vector<double> u_samples; // monotonically increasing in [0,1]
+        std::vector<double> s_samples; // cumulative lengths in [0, path_length]
+      } arc_lut;
       // (streamlined) gimbal dynamics were removed to keep the demo focused
       // on a single body-controlled camera with gentle smoothing and banking.
       // Points of interest the camera may slow near for inspection
