@@ -65,7 +65,7 @@ protected:
   {
     return nullptr;
   }
-  auto DoUnMap() -> void override { }
+  auto DoUnMap() noexcept -> void override { }
 
   auto CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
     const BufferRange& /*range*/ = {}) const -> NativeView override

@@ -182,7 +182,7 @@ auto Buffer::DoMap(const size_t offset, const size_t size) -> void*
   return static_cast<uint8_t*>(mapped) + offset;
 }
 
-auto Buffer::DoUnMap() -> void
+auto Buffer::DoUnMap() noexcept -> void
 {
   DCHECK_F(IsMapped()); // Guaranteed by the base class
 

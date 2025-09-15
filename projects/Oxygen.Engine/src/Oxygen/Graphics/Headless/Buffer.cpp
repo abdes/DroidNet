@@ -46,7 +46,7 @@ auto Buffer::DoMap(uint64_t /*offset*/, uint64_t /*size*/) -> void*
   return data_.data();
 }
 
-auto Buffer::DoUnMap() -> void
+auto Buffer::DoUnMap() noexcept -> void
 {
   DCHECK_F(IsMapped()); // Guaranteed by the base class
   mapped_ = false;

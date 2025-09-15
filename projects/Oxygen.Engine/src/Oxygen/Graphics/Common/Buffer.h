@@ -216,7 +216,7 @@ public:
 
 protected:
   virtual auto DoMap(uint64_t offset = 0, uint64_t size = 0) -> void* = 0;
-  virtual auto DoUnMap() -> void = 0;
+  virtual auto DoUnMap() noexcept -> void = 0;
 
   /**
    * @brief Get a constant buffer view (CBV) for this buffer
