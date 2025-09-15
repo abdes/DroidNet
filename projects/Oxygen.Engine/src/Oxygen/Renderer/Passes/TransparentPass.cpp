@@ -135,22 +135,11 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     recorder.SetRenderTargets(std::span(&rtv, 1), std::nullopt);
   }
 
-  // Issue only transparent draws via predicate helper.
+  // Issue only transparent draws; RenderPass logs emitted count.
   // TODO(engine): Implement proper back-to-front ordering (or OIT) inside the
   // transparent partition; current order is deterministic but not depth-sorted
   // which can cause incorrect blending for overlapping transparent geometry.
-  uint32_t emitted_count = 0;
-  const bool emitted
-    = IssueDrawCalls(recorder, [&emitted_count](const DrawMetadata& md) {
-        if (!md.flags.IsSet(PassMaskBit::kTransparent)) {
-          return false;
-        }
-        ++emitted_count;
-        return true;
-      });
-  if (emitted) {
-    DLOG_F(2, "TransparentPass emitted {} draw(s)", emitted_count);
-  }
+  IssueDrawCallsOverPass(recorder, oxygen::engine::PassMaskBit::kTransparent);
   Context().RegisterPass(this);
   co_return;
 }

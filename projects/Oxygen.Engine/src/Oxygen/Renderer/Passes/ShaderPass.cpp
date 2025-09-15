@@ -203,20 +203,9 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
-  // Emit only opaque/masked draws; exclude transparent (handled later).
-  uint32_t skipped_transparent = 0;
-  const bool emitted
-    = IssueDrawCalls(recorder, [&skipped_transparent](const DrawMetadata& md) {
-        if (md.flags.IsSet(PassMaskBit::kTransparent)) {
-          ++skipped_transparent;
-          return false;
-        }
-        return md.flags.IsSet(PassMaskBit::kOpaqueOrMasked);
-      });
-  DLOG_F(2,
-    "ShaderPass emitted opaque/masked draws: emitted_any={} "
-    "skipped_transparent={}",
-    emitted, skipped_transparent);
+  // Emit only opaque/masked partition; transparent handled by TransparentPass.
+  IssueDrawCallsOverPass(
+    recorder, oxygen::engine::PassMaskBit::kOpaqueOrMasked);
 
   Context().RegisterPass(this);
 
@@ -408,4 +397,4 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   return false;
 }
 
-// Removed IssueOpaqueDraws (superseded by predicate-based IssueDrawCalls).
+// Removed IssueOpaqueDraws (superseded by partition-based IssueDrawCalls).
