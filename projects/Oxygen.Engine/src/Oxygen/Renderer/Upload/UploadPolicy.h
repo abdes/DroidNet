@@ -24,8 +24,10 @@ struct UploadPolicy {
     static constexpr Alignment kRowPitchAlignment { 256U };
     // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT (bytes)
     static constexpr Alignment kPlacementAlignment { 512U };
-    // Generic buffer copy alignment (bytes)
-    static constexpr Alignment kBufferCopyAlignment { 256U };
+    // Relaxed buffer copy alignment, although NVIDIA recommends 16 (bytes) for
+    // best performance.
+    // TODO: optimize this when data structures are finalized
+    static constexpr Alignment kBufferCopyAlignment { 4U };
   };
   struct Limits {
     static constexpr uint64_t kSmallArenaBlockMin = 64ULL * 1024ULL; // 64 KB
