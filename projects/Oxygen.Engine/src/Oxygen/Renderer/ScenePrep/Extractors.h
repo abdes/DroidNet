@@ -179,6 +179,14 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   const auto& rend = item.Renderable();
   std::vector<uint32_t> visible_submeshes;
   visible_submeshes.reserve(submeshes.size());
+
+  // Diagnostics: allow disabling culling and/or inflating bounds slightly
+  static constexpr bool kDisableSubmeshFrustumCulling = false;
+  // Absolute inflation in world units (meters) and relative inflation factor
+  // (percentage of AABB diagonal or sphere radius). Final inflation is
+  // max(abs, rel).
+  static constexpr float kBoundsInflationAbs = 0.0f;
+  static constexpr float kBoundsInflationRel = 0.01f; // 1% guard band
   for (uint32_t i = 0, n = static_cast<uint32_t>(submeshes.size()); i < n;
     ++i) {
     // Visibility mask check first (cheap)
@@ -187,14 +195,33 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
     }
 
     // Frustum culling per submesh: prefer world AABB; fallback to node sphere
-    bool in_frustum;
-    if (const auto aabb = item.Renderable().GetWorldSubMeshBoundingBox(i)) {
-      in_frustum = frustum.IntersectsAABB(aabb->first, aabb->second);
-    } else {
-      const auto sphere = rend.GetWorldBoundingSphere();
-      const auto c = glm::vec3(sphere);
-      const float r = sphere.w;
-      in_frustum = frustum.IntersectsSphere(c, r);
+    bool in_frustum = true;
+    if (!kDisableSubmeshFrustumCulling) {
+      if (const auto aabb = item.Renderable().GetWorldSubMeshBoundingBox(i)) {
+        // Inflate AABB slightly if requested (abs or relative)
+        auto min = aabb->first;
+        auto max = aabb->second;
+        const float diag = glm::length(max - min);
+        const float rel
+          = kBoundsInflationRel > 0.0f ? (diag * kBoundsInflationRel) : 0.0f;
+        const float infl = (std::max)(kBoundsInflationAbs, rel);
+        if (infl > 0.0f) {
+          min -= glm::vec3(infl);
+          max += glm::vec3(infl);
+        }
+        in_frustum = frustum.IntersectsAABB(min, max);
+      } else {
+        const auto sphere = rend.GetWorldBoundingSphere();
+        const auto c = glm::vec3(sphere);
+        float r = sphere.w;
+        const float rel
+          = kBoundsInflationRel > 0.0f ? (r * kBoundsInflationRel) : 0.0f;
+        const float infl = (std::max)(kBoundsInflationAbs, rel);
+        if (infl > 0.0f) {
+          r += infl;
+        }
+        in_frustum = frustum.IntersectsSphere(c, r);
+      }
     }
     if (!in_frustum) {
       continue;
