@@ -118,6 +118,14 @@ public:
     const ElementRef& ref, std::uint64_t size_bytes) const
     -> std::expected<oxygen::engine::upload::UploadBufferDesc, std::error_code>;
 
+  //! Build a buffer-upload descriptor for a specific element index.
+  //! This bypasses ElementRef and directly targets element_index within the
+  //! primary buffer. Returns error if buffer is not available or index is out
+  //! of range.
+  OXGN_RNDR_API auto MakeUploadDescForIndex(
+    std::uint32_t element_index, std::uint64_t size_bytes) const
+    -> std::expected<oxygen::engine::upload::UploadBufferDesc, std::error_code>;
+
   //! Lightweight binding description for Phase 1 (single chunk).
   struct Binding {
     ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };

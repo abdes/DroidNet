@@ -147,4 +147,23 @@ auto AtlasBuffer::MakeUploadDesc(
   return desc;
 }
 
+auto AtlasBuffer::MakeUploadDescForIndex(
+  const std::uint32_t element_index, const std::uint64_t size_bytes) const
+  -> std::expected<oxygen::engine::upload::UploadBufferDesc, std::error_code>
+{
+  if (!primary_buffer_) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  if (element_index >= capacity_elements_) {
+    return std::unexpected(
+      std::make_error_code(std::errc::result_out_of_range));
+  }
+
+  oxygen::engine::upload::UploadBufferDesc desc;
+  desc.dst = primary_buffer_;
+  desc.size_bytes = size_bytes;
+  desc.dst_offset = static_cast<std::uint64_t>(element_index) * stride_;
+  return desc;
+}
+
 } // namespace oxygen::renderer::resources
