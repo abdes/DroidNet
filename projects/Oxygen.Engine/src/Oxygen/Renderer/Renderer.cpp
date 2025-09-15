@@ -107,7 +107,6 @@ Renderer::~Renderer()
   if (auto g = gfx_weak_.lock()) {
     // Best-effort: ignore if already unregistered or null.
     draw_metadata_.ReleaseGpuResources(*g);
-    material_constants_.ReleaseGpuResources(*g);
   }
 }
 
@@ -701,23 +700,6 @@ auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
 auto Renderer::CurrentDrawCount() const noexcept -> std::size_t
 {
   return prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata);
-}
-
-auto Renderer::SetMaterialConstants(const MaterialConstants& constants) -> void
-{
-  auto& cpu = material_constants_.GetCpuData();
-  if (cpu.size() != 1) {
-    cpu.resize(1);
-  }
-  cpu[0] = constants;
-  material_constants_.MarkDirty();
-}
-
-auto Renderer::GetMaterialConstants() const -> const MaterialConstants&
-{
-  const auto& cpu = material_constants_.GetCpuData();
-  DCHECK_F(!cpu.empty());
-  return cpu.front();
 }
 
 auto Renderer::ModifySceneConstants(
