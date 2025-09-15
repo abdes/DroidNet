@@ -133,11 +133,6 @@ public:
     return prepared_frame_;
   }
 
-  // Material constants via bindless structured buffer (single element)
-  OXGN_RNDR_API auto SetMaterialConstants(const MaterialConstants& constants)
-    -> void;
-  OXGN_RNDR_API auto GetMaterialConstants() const -> const MaterialConstants&;
-
   OXGN_RNDR_API auto BuildFrame(
     const View& view, const FrameContext& frame_context) -> std::size_t;
 
@@ -190,9 +185,6 @@ private:
   SceneConstants scene_const_cpu_;
   MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
-
-  // Material constants (StructuredBuffer<MaterialConstants>)
-  detail::BindlessStructuredBuffer<MaterialConstants> material_constants_;
 
   // Per-draw metadata buffer (StructuredBuffer<DrawMetadata>)
   detail::BindlessStructuredBuffer<DrawMetadata> draw_metadata_;
