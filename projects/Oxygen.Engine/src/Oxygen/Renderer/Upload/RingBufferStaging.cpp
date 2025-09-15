@@ -11,7 +11,6 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 
-using oxygen::engine::upload::Bytes;
 using oxygen::engine::upload::FenceValue;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
@@ -28,18 +27,21 @@ constexpr auto AlignUp(std::uint64_t v, std::uint64_t a) -> std::uint64_t
 
 namespace oxygen::engine::upload {
 
-auto RingBufferStaging::Allocate(Bytes size, std::string_view debug_name)
-  -> Allocation
+auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
+  -> std::expected<Allocation, UploadError>
 {
   const auto bytes = size.get();
   if (bytes == 0) {
-    return {};
+    return std::unexpected(UploadError::kInvalidRequest);
   }
 
   const auto aligned = AlignUp(bytes, alignment_);
-  EnsureCapacity(aligned, debug_name);
+  auto ensure = EnsureCapacity(aligned, debug_name);
+  if (!ensure) {
+    return std::unexpected(ensure.error());
+  }
   if (!buffer_ || !mapped_ptr_) {
-    return {};
+    return std::unexpected(UploadError::kStagingAllocFailed);
   }
 
   auto& head = heads_[active_partition_];
@@ -48,11 +50,8 @@ auto RingBufferStaging::Allocate(Bytes size, std::string_view debug_name)
   const auto offset = partition_base + head;
   head += aligned;
 
-  Allocation out;
-  out.buffer = buffer_;
-  out.offset = offset;
-  out.size = bytes; // requested size (not aligned)
-  out.ptr = mapped_ptr_ + offset;
+  Allocation out(
+    buffer_, OffsetBytes { offset }, SizeBytes { bytes }, mapped_ptr_ + offset);
 
   // Update telemetry
   Stats().total_allocations++;
@@ -78,13 +77,13 @@ auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue /*completed*/)
   // No-op: partition reset happens via SetActivePartition per frame.
 }
 
-void RingBufferStaging::EnsureCapacity(
-  std::uint64_t required, std::string_view debug_name)
+auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
+  std::string_view debug_name) -> std::expected<void, UploadError>
 {
   const auto head = heads_.empty() ? 0ULL : heads_[active_partition_];
   if (capacity_per_partition_ >= head + required && buffer_) {
     Stats().current_buffer_size = buffer_->GetSize();
-    return;
+    return {};
   }
 
   const auto current = capacity_per_partition_;
@@ -104,24 +103,32 @@ void RingBufferStaging::EnsureCapacity(
 
   // We can UnMap the buffer immediately, but it cannot be released now.
   // Release must be deferred until frames are no longer using it.
-  {
-    if (buffer_ && buffer_->IsMapped()) {
-      buffer_->UnMap();
-      Stats().unmap_calls++;
-    }
-    // This will keep the buffer shared_ptr alive until it is time for it to be
-    // destroyed.
-    graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
-    // Now, safe to re-assign
+  UnMap();
+  // This will keep the buffer shared_ptr alive until it is time for it to be
+  // destroyed.
+  graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
+  // Now, safe to re-assign
+  UploadError error_code;
+  try {
     buffer_ = gfx_->CreateBuffer(desc);
     Stats().buffer_growth_count++;
-    mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-    Stats().map_calls++;
+    auto map_result = Map(); // This may throw for now...
+    if (map_result) {
+      capacity_per_partition_ = aligned_per_partition;
+      capacity_ = total_capacity;
+      Stats().current_buffer_size = buffer_->GetSize();
+      return {};
+    }
+    error_code = map_result.error();
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "RingBufferStaging allocation failed ({}): {}", total_capacity,
+      ex.what());
+    error_code = UploadError::kStagingAllocFailed;
+    // fall through to the cleanup code below
   }
-
-  capacity_per_partition_ = aligned_per_partition;
-  capacity_ = total_capacity;
-  Stats().current_buffer_size = buffer_->GetSize();
+  buffer_ = nullptr;
+  mapped_ptr_ = nullptr;
+  return std::unexpected(error_code);
 }
 
 RingBufferStaging::~RingBufferStaging()
@@ -150,6 +157,33 @@ auto RingBufferStaging::FinalizeStats() -> void
     + std::to_string(partitions_count_.get()) + ", "
     + std::to_string(partition_used) + "/"
     + std::to_string(capacity_per_partition_) + " bytes used";
+}
+
+auto RingBufferStaging::Map() -> std::expected<void, UploadError>
+{
+  DCHECK_NOTNULL_F(buffer_);
+  DCHECK_F(!buffer_->IsMapped());
+  DCHECK_F(mapped_ptr_ == nullptr);
+
+  mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
+  if (!mapped_ptr_) {
+    return std::unexpected(UploadError::kStagingMapFailed);
+  }
+  Stats().map_calls++;
+  return {};
+}
+
+auto RingBufferStaging::UnMap() noexcept -> void
+{
+  // This call is idempotent and may be made even if the buffer is not yet
+  // created or not mapped.
+  if (!buffer_ || !buffer_->IsMapped()) {
+    return;
+  }
+  DCHECK_NOTNULL_F(mapped_ptr_);
+  buffer_->UnMap();
+  mapped_ptr_ = nullptr;
+  Stats().unmap_calls++;
 }
 
 } // namespace oxygen::engine::upload

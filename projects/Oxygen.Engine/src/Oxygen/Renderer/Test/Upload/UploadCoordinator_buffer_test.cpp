@@ -25,7 +25,7 @@
 
 namespace {
 
-using oxygen::engine::upload::Bytes;
+using oxygen::engine::upload::SizeBytes;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadKind;

@@ -37,10 +37,25 @@ namespace oxygen::engine::upload {
 
 //=== Types & strong aliases -------------------------------------------------//
 
-using Bytes = NamedType<uint64_t, struct BytesTag,
+using SizeBytes = NamedType<uint64_t, struct BytesTag,
   // clang-format off
   DefaultInitialized,
   Arithmetic>; // clang-format on
+
+inline auto to_string(SizeBytes const& b)
+{
+  return std::to_string(b.get()) + " bytes";
+}
+
+using OffsetBytes = NamedType<uint64_t, struct OffsetBytesTag,
+  // clang-format off
+  DefaultInitialized,
+  Arithmetic>; // clang-format on
+
+inline auto to_string(OffsetBytes const& b)
+{
+  return std::to_string(b.get()) + " bytes";
+}
 
 using Alignment = NamedType<uint32_t, struct AlignmentTag,
   // clang-format off

@@ -55,7 +55,8 @@ public:
   }
   ~RingBufferStaging() override;
 
-  auto Allocate(Bytes size, std::string_view debug_name) -> Allocation override;
+  auto Allocate(SizeBytes size, std::string_view debug_name)
+    -> std::expected<Allocation, UploadError> override;
 
   auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
 
@@ -81,7 +82,9 @@ private:
   }
 
   auto EnsureCapacity(std::uint64_t required, std::string_view debug_name)
-    -> void;
+    -> std::expected<void, UploadError>;
+  auto Map() -> std::expected<void, UploadError>;
+  auto UnMap() noexcept -> void;
 
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<graphics::Buffer> buffer_;

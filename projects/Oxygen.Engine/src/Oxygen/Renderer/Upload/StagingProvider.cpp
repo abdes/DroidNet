@@ -10,6 +10,18 @@
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 
 namespace oxygen::engine::upload {
+//! Construct a well-formed Allocation.
+StagingProvider::Allocation::Allocation(std::shared_ptr<graphics::Buffer> buf,
+  OffsetBytes offset, SizeBytes size, std::byte* ptr) noexcept
+  : buffer(std::move(buf))
+  , offset(offset)
+  , size(size)
+  , ptr(ptr)
+{
+  CHECK_NOTNULL_F(buffer);
+  CHECK_NOTNULL_F(ptr);
+  CHECK_F(size.get() > 0 && size.get() <= buffer->GetSize());
+}
 
 StagingProvider::~StagingProvider()
 {

@@ -20,6 +20,7 @@ enum class UploadError : int {
   kDeviceLost,
   kProducerFailed,
   kCanceled,
+  kStagingMapFailed,
   // Tracker-specific errors
   kTicketNotFound,
   kTrackerShutdown,
@@ -35,6 +36,8 @@ public:
   std::string message(int ev) const override
   {
     switch (static_cast<UploadError>(ev)) {
+    case UploadError::kStagingMapFailed:
+      return "Failed to map staging buffer memory for upload operation";
     case UploadError::kInvalidRequest:
       return "Upload request contains invalid parameters or resource "
              "descriptors";

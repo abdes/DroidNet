@@ -90,14 +90,18 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   }
 
   // Allocate staging directly from the provider
-  auto staging = provider.Allocate(Bytes { size }, req.debug_name);
+  auto staging_exp = provider.Allocate(SizeBytes { size }, req.debug_name);
+  if (!staging_exp) {
+    return std::unexpected(staging_exp.error());
+  }
+  auto staging = std::move(*staging_exp);
 
   // Fill staging from the provided data view or producer
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
     auto to_copy = std::min<uint64_t>(size, view.bytes.size());
     if (to_copy > 0) {
-      std::memcpy(staging.ptr, view.bytes.data(), to_copy);
+      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
     }
   } else {
     auto& producer
@@ -105,7 +109,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
         std::get<std::move_only_function<bool(std::span<std::byte>)>>(
           req.data));
     if (producer) {
-      std::span<std::byte> dst(staging.ptr, size);
+      std::span<std::byte> dst(staging.Ptr(), size);
       if (!producer(dst)) {
         // Producer failed: return immediate failed ticket
         return tracker.RegisterFailedImmediate(
@@ -124,7 +128,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   recorder->RequireResourceState(*desc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBuffer(
-    *desc.dst, desc.dst_offset, *staging.buffer, staging.offset, size);
+    *desc.dst, desc.dst_offset, staging.Buffer(), staging.Offset().get(), size);
   // Choose an appropriate steady-state based on declared buffer usage.
   const auto target_state = UsageToTargetState(desc.dst->GetUsage());
   recorder->RequireResourceState(*desc.dst, target_state);
@@ -152,14 +156,19 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
 
-  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
+  auto staging_exp
+    = provider.Allocate(SizeBytes { total_bytes }, req.debug_name);
+  if (!staging_exp) {
+    return std::unexpected(staging_exp.error());
+  }
+  auto staging = std::move(*staging_exp);
 
   // Fill staging
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
     const auto to_copy = std::min<uint64_t>(total_bytes, view.bytes.size());
     if (to_copy > 0) {
-      std::memcpy(staging.ptr, view.bytes.data(), to_copy);
+      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
     }
   } else {
     auto& producer
@@ -167,7 +176,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
         std::get<std::move_only_function<bool(std::span<std::byte>)>>(
           req.data));
     if (producer) {
-      std::span<std::byte> dst(staging.ptr, total_bytes);
+      std::span<std::byte> dst(staging.Ptr(), total_bytes);
       if (!producer(dst)) {
         return tracker.RegisterFailedImmediate(
           req.debug_name, UploadError::kProducerFailed);
@@ -178,7 +187,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   // Build upload region(s) from plan; adjust offsets by staging.offset.
   std::vector<TextureUploadRegion> regions = plan.regions;
   for (auto& r : regions) {
-    r.buffer_offset += staging.offset;
+    r.buffer_offset += staging.Offset().get();
   }
 
   // Record copy to texture
@@ -190,7 +199,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBufferToTexture(
-    *staging.buffer, std::span { regions }, *tdesc.dst);
+    staging.Buffer(), std::span { regions }, *tdesc.dst);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
   recorder->FlushBarriers();
 
@@ -212,13 +221,18 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   }
   const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
-  auto staging = provider.Allocate(Bytes { total_bytes }, req.debug_name);
+  auto staging_exp
+    = provider.Allocate(SizeBytes { total_bytes }, req.debug_name);
+  if (!staging_exp) {
+    return std::unexpected(staging_exp.error());
+  }
+  auto staging = std::move(*staging_exp);
 
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
     const auto to_copy = std::min<uint64_t>(total_bytes, view.bytes.size());
     if (to_copy > 0) {
-      std::memcpy(staging.ptr, view.bytes.data(), to_copy);
+      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
     }
   } else {
     auto& producer
@@ -226,7 +240,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
         std::get<std::move_only_function<bool(std::span<std::byte>)>>(
           req.data));
     if (producer) {
-      std::span<std::byte> dst(staging.ptr, total_bytes);
+      std::span<std::byte> dst(staging.Ptr(), total_bytes);
       if (!producer(dst)) {
         return tracker.RegisterFailedImmediate(
           req.debug_name, UploadError::kProducerFailed);
@@ -236,7 +250,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   std::vector<TextureUploadRegion> regions = plan.regions;
   for (auto& r : regions) {
-    r.buffer_offset += staging.offset;
+    r.buffer_offset += staging.Offset().get();
   }
 
   const auto key = ChooseUploadQueueKey(gfx);
@@ -247,7 +261,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBufferToTexture(
-    *staging.buffer, std::span { regions }, *tdesc.dst);
+    staging.Buffer(), std::span { regions }, *tdesc.dst);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
   recorder->FlushBarriers();
 
@@ -452,14 +466,23 @@ auto UploadCoordinator::SubmitRun(
   -> std::expected<std::vector<UploadTicket>, UploadError>
 {
   // Plan → FillStaging → Optimize → Record → Tickets
-  return PlanBufferRun(run).and_then([&](BufferUploadPlan plan) {
-    auto staging = FillStagingForPlan(plan, run, provider, "BatchUpload");
-    return OptimizeBufferRun(run, plan).and_then([&](BufferUploadPlan opt) {
-      return RecordBufferRun(opt, run, staging)
-        .and_then([&](graphics::FenceValue fence) {
-          return MakeTicketsForPlan(plan, run, fence);
-        });
-    });
+  auto plan_result = PlanBufferRun(run);
+  if (!plan_result) {
+    return std::unexpected(plan_result.error());
+  }
+  auto& plan = plan_result.value();
+  auto allocation_result
+    = provider.Allocate(SizeBytes { plan.total_bytes }, "BatchUpload");
+  if (!allocation_result) {
+    return std::unexpected(allocation_result.error());
+  }
+  auto& allocation = *allocation_result;
+  FillStagingForPlan(plan, run, allocation);
+  return OptimizeBufferRun(run, plan).and_then([&](BufferUploadPlan opt) {
+    return RecordBufferRun(opt, run, allocation)
+      .and_then([&](graphics::FenceValue fence) {
+        return MakeTicketsForPlan(plan, run, fence);
+      });
   });
 }
 
@@ -470,10 +493,9 @@ auto UploadCoordinator::PlanBufferRun(std::span<const UploadRequest> run)
 }
 
 auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
-  std::span<const UploadRequest> run, StagingProvider& provider,
-  std::string_view debug_name) -> StagingProvider::Allocation
+  std::span<const UploadRequest> run, StagingProvider::Allocation& allocation)
+  -> void
 {
-  auto staging = provider.Allocate(Bytes { plan.total_bytes }, debug_name);
   const auto& fp = policy_.filler;
   for (const auto& it : plan.uploads) {
     const auto rep = it.request_indices.front();
@@ -483,10 +505,11 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
       auto view = std::get<UploadDataView>(r.data);
       const auto to_copy = std::min<uint64_t>(reg.size, view.bytes.size());
       if (to_copy > 0) {
-        std::memcpy(staging.ptr + reg.src_offset, view.bytes.data(), to_copy);
+        std::memcpy(
+          allocation.Ptr() + reg.src_offset, view.bytes.data(), to_copy);
       }
       if (fp.enable_default_fill && to_copy < reg.size) {
-        std::memset(staging.ptr + reg.src_offset + to_copy,
+        std::memset(allocation.Ptr() + reg.src_offset + to_copy,
           static_cast<int>(fp.filler_value),
           static_cast<size_t>(reg.size - to_copy));
       }
@@ -495,7 +518,7 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
         = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
           std::get<std::move_only_function<bool(std::span<std::byte>)>>(
             r.data));
-      std::span<std::byte> dst(staging.ptr + reg.src_offset, reg.size);
+      std::span<std::byte> dst(allocation.Ptr() + reg.src_offset, reg.size);
       if (!producer && fp.enable_default_fill) {
         std::memset(dst.data(), static_cast<int>(fp.filler_value),
           static_cast<size_t>(dst.size()));
@@ -507,7 +530,6 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
       }
     }
   }
-  return staging;
 }
 
 auto UploadCoordinator::OptimizeBufferRun(std::span<const UploadRequest> run,
@@ -548,8 +570,8 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       recorder->FlushBarriers();
     }
 
-    recorder->CopyBuffer(*dst, it.region.dst_offset, *staging.buffer,
-      staging.offset + it.region.src_offset, it.region.size);
+    recorder->CopyBuffer(*dst, it.region.dst_offset, staging.Buffer(),
+      staging.Offset().get() + it.region.src_offset, it.region.size);
 
     const bool is_last = (idx2 + 1 == optimized.uploads.size());
     const bool next_diff = !is_last && [&]() {

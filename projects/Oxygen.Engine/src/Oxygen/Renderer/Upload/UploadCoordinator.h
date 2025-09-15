@@ -123,15 +123,14 @@ private:
 
   std::vector<std::weak_ptr<StagingProvider>> providers_;
 
-  //=== Buffer batch pipeline helpers (SubmitMany decomposition) -----------//
   //! Stage 1: Plan a coalescible run of buffer requests.
   auto PlanBufferRun(std::span<const UploadRequest> run)
     -> std::expected<BufferUploadPlan, UploadError>;
 
   //! Stage 2: Allocate and fill staging according to the plan and policy.
   auto FillStagingForPlan(const BufferUploadPlan& plan,
-    std::span<const UploadRequest> run, StagingProvider& provider,
-    std::string_view debug_name) -> StagingProvider::Allocation;
+    std::span<const UploadRequest> run, StagingProvider::Allocation& allocation)
+    -> void;
 
   //! Stage 3: Optimize the buffer plan by coalescing contiguous regions.
   auto OptimizeBufferRun(
