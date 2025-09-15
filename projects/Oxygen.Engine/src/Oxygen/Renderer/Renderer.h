@@ -18,7 +18,6 @@
 #include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/CameraView.h>
-#include <Oxygen/Renderer/Detail/BindlessStructuredBuffer.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
@@ -122,9 +121,6 @@ public:
   //! Returns the last set scene constants (undefined before first set).
   OXGN_RNDR_API auto GetSceneConstants() const -> const SceneConstants&;
 
-  OXGN_RNDR_API auto SetDrawMetadata(const DrawMetadata& indices) -> void;
-  OXGN_RNDR_API auto GetDrawMetadata() const -> const DrawMetadata&;
-
   //! Accessor for in-progress SoA frame snapshot (Task 6+). Returns an empty
   //! frame until finalization is wired.
   [[nodiscard]] auto GetPreparedFrame() const noexcept
@@ -152,26 +148,14 @@ private:
   auto CurrentDrawCount() const noexcept -> std::size_t;
 
   //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
-  //! Generate DrawMetadata & material constant arrays with dedupe + validate.
-  auto GenerateDrawMetadata(sceneprep::ScenePrepState& prep_state)
-    -> void; // non-const: may register new materials (stable handle allocation)
-  //! Build sorting keys, stable-sort, and construct partition ranges.
-  auto BuildSortingAndPartitions()
-    -> void; // builds sorting keys, sorts, partitions
   //! Publish spans into PreparedSceneFrame using TransformUploader data
   //! directly.
   auto PublishPreparedFrameSpans() -> void;
-  //! Upload sorted DrawMetadata to bindless StructuredBuffer.
-  auto UploadDrawMetadataBindless() -> void;
   //! Aggregate timing + counters and emit diagnostic partition logs.
   auto UpdateFinalizeStatistics(const sceneprep::ScenePrepState& prep_state,
     std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
-
-  auto UpdateDrawMetadataSlotIfChanged() -> void;
-
-  auto EnsureAndUploadDrawMetadataBuffer() -> void;
 
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context) -> void;
@@ -186,34 +170,10 @@ private:
   MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
 
-  // Per-draw metadata buffer (StructuredBuffer<DrawMetadata>)
-  detail::BindlessStructuredBuffer<DrawMetadata> draw_metadata_;
-
   //=== SoA Finalization (in-progress) ===----------------------------------//
   // CPU-owning storage populated during finalization each frame. Spans inside
   // PreparedSceneFrame alias these vectors (no ownership transfer).
   PreparedSceneFrame prepared_frame_ {}; // view object
-  std::vector<DrawMetadata>
-    draw_metadata_cpu_soa_; // SoA-built per-draw records
-  // Partition map backing storage (pass mask -> [begin,end)) published via
-  // PreparedSceneFrame spans each frame (Task 11 scaffolding).
-  std::vector<PreparedSceneFrame::PartitionRange> partitions_cpu_soa_;
-  // Sorting key scaffolding (Task 16 prep). One key per draw; not yet used to
-  // reorder. Captures pass_mask + material + geometry indices (currently
-  // placeholders) to ensure stable deterministic ordering hash.
-  struct DrawSortingKey {
-    PassMask pass_mask {}; // from DrawMetadata.flags
-    // DrawMetadata.material_handle (stable MaterialHandle)
-    uint32_t material_index { 0 };
-    ShaderVisibleIndex
-      geometry_vertex_srv {}; // DrawMetadata.vertex_buffer_index
-    ShaderVisibleIndex geometry_index_srv {}; // DrawMetadata.index_buffer_index
-  };
-  std::vector<DrawSortingKey> sorting_keys_cpu_soa_;
-  uint64_t last_draw_order_hash_ { 0ULL }; // FNV-1a over sequence of keys
-
-  // High-water reservation to minimize realloc churn for SoA arrays.
-  std::size_t max_finalized_count_ { 0 };
 
   struct FinalizeStats {
     std::size_t collected { 0 };
@@ -223,10 +183,7 @@ private:
     std::chrono::microseconds finalize_time { 0 };
   } last_finalize_stats_ {};
 
-  // Microseconds spent performing draw sorting (stable sort + permutation +
-  // partition range construction). Captured each frame FinalizeScenePrepSoA
-  // runs. 0 when no draws.
-  std::chrono::microseconds last_sort_time_ { 0 };
+  // Microseconds spent performing draw sorting moved to DrawMetadataEmitter.
 
   // Populates SoA arrays from ScenePrep outputs (initial minimal subset).
   auto FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state) -> void;

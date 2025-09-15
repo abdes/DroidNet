@@ -105,8 +105,30 @@ public:
     if constexpr (FinalizationCfg::has_geometry_upload) {
       finalization_.geometry_upload(state);
     }
+
     if constexpr (FinalizationCfg::has_transform_upload) {
       finalization_.transform_upload(state);
+    }
+
+    if constexpr (FinalizationCfg::has_material_upload) {
+      finalization_.material_upload(state);
+    }
+
+    // Draw metadata emission per retained item
+    if constexpr (FinalizationCfg::has_draw_md_emit) {
+      for (const auto& item : state.RetainedItems()) {
+        finalization_.draw_md_emit(state, item);
+      }
+    }
+
+    // Sorting and partitioning
+    if constexpr (FinalizationCfg::has_draw_md_sorter) {
+      finalization_.draw_md_sort(state);
+    }
+
+    // Upload draw metadata (includes potential SRV resolution)
+    if constexpr (FinalizationCfg::has_draw_md_upload) {
+      finalization_.draw_md_upload(state);
     }
   }
 
