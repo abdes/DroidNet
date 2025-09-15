@@ -353,28 +353,32 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   const auto stride
     = static_cast<std::uint64_t>(sizeof(oxygen::engine::DrawMetadata));
   const auto count = static_cast<std::uint32_t>(Cpu().size());
-  for (std::uint32_t i = 0; i < count; ++i) {
-    if (auto desc = atlas_->MakeUploadDesc(element_refs_[i], stride)) {
+
+  // Minimal emitter: create one UploadRequest per element, but submit the
+  // entire batch once. UploadPlanner will sort/pack/optimize the requests
+  // (no emitter-side coalescing required).
+  for (std::uint32_t idx = 0; idx < count; ++idx) {
+    if (auto desc = atlas_->MakeUploadDesc(element_refs_[idx], stride)) {
       UploadRequest req;
       req.kind = UploadKind::kBuffer;
       req.debug_name = "DrawMetadata";
       req.desc = *desc;
       req.data = UploadDataView { std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(&Cpu()[i]), stride) };
+        reinterpret_cast<const std::byte*>(&Cpu()[idx]), stride) };
       requests.push_back(std::move(req));
     } else {
-      LOG_F(ERROR, "Failed to make upload desc for DrawMetadata {}", i);
+      LOG_F(ERROR, "Failed to make upload desc for DrawMetadata {}", idx);
     }
+  }
 
-    if (!requests.empty()) {
-      const auto tickets = uploader_->SubmitMany(
-        std::span { requests.data(), requests.size() }, *staging_provider_);
-      upload_operations_count_ += requests.size();
-      if (!tickets) {
-        const std::error_code ec = tickets.error();
-        LOG_F(ERROR, "DrawMetadata upload submission failed: [{}] {}",
-          ec.category().name(), ec.message());
-      }
+  if (!requests.empty()) {
+    const auto tickets = uploader_->SubmitMany(
+      std::span { requests.data(), requests.size() }, *staging_provider_);
+    upload_operations_count_ += requests.size();
+    if (!tickets) {
+      const std::error_code ec = tickets.error();
+      LOG_F(ERROR, "DrawMetadata upload submission failed: [{}] {}",
+        ec.category().name(), ec.message());
     }
   }
 }
