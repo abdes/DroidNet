@@ -11,9 +11,11 @@ small, renderer-internal, coroutine-friendly API.
   textures.
 - Allocates CPU-visible staging: `StagingProvider` implementations return
   persistently mapped regions (or mapped-on-demand) for filling.
-  - Single buffer: `SingleBufferStaging` (pinned or per-op mapping).
-  - Ring/linear arena: `RingBufferStaging` (partitioned per frame; caller
-    selects alignment and active partition).
+  - Implementations of `StagingProvider` return persistently mapped regions
+    (or mapped-on-demand) for filling. The repository provides a
+    `RingBufferStaging` implementation (partitioned per frame). Other
+    provider strategies (single-buffer, pinned mappings, etc.) may be
+    implemented by clients as needed.
 - Records and submits copy commands on a transfer queue when available, else
   the graphics queue.
 - Tracks completion and basic stats via GPU fence values: `UploadTracker`.
@@ -42,8 +44,6 @@ ticket → RetireCompleted polls fence and notifies providers for recycling.
     `OnFrameStart(Slot)`.
   - Source: `StagingProvider.h`.
   - Implementations:
-    - SingleBufferStaging: one upload buffer that grows with a slack factor;
-      mapping policy is pinned or per-op. Source: `SingleBufferStaging.h`.
     - RingBufferStaging: one persistently mapped upload buffer, partitioned by
       frames-in-flight; bump-allocates per active partition; alignment is
       required (power-of-two). Source: `RingBufferStaging.h/.cpp`.
@@ -61,26 +61,22 @@ ticket → RetireCompleted polls fence and notifies providers for recycling.
 
 See `UploadCoordinator.h` for complete signatures. Highlights:
 
-- Submissions (provider-aware and default):
-  - `Submit(const UploadRequest&, std::shared_ptr<StagingProvider>)` →
-    `UploadTicket`
-  - `SubmitMany(std::span<const UploadRequest>, std::shared_ptr<StagingProvider>)`
-    → `std::vector<UploadTicket>`
-  - Convenience overloads with an internal default provider
-    (`SingleBufferStaging` pinned): `Submit(...)`, `SubmitMany(...)`
+- Submissions (provider-aware):
+- `Submit(const UploadRequest&, StagingProvider&)` → `std::expected<UploadTicket, UploadError>`
+- `SubmitMany(std::span<const UploadRequest>, StagingProvider&)` → `std::expected<std::vector<UploadTicket>, UploadError>`
+- Note: callers must provide a `StagingProvider` instance (for example
+    one created by `UploadCoordinator::CreateRingBufferStaging`).
 - Waiting and results:
   - `IsComplete(UploadTicket)`, `TryGetResult(UploadTicket)`
   - `Await(UploadTicket)`, `AwaitAll(span<UploadTicket>)`
 - Async helpers (OxCo):
-  - `SubmitAsync(...)`, `SubmitManyAsync(...)`
-  - `AwaitAsync(UploadTicket)`, `AwaitAllAsync(span<UploadTicket>)`
-- Frame control and diagnostics:
-  - `Flush()` submits deferred command lists to queues.
-  - `RetireCompleted()` polls queue fences, advances `UploadTracker`, and
-    notifies active providers via `RetireCompleted(fence)`.
-  - `GetStats()` returns `UploadStats` (submitted, completed, in_flight,
-    bytes_submitted, bytes_completed).
-  - `Cancel(UploadTicket)` best-effort cancellation.
+- `SubmitAsync(...)`, `SubmitManyAsync(...)`
+- `AwaitAsync(UploadTicket)`, `AwaitAllAsync(span<UploadTicket>)`
+- Frame lifecycle and control:
+- `OnFrameStart(renderer::RendererTag, frame::Slot)` — call this at the
+    start of each frame so the coordinator can advance tracker and notify
+    registered `StagingProvider`s (e.g., `RingBufferStaging`).
+- `Cancel(UploadTicket)` best-effort cancellation.
 
 ## Usage examples
 
@@ -88,6 +84,10 @@ See `UploadCoordinator.h` for complete signatures. Highlights:
 
 ```cpp
 std::vector<std::byte> data = /* ... */;
+
+// Create a staging provider suitable for your renderer; choose partitions
+// (frames in flight) and alignment based on element stride.
+auto provider = upload.CreateRingBufferStaging(frame::SlotCount{3}, 256u);
 
 oxygen::engine::upload::UploadRequest req {
   .kind = oxygen::engine::upload::UploadKind::kBuffer,
@@ -100,9 +100,16 @@ oxygen::engine::upload::UploadRequest req {
   .data = oxygen::engine::upload::UploadDataView{ std::span<const std::byte>(data) },
 };
 
-auto ticket = upload.Submit(req);
-upload.Flush();
-auto result = upload.Await(ticket);
+auto ticket_exp = upload.Submit(req, *provider);
+if (!ticket_exp) {
+  // handle submit error (UploadError)
+}
+auto ticket = *ticket_exp;
+auto result_exp = upload.Await(ticket);
+if (!result_exp) {
+  // handle await error (UploadError)
+}
+auto result = *result_exp;
 ```
 
 ### Provider-aware batch of buffers (coalesced staging)
@@ -111,7 +118,10 @@ auto result = upload.Await(ticket);
 using namespace oxygen;
 using namespace oxygen::engine::upload;
 
-auto provider = std::make_shared<SingleBufferStaging>(gfx.shared_from_this());
+// Create a ring-buffer staging provider via the coordinator. Choose an
+// appropriate partitions count and alignment for your renderer's
+// frames-in-flight and element stride.
+auto provider = upload.CreateRingBufferStaging(frame::SlotCount{3}, 256u);
 
 std::array<UploadRequest, 2> reqs = {
   UploadRequest{
@@ -128,9 +138,16 @@ std::array<UploadRequest, 2> reqs = {
   },
 };
 
-auto tickets = upload.SubmitMany(reqs, provider);
-upload.Flush();
-auto results = upload.AwaitAll(tickets);
+auto tickets_exp = upload.SubmitMany(reqs, *provider);
+if (!tickets_exp) {
+  // handle submit-many error
+}
+auto tickets = *tickets_exp;
+auto results_exp = upload.AwaitAll(tickets);
+if (!results_exp) {
+  // handle await-all error
+}
+auto results = *results_exp;
 ```
 
 ### Texture2D upload with subresource regions
@@ -147,9 +164,17 @@ UploadRequest tex_req {
   .data = UploadDataView{ /* contiguous texel bytes for the planned regions */ },
 };
 
-auto t = upload.Submit(tex_req);
-upload.Flush();
-auto r = upload.Await(t);
+// Submit with an explicit provider (e.g., ring-buffer staging created above)
+auto tex_ticket_exp = upload.Submit(tex_req, *provider);
+if (!tex_ticket_exp) {
+  // handle submit error
+}
+auto tex_ticket = *tex_ticket_exp;
+auto tex_res_exp = upload.Await(tex_ticket);
+if (!tex_res_exp) {
+  // handle await error
+}
+auto r = *tex_res_exp;
 ```
 
 ## How planning and recording work
@@ -172,10 +197,6 @@ auto r = upload.Await(t);
 
 ## Providers and lifecycle
 
-- SingleBufferStaging
-  - Grows a single upload buffer with a slack factor; supports pinned mapping
-    or per-op map/unmap.
-  - Unmaps on `RetireCompleted` when in per-op mode.
 - RingBufferStaging
   - One persistently mapped buffer partitioned by frames-in-flight; bump
     allocates within the active partition; caller must call
@@ -231,7 +252,9 @@ Planned enhancements
 - UploadTracker & stats: `./UploadTracker.h`, `./UploadTracker.cpp`,
   `./UploadDiagnostics.h`
 - Staging contract: `./StagingProvider.h`
-- Providers: `./SingleBufferStaging.h`, `./RingBufferStaging.h`,
+- Providers: `./RingBufferStaging.h` (provided). Other providers may be
+   implemented by the caller and used by passing them to the coordinator's
+   `Submit`/`SubmitMany` APIs.
   `./RingBufferStaging.cpp`
 - Tests: `../Test/Upload*` (planner, tracker, and coordinator scenarios)
 
