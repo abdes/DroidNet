@@ -458,15 +458,15 @@ auto TransformUploader::MakeTransformKey(const glm::mat4& m) noexcept
   constexpr float scale = 1024.0f;
   std::array<std::int32_t, 12> quantized;
 
-  auto quantized_view = std::views::iota(0, 4) // columns
-    | std::views::transform([&](const int c) {
-        return std::views::iota(0, 3) | std::views::transform([&](const int r) {
-          return static_cast<std::int32_t>(std::lround(m[c][r] * scale));
-        });
-      })
-    | std::views::join;
+  // Fill quantized array: for each column (0..3), for each row (0..2)
+  int idx = 0;
+  for (int c = 0; c < 4; ++c) {
+    for (int r = 0; r < 3; ++r) {
+      quantized[idx++]
+        = static_cast<std::int32_t>(std::lround(m[c][r] * scale));
+    }
+  }
 
-  std::ranges::copy(quantized_view, quantized.begin());
   return oxygen::ComputeFNV1a64(quantized.data(), sizeof(quantized));
 }
 
