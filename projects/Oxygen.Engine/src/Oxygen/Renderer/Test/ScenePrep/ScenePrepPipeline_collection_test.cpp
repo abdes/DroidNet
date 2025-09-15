@@ -159,7 +159,8 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
 
   ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineFixture::kNodeCount);
   for (const auto& item : StateRef().CollectedItems()) {
@@ -200,7 +201,8 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
 
   EXPECT_EQ(StateRef().CollectedCount(), 0);
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
@@ -245,7 +247,8 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
@@ -292,7 +295,8 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), ViewRef(), /*frame_id=*/1, StateRef(), true);
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));

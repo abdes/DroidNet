@@ -140,8 +140,6 @@ private:
     RenderContext& context, const FrameContext& frame_context) -> void;
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
-  //! Finalize SoA (wrapper around existing FinalizeScenePrepSoA) and log.
-  auto FinalizeScenePrepPhase(sceneprep::ScenePrepState& prep_state) -> void;
   //! Update scene constants from resolved view matrices & camera state.
   auto UpdateSceneConstantsFromView(const View& view) -> void;
   //! Compute current finalized draw count (post-sort) from prepared frame.
@@ -151,9 +149,6 @@ private:
   //! Publish spans into PreparedSceneFrame using TransformUploader data
   //! directly.
   auto PublishPreparedFrameSpans() -> void;
-  //! Aggregate timing + counters and emit diagnostic partition logs.
-  auto UpdateFinalizeStatistics(const sceneprep::ScenePrepState& prep_state,
-    std::chrono::high_resolution_clock::time_point t_begin) -> void;
 
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
 
@@ -175,24 +170,11 @@ private:
   // PreparedSceneFrame alias these vectors (no ownership transfer).
   PreparedSceneFrame prepared_frame_ {}; // view object
 
-  struct FinalizeStats {
-    std::size_t collected { 0 };
-    std::size_t filtered { 0 };
-    std::size_t finalized { 0 };
-    std::chrono::microseconds collection_time { 0 };
-    std::chrono::microseconds finalize_time { 0 };
-  } last_finalize_stats_ {};
-
-  // Microseconds spent performing draw sorting moved to DrawMetadataEmitter.
-
-  // Populates SoA arrays from ScenePrep outputs (initial minimal subset).
-  auto FinalizeScenePrepSoA(sceneprep::ScenePrepState& prep_state) -> void;
-
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each BuildFrame while retaining
   // deduplicated caches inside contained managers.
   std::unique_ptr<sceneprep::ScenePrepState> scene_prep_state_;
-  std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_pipeline_;
+  std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };

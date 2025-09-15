@@ -58,7 +58,8 @@ protected:
     AddGeometry();
     proto_.emplace(node_.GetObject()->get());
 
-    ctx_.emplace(0, *(static_cast<View*>(nullptr)), *scene_);
+    ctx_.emplace(oxygen::frame::SequenceNumber { 0 },
+      *(static_cast<View*>(nullptr)), *scene_);
   }
 
   void TearDown() override

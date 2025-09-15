@@ -111,7 +111,7 @@ protected:
     state_ = std::make_unique<ScenePrepState>(std::move(geom_uploader),
       std::move(transform_uploader), std::move(material_binder));
 
-    ctx_.emplace(0, view_, *scene_);
+    ctx_.emplace(oxygen::frame::SequenceNumber { 0 }, view_, *scene_);
   }
 
   auto TearDown() -> void override

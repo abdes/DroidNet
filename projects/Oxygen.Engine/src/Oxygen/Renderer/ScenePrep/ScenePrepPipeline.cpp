@@ -10,12 +10,12 @@
 namespace oxygen::engine::sceneprep {
 
 auto ScenePrepPipeline::Collect(const scene::Scene& scene, const View& view,
-  uint64_t frame_id, ScenePrepState& state, bool reset_state) -> void
+  frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state) -> void
 {
-  DLOG_SCOPE_F(2, fmt::format("ScenePrep Collect f:{}", frame_id).c_str());
+  DLOG_SCOPE_F(2, fmt::format("ScenePrep Collect f:{}", fseq.get()).c_str());
 
   prep_state_ = observer_ptr { &state };
-  ctx_.emplace(frame_id, view, scene);
+  ctx_.emplace(fseq, view, scene);
 
   // Reset per-frame state if requested.
   if (reset_state) {
@@ -49,8 +49,9 @@ auto ScenePrepPipeline::Finalize() -> void
   DCHECK_F(ctx_.has_value());
   DCHECK_NOTNULL_F(prep_state_);
 
-  DLOG_SCOPE_F(
-    2, fmt::format("ScenePrep Finalize f:{}", ctx_->GetFrameId()).c_str());
+  DLOG_SCOPE_F(2,
+    fmt::format("ScenePrep Finalize f:{}", ctx_->GetFrameSequenceNumber().get())
+      .c_str());
 
   FinalizeImpl(*prep_state_);
 }

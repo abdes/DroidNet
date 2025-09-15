@@ -62,7 +62,7 @@ protected:
     // Proto seeded with node; proto geometry/visibility set per test explicitly
     proto_.emplace(node_.GetObject()->get());
 
-    ctx_.emplace(0, view_, *scene_);
+    ctx_.emplace(oxygen::frame::SequenceNumber { 0 }, view_, *scene_);
   }
 
   void TearDown() override { scene_.reset(); }
@@ -72,7 +72,7 @@ protected:
   void SetView(const View& view)
   {
     view_ = view;
-    ctx_.emplace(0, view_, *scene_);
+    ctx_.emplace(oxygen::frame::SequenceNumber { 0 }, view_, *scene_);
   }
 
   void SeedVisibilityAndTransform()

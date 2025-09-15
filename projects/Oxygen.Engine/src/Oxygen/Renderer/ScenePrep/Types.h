@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Core/Types/Frame.h>
 
 namespace oxygen::data {
 class GeometryAsset;
@@ -111,44 +112,5 @@ constexpr auto to_string(GeometryHandle h)
 {
   return "GeoH(" + std::to_string(h.get()) + ")";
 }
-
-//! Shared context passed to ScenePrep algorithms.
-/*!
- Provides read-only frame, view and scene information along with a mutable
- `RenderContext` for resource operations. The context must outlive the
- ScenePrep invocation that receives it.
- */
-class ScenePrepContext {
-public:
-  //! Construct a ScenePrepContext that borrows the provided references.
-  ScenePrepContext(uint64_t fid, const View& v, const scene::Scene& s) noexcept
-    : frame_id { fid }
-    , view_ { std::ref(v) }
-    , scene_ { std::ref(s) }
-  {
-  }
-
-  OXYGEN_DEFAULT_COPYABLE(ScenePrepContext)
-  OXYGEN_DEFAULT_MOVABLE(ScenePrepContext)
-
-  ~ScenePrepContext() noexcept = default;
-
-  [[nodiscard]] auto GetFrameId() const noexcept { return frame_id; }
-  [[nodiscard]] auto& GetView() const noexcept { return view_.get(); }
-  [[nodiscard]] auto& GetScene() const noexcept { return scene_.get(); }
-  // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
-
-private:
-  //! Current frame identifier for temporal coherency optimizations.
-  uint64_t frame_id; // TODO: strong type
-
-  //! View containing camera matrices and frustum for the current frame.
-  std::reference_wrapper<const View> view_;
-
-  //! Scene graph being processed.
-  std::reference_wrapper<const scene::Scene> scene_;
-
-  // (RenderContext placeholder removed)
-};
 
 } // namespace oxygen::engine::sceneprep
