@@ -103,6 +103,7 @@ cbuffer DrawIndexConstant : register(b2) {
 struct VSOutput {
     float4 position : SV_POSITION;
     float3 color : COLOR;
+    float3 world_normal : NORMAL;
 };
 
 // -----------------------------------------------------------------------------
@@ -175,33 +176,50 @@ VSOutput VS(uint vertexID : SV_VertexID) {
                                 0,0,0,1);
     }
     float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
+    // Compute world-space normal: prefer uploaded normal matrices if available
+    float3x3 normal_mat;
+    if (bindless_normal_matrices_slot != 0xFFFFFFFFu) {
+        StructuredBuffer<float4x4> normals = ResourceDescriptorHeap[bindless_normal_matrices_slot];
+        normal_mat = (float3x3)normals[meta.transform_index];
+    } else {
+        normal_mat = (float3x3)world_matrix;
+    }
+    float3 n_ws = normalize(mul(normal_mat, vertex.normal));
     float4 view_pos = mul(view_matrix, world_pos);
     float4 proj_pos = mul(projection_matrix, view_pos);
     output.position = proj_pos;
     output.color = vertex.color.rgb;
+    output.world_normal = n_ws;
     return output;
 }
 
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
-    // Default: just vertex color if materials buffer is not available
-    float4 result = float4(input.color, 1.0);
+    // Hardcoded directional light (POC)
+    const float3 light_dir_ws = normalize(float3(0.3, -1.0, 0.1)); // from above-right
+    const float3 light_color  = float3(1.0, 1.0, 1.0);
+    const float  light_intensity = 1.0;
 
-    // Access per-draw metadata to find the material index for this draw
+    // Half-Lambert term (softens the terminator, avoids harsh falloff)
+    float ndotl = 0.5 * dot(normalize(input.world_normal), -light_dir_ws) + 0.5;
+    ndotl = saturate(ndotl);
+    float3 lighting = ndotl * light_intensity;
+
+    // Base color defaults
+    float3 base_rgb = float3(1.0, 1.0, 1.0);
+    float  base_a   = 1.0;
+
+    // If material constants available, modulate by base_color
     if (bindless_draw_metadata_slot != 0xFFFFFFFFu &&
         bindless_material_constants_slot != 0xFFFFFFFFu) {
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
-
-        // Read material constants for this draw
         StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
-    MaterialConstants mat = materials[meta.material_handle];
-
-        // Simple unlit shading: vertex color modulated by material base color
-        float3 base_rgb = mat.base_color.rgb;
-        float  base_a   = mat.base_color.a;
-        result = float4(input.color * base_rgb, base_a);
+        MaterialConstants mat = materials[meta.material_handle];
+        base_rgb = mat.base_color.rgb;
+        base_a   = mat.base_color.a;
     }
 
-    return result;
+    float3 shaded = input.color * base_rgb * lighting * light_color;
+    return float4(shaded, base_a);
 }
