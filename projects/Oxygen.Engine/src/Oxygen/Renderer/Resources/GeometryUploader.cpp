@@ -124,26 +124,7 @@ auto MakeGeometryKey(const oxygen::data::Mesh& mesh) noexcept -> std::uint64_t
   return reinterpret_cast<std::uintptr_t>(&mesh);
 }
 
-auto SelectBatchPolicy(const std::uint64_t size_bytes, const bool is_critical)
-  -> oxygen::engine::upload::BatchPolicy
-{
-  using oxygen::engine::upload::BatchPolicy;
-
-  // Critical geometry (e.g., immediately visible meshes) use immediate upload
-  if (is_critical) {
-    return BatchPolicy::kImmediate;
-  }
-
-  // Large geometry goes to background processing to avoid blocking
-  // Use a simple size threshold directly in the method
-  constexpr std::uint64_t large_geometry_threshold = 2ULL * 1024 * 1024; // 2MB
-  if (size_bytes >= large_geometry_threshold) {
-    return BatchPolicy::kBackground;
-  }
-
-  // Small to medium geometry uses coalescing for efficiency
-  return BatchPolicy::kCoalesce;
-}
+// Batch policy removed: SubmitMany now coalesces automatically.
 
 } // namespace
 
@@ -414,11 +395,8 @@ auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_NE_F(srv_index, kInvalidShaderVisibleIndex);
 
   // Prepare vertex data upload request
-  const auto batch_policy
-    = SelectBatchPolicy(buffer_size, dirty_entry.is_critical);
   return engine::upload::UploadRequest {
     .kind = engine::upload::UploadKind::kBuffer,
-    .batch_policy = batch_policy,
     .debug_name = "VertexUpload",
     .desc = engine::upload::UploadBufferDesc {
         .dst = vertex_buffer,
@@ -457,12 +435,8 @@ auto GeometryUploader::UploadIndexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_NE_F(srv_index, kInvalidShaderVisibleIndex);
 
   // Prepare index data upload request
-  const auto batch_policy
-    = SelectBatchPolicy(buffer_size, dirty_entry.is_critical);
-
   return engine::upload::UploadRequest {
     .kind = engine::upload::UploadKind::kBuffer,
-    .batch_policy = batch_policy,
     .debug_name = "IndexUpload",
     .desc = engine::upload::UploadBufferDesc {
         .dst = index_buffer,

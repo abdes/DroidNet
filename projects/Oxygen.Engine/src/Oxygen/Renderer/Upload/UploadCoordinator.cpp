@@ -10,6 +10,7 @@
 #include <functional>
 #include <span>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -334,130 +335,32 @@ auto UploadCoordinator::SubmitMany(
   std::vector<UploadTicket> out;
   out.reserve(reqs.size());
 
-  // For now: coalesce consecutive buffer requests when batch policy allows.
-  // Otherwise, fall back to per-request Submit.
-  size_t i = 0;
-  while (i < reqs.size()) {
-    // Gather a run of buffer requests marked Coalesce.
-    size_t start = i;
-    while (i < reqs.size() && reqs[i].kind == UploadKind::kBuffer
-      && reqs[i].batch_policy == BatchPolicy::kCoalesce) {
-      ++i;
+  // Coalesce consecutive buffer requests. Non-buffer requests are submitted
+  // individually. All coalescing/optimization is handled by UploadPlanner.
+  size_t idx = 0;
+  while (idx < reqs.size()) {
+    // Gather a run of consecutive buffer requests.
+    size_t start = idx;
+    while (idx < reqs.size() && reqs[idx].kind == UploadKind::kBuffer) {
+      ++idx;
     }
-    const bool have_run = (i > start);
-    if (!have_run) {
-      auto submit_result = Submit(reqs[i], provider);
-      if (!submit_result.has_value()) {
+    if (idx == start) {
+      auto submit_result = Submit(reqs[idx], provider);
+      if (!submit_result) {
         return std::unexpected(submit_result.error());
       }
-      out.emplace_back(submit_result.value());
-      ++i;
+      out.emplace_back(std::move(*submit_result));
+      ++idx;
       continue;
     }
-
-    const auto span
-      = std::span<const UploadRequest>(reqs.data() + start, i - start);
-    auto exp_plan = UploadPlanner::PlanBuffers(span, policy_);
-    if (!exp_plan.has_value()) {
-      return std::unexpected(exp_plan.error());
-    }
-    auto plan = exp_plan.value();
-    if (plan.total_bytes == 0 || plan.regions.empty()) {
-      // No valid buffers in the run; submit individually for error accounting.
-      for (size_t j = start; j < i; ++j) {
-        auto submit_result = Submit(reqs[j], provider);
-        if (!submit_result.has_value()) {
-          return std::unexpected(submit_result.error());
-        }
-        out.emplace_back(submit_result.value());
-      }
-      continue;
+    auto exp_tickets
+      = SubmitRun({ reqs.data() + start, idx - start }, provider);
+    if (!exp_tickets) {
+      return std::unexpected(exp_tickets.error());
     }
 
-    auto staging = provider.Allocate(
-      Bytes { plan.total_bytes }, "UploadCoordinator.BufferBatch");
-
-    // Fill staging: concatenate views/producers; track failures per request.
-    std::vector<bool> ok(span.size(), true);
-    for (const auto& br : plan.regions) {
-      const auto& r = span[br.request_index - start];
-      if (std::holds_alternative<UploadDataView>(r.data)) {
-        auto view = std::get<UploadDataView>(r.data);
-        const auto to_copy = std::min<uint64_t>(br.size, view.bytes.size());
-        if (to_copy > 0) {
-          std::memcpy(staging.ptr + br.src_offset, view.bytes.data(), to_copy);
-        }
-      } else {
-        auto& producer
-          = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-            std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-              r.data));
-        if (producer) {
-          std::span<std::byte> dst(staging.ptr + br.src_offset, br.size);
-          if (!producer(dst)) {
-            ok[br.request_index - start] = false;
-          }
-        }
-      }
-    }
-
-    const auto key = ChooseUploadQueueKey(*gfx_);
-    auto recorder = gfx_->AcquireCommandRecorder(
-      key, "UploadCoordinator.SubmitBuffersBatch");
-
-    // Record all copies and state transitions, grouping by destination.
-    // PlanBuffers returns regions sorted by (dst, dst_offset).
-    std::shared_ptr<Buffer> current_dst;
-    for (size_t idx = 0; idx < plan.regions.size(); ++idx) {
-      const auto& br = plan.regions[idx];
-      if (!ok[br.request_index - start]) {
-        continue; // skip failed
-      }
-
-      const bool first_for_dst
-        = (!current_dst) || (current_dst.get() != br.dst.get());
-      if (first_for_dst) {
-        // Close out previous dst by restoring its steady state (done below
-        // when leaving the group). Start tracking for the new destination.
-        current_dst = br.dst;
-        recorder->BeginTrackingResourceState(
-          *current_dst, ResourceStates::kCommon, false);
-        recorder->RequireResourceState(*current_dst, ResourceStates::kCopyDest);
-        recorder->FlushBarriers();
-      }
-
-      recorder->CopyBuffer(*br.dst, br.dst_offset, *staging.buffer,
-        staging.offset + br.src_offset, br.size);
-
-      // If next region is a different destination (or end), transition this
-      // destination to its steady-state now.
-      const bool is_last = (idx + 1 == plan.regions.size());
-      const bool next_diff
-        = !is_last && (plan.regions[idx + 1].dst.get() != br.dst.get());
-      if (is_last || next_diff) {
-        recorder->RequireResourceState(
-          *br.dst, UsageToTargetState(br.dst->GetUsage()));
-        recorder->FlushBarriers();
-      }
-    }
-
-    // Defer unmap-then-release for the batched staging buffer
-    DeferUnmapThenRelease(gfx_->GetDeferredReclaimer(), staging.buffer);
-    auto queue = gfx_->GetCommandQueue(key);
-    const auto fence_raw = queue->Signal();
-    recorder->RecordQueueSignal(fence_raw);
-
-    // Create tickets for each request in the run (same fence, per-size bytes)
-    for (const auto& br : plan.regions) {
-      const auto& r = span[br.request_index - start];
-      if (!ok[br.request_index - start]) {
-        out.emplace_back(tracker_.RegisterFailedImmediate(
-          r.debug_name, UploadError::kProducerFailed));
-      } else {
-        out.emplace_back(
-          tracker_.Register(FenceValue { fence_raw }, br.size, r.debug_name));
-      }
-    }
+    out.insert(out.end(), std::make_move_iterator(exp_tickets->begin()),
+      std::make_move_iterator(exp_tickets->end()));
   }
   return out;
 }
@@ -566,6 +469,152 @@ auto UploadCoordinator::AwaitAllAsync(std::span<const UploadTicket> tickets)
   }
   co_await Until(tracker_.CompletedFenceValue() >= max_fence);
   co_return;
+}
+
+//=== SubmitMany decomposition helpers ------------------------------------//
+
+auto UploadCoordinator::SubmitRun(
+  std::span<const UploadRequest> run, StagingProvider& provider)
+  -> std::expected<std::vector<UploadTicket>, UploadError>
+{
+  // Plan → FillStaging → Optimize → Record → Tickets
+  return PlanBufferRun(run).and_then([&](BufferUploadPlan plan) {
+    auto staging = FillStagingForPlan(plan, run, provider, "BatchUpload");
+    return OptimizeBufferRun(run, plan).and_then([&](BufferUploadPlan opt) {
+      return RecordBufferRun(opt, run, staging)
+        .and_then([&](graphics::FenceValue fence) {
+          return MakeTicketsForPlan(plan, run, fence);
+        });
+    });
+  });
+}
+
+auto UploadCoordinator::PlanBufferRun(std::span<const UploadRequest> run)
+  -> std::expected<BufferUploadPlan, UploadError>
+{
+  return UploadPlanner::PlanBuffers(run, policy_);
+}
+
+auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
+  std::span<const UploadRequest> run, StagingProvider& provider,
+  std::string_view debug_name) -> StagingProvider::Allocation
+{
+  auto staging = provider.Allocate(Bytes { plan.total_bytes }, debug_name);
+  const auto& fp = policy_.filler;
+  for (const auto& it : plan.uploads) {
+    const auto rep = it.request_indices.front();
+    const auto& r = run[rep];
+    const auto& reg = it.region;
+    if (std::holds_alternative<UploadDataView>(r.data)) {
+      auto view = std::get<UploadDataView>(r.data);
+      const auto to_copy = std::min<uint64_t>(reg.size, view.bytes.size());
+      if (to_copy > 0) {
+        std::memcpy(staging.ptr + reg.src_offset, view.bytes.data(), to_copy);
+      }
+      if (fp.enable_default_fill && to_copy < reg.size) {
+        std::memset(staging.ptr + reg.src_offset + to_copy,
+          static_cast<int>(fp.filler_value),
+          static_cast<size_t>(reg.size - to_copy));
+      }
+    } else {
+      auto& producer
+        = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
+          std::get<std::move_only_function<bool(std::span<std::byte>)>>(
+            r.data));
+      std::span<std::byte> dst(staging.ptr + reg.src_offset, reg.size);
+      if (!producer && fp.enable_default_fill) {
+        std::memset(dst.data(), static_cast<int>(fp.filler_value),
+          static_cast<size_t>(dst.size()));
+      } else if (producer) {
+        if (!producer(dst) && fp.enable_default_fill) {
+          std::memset(dst.data(), static_cast<int>(fp.filler_value),
+            static_cast<size_t>(dst.size()));
+        }
+      }
+    }
+  }
+  return staging;
+}
+
+auto UploadCoordinator::OptimizeBufferRun(std::span<const UploadRequest> run,
+  const BufferUploadPlan& plan) -> std::expected<BufferUploadPlan, UploadError>
+{
+  return UploadPlanner::OptimizeBuffers(run, plan, policy_);
+}
+
+auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
+  std::span<const UploadRequest> run, StagingProvider::Allocation& staging)
+  -> std::expected<graphics::FenceValue, UploadError>
+{
+  const auto key = ChooseUploadQueueKey(*gfx_);
+  auto recorder
+    = gfx_->AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffersBatch");
+
+  std::shared_ptr<Buffer> current_dst;
+  for (size_t idx2 = 0; idx2 < optimized.uploads.size(); ++idx2) {
+    const auto& it = optimized.uploads[idx2];
+    if (it.request_indices.empty()) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+    const auto rep = it.request_indices.front();
+    const auto& r = run[rep];
+    const auto& bdesc = std::get<UploadBufferDesc>(r.desc);
+    auto dst = bdesc.dst;
+    if (!dst) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+
+    const bool first_for_dst
+      = (!current_dst) || (current_dst.get() != dst.get());
+    if (first_for_dst) {
+      current_dst = dst;
+      recorder->BeginTrackingResourceState(
+        *current_dst, ResourceStates::kCommon, false);
+      recorder->RequireResourceState(*current_dst, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+    }
+
+    recorder->CopyBuffer(*dst, it.region.dst_offset, *staging.buffer,
+      staging.offset + it.region.src_offset, it.region.size);
+
+    const bool is_last = (idx2 + 1 == optimized.uploads.size());
+    const bool next_diff = !is_last && [&]() {
+      const auto& next_it = optimized.uploads[idx2 + 1];
+      const auto next_rep = next_it.request_indices.front();
+      const auto& next_r = run[next_rep];
+      const auto& next_bdesc = std::get<UploadBufferDesc>(next_r.desc);
+      return next_bdesc.dst.get() != dst.get();
+    }();
+    if (is_last || next_diff) {
+      recorder->RequireResourceState(*dst, UsageToTargetState(dst->GetUsage()));
+      recorder->FlushBarriers();
+    }
+  }
+
+  DeferUnmapThenRelease(gfx_->GetDeferredReclaimer(), staging.buffer);
+  auto queue = gfx_->GetCommandQueue(key);
+  const auto fence_raw = queue->Signal();
+  recorder->RecordQueueSignal(fence_raw);
+  return graphics::FenceValue { fence_raw };
+}
+
+auto UploadCoordinator::MakeTicketsForPlan(
+  const BufferUploadPlan& original_plan, std::span<const UploadRequest> run,
+  graphics::FenceValue fence)
+  -> std::expected<std::vector<UploadTicket>, UploadError>
+{
+  std::vector<UploadTicket> tickets;
+  tickets.reserve(original_plan.uploads.size());
+  for (const auto& it : original_plan.uploads) {
+    if (it.request_indices.empty()) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+    const auto rep = it.request_indices.front();
+    const auto& r = run[rep];
+    tickets.emplace_back(
+      tracker_.Register(fence, it.region.size, r.debug_name));
+  }
+  return tickets;
 }
 
 } // namespace oxygen::engine::upload

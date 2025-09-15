@@ -447,7 +447,9 @@ auto MaterialBinder::EnsureFrameResources() -> void
   // Phase 1: Upload all materials every frame (ignore dirty tracking)
   for (std::uint32_t i = 0; i < count; ++i) {
     // Phase 1 behavior: Upload all materials every frame regardless of dirty
-    // status const bool is_dirty = (i < dirty_epoch_.size()) &&
+    // status
+
+    // const bool is_dirty = (i < dirty_epoch_.size()) &&
     // (dirty_epoch_[i] == current_epoch_); if (!is_dirty) {
     //   continue;
     // }

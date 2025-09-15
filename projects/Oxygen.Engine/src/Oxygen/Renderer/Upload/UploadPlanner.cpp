@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <optional>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
@@ -37,24 +38,51 @@ auto ComputeSlice(const FormatInfo& info, uint32_t region_w, uint32_t region_h)
   return std::pair<uint64_t, uint64_t> { row_pitch, slice_pitch };
 };
 
-//! Build a BufferUploadPlan or return an UploadError when the computed
-//! regions are empty.
-inline auto MakeBufferPlanOrError(
-  uint64_t total_size, std::vector<BufferUploadPlan::CopyRegion>&& regions)
-  -> std::expected<BufferUploadPlan, UploadError>
+
+using oxygen::graphics::BufferUploadRegion;
+using oxygen::engine::upload::UploadItem;
+
+// Use AlignUp defined earlier in this translation unit.
+
+// Validate a buffer request and extract destination buffer and size/offset
+struct ValidBufReq {
+  std::shared_ptr<oxygen::graphics::Buffer> dst;
+  uint64_t dst_offset;
+  uint64_t size;
+};
+
+inline auto TryValidateBufReq(const oxygen::engine::upload::UploadRequest& r)
+  -> std::optional<ValidBufReq>
 {
-  // We have requests, but none were valid. This is something we cannot
-  // gracefully ignore.
-  if (regions.empty()) {
-    DLOG_F(ERROR, "-failed- no upload request was valid");
-    return std::unexpected(UploadError::kInvalidRequest);
+  if (r.kind != oxygen::engine::upload::UploadKind::kBuffer) {
+    return std::nullopt;
   }
-  DLOG_F(
-    2, "plan summary: {} regions, {} bytes total", regions.size(), total_size);
-  return BufferUploadPlan {
-    .total_bytes = total_size,
-    .regions = std::move(regions),
-  };
+  if (!std::holds_alternative<oxygen::engine::upload::UploadBufferDesc>(r.desc)) {
+    LOG_F(WARNING, "-skip- request is for a buffer upload, but desc is not");
+    return std::nullopt;
+  }
+  const auto& bdesc
+    = std::get<oxygen::engine::upload::UploadBufferDesc>(r.desc);
+  if (!bdesc.dst || bdesc.size_bytes == 0) {
+    LOG_F(WARNING, "-skip- null or empty upload destination");
+    return std::nullopt;
+  }
+  const auto bound = bdesc.dst_offset + bdesc.size_bytes;
+  if (bound > bdesc.dst->GetDescriptor().size_bytes) {
+    LOG_F(WARNING, "-skip- request would overflow destination buffer");
+    return std::nullopt;
+  }
+  return ValidBufReq { bdesc.dst, bdesc.dst_offset, bdesc.size_bytes };
+}
+
+struct SortKey {
+  const void* dst_ptr;
+  uint64_t dst_offset;
+};
+
+inline auto MakeSortKey(const ValidBufReq& v) -> SortKey
+{
+  return SortKey { v.dst.get(), v.dst_offset };
 }
 
 //! Build a TextureUploadPlan or return an UploadError when the computed
@@ -81,104 +109,107 @@ inline auto MakeTexturePlanOrError(
 
 namespace oxygen::engine::upload {
 
-auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
+  auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
   const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>
 {
+  DLOG_SCOPE_FUNCTION(2);
+  using Policy = UploadPolicy::AlignmentPolicy;
+  const uint64_t align = Policy::kBufferCopyAlignment.get();
+
+  BufferUploadPlan plan;
   if (requests.empty()) {
-    // Not an error; just nothing to do.
-    return {};
+    return plan; // empty plan
   }
 
-  (void)policy; // FIXME: use policy
-  using Policy = UploadPolicy::AlignmentPolicy;
+  struct IndexedValid {
+    size_t index;
+    ValidBufReq valid;
+  };
 
-  DLOG_SCOPE_FUNCTION(2);
-  DLOG_F(2, "{} requests", requests.size());
-
-  const uint64_t align = Policy::kBufferCopyAlignment.get();
-  // Collect valid buffer requests first (preserving request_index), then
-  // sort/group by destination buffer and dst_offset so recording can batch
-  // state transitions per resource. Staging offsets (src_offset) are assigned
-  // according to this sorted order.
-  std::vector<BufferUploadPlan::CopyRegion> regions;
-  regions.reserve(requests.size());
+  std::vector<IndexedValid> valid;
+  valid.reserve(requests.size());
   for (size_t idx = 0; idx < requests.size(); ++idx) {
     const auto& r = requests[idx];
-    if (r.kind != UploadKind::kBuffer) {
-      continue;
+    if (auto v = TryValidateBufReq(r)) {
+      valid.push_back(IndexedValid { idx, *v });
     }
-    DLOG_SCOPE_F(3, fmt::format("request[{}] : {}", idx, r.debug_name).c_str());
-    // Request is for a buffer upload, but the descriptor is not. Definitiely
-    // programming logic error.
-    if (!std::holds_alternative<UploadBufferDesc>(r.desc)) {
-      LOG_F(WARNING, "-skip- request is for a buffer upload, but desc is not");
-      continue;
-    }
-    const auto& bdesc = std::get<UploadBufferDesc>(r.desc);
-    if (!bdesc.dst || bdesc.size_bytes == 0) {
-      LOG_F(WARNING, "-skip- null or empty upload destination");
-      continue;
-    }
-    auto bound = bdesc.dst_offset + bdesc.size_bytes;
-    if (bound > bdesc.dst->GetDescriptor().size_bytes) {
-      DLOG_SCOPE_F(3, "offset     : {}", bdesc.dst_offset);
-      DLOG_SCOPE_F(3, "size bytes : {}", bdesc.size_bytes);
-      LOG_F(WARNING, "-skip- request would overflow destination buffer");
-      continue;
-    }
-
-    BufferUploadPlan::CopyRegion br {
-      .dst = bdesc.dst,
-      .dst_offset = bdesc.dst_offset,
-      .size = bdesc.size_bytes,
-      .src_offset = 0, // assign after sorting
-      .request_index = idx,
-    };
-    regions.emplace_back(br);
   }
 
-  // Sort by destination identity then by destination offset to maximize
-  // coalescing potential and allow single transition per destination.
-  std::sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) {
-    const auto ap = a.dst.get();
-    const auto bp = b.dst.get();
-    if (ap == bp) {
-      return a.dst_offset < b.dst_offset;
+  if (valid.empty()) {
+    DLOG_F(ERROR, "-failed- no upload request was valid");
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  std::sort(valid.begin(), valid.end(), [](const auto& a, const auto& b) {
+    auto ka = MakeSortKey(a.valid);
+    auto kb = MakeSortKey(b.valid);
+    if (ka.dst_ptr == kb.dst_ptr) {
+      return ka.dst_offset < kb.dst_offset;
     }
-    return ap < bp;
+    return ka.dst_ptr < kb.dst_ptr;
   });
 
-  // Assign contiguous src offsets in sorted order with required alignment.
   uint64_t running = 0;
-  for (auto& br : regions) {
-    const uint64_t offset = AlignUp(running, align);
-    br.src_offset = offset;
-    running = offset + br.size;
+  plan.uploads.reserve(valid.size());
+  for (const auto& iv : valid) {
+    const uint64_t src = AlignUp(running, align);
+    running = src + iv.valid.size;
+    UploadItem item {
+      .region = BufferUploadRegion {
+        .dst_offset = iv.valid.dst_offset,
+        .src_offset = src,
+        .size = iv.valid.size,
+      },
+      .request_indices = std::vector<std::size_t> { iv.index },
+    };
+    plan.uploads.emplace_back(std::move(item));
   }
+  plan.total_bytes = running;
+  DLOG_F(2, "plan summary: {} regions, {} bytes total", plan.uploads.size(), plan.total_bytes);
+  return plan;
+}
 
-  // Optional optimization: merge contiguous regions targeting the same dst
-  // when both destination offsets and assigned src offsets are contiguous.
-  std::vector<BufferUploadPlan::CopyRegion> merged;
-  merged.reserve(regions.size());
-  for (size_t idx = 0; idx < regions.size(); ++idx) {
-    auto cur = regions[idx];
-    while (idx + 1 < regions.size()) {
-      const auto& nxt = regions[idx + 1];
-      const bool same_dst = (cur.dst.get() == nxt.dst.get());
-      const bool dst_contig = (cur.dst_offset + cur.size == nxt.dst_offset);
-      const bool src_contig = (cur.src_offset + cur.size == nxt.src_offset);
-      if (!(same_dst && dst_contig && src_contig)) {
-        break;
-      }
-      // Merge nxt into cur
-      cur.size += nxt.size;
-      // Keep cur.request_index as the representative for the merged copy.
-      ++idx;
+auto UploadPlanner::OptimizeBuffers(std::span<const UploadRequest> requests,
+  const BufferUploadPlan& plan, const UploadPolicy& /*policy*/)
+  -> std::expected<BufferUploadPlan, UploadError>
+{
+  DLOG_SCOPE_FUNCTION(2);
+  BufferUploadPlan out;
+  if (plan.uploads.empty()) {
+    return out; // nothing to optimize
+  }
+  out.total_bytes = plan.total_bytes;
+  out.uploads.reserve(plan.uploads.size());
+
+  auto cur = plan.uploads.front();
+  for (size_t i = 1; i < plan.uploads.size(); ++i) {
+    const auto& nxt = plan.uploads[i];
+    // Same destination? Compare using representative request index
+    const auto rep_cur = cur.request_indices.front();
+    const auto rep_nxt = nxt.request_indices.front();
+    const auto& rc = requests[rep_cur];
+    const auto& rn = requests[rep_nxt];
+    const auto& bdc = std::get<UploadBufferDesc>(rc.desc);
+    const auto& bdn = std::get<UploadBufferDesc>(rn.desc);
+    const bool same_dst = (bdc.dst.get() == bdn.dst.get());
+
+    const bool dst_contig
+      = (cur.region.dst_offset + cur.region.size) == nxt.region.dst_offset;
+    const bool src_contig
+      = (cur.region.src_offset + cur.region.size) == nxt.region.src_offset;
+    if (!(same_dst && dst_contig && src_contig)) {
+      out.uploads.emplace_back(std::move(cur));
+      cur = nxt;
+      continue;
     }
-    merged.emplace_back(cur);
+    // Merge nxt into cur
+    cur.region.size += nxt.region.size;
+    cur.request_indices.insert(cur.request_indices.end(),
+      nxt.request_indices.begin(), nxt.request_indices.end());
   }
-
-  return MakeBufferPlanOrError(running, std::move(merged));
+  out.uploads.emplace_back(std::move(cur));
+  DLOG_F(2, "opt summary: {} regions (from {}), {} bytes total", out.uploads.size(), plan.uploads.size(), out.total_bytes);
+  return out;
 }
 
 auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,

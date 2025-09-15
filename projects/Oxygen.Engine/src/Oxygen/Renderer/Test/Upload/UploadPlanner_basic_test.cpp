@@ -7,14 +7,19 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 
 #include <memory>
 #include <vector>
 
+using oxygen::engine::upload::UploadBufferDesc;
+using oxygen::engine::upload::UploadError;
+using oxygen::engine::upload::UploadKind;
 using oxygen::engine::upload::UploadPlanner;
 using oxygen::engine::upload::UploadPolicy;
+using oxygen::engine::upload::UploadRequest;
 using oxygen::engine::upload::UploadSubresource;
 using oxygen::engine::upload::UploadTextureDesc;
 
@@ -71,6 +76,47 @@ private:
   oxygen::graphics::TextureDesc desc_;
 };
 } // namespace
+
+//! PlanBuffers: empty span returns empty plan (no error).
+NOLINT_TEST(UploadPlanner, BufferPlan_EmptySpan_ReturnsEmptyPlan)
+{
+  // Arrange
+  std::vector<UploadRequest> reqs;
+
+  // Act
+  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+
+  // Assert
+  ASSERT_TRUE(exp_plan.has_value());
+  const auto& plan = exp_plan.value();
+  EXPECT_TRUE(plan.uploads.empty());
+  EXPECT_EQ(plan.total_bytes, 0u);
+}
+
+//! PlanBuffers: non-empty span with all invalid requests returns error.
+NOLINT_TEST(UploadPlanner, BufferPlan_AllInvalid_ReturnsError)
+{
+  // Arrange
+  std::vector<UploadRequest> reqs;
+  // Invalid: null dst and zero size
+  UploadRequest r0;
+  r0.kind = UploadKind::kBuffer;
+  r0.desc
+    = UploadBufferDesc { .dst = nullptr, .size_bytes = 0, .dst_offset = 0 };
+  reqs.emplace_back(std::move(r0));
+  // Invalid: kind mismatch (e.g., texture) also considered invalid for
+  // PlanBuffers
+  UploadRequest r1;
+  r1.kind = UploadKind::kTexture2D;
+  reqs.emplace_back(std::move(r1));
+
+  // Act
+  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+
+  // Assert
+  ASSERT_FALSE(exp_plan.has_value());
+  EXPECT_EQ(exp_plan.error(), UploadError::kInvalidRequest);
+}
 
 //! Full texture plan produces 256B-aligned row pitch and correct slice size.
 TEST(UploadPlanner, Texture2D_Full)
@@ -344,7 +390,7 @@ TEST(UploadPlanner, TextureCube_TwoFaces)
     UploadSubresource { .mip = 0, .array_slice = 3 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTextureCube(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);

@@ -9,6 +9,7 @@
 #include <expected>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
@@ -27,6 +28,9 @@ class Graphics;
 } // namespace oxygen
 
 namespace oxygen::engine::upload {
+
+// Forward declaration to avoid including UploadPlanner.h in the header
+struct BufferUploadPlan;
 
 class UploadCoordinator {
 public:
@@ -53,9 +57,12 @@ public:
     -> std::shared_ptr<StagingProvider>;
 
   // Provider-aware submissions
+  //! Submits a single upload request. No cross-request coalescing.
   OXGN_RNDR_API auto Submit(const UploadRequest& req, StagingProvider& provider)
     -> std::expected<UploadTicket, UploadError>;
 
+  //! Submits multiple requests. Consecutive buffer requests are coalesced
+  //! and optimized by UploadPlanner before recording.
   OXGN_RNDR_API auto SubmitMany(
     std::span<const UploadRequest> reqs, StagingProvider& provider)
     -> std::expected<std::vector<UploadTicket>, UploadError>;
@@ -122,6 +129,36 @@ private:
   UploadTracker tracker_;
 
   std::vector<std::weak_ptr<StagingProvider>> providers_;
+
+  //=== Buffer batch pipeline helpers (SubmitMany decomposition) -----------//
+  //! Stage 1: Plan a coalescible run of buffer requests.
+  auto PlanBufferRun(std::span<const UploadRequest> run)
+    -> std::expected<BufferUploadPlan, UploadError>;
+
+  //! Stage 2: Allocate and fill staging according to the plan and policy.
+  auto FillStagingForPlan(const BufferUploadPlan& plan,
+    std::span<const UploadRequest> run, StagingProvider& provider,
+    std::string_view debug_name) -> StagingProvider::Allocation;
+
+  //! Stage 3: Optimize the buffer plan by coalescing contiguous regions.
+  auto OptimizeBufferRun(
+    std::span<const UploadRequest> run, const BufferUploadPlan& plan)
+    -> std::expected<BufferUploadPlan, UploadError>;
+
+  //! Stage 4: Record copies and transitions; returns signaled fence value.
+  auto RecordBufferRun(const BufferUploadPlan& optimized,
+    std::span<const UploadRequest> run, StagingProvider::Allocation& staging)
+    -> std::expected<graphics::FenceValue, UploadError>;
+
+  //! Issue per-request tickets based on the original (pre-optimized) plan.
+  auto MakeTicketsForPlan(const BufferUploadPlan& original_plan,
+    std::span<const UploadRequest> run, graphics::FenceValue fence)
+    -> std::expected<std::vector<UploadTicket>, UploadError>;
+
+  //! Helper: Execute the buffer-run pipeline end-to-end.
+  //! Plan → FillStaging → Optimize → Record → Tickets.
+  auto SubmitRun(std::span<const UploadRequest> run, StagingProvider& provider)
+    -> std::expected<std::vector<UploadTicket>, UploadError>;
 };
 
 } // namespace oxygen::engine::upload

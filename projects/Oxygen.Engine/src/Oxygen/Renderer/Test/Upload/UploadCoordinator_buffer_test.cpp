@@ -57,7 +57,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
 
   UploadRequest req {
     .kind = UploadKind::kBuffer,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "BufUpload",
     .desc = UploadBufferDesc {
@@ -128,7 +127,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
 
   UploadRequest req {
     .kind = UploadKind::kBuffer,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "BufUploadProducer",
     .desc = UploadBufferDesc {
@@ -196,7 +194,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
 
   UploadRequest ra {
     .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "A",
     .desc
@@ -211,7 +208,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
   };
 
   UploadRequest rb { .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "B",
     .desc
@@ -310,7 +306,6 @@ NOLINT_TEST_F(
 
   UploadRequest ra {
     .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "A-prod",
     .desc
@@ -324,7 +319,6 @@ NOLINT_TEST_F(
   };
   UploadRequest rb {
     .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "B-prod",
     .desc = UploadBufferDesc {
@@ -411,7 +405,6 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
 
   UploadRequest req {
     .kind = UploadKind::kBuffer,
-    .batch_policy = {},
     .priority = {},
     .debug_name = "FailProd",
     .desc = UploadBufferDesc {
@@ -450,10 +443,10 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
   GfxPtr()->Flush();
 }
 
-//! Batch: first producer ok, second fails. Only first copy is recorded; both
-//! tickets complete with respective statuses.
+//! Batch: first producer ok, second fails. With default filler enabled, both
+//! copies are recorded and both tickets succeed.
 NOLINT_TEST_F(
-  UploadCoordinatorTest, BufferSubmitMany_ProducerSecondFails_PartialSubmit)
+  UploadCoordinatorTest, BufferSubmitMany_ProducerSecondFails_FilledAndOk)
 {
   BufferDesc dest_desc {
     .size_bytes = 2048,
@@ -479,7 +472,6 @@ NOLINT_TEST_F(
 
   UploadRequest ra {
     .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "A-prod-ok",
     .desc = UploadBufferDesc {
@@ -491,7 +483,6 @@ NOLINT_TEST_F(
     .data = std::move(pa) };
   UploadRequest rb {
     .kind = UploadKind::kBuffer,
-    .batch_policy = oxygen::engine::upload::BatchPolicy::kCoalesce,
     .priority = {},
     .debug_name = "B-prod-fail",
     .desc = UploadBufferDesc {
@@ -518,10 +509,11 @@ NOLINT_TEST_F(
   EXPECT_TRUE(prod_a_ran);
   EXPECT_TRUE(prod_b_ran);
 
-  // Copy log should have exactly one copy for the successful one
+  // Copy log should contain two copies (filler path for the failed producer)
   const auto& log = GfxPtr()->buffer_log_;
-  ASSERT_EQ(log.copies.size(), 1u);
+  ASSERT_EQ(log.copies.size(), 2u);
   EXPECT_EQ(log.copies[0].dst, dst_a.get());
+  EXPECT_EQ(log.copies[1].dst, dst_b.get());
 
   // Simulate frame advance to complete fences
   SimulateFrameStart(frame::Slot { 1 });
@@ -542,8 +534,81 @@ NOLINT_TEST_F(
   if (!r1.has_value()) {
     FAIL() << "expected a value";
   }
-  ASSERT_FALSE(r1->success);
-  EXPECT_EQ(r1->error, oxygen::engine::upload::UploadError::kProducerFailed);
+  ASSERT_TRUE(r1->success);
+  GfxPtr()->Flush();
+}
+
+//! Coalescing: two contiguous regions targeting the same destination merge
+//! into a single CopyBuffer when both dst and src offsets are contiguous.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
+{
+
+  oxygen::graphics::BufferDesc dest_desc {
+    .size_bytes = 4096,
+    .usage = oxygen::graphics::BufferUsage::kVertex,
+    .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
+  };
+  auto dst = GfxPtr()->CreateBuffer(dest_desc);
+
+  // Two requests targeting the same dst; dst offsets contiguous and sizes
+  // aligned so planner can assign contiguous src offsets.
+  std::array<std::byte, 256> data_a {};
+  std::array<std::byte, 128> data_b {};
+  std::fill(data_a.begin(), data_a.end(), std::byte { 0xAB });
+  std::fill(data_b.begin(), data_b.end(), std::byte { 0xCD });
+
+  oxygen::engine::upload::UploadRequest ra {
+    .kind = oxygen::engine::upload::UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "A_same",
+    .desc = oxygen::engine::upload::UploadBufferDesc {
+      .dst = dst,
+  .size_bytes = 256,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = oxygen::engine::upload::UploadDataView {
+      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()) },
+  };
+
+  oxygen::engine::upload::UploadRequest rb {
+    .kind = oxygen::engine::upload::UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "B_same",
+    .desc = oxygen::engine::upload::UploadBufferDesc {
+      .dst = dst,
+  .size_bytes = 128,
+  .dst_offset = 256, // contiguous with first
+    },
+    .subresources = {},
+    .data = oxygen::engine::upload::UploadDataView {
+      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()) },
+  };
+
+  auto& uploader = Uploader();
+  std::vector<oxygen::engine::upload::UploadRequest> reqs;
+  reqs.emplace_back(std::move(ra));
+  reqs.emplace_back(std::move(rb));
+
+  auto tickets_result = uploader.SubmitMany(
+    std::span<const oxygen::engine::upload::UploadRequest>(
+      reqs.data(), reqs.size()),
+    Staging());
+  ASSERT_TRUE(tickets_result.has_value());
+
+  // Expect a single CopyBuffer due to merge
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_GE(log.copies.size(), 1u);
+  // Depending on batching, there should be exactly 1 for same destination
+  // contiguous regions; assert last two entries share the dst and form a
+  // single merged size.
+  // Our mock logs each CopyBuffer call; we expect 1 here.
+  ASSERT_EQ(log.copies.size(), 1u);
+  const auto& e = log.copies[0];
+  EXPECT_EQ(e.dst, dst.get());
+  EXPECT_EQ(e.dst_offset, 0u);
+  EXPECT_EQ(e.size, 384u); // 256 + 128 merged
+
   GfxPtr()->Flush();
 }
 

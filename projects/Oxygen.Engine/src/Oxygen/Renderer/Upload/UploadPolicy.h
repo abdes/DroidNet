@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Renderer/Upload/Types.h>
@@ -33,6 +34,11 @@ struct UploadPolicy {
   struct Timeouts {
     static constexpr uint32_t kFlushTimeSliceMs = 2U;
   };
+  struct FillerPolicy {
+    // When enabled, missing/short producers are padded with this value.
+    bool enable_default_fill = true;
+    std::byte filler_value { std::byte { 0 } };
+  } filler;
 };
 
 OXGN_RNDR_API auto DefaultUploadPolicy() -> UploadPolicy;
