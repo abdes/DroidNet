@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
 
@@ -59,26 +60,11 @@ public:
   auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
 
   // Notify of frame slot change without RTTI
-  auto OnFrameStart(UploaderTag, frame::Slot slot) -> void override
-  {
-    SetActivePartition(slot);
-    stats_.allocations_this_frame = 0; // Reset frame counter
-  }
+  OXGN_RNDR_API auto OnFrameStart(UploaderTag, frame::Slot slot)
+    -> void override;
 
-  auto GetStats() const -> StagingStats override
-  {
-    auto stats = stats_;
-
-    // Add partition utilization info
-    const auto partition_used
-      = heads_.empty() ? 0ULL : heads_[active_partition_];
-    stats.implementation_info = "RingBuffer: Partition "
-      + std::to_string(active_partition_) + "/"
-      + std::to_string(partitions_count_.get()) + ", "
-      + std::to_string(partition_used) + "/"
-      + std::to_string(capacity_per_partition_) + " bytes used";
-    return stats;
-  }
+protected:
+  auto FinalizeStats() -> void override;
 
 private:
   // Select active partition (frame slot) and reset its bump pointer.
@@ -94,13 +80,8 @@ private:
     heads_[active_partition_] = 0ULL;
   }
 
-  auto EnsureCapacity_(std::uint64_t required, std::string_view debug_name)
+  auto EnsureCapacity(std::uint64_t required, std::string_view debug_name)
     -> void;
-  static constexpr auto AlignUp_(std::uint64_t v, std::uint64_t a)
-    -> std::uint64_t
-  {
-    return (v + (a - 1)) & ~(a - 1);
-  }
 
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<graphics::Buffer> buffer_;
@@ -113,7 +94,6 @@ private:
   std::uint64_t capacity_ { 0 }; // total bytes
   std::uint32_t alignment_ { 256u };
   float slack_ { 0.5f };
-  StagingStats stats_ {};
 };
 
 } // namespace oxygen::engine::upload

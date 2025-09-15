@@ -16,6 +16,7 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
 
@@ -86,7 +87,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(StagingProvider)
   OXYGEN_DEFAULT_MOVABLE(StagingProvider)
 
-  virtual ~StagingProvider() = default;
+  OXGN_RNDR_API virtual ~StagingProvider();
 
   //! Allocate a persistently mapped upload region of at least 'size' bytes.
   virtual auto Allocate(Bytes size, std::string_view debug_name) -> Allocation
@@ -100,7 +101,14 @@ public:
   virtual auto OnFrameStart(UploaderTag, frame::Slot /*slot*/) -> void { }
 
   //! Optional telemetry; providers may override to expose stats.
-  [[nodiscard]] virtual auto GetStats() const -> StagingStats { return {}; }
+  [[nodiscard]] auto GetStats() const -> const StagingStats& { return stats_; }
+
+protected:
+  virtual auto FinalizeStats() -> void { };
+  [[nodiscard]] auto Stats() -> StagingStats& { return stats_; }
+
+private:
+  StagingStats stats_ {};
 };
 
 } // namespace oxygen::engine::upload

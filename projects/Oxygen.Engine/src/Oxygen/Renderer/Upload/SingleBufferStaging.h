@@ -56,35 +56,28 @@ public:
     // Always using pinned mapping - nothing to do here
   }
 
-  auto GetStats() const -> StagingStats override
-  {
-    auto stats = stats_;
-    stats.implementation_info = "SingleBuffer: PINNED mapping";
-    return stats;
-  }
-
 private:
   auto UpdateAllocationStats_(std::uint64_t size) -> void
   {
-    stats_.total_allocations++;
-    stats_.total_bytes_allocated += size;
-    stats_.allocations_this_frame++;
+    Stats().total_allocations++;
+    Stats().total_bytes_allocated += size;
+    Stats().allocations_this_frame++;
 
     // Update moving average (simple exponential moving average with alpha=0.1)
     constexpr double alpha = 0.1;
-    if (stats_.avg_allocation_size == 0) {
-      stats_.avg_allocation_size = static_cast<std::uint32_t>(size);
+    if (Stats().avg_allocation_size == 0) {
+      Stats().avg_allocation_size = static_cast<std::uint32_t>(size);
     } else {
       const auto new_avg = alpha * static_cast<double>(size)
-        + (1.0 - alpha) * static_cast<double>(stats_.avg_allocation_size);
-      stats_.avg_allocation_size = static_cast<std::uint32_t>(new_avg);
+        + (1.0 - alpha) * static_cast<double>(Stats().avg_allocation_size);
+      Stats().avg_allocation_size = static_cast<std::uint32_t>(new_avg);
     }
   }
 
   auto EnsureCapacity_(uint64_t desired, std::string_view name) -> void
   {
     if (buffer_ && buffer_->GetSize() >= desired) {
-      stats_.current_buffer_size = buffer_->GetSize();
+      Stats().current_buffer_size = buffer_->GetSize();
       return;
     }
 
@@ -101,12 +94,12 @@ private:
 
     Unmap_();
     buffer_ = gfx_->CreateBuffer(desc);
-    stats_.buffer_growth_count++;
-    stats_.current_buffer_size = buffer_->GetSize();
+    Stats().buffer_growth_count++;
+    Stats().current_buffer_size = buffer_->GetSize();
 
     // Always use pinned mapping
     mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-    stats_.map_calls++;
+    Stats().map_calls++;
   }
 
   auto Map_() -> std::byte*
@@ -116,7 +109,7 @@ private:
     }
     if (!buffer_->IsMapped()) {
       mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-      stats_.map_calls++;
+      Stats().map_calls++;
     }
     return mapped_ptr_;
   }
@@ -125,7 +118,7 @@ private:
   {
     if (buffer_ && buffer_->IsMapped()) {
       buffer_->UnMap();
-      stats_.unmap_calls++;
+      Stats().unmap_calls++;
     }
     mapped_ptr_ = nullptr;
   }
@@ -134,7 +127,6 @@ private:
   float slack_ { 0.5f };
   std::shared_ptr<graphics::Buffer> buffer_;
   std::byte* mapped_ptr_ { nullptr };
-  StagingStats stats_ {};
 };
 
 } // namespace oxygen::engine::upload
