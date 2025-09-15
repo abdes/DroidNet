@@ -48,10 +48,7 @@ public:
 
   ~UploadCoordinator() = default;
 
-  auto CreateSingleBufferStaging(float slack = 0.5f)
-    -> std::shared_ptr<StagingProvider>;
-
-  auto CreateRingBufferStaging(
+  OXGN_RNDR_API auto CreateRingBufferStaging(
     frame::SlotCount partitions, std::uint32_t alignment, float slack = 0.5f)
     -> std::shared_ptr<StagingProvider>;
 

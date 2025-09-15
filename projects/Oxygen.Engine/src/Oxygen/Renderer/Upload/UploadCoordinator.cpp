@@ -22,7 +22,6 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
-#include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
@@ -282,15 +281,6 @@ UploadCoordinator::UploadCoordinator(
   , policy_(policy)
 {
   DCHECK_NOTNULL_F(gfx_);
-}
-
-auto UploadCoordinator::CreateSingleBufferStaging(float slack)
-  -> std::shared_ptr<StagingProvider>
-{
-  auto provider = std::make_shared<SingleBufferStaging>(
-    internal::UploaderTagFactory::Get(), gfx_, slack);
-  providers_.push_back(provider);
-  return provider;
 }
 
 auto UploadCoordinator::CreateRingBufferStaging(frame::SlotCount partitions,

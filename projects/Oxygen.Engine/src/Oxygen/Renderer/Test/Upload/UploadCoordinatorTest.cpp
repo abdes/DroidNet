@@ -8,7 +8,7 @@
 
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Test/Upload/UploadCoordinatorTest.h>
-#include <Oxygen/Renderer/Upload/SingleBufferStaging.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
 // Implementation of UploaderTagFactory. Provides access to UploaderTag
@@ -36,12 +36,11 @@ auto UploadCoordinatorTest::SetUp() -> void
   using graphics::SingleQueueStrategy;
   using internal::UploaderTagFactory;
   using renderer::testing::FakeGraphics;
-  using upload::SingleBufferStaging;
 
   gfx_ = std::make_shared<FakeGraphics>();
   gfx_->CreateCommandQueues(SingleQueueStrategy());
-  staging_provider_ = std::make_shared<SingleBufferStaging>(
-    UploaderTagFactory::Get(), GfxPtr());
+  staging_provider_
+    = Uploader().CreateRingBufferStaging(frame::SlotCount { 1 }, 4, 0.5f);
 }
 
 } // namespace oxygen::engine::upload::testing
