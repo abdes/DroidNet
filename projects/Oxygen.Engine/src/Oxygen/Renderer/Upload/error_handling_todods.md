@@ -23,11 +23,8 @@
 | ⏳ | CommandRecorder acquisition can fail silently | `UploadCoordinator::SubmitBuffer()` |
 | ⏳ | Queue::Signal() can fail but not checked | `UploadCoordinator::SubmitBuffer()` |
 | ✅ | Producer function failure only logged, not propagated | `UploadCoordinator::SubmitBuffer()` |
-| ⏳ | No validation of staging provider state before use | `UploadCoordinator::Submit()` |
 | ⏳ | Graphics context validity not checked before operations | `UploadCoordinator::Submit()` |
 | ✅ | UploadPlanner can return invalid plans without error indication | `UploadPlanner::PlanBuffers()` |
 | ✅ | Format validation missing for texture uploads | `UploadCoordinator::SubmitTexture2D()` |
-| ⏳ | Subresource bounds validation missing | `UploadCoordinator::SubmitTexture2D()` |
-| ⏳ | No maximum upload size validation | `UploadCoordinator::Submit()` |
 | ⏳ | Resource state transition can fail silently | `UploadCoordinator::SubmitBuffer()` |
 | ⏳ | Command recording can fail but errors not propagated | `UploadCoordinator::SubmitBuffer()` |

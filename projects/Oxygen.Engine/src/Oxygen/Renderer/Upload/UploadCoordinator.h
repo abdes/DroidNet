@@ -18,7 +18,6 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/Types.h>
-#include <Oxygen/Renderer/Upload/UploadDiagnostics.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 #include <Oxygen/Renderer/Upload/UploadTracker.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -96,12 +95,6 @@ public:
    */
   OXGN_RNDR_API auto OnFrameStart(renderer::RendererTag, frame::Slot slot)
     -> void;
-
-  // Diagnostics and control
-  OXGN_RNDR_API auto GetStats() const -> UploadStats
-  {
-    return tracker_.GetStats();
-  }
 
   // Best-effort cancellation; may not prevent GPU copy if already submitted.
   OXGN_RNDR_API auto Cancel(UploadTicket t) -> std::expected<bool, UploadError>

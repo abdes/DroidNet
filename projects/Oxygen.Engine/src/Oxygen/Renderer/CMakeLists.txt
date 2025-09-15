@@ -107,7 +107,6 @@ set(
   "Upload/Types.h"
   "Upload/UploadCoordinator.cpp"
   "Upload/UploadCoordinator.h"
-  "Upload/UploadDiagnostics.h"
   "Upload/UploaderTag.h"
   "Upload/UploadPlanner.cpp"
   "Upload/UploadPlanner.h"

@@ -27,10 +27,6 @@ auto UploadTracker::Register(const FenceValue fence, const uint64_t bytes,
   e.completed = false;
   e.result = UploadResult {};
   e.creation_slot = current_slot_;
-  // stats: submitted
-  stats_.submitted += 1;
-  stats_.in_flight += 1;
-  stats_.bytes_submitted += bytes;
   return UploadTicket { id, fence };
 }
 
@@ -49,9 +45,6 @@ auto UploadTracker::RegisterFailedImmediate(
   e.result.success = false;
   e.result.bytes_uploaded = 0;
   e.result.error = error;
-  // stats: counts as submitted+completed immediately (no in-flight)
-  stats_.submitted += 1;
-  stats_.completed += 1;
   return UploadTicket { id, e.fence };
 }
 
@@ -144,12 +137,6 @@ auto UploadTracker::CompletedFenceValue() noexcept
   return completed_fence_;
 }
 
-auto UploadTracker::GetStats() const -> UploadStats
-{
-  std::lock_guard<std::mutex> lk(mu_);
-  return stats_;
-}
-
 auto UploadTracker::Cancel(const TicketId id)
   -> std::expected<bool, UploadError>
 {
@@ -167,11 +154,6 @@ auto UploadTracker::Cancel(const TicketId id)
   e.result.success = false;
   e.result.bytes_uploaded = 0;
   e.result.error = UploadError::kCanceled;
-  // stats: completed, reduce in_flight
-  stats_.completed += 1;
-  if (stats_.in_flight > 0) {
-    stats_.in_flight -= 1;
-  }
   cv_.notify_all();
   return true;
 }
@@ -182,12 +164,6 @@ auto UploadTracker::MarkEntryCompleted(Entry& e) -> void
   e.result.success = true;
   e.result.bytes_uploaded = e.bytes;
   e.result.error = std::nullopt; // No error for successful completion
-  // stats
-  stats_.completed += 1;
-  if (stats_.in_flight > 0) {
-    stats_.in_flight -= 1;
-  }
-  stats_.bytes_completed += e.bytes;
 }
 
 auto UploadTracker::OnFrameStart(UploaderTag, frame::Slot slot) -> void
