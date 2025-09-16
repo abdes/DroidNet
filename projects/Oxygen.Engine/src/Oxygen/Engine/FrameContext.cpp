@@ -79,28 +79,31 @@ auto FrameContext::SetInputSnapshot(
   atomic_input_snapshot_.store(std::move(inp), std::memory_order_release);
 }
 
-auto FrameContext::SetViews(std::vector<ViewInfo> v) noexcept -> void
-{
-  // Views are part of authoritative GameState and per the header comment they
-  // may be mutated until PhaseId::kSnapshot (not included). Enforce the
-  // ordered-phase check explicitly so the assertion matches the documented
-  // mutation window.
-  CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
-
-  std::unique_lock lock(views_mutex_);
-  views_ = std::move(v);
-}
-
-auto FrameContext::AddView(const ViewInfo& view) noexcept -> void
+auto FrameContext::AddView(std::shared_ptr<RenderableView> view) noexcept
+  -> void
 {
   // Views may only be added before the Snapshot phase (exclusive).
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
+#if !defined(NDEBUG)
+  // In debug builds, verify that the view surface is one of the surfaces set in
+  // the FrameContext.
+  if (auto surf_res = view->GetSurface()) {
+    const auto& surface = surf_res.value().get();
+    const bool found = std::ranges::any_of(
+      surfaces_, [&](const auto& s) { return s.get() == &surface; });
+    if (!found) {
+      DLOG_F(WARNING,
+        "View '{}' being added with a surface not in the Frame Context",
+        view->GetName());
+    }
+  }
+#endif // !defined(NDEBUG)
 
   std::unique_lock lock(views_mutex_);
-  views_.push_back(view);
+  views_.emplace_back(std::move(view));
 }
 
-auto FrameContext::ClearViews() noexcept -> void
+auto FrameContext::ClearViews(EngineTag) noexcept -> void
 {
   // Clearing views is only allowed before Snapshot phase (exclusive).
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
@@ -164,7 +167,32 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   if (index >= surfaces_.size()) {
     return false; // Index out of bounds
   }
+  // Capture pointer of surface being removed for view cleanup
+  auto removed_surface_ptr = surfaces_[index].get();
   surfaces_.erase(surfaces_.begin() + static_cast<std::ptrdiff_t>(index));
+  // Remove any views that reference the removed surface. Do this while
+  // holding the views_mutex_ to avoid races with view mutation.
+  {
+    std::unique_lock view_lock(views_mutex_);
+    // Erase-remove idiom: keep views whose surface != removed_surface_ptr
+    auto new_end
+      = std::remove_if(views_.begin(), views_.end(), [&](const auto& vptr) {
+          DCHECK_NOTNULL_F(vptr);
+          if (auto surf_res = vptr->GetSurface()) {
+            const auto& surf = surf_res.value().get();
+            if (&surf == removed_surface_ptr) {
+              LOG_F(INFO, "Removing view '{}' due to surface removal",
+                vptr->GetName());
+              return true; // remove this view
+            }
+          }
+          return false;
+        });
+
+    if (new_end != views_.end()) {
+      views_.erase(new_end, views_.end());
+    }
+  }
   // Keep presentable flags in sync
   if (index < presentable_flags_.size()) {
     presentable_flags_.erase(
@@ -180,6 +208,7 @@ auto FrameContext::ClearSurfaces(EngineTag) noexcept -> void
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
 
   std::unique_lock lock(surfaces_mutex_);
+  views_.clear(); // Clear views since they reference the surfaces
   surfaces_.clear();
   // Keep presentable flags in sync
   presentable_flags_.clear();
@@ -328,7 +357,12 @@ auto FrameContext::PopulateGameStateSnapshot(
 {
   // Caller must hold views_mutex_ and surfaces_mutex_ when invoking this
   // function to guarantee consistent copies of coordinator-owned state.
-  out.views = views_;
+  out.views.clear();
+  out.views.resize(views_.size());
+  for (const auto view_ptr : views_) {
+    out.views.emplace_back(std::move(view_ptr));
+  }
+
   out.surfaces = surfaces_;
   out.presentable_flags = presentable_flags_;
 

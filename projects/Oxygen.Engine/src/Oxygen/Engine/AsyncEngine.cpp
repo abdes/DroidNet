@@ -253,6 +253,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 
   // TODO: setup all the properties of context that need to be set
 
+  context.ClearViews(tag); // FIXME: for now we clear views every frame
   context.ClearPresentableFlags(tag);
   context.SetFrameSequenceNumber(frame_number_, tag);
   context.SetFrameSlot(frame_slot_, tag);

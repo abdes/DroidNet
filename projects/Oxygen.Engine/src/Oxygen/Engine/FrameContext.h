@@ -47,6 +47,7 @@
 #include <atomic>
 #include <chrono>
 #include <concepts>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -114,6 +115,25 @@ struct FrameError {
   std::string message; //!< Human-readable error message
   //!< Optional unique identifier for error source
   std::optional<std::string> source_key;
+};
+
+// Note: There is no 1:1 mapping between surfaces and views. A surface may have
+// zero or many associated views. Each view references exactly one surface (or
+// null). Surfaces and views are expected to be finalized by the coordinator
+// during FrameStart and remain frozen afterward.
+class RenderableView : public oxygen::Named {
+public:
+  RenderableView() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(RenderableView)
+  OXYGEN_DEFAULT_MOVABLE(RenderableView)
+
+  ~RenderableView() override = default;
+
+  virtual [[nodiscard]] auto GetSurface() const noexcept
+    -> std::expected<std::reference_wrapper<graphics::Surface>, std::string>
+    = 0;
+  virtual [[nodiscard]] auto Resolve() const noexcept -> oxygen::View = 0;
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -355,23 +375,6 @@ template <typename MutationPolicy> struct GameData {
 using GameDataMutable = GameData<MutablePolicy>;
 using GameDataImmutable = GameData<ImmutablePolicy>;
 
-// Note: There is no 1:1 mapping between surfaces and views. A surface may have
-// zero or many associated views. Each view references exactly one surface (or
-// null). Surfaces and views are expected to be finalized by the coordinator
-// during FrameStart and remain frozen afterward.
-struct ViewInfo {
-  std::string view_name; // TODO: consider adding this to View class
-  std::optional<View> view; // view-specific camera/matrices
-
-  // Typed opaque handle for surface/device-backed render targets. This
-  // preserves the previous type-erasure but gives a distinct compile-time alias
-  // so callers don't mix handles accidentally.
-  struct SurfaceHandle {
-    std::shared_ptr<void> ptr;
-  };
-  SurfaceHandle surface; // opaque surface/target handle
-};
-
 //! Opaque input snapshot container for type-erased input data.
 struct InputSnapshot {
   std::shared_ptr<const void> blob; // host-specific input snapshot
@@ -392,7 +395,7 @@ struct InputSnapshot {
  @see FrameSnapshot, FrameContext::GetGameStateSnapshot
 */
 struct GameStateSnapshot {
-  std::vector<ViewInfo> views; // per-view transforms & targets
+  std::vector<std::shared_ptr<const RenderableView>> views;
   std::shared_ptr<const InputSnapshot> input; // input snapshot at capture time
 
   // Cross-module game data using immutable policy
@@ -596,18 +599,18 @@ public:
     return atomic_input_snapshot_.load(std::memory_order_acquire);
   }
 
-  auto GetViews() const noexcept -> std::span<const ViewInfo> { return views_; }
-
-  // Coordinator-only view management with phase validation RATIONALE: Views
-  // affect rendering setup and must be finalized during appropriate phases
-  // (FrameStart/SceneMutation/FrameGraph) before parallel tasks begin
-  OXGN_NGIN_API auto SetViews(std::vector<ViewInfo> v) noexcept -> void;
+  auto GetViews() const noexcept
+  {
+    return std::ranges::views::transform(
+      views_, [](const auto& v) { return std::cref(*v); });
+  }
 
   // Add individual view with phase validation
-  OXGN_NGIN_API auto AddView(const ViewInfo& view) noexcept -> void;
+  OXGN_NGIN_API auto AddView(std::shared_ptr<RenderableView> view) noexcept
+    -> void;
 
   // Clear views with phase validation
-  OXGN_NGIN_API auto ClearViews() noexcept -> void;
+  OXGN_NGIN_API auto ClearViews(EngineTag) noexcept -> void;
 
   OXGN_NGIN_API auto SetCurrentPhase(core::PhaseId p, EngineTag) noexcept
     -> void;
@@ -870,7 +873,7 @@ private:
   // Active rendering views, in multi-view rendering. There is no 1:1 mapping
   // between views and surfaces. Can be mutated until the PhaseId::kSnapshot
   // phase (not included)
-  std::vector<ViewInfo> views_;
+  std::vector<std::shared_ptr<RenderableView>> views_;
 
   // Active scene (non-owning, may be null). Not part of GameData because the
   // high level scene is manipulated early in the frame render cycle, uses its

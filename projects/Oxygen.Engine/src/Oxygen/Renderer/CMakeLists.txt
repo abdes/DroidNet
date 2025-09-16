@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
   "CameraView.h"
+  "Errors.h"
   "Upload/Errors.h"
   "Passes/DepthPrePass.h"
   "Passes/RenderPass.h"
@@ -147,6 +148,7 @@ target_link_libraries(
     oxygen::oxco
     oxygen::data
     oxygen::scene
+    oxygen::engine
     oxygen::graphics-common
 )
 

@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -184,10 +185,57 @@ auto Renderer::PostExecute(RenderContext& context) -> void
   context.Reset();
 }
 
-auto Renderer::OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
+auto Renderer::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
-  // TODO: this will receive the render graph execution once the rendeer is
-  // fully refactored
+  // FIXME: temporary: single view rendering only
+  // Pick the first available view from FrameContext's view-transform view
+  bool found = false;
+  for (const auto& viewRef : context.GetViews()) {
+    const auto& view = viewRef.get();
+    const auto resolved_view = view.Resolve();
+    BuildFrame(resolved_view, context);
+    found = true;
+    break; // temporary single-view support
+  }
+  if (!found) {
+    LOG_F(WARNING, "Renderer::OnFrameGraph: no views in FrameContext");
+    co_return;
+  }
+
+  co_return;
+}
+
+auto Renderer::OnCommandRecord(FrameContext& context) -> co::Co<>
+{
+  // Currently App Module will call ExecuteRenderGraph directly on its main
+  // thread.
+
+  // Once done, mark surfaces for rendered views presentable.
+
+  // Mark our surface as presentable after rendering is complete
+  // This is part of the module contract - surfaces must be marked presentable
+  // before the Present phase. Since FrameContext is recreated each frame,
+  // we need to find and mark our surface every frame.
+  for (const auto& viewRef : context.GetViews()) {
+    const auto& view = viewRef.get();
+    const auto surface_result = view.GetSurface();
+    if (!surface_result) {
+      LOG_F(WARNING, "Could not mark surface presentable for view {}: {}",
+        view.GetName(), surface_result.error());
+      continue;
+    }
+    const auto& surface = surface_result.value().get();
+    auto surfaces = context.GetSurfaces();
+    for (size_t i = 0; i < surfaces.size(); ++i) {
+      if (surfaces[i].get() == &surface) {
+        context.SetSurfacePresentable(i, true);
+        LOG_F(2, "Surface '{}' marked as presentable at index {}",
+          surface.GetName(), i);
+        break;
+      }
+    }
+  }
+
   co_return;
 }
 
@@ -296,7 +344,7 @@ auto Renderer::PublishPreparedFrameSpans() -> void
   }
 }
 
-auto Renderer::BuildFrame(const CameraView& camera_view,
+auto Renderer::BuildFrame(const renderer::CameraView& camera_view,
   const FrameContext& frame_context) -> std::size_t
 {
   const auto view = camera_view.Resolve();
@@ -409,6 +457,10 @@ auto Renderer::OnTransformPropagation(FrameContext& context) -> co::Co<>
 
   // Perform hierarchy propagation & world matrix updates.
   scene_ptr->Update();
+
+  for (const auto& viewRef : context.GetViews()) {
+    viewRef.get().Resolve();
+  }
 
   co_return;
 }

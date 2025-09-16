@@ -4,6 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <ranges>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Macros.h>
@@ -11,8 +19,6 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/EngineTag.h>
 #include <Oxygen/Engine/FrameContext.h>
-
-#include <unordered_set>
 
 namespace oxygen::engine::internal {
 auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
@@ -69,6 +75,36 @@ struct DummySurface final : oxygen::graphics::Surface {
   auto Present() const -> void override { }
   auto Width() const -> uint32_t override { return 0u; }
   auto Height() const -> uint32_t override { return 0u; }
+};
+
+// Minimal concrete RenderableView implementation for tests
+struct DummyRenderableView final : oxygen::engine::RenderableView {
+  DummyRenderableView() = default;
+
+  // Return a static dummy surface reference for tests wrapped in expected
+  auto GetSurface() const noexcept
+    -> std::expected<std::reference_wrapper<oxygen::graphics::Surface>,
+      std::string> override
+  {
+    static DummySurface s;
+    return std::expected<std::reference_wrapper<oxygen::graphics::Surface>,
+      std::string>(std::ref(s));
+  }
+
+  // Return a simple View for resolution; tests don't inspect it deeply
+  auto Resolve() const noexcept -> oxygen::View override
+  {
+    oxygen::View::Params p;
+    return oxygen::View(p);
+  }
+
+  // Implement Named interface
+  auto GetName() const noexcept -> std::string_view override
+  {
+    return "DummyRenderableView";
+  }
+
+  void SetName(std::string_view) noexcept override { /* no-op for tests */ }
 };
 
 //! Stage and read back module data using new facade API
@@ -219,10 +255,9 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Add a view (should succeed in GameState mutation phase)
-  oxygen::engine::ViewInfo view;
-  view.view_name = "test";
+  auto view = std::make_shared<DummyRenderableView>();
   ctx.AddView(view);
-  EXPECT_EQ(ctx.GetViews().size(), 1u);
+  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 
   // Move to snapshot phase (allows FrameState but not GameState mutations)
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
@@ -230,11 +265,10 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
 
   // Now try to mutate Views - should trigger CHECK_F (death) due to phase
   // restrictions. Use ASSERT_DEATH to verify behavior in tests.
-  oxygen::engine::ViewInfo view2;
-  view2.view_name = "test2";
+  auto view2 = std::make_shared<DummyRenderableView>();
   NOLINT_ASSERT_DEATH(ctx.AddView(view2), ".*");
   // The visible views should remain unchanged after the failed mutation.
-  EXPECT_EQ(ctx.GetViews().size(), 1u);
+  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 }
 
 //! Ensure surface, presentable flag and view mutations die when attempted
@@ -248,11 +282,10 @@ NOLINT_TEST(FrameContext_basic_test, ViewsMutatorsDieInSnapshot)
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   (void)ctx.PublishSnapshots(tag);
 
-  oxygen::engine::ViewInfo view;
-  view.view_name = "bad_view";
+  auto bad_view = std::make_shared<DummyRenderableView>();
 
-  NOLINT_ASSERT_DEATH(ctx.AddView(view), ".*");
-  NOLINT_ASSERT_DEATH(ctx.ClearViews(), ".*");
+  NOLINT_ASSERT_DEATH(ctx.AddView(bad_view), ".*");
+  NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
 }
 
 // Surfaces: structural mutations must die in Snapshot phase
@@ -306,8 +339,7 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsDieAtOrAfterPresent)
 NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 {
   auto tag = EngineTagFactory::Get();
-  oxygen::engine::ViewInfo view;
-  view.view_name = "matrix";
+  auto view = std::make_shared<DummyRenderableView>();
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
@@ -317,13 +349,13 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Allowed: adding/clearing views before Snapshot
       ctx.AddView(view);
-      EXPECT_EQ(ctx.GetViews().size(), 1u);
-      ctx.ClearViews();
-      EXPECT_EQ(ctx.GetViews().size(), 0u);
+      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
+      ctx.ClearViews(tag);
+      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0u);
     } else {
       // Disallowed: should be fatal
       NOLINT_ASSERT_DEATH(ctx.AddView(view), ".*");
-      NOLINT_ASSERT_DEATH(ctx.ClearViews(), ".*");
+      NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
     }
   }
 }

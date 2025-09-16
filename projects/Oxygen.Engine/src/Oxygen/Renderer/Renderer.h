@@ -81,13 +81,16 @@ public:
   {
     // Participate in frame start, transform propagation and command record.
     return MakeModuleMask<core::PhaseId::kFrameStart,
-      core::PhaseId::kTransformPropagation, core::PhaseId::kCommandRecord>();
+      core::PhaseId::kTransformPropagation, core::PhaseId::kFrameGraph,
+      core::PhaseId::kCommandRecord>();
   }
 
   OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
 
   OXGN_RNDR_NDAPI auto OnTransformPropagation(FrameContext& context)
     -> co::Co<> override;
+
+  OXGN_RNDR_NDAPI auto OnFrameGraph(FrameContext& context) -> co::Co<> override;
 
   // Submit deferred uploads and retire completed ones during command record.
   OXGN_RNDR_NDAPI auto OnCommandRecord(FrameContext& context)
@@ -132,7 +135,7 @@ public:
   OXGN_RNDR_API auto BuildFrame(
     const View& view, const FrameContext& frame_context) -> std::size_t;
 
-  OXGN_RNDR_API auto BuildFrame(const CameraView& camera_view,
+  OXGN_RNDR_API auto BuildFrame(const renderer::CameraView& camera_view,
     const FrameContext& frame_context) -> std::size_t;
 
 private:
