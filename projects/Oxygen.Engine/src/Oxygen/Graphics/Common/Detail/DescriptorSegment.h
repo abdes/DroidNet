@@ -9,7 +9,7 @@
 // ReSharper disable once CppUnusedIncludeDirective - OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -73,14 +73,14 @@ public:
    \return The allocated index, or (std::numeric_limits<uint32_t>::max)() if the
    segment is full.
   */
-  [[nodiscard]] virtual auto Allocate() noexcept -> bindless::Handle = 0;
+  [[nodiscard]] virtual auto Allocate() noexcept -> bindless::HeapIndex = 0;
 
   //! Releases a descriptor index back to this segment.
   /*!
    \param index The global index to release.
    \return True if the index was successfully released, false otherwise.
   */
-  virtual auto Release(bindless::Handle index) noexcept -> bool = 0;
+  virtual auto Release(bindless::HeapIndex index) noexcept -> bool = 0;
 
   //! Returns the number of descriptors currently available in this segment.
   [[nodiscard]] virtual auto GetAvailableCount() const noexcept
@@ -110,7 +110,8 @@ public:
     = 0;
 
   //! Returns the base index of this segment.
-  [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> bindless::Handle
+  [[nodiscard]] virtual auto GetBaseIndex() const noexcept
+    -> bindless::HeapIndex
     = 0;
 
   //! Returns the capacity of this segment.
@@ -133,7 +134,7 @@ public:
   //          otherwise returns `DescriptorHandle::kInvalidIndex`.
   // */
   // [[nodiscard]] virtual auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
+  //   const DescriptorHandle& handle) const noexcept -> bindless::HeapIndex
   //   = 0;
 };
 

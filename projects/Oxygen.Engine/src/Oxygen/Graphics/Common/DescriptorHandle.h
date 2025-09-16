@@ -10,7 +10,7 @@
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -85,7 +85,7 @@ public:
   [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     const auto properly_allocated
-      = allocator_ != nullptr && handle_ != kInvalidBindlessHandle;
+      = allocator_ != nullptr && handle_ != kInvalidBindlessHeapIndex;
     // When properly allocated, the view type and visibility should also be
     // valid.
     assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
@@ -127,7 +127,7 @@ public:
 protected:
   //! No allocator constructor creates an invalid handle. Primarily useful for
   //! unit tests.
-  OXGN_GFX_API DescriptorHandle(bindless::Handle index,
+  OXGN_GFX_API DescriptorHandle(bindless::HeapIndex index,
     ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
   //! Constructor that takes an allocator and index.
@@ -141,7 +141,7 @@ protected:
    purposes via derivation.
   */
   OXGN_GFX_API DescriptorHandle(DescriptorAllocator* allocator,
-    bindless::Handle index, ResourceViewType view_type,
+    bindless::HeapIndex index, ResourceViewType view_type,
     DescriptorVisibility visibility) noexcept;
 
 private:
@@ -151,7 +151,7 @@ private:
   DescriptorAllocator* allocator_ { nullptr };
 
   //! Stable index for shader reference.
-  bindless::Handle handle_ { kInvalidBindlessHandle };
+  bindless::HeapIndex handle_ { kInvalidBindlessHeapIndex };
 
   //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
   ResourceViewType view_type_ { ResourceViewType::kNone };

@@ -321,7 +321,7 @@ auto ResourceRegistry::PurgeCachedViewsForResource(
 }
 
 auto ResourceRegistry::AttachDescriptorWithView(
-  const NativeResource& dst_resource, const bindless::Handle index,
+  const NativeResource& dst_resource, const bindless::HeapIndex index,
   DescriptorHandle descriptor_handle, const NativeView& view,
   std::any description, const std::size_t key_hash) -> void
 {
@@ -343,13 +343,13 @@ auto ResourceRegistry::AttachDescriptorWithView(
 }
 
 auto ResourceRegistry::CollectDescriptorIndicesForResource(
-  const NativeResource& resource) const -> std::vector<bindless::Handle>
+  const NativeResource& resource) const -> std::vector<bindless::HeapIndex>
 {
   const auto it = resources_.find(resource);
   if (it == resources_.end()) {
     return {};
   }
-  std::vector<bindless::Handle> out;
+  std::vector<bindless::HeapIndex> out;
   out.reserve(it->second.descriptors.size());
   for (const auto& idx : it->second.descriptors | std::views::keys) {
     out.push_back(idx);

@@ -147,7 +147,7 @@ auto DescriptorAllocator::GetShaderVisibleHeaps()
 }
 
 auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
-  bindless::Handle base_index, ResourceViewType view_type,
+  bindless::HeapIndex base_index, ResourceViewType view_type,
   DescriptorVisibility visibility)
   -> std::unique_ptr<graphics::detail::DescriptorSegment>
 {

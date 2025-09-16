@@ -26,7 +26,7 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorSegment.h"
 
-using oxygen::kInvalidBindlessHandle;
+using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
@@ -61,18 +61,18 @@ NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ThrowsIfOutOfSpaceAndNoGrowth)
     one_segment = true;
     auto segment = std::make_unique<MockDescriptorSegment>();
     EXPECT_CALL(*segment, Allocate())
-      .WillOnce(testing::Return(b::Handle { 0 }))
-      .WillRepeatedly(testing::Return(kInvalidBindlessHandle));
+      .WillOnce(testing::Return(b::HeapIndex { 0 }))
+      .WillRepeatedly(testing::Return(kInvalidBindlessHeapIndex));
     EXPECT_CALL(*segment, GetAvailableCount())
       .WillRepeatedly(testing::Return(b::Count { 0 }));
-    EXPECT_CALL(*segment, Release(b::Handle { 0 }))
+    EXPECT_CALL(*segment, Release(b::HeapIndex { 0 }))
       .WillRepeatedly(testing::Return(true));
     EXPECT_CALL(*segment, GetViewType())
       .WillRepeatedly(testing::Return(ResourceViewType::kTexture_SRV));
     EXPECT_CALL(*segment, GetVisibility())
       .WillRepeatedly(testing::Return(DescriptorVisibility::kShaderVisible));
     EXPECT_CALL(*segment, GetBaseIndex())
-      .WillRepeatedly(testing::Return(b::Handle { 0 }));
+      .WillRepeatedly(testing::Return(b::HeapIndex { 0 }));
     EXPECT_CALL(*segment, GetCapacity())
       .WillRepeatedly(testing::Return(b::Capacity { 1 }));
     EXPECT_CALL(*segment, GetAllocatedCount())
@@ -106,16 +106,16 @@ NOLINT_TEST_F(
     auto segment1
       = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*segment1, Allocate())
-      .WillOnce(testing::Return(b::Handle { 0 }));
+      .WillOnce(testing::Return(b::HeapIndex { 0 }));
     // Add proper release expectation for cleanup
-    EXPECT_CALL(*segment1, Release(b::Handle { 0 }))
+    EXPECT_CALL(*segment1, Release(b::HeapIndex { 0 }))
       .WillOnce(testing::Return(true));
     EXPECT_CALL(*segment1, GetViewType())
       .WillRepeatedly(testing::Return(ResourceViewType::kTexture_SRV));
     EXPECT_CALL(*segment1, GetVisibility())
       .WillRepeatedly(testing::Return(DescriptorVisibility::kShaderVisible));
     EXPECT_CALL(*segment1, GetBaseIndex())
-      .WillRepeatedly(testing::Return(b::Handle { 0 }));
+      .WillRepeatedly(testing::Return(b::HeapIndex { 0 }));
     EXPECT_CALL(*segment1, GetCapacity())
       .WillRepeatedly(testing::Return(b::Capacity { 1 }));
     EXPECT_CALL(*segment1, GetAllocatedCount())

@@ -38,9 +38,9 @@ public:
 
   auto GetHeapBaseIndex(
     ResourceViewType /*view_type*/, DescriptorVisibility /*visibility*/) const
-    -> oxygen::bindless::Handle override
+    -> oxygen::bindless::HeapIndex override
   {
-    return oxygen::bindless::Handle { 0 }; // Always return 0 for base index
+    return oxygen::bindless::HeapIndex { 0 }; // Always return 0 for base index
   }
 
 private:
@@ -71,9 +71,9 @@ public:
 
   auto GetHeapBaseIndex(
     ResourceViewType /*view_type*/, DescriptorVisibility /*visibility*/) const
-    -> oxygen::bindless::Handle override
+    -> oxygen::bindless::HeapIndex override
   {
-    return oxygen::bindless::Handle { 0 }; // Always return 0 for base index
+    return oxygen::bindless::HeapIndex { 0 }; // Always return 0 for base index
   }
 
 private:
@@ -102,8 +102,9 @@ public:
     return heap_descriptions_[heap_key] = desc;
   }
 
-  auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> oxygen::bindless::Handle override
+  auto GetHeapBaseIndex(
+    ResourceViewType view_type, DescriptorVisibility visibility) const
+    -> oxygen::bindless::HeapIndex override
   {
     return default_strategy_.GetHeapBaseIndex(view_type, visibility);
   }

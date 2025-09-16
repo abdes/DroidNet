@@ -14,14 +14,15 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Nexus/TimelineGatedSlotReuse.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 using oxygen::VersionedBindlessHandle;
-using oxygen::bindless::Handle;
 using oxygen::nexus::DomainKey;
+
+namespace b = oxygen::bindless;
 
 namespace {
 
@@ -35,12 +36,18 @@ using testing::UnorderedElementsAreArray;
 // Backend allocator/free mocks used by tests.
 struct AllocateBackend {
   std::atomic<uint32_t> next { 0 };
-  auto operator()(DomainKey) -> Handle { return Handle { next.fetch_add(1u) }; }
+  auto operator()(DomainKey) -> b::HeapIndex
+  {
+    return b::HeapIndex { next.fetch_add(1u) };
+  }
 };
 
 struct FreeBackend {
   std::vector<uint32_t> freed;
-  auto operator()(DomainKey, Handle h) -> void { freed.push_back(h.get()); }
+  auto operator()(DomainKey, b::HeapIndex h) -> void
+  {
+    freed.push_back(h.get());
+  }
 };
 
 // Test-only CommandQueue implementation that derives from the real
@@ -104,8 +111,8 @@ protected:
   auto SetUp() -> void override
   {
     strategy_ = std::make_unique<oxygen::nexus::TimelineGatedSlotReuse>(
-      [this](DomainKey d) -> Handle { return alloc_(d); },
-      [this](DomainKey d, Handle h) { free_(d, h); });
+      [this](DomainKey d) -> b::HeapIndex { return alloc_(d); },
+      [this](DomainKey d, b::HeapIndex h) { free_(d, h); });
     domain_ = DomainKey { oxygen::graphics::ResourceViewType::kTexture_SRV,
       oxygen::graphics::DescriptorVisibility::kShaderVisible };
   }

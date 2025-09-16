@@ -11,7 +11,7 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 
 namespace oxygen::nexus {
 
@@ -55,7 +55,7 @@ namespace oxygen::nexus {
  become invalid when the generation changes.
 
  @warning Accessing out-of-bounds indices returns 0 (invalid generation).
- @see oxygen::bindless::Handle, DescriptorAllocator
+ @see oxygen::bindless::HeapIndex, DescriptorAllocator
 */
 class GenerationTracker {
 public:
@@ -119,7 +119,7 @@ public:
    ### Usage Examples
 
    ```cpp
-   auto handle = oxygen::bindless::Handle{42};
+   auto handle = oxygen::bindless::HeapIndex{42};
   auto generation = tracker.Load(handle);
   if (generation.get() == 0) {
      // Handle is out of bounds or invalid
@@ -130,7 +130,7 @@ public:
          initialize to 1 (idempotent operation).
    @see Bump, Resize
   */
-  [[nodiscard]] auto Load(oxygen::bindless::Handle index) const noexcept
+  [[nodiscard]] auto Load(oxygen::bindless::HeapIndex index) const noexcept
     -> bindless::Generation
   {
     const auto u_index = index.get();
@@ -170,10 +170,10 @@ public:
 
    ```cpp
    // Resource is being deallocated, bump generation
-   tracker.Bump(oxygen::bindless::Handle{slot_index});
+   tracker.Bump(oxygen::bindless::HeapIndex{slot_index});
 
    // Future allocations to this slot will see new generation
-   auto new_gen = tracker.Load(oxygen::bindless::Handle{slot_index});
+   auto new_gen = tracker.Load(oxygen::bindless::HeapIndex{slot_index});
    ```
 
    @note For uninitialized slots (0), this increments to 1. For initialized
@@ -181,7 +181,7 @@ public:
    @warning Out-of-bounds indices are silently ignored.
    @see Load
   */
-  void Bump(oxygen::bindless::Handle index) noexcept
+  void Bump(oxygen::bindless::HeapIndex index) noexcept
   {
     const auto u_index = index.get();
     if (u_index >= size_) {

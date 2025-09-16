@@ -132,7 +132,7 @@ public:
         continue;
       }
       if (const auto index = segment->Allocate();
-        index != kInvalidBindlessHandle) {
+        index != kInvalidBindlessHeapIndex) {
         return CreateDescriptorHandle(index, view_type, visibility);
       }
     }
@@ -147,11 +147,11 @@ public:
         = last->GetBaseIndex().get() + last->GetCapacity().get();
       const auto capacity
         = CalculateGrowthCapacity(desc.growth_factor, last->GetCapacity());
-      if (auto segment = CreateHeapSegment(
-            capacity, bindless::Handle { base_index }, view_type, visibility)) {
+      if (auto segment = CreateHeapSegment(capacity,
+            bindless::HeapIndex { base_index }, view_type, visibility)) {
         segments.push_back(std::move(segment));
         if (const auto index = segments.back()->Allocate();
-          index != kInvalidBindlessHandle) {
+          index != kInvalidBindlessHeapIndex) {
           return CreateDescriptorHandle(index, view_type, visibility);
         }
       }
@@ -286,20 +286,8 @@ public:
     });
   }
 
-  // [[nodiscard]] auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
-  //   override
-  // {
-  //   std::lock_guard lock(mutex_);
-  //   const auto segment = GetSegmentForHandleNoLock(handle);
-  //   if (!segment) {
-  //     return kInvalidBindlessHandle;
-  //   }
-  //   return (*segment)->GetShaderVisibleIndex(handle);
-  // }
-
   [[nodiscard]] auto GetDomainBaseIndex(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> bindless::Handle override
+    const DescriptorVisibility visibility) const -> bindless::HeapIndex override
   {
     return AbortOnFailed(__func__, [&]() {
       std::lock_guard lock(mutex_);
@@ -309,9 +297,9 @@ public:
 
   [[nodiscard]] auto Reserve(const ResourceViewType view_type,
     const DescriptorVisibility visibility, const bindless::Count count)
-    -> std::optional<bindless::Handle> override
+    -> std::optional<bindless::HeapIndex> override
   {
-    return AbortOnFailed(__func__, [&]() -> std::optional<bindless::Handle> {
+    return AbortOnFailed(__func__, [&]() -> std::optional<bindless::HeapIndex> {
       std::lock_guard lock(mutex_);
       // Some (type, visibility) pairs may be unsupported by the strategy.
       // If the precomputed key is empty, treat it as unsupported.
@@ -366,7 +354,7 @@ protected:
    This function is called with the mutex already locked.
   */
   virtual auto CreateHeapSegment(bindless::Capacity capacity,
-    bindless::Handle base_index, ResourceViewType view_type,
+    bindless::HeapIndex base_index, ResourceViewType view_type,
     DescriptorVisibility visibility) -> std::unique_ptr<DescriptorSegment>
     = 0;
 

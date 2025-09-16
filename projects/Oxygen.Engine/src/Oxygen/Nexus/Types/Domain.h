@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/api_export.h>
@@ -46,7 +46,7 @@ struct DomainKey {
 */
 struct DomainRange {
   //! Starting handle index in the global bindless heap.
-  oxygen::bindless::Handle start {};
+  oxygen::bindless::HeapIndex start {};
 
   //! Number of descriptor slots allocated for this domain.
   oxygen::bindless::Capacity capacity {};

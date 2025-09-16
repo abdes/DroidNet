@@ -124,7 +124,7 @@ auto DomainIndexMapper::GetDomainRange(DomainKey const& k) const noexcept
  ### Usage Examples
 
  ```cpp
- auto handle = oxygen::bindless::Handle{42};
+ auto handle = oxygen::bindless::HeapIndex{42};
  if (auto domain = mapper.ResolveDomain(handle)) {
    auto view_type = domain->view_type;
    auto visibility = domain->visibility;
@@ -136,7 +136,7 @@ auto DomainIndexMapper::GetDomainRange(DomainKey const& k) const noexcept
  @see GetDomainRange, DomainKey
 */
 auto DomainIndexMapper::ResolveDomain(
-  oxygen::bindless::Handle index) const noexcept -> std::optional<DomainKey>
+  oxygen::bindless::HeapIndex index) const noexcept -> std::optional<DomainKey>
 {
   const auto u_index = index.get();
   for (auto const& entry : pimpl_->map) {

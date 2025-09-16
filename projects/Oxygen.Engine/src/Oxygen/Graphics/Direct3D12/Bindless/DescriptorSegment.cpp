@@ -16,7 +16,7 @@ using oxygen::windows::ThrowOnFailed;
 namespace oxygen::graphics::d3d12 {
 
 DescriptorSegment::DescriptorSegment(dx::IDevice* device,
-  const bindless::Capacity capacity, const bindless::Handle base_index,
+  const bindless::Capacity capacity, const bindless::HeapIndex base_index,
   const ResourceViewType view_type, const DescriptorVisibility visibility,
   const std::string_view debug_name)
   : FixedDescriptorSegment(capacity, base_index, view_type, visibility)
@@ -126,7 +126,7 @@ auto DescriptorSegment::GetHeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE
 }
 
 auto DescriptorSegment::GlobalToLocalIndex(
-  const bindless::Handle global_index) const -> bindless::Handle
+  const bindless::HeapIndex global_index) const -> bindless::HeapIndex
 {
   // Validate the global index is within this segment's range
   DCHECK_GE_F(global_index, GetBaseIndex(),
@@ -141,7 +141,7 @@ auto DescriptorSegment::GlobalToLocalIndex(
     "Global index {} is outside segment capacity (base={}, capacity={})",
     u_global_index, u_base_index, u_capacity);
 
-  return bindless::Handle { u_global_index - u_base_index };
+  return bindless::HeapIndex { u_global_index - u_base_index };
 }
 
 } // namespace oxygen::graphics::d3d12

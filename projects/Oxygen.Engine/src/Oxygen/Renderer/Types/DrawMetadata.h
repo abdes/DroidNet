@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {

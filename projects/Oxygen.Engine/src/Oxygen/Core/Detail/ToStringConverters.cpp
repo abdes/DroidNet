@@ -8,7 +8,7 @@
 
 #include <fmt/format.h>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -97,9 +97,9 @@ auto oxygen::to_string(const Format value) -> const char*
 }
 
 // Format helpers replaced with fmt::format usages for clarity and safety.
-auto oxygen::to_string(BindlessHandle h) -> std::string
+auto oxygen::to_string(BindlessHeapIndex h) -> std::string
 {
-  return fmt::format("BindlessHandle(i:{})", h.get());
+  return fmt::format("BindlessHeapIndex(i:{})", h.get());
 }
 
 auto oxygen::to_string(ShaderVisibleIndex idx) -> std::string
@@ -140,7 +140,7 @@ auto oxygen::to_string(FrameSequenceNumber seq) -> std::string
   return fmt::format("Frame(seq:{})", seq.get());
 }
 
-auto oxygen::to_string(BindlessHandleCount count) -> std::string
+auto oxygen::to_string(BindlessItemCount count) -> std::string
 {
   return std::to_string(count.get());
 }
@@ -150,7 +150,7 @@ auto oxygen::to_string(FrameSlotCount sc) -> std::string
   return std::to_string(sc.get());
 }
 
-auto oxygen::to_string(BindlessHandleCapacity capacity) -> std::string
+auto oxygen::to_string(BindlessHeapCapacity capacity) -> std::string
 {
   return std::to_string(capacity.get());
 }

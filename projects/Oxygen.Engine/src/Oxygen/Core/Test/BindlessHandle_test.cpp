@@ -12,7 +12,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.Constants.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 
 // Google Test matchers for logging tests
 using testing::AllOf;
@@ -24,7 +24,7 @@ namespace {
 NOLINT_TEST(Handle, Invalid_RecognizesInvalidSentinel)
 {
   // Arrange
-  auto invalid = oxygen::kInvalidBindlessHandle;
+  auto invalid = oxygen::kInvalidBindlessHeapIndex;
 
   // Act
 
@@ -36,7 +36,7 @@ NOLINT_TEST(Handle, Invalid_RecognizesInvalidSentinel)
 NOLINT_TEST(Handle, ToString_ContainsNumericValue)
 {
   // Arrange
-  oxygen::BindlessHandle h { 42u };
+  oxygen::BindlessHeapIndex h { 42u };
 
   // Act
   auto s = to_string(h);
@@ -48,13 +48,13 @@ NOLINT_TEST(Handle, ToString_ContainsNumericValue)
 //! Pack/unpack keeps index and generation and IsValid reports correctly.
 NOLINT_TEST(Versioned, PackUnpack_RetainsIndexAndGeneration)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   Generation gen { 3u };
-  BindlessHandle idx { 7u };
+  BindlessHeapIndex idx { 7u };
   VersionedBindlessHandle v { idx, gen };
 
   // Act
@@ -72,15 +72,15 @@ NOLINT_TEST(Versioned, PackUnpack_RetainsIndexAndGeneration)
 //! Explicit hasher should produce identical hashes for equal handles.
 NOLINT_TEST(Versioned, Hash_EqualForEqualValues)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
   using Hasher = VersionedBindlessHandle::Hasher;
 
   // Arrange
   Generation gen { 1u };
-  VersionedBindlessHandle a { BindlessHandle { 5u }, gen };
-  VersionedBindlessHandle b { BindlessHandle { 5u }, gen };
+  VersionedBindlessHandle a { BindlessHeapIndex { 5u }, gen };
+  VersionedBindlessHandle b { BindlessHeapIndex { 5u }, gen };
 
   // Act
   Hasher hasher;
@@ -107,13 +107,13 @@ NOLINT_TEST(Versioned, InvalidPack_UninitializedIsInvalidAfterPack)
 //! Different generations must produce different hashes for same index.
 NOLINT_TEST(Versioned, Hash_DifferentGenerationsProduceDifferentHashes)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
   using Hasher = VersionedBindlessHandle::Hasher;
 
   // Arrange
-  BindlessHandle idx { 10u };
+  BindlessHeapIndex idx { 10u };
   VersionedBindlessHandle a { idx, Generation { 1u } };
   VersionedBindlessHandle b { idx, Generation { 2u } };
 
@@ -128,8 +128,8 @@ NOLINT_TEST(Versioned, Hash_DifferentGenerationsProduceDifferentHashes)
 NOLINT_TEST(Handle, ToString_ZeroAndMaxFormatting)
 {
   // Arrange
-  oxygen::BindlessHandle zero { 0u };
-  oxygen::BindlessHandle max { std::numeric_limits<uint32_t>::max() };
+  oxygen::BindlessHeapIndex zero { 0u };
+  oxygen::BindlessHeapIndex max { std::numeric_limits<uint32_t>::max() };
 
   // Act
   auto s0 = to_string(zero);
@@ -146,18 +146,18 @@ NOLINT_TEST(Handle, ToString_ZeroAndMaxFormatting)
 //! generation using the exact format "Bindless(i:<index>, g:<generation>)".
 NOLINT_TEST(Versioned, ToString_IncludesIndexAndGenerationExact)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle v { BindlessHandle { 7u }, Generation { 3u } };
+  VersionedBindlessHandle v { BindlessHeapIndex { 7u }, Generation { 3u } };
 
   // Act
   auto s = to_string(v);
 
   // Assert
-  EXPECT_THAT(s, HasSubstr("BindlessHandle(i:7, g:3)"));
+  EXPECT_THAT(s, HasSubstr("BindlessHeapIndex(i:7, g:3)"));
 }
 
 //! to_string for the invalid sentinel should render the invalid numeric index
@@ -165,7 +165,7 @@ NOLINT_TEST(Versioned, ToString_IncludesIndexAndGenerationExact)
 NOLINT_TEST(Handle, ToString_InvalidSentinelProducesInvalidIndex)
 {
   // Arrange
-  auto s = to_string(oxygen::kInvalidBindlessHandle);
+  auto s = to_string(oxygen::kInvalidBindlessHeapIndex);
 
   // Assert: contains numeric sentinel
   EXPECT_NE(s.find(std::to_string(
@@ -173,36 +173,37 @@ NOLINT_TEST(Handle, ToString_InvalidSentinelProducesInvalidIndex)
     std::string::npos);
 }
 
-//! Verify max-value formatting for VersionedBindlessHandle prints full uint32_t
+//! Verify max-value formatting for VersionedBindlessHandle prints full
+//! uint32_t
 NOLINT_TEST(Versioned, ToString_MaxValuesFormatting)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   constexpr uint32_t max = std::numeric_limits<uint32_t>::max();
-  VersionedBindlessHandle v { BindlessHandle { max }, Generation { max } };
+  VersionedBindlessHandle v { BindlessHeapIndex { max }, Generation { max } };
 
   // Act
   auto s = to_string(v);
 
   // Assert
-  const auto expected = std::string("BindlessHandle(i:") + std::to_string(max)
-    + ", g:" + std::to_string(max) + ")";
+  const auto expected = std::string("BindlessHeapIndex(i:")
+    + std::to_string(max) + ", g:" + std::to_string(max) + ")";
   EXPECT_THAT(s, HasSubstr(expected));
 }
 
 //! Near-max generation packing and wrap-around behavior.
 NOLINT_TEST(Versioned, WrapAround_NearMaxGenerationPacking)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
   constexpr uint32_t near_max = std::numeric_limits<uint32_t>::max() - 1u;
-  BindlessHandle idx { 123u };
+  BindlessHeapIndex idx { 123u };
   Generation g1 { near_max };
   VersionedBindlessHandle v1 { idx, g1 };
 
@@ -225,16 +226,17 @@ NOLINT_TEST(Versioned, WrapAround_NearMaxGenerationPacking)
 //! Ordering: when indices equal, ordering follows generation.
 NOLINT_TEST(Versioned, Order_OrdersByGenerationWhenIndexEqual)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  BindlessHandle idx { 50u };
+  BindlessHeapIndex idx { 50u };
   VersionedBindlessHandle low { idx, Generation { 1u } };
   VersionedBindlessHandle high { idx, Generation { 2u } };
 
-  // Act / Assert: direct comparison uses VersionedBindlessHandle's operator<=>
+  // Act / Assert: direct comparison uses VersionedBindlessHandle's
+  // operator<=>
   EXPECT_LT(low, high);
   EXPECT_TRUE(low <= high);
   EXPECT_FALSE(high < low);
@@ -243,13 +245,13 @@ NOLINT_TEST(Versioned, Order_OrdersByGenerationWhenIndexEqual)
 //! Different indices should order by index regardless of generation.
 NOLINT_TEST(Versioned, Order_OrdersByIndexFirst)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle a { BindlessHandle { 10 }, Generation { 5 } };
-  VersionedBindlessHandle b { BindlessHandle { 11 }, Generation { 0 } };
+  VersionedBindlessHandle a { BindlessHeapIndex { 10 }, Generation { 5 } };
+  VersionedBindlessHandle b { BindlessHeapIndex { 11 }, Generation { 0 } };
 
   // Assert
   EXPECT_LT(a, b);
@@ -259,14 +261,14 @@ NOLINT_TEST(Versioned, Order_OrdersByIndexFirst)
 //! Verify transitivity: if a < b and b < c then a < c
 NOLINT_TEST(Versioned, Order_TransitiveOrdering)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle a { BindlessHandle { 1 }, Generation { 1 } };
-  VersionedBindlessHandle b { BindlessHandle { 1 }, Generation { 2 } };
-  VersionedBindlessHandle c { BindlessHandle { 2 }, Generation { 0 } };
+  VersionedBindlessHandle a { BindlessHeapIndex { 1 }, Generation { 1 } };
+  VersionedBindlessHandle b { BindlessHeapIndex { 1 }, Generation { 2 } };
+  VersionedBindlessHandle c { BindlessHeapIndex { 2 }, Generation { 0 } };
 
   // Assert
   EXPECT_LT(a, b);
@@ -277,13 +279,13 @@ NOLINT_TEST(Versioned, Order_TransitiveOrdering)
 //! Equal when both index and generation match exactly.
 NOLINT_TEST(Versioned, Order_EqualityWhenBothMatch)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle x { BindlessHandle { 42 }, Generation { 7 } };
-  VersionedBindlessHandle y { BindlessHandle { 42 }, Generation { 7 } };
+  VersionedBindlessHandle x { BindlessHeapIndex { 42 }, Generation { 7 } };
+  VersionedBindlessHandle y { BindlessHeapIndex { 42 }, Generation { 7 } };
 
   // Assert
   EXPECT_EQ(x, y);
@@ -293,32 +295,33 @@ NOLINT_TEST(Versioned, Order_EqualityWhenBothMatch)
 
 TEST(AllTypes, CompileTimeProperties)
 {
-  using oxygen::BindlessHandle;
-  using oxygen::BindlessHandleCapacity;
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessHeapCapacity;
+  using oxygen::BindlessHeapIndex;
+  using oxygen::BindlessItemCount;
 
   // Ensure underlying size is 32-bit for all strongly-typed values used by
   // the bindless subsystem.
-  static_assert(sizeof(BindlessHandle) == sizeof(uint32_t));
-  static_assert(sizeof(BindlessHandleCount) == sizeof(uint32_t));
-  static_assert(sizeof(BindlessHandleCapacity) == sizeof(uint32_t));
+  static_assert(sizeof(BindlessHeapIndex) == sizeof(uint32_t));
+  static_assert(sizeof(BindlessItemCount) == sizeof(uint32_t));
+  static_assert(sizeof(BindlessHeapCapacity) == sizeof(uint32_t));
 
   // Ensure no implicit conversions exist between these strong types and raw
   // integers or the handle type.
-  static_assert(!std::is_convertible_v<BindlessHandleCount, BindlessHandle>);
-  static_assert(!std::is_convertible_v<BindlessHandleCount, uint32_t>);
-  static_assert(!std::is_convertible_v<BindlessHandleCapacity, BindlessHandle>);
-  static_assert(!std::is_convertible_v<BindlessHandleCapacity, uint32_t>);
+  static_assert(!std::is_convertible_v<BindlessItemCount, BindlessHeapIndex>);
+  static_assert(!std::is_convertible_v<BindlessItemCount, uint32_t>);
+  static_assert(
+    !std::is_convertible_v<BindlessHeapCapacity, BindlessHeapIndex>);
+  static_assert(!std::is_convertible_v<BindlessHeapCapacity, uint32_t>);
 }
 
-//! BindlessHandleCount supports arithmetic operations and formatting.
+//! BindlessItemCount supports arithmetic operations and formatting.
 NOLINT_TEST(HandleCount, Arithmetic_IncrementAndAddition)
 {
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessItemCount;
 
   // Arrange
-  BindlessHandleCount count { 5u };
-  BindlessHandleCount other { 3u };
+  BindlessItemCount count { 5u };
+  BindlessItemCount other { 3u };
 
   // Act
   auto pre_inc = ++count;
@@ -334,15 +337,15 @@ NOLINT_TEST(HandleCount, Arithmetic_IncrementAndAddition)
   EXPECT_EQ(diff.get(), 4u);
 }
 
-//! BindlessHandleCount comparison operations work correctly.
+//! BindlessItemCount comparison operations work correctly.
 NOLINT_TEST(HandleCount, Comparison_OrderingAndEquality)
 {
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessItemCount;
 
   // Arrange
-  BindlessHandleCount small { 5u };
-  BindlessHandleCount large { 10u };
-  BindlessHandleCount equal { 5u };
+  BindlessItemCount small { 5u };
+  BindlessItemCount large { 10u };
+  BindlessItemCount equal { 5u };
 
   // Assert
   EXPECT_LT(small, large);
@@ -355,14 +358,14 @@ NOLINT_TEST(HandleCount, Comparison_OrderingAndEquality)
   EXPECT_NE(small, large);
 }
 
-//! BindlessHandleCapacity supports arithmetic and comparison operations.
+//! BindlessHeapCapacity supports arithmetic and comparison operations.
 NOLINT_TEST(HandleCapacity, Arithmetic_AdditionAndSubtraction)
 {
-  using oxygen::BindlessHandleCapacity;
+  using oxygen::BindlessHeapCapacity;
 
   // Arrange
-  BindlessHandleCapacity capacity { 100u };
-  BindlessHandleCapacity delta { 25u };
+  BindlessHeapCapacity capacity { 100u };
+  BindlessHeapCapacity delta { 25u };
 
   // Act
   auto increased = capacity + delta;
@@ -420,12 +423,12 @@ NOLINT_TEST(VersionedGeneration, Comparison_OrderingAndEquality)
 //! VersionedBindlessHandle move construction and assignment work correctly.
 NOLINT_TEST(Versioned, MoveSemantics_ConstructionAndAssignment)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle original { BindlessHandle { 42u },
+  VersionedBindlessHandle original { BindlessHeapIndex { 42u },
     Generation { 7u } };
   auto expected_index = original.ToBindlessHandle();
   auto expected_gen = original.GenerationValue();
@@ -451,12 +454,12 @@ NOLINT_TEST(Versioned, MoveSemantics_ConstructionAndAssignment)
 //! VersionedBindlessHandle copy construction and assignment work correctly.
 NOLINT_TEST(Versioned, CopySemantics_ConstructionAndAssignment)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange
-  VersionedBindlessHandle original { BindlessHandle { 33u },
+  VersionedBindlessHandle original { BindlessHeapIndex { 33u },
     Generation { 4u } };
 
   // Act: copy construction
@@ -495,12 +498,12 @@ NOLINT_TEST(Versioned, DefaultConstruction_CreatesInvalidHandle)
 //! Constexpr operations work at compile time for basic operations.
 NOLINT_TEST(Versioned, Constexpr_CompileTimeOperations)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Compile-time construction and operations
-  constexpr VersionedBindlessHandle h { BindlessHandle { 15u },
+  constexpr VersionedBindlessHandle h { BindlessHeapIndex { 15u },
     Generation { 2u } };
   constexpr auto packed = h.ToPacked();
   constexpr auto unpacked = VersionedBindlessHandle::FromPacked(packed);
@@ -516,9 +519,9 @@ NOLINT_TEST(Versioned, Constexpr_CompileTimeOperations)
   EXPECT_EQ(unpacked.GenerationValue().get(), 2u);
 
   // Verify constexpr comparison
-  constexpr VersionedBindlessHandle h1 { BindlessHandle { 10u },
+  constexpr VersionedBindlessHandle h1 { BindlessHeapIndex { 10u },
     Generation { 1u } };
-  constexpr VersionedBindlessHandle h2 { BindlessHandle { 10u },
+  constexpr VersionedBindlessHandle h2 { BindlessHeapIndex { 10u },
     Generation { 2u } };
   constexpr bool less_than = h1 < h2;
   constexpr bool equal = h1 == h1;
@@ -530,13 +533,13 @@ NOLINT_TEST(Versioned, Constexpr_CompileTimeOperations)
 //! Actual generation overflow behavior with uint32_t max values.
 NOLINT_TEST(Versioned, Overflow_ActualGenerationWrapAround)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
 
   // Arrange: use actual max value
   constexpr uint32_t max_gen = std::numeric_limits<uint32_t>::max();
-  BindlessHandle idx { 456u };
+  BindlessHeapIndex idx { 456u };
   Generation max_generation { max_gen };
 
   // Act: create handle with max generation and pack/unpack
@@ -560,18 +563,18 @@ NOLINT_TEST(Versioned, Overflow_ActualGenerationWrapAround)
   EXPECT_EQ(wrapped_handle.GenerationValue().get(), 0u);
 }
 
-//! BindlessHandle hashing works correctly with std::hash via Hashable skill.
+//! BindlessHeapIndex hashing works correctly with std::hash via Hashable skill.
 NOLINT_TEST(Handle, Hashing_StdHashBehavior)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
 
   // Arrange
-  BindlessHandle h1 { 123u };
-  BindlessHandle h2 { 123u };
-  BindlessHandle h3 { 456u };
+  BindlessHeapIndex h1 { 123u };
+  BindlessHeapIndex h2 { 123u };
+  BindlessHeapIndex h3 { 456u };
 
   // Act
-  std::hash<BindlessHandle> hasher;
+  std::hash<BindlessHeapIndex> hasher;
   auto hash1 = hasher(h1);
   auto hash2 = hasher(h2);
   auto hash3 = hasher(h3);
@@ -581,15 +584,15 @@ NOLINT_TEST(Handle, Hashing_StdHashBehavior)
   EXPECT_NE(hash1, hash3); // Different handles produce different hashes
 }
 
-//! BindlessHandle comparison works correctly via Comparable skill.
+//! BindlessHeapIndex comparison works correctly via Comparable skill.
 NOLINT_TEST(Handle, Comparison_ComparableSkillBehavior)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
 
   // Arrange
-  BindlessHandle small { 10u };
-  BindlessHandle large { 20u };
-  BindlessHandle equal { 10u };
+  BindlessHeapIndex small { 10u };
+  BindlessHeapIndex large { 20u };
+  BindlessHeapIndex equal { 10u };
 
   // Assert: all comparison operators work
   EXPECT_LT(small, large);
@@ -605,28 +608,30 @@ NOLINT_TEST(Handle, Comparison_ComparableSkillBehavior)
 //! Cross-type safety: different handle types cannot be mixed.
 NOLINT_TEST(HandleTypes, TypeSafety_NoImplicitConversions)
 {
-  using oxygen::BindlessHandle;
-  using oxygen::BindlessHandleCapacity;
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessHeapCapacity;
+  using oxygen::BindlessHeapIndex;
+  using oxygen::BindlessItemCount;
 
   // Compile-time assertions to verify type safety
-  static_assert(!std::is_convertible_v<BindlessHandle, BindlessHandleCount>);
-  static_assert(!std::is_convertible_v<BindlessHandle, BindlessHandleCapacity>);
-  static_assert(!std::is_convertible_v<BindlessHandleCount, BindlessHandle>);
-  static_assert(!std::is_convertible_v<BindlessHandleCapacity, BindlessHandle>);
+  static_assert(!std::is_convertible_v<BindlessHeapIndex, BindlessItemCount>);
   static_assert(
-    !std::is_convertible_v<BindlessHandleCount, BindlessHandleCapacity>);
+    !std::is_convertible_v<BindlessHeapIndex, BindlessHeapCapacity>);
+  static_assert(!std::is_convertible_v<BindlessItemCount, BindlessHeapIndex>);
   static_assert(
-    !std::is_convertible_v<BindlessHandleCapacity, BindlessHandleCount>);
+    !std::is_convertible_v<BindlessHeapCapacity, BindlessHeapIndex>);
+  static_assert(
+    !std::is_convertible_v<BindlessItemCount, BindlessHeapCapacity>);
+  static_assert(
+    !std::is_convertible_v<BindlessHeapCapacity, BindlessItemCount>);
 
   // Verify no implicit conversion to underlying type
-  static_assert(!std::is_convertible_v<BindlessHandle, uint32_t>);
-  static_assert(!std::is_convertible_v<uint32_t, BindlessHandle>);
+  static_assert(!std::is_convertible_v<BindlessHeapIndex, uint32_t>);
+  static_assert(!std::is_convertible_v<uint32_t, BindlessHeapIndex>);
 
   // Runtime verification that types work independently
-  BindlessHandle handle { 42u };
-  BindlessHandleCount count { 42u };
-  BindlessHandleCapacity capacity { 42u };
+  BindlessHeapIndex handle { 42u };
+  BindlessItemCount count { 42u };
+  BindlessHeapCapacity capacity { 42u };
 
   // They can have same underlying value but are different types
   EXPECT_EQ(handle.get(), count.get());
@@ -665,14 +670,14 @@ private:
   loguru::Verbosity saved_verbosity_ { loguru::Verbosity_OFF };
 };
 
-//! Verify that BindlessHandle can be logged using LOG_F macro.
-NOLINT_TEST_F(LoggingTests, BindlessHandle_LoggingIntegration_ProducesOutput)
+//! Verify that BindlessHeapIndex can be logged using LOG_F macro.
+NOLINT_TEST_F(LoggingTests, BindlessHeapIndex_LoggingIntegration_ProducesOutput)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using testing::HasSubstr;
 
   // Arrange
-  BindlessHandle handle { 123u };
+  BindlessHeapIndex handle { 123u };
 
   // Act
   auto output = CaptureStderr([&] { LOG_F(INFO, "Handle: {}", handle); });
@@ -682,15 +687,14 @@ NOLINT_TEST_F(LoggingTests, BindlessHandle_LoggingIntegration_ProducesOutput)
   EXPECT_THAT(output, HasSubstr("123"));
 }
 
-//! Verify that BindlessHandleCount can be logged using LOG_F macro.
-NOLINT_TEST_F(
-  LoggingTests, BindlessHandleCount_LoggingIntegration_ProducesOutput)
+//! Verify that BindlessItemCount can be logged using LOG_F macro.
+NOLINT_TEST_F(LoggingTests, BindlessItemCount_LoggingIntegration_ProducesOutput)
 {
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessItemCount;
   using testing::HasSubstr;
 
   // Arrange
-  BindlessHandleCount count { 456u };
+  BindlessItemCount count { 456u };
 
   // Act
   auto output = CaptureStderr([&] { LOG_F(INFO, "Count: {}", count); });
@@ -700,15 +704,15 @@ NOLINT_TEST_F(
   EXPECT_THAT(output, HasSubstr("456"));
 }
 
-//! Verify that BindlessHandleCapacity can be logged using LOG_F macro.
+//! Verify that BindlessHeapCapacity can be logged using LOG_F macro.
 NOLINT_TEST_F(
-  LoggingTests, BindlessHandleCapacity_LoggingIntegration_ProducesOutput)
+  LoggingTests, BindlessHeapCapacity_LoggingIntegration_ProducesOutput)
 {
-  using oxygen::BindlessHandleCapacity;
+  using oxygen::BindlessHeapCapacity;
   using testing::HasSubstr;
 
   // Arrange
-  BindlessHandleCapacity capacity { 789u };
+  BindlessHeapCapacity capacity { 789u };
 
   // Act
   auto output = CaptureStderr([&] { LOG_F(INFO, "Capacity: {}", capacity); });
@@ -722,13 +726,13 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(LoggingTests,
   VersionedBindlessHandle_LoggingIntegration_ProducesFormattedOutput)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
   using testing::HasSubstr;
 
   // Arrange
-  VersionedBindlessHandle versioned { BindlessHandle { 42u },
+  VersionedBindlessHandle versioned { BindlessHeapIndex { 42u },
     Generation { 7u } };
 
   // Act
@@ -736,7 +740,7 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Versioned:"));
-  EXPECT_THAT(output, HasSubstr("BindlessHandle(i:42, g:7)"));
+  EXPECT_THAT(output, HasSubstr("BindlessHeapIndex(i:42, g:7)"));
 }
 
 //! Verify that Generation type can be logged using LOG_F macro.
@@ -757,14 +761,15 @@ NOLINT_TEST_F(LoggingTests, Generation_LoggingIntegration_ProducesOutput)
   EXPECT_THAT(output, HasSubstr("13"));
 }
 
-//! Verify that invalid BindlessHandle can be logged and shows sentinel value.
+//! Verify that invalid BindlessHeapIndex can be logged and shows sentinel
+//! value.
 NOLINT_TEST_F(
-  LoggingTests, InvalidBindlessHandle_LoggingIntegration_ShowsSentinel)
+  LoggingTests, InvalidBindlessHeapIndex_LoggingIntegration_ShowsSentinel)
 {
   using testing::HasSubstr;
 
   // Arrange
-  auto invalid = oxygen::kInvalidBindlessHandle;
+  auto invalid = oxygen::kInvalidBindlessHeapIndex;
 
   // Act
   auto output = CaptureStderr([&] { LOG_F(INFO, "Invalid: {}", invalid); });
@@ -790,7 +795,7 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Invalid versioned:"));
-  EXPECT_THAT(output, HasSubstr("BindlessHandle(i:"));
+  EXPECT_THAT(output, HasSubstr("BindlessHeapIndex(i:"));
   EXPECT_THAT(output, HasSubstr(std::to_string(oxygen::kInvalidBindlessIndex)));
   EXPECT_THAT(output, HasSubstr("g:0)"));
 }
@@ -799,19 +804,19 @@ NOLINT_TEST_F(LoggingTests,
 NOLINT_TEST_F(
   LoggingTests, MultipleTypes_LoggingIntegration_FormatsAllCorrectly)
 {
-  using oxygen::BindlessHandle;
-  using oxygen::BindlessHandleCapacity;
-  using oxygen::BindlessHandleCount;
+  using oxygen::BindlessHeapCapacity;
+  using oxygen::BindlessHeapIndex;
+  using oxygen::BindlessItemCount;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
   using testing::AllOf;
   using testing::HasSubstr;
 
   // Arrange
-  BindlessHandle handle { 10u };
-  BindlessHandleCount count { 20u };
-  BindlessHandleCapacity capacity { 100u };
-  VersionedBindlessHandle versioned { BindlessHandle { 5u },
+  BindlessHeapIndex handle { 10u };
+  BindlessItemCount count { 20u };
+  BindlessHeapCapacity capacity { 100u };
+  VersionedBindlessHandle versioned { BindlessHeapIndex { 5u },
     Generation { 2u } };
 
   // Act
@@ -824,23 +829,23 @@ NOLINT_TEST_F(
   EXPECT_THAT(output,
     AllOf(HasSubstr("Handle:"), HasSubstr("10"), HasSubstr("Count:"),
       HasSubstr("20"), HasSubstr("Capacity:"), HasSubstr("100"),
-      HasSubstr("Versioned:"), HasSubstr("BindlessHandle(i:5, g:2)")));
+      HasSubstr("Versioned:"), HasSubstr("BindlessHeapIndex(i:5, g:2)")));
 }
 
 //! Verify that edge case values (zero, max) can be logged correctly.
 NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
 {
-  using oxygen::BindlessHandle;
+  using oxygen::BindlessHeapIndex;
   using oxygen::VersionedBindlessHandle;
   using Generation = VersionedBindlessHandle::Generation;
   using testing::AllOf;
   using testing::HasSubstr;
 
   // Arrange
-  BindlessHandle zero { 0u };
-  BindlessHandle max_handle { std::numeric_limits<uint32_t>::max() };
+  BindlessHeapIndex zero { 0u };
+  BindlessHeapIndex max_handle { std::numeric_limits<uint32_t>::max() };
   VersionedBindlessHandle max_versioned {
-    BindlessHandle { std::numeric_limits<uint32_t>::max() },
+    BindlessHeapIndex { std::numeric_limits<uint32_t>::max() },
     Generation { std::numeric_limits<uint32_t>::max() }
   };
 
@@ -855,7 +860,7 @@ NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
   EXPECT_THAT(output,
     AllOf(HasSubstr("Zero:"), HasSubstr("0"), HasSubstr("Max:"),
       HasSubstr(max_str), HasSubstr("MaxVersioned:"),
-      HasSubstr("BindlessHandle(i:" + max_str + ", g:" + max_str + ")")));
+      HasSubstr("BindlessHeapIndex(i:" + max_str + ", g:" + max_str + ")")));
 }
 
 //! Verify that bindless namespace aliases work with logging.
@@ -865,7 +870,7 @@ NOLINT_TEST_F(LoggingTests, NamespaceAliases_LoggingIntegration_WorkCorrectly)
   using testing::HasSubstr;
 
   // Arrange
-  oxygen::bindless::Handle handle { 42u };
+  oxygen::bindless::HeapIndex handle { 42u };
   oxygen::bindless::Count count { 15u };
   oxygen::bindless::Capacity capacity { 200u };
 

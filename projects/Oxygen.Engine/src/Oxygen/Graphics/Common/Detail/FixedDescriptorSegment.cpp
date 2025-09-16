@@ -10,13 +10,13 @@
 using oxygen::graphics::detail::FixedDescriptorSegment;
 
 FixedDescriptorSegment::FixedDescriptorSegment(
-  const bindless::Capacity capacity, const bindless::Handle base_index,
+  const bindless::Capacity capacity, const bindless::HeapIndex base_index,
   const ResourceViewType view_type, const DescriptorVisibility visibility)
   : capacity_(capacity)
   , view_type_(view_type)
   , visibility_(visibility)
   , base_index_(base_index)
-  , next_index_ { bindless::Handle { 0 } }
+  , next_index_ { bindless::HeapIndex { 0 } }
   , released_flags_(capacity.get(), false)
 {
   // Log heap segment creation
@@ -28,28 +28,28 @@ FixedDescriptorSegment::FixedDescriptorSegment(
 
 //! Converts a global descriptor index to a local index within the segment.
 auto FixedDescriptorSegment::ToLocalIndex(
-  const bindless::Handle global_index) const noexcept -> bindless::Handle
+  const bindless::HeapIndex global_index) const noexcept -> bindless::HeapIndex
 {
   // Ensure the global index belongs to this segment's range.
   if (global_index < base_index_) {
     LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range",
       global_index);
-    return kInvalidBindlessHandle;
+    return kInvalidBindlessHeapIndex;
   }
 
   const auto local
-    = bindless::Handle { (global_index.get() - base_index_.get()) };
+    = bindless::HeapIndex { (global_index.get() - base_index_.get()) };
   if (local.get() >= capacity_.get()) {
     LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range",
       global_index);
-    return kInvalidBindlessHandle;
+    return kInvalidBindlessHeapIndex;
   }
   return local;
 }
 
 //! Checks if a local index is currently allocated in the segment.
 auto FixedDescriptorSegment::IsAllocated(
-  const bindless::Handle local_index) const noexcept -> bool
+  const bindless::HeapIndex local_index) const noexcept -> bool
 {
   const auto idx = local_index.get();
   if (idx >= next_index_.get()) {
@@ -88,14 +88,14 @@ FixedDescriptorSegment::~FixedDescriptorSegment() noexcept
   }
 }
 
-auto FixedDescriptorSegment::Allocate() noexcept -> bindless::Handle
+auto FixedDescriptorSegment::Allocate() noexcept -> bindless::HeapIndex
 {
-  LOG_SCOPE_F(2, "Allocate bindless::Handle");
+  LOG_SCOPE_F(2, "Allocate bindless::HeapIndex");
   DLOG_F(2, "view type  : {}", view_type_);
   DLOG_F(1, "visibility : {}", visibility_);
   DLOG_F(2, "base index : {}", base_index_);
 
-  auto global_index = kInvalidBindlessHandle;
+  auto global_index = kInvalidBindlessHeapIndex;
 
   // First try to reuse a released descriptor (LIFO for better cache locality)
   if (!free_list_.empty()) {
@@ -103,14 +103,16 @@ auto FixedDescriptorSegment::Allocate() noexcept -> bindless::Handle
     free_list_.pop_back();
     released_flags_[static_cast<size_t>(local_index.get())] = false;
     DLOG_F(2, " -> recycled local index {}", local_index);
-    global_index = bindless::Handle { base_index_.get() + local_index.get() };
+    global_index
+      = bindless::HeapIndex { base_index_.get() + local_index.get() };
     DLOG_F(2, " -> global index {}", global_index);
   } else if (next_index_.get() < capacity_.get()) {
     // If no freed descriptors, allocate a new one
-    const auto local_index = bindless::Handle { next_index_.get() };
-    next_index_ = bindless::Handle { next_index_.get() + 1 };
+    const auto local_index = bindless::HeapIndex { next_index_.get() };
+    next_index_ = bindless::HeapIndex { next_index_.get() + 1 };
     DLOG_F(2, " -> allocated new local index {}", local_index);
-    global_index = bindless::Handle { base_index_.get() + local_index.get() };
+    global_index
+      = bindless::HeapIndex { base_index_.get() + local_index.get() };
     DLOG_F(2, " -> global index {}", global_index);
   } else {
     // No more descriptors available
@@ -121,11 +123,11 @@ auto FixedDescriptorSegment::Allocate() noexcept -> bindless::Handle
   return global_index;
 }
 
-auto FixedDescriptorSegment::Release(const bindless::Handle index) noexcept
+auto FixedDescriptorSegment::Release(const bindless::HeapIndex index) noexcept
   -> bool
 {
-  LOG_SCOPE_F(2, "Release bindless::Handle");
-  if (index == kInvalidBindlessHandle) {
+  LOG_SCOPE_F(2, "Release bindless::HeapIndex");
+  if (index == kInvalidBindlessHeapIndex) {
     DLOG_F(2, "-shady- invalid handle");
     return false;
   }
@@ -135,7 +137,7 @@ auto FixedDescriptorSegment::Release(const bindless::Handle index) noexcept
 
   // Convert to local index
   auto local_index = ToLocalIndex(index);
-  if (local_index == kInvalidBindlessHandle) {
+  if (local_index == kInvalidBindlessHeapIndex) {
     DLOG_F(2, "-shady- invalid conversion to local index");
     return false;
   }
@@ -185,5 +187,5 @@ auto FixedDescriptorSegment::ReleaseAll() -> void
   free_list_.clear();
   released_flags_.assign(capacity_.get(), false);
   // Reset the next index to zero
-  next_index_ = bindless::Handle { 0 };
+  next_index_ = bindless::HeapIndex { 0 };
 }

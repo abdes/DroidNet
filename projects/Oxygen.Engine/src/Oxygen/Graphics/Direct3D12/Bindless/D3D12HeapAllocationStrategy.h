@@ -14,7 +14,7 @@
 #include <Oxygen/Base/Compilers.h> // needed for OXYGEN_UNREACHABLE_RETURN
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -94,7 +94,7 @@ public:
            their combination is illegal.
   */
   OXGN_D3D12_API auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> BindlessHandle override;
+    DescriptorVisibility visibility) const -> BindlessHeapIndex override;
 
   //! Returns the D3D12 descriptor heap type for a given view type.
   /*!
@@ -127,7 +127,7 @@ private:
   std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 
   //! Maps (view_type, visibility) pairs to their base indices
-  std::unordered_map<std::string, BindlessHandle> heap_base_indices_;
+  std::unordered_map<std::string, BindlessHeapIndex> heap_base_indices_;
 };
 
 } // namespace oxygen::graphics::d3d12

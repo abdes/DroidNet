@@ -5,14 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorSegment.h>
 
 namespace oxygen::graphics::headless::bindless {
 
 DescriptorSegment::DescriptorSegment(oxygen::bindless::Capacity capacity,
-  const oxygen::bindless::Handle base_index, const ResourceViewType view_type,
-  const DescriptorVisibility visibility)
+  const oxygen::bindless::HeapIndex base_index,
+  const ResourceViewType view_type, const DescriptorVisibility visibility)
   : base_index_(base_index)
   , capacity_(capacity)
   , view_type_(view_type)
@@ -30,14 +30,14 @@ DescriptorSegment::DescriptorSegment(oxygen::bindless::Capacity capacity,
   free_list_.reserve(cap);
 }
 
-auto DescriptorSegment::Allocate() noexcept -> oxygen::bindless::Handle
+auto DescriptorSegment::Allocate() noexcept -> oxygen::bindless::HeapIndex
 {
-  LOG_SCOPE_F(2, "Allocate bindless::Handle");
+  LOG_SCOPE_F(2, "Allocate bindless::HeapIndex");
   DLOG_F(2, "view type  : {}", view_type_);
   DLOG_F(1, "visibility : {}", visibility_);
   DLOG_F(2, "base index : {}", base_index_);
 
-  auto idx = kInvalidBindlessHandle;
+  auto idx = kInvalidBindlessHeapIndex;
   {
     std::lock_guard lock(mutex_);
     const auto cap = capacity_.get();
@@ -53,7 +53,7 @@ auto DescriptorSegment::Allocate() noexcept -> oxygen::bindless::Handle
         const auto local = bump_cursor_++;
         allocation_bitmap_[local / 8]
           |= (static_cast<uint8_t>(1) << (local % 8));
-        idx = oxygen::bindless::Handle { base_index_.get() + local };
+        idx = oxygen::bindless::HeapIndex { base_index_.get() + local };
       }
     }
     ++allocated_count_;
@@ -63,10 +63,11 @@ auto DescriptorSegment::Allocate() noexcept -> oxygen::bindless::Handle
   return idx;
 }
 
-auto DescriptorSegment::Release(oxygen::bindless::Handle index) noexcept -> bool
+auto DescriptorSegment::Release(oxygen::bindless::HeapIndex index) noexcept
+  -> bool
 {
-  LOG_SCOPE_F(2, "Release bindless::Handle");
-  if (index == kInvalidBindlessHandle) {
+  LOG_SCOPE_F(2, "Release bindless::HeapIndex");
+  if (index == kInvalidBindlessHeapIndex) {
     DLOG_F(2, "-shady- invalid handle");
     return false;
   }
@@ -92,7 +93,7 @@ auto DescriptorSegment::Release(oxygen::bindless::Handle index) noexcept -> bool
     }
     allocation_bitmap_[byte] &= ~mask;
     free_list_.emplace_back(
-      static_cast<oxygen::bindless::Handle::UnderlyingType>(u_index));
+      static_cast<oxygen::bindless::HeapIndex::UnderlyingType>(u_index));
     --allocated_count_;
   }
   DLOG_F(2, "remaining  : {}/{}", GetAvailableCount(), GetCapacity());
@@ -121,7 +122,7 @@ auto DescriptorSegment::Release(oxygen::bindless::Handle index) noexcept -> bool
 }
 
 [[nodiscard]] auto DescriptorSegment::GetBaseIndex() const noexcept
-  -> oxygen::bindless::Handle
+  -> oxygen::bindless::HeapIndex
 {
   return base_index_;
 }
@@ -140,7 +141,8 @@ auto DescriptorSegment::Release(oxygen::bindless::Handle index) noexcept -> bool
 }
 
 // [[nodiscard]] auto DescriptorSegment::GetShaderVisibleIndex(
-//   const DescriptorHandle& handle) const noexcept -> oxygen::bindless::Handle
+//   const DescriptorHandle& handle) const noexcept ->
+//   oxygen::bindless::HeapIndex
 // {
 //   // For headless, shader-visible index equals the global handle index
 //   if (!handle.IsValid()) {

@@ -20,7 +20,7 @@ public:
 
   //! Exposes the constructor for testing purposes.
   TestDescriptorHandle(DescriptorAllocator* allocator,
-    const oxygen::bindless::Handle index, const ResourceViewType view_type,
+    const oxygen::bindless::HeapIndex index, const ResourceViewType view_type,
     const DescriptorVisibility visibility)
     : DescriptorHandle(allocator, index, view_type, visibility)
   {

@@ -10,7 +10,7 @@
 #include <optional>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Nexus/api_export.h>
 
@@ -58,7 +58,7 @@ namespace detail {
  }
 
  // Reverse lookup from absolute index
- auto handle = oxygen::bindless::Handle{42};
+ auto handle = oxygen::bindless::HeapIndex{42};
  if (auto domain = mapper.ResolveDomain(handle)) {
    // Found the domain containing this handle
  }
@@ -95,7 +95,8 @@ public:
 
   //! Resolve domain key from absolute bindless handle.
   OXGN_NXS_NDAPI auto ResolveDomain(
-    oxygen::bindless::Handle index) const noexcept -> std::optional<DomainKey>;
+    oxygen::bindless::HeapIndex index) const noexcept
+    -> std::optional<DomainKey>;
 
 private:
   std::unique_ptr<detail::DomainIndexMapperImpl> pimpl_;

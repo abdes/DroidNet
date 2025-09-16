@@ -1,4 +1,4 @@
-//===-----------------------------------------------------------oxygen::bindless::Handle-----------===//
+//===-----------------------------------------------------------oxygen::bindless::HeapIndex-----------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
@@ -56,7 +56,7 @@ AllocationStrategy::AllocationStrategy()
   // ensure deterministic layout across runs. If a heap's shader-visible
   // capacity is zero, do not create a corresponding gpu key (no shader-visible
   // domain is created for that view type).
-  oxygen::bindless::Handle::UnderlyingType current = 0;
+  oxygen::bindless::HeapIndex::UnderlyingType current = 0;
   for (const auto& cfg : heap_configs) {
     const std::string view_str(cfg.name);
     const auto& desc = this->heaps_.at(view_str);
@@ -65,7 +65,7 @@ AllocationStrategy::AllocationStrategy()
     {
       const std::string key = view_str + ":cpu";
       const auto capacity = desc.cpu_visible_capacity;
-      this->heap_base_indices_[key] = oxygen::bindless::Handle { current };
+      this->heap_base_indices_[key] = oxygen::bindless::HeapIndex { current };
       current += capacity.get();
     }
 
@@ -73,7 +73,7 @@ AllocationStrategy::AllocationStrategy()
     if (desc.shader_visible_capacity.get() > 0) {
       const std::string key = view_str + ":gpu";
       const auto capacity = desc.shader_visible_capacity;
-      this->heap_base_indices_[key] = oxygen::bindless::Handle { current };
+      this->heap_base_indices_[key] = oxygen::bindless::HeapIndex { current };
       current += capacity.get();
     }
   }
@@ -159,14 +159,14 @@ auto AllocationStrategy::GetHeapDescription(const std::string& heap_key) const
 }
 
 auto AllocationStrategy::GetHeapBaseIndex(const ResourceViewType view_type,
-  const DescriptorVisibility visibility) const -> oxygen::bindless::Handle
+  const DescriptorVisibility visibility) const -> oxygen::bindless::HeapIndex
 {
   const auto key = GetHeapKey(view_type, visibility);
   if (const auto it = heap_base_indices_.find(key);
     it != heap_base_indices_.end()) {
     return it->second;
   }
-  return oxygen::bindless::Handle { 0 };
+  return oxygen::bindless::HeapIndex { 0 };
 }
 
 } // namespace oxygen::graphics::headless::bindless

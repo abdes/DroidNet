@@ -18,7 +18,7 @@
 #include <span>
 #include <vector>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
@@ -56,10 +56,10 @@ namespace oxygen::nexus {
 class TimelineGatedSlotReuse {
 public:
   //! Function signature for backend slot allocation
-  using AllocateFn = std::function<bindless::Handle(DomainKey)>;
+  using AllocateFn = std::function<bindless::HeapIndex(DomainKey)>;
 
   //! Function signature for backend slot deallocation
-  using FreeFn = std::function<void(DomainKey, bindless::Handle)>;
+  using FreeFn = std::function<void(DomainKey, bindless::HeapIndex)>;
 
   //! Construct with backend allocate/free hooks
   OXGN_NXS_API explicit TimelineGatedSlotReuse(
@@ -106,7 +106,7 @@ private:
     //! Domain context for the handle
     DomainKey domain;
     //! Bindless index to reclaim
-    bindless::Handle index;
+    bindless::HeapIndex index;
   };
 
   //! Backend allocation function
@@ -174,7 +174,7 @@ private:
     pending_per_queue_;
 
   //! Ensure generation tracker and pending flags cover the given index
-  void EnsureCapacity(bindless::Handle index);
+  void EnsureCapacity(bindless::HeapIndex index);
 };
 
 } // namespace oxygen::nexus

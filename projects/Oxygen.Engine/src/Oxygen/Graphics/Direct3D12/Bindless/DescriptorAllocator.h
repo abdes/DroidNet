@@ -89,7 +89,7 @@ protected:
    \return A unique_ptr to the created segment, or nullptr on failure.
   */
   OXGN_D3D12_API auto CreateHeapSegment(bindless::Capacity capacity,
-    bindless::Handle base_index, ResourceViewType view_type,
+    bindless::HeapIndex base_index, ResourceViewType view_type,
     DescriptorVisibility visibility)
     -> std::unique_ptr<graphics::detail::DescriptorSegment> override;
 

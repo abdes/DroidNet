@@ -35,38 +35,38 @@ using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
 using oxygen::graphics::bindless::testing::MockDescriptorSegment;
 
-using oxygen::kInvalidBindlessHandle;
+using oxygen::kInvalidBindlessHeapIndex;
 namespace b = oxygen::bindless;
 
 class AllocatorSimpleConcurrencyTest : public BaseDescriptorAllocatorTest {
 public:
-  std::atomic<b::Handle::UnderlyingType> next_index_ { 0 };
+  std::atomic<b::HeapIndex::UnderlyingType> next_index_ { 0 };
 };
 
 class AllocatorCombiningConcurrencyTest : public BaseDescriptorAllocatorTest {
 public:
   // Setup the segment factory with base indices for different type/visibility
   // combinations
-  std::map<std::pair<ResourceViewType, DescriptorVisibility>, b::Handle>
+  std::map<std::pair<ResourceViewType, DescriptorVisibility>, b::HeapIndex>
     base_indices_ = { { { ResourceViewType::kTexture_SRV,
                           DescriptorVisibility::kShaderVisible },
-                        b::Handle { 1000 } },
+                        b::HeapIndex { 1000 } },
       { { ResourceViewType::kTexture_UAV,
           DescriptorVisibility::kShaderVisible },
-        b::Handle { 2000 } },
+        b::HeapIndex { 2000 } },
       { { ResourceViewType::kRawBuffer_SRV,
           DescriptorVisibility::kShaderVisible },
-        b::Handle { 3000 } },
+        b::HeapIndex { 3000 } },
       { { ResourceViewType::kRawBuffer_UAV,
           DescriptorVisibility::kShaderVisible },
-        b::Handle { 4000 } },
+        b::HeapIndex { 4000 } },
       { { ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly },
-        b::Handle { 5000 } },
+        b::HeapIndex { 5000 } },
       { { ResourceViewType::kTexture_UAV, DescriptorVisibility::kCpuOnly },
-        b::Handle { 6000 } } };
+        b::HeapIndex { 6000 } } };
 
   std::map<std::pair<ResourceViewType, DescriptorVisibility>,
-    std::atomic<b::Handle::UnderlyingType>>
+    std::atomic<b::HeapIndex::UnderlyingType>>
     next_indices_;
 
 protected:
@@ -98,7 +98,8 @@ NOLINT_TEST_F(
     // Setup allocate to return sequential indices
     ON_CALL(*segment, Allocate()).WillByDefault([this, capacity] {
       const auto idx = next_index_.fetch_add(1);
-      return idx < capacity.get() ? b::Handle { idx } : kInvalidBindlessHandle;
+      return idx < capacity.get() ? b::HeapIndex { idx }
+                                  : kInvalidBindlessHeapIndex;
     });
 
     // Setup release to always succeed
@@ -111,7 +112,7 @@ NOLINT_TEST_F(
     ON_CALL(*segment, GetViewType()).WillByDefault(testing::Return(type));
     ON_CALL(*segment, GetVisibility()).WillByDefault(testing::Return(vis));
     ON_CALL(*segment, GetBaseIndex())
-      .WillByDefault(testing::Return(b::Handle { 0 }));
+      .WillByDefault(testing::Return(b::HeapIndex { 0 }));
     ON_CALL(*segment, GetCapacity()).WillByDefault(testing::Return(capacity));
     ON_CALL(*segment, GetAllocatedCount()).WillByDefault([this] {
       return b::Count { next_index_.load() };
@@ -243,8 +244,8 @@ NOLINT_TEST_F(
       .WillByDefault([this, type, vis, capacity, base_index] {
         const auto idx = next_indices_[{ type, vis }].fetch_add(1);
         return (idx - base_index.get()) < capacity.get()
-          ? b::Handle { idx }
-          : kInvalidBindlessHandle;
+          ? b::HeapIndex { idx }
+          : kInvalidBindlessHeapIndex;
       });
 
     // Setup release to always succeed
@@ -307,8 +308,8 @@ NOLINT_TEST_F(
                 // Only check properties if handle is valid and not
                 // kInvalidIndex
                 auto expected_base_index = base_indices_[{ type, vis }];
-                EXPECT_NE(
-                  handles.back().GetBindlessHandle(), kInvalidBindlessHandle);
+                EXPECT_NE(handles.back().GetBindlessHandle(),
+                  kInvalidBindlessHeapIndex);
                 EXPECT_GE(
                   handles.back().GetBindlessHandle(), expected_base_index);
                 EXPECT_LT(handles.back().GetBindlessHandle().get(),

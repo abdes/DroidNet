@@ -18,16 +18,20 @@
 
 namespace oxygen {
 
-//! Strong type representing a handle to a bindless engine resource.
+//! Strong type representing an index into a bindless heap, managed by an engine
+//! descriptor allocator.
 /*!
- This is not to be confused with a GPU/CPU descriptor address, or a
- shader-visible index. When needed, the allocator for this type of handles, or
- the backend that manages the corresponding GPU resources, will provide the
- appropriate mapping.
+ The underlying index cannot be assumed to be unique ouside of its corresponding
+ `heap`, and the interpretation of `heap` is allocator specific.
 
- @see VersionedBindlessHandle, ShaderVisibleIndex.
+ This is not to be confused with a GPU/CPU descriptor address, or a
+ shader-visible index. When needed, the original allocator, when also provided
+ with enough information to identify the corresponding heap (resource type,
+ visibility, etc...) will provide the appropriate mapping.
+
+ @see ShaderVisibleIndex
 */
-using BindlessHandle = NamedType<uint32_t, struct BindlessHandleTag,
+using BindlessHeapIndex = NamedType<uint32_t, struct BindlessHeapIndexTag,
   // clang-format off
   Hashable,
   Comparable,
@@ -35,15 +39,16 @@ using BindlessHandle = NamedType<uint32_t, struct BindlessHandleTag,
 
 //! Strongly-typed shader-visible bindless index (32-bit).
 /*!
- Represents the index used in shaders to access bindless resources. This is
- distinct from `BindlessHandle`, which is an opaque handle used by the CPU-side
- engine to manage resources. The mapping between `BindlessHandle` and
- `ShaderVisibleIndex` is managed by the allocator or backend.
+ Represents the index used in shaders to access a bindless resource from a
+ specific bindless descriptor table. This is distinct from `BindlessHeapIndex`,
+ which is a backend specific index used by the Graphics backend descriptor
+ allocators. The mapping between `BindlessHeapIndex` and `ShaderVisibleIndex` is
+ managed by the allocator.
 
  @warning No assumptions should be made about the algorithm used for deriving a
- `ShaderVisibleIndex` from a `BindlessHandle`.
+ `ShaderVisibleIndex` from a `BindlessHeapIndex`.
 
- @see BindlessHandle, VersionedBindlessHandle.
+ @see BindlessHeapIndex
 */
 using ShaderVisibleIndex = NamedType<uint32_t, struct ShaderVisibleIndexTag,
   // clang-format off
@@ -51,33 +56,36 @@ using ShaderVisibleIndex = NamedType<uint32_t, struct ShaderVisibleIndexTag,
   Comparable,
   Printable>; // clang-format on
 
-//! Strong type representing a count of bindless handles.
+//! Strong type representing a count of bindless items (descriptors, indices,
+//! etc.).
 /*!
- Tied to `BindlessHandle` by name to make intent and scope obvious. Its
- underlying type is the same as `BindlessHandle` to guarantee consistent bounds
- and semantics.
+ This strong type is particulalry useful to disambiguate size/count parameters
+ and return types from indices or capacity. Its underlying type is the same as
+ `BindlessHeapIndex` to guarantee consistent bounds and semantics.
+
+ @see BindlessHeapIndex, BindlessHeapCapacity
 */
-using BindlessHandleCount = NamedType<uint32_t, struct BindlessHandleCountTag,
+using BindlessItemCount = NamedType<uint32_t, struct BindlessItemCountTag,
   // clang-format off
-  DefaultInitialized,
-  PreIncrementable,
-  PostIncrementable,
-  Addable,
-  Subtractable,
-  Comparable,
-  Printable,
-  Hashable>; // clang-format on
+    DefaultInitialized,
+    PreIncrementable,
+    PostIncrementable,
+    Addable,
+    Subtractable,
+    Comparable,
+    Printable,
+    Hashable>; // clang-format on
 
 //! Strong type representing the capacity of an allocator or a container of
 //! bindless handles.
 /*!
- Tied to `BindlessHandle` by name to make intent and scope obvious. Its
- underlying type is the same as `BindlessHandle` to guarantee consistent bounds
- and semantics.
+ Its underlying type is the same as `BindlessHeapIndex` to guarantee consistent
+ bounds and semantics.
+
+ @see BindlessHeapIndex, BindlessItemCount
 */
-using BindlessHandleCapacity
-  = NamedType<uint32_t, struct BindlessHandleCapacityTag,
-    // clang-format off
+using BindlessHeapCapacity = NamedType<uint32_t, struct BindlessHeapCapacityTag,
+  // clang-format off
   DefaultInitialized,
   Addable,
   Subtractable,
@@ -86,7 +94,7 @@ using BindlessHandleCapacity
   Hashable>; // clang-format on
 
 //! Sentinel value representing an invalid bindless handle.
-static constexpr BindlessHandle kInvalidBindlessHandle {
+static constexpr BindlessHeapIndex kInvalidBindlessHeapIndex {
   kInvalidBindlessIndex
 };
 
@@ -95,18 +103,18 @@ static constexpr ShaderVisibleIndex kInvalidShaderVisibleIndex {
   kInvalidBindlessIndex
 };
 
-//! Convert a BindlessHandle to a human-readable string representation.
-OXGN_CORE_NDAPI auto to_string(BindlessHandle h) -> std::string;
+//! Convert a BindlessHeapIndex to a human-readable string representation.
+OXGN_CORE_NDAPI auto to_string(BindlessHeapIndex h) -> std::string;
 
 //! Convert a ShaderVisibleIndex to a human-readable string
 //! representation.
 OXGN_CORE_NDAPI auto to_string(ShaderVisibleIndex h) -> std::string;
 
-//! Convert a BindlessHandleCount to a human-readable string representation.
-OXGN_CORE_NDAPI auto to_string(BindlessHandleCount count) -> std::string;
+//! Convert a BindlessItemCount to a human-readable string representation.
+OXGN_CORE_NDAPI auto to_string(BindlessItemCount count) -> std::string;
 
-//! Convert a BindlessHandleCapacity to a human-readable string representation.
-OXGN_CORE_NDAPI auto to_string(BindlessHandleCapacity capacity) -> std::string;
+//! Convert a BindlessHeapCapacity to a human-readable string representation.
+OXGN_CORE_NDAPI auto to_string(BindlessHeapCapacity capacity) -> std::string;
 
 // Forward declaration for the hasher, so that we can use it for the Hasher type
 // alias
@@ -128,7 +136,7 @@ struct VersionedBindlessHandleHash;
 
  ### Usage example:
  ```cpp
- VersionedBindlessHandle h{BindlessHandle{42},
+ VersionedBindlessHandle h{BindlessHeapIndex{42},
  VersionedBindlessHandle::Generation{1}}; auto packed = h.ToPacked(); // returns
  VersionedBindlessHandle::Packed auto restored =
  VersionedBindlessHandle::FromPacked(packed);
@@ -178,7 +186,8 @@ public:
    @param idx The shader-visible bindless index
    @param gen The generation counter for staleness detection
   */
-  constexpr VersionedBindlessHandle(BindlessHandle idx, Generation gen) noexcept
+  constexpr VersionedBindlessHandle(
+    BindlessHeapIndex idx, Generation gen) noexcept
     : index_(idx)
     , generation_(gen)
   {
@@ -203,7 +212,7 @@ public:
     const uint32_t generation = static_cast<uint32_t>(raw & kLower32BitsMask);
 
     return VersionedBindlessHandle {
-      BindlessHandle { index },
+      BindlessHeapIndex { index },
       Generation { generation },
     };
   }
@@ -259,7 +268,7 @@ public:
   }
 
 private:
-  BindlessHandle index_ { kInvalidBindlessHandle };
+  BindlessHeapIndex index_ { kInvalidBindlessHeapIndex };
   Generation generation_ { 0U };
 };
 
@@ -290,17 +299,17 @@ struct VersionedBindlessHandleHash {
 //! Explicit namespace with concise aliases for the bindless numeric types to
 //! improve ergonomic at use sites.
 namespace bindless {
-  using Handle = BindlessHandle;
+  using HeapIndex = BindlessHeapIndex;
   using ShaderVisibleIndex = ShaderVisibleIndex;
   using VersionedHandle = VersionedBindlessHandle;
-  using Count = BindlessHandleCount;
-  using Capacity = BindlessHandleCapacity;
+  using Count = BindlessItemCount;
+  using Capacity = BindlessHeapCapacity;
   using Generation = VersionedBindlessHandle::Generation;
 
   //! Maximum exclusive bindless handle value. This sentinel marks the upper
   //! bound (exclusive) for shader-visible bindless indices and is chosen to
   //! match the underlying 32-bit storage.
-  inline constexpr auto kMaxHandle = Handle {
+  inline constexpr auto kMaxHeapIndex = HeapIndex {
     (std::numeric_limits<uint32_t>::max)(),
   };
 
