@@ -537,7 +537,7 @@ NOLINT_TEST(
   EXPECT_EQ(cbv_gpu_desc.shader_visible_capacity, b::Capacity { 123u });
   EXPECT_EQ(strat.GetHeapBaseIndex(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible),
-    b::Handle { 1000u });
+    b::HeapIndex { 1000u });
 
   // Validate CPU RTV
   const auto rtv_cpu_key = strat.GetHeapKey(
@@ -548,7 +548,7 @@ NOLINT_TEST(
   EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0u });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly),
-    b::Handle { 2000u });
+    b::HeapIndex { 2000u });
 }
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, InvalidKey_RTVGpu_Throws)
@@ -707,7 +707,7 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, ZeroCapacitySemantics)
   EXPECT_EQ(desc.cpu_visible_capacity, b::Capacity { 0u });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible),
-    b::Handle { 5u });
+    b::HeapIndex { 5u });
 }
 
 NOLINT_TEST(
@@ -805,6 +805,6 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
     }
     EXPECT_EQ(k, gpu_key);
     EXPECT_EQ(strat.GetHeapBaseIndex(vt, DescriptorVisibility::kShaderVisible),
-      b::Handle { 777u });
+      b::HeapIndex { 777u });
   }
 }

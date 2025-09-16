@@ -16,7 +16,7 @@
 #include "./Mocks/MockDescriptorSegment.h"
 #include "./Mocks/TestDescriptorHandle.h"
 
-using oxygen::kInvalidBindlessHandle;
+using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
@@ -37,7 +37,7 @@ protected:
   static constexpr auto visibility_ = DescriptorVisibility::kShaderVisible;
 
   // Helper to create a segment for testing with configurable parameters
-  static auto CreateSegment(const b::Handle::UnderlyingType base_index = 0)
+  static auto CreateSegment(const b::HeapIndex::UnderlyingType base_index = 0)
     -> std::unique_ptr<MockDescriptorSegment>
   {
     auto segment
@@ -52,11 +52,11 @@ protected:
     ON_CALL(*segment, GetAvailableCount())
       .WillByDefault(::testing::Return(b::Count { 100 }));
     ON_CALL(*segment, GetBaseIndex())
-      .WillByDefault(::testing::Return(b::Handle { base_index }));
+      .WillByDefault(::testing::Return(b::HeapIndex { base_index }));
 
     // Return fixed index (for simple test cases)
     ON_CALL(*segment, Allocate())
-      .WillByDefault(::testing::Return(b::Handle { base_index }));
+      .WillByDefault(::testing::Return(b::HeapIndex { base_index }));
 
     // Release should always succeed in tests
     ON_CALL(*segment, Release(::testing::_))
@@ -77,7 +77,7 @@ NOLINT_TEST_F(UnitTests, DefaultConstructedHandleIsInvalid)
 {
   const DescriptorHandle handle;
   EXPECT_FALSE(handle.IsValid());
-  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHandle);
+  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHeapIndex);
 }
 
 NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
@@ -85,7 +85,7 @@ NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
   auto mock_segment = CreateSegment(42);
 
   EXPECT_CALL(*mock_segment, Allocate()).Times(1);
-  EXPECT_CALL(*mock_segment, Release(b::Handle { 42 })).Times(0);
+  EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(0);
 
   SetSegmentFactory(
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
@@ -96,7 +96,7 @@ NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
   handle.Invalidate();
 
   EXPECT_FALSE(handle.IsValid());
-  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHandle);
+  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHeapIndex);
 
   // No release should be called here, as we just invalidated the handle
 }
@@ -120,7 +120,7 @@ NOLINT_TEST_F(UnitTests, ExplicitReleaseInvalidatesHandle)
   auto mock_segment = CreateSegment(42);
 
   EXPECT_CALL(*mock_segment, Allocate()).Times(1);
-  EXPECT_CALL(*mock_segment, Release(b::Handle { 42 })).Times(1);
+  EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(1);
 
   SetSegmentFactory(
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
@@ -133,7 +133,7 @@ NOLINT_TEST_F(UnitTests, ExplicitReleaseInvalidatesHandle)
   handle.Release();
 
   EXPECT_FALSE(handle.IsValid());
-  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHandle);
+  EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHeapIndex);
 }
 
 NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
@@ -141,7 +141,7 @@ NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
   auto mock_segment = CreateSegment(42);
 
   EXPECT_CALL(*mock_segment, Allocate()).Times(1);
-  EXPECT_CALL(*mock_segment, Release(b::Handle { 42 })).Times(1);
+  EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(1);
 
   SetSegmentFactory(
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
@@ -150,20 +150,20 @@ NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
     const auto handle = allocator_.Allocate(
       ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     EXPECT_TRUE(handle.IsValid());
-    EXPECT_EQ(handle.GetBindlessHandle(), b::Handle { 42U });
+    EXPECT_EQ(handle.GetBindlessHandle(), b::HeapIndex { 42U });
   } // Handle goes out of scope, destructor should release
 }
 
 NOLINT_TEST_F(UnitTests, MoveConstructorDestinationEquivalentToSource)
 {
-  TestDescriptorHandle src(&allocator_, b::Handle { 77 },
+  TestDescriptorHandle src(&allocator_, b::HeapIndex { 77 },
     ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
 
   DescriptorHandle dst(std::move(src));
 
   // Destination should have the same properties as the original source
   EXPECT_TRUE(dst.IsValid());
-  EXPECT_EQ(dst.GetBindlessHandle(), b::Handle { 77U });
+  EXPECT_EQ(dst.GetBindlessHandle(), b::HeapIndex { 77U });
   EXPECT_EQ(dst.GetViewType(), ResourceViewType::kSampler);
   EXPECT_EQ(dst.GetVisibility(), DescriptorVisibility::kCpuOnly);
 
@@ -174,14 +174,14 @@ NOLINT_TEST_F(UnitTests, MoveConstructorDestinationEquivalentToSource)
 
 NOLINT_TEST_F(UnitTests, MoveConstructorInvalidatesSource)
 {
-  TestDescriptorHandle src(&allocator_, b::Handle { 77 },
+  TestDescriptorHandle src(&allocator_, b::HeapIndex { 77 },
     ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
 
   auto dst(std::move(src));
 
   // Source should be invalidated
   EXPECT_FALSE(src.IsValid()); // NOLINT(bugprone-use-after-move) - testing
-  EXPECT_EQ(src.GetBindlessHandle(), kInvalidBindlessHandle);
+  EXPECT_EQ(src.GetBindlessHandle(), kInvalidBindlessHeapIndex);
 
   // Invalidate to avoid release in destructor, as we have not allocated the
   // handle via the allocator.
@@ -191,13 +191,13 @@ NOLINT_TEST_F(UnitTests, MoveConstructorInvalidatesSource)
 NOLINT_TEST_F(UnitTests, MoveAssignmentDestinationEquivalentToSource)
 {
   auto* allocator_ptr = &allocator_;
-  TestDescriptorHandle src(allocator_ptr, b::Handle { 33 },
+  TestDescriptorHandle src(allocator_ptr, b::HeapIndex { 33 },
     ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
 
   auto dst = std::move(src);
 
   EXPECT_TRUE(dst.IsValid());
-  EXPECT_EQ(dst.GetBindlessHandle(), b::Handle { 33U });
+  EXPECT_EQ(dst.GetBindlessHandle(), b::HeapIndex { 33U });
   EXPECT_EQ(dst.GetViewType(), ResourceViewType::kTexture_UAV);
   EXPECT_EQ(dst.GetVisibility(), DescriptorVisibility::kShaderVisible);
 
@@ -213,9 +213,9 @@ NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
 
   // The handle will own index 55, and we expect Release(55) to be called when
   // dst is overwritten.
-  EXPECT_CALL(*mock_segment, Release(b::Handle { 55 }))
+  EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 55 }))
     .Times(1); // Release the moved handle upon destruction
-  EXPECT_CALL(*mock_segment, Release(b::Handle { 99 }))
+  EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 99 }))
     .Times(1); // Release the old handle
 
   // Assign the allocator segment factory to always return our mock
@@ -227,7 +227,7 @@ NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Hand made source so we do not need to manage its release
-  TestDescriptorHandle src(&allocator_, b::Handle { 99 },
+  TestDescriptorHandle src(&allocator_, b::HeapIndex { 99 },
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Now move-assign a new handle to dst, which should release the old one
@@ -235,14 +235,14 @@ NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
 
   // dst should now have src properties
   EXPECT_TRUE(dst.IsValid());
-  EXPECT_EQ(dst.GetBindlessHandle(), b::Handle { 99U });
+  EXPECT_EQ(dst.GetBindlessHandle(), b::HeapIndex { 99U });
   EXPECT_EQ(dst.GetViewType(), ResourceViewType::kTexture_SRV);
   EXPECT_EQ(dst.GetVisibility(), DescriptorVisibility::kShaderVisible);
 }
 
 NOLINT_TEST_F(UnitTests, MoveAssignmentInvalidatesSource)
 {
-  TestDescriptorHandle src(&allocator_, b::Handle { 77 },
+  TestDescriptorHandle src(&allocator_, b::HeapIndex { 77 },
     ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
   EXPECT_TRUE(src.IsValid());
 

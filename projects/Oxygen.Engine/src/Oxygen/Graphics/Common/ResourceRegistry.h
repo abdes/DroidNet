@@ -480,7 +480,7 @@ public:
    @see RegisterView, Replace, UnRegisterView
   */
   template <ResourceWithViews Resource>
-  auto UpdateView(Resource& resource, bindless::Handle index,
+  auto UpdateView(Resource& resource, bindless::HeapIndex index,
     const typename Resource::ViewDescriptionT& desc) -> bool
   {
     std::lock_guard lock(registry_mutex_);
@@ -774,7 +774,7 @@ public:
     else {
       // Snapshot indices before we mutate the map to preserve iteration
       // guarantees while moving entries between maps.
-      std::vector<bindless::Handle> indices
+      std::vector<bindless::HeapIndex> indices
         = CollectDescriptorIndicesForResource(old_obj);
 
       // Helper to find cached description for a given view object.
@@ -1178,12 +1178,12 @@ private:
   //! Attach a descriptor and associate a native view and cache entry. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
-    bindless::Handle index, DescriptorHandle descriptor_handle,
+    bindless::HeapIndex index, DescriptorHandle descriptor_handle,
     const NativeView& view, std::any description, std::size_t key_hash) -> void;
   //! Collect all descriptor indices owned by a resource. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_NDAPI auto CollectDescriptorIndicesForResource(
-    const NativeResource& resource) const -> std::vector<bindless::Handle>;
+    const NativeResource& resource) const -> std::vector<bindless::HeapIndex>;
 
   OXGN_GFX_NDAPI auto Contains(const NativeResource& resource) const -> bool;
   OXGN_GFX_NDAPI auto Contains(
@@ -1208,14 +1208,15 @@ private:
     };
 
     // Map from descriptor index to view entry
-    std::unordered_map<bindless::Handle, ViewEntry> descriptors;
+    std::unordered_map<bindless::HeapIndex, ViewEntry> descriptors;
   };
 
   // Primary storage
   std::unordered_map<NativeResource, ResourceEntry> resources_;
 
   // Map from descriptor index to owning resource
-  std::unordered_map<bindless::Handle, NativeResource> descriptor_to_resource_;
+  std::unordered_map<bindless::HeapIndex, NativeResource>
+    descriptor_to_resource_;
 
   // Unified view cache
   struct CacheKey {

@@ -17,7 +17,7 @@ namespace oxygen::graphics::detail {
 class FixedDescriptorSegment : public DescriptorSegment {
 public:
   OXGN_GFX_API FixedDescriptorSegment(bindless::Capacity capacity,
-    bindless::Handle base_index, ResourceViewType view_type,
+    bindless::HeapIndex base_index, ResourceViewType view_type,
     DescriptorVisibility visibility);
 
   OXGN_GFX_API ~FixedDescriptorSegment() noexcept override;
@@ -30,7 +30,7 @@ public:
            segment is full, or an error occurs. Errors are logged but not
            propagated.
   */
-  OXGN_GFX_NDAPI auto Allocate() noexcept -> bindless::Handle override;
+  OXGN_GFX_NDAPI auto Allocate() noexcept -> bindless::HeapIndex override;
 
   //! Releases a descriptor index back to this segment.
   /*!
@@ -41,7 +41,8 @@ public:
    adds the released index to the free list for future reuse.
    Ensures the same descriptor cannot be released twice.
   */
-  OXGN_GFX_API auto Release(bindless::Handle index) noexcept -> bool override;
+  OXGN_GFX_API auto Release(bindless::HeapIndex index) noexcept
+    -> bool override;
 
   //! Returns the number of descriptors currently available in this segment.
   OXGN_GFX_NDAPI auto GetAvailableCount() const noexcept
@@ -53,14 +54,15 @@ public:
     -> bindless::Count override;
 
   // OXGN_GFX_NDAPI auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept -> bindless::Handle
+  //   const DescriptorHandle& handle) const noexcept -> bindless::HeapIndex
   //   override;
 
   [[nodiscard]] auto GetCapacity() const noexcept -> bindless::Capacity override
   {
     return capacity_;
   }
-  [[nodiscard]] auto GetBaseIndex() const noexcept -> bindless::Handle override
+  [[nodiscard]] auto GetBaseIndex() const noexcept
+    -> bindless::HeapIndex override
   {
     return base_index_;
   }
@@ -85,19 +87,19 @@ protected:
 
 private:
   [[nodiscard]] auto FreeListSize() const -> bindless::Count;
-  [[nodiscard]] auto ToLocalIndex(bindless::Handle global_index) const noexcept
-    -> bindless::Handle;
-  [[nodiscard]] auto IsAllocated(bindless::Handle local_index) const noexcept
+  [[nodiscard]] auto ToLocalIndex(
+    bindless::HeapIndex global_index) const noexcept -> bindless::HeapIndex;
+  [[nodiscard]] auto IsAllocated(bindless::HeapIndex local_index) const noexcept
     -> bool;
 
   bindless::Capacity capacity_;
   ResourceViewType view_type_;
   DescriptorVisibility visibility_;
 
-  bindless::Handle base_index_;
-  bindless::Handle next_index_;
+  bindless::HeapIndex base_index_;
+  bindless::HeapIndex next_index_;
   std::vector<bool> released_flags_;
-  std::vector<bindless::Handle> free_list_ {};
+  std::vector<bindless::HeapIndex> free_list_ {};
 };
 
 } // namespace oxygen::graphics::detail

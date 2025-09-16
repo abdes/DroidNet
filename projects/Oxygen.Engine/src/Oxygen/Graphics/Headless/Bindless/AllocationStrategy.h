@@ -64,14 +64,16 @@ public:
   [[nodiscard]] auto GetHeapDescription(const std::string& heap_key) const
     -> const HeapDescription& override;
 
-  [[nodiscard]] auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> oxygen::bindless::Handle override;
+  [[nodiscard]] auto GetHeapBaseIndex(
+    ResourceViewType view_type, DescriptorVisibility visibility) const
+    -> oxygen::bindless::HeapIndex override;
 
 private:
   // Headless-specific heap table; capacities are intentionally generous to
   // simulate an unlimited, software-only environment suitable for testing.
   std::unordered_map<std::string, HeapDescription> heaps_;
-  std::unordered_map<std::string, oxygen::bindless::Handle> heap_base_indices_;
+  std::unordered_map<std::string, oxygen::bindless::HeapIndex>
+    heap_base_indices_;
 };
 
 } // namespace oxygen::graphics::headless::bindless

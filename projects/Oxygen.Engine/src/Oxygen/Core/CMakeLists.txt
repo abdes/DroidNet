@@ -62,12 +62,12 @@ set(
   OXYGEN_CORE_HEADERS
   "api_export.h"
   "AnyCache.h"
+  "Bindless/Types.h"
   "Detail/FormatUtils.h"
   "Modules/EngineModule.h"
   "PhaseRegistry.h"
   "Resources.h"
   "SafeCall.h"
-  "Types/BindlessHandle.h"
   "Types/Epoch.h"
   "Types/Format.h"
   "Types/Frame.h"

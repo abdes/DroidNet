@@ -109,7 +109,7 @@ void TimelineGatedSlotReuse::SetDebugStallWarningConfig(
 
  ```cpp
  // Internal usage - called automatically by public methods
- EnsureCapacity(bindless::Handle{1000});
+ EnsureCapacity(bindless::HeapIndex{1000});
  // Ensures arrays can handle indices up to 1000
  ```
 
@@ -117,7 +117,7 @@ void TimelineGatedSlotReuse::SetDebugStallWarningConfig(
  @warning Never shrinks arrays to maintain pointer stability guarantees
  @see Allocate, Release
 */
-void TimelineGatedSlotReuse::EnsureCapacity(bindless::Handle index)
+void TimelineGatedSlotReuse::EnsureCapacity(bindless::HeapIndex index)
 {
   // Ensure generation tracker covers index. Resize to at least index+1.
   const std::size_t needed = static_cast<std::size_t>(index.get()) + 1u;
@@ -184,7 +184,7 @@ void TimelineGatedSlotReuse::EnsureCapacity(bindless::Handle index)
 */
 auto TimelineGatedSlotReuse::Allocate(DomainKey const& domain) -> VHandle
 {
-  const bindless::Handle handle = allocate_(domain);
+  const bindless::HeapIndex handle = allocate_(domain);
 
   // Ensure generation tracker and pending flags cover index
   EnsureCapacity(handle);
@@ -228,7 +228,7 @@ auto TimelineGatedSlotReuse::Release(DomainKey const& domain, VHandle const h,
     return;
   }
 
-  const bindless::Handle idx = h.ToBindlessHandle();
+  const bindless::HeapIndex idx = h.ToBindlessHandle();
   const auto u_idx = idx.get();
 
   // Prevent double-release via atomic pending flags with pointer stability Use
@@ -318,7 +318,7 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
       continue;
     }
 
-    const bindless::Handle idx = vh.ToBindlessHandle();
+    const bindless::HeapIndex idx = vh.ToBindlessHandle();
     const auto u_idx = idx.get();
 
     bool should_enqueue = false;
@@ -566,7 +566,7 @@ auto TimelineGatedSlotReuse::Process() noexcept -> void
 auto TimelineGatedSlotReuse::IsHandleCurrent(
   oxygen::VersionedBindlessHandle h) const noexcept -> bool
 {
-  const bindless::Handle idx = h.ToBindlessHandle();
+  const bindless::HeapIndex idx = h.ToBindlessHandle();
   const auto cur = generation_tracker_.Load(idx);
   return cur.get() == h.GenerationValue().get();
 }

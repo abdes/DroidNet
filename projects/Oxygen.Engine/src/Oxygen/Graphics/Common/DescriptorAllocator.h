@@ -74,7 +74,7 @@ public:
 
   //! Returns the base index for a heap (default 0 for backward compatibility).
   [[nodiscard]] virtual auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> bindless::Handle
+    DescriptorVisibility visibility) const -> bindless::HeapIndex
     = 0;
 };
 
@@ -85,7 +85,7 @@ class DefaultDescriptorAllocationStrategy
 public:
   DefaultDescriptorAllocationStrategy()
   {
-    bindless::Handle::UnderlyingType current_base = 0;
+    bindless::HeapIndex::UnderlyingType current_base = 0;
     for (const auto& [view_type_str, desc] : heaps_) {
       for (const DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly,
              DescriptorVisibility::kShaderVisible }) {
@@ -98,7 +98,7 @@ public:
         if (capacity == bindless::Capacity { 0 }) {
           continue;
         }
-        heap_base_indices_[heap_key] = bindless::Handle { current_base };
+        heap_base_indices_[heap_key] = bindless::HeapIndex { current_base };
         current_base += capacity.get();
       }
     }
@@ -191,14 +191,14 @@ public:
 
   //! Allow specifying base indices for heaps (default 0, but can be extended).
   [[nodiscard]] auto GetHeapBaseIndex(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> bindless::Handle override
+    const DescriptorVisibility visibility) const -> bindless::HeapIndex override
   {
     if (const auto it
       = heap_base_indices_.find(GetHeapKey(view_type, visibility));
       it != heap_base_indices_.end()) {
       return it->second;
     }
-    return bindless::Handle { 0 };
+    return bindless::HeapIndex { 0 };
   }
 
 private:
@@ -221,7 +221,7 @@ private:
   };
 
   //! Base indices for different heaps.
-  std::unordered_map<std::string, bindless::Handle> heap_base_indices_ {};
+  std::unordered_map<std::string, bindless::HeapIndex> heap_base_indices_ {};
 };
 
 //! Abstract interface for descriptor allocation from heaps.
@@ -306,7 +306,7 @@ public:
    \return The domain's global base index.
   */
   [[nodiscard]] virtual auto GetDomainBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> bindless::Handle
+    DescriptorVisibility visibility) const -> bindless::HeapIndex
     = 0;
 
   //! Attempts to reserve capacity in a domain and returns its base index.
@@ -323,7 +323,7 @@ public:
   */
   [[nodiscard]] virtual auto Reserve(ResourceViewType view_type,
     DescriptorVisibility visibility, bindless::Count count)
-    -> std::optional<bindless::Handle>
+    -> std::optional<bindless::HeapIndex>
     = 0;
 
   //! Checks if this allocator owns the given descriptor handle.
@@ -350,14 +350,18 @@ public:
   //! Returns the shader-visible bindless index for a descriptor allocated by
   //! this allocator.
   /*!
+   The returned index is valid only for indexing into the correct bindless
+   descriptor table from which the descriptor for the original handle was
+   allocated.
+
    The mapping from a global `DescriptorHandle` to a shader-visible index is
    allocator- and backend-specific. Callers must use this method instead of
    attempting to derive the index themselves.
 
    @param handle The descriptor handle to map to a shader-visible index.
    @return The shader-visible index into the bindless table for the resource
-   type associated with \p handle, or `kInvalidShaderVisibleIndex` if \p
-   handle is invalid or not owned by this allocator.
+   type associated with \p handle, or `kInvalidShaderVisibleIndex` if \p handle
+   is invalid or not owned by this allocator.
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(
     const DescriptorHandle& handle) const noexcept
@@ -368,7 +372,7 @@ protected:
   //! Protected method to create a descriptor handle instance. Provided for
   //! classes implementing this interface, which is the only one declared as
   //! a friend in DescriptorHandle.
-  auto CreateDescriptorHandle(const bindless::Handle index,
+  auto CreateDescriptorHandle(const bindless::HeapIndex index,
     const ResourceViewType view_type, const DescriptorVisibility visibility)
   {
     return DescriptorHandle { this, index, view_type, visibility };

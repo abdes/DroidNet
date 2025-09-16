@@ -23,7 +23,7 @@ using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
 using oxygen::graphics::detail::DescriptorSegment;
 namespace dx = oxygen::graphics::d3d12::dx;
 
-using oxygen::kInvalidBindlessHandle;
+using oxygen::kInvalidBindlessHeapIndex;
 namespace b = oxygen::bindless;
 
 namespace {
@@ -61,8 +61,9 @@ public:
   }
 
 protected:
-  auto CreateHeapSegment(const b::Capacity capacity, const b::Handle base_index,
-    const ResourceViewType view_type, const DescriptorVisibility visibility)
+  auto CreateHeapSegment(const b::Capacity capacity,
+    const b::HeapIndex base_index, const ResourceViewType view_type,
+    const DescriptorVisibility visibility)
     -> std::unique_ptr<DescriptorSegment> override
   {
     // Use a simple mock heap segment from D3D12 tests
@@ -141,8 +142,8 @@ NOLINT_TEST(D3D12DomainTest, DomainBaseIndices_UniqueAcrossGpuVisibleHeaps)
   const auto base_sampler_gpu = alloc.GetDomainBaseIndex(
     ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
 
-  EXPECT_NE(base_cbv_srv_uav_gpu, kInvalidBindlessHandle);
-  EXPECT_NE(base_sampler_gpu, kInvalidBindlessHandle);
+  EXPECT_NE(base_cbv_srv_uav_gpu, kInvalidBindlessHeapIndex);
+  EXPECT_NE(base_sampler_gpu, kInvalidBindlessHeapIndex);
   EXPECT_NE(base_cbv_srv_uav_gpu, base_sampler_gpu)
     << "Two GPU-visible domains must not share the same base index";
 }
@@ -161,7 +162,7 @@ NOLINT_TEST(D3D12DomainTest, DomainBaseIndices_CpuOnlyValidAndDeterministic)
   for (const auto& [type, vis] : cpu_domains) {
     const auto b1 = alloc.GetDomainBaseIndex(type, vis);
     const auto b2 = alloc.GetDomainBaseIndex(type, vis);
-    EXPECT_NE(b1, kInvalidBindlessHandle);
+    EXPECT_NE(b1, kInvalidBindlessHeapIndex);
     EXPECT_EQ(b1, b2) << "Base index must be stable for the same domain";
   }
 }
@@ -211,10 +212,10 @@ NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
   // Verify the strategy reports the configured base indices
   EXPECT_EQ(strat.GetHeapBaseIndex(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible),
-    b::Handle { 12345u });
+    b::HeapIndex { 12345u });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible),
-    b::Handle { 20000u });
+    b::HeapIndex { 20000u });
 
   // Verify allocator exposes the same values via GetDomainBaseIndex
   auto strat_ptr
@@ -222,10 +223,10 @@ NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
   TestD3D12Allocator alloc { strat_ptr };
   EXPECT_EQ(alloc.GetDomainBaseIndex(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible),
-    b::Handle { 12345u });
+    b::HeapIndex { 12345u });
   EXPECT_EQ(alloc.GetDomainBaseIndex(
               ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible),
-    b::Handle { 20000u });
+    b::HeapIndex { 20000u });
 }
 
 NOLINT_TEST(D3D12DomainTest, ReserveExceedingCapacityFails)

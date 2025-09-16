@@ -100,7 +100,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
   // Create segment during Reserve() and verify base index and capacity are
   // honored.
   allocator_->ext_segment_factory_ = [](const b::Capacity capacity,
-                                       const b::Handle base_index,
+                                       const b::HeapIndex base_index,
                                        const ResourceViewType vt,
                                        const DescriptorVisibility vis) {
     auto seg = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();

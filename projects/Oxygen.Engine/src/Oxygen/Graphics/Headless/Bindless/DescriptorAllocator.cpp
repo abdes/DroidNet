@@ -20,7 +20,7 @@ DescriptorAllocator::DescriptorAllocator(
 }
 
 auto DescriptorAllocator::CreateHeapSegment(oxygen::bindless::Capacity capacity,
-  oxygen::bindless::Handle base_index, ResourceViewType view_type,
+  oxygen::bindless::HeapIndex base_index, ResourceViewType view_type,
   DescriptorVisibility visibility) -> std::unique_ptr<detail::DescriptorSegment>
 {
   return std::make_unique<DescriptorSegment>(

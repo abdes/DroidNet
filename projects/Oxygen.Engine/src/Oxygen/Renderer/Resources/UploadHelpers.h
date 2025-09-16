@@ -9,7 +9,7 @@
 #include <expected>
 #include <memory>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {

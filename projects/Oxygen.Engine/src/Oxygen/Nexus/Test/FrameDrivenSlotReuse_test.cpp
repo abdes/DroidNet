@@ -9,16 +9,17 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 
 using oxygen::VersionedBindlessHandle;
-using oxygen::bindless::Handle;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::nexus::DomainKey;
+
+namespace b = oxygen::bindless;
 
 namespace {
 
@@ -36,7 +37,7 @@ struct FakeAllocator : oxygen::graphics::DescriptorAllocator {
   auto Allocate(RVT, Vis) -> DescriptorHandle override
   {
     return CreateDescriptorHandle(
-      Handle { 0 }, RVT::kTexture_SRV, Vis::kShaderVisible);
+      b::HeapIndex { 0 }, RVT::kTexture_SRV, Vis::kShaderVisible);
   }
   auto Release(DescriptorHandle&) -> void override { }
   auto CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&)
@@ -49,12 +50,12 @@ struct FakeAllocator : oxygen::graphics::DescriptorAllocator {
   {
     return oxygen::bindless::Count { 0 };
   }
-  auto GetDomainBaseIndex(RVT, Vis) const -> Handle override
+  auto GetDomainBaseIndex(RVT, Vis) const -> b::HeapIndex override
   {
-    return Handle { 0 };
+    return b::HeapIndex { 0 };
   }
   auto Reserve(RVT, Vis, oxygen::bindless::Count)
-    -> std::optional<Handle> override
+    -> std::optional<b::HeapIndex> override
   {
     return std::nullopt;
   }
@@ -81,23 +82,26 @@ struct AllocateBackend {
   std::vector<uint32_t> free_list;
   std::atomic<int> alloc_count { 0 };
 
-  auto operator()(DomainKey) -> Handle
+  auto operator()(DomainKey) -> b::HeapIndex
   {
     ++alloc_count;
     if (!free_list.empty()) {
       auto idx = free_list.back();
       free_list.pop_back();
-      return Handle { idx };
+      return b::HeapIndex { idx };
     }
     static std::atomic<uint32_t> next { 0 };
-    return Handle { next++ };
+    return b::HeapIndex { next++ };
   }
 };
 
 //! Backend free function mock that records freed handle indices.
 struct FreeBackend {
   std::vector<uint32_t> freed;
-  auto operator()(DomainKey, Handle h) -> void { freed.push_back(h.get()); }
+  auto operator()(DomainKey, b::HeapIndex h) -> void
+  {
+    freed.push_back(h.get());
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -124,7 +128,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain { .view_type = graphics::ResourceViewType::kTexture_SRV,
@@ -173,7 +177,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain { .view_type = graphics::ResourceViewType::kTexture_SRV,
@@ -225,7 +229,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   constexpr DomainKey domain {
@@ -295,7 +299,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, Release_InvalidHandle_IsNoOp)
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain { .view_type = graphics::ResourceViewType::kTexture_SRV,
@@ -329,7 +333,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, IsHandleCurrent_InvalidHandle_ReturnsFalse)
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   // Act & Assert - Default-constructed VersionedBindlessHandle is invalid
@@ -359,14 +363,14 @@ NOLINT_TEST(
       : next(start)
     {
     }
-    auto operator()(DomainKey) -> Handle
+    auto operator()(DomainKey) -> b::HeapIndex
     {
       if (!free_list.empty()) {
         auto idx = free_list.back();
         free_list.pop_back();
-        return Handle { idx };
+        return b::HeapIndex { idx };
       }
-      return Handle { next.fetch_add(1u) };
+      return b::HeapIndex { next.fetch_add(1u) };
     }
   } do_alloc(10000u);
 
@@ -374,7 +378,7 @@ NOLINT_TEST(
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain {
@@ -425,7 +429,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain { .view_type = graphics::ResourceViewType::kTexture_SRV,
@@ -482,7 +486,7 @@ NOLINT_TEST(FrameDrivenSlotReuse,
 
   nexus::FrameDrivenSlotReuse reuse(
     [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_free](const DomainKey d, const Handle h) { do_free(d, h); },
+    [&do_free](const DomainKey d, const b::HeapIndex h) { do_free(d, h); },
     per_frame);
 
   DomainKey domain {

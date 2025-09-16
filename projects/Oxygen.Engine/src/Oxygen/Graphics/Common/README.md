@@ -115,8 +115,9 @@ implementation that satisfies the engine contract and the following guidelines.
   previously reserved slots.
 - Reserve: support reserving a block of indices for preallocated usage (for
   example when the engine wants to ensure a domain has a contiguous range).
-- GetShaderVisibleIndex: convert a local descriptor handle to a shader-visible
-  index usable by the root signature or descriptor table.
+- GetShaderVisibleIndex: convert an allocator managed descriptor handle to a
+  shader-visible index. Translation is allocator and heap strategy specific and
+  should not be assumed in any way.
 - CopyDescriptor: perform fast backend-native descriptor copies between
   allocated slots.
 
@@ -267,9 +268,15 @@ component wraps this with appropriate lifecycle management.
 
 - Descriptor allocator must be installed exactly once per `Graphics` instance
   (see `Graphics::SetDescriptorAllocator`).
-- Descriptor handles produced by `DescriptorAllocator` are treated as stable
-  indices by shaders. `GetShaderVisibleIndex` must return the local index usable
-  by descriptor tables bound for shaders.
+- `DescriptorHandle` and `bindless::HeapIndex` produced by `DescriptorAllocator`
+  are `Graphics` global, no matter how many heaps or segments are being used.
+  `bindless::ShaderVisibleIndex` are NOT; they are relative to a specific
+  bindless descriptor table.
+- For a particular `bindless:Handle`, `GetShaderVisibleIndex` will always return
+  the same `bindless::ShaderVisibleIndex`, that can be used bu shaders to refer
+  to the corresponding resource in the bindless table it was allocated in. the
+  local index usable by descriptor tables bound for shaders. No indirection is
+  needed, no offsetting is needed.
 - `ResourceRegistry` expects `GetNativeView()` to produce native, short-lived
   view objects that can be stored in the registry. When replacing resources, the
   registry may ask you to recreate views in-place; keep descriptor slots stable.

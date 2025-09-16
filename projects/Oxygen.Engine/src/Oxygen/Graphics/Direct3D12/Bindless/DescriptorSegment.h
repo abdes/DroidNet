@@ -32,12 +32,12 @@ namespace d3d12 {
     : public graphics::detail::FixedDescriptorSegment {
   public:
     OXGN_D3D12_API DescriptorSegment(dx::IDevice* device,
-      bindless::Capacity capacity, bindless::Handle base_index,
+      bindless::Capacity capacity, bindless::HeapIndex base_index,
       ResourceViewType view_type, DescriptorVisibility visibility,
       std::string_view debug_name);
 
     OXGN_D3D12_API DescriptorSegment(dx::IDevice* device,
-      const bindless::Capacity capacity, const bindless::Handle base_index,
+      const bindless::Capacity capacity, const bindless::HeapIndex base_index,
       const ResourceViewType view_type, const DescriptorVisibility visibility)
       : DescriptorSegment(
           device, capacity, base_index, view_type, visibility, {})
@@ -90,8 +90,8 @@ namespace d3d12 {
 
   private:
     //! Computes a local index from a global index.
-    [[nodiscard]] auto GlobalToLocalIndex(bindless::Handle global_index) const
-      -> bindless::Handle;
+    [[nodiscard]] auto GlobalToLocalIndex(
+      bindless::HeapIndex global_index) const -> bindless::HeapIndex;
 
     dx::IDevice* device_;
 

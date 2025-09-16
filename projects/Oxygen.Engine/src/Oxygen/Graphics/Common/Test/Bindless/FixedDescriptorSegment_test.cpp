@@ -21,14 +21,13 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
-using oxygen::kInvalidBindlessHandle;
-using oxygen::bindless::Capacity;
-using oxygen::bindless::Count;
-using oxygen::bindless::Handle;
+using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::detail::FixedDescriptorSegment;
+
+namespace b = oxygen::bindless;
 
 namespace {
 
@@ -36,7 +35,7 @@ class TestDescriptorSegment : public FixedDescriptorSegment {
   using Base = FixedDescriptorSegment;
 
 public:
-  TestDescriptorSegment(Capacity capacity, Handle base_index,
+  TestDescriptorSegment(b::Capacity capacity, b::HeapIndex base_index,
     ResourceViewType view_type, DescriptorVisibility visibility)
     : Base(capacity, base_index, view_type, visibility)
   {
@@ -60,7 +59,7 @@ void ExpectFull(FixedDescriptorSegment& segment)
 {
   EXPECT_EQ(segment.GetAllocatedCount().get(), segment.GetCapacity().get());
   EXPECT_EQ(segment.GetAvailableCount().get(), 0U);
-  EXPECT_EQ(segment.Allocate(), kInvalidBindlessHandle);
+  EXPECT_EQ(segment.Allocate(), kInvalidBindlessHeapIndex);
 }
 void ExpectSize(const FixedDescriptorSegment& segment, uint32_t used)
 {
@@ -77,7 +76,7 @@ void ExpectSize(const FixedDescriptorSegment& segment, uint32_t used)
 NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionZeroBase)
 {
   // Test default construction with base index 0 and CPU-only visibility.
-  const TestDescriptorSegment seg(Capacity { 8 }, Handle { 0 },
+  const TestDescriptorSegment seg(b::Capacity { 8 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kCpuOnly);
   EXPECT_EQ(seg.GetViewType(), ResourceViewType::kConstantBuffer);
   EXPECT_EQ(seg.GetVisibility(), DescriptorVisibility::kCpuOnly);
@@ -90,7 +89,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionNonzeroBase)
 {
   // Test construction with nonzero base index and shader-visible visibility.
   constexpr uint32_t base = 42;
-  const TestDescriptorSegment seg(Capacity { 16 }, Handle { base },
+  const TestDescriptorSegment seg(b::Capacity { 16 }, b::HeapIndex { base },
     ResourceViewType::kStructuredBuffer_SRV,
     DescriptorVisibility::kShaderVisible);
   EXPECT_EQ(seg.GetViewType(), ResourceViewType::kStructuredBuffer_SRV);
@@ -102,17 +101,17 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionNonzeroBase)
 //! Construction with zero capacity.
 NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionWithZeroCapacity)
 {
-  TestDescriptorSegment seg(Capacity { 0 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 0 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   EXPECT_EQ(seg.GetCapacity().get(), 0U);
   ExpectEmpty(seg);
-  EXPECT_EQ(seg.Allocate(), kInvalidBindlessHandle);
+  EXPECT_EQ(seg.Allocate(), kInvalidBindlessHeapIndex);
 }
 
 //! Construction with invalid view type or visibility.
 NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionWithInvalidTypeOrVisibility)
 {
-  const TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  const TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kNone, DescriptorVisibility::kNone);
   EXPECT_EQ(seg.GetViewType(), ResourceViewType::kNone);
   EXPECT_EQ(seg.GetVisibility(), DescriptorVisibility::kNone);
@@ -131,7 +130,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, DestructionWhenNotEmpty)
 
   {
     // Allocate a descriptor to ensure the segment is not empty at destruction.
-    FixedDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+    FixedDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
       ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
     if (seg.GetCapacity().get() == 0) {
       return;
@@ -155,14 +154,14 @@ NOLINT_TEST(FixedDescriptorSegmentTest, DestructionWhenNotEmpty)
 NOLINT_TEST(FixedDescriptorSegmentTest, SequentialAllocation)
 {
   constexpr uint32_t base = 10;
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { base },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { base },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   constexpr uint32_t n = 4U;
   // Allocate up to n descriptors and check their indices.
   for (uint32_t i = 0; i < (std::min)(n, seg.GetCapacity().get()); ++i) {
     [[maybe_unused]] auto idx = seg.Allocate();
-    EXPECT_NE(idx, kInvalidBindlessHandle);
-    EXPECT_EQ(idx, Handle { base + i });
+    EXPECT_NE(idx, kInvalidBindlessHeapIndex);
+    EXPECT_EQ(idx, b::HeapIndex { base + i });
   }
   ExpectSize(seg, (std::min)(n, seg.GetCapacity().get()));
 }
@@ -170,11 +169,11 @@ NOLINT_TEST(FixedDescriptorSegmentTest, SequentialAllocation)
 //! Allocate until full, then fail.
 NOLINT_TEST(FixedDescriptorSegmentTest, AllocateUntilFull)
 {
-  TestDescriptorSegment seg(Capacity { 8 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 8 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if (capacity.get() == 0) {
-    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHandle);
+    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHeapIndex);
     ExpectFull(seg);
     EXPECT_EQ(seg.GetAvailableCount().get(), 0U);
     return;
@@ -182,8 +181,8 @@ NOLINT_TEST(FixedDescriptorSegmentTest, AllocateUntilFull)
   // Allocate all descriptors until full.
   for (uint32_t i = 0; i < capacity.get(); ++i) {
     [[maybe_unused]] auto idx = seg.Allocate();
-    EXPECT_NE(idx, kInvalidBindlessHandle);
-    EXPECT_EQ(idx, Handle { i });
+    EXPECT_NE(idx, kInvalidBindlessHeapIndex);
+    EXPECT_EQ(idx, b::HeapIndex { i });
   }
   // Next allocation should fail.
   ExpectFull(seg);
@@ -193,21 +192,21 @@ NOLINT_TEST(FixedDescriptorSegmentTest, AllocateUntilFull)
 NOLINT_TEST(FixedDescriptorSegmentTest, AllocateReleaseAllThenAllocateAgain)
 {
   constexpr uint32_t cap = 4;
-  TestDescriptorSegment seg(Capacity { cap }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { cap }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
-  std::vector<Handle> indices;
+  std::vector<b::HeapIndex> indices;
   indices.reserve(cap);
   for (uint32_t i = 0; i < cap; ++i) {
     indices.push_back(seg.Allocate());
   }
-  for (const Handle idx : indices) {
+  for (const auto idx : indices) {
     EXPECT_TRUE(seg.Release(idx));
   }
   ExpectEmpty(seg);
   // Allocate again after full release
   for (uint32_t i = 0; i < cap; ++i) {
     auto idx = seg.Allocate();
-    EXPECT_NE(idx, kInvalidBindlessHandle);
+    EXPECT_NE(idx, kInvalidBindlessHeapIndex);
   }
   ExpectFull(seg);
 }
@@ -215,7 +214,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, AllocateReleaseAllThenAllocateAgain)
 //! Allocate, release, and check available/allocated counts.
 NOLINT_TEST(FixedDescriptorSegmentTest, AllocateReleaseCounts)
 {
-  TestDescriptorSegment seg(Capacity { 3 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 3 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto a = seg.Allocate();
   const auto b = seg.Allocate();
@@ -236,17 +235,17 @@ NOLINT_TEST(FixedDescriptorSegmentTest, AllocateReleaseCounts)
 //! Release and immediate recycle of a single descriptor.
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAndRecycleSingle)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if (capacity.get() == 0) {
-    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHandle);
+    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHeapIndex);
     return;
   }
   // Allocate and release a descriptor, then allocate again and expect the same
   // index.
   [[maybe_unused]] const auto idx = seg.Allocate();
-  EXPECT_NE(idx, kInvalidBindlessHandle);
+  EXPECT_NE(idx, kInvalidBindlessHeapIndex);
   EXPECT_TRUE(seg.Release(idx));
   ExpectSize(seg, 0U);
   const auto recycled = seg.Allocate();
@@ -257,7 +256,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAndRecycleSingle)
 //! Release multiple descriptors, verify counts, no recycle.
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseMultipleNoRecycle)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if (capacity.get() < 3) {
@@ -278,14 +277,14 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseMultipleNoRecycle)
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAllAndReuseIndices)
 {
   constexpr uint32_t cap = 3;
-  TestDescriptorSegment seg(Capacity { cap }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { cap }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
-  std::vector<Handle> indices;
+  std::vector<b::HeapIndex> indices;
   indices.reserve(cap);
   for (uint32_t i = 0; i < cap; ++i) {
     indices.push_back(seg.Allocate());
   }
-  for (const Handle idx : indices) {
+  for (const auto idx : indices) {
     EXPECT_TRUE(seg.Release(idx));
   }
   ExpectEmpty(seg);
@@ -308,10 +307,10 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAllAndReuseIndices)
 //! Release already released index fails.
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAlreadyReleasedFails)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   if (const auto capacity = seg.GetCapacity(); capacity.get() == 0) {
-    EXPECT_FALSE(seg.Release(Handle { 0 }));
+    EXPECT_FALSE(seg.Release(b::HeapIndex { 0 }));
     return;
   }
   // Release the same index twice; second release should fail.
@@ -325,7 +324,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAlreadyReleasedFails)
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseUnallocatedIndexFails)
 {
   constexpr uint32_t base = 10;
-  TestDescriptorSegment seg(Capacity { 8 }, Handle { base },
+  TestDescriptorSegment seg(b::Capacity { 8 }, b::HeapIndex { base },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if (capacity.get() < 6) {
@@ -335,10 +334,10 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseUnallocatedIndexFails)
   [[maybe_unused]] auto idx1 = seg.Allocate();
   [[maybe_unused]] auto idx2 = seg.Allocate();
   constexpr uint32_t unallocated = base + 5;
-  EXPECT_FALSE(seg.Release(Handle { unallocated }));
+  EXPECT_FALSE(seg.Release(b::HeapIndex { unallocated }));
   if (const uint32_t next = base + seg.GetAllocatedCount().get();
     next < base + capacity.get()) {
-    EXPECT_FALSE(seg.Release(Handle { next }));
+    EXPECT_FALSE(seg.Release(b::HeapIndex { next }));
   }
 }
 
@@ -346,56 +345,56 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseUnallocatedIndexFails)
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseOutOfBoundsFails)
 {
   constexpr uint32_t base = 20;
-  TestDescriptorSegment seg(Capacity { 8 }, Handle { base },
+  TestDescriptorSegment seg(b::Capacity { 8 }, b::HeapIndex { base },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if constexpr (base == 0) {
     if (capacity.get() == 0) {
-      EXPECT_FALSE(seg.Release(Handle { base + capacity.get() }));
-      EXPECT_FALSE(seg.Release(kInvalidBindlessHandle));
+      EXPECT_FALSE(seg.Release(b::HeapIndex { base + capacity.get() }));
+      EXPECT_FALSE(seg.Release(kInvalidBindlessHeapIndex));
       return;
     }
   }
   if (capacity.get() == 0) {
     if constexpr (base > 0) {
-      EXPECT_FALSE(seg.Release(Handle { base - 1 }));
+      EXPECT_FALSE(seg.Release(b::HeapIndex { base - 1 }));
     }
-    EXPECT_FALSE(seg.Release(Handle { base + capacity.get() }));
-    EXPECT_FALSE(seg.Release(Handle { base + capacity.get() + 1 }));
-    EXPECT_FALSE(seg.Release(kInvalidBindlessHandle));
+    EXPECT_FALSE(seg.Release(b::HeapIndex { base + capacity.get() }));
+    EXPECT_FALSE(seg.Release(b::HeapIndex { base + capacity.get() + 1 }));
+    EXPECT_FALSE(seg.Release(kInvalidBindlessHeapIndex));
     return;
   }
   // Try to release indices outside the valid range.
   [[maybe_unused]] auto idx = seg.Allocate();
   if constexpr (base > 0) {
-    EXPECT_FALSE(seg.Release(Handle { base - 1 }));
+    EXPECT_FALSE(seg.Release(b::HeapIndex { base - 1 }));
   }
-  EXPECT_FALSE(seg.Release(Handle { base + capacity.get() }));
-  EXPECT_FALSE(seg.Release(Handle { base + capacity.get() + 1 }));
-  EXPECT_FALSE(seg.Release(kInvalidBindlessHandle));
+  EXPECT_FALSE(seg.Release(b::HeapIndex { base + capacity.get() }));
+  EXPECT_FALSE(seg.Release(b::HeapIndex { base + capacity.get() + 1 }));
+  EXPECT_FALSE(seg.Release(kInvalidBindlessHeapIndex));
 }
 
 //! Release with invalid index (max uint32_t).
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseInvalidIndex)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
-  EXPECT_FALSE(seg.Release(kInvalidBindlessHandle));
+  EXPECT_FALSE(seg.Release(kInvalidBindlessHeapIndex));
 }
 
 //! Release with negative index (converted to uint32_t).
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseNegativeIndex)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   constexpr int32_t neg = -1;
-  EXPECT_FALSE(seg.Release(Handle { static_cast<uint32_t>(neg) }));
+  EXPECT_FALSE(seg.Release(b::HeapIndex { static_cast<uint32_t>(neg) }));
 }
 
 //! Release after reallocation and double-release.
 NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAfterReallocation)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   if (const auto capacity = seg.GetCapacity(); capacity.get() == 0) {
     return;
@@ -403,7 +402,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAfterReallocation)
 
   // Allocate one descriptor
   const auto idx = seg.Allocate();
-  EXPECT_NE(idx, kInvalidBindlessHandle);
+  EXPECT_NE(idx, kInvalidBindlessHeapIndex);
 
   // Release it
   EXPECT_TRUE(seg.Release(idx));
@@ -431,7 +430,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ReleaseAfterReallocation)
 NOLINT_TEST(FixedDescriptorSegmentTest, LIFORecycling)
 {
   constexpr uint32_t base = 100;
-  TestDescriptorSegment seg(Capacity { 8 }, Handle { base },
+  TestDescriptorSegment seg(b::Capacity { 8 }, b::HeapIndex { base },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   if (const auto capacity = seg.GetCapacity(); capacity.get() < 5) {
     return;
@@ -453,11 +452,11 @@ NOLINT_TEST(FixedDescriptorSegmentTest, LIFORecycling)
 
   // LIFO: should get c, d, b (base+2, base+3, base+1)
   const auto f = seg.Allocate();
-  EXPECT_EQ(f, Handle { base + 2 });
+  EXPECT_EQ(f, b::HeapIndex { base + 2 });
   const auto g = seg.Allocate();
-  EXPECT_EQ(g, Handle { base + 3 });
+  EXPECT_EQ(g, b::HeapIndex { base + 3 });
   const auto h = seg.Allocate();
-  EXPECT_EQ(h, Handle { base + 1 });
+  EXPECT_EQ(h, b::HeapIndex { base + 1 });
 
   ExpectSize(seg, 5U);
 }
@@ -466,9 +465,9 @@ NOLINT_TEST(FixedDescriptorSegmentTest, LIFORecycling)
 NOLINT_TEST(FixedDescriptorSegmentTest, LIFORecycleFullFreeList)
 {
   constexpr uint32_t cap = 5;
-  TestDescriptorSegment seg(Capacity { cap }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { cap }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
-  std::vector<Handle> indices;
+  std::vector<b::HeapIndex> indices;
   indices.reserve(cap);
   for (uint32_t i = 0; i < cap; ++i) {
     indices.push_back(seg.Allocate());
@@ -493,14 +492,14 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
 {
   uint32_t base = 77;
   auto visibility = DescriptorVisibility::kShaderVisible;
-  TestDescriptorSegment orig(Capacity { 8 }, Handle { base },
+  TestDescriptorSegment orig(b::Capacity { 8 }, b::HeapIndex { base },
     ResourceViewType::kConstantBuffer, visibility);
   auto capacity = orig.GetCapacity();
 
   if (capacity.get() == 0) {
     TestDescriptorSegment moved(std::move(orig));
     EXPECT_EQ(moved.GetCapacity().get(), 0U);
-    TestDescriptorSegment assign(Capacity { 8 }, Handle { base + 1 },
+    TestDescriptorSegment assign(b::Capacity { 8 }, b::HeapIndex { base + 1 },
       ResourceViewType::kConstantBuffer, visibility);
     assign = std::move(moved);
     EXPECT_EQ(assign.GetCapacity().get(), 0U);
@@ -508,7 +507,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
   }
 
   // Allocate about half the capacity in the original segment
-  std::vector<Handle> allocations;
+  std::vector<b::HeapIndex> allocations;
   allocations.reserve(capacity.get() / 2 + (capacity.get() % 2));
   for (uint32_t i = 0; i < capacity.get() / 2 + (capacity.get() % 2); ++i) {
     allocations.push_back(orig.Allocate());
@@ -522,7 +521,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
   uint32_t orig_size = orig.GetAllocatedCount().get();
   uint32_t orig_avail = orig.GetAvailableCount().get();
   auto orig_next = orig.Allocate();
-  if (orig_next != kInvalidBindlessHandle) {
+  if (orig_next != kInvalidBindlessHeapIndex) {
     EXPECT_TRUE(orig.Release(orig_next));
   }
 
@@ -540,12 +539,12 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
   // Allocate from the moved segment and verify the next index matches
   auto moved_next = moved.Allocate();
   EXPECT_EQ(moved_next, orig_next);
-  if (moved_next != kInvalidBindlessHandle) {
+  if (moved_next != kInvalidBindlessHeapIndex) {
     EXPECT_TRUE(moved.Release(moved_next));
   }
 
   // Create another segment and allocate from it to set up for move assignment
-  TestDescriptorSegment another(Capacity { 8 }, Handle { base + 100 },
+  TestDescriptorSegment another(b::Capacity { 8 }, b::HeapIndex { base + 100 },
     ResourceViewType::kConstantBuffer, visibility);
   if (capacity.get() > 0) {
     auto _ = another.Allocate();
@@ -554,7 +553,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
   uint32_t another_size = another.GetAllocatedCount().get();
   uint32_t another_avail = another.GetAvailableCount().get();
   auto another_next = another.Allocate();
-  if (another_next != kInvalidBindlessHandle) {
+  if (another_next != kInvalidBindlessHeapIndex) {
     EXPECT_TRUE(another.Release(another_next));
   }
 
@@ -563,7 +562,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
 
   EXPECT_EQ(moved.GetViewType(), ResourceViewType::kConstantBuffer);
   EXPECT_EQ(moved.GetVisibility(), visibility);
-  EXPECT_EQ(moved.GetBaseIndex(), Handle { base + 100 });
+  EXPECT_EQ(moved.GetBaseIndex(), b::HeapIndex { base + 100 });
   EXPECT_EQ(moved.GetCapacity(), capacity);
   EXPECT_EQ(moved.GetAllocatedCount().get(), another_size);
   EXPECT_EQ(moved.GetAvailableCount().get(), another_avail);
@@ -571,7 +570,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
   // Allocate from the newly assigned segment and verify the next index
   auto assigned_next = moved.Allocate();
   EXPECT_EQ(assigned_next, another_next);
-  if (assigned_next != kInvalidBindlessHandle) {
+  if (assigned_next != kInvalidBindlessHeapIndex) {
     EXPECT_TRUE(moved.Release(assigned_next));
   }
 }
@@ -579,7 +578,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveSemantics)
 //! Move from empty segment.
 NOLINT_TEST(FixedDescriptorSegmentTest, MoveFromEmptySegment)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const TestDescriptorSegment moved(std::move(seg));
   ExpectEmpty(moved);
@@ -589,7 +588,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveFromEmptySegment)
 //! Move assign to self.
 NOLINT_TEST(FixedDescriptorSegmentTest, MoveAssignToSelf)
 {
-  TestDescriptorSegment seg(Capacity { 4 }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   seg = std::move(seg); // NOLINT(clang-diagnostic-self-move) -- testing
   ExpectEmpty(seg);
@@ -603,9 +602,9 @@ NOLINT_TEST(FixedDescriptorSegmentTest, MoveAssignToSelf)
 //! Polymorphic interface usage.
 NOLINT_TEST(FixedDescriptorSegmentTest, PolymorphicInterfaceUsage)
 {
-  const auto seg
-    = std::make_unique<TestDescriptorSegment>(Capacity { 8 }, Handle { 100 },
-      ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
+  const auto seg = std::make_unique<TestDescriptorSegment>(b::Capacity { 8 },
+    b::HeapIndex { 100 }, ResourceViewType::kConstantBuffer,
+    DescriptorVisibility::kShaderVisible);
 
   const auto capacity = seg->GetCapacity();
   if (capacity.get() == 0) {
@@ -617,12 +616,12 @@ NOLINT_TEST(FixedDescriptorSegmentTest, PolymorphicInterfaceUsage)
   constexpr uint32_t n = 4U;
   for (uint32_t i = 0; i < (std::min)(n, capacity.get()); ++i) {
     auto idx = seg->Allocate();
-    EXPECT_NE(idx, kInvalidBindlessHandle);
-    EXPECT_EQ(idx, Handle { seg->GetBaseIndex().get() + i });
+    EXPECT_NE(idx, kInvalidBindlessHeapIndex);
+    EXPECT_EQ(idx, b::HeapIndex { seg->GetBaseIndex().get() + i });
     EXPECT_EQ(seg->GetAllocatedCount().get(), i + 1);
   }
   for (uint32_t i = 0; i < (std::min)(n, capacity.get()); ++i) {
-    EXPECT_TRUE(seg->Release(Handle { seg->GetBaseIndex().get() + i }));
+    EXPECT_TRUE(seg->Release(b::HeapIndex { seg->GetBaseIndex().get() + i }));
   }
   ExpectSize(*seg, 0U);
   ExpectEmpty(*seg);
@@ -642,11 +641,11 @@ INSTANTIATE_TEST_SUITE_P(
 NOLINT_TEST_P(AllocateUntilFullParamTest, AllocateUntilFull)
 {
   const uint32_t test_capacity = GetParam();
-  TestDescriptorSegment seg(Capacity { test_capacity }, Handle { 0 },
+  TestDescriptorSegment seg(b::Capacity { test_capacity }, b::HeapIndex { 0 },
     ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
   const auto capacity = seg.GetCapacity();
   if (capacity.get() == 0) {
-    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHandle);
+    EXPECT_EQ(seg.Allocate(), kInvalidBindlessHeapIndex);
     ExpectFull(seg);
     EXPECT_EQ(seg.GetAvailableCount().get(), 0U);
     return;
@@ -654,8 +653,8 @@ NOLINT_TEST_P(AllocateUntilFullParamTest, AllocateUntilFull)
   // Allocate all descriptors until full.
   for (uint32_t i = 0; i < capacity.get(); ++i) {
     [[maybe_unused]] auto idx = seg.Allocate();
-    EXPECT_NE(idx, kInvalidBindlessHandle);
-    EXPECT_EQ(idx, Handle { i });
+    EXPECT_NE(idx, kInvalidBindlessHeapIndex);
+    EXPECT_EQ(idx, b::HeapIndex { i });
   }
   // Next allocation should fail.
   ExpectFull(seg);

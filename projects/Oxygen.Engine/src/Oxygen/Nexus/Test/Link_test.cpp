@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
@@ -53,7 +53,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     std::cout << "Testing GenerationTracker basic operations...\n";
 
     nexus::GenerationTracker tracker(bindless::Capacity { 16 });
-    const auto handle = bindless::Handle { 5 };
+    const auto handle = bindless::HeapIndex { 5 };
 
     // Test lazy initialization
     const auto gen1 = tracker.Load(handle);
@@ -78,7 +78,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     }
 
     // Test out-of-bounds safety
-    const auto gen_oob = tracker.Load(bindless::Handle { 100 });
+    const auto gen_oob = tracker.Load(bindless::HeapIndex { 100 });
     if (gen_oob.get() == 0) {
       std::cout << "✓ GenerationTracker out-of-bounds returns 0\n";
     } else {
@@ -93,7 +93,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     std::cout
       << "Testing VersionedBindlessHandle construction and validation...\n";
 
-    const auto handle = bindless::Handle { 42 };
+    const auto handle = bindless::HeapIndex { 42 };
     const auto generation = VersionedBindlessHandle::Generation { 5 };
 
     VersionedBindlessHandle versioned_handle { handle, generation };

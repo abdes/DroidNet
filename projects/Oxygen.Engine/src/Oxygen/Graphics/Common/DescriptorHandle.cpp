@@ -13,7 +13,7 @@ using oxygen::graphics::DescriptorAllocator;
 using oxygen::graphics::DescriptorHandle;
 
 DescriptorHandle::DescriptorHandle(DescriptorAllocator* allocator,
-  const bindless::Handle index, const ResourceViewType view_type,
+  const bindless::HeapIndex index, const ResourceViewType view_type,
   const DescriptorVisibility visibility) noexcept
   : allocator_(allocator)
   , handle_(index)
@@ -21,11 +21,11 @@ DescriptorHandle::DescriptorHandle(DescriptorAllocator* allocator,
   , visibility_(visibility)
 {
   DCHECK_F(allocator != nullptr, "Allocator must not be null");
-  DCHECK_F(index != kInvalidBindlessHandle, "Invalid index");
+  DCHECK_F(index != kInvalidBindlessHeapIndex, "Invalid index");
   DLOG_F(4, "constructed {}", *this);
 }
 
-DescriptorHandle::DescriptorHandle(const bindless::Handle index,
+DescriptorHandle::DescriptorHandle(const bindless::HeapIndex index,
   const ResourceViewType view_type,
   const DescriptorVisibility visibility) noexcept
   : handle_(index)
@@ -85,7 +85,7 @@ void DescriptorHandle::InvalidateInternal(bool moved) noexcept
   }
 
   allocator_ = nullptr;
-  handle_ = kInvalidBindlessHandle;
+  handle_ = kInvalidBindlessHeapIndex;
   view_type_ = ResourceViewType::kNone;
   visibility_ = DescriptorVisibility::kNone;
 }

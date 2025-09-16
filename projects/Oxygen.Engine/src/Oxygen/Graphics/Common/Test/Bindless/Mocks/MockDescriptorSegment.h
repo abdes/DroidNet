@@ -18,12 +18,12 @@ class MockDescriptorSegment : public detail::DescriptorSegment {
 public:
   // clang-format off
   // NOLINTBEGIN
-  MOCK_METHOD(oxygen::bindless::Handle, Allocate, (), (override, noexcept));
-  MOCK_METHOD(bool, Release, (oxygen::bindless::Handle), (override, noexcept));
+  MOCK_METHOD(oxygen::bindless::HeapIndex, Allocate, (), (override, noexcept));
+  MOCK_METHOD(bool, Release, (oxygen::bindless::HeapIndex), (override, noexcept));
   MOCK_METHOD(oxygen::bindless::Count, GetAvailableCount, (), (const, override, noexcept));
   MOCK_METHOD(ResourceViewType, GetViewType, (), (const, override, noexcept));
   MOCK_METHOD(DescriptorVisibility, GetVisibility, (), (const, override, noexcept));
-  MOCK_METHOD(oxygen::bindless::Handle, GetBaseIndex, (), (const, override, noexcept));
+  MOCK_METHOD(oxygen::bindless::HeapIndex, GetBaseIndex, (), (const, override, noexcept));
   MOCK_METHOD(oxygen::bindless::Capacity, GetCapacity, (), (const, override, noexcept));
   MOCK_METHOD(oxygen::bindless::Count, GetAllocatedCount, (), (const, override, noexcept));
   // NOLINTEND

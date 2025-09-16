@@ -277,7 +277,7 @@ the headers for full APIs, invariants, and usage examples.
   domain as a pair {ResourceViewType, DescriptorVisibility}. See
   src/Oxygen/Nexus/Types/Domain.h
 - **oxygen::nexus::DomainRange** — Absolute range in the global bindless heap:
-  {start: bindless::Handle, capacity: bindless::Capacity}. See
+  {start: bindless::HeapIndex, capacity: bindless::Capacity}. See
   src/Oxygen/Nexus/Types/Domain.h
 - **oxygen::nexus::GenerationTracker** — Thread-safe per-slot generation table
   used to stamp VersionedBindlessHandle and detect stale handles; supports lazy
@@ -297,10 +297,10 @@ API (Renderer-layer wrapper around injected allocate/free):
 class FrameDrivenSlotReuse {
 public:
   //! Type-erased backend allocate function: returns absolute handle index.
-  using AllocateFn = std::function<oxygen::bindless::Handle(DomainKey)>;
+  using AllocateFn = std::function<oxygen::bindless::HeapIndex(DomainKey)>;
 
   //! Type-erased backend free function.
-  using FreeFn = std::function<void(DomainKey, oxygen::bindless::Handle)>;
+  using FreeFn = std::function<void(DomainKey, oxygen::bindless::HeapIndex)>;
 
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
@@ -328,7 +328,7 @@ public:
   lambda into the current frame’s bucket. On the next cycle of the same frame
   index, per-frame executes the lambda which:
   - generation.bump(absIndex) with release semantics; then
-  - free(domain, oxygen::bindless::Handle{absIndex}).
+  - free(domain, oxygen::bindless::HeapIndex{absIndex}).
 - Allocate calls allocate(domain, ...) to obtain an index, reads
   generation.load(absIndex) with acquire, and returns
   VersionedBindlessHandle{absIndex, gen}.
@@ -483,8 +483,8 @@ rules, and tests are specified here.
   ```cpp
   class TimelineGatedSlotReuse {
   public:
-    using AllocateFn = std::function<oxygen::bindless::Handle(DomainKey)>;
-    using FreeFn = std::function<void(DomainKey, oxygen::bindless::Handle)>;
+    using AllocateFn = std::function<oxygen::bindless::HeapIndex(DomainKey)>;
+    using FreeFn = std::function<void(DomainKey, oxygen::bindless::HeapIndex)>;
 
     explicit TimelineGatedSlotReuse(AllocateFn allocate,
                                     FreeFn free,
@@ -610,7 +610,7 @@ rules, and tests are specified here.
 
 On Allocate(domain, …) [both strategies]:
 
-1) Call allocate(domain, …) → oxygen::bindless::Handle idx.
+1) Call allocate(domain, …) → oxygen::bindless::HeapIndex idx.
 2) Read g = generation_table[idx].load(memory_order_acquire); if zero,
    initialize to 1.
 3) Return VersionedBindlessHandle{ index=idx, generation=g }.

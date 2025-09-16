@@ -27,7 +27,7 @@ public:
   using ExtendedSegmentFactory
     = std::function<std::unique_ptr<detail::DescriptorSegment>(
       oxygen::bindless::Capacity /*capacity*/,
-      oxygen::bindless::Handle /*base_index*/, ResourceViewType,
+      oxygen::bindless::HeapIndex /*base_index*/, ResourceViewType,
       DescriptorVisibility)>;
 
   // Explicit constructor to set up default action for the mocked Allocate
@@ -73,7 +73,7 @@ public:
 protected:
   // Manual override for heap segment creation (not mocked)
   auto CreateHeapSegment(const oxygen::bindless::Capacity capacity,
-    const oxygen::bindless::Handle base_index, const ResourceViewType view_type,
+    const oxygen::bindless::HeapIndex base_index, const ResourceViewType view_type,
     const DescriptorVisibility visibility)
     -> std::unique_ptr<detail::DescriptorSegment> override
   {

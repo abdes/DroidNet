@@ -26,8 +26,8 @@ namespace {
   // Descriptor index range for overlap validation.
   struct RangeInfo {
     std::string key;
-    bindless::Handle::UnderlyingType begin;
-    bindless::Handle::UnderlyingType end; // exclusive
+    bindless::HeapIndex::UnderlyingType begin;
+    bindless::HeapIndex::UnderlyingType end; // exclusive
   };
 
   // Local helper to build a normalized heap key string.
@@ -118,7 +118,7 @@ namespace {
   // Returns the HeapDescription and its base_index.
   static auto ParseEntryOrThrow(const nlohmann::json& cfg,
     const std::string& heap_key, const bool key_shader_visible)
-    -> std::pair<HeapDescription, bindless::Handle>
+    -> std::pair<HeapDescription, bindless::HeapIndex>
   {
     if (!cfg.is_object()) {
       throw std::runtime_error(
@@ -160,7 +160,7 @@ namespace {
     const uint32_t max_growth_iterations
       = cfg.value("max_growth_iterations", 0u);
 
-    bindless::Handle base_index { 0 };
+    bindless::HeapIndex base_index { 0 };
     if (cfg.contains("base_index")) {
       if (!cfg["base_index"].is_number_integer()) {
         throw std::runtime_error(
@@ -172,8 +172,8 @@ namespace {
           "Heap entry 'base_index' must be > 0 and < {} '" + heap_key + "'"
           + std::to_string(kMaxValue));
       }
-      base_index = bindless::Handle {
-        static_cast<bindless::Handle::UnderlyingType>(base_value),
+      base_index = bindless::HeapIndex {
+        static_cast<bindless::HeapIndex::UnderlyingType>(base_value),
       };
     }
 
@@ -272,13 +272,13 @@ auto D3D12HeapAllocationStrategy::GetHeapDescription(
 
 auto D3D12HeapAllocationStrategy::GetHeapBaseIndex(
   const ResourceViewType view_type, const DescriptorVisibility visibility) const
-  -> bindless::Handle
+  -> bindless::HeapIndex
 {
   const auto key = GetHeapKey(view_type, visibility);
   const auto it = heap_base_indices_.find(key);
   if (it == heap_base_indices_.end()) {
     DLOG_F(WARNING, "No base index found for heap key: {}, using 0", key);
-    return bindless::Handle { 0 };
+    return bindless::HeapIndex { 0 };
   }
   return it->second;
 }
@@ -359,7 +359,8 @@ void D3D12HeapAllocationStrategy::InitFromJson(std::string_view json_text)
     const auto u_capacity = parsed.shader_visible
       ? desc.shader_visible_capacity.get()
       : desc.cpu_visible_capacity.get();
-    const auto end_index = bindless::Handle { base_index.get() + u_capacity };
+    const auto end_index
+      = bindless::HeapIndex { base_index.get() + u_capacity };
     if (u_capacity > 0) {
       ranges.push_back(
         RangeInfo { heap_key, base_index.get(), end_index.get() });

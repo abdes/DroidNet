@@ -13,7 +13,7 @@
 #include <mutex>
 #include <vector>
 
-#include <Oxygen/Core/Types/BindlessHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
@@ -55,10 +55,10 @@ namespace oxygen::nexus {
 class FrameDrivenSlotReuse {
 public:
   //! Type-erased backend allocate function: returns absolute handle index.
-  using AllocateFn = std::function<bindless::Handle(DomainKey)>;
+  using AllocateFn = std::function<bindless::HeapIndex(DomainKey)>;
 
   //! Type-erased backend free function.
-  using FreeFn = std::function<void(DomainKey, bindless::Handle)>;
+  using FreeFn = std::function<void(DomainKey, bindless::HeapIndex)>;
 
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   OXGN_NXS_API explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
@@ -80,7 +80,7 @@ public:
 
 private:
   //! Ensure internal buffers have capacity for the provided bindless index.
-  auto EnsureCapacity_(bindless::Handle idx) -> void;
+  auto EnsureCapacity_(bindless::HeapIndex idx) -> void;
 
   AllocateFn allocate_;
   FreeFn free_;

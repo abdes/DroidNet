@@ -293,7 +293,7 @@ auto FrameDrivenSlotReuse::OnBeginFrame(frame::Slot fi) -> void
        operations and flag access
  @see Allocate, Release
 */
-auto FrameDrivenSlotReuse::EnsureCapacity_(bindless::Handle idx) -> void
+auto FrameDrivenSlotReuse::EnsureCapacity_(bindless::HeapIndex idx) -> void
 {
   const auto needed = static_cast<std::size_t>(idx.get()) + 1u;
   if (pending_size_ >= needed) {
