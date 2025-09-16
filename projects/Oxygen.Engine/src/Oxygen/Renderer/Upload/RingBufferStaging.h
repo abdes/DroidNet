@@ -76,6 +76,23 @@ private:
     }
     active_partition_ = slot;
 
+    // Optional guard: if we are cycling back to this partition and have not
+    // observed any retirement since it was last used, log a warning. We still
+    // overwrite as designed; this is a diagnostic only.
+    static constexpr bool kWarnOnPartitionReuseWithoutRetire = true;
+    if (kWarnOnPartitionReuseWithoutRetire) {
+      const auto last_seen = partition_last_seen_retire_count_.empty()
+        ? 0ULL
+        : partition_last_seen_retire_count_[active_partition_];
+      if (last_seen == retire_count_) {
+        LOG_F(WARNING,
+          "RingBufferStaging: Reusing partition {} without observed retirement;"
+          " overwriting staging data. head={} cap_per_partition={}",
+          active_partition_, heads_.empty() ? 0ULL : heads_[active_partition_],
+          capacity_per_partition_);
+      }
+    }
+
     // When we cycle back to this partition, all GPU work for it has completed
     // so we can safely reclaim the space by resetting the head
     heads_[active_partition_] = 0ULL;
@@ -97,6 +114,13 @@ private:
   std::uint64_t capacity_ { 0 }; // total bytes
   std::uint32_t alignment_ { 256u };
   float slack_ { 0.5f };
+
+  // Retirement observation: incremented on RetireCompleted(); at Allocate()
+  // we record the current value per active partition. On reuse, if no new
+  // retirement was observed, we log a warning before overwriting.
+  std::uint64_t retire_count_ { 0ULL };
+  std::vector<std::uint64_t> partition_last_seen_retire_count_ {};
+  FenceValue last_completed_fence_ { 0 };
 };
 
 } // namespace oxygen::engine::upload

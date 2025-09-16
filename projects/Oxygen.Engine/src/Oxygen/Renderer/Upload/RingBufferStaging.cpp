@@ -53,6 +53,14 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   Allocation out(
     buffer_, OffsetBytes { offset }, SizeBytes { bytes }, mapped_ptr_ + offset);
 
+  // Record that this partition observed the current retire counter at the
+  // time of allocation. If we later reuse this partition without retire_count_
+  // increasing, SetActivePartition will log a warning.
+  if (partition_last_seen_retire_count_.size() < heads_.size()) {
+    partition_last_seen_retire_count_.assign(heads_.size(), 0ULL);
+  }
+  partition_last_seen_retire_count_[active_partition_] = retire_count_;
+
   // Update telemetry
   Stats().total_allocations++;
   Stats().total_bytes_allocated += bytes;
@@ -71,10 +79,15 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   return out;
 }
 
-auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue /*completed*/)
+auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue completed)
   -> void
 {
-  // No-op: partition reset happens via SetActivePartition per frame.
+  // Only bump when the completed fence actually advances, to avoid false
+  // positives in the partition reuse warning.
+  if (completed > last_completed_fence_) {
+    last_completed_fence_ = completed;
+    ++retire_count_;
+  }
 }
 
 auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
