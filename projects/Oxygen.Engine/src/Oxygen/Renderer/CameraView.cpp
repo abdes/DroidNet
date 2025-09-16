@@ -8,11 +8,12 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
-using oxygen::engine::CameraView;
+using oxygen::renderer::CameraView;
 
 namespace {
 [[nodiscard]] auto BuildViewMatrixFromPose(
@@ -24,7 +25,15 @@ namespace {
 }
 } // namespace
 
-auto CameraView::Resolve() const -> View
+CameraView::CameraView(Params p, std::weak_ptr<graphics::Surface> surface)
+  : params_(std::move(p))
+  , name_(p.camera_node.GetName())
+  , surface_(std::move(surface))
+{
+  DCHECK_F(!surface_.expired());
+}
+
+auto CameraView::Resolve() const noexcept -> View
 {
   using oxygen::scene::OrthographicCamera;
   using oxygen::scene::PerspectiveCamera;

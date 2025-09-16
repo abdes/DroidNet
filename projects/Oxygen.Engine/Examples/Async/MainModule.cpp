@@ -726,19 +726,27 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(2, "MainModule::OnSceneMutation");
-  try {
-    if (surface_) {
-      EnsureMainCamera(static_cast<int>(surface_->Width()),
-        static_cast<int>(surface_->Height()));
-    }
-  } catch (const std::exception& ex) {
-    if (window_weak_.expired()) {
-      LOG_F(ERROR, "window is no longer valid: {}", ex.what());
-      surface_.reset();
-      context.RemoveSurfaceAt(0); // FIXME: find our surface index
-    }
+  if (!surface_ || window_weak_.expired()) {
+    LOG_F(ERROR, "Window or Surface is no longer valid");
+    surface_.reset();
+    context.RemoveSurfaceAt(0); // FIXME: find our surface index
     co_return;
   }
+
+  EnsureMainCamera(
+    static_cast<int>(surface_->Width()), static_cast<int>(surface_->Height()));
+
+  // FIXME: view management is temporary
+  context.AddView(std::make_shared<renderer::CameraView>(
+    renderer::CameraView::Params {
+      .camera_node = main_camera_,
+      .viewport = std::nullopt,
+      .scissor = std::nullopt,
+      .pixel_jitter = glm::vec2(0.0F, 0.0F),
+      .reverse_z = false,
+      .mirrored = false,
+    },
+    surface_));
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -800,19 +808,6 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
   // Setup render passes (frame graph configuration)
   SetupRenderPasses();
 
-  // Build the frame in the renderer
-  if (renderer_ && scene_) {
-    engine::CameraView::Params cv {
-      .camera_node = main_camera_,
-      .viewport = std::nullopt,
-      .scissor = std::nullopt,
-      .pixel_jitter = glm::vec2(0.0F, 0.0F),
-      .reverse_z = false,
-      .mirrored = false,
-    };
-    renderer_->BuildFrame(engine::CameraView(cv), context);
-  }
-
   co_return;
 }
 
@@ -826,22 +821,6 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 
   // Execute the actual rendering commands
   co_await ExecuteRenderCommands(context);
-
-  // Mark our surface as presentable after rendering is complete
-  // This is part of the module contract - surfaces must be marked presentable
-  // before the Present phase. Since FrameContext is recreated each frame,
-  // we need to find and mark our surface every frame.
-  if (surface_) {
-    auto surfaces = context.GetSurfaces();
-    for (size_t i = 0; i < surfaces.size(); ++i) {
-      if (surfaces[i] == surface_) {
-        context.SetSurfacePresentable(i, true);
-        LOG_F(2, "Surface '{}' marked as presentable at index {}",
-          surface_->GetName(), i);
-        break;
-      }
-    }
-  }
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
