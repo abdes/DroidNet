@@ -67,7 +67,7 @@ using oxygen::graphics::SingleQueueStrategy;
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
 
-Renderer::Renderer(std::weak_ptr<Graphics> graphics)
+Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   : gfx_weak_(std::move(graphics))
   , scene_prep_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
         decltype(sceneprep::CreateBasicCollectionConfig()),
@@ -81,8 +81,17 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics)
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
   auto gfx = gfx_weak_.lock();
 
-  uploader_
-    = std::make_unique<upload::UploadCoordinator>(observer_ptr { gfx.get() });
+  // Require a non-empty upload queue key in the renderer configuration.
+  CHECK_F(!config.upload_queue_key.empty(),
+    "RendererConfig.upload_queue_key must not be empty");
+
+  // Build upload policy and honour configured upload queue from Renderer
+  // configuration.
+  auto policy = upload::DefaultUploadPolicy();
+  policy.upload_queue_key = graphics::QueueKey { config.upload_queue_key };
+
+  uploader_ = std::make_unique<upload::UploadCoordinator>(
+    observer_ptr { gfx.get() }, policy);
   staging_provider_
     = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
 

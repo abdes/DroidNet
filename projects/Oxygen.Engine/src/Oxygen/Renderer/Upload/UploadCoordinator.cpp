@@ -64,22 +64,10 @@ auto UsageToTargetState(BufferUsage usage) -> ResourceStates
   return ResourceStates::kCommon;
 }
 
-// Choose a queue key preferring the copy queue when available, otherwise
-// falling back to the graphics queue.
-// TODO: make this use the QueueSStrategy and part of the RenderConfig
-auto ChooseUploadQueueKey(oxygen::Graphics& gfx) -> QueueKey
-{
-  const auto copy_key = SingleQueueStrategy().KeyFor(QueueRole::kTransfer);
-  if (gfx.GetCommandQueue(copy_key) != nullptr) {
-    return copy_key;
-  }
-  return SingleQueueStrategy().KeyFor(QueueRole::kGraphics);
-}
-
 // Minimal synchronous Submit: buffer uploads only.
 // Follows Renderer.cpp pattern and uses SingleQueueStrategy for now.
 auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
-  UploadTracker& tracker, StagingProvider& provider)
+  UploadTracker& tracker, StagingProvider& provider, const QueueKey& queue_key)
   -> std::expected<UploadTicket, UploadError>
 {
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
@@ -118,12 +106,12 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   }
 
   // Record copy
-  const auto key = ChooseUploadQueueKey(gfx);
+  const auto& key = queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffer");
   // Begin tracking once per recorder for this destination
   recorder->BeginTrackingResourceState(
-    *desc.dst, ResourceStates::kCommon, false);
+    *desc.dst, ResourceStates::kCopyDest, false);
   recorder->RequireResourceState(*desc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBuffer(
@@ -190,7 +178,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   }
 
   // Record copy to texture
-  const auto key = ChooseUploadQueueKey(gfx);
+  const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture2D");
   recorder->BeginTrackingResourceState(
@@ -252,7 +240,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
     r.buffer_offset += staging.Offset().get();
   }
 
-  const auto key = ChooseUploadQueueKey(gfx);
+  const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture3D");
   recorder->BeginTrackingResourceState(
@@ -297,7 +285,8 @@ auto UploadCoordinator::Submit(const UploadRequest& req,
 {
   switch (req.kind) {
   case UploadKind::kBuffer:
-    return SubmitBuffer(*gfx_, req, tracker_, provider);
+    return SubmitBuffer(
+      *gfx_, req, tracker_, provider, policy_.upload_queue_key);
   case UploadKind::kTexture2D:
     return SubmitTexture2D(*gfx_, req, policy_, tracker_, provider);
   case UploadKind::kTexture3D:
@@ -345,8 +334,8 @@ auto UploadCoordinator::SubmitMany(
 
 auto UploadCoordinator::RetireCompleted() -> void
 {
-  // Poll the same queue role used for uploads (transfer preferred)
-  const auto key = ChooseUploadQueueKey(*gfx_);
+  // Poll the upload queue configured in the policy.
+  const auto& key = policy_.upload_queue_key;
   if (auto q = gfx_->GetCommandQueue(key); q) {
     q->Flush();
     const auto completed = FenceValue { q->GetCompletedValue() };
@@ -500,8 +489,7 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
       }
       if (fp.enable_default_fill && to_copy < reg.size) {
         std::memset(allocation.Ptr() + reg.src_offset + to_copy,
-          static_cast<int>(fp.filler_value),
-          static_cast<size_t>(reg.size - to_copy));
+          static_cast<int>(fp.filler_value), reg.size - to_copy);
       }
     } else {
       auto& producer
@@ -510,12 +498,11 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
             r.data));
       std::span<std::byte> dst(allocation.Ptr() + reg.src_offset, reg.size);
       if (!producer && fp.enable_default_fill) {
-        std::memset(dst.data(), static_cast<int>(fp.filler_value),
-          static_cast<size_t>(dst.size()));
+        std::memset(dst.data(), static_cast<int>(fp.filler_value), dst.size());
       } else if (producer) {
         if (!producer(dst) && fp.enable_default_fill) {
-          std::memset(dst.data(), static_cast<int>(fp.filler_value),
-            static_cast<size_t>(dst.size()));
+          std::memset(
+            dst.data(), static_cast<int>(fp.filler_value), dst.size());
         }
       }
     }
@@ -532,7 +519,7 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
   std::span<const UploadRequest> run, StagingProvider::Allocation& staging)
   -> std::expected<graphics::FenceValue, UploadError>
 {
-  const auto key = ChooseUploadQueueKey(*gfx_);
+  const auto& key = policy_.upload_queue_key;
   auto recorder
     = gfx_->AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffersBatch");
 

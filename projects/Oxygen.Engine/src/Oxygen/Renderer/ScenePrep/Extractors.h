@@ -180,10 +180,6 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   std::vector<uint32_t> visible_submeshes;
   visible_submeshes.reserve(submeshes.size());
 
-  // Diagnostic logging: print LOD and submesh counts and per-submesh visibility
-  DLOG_F(INFO, "SubMeshVisibilityFilter: resolved_lod={}, submesh_count={}",
-    lod, submeshes.size());
-
   // Diagnostics: allow disabling culling and/or inflating bounds slightly
   static constexpr bool kDisableSubmeshFrustumCulling = false;
   // Absolute inflation in world units (meters) and relative inflation factor
@@ -195,9 +191,6 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
     ++i) {
     // Visibility mask check first (cheap)
     const bool rend_vis = rend.IsSubmeshVisible(lod, i);
-    DLOG_F(INFO,
-      " Submesh[{}] - Renderable::IsSubmeshVisible(lod={},index={}) = {}", i,
-      lod, i, rend_vis ? "true" : "false");
     if (!rend_vis) {
       continue;
     }

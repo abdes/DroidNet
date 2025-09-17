@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
@@ -57,7 +58,10 @@ class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
-  OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics);
+  // Renderer must be constructed with a valid RendererConfig containing a
+  // non-empty upload_queue_key key.
+  OXGN_RNDR_API explicit Renderer(
+    std::weak_ptr<Graphics> graphics, RendererConfig config);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
