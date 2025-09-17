@@ -23,108 +23,108 @@ namespace oxygen::input {
 //-- ActionTrigger -------------------------------------------------------------
 
 enum class ActionTriggerType : uint8_t {
-    kPressed,
-    kReleased,
-    kDown,
-    kHold,
-    kHoldAndRelease,
-    kPulse,
-    kTap,
-    kActionChain,
-    kCombo,
+  kPressed,
+  kReleased,
+  kDown,
+  kHold,
+  kHoldAndRelease,
+  kPulse,
+  kTap,
+  kActionChain,
+  kCombo,
 };
 
 class ActionTrigger {
 public:
-    enum class Behavior : uint8_t {
-        kExplicit, // Input may trigger if any explicit trigger is triggered.
-        kImplicit, // Input may trigger only if all implicit triggers are
-        // triggered.
-        kBlocker, // Inverted trigger that will block all other triggers if it
-        // is triggered.
-    };
+  enum class Behavior : uint8_t {
+    kExplicit, // Input may trigger if any explicit trigger is triggered.
+    kImplicit, // Input may trigger only if all implicit triggers are
+    // triggered.
+    kBlocker, // Inverted trigger that will block all other triggers if it
+    // is triggered.
+  };
 
-    explicit ActionTrigger() = default;
-    virtual ~ActionTrigger() = default;
+  explicit ActionTrigger() = default;
+  virtual ~ActionTrigger() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTrigger);
-    OXYGEN_DEFAULT_MOVABLE(ActionTrigger);
+  OXYGEN_DEFAULT_COPYABLE(ActionTrigger);
+  OXYGEN_DEFAULT_MOVABLE(ActionTrigger);
 
-    [[nodiscard]] virtual auto GetType() const -> ActionTriggerType = 0;
+  [[nodiscard]] virtual auto GetType() const -> ActionTriggerType = 0;
 
-    [[nodiscard]] auto IsExplicit() const
-    {
-        return behavior_ == Behavior::kExplicit;
-    }
+  [[nodiscard]] auto IsExplicit() const
+  {
+    return behavior_ == Behavior::kExplicit;
+  }
 
-    void MakeExplicit() { behavior_ = Behavior::kExplicit; }
+  void MakeExplicit() { behavior_ = Behavior::kExplicit; }
 
-    [[nodiscard]] auto IsImplicit() const
-    {
-        return behavior_ == Behavior::kImplicit;
-    }
+  [[nodiscard]] auto IsImplicit() const
+  {
+    return behavior_ == Behavior::kImplicit;
+  }
 
-    void MakeImplicit() { behavior_ = Behavior::kImplicit; }
+  void MakeImplicit() { behavior_ = Behavior::kImplicit; }
 
-    [[nodiscard]] auto IsBlocker() const
-    {
-        return behavior_ == Behavior::kBlocker;
-    }
+  [[nodiscard]] auto IsBlocker() const
+  {
+    return behavior_ == Behavior::kBlocker;
+  }
 
-    void MakeBlocker() { behavior_ = Behavior::kBlocker; }
+  void MakeBlocker() { behavior_ = Behavior::kBlocker; }
 
-    void SetActuationThreshold(float threshold)
-    {
-        actuation_threshold_ = threshold;
-    }
+  void SetActuationThreshold(float threshold)
+  {
+    actuation_threshold_ = threshold;
+  }
 
-    [[nodiscard]] auto IsIdle() const { return state_ == State::kIdle; }
+  [[nodiscard]] auto IsIdle() const { return state_ == State::kIdle; }
 
-    [[nodiscard]] auto IsOngoing() const { return state_ == State::kOngoing; }
+  [[nodiscard]] auto IsOngoing() const { return state_ == State::kOngoing; }
 
-    [[nodiscard]] virtual auto IsTriggered() const -> bool { return triggered_; }
+  [[nodiscard]] virtual auto IsTriggered() const -> bool { return triggered_; }
 
-    [[nodiscard]] virtual auto IsCanceled() const -> bool
-    {
-        return !triggered_ && (previous_state_ == State::kOngoing)
-            && (state_ == State::kIdle);
-    }
+  [[nodiscard]] virtual auto IsCanceled() const -> bool
+  {
+    return !triggered_ && (previous_state_ == State::kOngoing)
+      && (state_ == State::kIdle);
+  }
 
-    [[nodiscard]] virtual auto IsCompleted() const -> bool
-    {
-        return triggered_ && (state_ == State::kIdle);
-    }
+  [[nodiscard]] virtual auto IsCompleted() const -> bool
+  {
+    return triggered_ && (state_ == State::kIdle);
+  }
 
-    void UpdateState(const ActionValue& action_value, Duration delta_time);
+  void UpdateState(const ActionValue& action_value, Duration delta_time);
 
 protected:
-    enum class State : uint8_t {
-        kIdle,
-        kOngoing,
-    };
-    virtual auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool
-        = 0;
+  enum class State : uint8_t {
+    kIdle,
+    kOngoing,
+  };
+  virtual auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool
+    = 0;
 
-    void SetTriggerState(State state)
-    {
-        previous_state_ = state_;
-        state_ = state;
-    }
+  void SetTriggerState(State state)
+  {
+    previous_state_ = state_;
+    state_ = state;
+  }
 
-    [[nodiscard]] auto GetActuationThreshold() const
-    {
-        return actuation_threshold_;
-    }
+  [[nodiscard]] auto GetActuationThreshold() const
+  {
+    return actuation_threshold_;
+  }
 
-    [[nodiscard]] auto GetPreviousState() const { return previous_state_; }
+  [[nodiscard]] auto GetPreviousState() const { return previous_state_; }
 
 private:
-    Behavior behavior_ { Behavior::kImplicit };
-    float actuation_threshold_ { 0.5F };
-    State state_ { State::kIdle };
-    State previous_state_ { State::kIdle };
-    bool triggered_ { false };
+  Behavior behavior_ { Behavior::kImplicit };
+  float actuation_threshold_ { 0.5F };
+  State state_ { State::kIdle };
+  State previous_state_ { State::kIdle };
+  bool triggered_ { false };
 };
 
 //-- ActionTriggerPressed ------------------------------------------------------
@@ -133,43 +133,43 @@ private:
 // the input will not cause further triggers.
 class ActionTriggerPressed : public ActionTrigger {
 public:
-    ActionTriggerPressed() = default;
-    ~ActionTriggerPressed() override = default;
+  ActionTriggerPressed() = default;
+  ~ActionTriggerPressed() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerPressed);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerPressed);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerPressed);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerPressed);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kPressed;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kPressed;
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    bool depleted_ { false };
+  bool depleted_ { false };
 };
 
 //-- ActionTriggerReleased -----------------------------------------------------
 
 class ActionTriggerReleased : public ActionTrigger {
 public:
-    ActionTriggerReleased() = default;
-    ~ActionTriggerReleased() override = default;
+  ActionTriggerReleased() = default;
+  ~ActionTriggerReleased() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerReleased);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerReleased);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerReleased);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerReleased);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kReleased;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kReleased;
+  }
 
 protected:
-    auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time [[maybe_unused]]) -> bool override;
+  auto DoUpdateState(const ActionValue& action_value,
+    Duration delta_time [[maybe_unused]]) -> bool override;
 };
 
 //-- ActionTriggerDown ---------------------------------------------------------
@@ -178,33 +178,33 @@ protected:
 // the input will cause further triggers.
 class ActionTriggerDown : public ActionTrigger {
 public:
-    OXYGEN_INPUT_API ActionTriggerDown();
-    ~ActionTriggerDown() override = default;
+  OXGN_NPUT_API ActionTriggerDown();
+  ~ActionTriggerDown() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerDown);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerDown);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerDown);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerDown);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kDown;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kDown;
+  }
 
-    [[nodiscard]] auto IsCompleted() const -> bool override
-    {
-        return triggered_once_ && IsIdle();
-    }
+  [[nodiscard]] auto IsCompleted() const -> bool override
+  {
+    return triggered_once_ && IsIdle();
+  }
 
-    [[nodiscard]] auto IsCanceled() const -> bool override
-    {
-        return ActionTrigger::IsCanceled() && !triggered_once_;
-    }
+  [[nodiscard]] auto IsCanceled() const -> bool override
+  {
+    return ActionTrigger::IsCanceled() && !triggered_once_;
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    bool triggered_once_ { false };
+  bool triggered_once_ { false };
 };
 
 //-- ActionTriggerTimed --------------------------------------------------------
@@ -215,23 +215,23 @@ private:
 // should provide the logic for Triggered transitions.
 class ActionTriggerTimed : public ActionTrigger {
 public:
-    explicit ActionTriggerTimed() = default;
-    ~ActionTriggerTimed() override = default;
+  explicit ActionTriggerTimed() = default;
+  ~ActionTriggerTimed() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerTimed);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerTimed);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerTimed);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerTimed);
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
-    [[nodiscard]] virtual auto GetHeldDuration() const -> Duration
-    {
-        return held_duration_;
-    }
+  [[nodiscard]] virtual auto GetHeldDuration() const -> Duration
+  {
+    return held_duration_;
+  }
 
 private:
-    Duration held_duration_ { 0 };
+  Duration held_duration_ { 0 };
 };
 
 //-- ActionTriggerHold ---------------------------------------------------------
@@ -240,43 +240,43 @@ private:
 // Trigger may optionally fire once, or repeatedly fire.
 class ActionTriggerHold : public ActionTriggerTimed {
 public:
-    explicit ActionTriggerHold() = default;
-    ~ActionTriggerHold() override = default;
+  explicit ActionTriggerHold() = default;
+  ~ActionTriggerHold() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerHold);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerHold);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerHold);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerHold);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kHold;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kHold;
+  }
 
-    void SetHoldDurationThreshold(const float threshold_seconds)
-    {
-        hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
-    }
+  void SetHoldDurationThreshold(const float threshold_seconds)
+  {
+    hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
+  }
 
-    [[nodiscard]] auto GetHoldDurationThreshold() const
-    {
-        return hold_duration_threshold_;
-    }
+  [[nodiscard]] auto GetHoldDurationThreshold() const
+  {
+    return hold_duration_threshold_;
+  }
 
-    [[nodiscard]] auto IsOneShot() const { return one_shot_; }
-    void OneShot(bool enable = true) { one_shot_ = enable; }
+  [[nodiscard]] auto IsOneShot() const { return one_shot_; }
+  void OneShot(bool enable = true) { one_shot_ = enable; }
 
-    [[nodiscard]] auto IsCompleted() const -> bool override
-    {
-        return triggered_once_ && (IsIdle());
-    }
+  [[nodiscard]] auto IsCompleted() const -> bool override
+  {
+    return triggered_once_ && (IsIdle());
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    Duration hold_duration_threshold_ { 0 };
-    bool one_shot_ { true };
-    bool triggered_once_ { false };
+  Duration hold_duration_threshold_ { 0 };
+  bool one_shot_ { true };
+  bool triggered_once_ { false };
 };
 
 //-- ActionTriggerHoldAndRelease -----------------------------------------------
@@ -285,33 +285,33 @@ private:
 // HoldTimeThreshold seconds.
 class ActionTriggerHoldAndRelease : public ActionTriggerTimed {
 public:
-    explicit ActionTriggerHoldAndRelease() = default;
-    ~ActionTriggerHoldAndRelease() override = default;
+  explicit ActionTriggerHoldAndRelease() = default;
+  ~ActionTriggerHoldAndRelease() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerHoldAndRelease);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerHoldAndRelease);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerHoldAndRelease);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerHoldAndRelease);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kHoldAndRelease;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kHoldAndRelease;
+  }
 
-    void SetHoldDurationThreshold(const float threshold_seconds)
-    {
-        hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
-    }
+  void SetHoldDurationThreshold(const float threshold_seconds)
+  {
+    hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
+  }
 
-    [[nodiscard]] auto GetHoldDurationThreshold() const
-    {
-        return hold_duration_threshold_;
-    }
+  [[nodiscard]] auto GetHoldDurationThreshold() const
+  {
+    return hold_duration_threshold_;
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    Duration hold_duration_threshold_ { 0 };
+  Duration hold_duration_threshold_ { 0 };
 };
 
 //-- ActionTriggerPulse --------------------------------------------------------
@@ -322,54 +322,54 @@ private:
 // input is released.
 class ActionTriggerPulse : public ActionTriggerTimed {
 public:
-    explicit ActionTriggerPulse() = default;
-    ~ActionTriggerPulse() override = default;
+  explicit ActionTriggerPulse() = default;
+  ~ActionTriggerPulse() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerPulse);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerPulse);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerPulse);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerPulse);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kPulse;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kPulse;
+  }
 
-    void SetInterval(const float interval_seconds)
-    {
-        interval_ = SecondsToDuration(interval_seconds);
-    }
+  void SetInterval(const float interval_seconds)
+  {
+    interval_ = SecondsToDuration(interval_seconds);
+  }
 
-    [[nodiscard]] auto GetInterval() const { return interval_; }
+  [[nodiscard]] auto GetInterval() const { return interval_; }
 
-    [[nodiscard]] auto TriggerOnStart() const { return trigger_on_start_; }
-    void TriggerOnStart(bool enable = true) { trigger_on_start_ = enable; }
+  [[nodiscard]] auto TriggerOnStart() const { return trigger_on_start_; }
+  void TriggerOnStart(bool enable = true) { trigger_on_start_ = enable; }
 
-    [[nodiscard]] auto GetTriggerLimit() const { return trigger_limit_; }
-    void SetTriggerLimit(uint32_t trigger_limit = 0)
-    {
-        trigger_limit_ = trigger_limit;
-    }
+  [[nodiscard]] auto GetTriggerLimit() const { return trigger_limit_; }
+  void SetTriggerLimit(uint32_t trigger_limit = 0)
+  {
+    trigger_limit_ = trigger_limit;
+  }
 
-    [[nodiscard]] auto IsCompleted() const -> bool override
-    {
-        return ((trigger_count_ == 1) || (trigger_count_ == trigger_limit_))
-            && (IsIdle());
-    }
+  [[nodiscard]] auto IsCompleted() const -> bool override
+  {
+    return ((trigger_count_ == 1) || (trigger_count_ == trigger_limit_))
+      && (IsIdle());
+  }
 
-    [[nodiscard]] auto IsCanceled() const -> bool override
-    {
-        return ((trigger_count_ != 1) && (trigger_count_ < trigger_limit_))
-            && IsIdle() && (GetPreviousState() == State::kOngoing);
-    }
+  [[nodiscard]] auto IsCanceled() const -> bool override
+  {
+    return ((trigger_count_ != 1) && (trigger_count_ < trigger_limit_))
+      && IsIdle() && (GetPreviousState() == State::kOngoing);
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    Duration interval_ { std::chrono::seconds { 1 } };
-    bool trigger_on_start_ { true };
-    uint32_t trigger_limit_ { 0 };
-    uint32_t trigger_count_ { 0 };
+  Duration interval_ { std::chrono::seconds { 1 } };
+  bool trigger_on_start_ { true };
+  uint32_t trigger_limit_ { 0 };
+  uint32_t trigger_count_ { 0 };
 };
 
 //-- ActionTriggerTap ----------------------------------------------------------
@@ -378,34 +378,34 @@ private:
 // seconds to trigger.
 class ActionTriggerTap : public ActionTriggerTimed {
 public:
-    explicit ActionTriggerTap() = default;
-    ~ActionTriggerTap() override = default;
+  explicit ActionTriggerTap() = default;
+  ~ActionTriggerTap() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerTap);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerTap);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerTap);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerTap);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kHoldAndRelease;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kHoldAndRelease;
+  }
 
-    void SetTapReleaseThreshold(const float threshold_seconds)
-    {
-        threshold_ = SecondsToDuration(threshold_seconds);
-    }
+  void SetTapReleaseThreshold(const float threshold_seconds)
+  {
+    threshold_ = SecondsToDuration(threshold_seconds);
+  }
 
-    [[nodiscard]] auto GetTapReleaseThreshold() const { return threshold_; }
+  [[nodiscard]] auto GetTapReleaseThreshold() const { return threshold_; }
 
-    // Canceled does not make sense for this trigger
-    // TODO(abdes) restrict events supported for action events
-    [[nodiscard]] auto IsCanceled() const -> bool override { return false; }
+  // Canceled does not make sense for this trigger
+  // TODO(abdes) restrict events supported for action events
+  [[nodiscard]] auto IsCanceled() const -> bool override { return false; }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    Duration threshold_ { 0 };
+  Duration threshold_ { 0 };
 };
 
 //-- ActionTriggerChain --------------------------------------------------------
@@ -416,42 +416,42 @@ private:
 // important to consume input from an action that has a trigger chain.
 class ActionTriggerChain : public ActionTrigger {
 public:
-    ActionTriggerChain() = default;
-    ~ActionTriggerChain() override = default;
+  ActionTriggerChain() = default;
+  ~ActionTriggerChain() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerChain);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerChain);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerChain);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerChain);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kActionChain;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kActionChain;
+  }
 
-    OXYGEN_INPUT_API void SetLinkedAction(std::shared_ptr<Action> action);
-    [[nodiscard]] auto GetLinkedAction() const -> std::weak_ptr<const Action>
-    {
-        return linked_action_;
-    }
+  OXGN_NPUT_API void SetLinkedAction(std::shared_ptr<Action> action);
+  [[nodiscard]] auto GetLinkedAction() const -> std::weak_ptr<const Action>
+  {
+    return linked_action_;
+  }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    std::shared_ptr<Action> linked_action_;
+  std::shared_ptr<Action> linked_action_;
 };
 
 //-- ActionTriggerCombo --------------------------------------------------------
 
 struct InputComboStep {
-    std::shared_ptr<Action> action;
-    ActionState completion_states;
-    Duration time_to_complete;
+  std::shared_ptr<Action> action;
+  ActionState completion_states;
+  Duration time_to_complete;
 };
 
 struct InputComboBreaker {
-    std::shared_ptr<Action> action;
-    ActionState completion_states;
+  std::shared_ptr<Action> action;
+  ActionState completion_states;
 };
 
 // A sequence of actions that must enter a certain state (triggered, completed,
@@ -459,42 +459,40 @@ struct InputComboBreaker {
 // fire.
 class ActionTriggerCombo : public ActionTrigger {
 public:
-    ActionTriggerCombo() = default;
-    ~ActionTriggerCombo() override = default;
+  ActionTriggerCombo() = default;
+  ~ActionTriggerCombo() override = default;
 
-    OXYGEN_DEFAULT_COPYABLE(ActionTriggerCombo);
-    OXYGEN_DEFAULT_MOVABLE(ActionTriggerCombo);
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerCombo);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerCombo);
 
-    [[nodiscard]] auto GetType() const -> ActionTriggerType override
-    {
-        return ActionTriggerType::kCombo;
-    }
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kCombo;
+  }
 
-    OXYGEN_INPUT_API void AddComboStep(
-        std::shared_ptr<Action> action,
-        ActionState completion_states = ActionState::kTriggered,
-        float time_to_complete_seconds = 0.5F);
-    OXYGEN_INPUT_API void RemoveComboStep(uint32_t index);
-    OXYGEN_INPUT_API void ClearComboSteps();
-    [[nodiscard]] auto GetComboSteps() const { return combo_steps_; }
+  OXGN_NPUT_API void AddComboStep(std::shared_ptr<Action> action,
+    ActionState completion_states = ActionState::kTriggered,
+    float time_to_complete_seconds = 0.5F);
+  OXGN_NPUT_API void RemoveComboStep(uint32_t index);
+  OXGN_NPUT_API void ClearComboSteps();
+  [[nodiscard]] auto GetComboSteps() const { return combo_steps_; }
 
-    OXYGEN_INPUT_API void AddComboBreaker(
-        std::shared_ptr<Action> action,
-        ActionState completion_states = ActionState::kTriggered);
-    OXYGEN_INPUT_API void RemoveComboBreaker(uint32_t index);
-    OXYGEN_INPUT_API void ClearComboBreakers();
-    [[nodiscard]] auto GetComboBreakers() const { return combo_breakers_; }
+  OXGN_NPUT_API void AddComboBreaker(std::shared_ptr<Action> action,
+    ActionState completion_states = ActionState::kTriggered);
+  OXGN_NPUT_API void RemoveComboBreaker(uint32_t index);
+  OXGN_NPUT_API void ClearComboBreakers();
+  [[nodiscard]] auto GetComboBreakers() const { return combo_breakers_; }
 
 protected:
-    OXYGEN_INPUT_API auto DoUpdateState(const ActionValue& action_value,
-        Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(
+    const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
-    std::vector<InputComboStep> combo_steps_;
-    std::vector<InputComboBreaker> combo_breakers_;
+  std::vector<InputComboStep> combo_steps_;
+  std::vector<InputComboBreaker> combo_breakers_;
 
-    Duration waited_time_ { 0 };
-    size_t current_step_index_ { 0 };
+  Duration waited_time_ { 0 };
+  size_t current_step_index_ { 0 };
 };
 
 } // namespace oxygen::input
