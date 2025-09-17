@@ -26,6 +26,7 @@ protected:
 
   auto TearDown() -> void override { }
 
+  auto Gfx() -> auto& { return *gfx_; }
   auto GfxPtr() const { return observer_ptr { gfx_.get() }; }
 
   auto Uploader(UploadPolicy policy = DefaultUploadPolicy())
@@ -38,11 +39,20 @@ protected:
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto Staging() -> StagingProvider& { return *staging_provider_; }
 
+  // Const overload to allow const helpers to read staging stats without
+  // mutating test fixtures.
+  auto Staging() const -> const StagingProvider& { return *staging_provider_; }
+
   auto SimulateFrameStart(frame::Slot slot) -> void
   {
     // Simulate frame advance to complete fences
     uploader_->OnFrameStart(
       renderer::internal::RendererTagFactory::Get(), slot);
+  }
+
+  auto SetStagingProvider(std::shared_ptr<StagingProvider> p) -> void
+  {
+    staging_provider_ = std::move(p);
   }
 
 private:

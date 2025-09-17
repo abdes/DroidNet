@@ -70,7 +70,29 @@ target_compile_definitions(
 )
 
 # Upload unit tests (no backend dependency)
+m_gtest_program(
+  RingBufferStaging
+  SOURCES
+    "Fakes/Graphics.h"
+    "Upload/RingBufferStaging_basic_test.cpp"
+    "Upload/RingBufferStaging_error_test.cpp"
+    "Upload/RingBufferStagingFixture.h"
+    "Upload/UploadCoordinatorTest.cpp"
+    "Upload/UploadCoordinatorTest.h"
+)
+target_compile_definitions(
+  Oxygen.Renderer.RingBufferStaging.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
+# Upload unit tests (no backend dependency)
 m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
+target_compile_definitions(
+  Oxygen.Renderer.UploadTracker.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
 
 # AtlasBuffer unit tests (no backend dependency)
 m_gtest_program(AtlasBuffer SOURCES "Upload/AtlasBuffer_basic_test.cpp")

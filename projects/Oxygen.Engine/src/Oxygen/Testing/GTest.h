@@ -33,14 +33,23 @@
   TRACE_GCHECK_F_IMPL(statement, message) // NOLINT
 #define GCHECK_F(statement) TRACE_GCHECK_F_IMPL(statement, "") // NOLINT
 
+// Helper macro to assert a condition in tests (via ASSERT_TRUE) and then
+// inform the compiler that the condition is assumed to be true. This
+// reduces linter warnings when accessing values guarded by the assertion.
 #if defined(__clang__)
-#  define ASSUME(x) __builtin_assume(x)
+#  define ASSUME_IMPL(x) __builtin_assume(x)
 #elif defined(_MSC_VER)
-#  define ASSUME(x) __assume(x)
+#  define ASSUME_IMPL(x) __assume(x)
 #else
-#  define ASSUME(x)                                                            \
+#  define ASSUME_IMPL(x)                                                       \
     do {                                                                       \
       if (!(x))                                                                \
         __builtin_unreachable();                                               \
     } while (0)
 #endif
+
+#define ASSERT_HAS_VALUE(x)                                                    \
+  do {                                                                         \
+    ASSERT_TRUE(x.has_value()); /* gtest assertion for diagnostics */          \
+    ASSUME_IMPL(x.has_value()); /* silence clang-tidy */                       \
+  } while (0)
