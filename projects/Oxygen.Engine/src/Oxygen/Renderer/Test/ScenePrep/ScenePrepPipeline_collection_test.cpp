@@ -17,6 +17,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
+#include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
+
 using namespace oxygen::engine;
 using namespace oxygen::engine::sceneprep;
 using oxygen::View;
@@ -25,24 +27,25 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
+using namespace oxygen::engine::sceneprep::testing;
 
 namespace {
 
 // Shared test fixture that builds a scene with two roots and a child under the
 // first root. All nodes get minimal geometry (1 LOD, 1 submesh). Also provides
 // a default View and per-test ScenePrepState.
-class ScenePrepPipelineFixture : public testing::Test {
+class ScenePrepPipelineTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
     scene_ = std::make_shared<Scene>("TestScene");
     root_a_ = scene_->CreateNode("RootA");
     root_b_ = scene_->CreateNode("RootB");
-    auto child_opt = scene_->CreateChildNode(root_a_, "ChildOfA");
+    const auto child_opt = scene_->CreateChildNode(root_a_, "ChildOfA");
     ASSERT_TRUE(child_opt.has_value());
     child_of_a_ = *child_opt;
 
-    auto geom = BuildSimpleGeometry();
+    const auto geom = BuildSimpleGeometry();
     root_a_.GetRenderable().SetGeometry(geom);
     root_b_.GetRenderable().SetGeometry(geom);
     child_of_a_.GetRenderable().SetGeometry(geom);
@@ -67,24 +70,7 @@ protected:
 
   static auto BuildSimpleGeometry() -> std::shared_ptr<GeometryAsset>
   {
-    std::vector<oxygen::data::Vertex> vertices(3);
-    std::vector<uint32_t> idx { 0, 1, 2 };
-    auto mat = MaterialAsset::CreateDefault();
-    auto mesh = MeshBuilder()
-                  .WithVertices(vertices)
-                  .WithIndices(idx)
-                  .BeginSubMesh("S0", mat)
-                  .WithMeshView({ .first_index = 0u,
-                    .index_count = 3u,
-                    .first_vertex = 0u,
-                    .vertex_count = 3u })
-                  .EndSubMesh()
-                  .Build();
-    oxygen::data::pak::GeometryAssetDesc desc {};
-    desc.lod_count = 1;
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
-    lods.emplace_back(std::shared_ptr<oxygen::data::Mesh>(mesh.release()));
-    return std::make_shared<GeometryAsset>(desc, std::move(lods));
+    return MakeGeometryWithLods(1, glm::vec3(-1.0f), glm::vec3(1.0f));
   }
 
   // Accessors for convenience
@@ -106,8 +92,7 @@ private:
 
 //! Verifies pipeline is testable by injecting custom stages and calling
 //! Collect across a 3-node scene.
-NOLINT_TEST_F(ScenePrepPipelineFixture,
-  ScenePrepPipeline_Collection_CustomStages_ProducesPerNode)
+NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
 {
   auto pre = [](const ScenePrepContext& /*ctx*/, ScenePrepState& /*st*/,
                RenderItemProto& it) {
@@ -117,7 +102,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   };
   auto resolve = [](const ScenePrepContext& /*ctx*/, ScenePrepState& /*st*/,
                    RenderItemProto& it) {
-    if (auto g = it.Geometry()) {
+    if (const auto g = it.Geometry()) {
       it.ResolveMesh(g->MeshAt(0), 0);
     } else {
       it.MarkDropped();
@@ -133,7 +118,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
   };
   auto prod = [](const ScenePrepContext& /*ctx*/, ScenePrepState& st,
                 RenderItemProto& it) {
-    for (auto sm : it.VisibleSubmeshes()) {
+    for (const auto sm : it.VisibleSubmeshes()) {
       st.CollectItem(RenderItemData {
         .lod_index = it.ResolvedMeshIndex(),
         .submesh_index = sm,
@@ -155,14 +140,14 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .producer = prod,
   };
   auto final_cfg = CreateStandardFinalizationConfig();
-  std::unique_ptr<ScenePrepPipeline> pipeline
+  const std::unique_ptr<ScenePrepPipeline> pipeline
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
     StateRef(), true);
 
-  ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineFixture::kNodeCount);
+  ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
   for (const auto& item : StateRef().CollectedItems()) {
     EXPECT_EQ(item.lod_index, 0u);
     EXPECT_EQ(item.submesh_index, 0u);
@@ -171,9 +156,8 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
 }
 
 //! Drop at pre-filter: downstream stages must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineFixture,
-  ScenePrepPipeline_Collection_DropAtPreFilter_SkipsDownstream)
-{ // NOLINT
+NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
+{
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre
     = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
@@ -197,7 +181,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .producer = prod,
   };
   auto final_cfg = CreateStandardFinalizationConfig();
-  std::unique_ptr<ScenePrepPipeline> pipeline
+  const std::unique_ptr<ScenePrepPipeline> pipeline
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
@@ -205,16 +189,15 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     StateRef(), true);
 
   EXPECT_EQ(StateRef().CollectedCount(), 0);
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(res_called, 0);
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
 }
 
 //! Drop at resolver: visibility and producer must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineFixture,
-  ScenePrepPipeline_Collection_DropAtResolver_SkipsDownstream)
-{ // NOLINT
+NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
+{
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre
     = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
@@ -243,7 +226,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .producer = prod,
   };
   auto final_cfg = CreateStandardFinalizationConfig();
-  std::unique_ptr<ScenePrepPipeline> pipeline
+  const std::unique_ptr<ScenePrepPipeline> pipeline
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
@@ -251,16 +234,15 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
-  EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
 }
 
 //! Drop at visibility filter: producer must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineFixture,
-  ScenePrepPipeline_Collection_DropAtVisibility_SkipsProducer)
-{ // NOLINT
+NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
+{
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre
     = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
@@ -291,7 +273,7 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     .producer = prod,
   };
   auto final_cfg = CreateStandardFinalizationConfig();
-  std::unique_ptr<ScenePrepPipeline> pipeline
+  const std::unique_ptr<ScenePrepPipeline> pipeline
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
@@ -299,9 +281,9 @@ NOLINT_TEST_F(ScenePrepPipelineFixture,
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
-  EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
-  EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineFixture::kNodeCount));
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(prod_called, 0);
 }
 

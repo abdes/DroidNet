@@ -13,10 +13,11 @@ namespace {
 //! Basic compile-time checks for CollectionConfig wiring.
 NOLINT_TEST(CollectionConfig, CollectionConfig_BasicFactory_StaticAsserts)
 {
+  // ReSharper disable CppIdenticalOperandsInBinaryExpression
   using namespace oxygen::engine::sceneprep;
 
   // Arrange
-  auto cfg = CreateBasicCollectionConfig();
+  [[maybe_unused]] auto cfg = CreateBasicCollectionConfig();
 
   // Act & Assert
   static_assert(decltype(cfg)::has_pre_filter);
@@ -35,6 +36,7 @@ NOLINT_TEST(CollectionConfig, CollectionConfig_BasicFactory_StaticAsserts)
     || RenderItemDataExtractor<std::decay_t<decltype(cfg.visibility_filter)>>);
   static_assert(RenderItemDataExtractor<std::decay_t<decltype(*cfg.producer)>>
     || RenderItemDataExtractor<std::decay_t<decltype(cfg.producer)>>);
+  // ReSharper restore CppIdenticalOperandsInBinaryExpression
 }
 
 } // namespace

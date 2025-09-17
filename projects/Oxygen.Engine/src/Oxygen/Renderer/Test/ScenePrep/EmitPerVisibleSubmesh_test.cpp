@@ -25,12 +25,14 @@
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
+#include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
+#include <Oxygen/Renderer/Test/Sceneprep/ScenePrepTestFixture.h>
 
 // Implementation of UploaderTagFactory. Provides access to UploaderTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -63,28 +65,16 @@ using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 
+using namespace oxygen::engine::sceneprep::testing;
+
 namespace {
 
-class EmitPerVisibleSubmeshTest : public testing::Test {
+class EmitPerVisibleSubmeshTest : public ScenePrepTestFixture {
 protected:
-  auto SetUp() -> void override
+  // Override factory to create resource-backed ScenePrepState while ensuring
+  // auxiliary objects outlive the state (gfx_, uploader_, staging_provider_)
+  auto CreateScenePrepState() -> std::unique_ptr<ScenePrepState> override
   {
-    scene_ = std::make_shared<Scene>("TestScene");
-    node_ = scene_->CreateNode("TestNode");
-
-    node_.GetTransform().SetLocalTransform(
-      glm::vec3(0.0F), glm::quat(1.0F, 0.0F, 0.0F, 0.0F), glm::vec3(1.0f));
-    scene_->Update();
-
-    Flags().SetFlag(SceneNodeFlags::kCastsShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true));
-    Flags().SetFlag(SceneNodeFlags::kReceivesShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true));
-
-    AddDefaultGeometry();
-    proto_.emplace(node_.GetObject()->get());
-
-    ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
     // Initialize fake graphics and upload coordinator for resource managers
     gfx_ = std::make_shared<oxygen::renderer::testing::FakeGraphics>();
     gfx_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
@@ -108,137 +98,16 @@ protected:
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
         observer_ptr { staging_provider_.get() });
 
-    state_ = std::make_unique<ScenePrepState>(std::move(geom_uploader),
+    return std::make_unique<ScenePrepState>(std::move(geom_uploader),
       std::move(transform_uploader), std::move(material_binder));
-
-    ctx_.emplace(oxygen::frame::SequenceNumber { 0 }, view_, *scene_);
   }
 
-  auto TearDown() -> void override
-  {
-    // Release owned resources
-    state_.reset();
-    uploader_.reset();
-    gfx_.reset();
-    scene_.reset();
-  }
-
-  auto ConfigurePerspectiveView(const glm::vec3 eye, const glm::vec3 center,
-    const glm::vec3 up = { 0, 1, 0 }, const float fovy_deg = 60.0f,
-    const float aspect = 1.0f, const float znear = 0.1f,
-    const float zfar = 1000.0f, const float viewport = 1000.0f) -> void
-  {
-    View::Params p {};
-    p.view = glm::lookAt(eye, center, up);
-    p.proj = glm::perspective(glm::radians(fovy_deg), aspect, znear, zfar);
-    p.viewport = { 0.0f, 0.0f, viewport, viewport };
-    p.has_camera_position = true;
-    p.camera_position = eye;
-    view_ = View { p };
-  }
-
-  auto SetGeometry(const std::shared_ptr<GeometryAsset>& geometry) -> void
-  {
-    Node().GetRenderable().SetGeometry(geometry);
-    proto_->SetGeometry(geometry);
-  }
-
-  auto SeedVisibilityAndTransform() -> void
-  {
-    proto_->SetVisible();
-    proto_->SetWorldTransform(*node_.GetTransform().GetWorldMatrix());
-  }
-
-  // Build a mesh with N submeshes
-  static auto MakeMeshWithSubmeshes(const uint32_t lod,
-    const std::size_t submesh_count) -> std::shared_ptr<oxygen::data::Mesh>
-  {
-    using namespace oxygen::data;
-    std::vector<Vertex> vertices(4);
-    vertices[0].position = { -1, -1, 0 };
-    vertices[1].position = { 1, -1, 0 };
-    vertices[2].position = { 1, 1, 0 };
-    vertices[3].position = { -1, 1, 0 };
-    std::vector<uint32_t> idx = { 0, 1, 2, 2, 3, 0 };
-    const auto mat = MaterialAsset::CreateDefault();
-    MeshBuilder b(lod);
-    b.WithVertices(vertices).WithIndices(idx);
-    for (std::size_t s = 0; s < submesh_count; ++s) {
-      b.BeginSubMesh("SM", mat)
-        .WithMeshView({ .first_index = 0u,
-          .index_count
-          = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
-          .first_vertex = 0u,
-          .vertex_count
-          = static_cast<pak::MeshViewDesc::BufferIndexT>(vertices.size()) })
-        .EndSubMesh();
-    }
-    return std::shared_ptr<Mesh>(b.Build().release());
-  }
-
-  // Build geometry with a single LOD and specified submesh count
-  static auto MakeGeometryWithSubmeshes(const std::size_t submesh_count)
-    -> std::shared_ptr<GeometryAsset>
-  {
-    oxygen::data::pak::GeometryAssetDesc desc {};
-    desc.lod_count = 1;
-    desc.bounding_box_min[0] = -1.0f;
-    desc.bounding_box_min[1] = -1.0f;
-    desc.bounding_box_min[2] = -1.0f;
-    desc.bounding_box_max[0] = 1.0f;
-    desc.bounding_box_max[1] = 1.0f;
-    desc.bounding_box_max[2] = 1.0f;
-    const auto mesh = MakeMeshWithSubmeshes(0, submesh_count);
-    return std::make_shared<GeometryAsset>(desc, std::vector { mesh });
-  }
-
-  // ReSharper disable CppMemberFunctionMayBeConst
-  auto Context() -> auto& { return *ctx_; }
-  auto State() -> auto& { return *state_; }
-  auto Proto() -> auto& { return *proto_; }
-  auto Node() -> auto& { return node_; }
-  auto Flags() -> auto& { return node_.GetFlags()->get(); }
-  // ReSharper restore CppMemberFunctionMayBeConst
-
-private:
-  auto AddDefaultGeometry() -> void
-  {
-    using namespace oxygen::data;
-    std::vector<Vertex> vertices(3);
-    std::vector<uint32_t> idx = { 0, 1, 2 };
-    const auto mat = MaterialAsset::CreateDefault();
-    const std::shared_ptr mesh = MeshBuilder()
-                                   .WithVertices(vertices)
-                                   .WithIndices(idx)
-                                   .BeginSubMesh("s", mat)
-                                   .WithMeshView({ .first_index = 0,
-                                     .index_count = 3,
-                                     .first_vertex = 0,
-                                     .vertex_count = 3 })
-                                   .EndSubMesh()
-                                   .Build();
-
-    pak::GeometryAssetDesc desc {};
-    desc.lod_count = 1;
-    std::vector<std::shared_ptr<Mesh>> lods;
-    lods.push_back(mesh);
-    const auto geometry
-      = std::make_shared<GeometryAsset>(desc, std::move(lods));
-
-    Node().GetRenderable().SetGeometry(geometry);
-  }
-
-  std::shared_ptr<Scene> scene_;
-  SceneNode node_;
-  View view_ { View::Params {} };
-  std::optional<ScenePrepContext> ctx_;
-  std::unique_ptr<ScenePrepState> state_;
+  // Keep auxiliary objects as protected members so they outlive the returned
+  // ScenePrepState (fixture owns them).
   std::shared_ptr<oxygen::renderer::testing::FakeGraphics> gfx_;
   std::unique_ptr<oxygen::engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<StagingProvider> staging_provider_;
-  std::optional<RenderItemProto> proto_;
 };
-
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)
 {
@@ -258,9 +127,12 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, NoResolvedMesh_Death)
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
 {
   // Arrange: resolve mesh but clear visible list
-  const auto geom = MakeGeometryWithSubmeshes(2);
+  const auto geom = MakeGeometryWithLods(2, { -1, -1, -1 }, { 1, 1, 1 });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
+  // Ensure a valid view/context is available for MeshResolver
+  ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
+  EmplaceContextWithView();
   MeshResolver(Context(), State(), Proto());
   // Do not run visibility filter; set empty list directly
   Proto().SetVisibleSubmeshes({});

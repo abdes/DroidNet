@@ -37,8 +37,9 @@ m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 m_gtest_program(
   ScenePrep
   SOURCES
-    "ScenePrep/CollectionConfig_basic_test.cpp"
-    "ScenePrep/DrawMetadata_material_handle_test.cpp"
+    "ScenePrep/ScenePrepHelpers.h"
+    "ScenePrep/ScenePrepTestFixture.h"
+    "ScenePrep/CollectionConfig_test.cpp"
     "ScenePrep/EmitPerVisibleSubmesh_test.cpp"
     "ScenePrep/ExtractionPreFilter_test.cpp"
     "ScenePrep/MeshResolver_test.cpp"
