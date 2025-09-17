@@ -24,6 +24,8 @@
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
+using oxygen::engine::upload::AtlasBuffer;
+
 namespace {
 
 [[nodiscard]] auto IsFinite(const glm::mat4& m) noexcept -> bool

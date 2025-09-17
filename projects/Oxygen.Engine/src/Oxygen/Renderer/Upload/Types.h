@@ -37,6 +37,14 @@ namespace oxygen::engine::upload {
 
 //=== Types & strong aliases -------------------------------------------------//
 
+//! Result categories for EnsureCapacity.
+/*!
+ - kUnchanged: Existing buffer already satisfies requested minimum.
+ - kCreated: New buffer created (first call, previously absent).
+ - kResized: Existing buffer replaced with a larger one.
+*/
+enum class EnsureBufferResult { kUnchanged, kCreated, kResized };
+
 using SizeBytes = NamedType<uint64_t, struct BytesTag,
   // clang-format off
   DefaultInitialized,

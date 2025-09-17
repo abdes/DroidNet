@@ -23,6 +23,7 @@
 using oxygen::engine::DrawMetadata;
 using oxygen::engine::PassMask;
 using oxygen::engine::PassMaskBit;
+using oxygen::engine::upload::AtlasBuffer;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadKind;

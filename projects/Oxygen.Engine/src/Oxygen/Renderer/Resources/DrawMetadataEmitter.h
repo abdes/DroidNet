@@ -18,10 +18,10 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RendererTag.h>
-#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -133,7 +133,7 @@ private:
 
   // CPU shadow storage and GPU atlas buffer for DrawMetadata
   std::vector<engine::DrawMetadata> cpu_;
-  std::unique_ptr<AtlasBuffer> atlas_;
+  std::unique_ptr<engine::upload::AtlasBuffer> atlas_;
 
   // Sorting & partitions
   std::vector<SortingKey> keys_;

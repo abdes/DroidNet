@@ -6,14 +6,18 @@
 
 #pragma once
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <optional>
+#include <unordered_map>
 
 #include <functional>
 #include <map>
@@ -210,6 +214,103 @@ private:
   TextureCommandLog* texture_log_ { nullptr };
 };
 
+// Minimal in-memory descriptor allocator for tests
+class MiniDescriptorAllocator final : public graphics::DescriptorAllocator {
+public:
+  MiniDescriptorAllocator() = default;
+  ~MiniDescriptorAllocator() override = default;
+
+  auto Allocate(graphics::ResourceViewType view_type,
+    graphics::DescriptorVisibility visibility)
+    -> graphics::DescriptorHandle override
+  {
+    const auto key = Key(view_type, visibility);
+    auto& state = domains_[key];
+    const auto index = state.next_index++;
+    return CreateDescriptorHandle(
+      oxygen::bindless::HeapIndex { index }, view_type, visibility);
+  }
+
+  auto Release(graphics::DescriptorHandle& handle) -> void override
+  {
+    handle.Invalidate();
+  }
+
+  auto CopyDescriptor(const graphics::DescriptorHandle& /*source*/,
+    const graphics::DescriptorHandle& /*destination*/) -> void override
+  {
+  }
+
+  [[nodiscard]] auto GetRemainingDescriptorsCount(graphics::ResourceViewType,
+    graphics::DescriptorVisibility) const -> oxygen::bindless::Count override
+  {
+    return oxygen::bindless::Count { 1'000'000 }; // ample room
+  }
+
+  [[nodiscard]] auto GetDomainBaseIndex(
+    graphics::ResourceViewType, graphics::DescriptorVisibility) const
+    -> oxygen::bindless::HeapIndex override
+  {
+    return oxygen::bindless::HeapIndex { 0 };
+  }
+
+  [[nodiscard]] auto Reserve(graphics::ResourceViewType view_type,
+    graphics::DescriptorVisibility visibility, oxygen::bindless::Count count)
+    -> std::optional<oxygen::bindless::HeapIndex> override
+  {
+    if (count.get() == 0) {
+      return std::nullopt;
+    }
+    const auto key = Key(view_type, visibility);
+    auto& state = domains_[key];
+    const auto base = state.next_index;
+    state.next_index += count.get();
+    return oxygen::bindless::HeapIndex { base };
+  }
+
+  [[nodiscard]] auto Contains(const graphics::DescriptorHandle& handle) const
+    -> bool override
+  {
+    return handle.IsValid();
+  }
+
+  [[nodiscard]] auto GetAllocatedDescriptorsCount(
+    graphics::ResourceViewType view_type,
+    graphics::DescriptorVisibility visibility) const
+    -> oxygen::bindless::Count override
+  {
+    const auto key = Key(view_type, visibility);
+    auto it = domains_.find(key);
+    if (it == domains_.end()) {
+      return oxygen::bindless::Count { 0 };
+    }
+    return oxygen::bindless::Count { static_cast<uint32_t>(
+      it->second.next_index) };
+  }
+
+  [[nodiscard]] auto GetShaderVisibleIndex(
+    const graphics::DescriptorHandle& handle) const noexcept
+    -> oxygen::bindless::ShaderVisibleIndex override
+  {
+    return oxygen::bindless::ShaderVisibleIndex {
+      handle.GetBindlessHandle().get()
+    };
+  }
+
+private:
+  struct DomainState {
+    uint32_t next_index { 0 };
+  };
+  using DomainKey = uint64_t;
+  static constexpr auto Key(graphics::ResourceViewType vt,
+    graphics::DescriptorVisibility vis) -> DomainKey
+  {
+    return (static_cast<DomainKey>(static_cast<uint32_t>(vt)) << 32)
+      | static_cast<DomainKey>(static_cast<uint32_t>(vis));
+  }
+  std::unordered_map<DomainKey, DomainState> domains_ {};
+};
+
 //! Fake Graphics implementation providing staging buffers, queues and recorders
 //! for upload tests.
 class FakeGraphics final : public Graphics {
@@ -221,8 +322,7 @@ public:
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
   {
-    static const graphics::DescriptorAllocator* dummy = nullptr;
-    return *dummy;
+    return descriptor_allocator_;
   }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>) const
@@ -441,6 +541,7 @@ public:
   BufferCommandLog buffer_log_ {};
   TextureCommandLog texture_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_ {};
+  mutable MiniDescriptorAllocator descriptor_allocator_ {};
 
 protected:
   [[nodiscard]] auto CreateCommandQueue(const QueueKey&, QueueRole)

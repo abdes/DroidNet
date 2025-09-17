@@ -20,8 +20,8 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
-#include <Oxygen/Renderer/Resources/UploadHelpers.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Upload/UploadHelpers.h>
 
 namespace {
 
@@ -386,7 +386,8 @@ auto GeometryUploader::UploadVertexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_EQ_F(buffer_size % stride, 0);
 
   DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
-  if (!internal::EnsureBufferAndSrv(
+  using oxygen::engine::upload::internal::EnsureBufferAndSrv;
+  if (!EnsureBufferAndSrv(
         *gfx_, vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
     // logging is done in the helper
     return std::unexpected { false };
@@ -427,7 +428,8 @@ auto GeometryUploader::UploadIndexBuffer(const GeometryEntry& dirty_entry)
   DCHECK_EQ_F(buffer_size % stride, 0);
 
   DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
-  if (!internal::EnsureBufferAndSrv(
+  using oxygen::engine::upload::internal::EnsureBufferAndSrv;
+  if (!EnsureBufferAndSrv(
         *gfx_, index_buffer, srv_index, buffer_size, stride, "IndexBuffer")) {
     return std::unexpected { false };
   }

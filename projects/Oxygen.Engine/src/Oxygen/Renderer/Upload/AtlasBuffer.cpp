@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
-
 #include <algorithm>
 
-namespace oxygen::renderer::resources {
+#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
+
+namespace oxygen::engine::upload {
 
 // Define the tag used to gate ElementRef construction
 struct ElementRefTag { };
@@ -50,7 +50,7 @@ AtlasBuffer::~AtlasBuffer()
 
  @param min_elements Minimum required element capacity.
  @param slack Additional fractional growth hint (e.g. 0.2 = +20%).
- @return EnsureResult enum wrapped in std::expected; unexpected carries
+ @return EnsureBufferResult enum wrapped in std::expected; unexpected carries
          allocation / driver errors from helper.
 
  ### Performance Characteristics
@@ -64,7 +64,7 @@ AtlasBuffer::~AtlasBuffer()
 
  ```cpp
  auto res = atlas.EnsureCapacity(128, 0.25f);
- if (res && *res != AtlasBuffer::EnsureResult::kUnchanged) {
+ if (res && *res != AtlasBuffer::EnsureBufferResult::kUnchanged) {
    // (Re)upload existing element data if needed.
  }
  ```
@@ -73,7 +73,7 @@ AtlasBuffer::~AtlasBuffer()
  @see AtlasBuffer::Allocate
 */
 auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
-  const float slack) -> std::expected<EnsureResult, std::error_code>
+  const float slack) -> std::expected<EnsureBufferResult, std::error_code>
 {
   stats_.ensure_calls++;
 
@@ -86,12 +86,10 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
         static_cast<std::uint64_t>(min_bytes * (1.0f + slack)))
     : min_bytes;
 
-  using internal::EnsureBufferResult;
-
   // Fast path: if a primary buffer exists and the target size is not
   // larger than current, nothing to do.
   if (primary_buffer_ && target_bytes <= current_bytes) {
-    return EnsureResult::kUnchanged;
+    return EnsureBufferResult::kUnchanged;
   }
 
   auto result = internal::EnsureBufferAndSrv(
@@ -119,16 +117,7 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
     stats_.next_index = next_index_;
   }
 
-  switch (*result) {
-  case EnsureBufferResult::kUnchanged:
-    return EnsureResult::kUnchanged;
-  case EnsureBufferResult::kCreated:
-    return EnsureResult::kCreated;
-  case EnsureBufferResult::kResized:
-    return EnsureResult::kResized;
-  }
-
-  return EnsureResult::kUnchanged;
+  return result;
 }
 
 /*!
@@ -297,4 +286,4 @@ auto AtlasBuffer::MakeUploadDescForIndex(
   return desc;
 }
 
-} // namespace oxygen::renderer::resources
+} // namespace oxygen::engine::upload

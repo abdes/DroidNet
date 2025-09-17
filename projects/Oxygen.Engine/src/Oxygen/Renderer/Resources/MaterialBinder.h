@@ -19,9 +19,9 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
-#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -242,9 +242,9 @@ private:
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
   // Atlas-based material storage (Phase 1+)
-  std::unique_ptr<AtlasBuffer> materials_atlas_;
+  std::unique_ptr<engine::upload::AtlasBuffer> materials_atlas_;
   // Atlas element refs stored per material when atlas path is enabled
-  std::vector<AtlasBuffer::ElementRef> material_refs_;
+  std::vector<engine::upload::AtlasBuffer::ElementRef> material_refs_;
 
   // Current frame slot for atlas element retirement
   oxygen::frame::Slot current_frame_slot_ { oxygen::frame::kInvalidSlot };

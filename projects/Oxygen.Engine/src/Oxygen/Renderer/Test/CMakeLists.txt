@@ -72,5 +72,8 @@ target_compile_definitions(
 # Upload unit tests (no backend dependency)
 m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
 
+# AtlasBuffer unit tests (no backend dependency)
+m_gtest_program(AtlasBuffer SOURCES "Upload/AtlasBuffer_basic_test.cpp")
+
 # UploadPlanner unit tests (backend-free)
 m_gtest_program(UploadPlanner SOURCES "Upload/UploadPlanner_basic_test.cpp")
