@@ -219,7 +219,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_vsync = enable_vsync,
       .extra = {},
     };
-    const auto queue_strategy = graphics::SingleQueueStrategy();
+    const auto queue_strategy = graphics::SharedTransferQueueStrategy();
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
       headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config);

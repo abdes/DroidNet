@@ -75,6 +75,8 @@ public:
 
   ~QueueManager() override = default;
 
+  auto QueueKeyFor(QueueRole role) const { return strategy_ptr_->KeyFor(role); }
+
   //! Create or reuse queues described by the strategy using the provided
   //! creator callable. The creator is expected to throw on error or return a
   //! non-empty shared_ptr.

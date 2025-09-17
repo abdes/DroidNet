@@ -44,6 +44,13 @@ namespace {
 using namespace oxygen::graphics;
 using namespace oxygen::engine::upload;
 
+//! Determines if the given queue is a copy/transfer queue that has limited
+//! resource state capabilities.
+auto IsCopyQueue(const oxygen::observer_ptr<CommandQueue>& queue) -> bool
+{
+  return queue && queue->GetQueueRole() == QueueRole::kTransfer;
+}
+
 // Maps a BufferUsage bitset to the preferred steady ResourceStates for
 // buffers after upload. Defaults to kCommon when no specific usage is set.
 auto UsageToTargetState(BufferUsage usage) -> ResourceStates
@@ -109,21 +116,34 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffer");
-  // Begin tracking once per recorder for this destination
+  auto queue = gfx.GetCommandQueue(key);
+  const bool is_copy_queue = IsCopyQueue(queue);
+
+  // Begin tracking with appropriate parameters for the queue type.
+  // Copy queues: start from kCommon and restore to kCommon when done.
+  // Graphics queues: start from kCopyDest and don't restore initial state.
+  const auto initial_state
+    = is_copy_queue ? ResourceStates::kCommon : ResourceStates::kCopyDest;
+  const bool keep_initial_state = is_copy_queue;
+
   recorder->BeginTrackingResourceState(
-    *desc.dst, ResourceStates::kCopyDest, false);
+    *desc.dst, initial_state, keep_initial_state);
   recorder->RequireResourceState(*desc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBuffer(
     *desc.dst, desc.dst_offset, staging.Buffer(), staging.Offset().get(), size);
-  // Choose an appropriate steady-state based on declared buffer usage.
-  const auto target_state = UsageToTargetState(desc.dst->GetUsage());
-  recorder->RequireResourceState(*desc.dst, target_state);
-  recorder->FlushBarriers();
+
+  // For copy queues, let the resource state tracker automatically restore to
+  // kCommon (because keep_initial_state = true). For graphics queues,
+  // transition to the appropriate usage-specific state.
+  if (!is_copy_queue) {
+    const auto target_state = UsageToTargetState(desc.dst->GetUsage());
+    recorder->RequireResourceState(*desc.dst, target_state);
+    recorder->FlushBarriers();
+  }
 
   // Reserve a fence value on the target queue and record a GPU-side signal
   // into the command stream so completion is observed after the copy.
-  auto queue = gfx.GetCommandQueue(key);
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
 
@@ -181,16 +201,25 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture2D");
+  auto queue = gfx.GetCommandQueue(key);
+  const bool is_copy_queue = IsCopyQueue(queue);
+
+  // For copy queues, use keep_initial_state=true to auto-restore to kCommon.
+  // For graphics queues, manage state transitions explicitly.
   recorder->BeginTrackingResourceState(
-    *tdesc.dst, ResourceStates::kCommon, false);
+    *tdesc.dst, ResourceStates::kCommon, is_copy_queue);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBufferToTexture(
     staging.Buffer(), std::span { regions }, *tdesc.dst);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
-  recorder->FlushBarriers();
 
-  auto queue = gfx.GetCommandQueue(key);
+  // For copy queues, the resource tracker will auto-restore to kCommon.
+  // For graphics queues, explicitly transition back to kCommon.
+  if (!is_copy_queue) {
+    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
+    recorder->FlushBarriers();
+  }
+
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
   return tracker.Register(
@@ -243,16 +272,25 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture3D");
+  auto queue = gfx.GetCommandQueue(key);
+  const bool is_copy_queue = IsCopyQueue(queue);
+
+  // For copy queues, use keep_initial_state=true to auto-restore to kCommon.
+  // For graphics queues, manage state transitions explicitly.
   recorder->BeginTrackingResourceState(
-    *tdesc.dst, ResourceStates::kCommon, false);
+    *tdesc.dst, ResourceStates::kCommon, is_copy_queue);
   recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBufferToTexture(
     staging.Buffer(), std::span { regions }, *tdesc.dst);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
-  recorder->FlushBarriers();
 
-  auto queue = gfx.GetCommandQueue(key);
+  // For copy queues, the resource tracker will auto-restore to kCommon.
+  // For graphics queues, explicitly transition back to kCommon.
+  if (!is_copy_queue) {
+    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
+    recorder->FlushBarriers();
+  }
+
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
   return tracker.Register(
@@ -522,6 +560,8 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
   const auto& key = policy_.upload_queue_key;
   auto recorder
     = gfx_->AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffersBatch");
+  auto queue = gfx_->GetCommandQueue(key);
+  const bool is_copy_queue = IsCopyQueue(queue);
 
   std::shared_ptr<Buffer> current_dst;
   for (size_t idx2 = 0; idx2 < optimized.uploads.size(); ++idx2) {
@@ -541,8 +581,15 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       = (!current_dst) || (current_dst.get() != dst.get());
     if (first_for_dst) {
       current_dst = dst;
+
+      // Begin tracking with appropriate parameters for the queue type.
+      // Copy queues: start from kCommon and restore to kCommon when done.
+      // Graphics queues: start from kCommon and don't restore initial state.
+      const auto initial_state = ResourceStates::kCommon;
+      const bool keep_initial_state = is_copy_queue;
+
       recorder->BeginTrackingResourceState(
-        *current_dst, ResourceStates::kCommon, false);
+        *current_dst, initial_state, keep_initial_state);
       recorder->RequireResourceState(*current_dst, ResourceStates::kCopyDest);
       recorder->FlushBarriers();
     }
@@ -558,13 +605,16 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       const auto& next_bdesc = std::get<UploadBufferDesc>(next_r.desc);
       return next_bdesc.dst.get() != dst.get();
     }();
-    if (is_last || next_diff) {
+
+    // Handle final state transition only for graphics queues.
+    // Copy queues will automatically restore to kCommon due to
+    // keep_initial_state=true.
+    if ((is_last || next_diff) && !is_copy_queue) {
       recorder->RequireResourceState(*dst, UsageToTargetState(dst->GetUsage()));
       recorder->FlushBarriers();
     }
   }
 
-  auto queue = gfx_->GetCommandQueue(key);
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
   return graphics::FenceValue { fence_raw };

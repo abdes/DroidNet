@@ -143,6 +143,9 @@ public:
   OXGN_GFX_API virtual auto CreateCommandQueues(
     const graphics::QueuesStrategy& queue_strategy) -> void;
 
+  OXGN_GFX_API virtual auto QueueKeyFor(graphics::QueueRole role) const
+    -> graphics::QueueKey;
+
   OXGN_GFX_NDAPI virtual auto GetCommandQueue(
     const graphics::QueueKey& key) const
     -> observer_ptr<graphics::CommandQueue>;
