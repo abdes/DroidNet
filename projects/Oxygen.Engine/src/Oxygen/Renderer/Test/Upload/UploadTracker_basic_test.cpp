@@ -30,7 +30,6 @@ namespace {
 
 using oxygen::engine::upload::FenceValue;
 using oxygen::engine::upload::TicketId;
-using oxygen::engine::upload::UploadError;
 using oxygen::engine::upload::UploadTicket;
 using oxygen::engine::upload::UploadTracker;
 using oxygen::engine::upload::internal::UploaderTagFactory;
@@ -51,12 +50,12 @@ NOLINT_TEST(UploadTrackerTest, RegisterAndComplete)
   // Assert pre-completion
   {
     const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_HAS_VALUE(is_t1);
+    ASSERT_TRUE(is_t1.has_value());
     EXPECT_FALSE(is_t1.value());
   }
   {
     const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_HAS_VALUE(is_t2);
+    ASSERT_TRUE(is_t2.has_value());
     EXPECT_FALSE(is_t2.value());
   }
   EXPECT_FALSE(tracker.TryGetResult(t1.id).has_value());
@@ -67,16 +66,18 @@ NOLINT_TEST(UploadTrackerTest, RegisterAndComplete)
   // Assert: t1 completed, t2 pending
   {
     const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_HAS_VALUE(is_t1);
+    ASSERT_TRUE(is_t1.has_value());
     EXPECT_TRUE(is_t1.value());
   }
   {
     const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_HAS_VALUE(is_t2);
+    ASSERT_TRUE(is_t2.has_value());
     EXPECT_FALSE(is_t2.value());
   }
   const auto r1 = tracker.TryGetResult(t1.id);
-  ASSERT_HAS_VALUE(r1);
+  if (!r1.has_value()) {
+    FAIL() << "Expected result for t1 after completion";
+  }
   EXPECT_TRUE(r1->success);
   EXPECT_EQ(r1->bytes_uploaded, 128u);
 
@@ -86,11 +87,13 @@ NOLINT_TEST(UploadTrackerTest, RegisterAndComplete)
   // Assert: t2 completed
   {
     const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_HAS_VALUE(is_t2);
+    ASSERT_TRUE(is_t2.has_value());
     EXPECT_TRUE(is_t2.value());
   }
   const auto r2 = tracker.TryGetResult(t2.id);
-  ASSERT_HAS_VALUE(r2);
+  if (!r2.has_value()) {
+    FAIL() << "Expected result for t2 after completion";
+  }
   EXPECT_TRUE(r2->success);
   EXPECT_EQ(r2->bytes_uploaded, 256u);
 }
@@ -110,7 +113,7 @@ NOLINT_TEST(UploadTrackerTest, AwaitSingle)
 
   // Assert: Await returns populated result
   const auto await_result = tracker.Await(t.id);
-  ASSERT_HAS_VALUE(await_result);
+  ASSERT_TRUE(await_result.has_value());
   const auto r = await_result.value();
   EXPECT_TRUE(r.success);
   EXPECT_EQ(r.bytes_uploaded, 42u);
@@ -132,12 +135,12 @@ NOLINT_TEST(UploadTrackerTest, AwaitAllMaxFence)
   tracker.MarkFenceCompleted(FenceValue { 2 });
   {
     const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_HAS_VALUE(is_t1);
+    ASSERT_TRUE(is_t1.has_value());
     EXPECT_TRUE(is_t1.value());
   }
   {
     const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_HAS_VALUE(is_t2);
+    ASSERT_TRUE(is_t2.has_value());
     EXPECT_FALSE(is_t2.value());
   }
 
@@ -149,7 +152,7 @@ NOLINT_TEST(UploadTrackerTest, AwaitAllMaxFence)
 
   const auto await_all_result
     = tracker.AwaitAll(std::span<const UploadTicket>(tickets));
-  ASSERT_HAS_VALUE(await_all_result);
+  ASSERT_TRUE(await_all_result.has_value());
   const auto& results = await_all_result.value();
   ASSERT_EQ(results.size(), tickets.size());
   EXPECT_EQ(results[0].bytes_uploaded, 10u);
@@ -195,11 +198,11 @@ NOLINT_TEST(UploadTrackerTest, OnFrameStart_CleansEntries)
   // Pre-condition: both tickets exist
   {
     const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_HAS_VALUE(is_t1);
+    ASSERT_TRUE(is_t1.has_value());
   }
   {
     const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_HAS_VALUE(is_t2);
+    ASSERT_TRUE(is_t2.has_value());
   }
 
   // Act: start frame for slot 1 again which should erase entries created in
@@ -229,16 +232,18 @@ NOLINT_TEST(UploadTrackerTest, Cancel_Pending_MarksCanceled)
   const auto cancel_result = tracker.Cancel(t.id);
 
   // Assert
-  ASSERT_HAS_VALUE(cancel_result);
+  ASSERT_TRUE(cancel_result.has_value());
   const bool canceled = cancel_result.value();
   EXPECT_TRUE(canceled);
   {
     const auto is_complete = tracker.IsComplete(t.id);
-    ASSERT_HAS_VALUE(is_complete);
+    ASSERT_TRUE(is_complete.has_value());
     EXPECT_TRUE(is_complete.value());
   }
   const auto r = tracker.TryGetResult(t.id);
-  ASSERT_HAS_VALUE(r);
+  if (!r.has_value()) {
+    FAIL() << "Expected result after cancellation";
+  }
   EXPECT_FALSE(r->success);
   EXPECT_EQ(r->error, oxygen::engine::upload::UploadError::kCanceled);
   EXPECT_EQ(r->bytes_uploaded, 0u);
