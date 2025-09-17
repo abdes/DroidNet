@@ -24,47 +24,48 @@ class InputMappingContext;
 
 class InputSystem : public engine::System {
 public:
-    struct InputMappingContextEntry {
-        int32_t priority;
-        bool is_active { false };
-        std::shared_ptr<InputMappingContext> mapping_context;
-    };
+  struct InputMappingContextEntry {
+    int32_t priority;
+    bool is_active { false };
+    std::shared_ptr<InputMappingContext> mapping_context;
+  };
 
-    OXYGEN_INPUT_API explicit InputSystem(PlatformPtr platform);
-    OXYGEN_INPUT_API ~InputSystem() override = default;
+  OXGN_NPUT_API explicit InputSystem(PlatformPtr platform);
+  OXGN_NPUT_API ~InputSystem() override = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(InputSystem)
-    OXYGEN_MAKE_NON_MOVABLE(InputSystem)
+  OXYGEN_MAKE_NON_COPYABLE(InputSystem)
+  OXYGEN_MAKE_NON_MOVABLE(InputSystem)
 
-    OXYGEN_INPUT_API void AddAction(const std::shared_ptr<Action>& action);
-    OXYGEN_INPUT_API void RemoveAction(const std::shared_ptr<Action>& action);
-    OXYGEN_INPUT_API void ClearAllActions();
-    [[nodiscard]] OXYGEN_INPUT_API auto GetActionByName(std::string_view name) const
-        -> std::shared_ptr<Action>;
+  OXGN_NPUT_API void AddAction(const std::shared_ptr<Action>& action);
+  OXGN_NPUT_API void RemoveAction(const std::shared_ptr<Action>& action);
+  OXGN_NPUT_API void ClearAllActions();
+  [[nodiscard]] OXGN_NPUT_API auto GetActionByName(std::string_view name) const
+    -> std::shared_ptr<Action>;
 
-    OXYGEN_INPUT_API void AddMappingContext(
-        const std::shared_ptr<InputMappingContext>& context, int32_t priority);
-    OXYGEN_INPUT_API void RemoveMappingContext(
-        const std::shared_ptr<InputMappingContext>& context);
-    OXYGEN_INPUT_API void ClearAllMappingContexts();
-    [[nodiscard]] OXYGEN_INPUT_API auto GetMappingContextByName(std::string_view name) const
-        -> std::shared_ptr<InputMappingContext>;
-    OXYGEN_INPUT_API void ActivateMappingContext(
-        const std::shared_ptr<InputMappingContext>& context);
-    OXYGEN_INPUT_API void DeactivateMappingContext(
-        const std::shared_ptr<InputMappingContext>& context);
+  OXGN_NPUT_API void AddMappingContext(
+    const std::shared_ptr<InputMappingContext>& context, int32_t priority);
+  OXGN_NPUT_API void RemoveMappingContext(
+    const std::shared_ptr<InputMappingContext>& context);
+  OXGN_NPUT_API void ClearAllMappingContexts();
+  [[nodiscard]] OXGN_NPUT_API auto GetMappingContextByName(
+    std::string_view name) const -> std::shared_ptr<InputMappingContext>;
+  OXGN_NPUT_API void ActivateMappingContext(
+    const std::shared_ptr<InputMappingContext>& context);
+  OXGN_NPUT_API void DeactivateMappingContext(
+    const std::shared_ptr<InputMappingContext>& context);
 
-    OXYGEN_INPUT_API void Update(
-        const engine::SystemUpdateContext& update_context) override;
+  OXGN_NPUT_API void Update(
+    const engine::SystemUpdateContext& update_context) override;
 
 private:
-    void ProcessInputEvent(const platform::InputEvent& event);
-    void HandleInput(const platform::InputSlot& slot, const platform::InputEvent& event);
+  void ProcessInputEvent(const platform::InputEvent& event);
+  void HandleInput(
+    const platform::InputSlot& slot, const platform::InputEvent& event);
 
-    std::vector<std::shared_ptr<Action>> actions_;
-    std::list<InputMappingContextEntry> mapping_contexts_;
+  std::vector<std::shared_ptr<Action>> actions_;
+  std::list<InputMappingContextEntry> mapping_contexts_;
 
-    PlatformPtr platform_;
+  PlatformPtr platform_;
 };
 
 } // namespace oxygen::input
