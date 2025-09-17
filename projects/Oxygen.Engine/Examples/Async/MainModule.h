@@ -125,7 +125,6 @@ namespace examples::async {
 
   private:
     //! Setup functions (called once).
-    auto SetupCommandQueues() -> void;
     auto SetupMainWindow() -> void;
     auto SetupSurface() -> void;
     auto SetupRenderer() -> void;

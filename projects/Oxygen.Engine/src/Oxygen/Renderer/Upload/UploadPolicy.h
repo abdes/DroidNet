@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 
 namespace oxygen::engine::upload {
@@ -41,6 +42,17 @@ struct UploadPolicy {
     bool enable_default_fill = true;
     std::byte filler_value { std::byte { 0 } };
   } filler;
+  // Queue key to use for upload command recording/signaling. This value is
+  // required and must be provided by the caller (for example Renderer via
+  // RendererConfig). Do not default-initialize this field.
+  oxygen::graphics::QueueKey upload_queue_key;
+
+  // Construct an UploadPolicy with a required upload queue key.
+  explicit UploadPolicy(oxygen::graphics::QueueKey qkey) noexcept
+    : upload_queue_key(std::move(qkey))
+  {
+  }
+  UploadPolicy() = delete;
 };
 
 OXGN_RNDR_API auto DefaultUploadPolicy() -> UploadPolicy;

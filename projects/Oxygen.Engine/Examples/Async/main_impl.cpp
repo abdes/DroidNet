@@ -219,11 +219,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_vsync = enable_vsync,
       .extra = {},
     };
+    const auto queue_strategy = graphics::SingleQueueStrategy();
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
       headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config);
     CHECK_F(
       !app.gfx_weak.expired()); // Expect a valid graphics backend, or abort
+    app.gfx_weak.lock()->CreateCommandQueues(queue_strategy);
 
     app.engine = std::make_shared<AsyncEngine>(
       app.platform,
@@ -250,9 +252,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     // Register built-in engine modules (one-time)
     {
+      oxygen::RendererConfig renderer_config {
+        .upload_queue_key = queue_strategy.KeyFor(QueueRole::kTransfer).get(),
+      };
       // Create the Renderer - we need unique_ptr for registration and
       // observer_ptr for MainModule
-      auto renderer_unique = std::make_unique<engine::Renderer>(app.gfx_weak);
+      auto renderer_unique
+        = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
       auto renderer_observer = observer_ptr { renderer_unique.get() };
 
       // Register as module
@@ -266,12 +272,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     const auto rc = co::Run(app, AsyncMain(app, frames));
 
     app.engine->Stop();
+    app.platform->Stop();
     app.engine.reset();
     if (!app.gfx_weak.expired()) {
-      app.gfx_weak.lock()->Stop();
-      loader.UnloadBackend();
+      auto gfx = app.gfx_weak.lock();
+      gfx->Stop();
+      gfx.reset();
     }
-    app.platform->Stop();
+    // Make sure no one holds a reference to the Graphics instance at this
+    // point.
+    loader.UnloadBackend();
     app.platform.reset();
 
     LOG_F(INFO, "exit code: {}", rc);

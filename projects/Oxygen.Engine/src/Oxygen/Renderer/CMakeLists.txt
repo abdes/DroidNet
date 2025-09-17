@@ -145,6 +145,7 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
+    oxygen::config
     oxygen::oxco
     oxygen::data
     oxygen::scene

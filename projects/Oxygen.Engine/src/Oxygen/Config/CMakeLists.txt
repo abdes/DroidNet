@@ -34,9 +34,10 @@ add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
 set(
   OXYGEN_CONFIG_HEADERS
-  "PlatformConfig.h"
   "EngineConfig.h"
   "GraphicsConfig.h"
+  "PlatformConfig.h"
+  "RendererConfig.h"
 )
 
 target_sources(

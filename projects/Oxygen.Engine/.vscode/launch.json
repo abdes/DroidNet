@@ -1,22 +1,31 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "(Dump PAK Simple) Launch",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.DumpPakFile.exe",
-            "args": [
-                "src/Oxygen/Content/Test/TestData/Simple.pak",
-                "--verbose"
-            ],
-            "stopAtEntry": true,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "console": "externalTerminal"
-        }
-    ]
+  // VS Code launch configuration for Oxygen.Engine examples
+  // Adjust the "program" path for other targets as needed.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: Oxygen.Examples.Async (MSVC)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Examples.Async.exe",
+      "args": ["-v", "1"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "(Dump PAK Simple) Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.DumpPakFile.exe",
+      "args": [
+        "src/Oxygen/Content/Test/TestData/Simple.pak",
+        "--verbose"
+      ],
+      "stopAtEntry": true,
+      "cwd": "${workspaceFolder}",
+      "environment": []
+    }
+  ]
 }

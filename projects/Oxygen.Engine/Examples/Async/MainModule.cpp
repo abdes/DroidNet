@@ -481,7 +481,6 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 
   // Initialize on first frame
   if (!initialized_) {
-    SetupCommandQueues();
     SetupMainWindow();
     SetupSurface();
     SetupRenderer();
@@ -842,14 +841,6 @@ auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
   LOG_F(2, "Frame end - surface presentation handled by AsyncEngine");
 }
 
-auto MainModule::SetupCommandQueues() -> void
-{
-  CHECK_F(!gfx_weak_.expired());
-
-  const auto gfx = gfx_weak_.lock();
-  gfx->CreateCommandQueues(graphics::SingleQueueStrategy());
-}
-
 auto MainModule::SetupMainWindow() -> void
 {
   // Set up the main window
@@ -875,9 +866,12 @@ auto MainModule::SetupSurface() -> void
 
   const auto gfx = gfx_weak_.lock();
 
-  const graphics::SingleQueueStrategy queues;
-  surface_ = gfx->CreateSurface(window_weak_,
-    gfx->GetCommandQueue(queues.KeyFor(graphics::QueueRole::kGraphics)));
+  auto queue = gfx->GetCommandQueue(graphics::QueueRole::kGraphics);
+  if (!queue) {
+    LOG_F(ERROR, "No graphics command queue available to create surface");
+    throw std::runtime_error("No graphics command queue available");
+  }
+  surface_ = gfx->CreateSurface(window_weak_, queue);
   surface_->SetName("Main Window Surface (AsyncEngine)");
   LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(),
     window_weak_.lock()->Id());

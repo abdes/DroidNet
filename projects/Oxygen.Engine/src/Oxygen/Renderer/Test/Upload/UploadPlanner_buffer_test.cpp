@@ -107,16 +107,6 @@ private:
 //===----------------------------------------------------------------------===//
 
 //! Fixture for buffer upload planning tests.
-/*!
- Provides common helpers and default setup for buffer-related upload tests.
-
- Key responsibilities:
- - Create dummy buffers used as upload destinations
- - Provide helper to construct UploadRequest instances
-
- This keeps per-test state isolated and avoids globals.
-*/
-// Base fixture with helpers shared by specialized fixtures.
 class UploadPlannerBufferTest : public testing::Test {
 protected:
   auto SetUp() -> void override { }
@@ -142,6 +132,11 @@ protected:
     bd.size_bytes = size_bytes;
     return std::make_shared<DummyBuffer>(bd);
   }
+
+  auto UploadQueueKey() const
+  {
+    return oxygen::graphics::QueueKey("universal");
+  }
 };
 
 //! Ensure OptimizeBuffers returns an empty plan when given an empty plan.
@@ -152,8 +147,8 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_EmptyPlanReturnsEmpty)
   const BufferUploadPlan empty_plan;
 
   // Act
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, empty_plan, UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, empty_plan, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -174,7 +169,8 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferPlan_PackingAndAlignment)
   requests.emplace_back(MakeBufferUpload(buf, 200, 100));
 
   // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
 
   // Assert
   ASSERT_TRUE(exp_plan.has_value());
@@ -214,12 +210,13 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_CoalesceContiguous)
   requests.emplace_back(MakeBufferUpload(buf, 256, 0));
   requests.emplace_back(MakeBufferUpload(buf, 256, 256));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
 
   // Assert
   ASSERT_TRUE(opt.has_value());
@@ -245,7 +242,8 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
   requests.emplace_back(MakeBufferUpload(buf, 100, 0));
   requests.emplace_back(MakeBufferUpload(buf, 200, 100));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // Manually perturb plan to create non-contiguous src offsets while dst is
@@ -256,8 +254,8 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
   changed.uploads[1].region.src_offset = changed.uploads[0].region.src_offset
     + changed.uploads[0].region.size + 512;
 
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, changed, UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, changed, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -277,12 +275,13 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousDstNotMerged)
   requests.emplace_back(MakeBufferUpload(buf, 512, 0));
   requests.emplace_back(MakeBufferUpload(buf, 512, 600)); // dst not contiguous
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -302,11 +301,12 @@ NOLINT_TEST_F(
   requests.emplace_back(MakeBufferUpload(buf1, 256, 0));
   requests.emplace_back(MakeBufferUpload(buf2, 256, 0));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -327,12 +327,13 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_ChainMergeThreeRequests)
   requests.emplace_back(MakeBufferUpload(buf, 512, 512));
   requests.emplace_back(MakeBufferUpload(buf, 512, 1024));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -364,10 +365,11 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   requests.emplace_back(MakeBufferUpload(buf, 512, 0));
 
   // Act: plan and optimize
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -397,10 +399,11 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   requests.emplace_back(MakeBufferUpload(buf, 512, 1024));
 
   // Act: plan and optimize
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -428,11 +431,12 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   // index 2 -> buf1 @ 512 (same as buf1, contiguous with index 0)
   requests.emplace_back(MakeBufferUpload(buf1, 512, 512));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -467,11 +471,12 @@ NOLINT_TEST_F(
   requests.emplace_back(
     MakeBufferUpload(buf, 512, 2560)); // idx 3 (contiguous with 2)
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
-  const auto opt
-    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  const auto opt = UploadPlanner::OptimizeBuffers(
+    requests, plan.value(), UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(opt.has_value());
   const auto& [uploads, total_bytes] = opt.value();
 
@@ -511,7 +516,8 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_ZeroLengthIgnored)
   requests.emplace_back(MakeBufferUpload(buf, 0, 0));
   requests.emplace_back(MakeBufferUpload(buf, 128, 0));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // Expect only the non-zero request to be planned
@@ -537,7 +543,8 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_AllInvalid_ReturnsError)
   requests.emplace_back(std::move(r1));
 
   // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
 
   // Assert
   ASSERT_FALSE(exp_plan.has_value());
@@ -556,7 +563,8 @@ NOLINT_TEST_F(
   std::vector<UploadRequest> requests;
   requests.emplace_back(MakeBufferUpload(buf, 64, 7));
 
-  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  const auto plan
+    = UploadPlanner::PlanBuffers(requests, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(plan.has_value());
 
   // dst_offset in the planned region must match requested dst_offset

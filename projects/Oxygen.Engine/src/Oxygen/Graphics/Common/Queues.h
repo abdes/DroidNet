@@ -170,4 +170,54 @@ private:
   static constexpr auto kSingleQueueName = "universal";
 };
 
+//! Strategy that requests a separate transfer/copy queue in addition to a
+//! graphics queue.
+class SharedTransferQueueStrategy final : public QueuesStrategy {
+public:
+  SharedTransferQueueStrategy() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(SharedTransferQueueStrategy)
+  OXYGEN_DEFAULT_MOVABLE(SharedTransferQueueStrategy)
+
+  ~SharedTransferQueueStrategy() override = default;
+
+  [[nodiscard]] auto Specifications() const
+    -> std::vector<QueueSpecification> override
+  {
+    return {
+      QueueSpecification {
+        .key = QueueKey { kGraphicsQueueName },
+        .role = QueueRole::kGraphics,
+        .allocation_preference = QueueAllocationPreference::kAllInOne,
+        .sharing_preference = QueueSharingPreference::kShared,
+      },
+      QueueSpecification {
+        .key = QueueKey { kTransferQueueName },
+        .role = QueueRole::kTransfer,
+        .allocation_preference = QueueAllocationPreference::kDedicated,
+        .sharing_preference = QueueSharingPreference::kShared,
+      },
+    };
+  }
+
+  [[nodiscard]] auto KeyFor(const QueueRole role) const -> QueueKey override
+  {
+    switch (role) {
+    case QueueRole::kTransfer:
+      return QueueKey { kTransferQueueName };
+    default:
+      return QueueKey { kGraphicsQueueName };
+    }
+  }
+
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
+  {
+    return std::make_unique<SharedTransferQueueStrategy>(*this);
+  }
+
+private:
+  static constexpr auto kGraphicsQueueName = "graphics";
+  static constexpr auto kTransferQueueName = "transfer";
+};
+
 } // namespace oxygen::graphics

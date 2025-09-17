@@ -71,8 +71,20 @@ private:
   oxygen::graphics::TextureDesc desc_;
 };
 
+//! Fixture for texture upload planning tests.
+class UploadPlannerTextureTest : public testing::Test {
+protected:
+  auto SetUp() -> void override { }
+  auto TearDown() -> void override { }
+
+  auto UploadQueueKey() const
+  {
+    return oxygen::graphics::QueueKey("universal");
+  }
+};
+
 //! Full texture plan produces 256B-aligned row pitch and correct slice size.
-NOLINT_TEST(UploadPlannerTest, Texture2D_Full)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_Full)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 128;
@@ -88,7 +100,8 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_Full)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& [total_bytes, regions] = exp_plan.value();
   ASSERT_EQ(regions.size(), 1u);
@@ -100,7 +113,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_Full)
 }
 
 // Two mips: aligned offsets and pitches match expectations for RGBA8.
-NOLINT_TEST(UploadPlannerTest, Texture2D_TwoMips)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_TwoMips)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 64;
@@ -121,7 +134,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_TwoMips)
     UploadSubresource { .mip = 1, .array_slice = 0 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);
@@ -139,7 +152,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_TwoMips)
 }
 
 // BC3 format: bytes_per_block=16, block_size=4. Validate full texture plan.
-NOLINT_TEST(UploadPlannerTest, Texture2D_BC3_Full)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_BC3_Full)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 128; // divisible by 4
@@ -155,7 +168,8 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_BC3_Full)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
@@ -169,7 +183,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_BC3_Full)
 
 // Partial region: plan should compute pitches based on region area, not full
 // mip.
-NOLINT_TEST(UploadPlannerTest, Texture2D_PartialRegion)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_PartialRegion)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 100; // non-multiple to exercise ceil block math
@@ -196,7 +210,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_PartialRegion)
       .depth = 1 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
@@ -211,7 +225,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_PartialRegion)
 }
 
 // Array slice copy: ensure distinct offsets for two slices of same mip.
-NOLINT_TEST(UploadPlannerTest, Texture2D_ArrayTwoSlices)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_ArrayTwoSlices)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 64;
@@ -232,7 +246,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_ArrayTwoSlices)
     UploadSubresource { .mip = 0, .array_slice = 1 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& [total_bytes, regions] = exp_plan.value();
   ASSERT_EQ(regions.size(), 2u);
@@ -246,7 +260,7 @@ NOLINT_TEST(UploadPlannerTest, Texture2D_ArrayTwoSlices)
 }
 
 // 3D texture: full region at mip 0 should multiply slice pitch by depth.
-NOLINT_TEST(UploadPlannerTest, Texture3D_Full)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture3D_Full)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 32;
@@ -263,7 +277,8 @@ NOLINT_TEST(UploadPlannerTest, Texture3D_Full)
   req.height = td.height;
   req.depth = td.depth;
   req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy {});
+  const auto exp_plan
+    = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& [total_bytes, regions] = exp_plan.value();
   ASSERT_EQ(regions.size(), 1u);
@@ -275,7 +290,7 @@ NOLINT_TEST(UploadPlannerTest, Texture3D_Full)
 }
 
 // 3D texture: partial region with z-range and smaller width/height.
-NOLINT_TEST(UploadPlannerTest, Texture3D_PartialRegion)
+NOLINT_TEST_F(UploadPlannerTextureTest, Texture3D_PartialRegion)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 40;
@@ -303,7 +318,7 @@ NOLINT_TEST(UploadPlannerTest, Texture3D_PartialRegion)
       .depth = 5 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
@@ -321,7 +336,7 @@ NOLINT_TEST(UploadPlannerTest, Texture3D_PartialRegion)
 }
 
 // Cube treated as 2D array: plan pitches like 2D; array_slice targets face.
-NOLINT_TEST(UploadPlannerTest, TextureCube_TwoFaces)
+NOLINT_TEST_F(UploadPlannerTextureTest, TextureCube_TwoFaces)
 {
   oxygen::graphics::TextureDesc td;
   td.width = 64;
@@ -343,7 +358,7 @@ NOLINT_TEST(UploadPlannerTest, TextureCube_TwoFaces)
     UploadSubresource { .mip = 0, .array_slice = 3 },
   };
   const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
   const auto& [total_bytes, regions] = exp_plan.value();
   ASSERT_EQ(regions.size(), 2u);
