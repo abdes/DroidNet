@@ -161,6 +161,12 @@ auto Graphics::CreateCommandQueues(
     });
 }
 
+auto Graphics::QueueKeyFor(graphics::QueueRole role) const -> graphics::QueueKey
+{
+  auto& qm = GetComponent<QueueManager>();
+  return qm.QueueKeyFor(role);
+}
+
 auto Graphics::FlushCommandQueues() -> void
 {
   // Forward to the QueueManager which enumerates unique queues safely.
@@ -189,7 +195,8 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
 {
   // Get the command queue from the queue key
   auto queue = GetCommandQueue(queue_key);
-  DCHECK_NOTNULL_F(queue, "Failed to get command queue for key");
+  DCHECK_NOTNULL_F(
+    queue, "Failed to get command queue for key '{}'", queue_key.get());
 
   // Acquire a command list
   auto command_list

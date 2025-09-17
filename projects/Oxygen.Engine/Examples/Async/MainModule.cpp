@@ -1224,8 +1224,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
 
   DLOG_F(1, "Recording commands for frame index {}", current_frame);
 
-  const graphics::SingleQueueStrategy queues;
-  auto queue_key = queues.KeyFor(graphics::QueueRole::kGraphics);
+  auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   auto recorder
     = gfx->AcquireCommandRecorder(queue_key, "Main Window Command List");
 
