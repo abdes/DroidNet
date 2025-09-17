@@ -12,11 +12,11 @@
 #include <Oxygen/Graphics/Common/Errors.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/Resources/UploadHelpers.h>
+#include <Oxygen/Renderer/Upload/UploadHelpers.h>
 
 using oxygen::graphics::GraphicsError;
 
-namespace oxygen::renderer::resources::internal {
+namespace oxygen::engine::upload::internal {
 
 auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
@@ -130,4 +130,4 @@ auto EnsureBufferAndSrv(Graphics& gfx,
     EnsureBufferResult::kResized);
 }
 
-} // namespace oxygen::renderer::resources::internal
+} // namespace oxygen::engine::upload::internal

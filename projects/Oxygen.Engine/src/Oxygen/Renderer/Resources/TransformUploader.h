@@ -20,8 +20,8 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
-#include <Oxygen/Renderer/Resources/AtlasBuffer.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -87,11 +87,11 @@ private:
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
   // Phase 1+: Future migration target – resident atlases (not yet wired)
-  std::unique_ptr<AtlasBuffer> worlds_atlas_;
-  std::unique_ptr<AtlasBuffer> normals_atlas_;
+  std::unique_ptr<engine::upload::AtlasBuffer> worlds_atlas_;
+  std::unique_ptr<engine::upload::AtlasBuffer> normals_atlas_;
   // Atlas element refs stored per transform when atlas path is enabled
-  std::vector<AtlasBuffer::ElementRef> world_refs_;
-  std::vector<AtlasBuffer::ElementRef> normal_refs_;
+  std::vector<engine::upload::AtlasBuffer::ElementRef> world_refs_;
+  std::vector<engine::upload::AtlasBuffer::ElementRef> normal_refs_;
 
   // Transform storage and deduplication
   std::vector<glm::mat4> transforms_;

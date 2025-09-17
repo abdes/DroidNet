@@ -27,6 +27,8 @@
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
+using oxygen::engine::upload::AtlasBuffer;
+
 namespace {
 
 //! Validate material asset for common issues and constraints.
