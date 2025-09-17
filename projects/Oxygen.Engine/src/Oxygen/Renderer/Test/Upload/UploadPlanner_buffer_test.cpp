@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -11,9 +14,7 @@
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 
-#include <memory>
-#include <vector>
-
+using oxygen::engine::upload::BufferUploadPlan;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadError;
 using oxygen::engine::upload::UploadKind;
@@ -26,11 +27,11 @@ namespace {
 //=== Dummy Buffer for testing -----------------------------------------------//
 
 // Minimal dummy buffer to test buffer upload planning
-class DummyBuffer : public oxygen::graphics::Buffer {
+class DummyBuffer final : public oxygen::graphics::Buffer {
 public:
-  explicit DummyBuffer(const oxygen::graphics::BufferDesc& d)
+  explicit DummyBuffer(oxygen::graphics::BufferDesc d)
     : Buffer("DummyBuf")
-    , desc_(d)
+    , desc_(std::move(d))
   {
   }
   auto GetDescriptor() const noexcept -> oxygen::graphics::BufferDesc override
@@ -39,11 +40,9 @@ public:
   }
   auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeResource(
-      const_cast<DummyBuffer*>(this), ClassTypeId());
+    return { const_cast<DummyBuffer*>(this), ClassTypeId() };
   }
 
-  // Minimal implementations of pure virtuals to make this a concrete type.
   auto Update(const void* /*data*/, uint64_t /*size*/, uint64_t /*offset*/)
     -> void override
   {
@@ -118,14 +117,14 @@ private:
  This keeps per-test state isolated and avoids globals.
 */
 // Base fixture with helpers shared by specialized fixtures.
-class UploadPlannerBufferTest : public ::testing::Test {
+class UploadPlannerBufferTest : public testing::Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
+  auto SetUp() -> void override { }
+  auto TearDown() -> void override { }
 
   // Helper to create a move-friendly UploadRequest for buffer uploads.
-  auto MakeBufferUpload(const std::shared_ptr<DummyBuffer>& dst,
-    uint64_t size_bytes, uint64_t dst_offset) -> UploadRequest
+  static auto MakeBufferUpload(const std::shared_ptr<DummyBuffer>& dst,
+    const uint64_t size_bytes, const uint64_t dst_offset) -> UploadRequest
   {
     UploadRequest r;
     r.kind = UploadKind::kBuffer;
@@ -136,7 +135,7 @@ protected:
   }
 
   // Convenience helper to create a dummy buffer with given size (default 4096).
-  auto MakeDummyBuffer(uint64_t size_bytes = 4096ull)
+  static auto MakeDummyBuffer(const uint64_t size_bytes = 4096ull)
     -> std::shared_ptr<DummyBuffer>
   {
     oxygen::graphics::BufferDesc bd;
@@ -149,36 +148,36 @@ protected:
 NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_EmptyPlanReturnsEmpty)
 {
   // Arrange: empty requests and empty plan
-  std::vector<UploadRequest> reqs;
-  oxygen::engine::upload::BufferUploadPlan empty_plan;
+  std::vector<UploadRequest> requests;
+  const BufferUploadPlan empty_plan;
 
   // Act
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, empty_plan, UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, empty_plan, UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: empty plan preserved
-  EXPECT_TRUE(out.uploads.empty());
-  EXPECT_EQ(out.total_bytes, 0u);
+  EXPECT_TRUE(uploads.empty());
+  EXPECT_EQ(total_bytes, 0u);
 }
 
 //! PlanBuffers should pack buffer uploads and align staging offsets.
 NOLINT_TEST_F(UploadPlannerBufferTest, BufferPlan_PackingAndAlignment)
 {
   // Arrange: create a dummy destination buffer of 4096 bytes
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
   // Two requests: sizes 100 and 200 bytes, different dst_offset
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 100, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 200, 100));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 100, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 200, 100));
 
   // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+  const auto exp_plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
 
   // Assert
-  ASSERT_HAS_VALUE(exp_plan);
+  ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
   ASSERT_EQ(plan.uploads.size(), 2u);
 
@@ -208,46 +207,46 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferPlan_PackingAndAlignment)
 NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_CoalesceContiguous)
 {
   // Arrange: create a dummy buffer
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
   // Two requests that are contiguous in dst and will be contiguous in src
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 256, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 256, 256));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 256, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 256, 256));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
 
   // Assert
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Expect coalesced into single upload
-  ASSERT_EQ(out.uploads.size(), 1u);
-  const auto& merged = out.uploads[0];
-  EXPECT_EQ(merged.region.dst_offset, 0u);
-  EXPECT_EQ(merged.region.size, 512u);
-  EXPECT_EQ(merged.request_indices.size(), 2u);
+  ASSERT_EQ(uploads.size(), 1u);
+  const auto& [region, request_indices] = uploads[0];
+  EXPECT_EQ(region.dst_offset, 0u);
+  EXPECT_EQ(region.size, 512u);
+  EXPECT_EQ(request_indices.size(), 2u);
 }
 
 //! Do not merge when source staging offsets are non-contiguous.
 NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
 {
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  // Two requests contiguous in dst but we will simulate non-contiguous src by
+  // Two requests contiguous in dst, but we will simulate non-contiguous src by
   // relying on PlanBuffers alignment gaps (create sizes that cause alignment to
   // insert a hole between src offsets)
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 100, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 200, 100));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 100, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 200, 100));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // Manually perturb plan to create non-contiguous src offsets while dst is
   // contiguous
@@ -258,12 +257,12 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
     + changed.uploads[0].region.size + 512;
 
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, changed, UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, changed, UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because src are non-contiguous
-  EXPECT_EQ(out.uploads.size(), 2u);
+  EXPECT_EQ(uploads.size(), 2u);
 }
 
 //! Do not merge when destination offsets are non-contiguous even if source
@@ -272,47 +271,47 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousDstNotMerged)
 {
   // Arrange: sizes aligned so src will be contiguous, but dst offsets leave a
   // gap
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 600)); // dst not contiguous
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 600)); // dst not contiguous
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because dst offsets are not contiguous
-  EXPECT_EQ(out.uploads.size(), 2u);
+  EXPECT_EQ(uploads.size(), 2u);
 }
 
 //! Do not merge regions that target different destination buffers.
 NOLINT_TEST_F(
   UploadPlannerBufferTest, BufferOptimize_DifferentDestinationNotMerged)
 {
-  auto buf1 = MakeDummyBuffer();
-  auto buf2 = MakeDummyBuffer();
+  const auto buf1 = MakeDummyBuffer();
+  const auto buf2 = MakeDummyBuffer();
 
   // Two requests contiguous in src/dst offsets but target different buffers
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf1, 256, 0));
-  reqs.emplace_back(MakeBufferUpload(buf2, 256, 0));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf1, 256, 0));
+  requests.emplace_back(MakeBufferUpload(buf2, 256, 0));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because destinations differ
-  EXPECT_EQ(out.uploads.size(), 2u);
+  EXPECT_EQ(uploads.size(), 2u);
 }
 
 //! Chain-merge aligned, contiguous requests into a single upload and preserve
@@ -321,30 +320,30 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_ChainMergeThreeRequests)
 {
   // Arrange: use sizes aligned to kBufferCopyAlignment so src offsets are
   // contiguous after PlanBuffers. Alignment is 512.
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 512));
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 1024));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 512));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 1024));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // Act: optimize
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: all three requests coalesced into a single upload
-  ASSERT_EQ(out.uploads.size(), 1u);
-  const auto& merged = out.uploads[0];
-  EXPECT_EQ(merged.region.dst_offset, 0u);
-  EXPECT_EQ(merged.region.size, 512u * 3u);
-  EXPECT_EQ(merged.request_indices.size(), 3u);
+  ASSERT_EQ(uploads.size(), 1u);
+  const auto& [region, request_indices] = uploads[0];
+  EXPECT_EQ(region.dst_offset, 0u);
+  EXPECT_EQ(region.size, 512u * 3u);
+  EXPECT_EQ(request_indices.size(), 3u);
   // total_bytes preserved
-  EXPECT_EQ(out.total_bytes, plan->total_bytes);
+  EXPECT_EQ(total_bytes, plan->total_bytes);
 }
 
 //! Verify merged request_indices reflect sorted destination order after
@@ -354,34 +353,34 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
 {
   // Arrange: create a single destination buffer and three requests inserted in
   // reverse destination order (to exercise PlanBuffers sorting).
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
+  std::vector<UploadRequest> requests;
   // index 0 -> highest dst offset
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 1024));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 1024));
   // index 1 -> middle dst offset
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 512));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 512));
   // index 2 -> lowest dst offset
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 0));
 
   // Act: plan and optimize
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: all three coalesced into one upload
-  ASSERT_EQ(out.uploads.size(), 1u);
-  const auto& merged = out.uploads[0];
-  ASSERT_EQ(merged.request_indices.size(), 3u);
+  ASSERT_EQ(uploads.size(), 1u);
+  const auto& [region, request_indices] = uploads[0];
+  ASSERT_EQ(request_indices.size(), 3u);
 
   // Because PlanBuffers sorts by dst_offset ascending, the representative
   // ordering inside request_indices should be {2,1,0} (original indices)
-  EXPECT_EQ(merged.request_indices[0], 2u);
-  EXPECT_EQ(merged.request_indices[1], 1u);
-  EXPECT_EQ(merged.request_indices[2], 0u);
+  EXPECT_EQ(request_indices[0], 2u);
+  EXPECT_EQ(request_indices[1], 1u);
+  EXPECT_EQ(request_indices[2], 0u);
 }
 
 //! When inputs are already ordered by dst, merged request_indices should
@@ -390,63 +389,63 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   BufferOptimize_MergedRequestIndicesPreserveInputOrderWhenAlreadyOrdered)
 {
   // Arrange: requests already in ascending dst_offset order.
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 512));
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 1024));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 512));
+  requests.emplace_back(MakeBufferUpload(buf, 512, 1024));
 
   // Act: plan and optimize
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: merged and request_indices preserve the original index order
-  ASSERT_EQ(out.uploads.size(), 1u);
-  const auto& merged = out.uploads[0];
-  ASSERT_EQ(merged.request_indices.size(), 3u);
-  EXPECT_EQ(merged.request_indices[0], 0u);
-  EXPECT_EQ(merged.request_indices[1], 1u);
-  EXPECT_EQ(merged.request_indices[2], 2u);
+  ASSERT_EQ(uploads.size(), 1u);
+  const auto& [region, request_indices] = uploads[0];
+  ASSERT_EQ(request_indices.size(), 3u);
+  EXPECT_EQ(request_indices[0], 0u);
+  EXPECT_EQ(request_indices[1], 1u);
+  EXPECT_EQ(request_indices[2], 2u);
 }
 
 //! Ensure merged uploads never mix requests from different destination buffers.
 NOLINT_TEST_F(UploadPlannerBufferTest,
   BufferOptimize_RequestIndicesSeparateForDifferentBuffers)
 {
-  auto buf1 = MakeDummyBuffer();
-  auto buf2 = MakeDummyBuffer();
+  const auto buf1 = MakeDummyBuffer();
+  const auto buf2 = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
+  std::vector<UploadRequest> requests;
   // index 0 -> buf1 @ 0
-  reqs.emplace_back(MakeBufferUpload(buf1, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf1, 512, 0));
   // index 1 -> buf2 @ 0 (different buffer)
-  reqs.emplace_back(MakeBufferUpload(buf2, 512, 0));
+  requests.emplace_back(MakeBufferUpload(buf2, 512, 0));
   // index 2 -> buf1 @ 512 (same as buf1, contiguous with index 0)
-  reqs.emplace_back(MakeBufferUpload(buf1, 512, 512));
+  requests.emplace_back(MakeBufferUpload(buf1, 512, 512));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // We expect 2 uploads for buf1 (merged indices) and buf2 separate => total 2
   // Because PlanBuffers sorts by destination pointer then offset, the exact
   // order of uploads in the plan can place buf2 between buf1 groups; ensure
   // that no merged upload contains indices from different buffers.
-  for (const auto& item : out.uploads) {
+  for (const auto& [region, request_indices] : uploads) {
     // Each request_indices should all reference the same dst buffer
-    const auto rep_idx = item.request_indices.front();
-    const auto& rep_desc = std::get<UploadBufferDesc>(reqs[rep_idx].desc);
-    for (auto idx : item.request_indices) {
-      const auto& desc = std::get<UploadBufferDesc>(reqs[idx].desc);
+    const auto rep_idx = request_indices.front();
+    const auto& rep_desc = std::get<UploadBufferDesc>(requests[rep_idx].desc);
+    for (const auto idx : request_indices) {
+      const auto& desc = std::get<UploadBufferDesc>(requests[idx].desc);
       EXPECT_EQ(desc.dst.get(), rep_desc.dst.get());
     }
   }
@@ -459,35 +458,36 @@ NOLINT_TEST_F(
 {
   // Arrange: single buffer with four requests where [0,1] are contiguous and
   // [2,3] are contiguous but separated by a gap between 1 and 2.
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 0)); // idx 0
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 512)); // idx 1
-  reqs.emplace_back(MakeBufferUpload(buf, 512, 2048)); // idx 2 (gap)
-  reqs.emplace_back(
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 512, 0)); // idx 0
+  requests.emplace_back(MakeBufferUpload(buf, 512, 512)); // idx 1
+  requests.emplace_back(MakeBufferUpload(buf, 512, 2048)); // idx 2 (gap)
+  requests.emplace_back(
     MakeBufferUpload(buf, 512, 2560)); // idx 3 (contiguous with 2)
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   const auto opt
-    = UploadPlanner::OptimizeBuffers(reqs, plan.value(), UploadPolicy {});
-  ASSERT_HAS_VALUE(opt);
-  const auto& out = opt.value();
+    = UploadPlanner::OptimizeBuffers(requests, plan.value(), UploadPolicy {});
+  ASSERT_TRUE(opt.has_value());
+  const auto& [uploads, total_bytes] = opt.value();
 
   // Expect two merged uploads: one for indices {0,1} and one for {2,3}
-  ASSERT_EQ(out.uploads.size(), 2u);
+  ASSERT_EQ(uploads.size(), 2u);
 
   // Find which upload contains idx 0 and which contains idx 2 and assert
   // groupings
   bool found01 = false, found23 = false;
-  for (const auto& item : out.uploads) {
-    const auto& inds = item.request_indices;
-    if (inds.size() == 2 && inds[0] == 0u && inds[1] == 1u) {
+  for (const auto& [region, request_indices] : uploads) {
+    if (request_indices.size() == 2 && request_indices[0] == 0u
+      && request_indices[1] == 1u) {
       found01 = true;
     }
-    if (inds.size() == 2 && inds[0] == 2u && inds[1] == 3u) {
+    if (request_indices.size() == 2 && request_indices[0] == 2u
+      && request_indices[1] == 3u) {
       found23 = true;
     }
   }
@@ -504,15 +504,15 @@ class UploadPlannerBufferEdgeTest : public UploadPlannerBufferTest { };
 //! Edge: zero-length buffer upload requests should be ignored by PlanBuffers
 NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_ZeroLengthIgnored)
 {
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
   // A zero-length request and a normal request
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 0, 0));
-  reqs.emplace_back(MakeBufferUpload(buf, 128, 0));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 0, 0));
+  requests.emplace_back(MakeBufferUpload(buf, 128, 0));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // Expect only the non-zero request to be planned
   EXPECT_EQ(plan->uploads.size(), 1u);
@@ -523,21 +523,21 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_ZeroLengthIgnored)
 NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_AllInvalid_ReturnsError)
 {
   // Arrange
-  std::vector<UploadRequest> reqs;
+  std::vector<UploadRequest> requests;
   // Invalid: null dst and zero size
   UploadRequest r0;
   r0.kind = UploadKind::kBuffer;
   r0.desc
     = UploadBufferDesc { .dst = nullptr, .size_bytes = 0, .dst_offset = 0 };
-  reqs.emplace_back(std::move(r0));
+  requests.emplace_back(std::move(r0));
   // Invalid: kind mismatch (e.g., texture) also considered invalid for
   // PlanBuffers
   UploadRequest r1;
   r1.kind = UploadKind::kTexture2D;
-  reqs.emplace_back(std::move(r1));
+  requests.emplace_back(std::move(r1));
 
   // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+  const auto exp_plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
 
   // Assert
   ASSERT_FALSE(exp_plan.has_value());
@@ -550,14 +550,14 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_AllInvalid_ReturnsError)
 NOLINT_TEST_F(
   UploadPlannerBufferEdgeTest, BufferPlan_MisalignedDstOffsetPreserved)
 {
-  auto buf = MakeDummyBuffer();
+  const auto buf = MakeDummyBuffer();
 
   // Create a request with a dst_offset that is misaligned (e.g., 7)
-  std::vector<UploadRequest> reqs;
-  reqs.emplace_back(MakeBufferUpload(buf, 64, 7));
+  std::vector<UploadRequest> requests;
+  requests.emplace_back(MakeBufferUpload(buf, 64, 7));
 
-  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  const auto plan = UploadPlanner::PlanBuffers(requests, UploadPolicy {});
+  ASSERT_TRUE(plan.has_value());
 
   // dst_offset in the planned region must match requested dst_offset
   ASSERT_EQ(plan->uploads.size(), 1u);

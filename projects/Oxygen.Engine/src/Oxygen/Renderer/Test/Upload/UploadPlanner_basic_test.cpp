@@ -164,7 +164,7 @@ NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_EmptyRequestsReturnsEmptyPlan)
   const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
 
   // Should return a valid plan with no uploads and total_bytes == 0
-  ASSERT_HAS_VALUE(plan);
+  ASSERT_TRUE(plan.has_value());
   const auto& p = plan.value();
   EXPECT_TRUE(p.uploads.empty());
   EXPECT_EQ(p.total_bytes, 0u);
@@ -193,7 +193,7 @@ NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_SortsByDstOffset)
   reqs.emplace_back(std::move(r0));
 
   const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-  ASSERT_HAS_VALUE(plan);
+  ASSERT_TRUE(plan.has_value());
   const auto& p = plan.value();
   ASSERT_EQ(p.uploads.size(), 2u);
 
