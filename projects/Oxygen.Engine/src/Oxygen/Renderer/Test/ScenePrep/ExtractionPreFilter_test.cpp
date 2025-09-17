@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include <glm/glm.hpp>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/View.h>
@@ -17,9 +19,9 @@
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-// glm types for transforms
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+
+#include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
+#include <Oxygen/Renderer/Test/Sceneprep/ScenePrepTestFixture.h>
 
 using oxygen::View;
 
@@ -34,113 +36,75 @@ using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 
+using namespace oxygen::engine::sceneprep::testing;
+
 namespace {
 
-class ExtractionFilterTest : public ::testing::Test {
+class ExtractionFilterTest : public ScenePrepTestFixture {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
-    scene_ = std::make_shared<Scene>("TestScene");
-    node_ = scene_->CreateNode("TestNode");
-
-    // Set the transform
-    node_.GetTransform().SetLocalTransform(
-      glm::vec3(0.2F), glm::quat(0.6F, 0.0F, 0.0F, 0.0F), glm::vec3(3.0f));
-    scene_->Update();
-
-    // Set rendering flags
-    Flags().SetFlag(SceneNodeFlags::kCastsShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true));
-    Flags().SetFlag(SceneNodeFlags::kReceivesShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true));
-
-    // Always add a geometry as the proto will abort if there is no geometry
-    AddGeometry();
-    proto_.emplace(node_.GetObject()->get());
-
-    ctx_.emplace(oxygen::frame::SequenceNumber { 0 },
-      *(static_cast<View*>(nullptr)), *scene_);
-  }
-
-  void TearDown() override
-  {
-    // Clean up any shared resources here.
-    scene_.reset();
-  }
-
-  auto& Context() { return *ctx_; }
-  auto& State() { return state_; }
-  auto& Proto() { return *proto_; }
-  auto& Node() { return node_; }
-  auto& Flags() { return node_.GetFlags()->get(); }
-
-  auto GetWorldMatrix() const noexcept
-  {
-    return node_.GetTransform().GetWorldMatrix();
+    // Delegate initialization to base fixture, then emulate the nullptr view
+    // case used by the original test by placing a null-like context.
+    ScenePrepTestFixture::SetUp();
+    EmplaceContextWithView();
   }
 
   auto InvokeFilter()
   {
     return ExtractionPreFilter(Context(), State(), Proto());
   }
-
-private:
-  void AddGeometry()
-  {
-    using namespace oxygen::data;
-    std::vector<Vertex> verts(3);
-    std::vector<uint32_t> idx = { 0, 1, 2 };
-    auto mat = MaterialAsset::CreateDefault();
-    std::shared_ptr<Mesh> mesh = MeshBuilder()
-                                   .WithVertices(verts)
-                                   .WithIndices(idx)
-                                   .BeginSubMesh("s", mat)
-                                   .WithMeshView({ .first_index = 0,
-                                     .index_count = 3,
-                                     .first_vertex = 0,
-                                     .vertex_count = 3 })
-                                   .EndSubMesh()
-                                   .Build();
-
-    pak::GeometryAssetDesc desc {};
-    desc.lod_count = 1;
-    std::vector<std::shared_ptr<Mesh>> lods;
-    lods.push_back(mesh);
-    auto geometry
-      = std::make_shared<GeometryAsset>(std::move(desc), std::move(lods));
-
-    Node().GetRenderable().SetGeometry(geometry);
-  }
-
-  std::shared_ptr<Scene> scene_;
-  SceneNode node_;
-  std::optional<ScenePrepContext> ctx_;
-  ScenePrepState state_;
-  std::optional<RenderItemProto> proto_;
 };
 
-// Test: node invisible -> filter should return false
+//! Verifies that when a scene node is marked invisible via its flags the
+//! extraction pre-filter marks the proto as dropped and does not throw.
+/*!
+ Arrange: the node's effective visibility bit is set to false. Act: invoke the
+ ExtractionPreFilter. Assert: the filter completes without throwing and the
+ resulting proto is marked dropped.
+
+ This test does not assume any further side-effects (such as changes to
+ transform or geometry pointers) and only validates the "dropped" outcome.
+*/
 NOLINT_TEST_F(ExtractionFilterTest, InvisibleNode_Fails)
 {
   // Mark node as invisible via flags
   Flags().SetFlag(SceneNodeFlags::kVisible,
     oxygen::scene::SceneFlag {}.SetEffectiveValueBit(false));
 
+  // Act & Assert: should not throw and proto must be dropped
   NOLINT_EXPECT_NO_THROW(InvokeFilter());
   EXPECT_TRUE(Proto().IsDropped());
 }
 
-// Test: node visible with geometry -> passes and proto seeded
+//! Verifies that a visible node with geometry passes the pre-filter and that
+//! the proto is seeded with expected defaults.
+/*!
+ Arrange: geometry is prepared in the fixture SetUp() and the context uses a
+ null-like view as configured by the fixture. Act: run ExtractionPreFilter.
+ Assert: the proto is not dropped, is marked visible, has default shadow flags
+ set, holds a non-null geometry pointer, and receives the expected world
+ transform from the node.
+
+ This test intentionally checks observable proto state only and avoids asserting
+ on unspecified implementation details of proto initialization.
+*/
 NOLINT_TEST_F(ExtractionFilterTest, WithGeometry_PassesAndSeeds)
 {
   // Geometry initialized in SetUp(); invoke filter and assert
   NOLINT_EXPECT_NO_THROW(ExtractionPreFilter(Context(), State(), Proto()));
+
+  // Basic outcome checks
   EXPECT_FALSE(Proto().IsDropped());
   EXPECT_TRUE(Proto().IsVisible());
+
+  // Default shadow flags expected for visible renderables in this fixture
   EXPECT_TRUE(Proto().CastsShadows());
   EXPECT_TRUE(Proto().ReceivesShadows());
+
+  // Seeded geometry and transform
   EXPECT_NE(Proto().Geometry(), nullptr);
-  EXPECT_EQ(Proto().GetWorldTransform(), GetWorldMatrix());
+  EXPECT_EQ(Proto().GetWorldTransform(), WorldMatrix());
 }
 
 } // namespace
