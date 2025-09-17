@@ -319,6 +319,9 @@ public:
     : Graphics("FakeGraphics")
   {
   }
+  // Test-only failure injection hooks
+  void SetFailMap(bool v) { fail_map_ = v; }
+  void SetThrowOnCreateBuffer(bool v) { throw_on_create_buffer_ = v; }
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
   {
@@ -404,17 +407,21 @@ public:
   [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<Buffer> override
   {
+    if (throw_on_create_buffer_) {
+      throw std::runtime_error("FakeGraphics: CreateBuffer forced failure");
+    }
     //! In-memory staging buffer used by the fake graphics for uploads.
     class FakeBuffer final : public Buffer {
       OXYGEN_TYPED(FakeBuffer)
     public:
       FakeBuffer(std::string_view name, uint64_t size, BufferUsage usage,
-        BufferMemory memory)
+        BufferMemory memory, bool map_should_fail)
         : Buffer(name)
       {
         desc_.size_bytes = size;
         desc_.usage = usage;
         desc_.memory = memory;
+        map_should_fail_ = map_should_fail;
       }
       [[nodiscard]] auto GetDescriptor() const noexcept -> BufferDesc override
       {
@@ -457,6 +464,9 @@ public:
     protected:
       auto DoMap(uint64_t, uint64_t) -> void* override
       {
+        if (map_should_fail_) {
+          return nullptr;
+        }
         if (!mapped_) {
           storage_.resize(desc_.size_bytes);
           mapped_ = true;
@@ -492,10 +502,11 @@ public:
     private:
       BufferDesc desc_ {};
       bool mapped_ { false };
+      bool map_should_fail_ { false };
       std::vector<std::byte> storage_ {};
     };
     return std::make_shared<FakeBuffer>(
-      "Staging", desc.size_bytes, desc.usage, desc.memory);
+      "Staging", desc.size_bytes, desc.usage, desc.memory, fail_map_);
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& strat)
     -> void override
@@ -542,6 +553,9 @@ public:
   TextureCommandLog texture_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_ {};
   mutable MiniDescriptorAllocator descriptor_allocator_ {};
+  // Test injection flags (mutable to allow const CreateBuffer)
+  mutable bool fail_map_ { false };
+  mutable bool throw_on_create_buffer_ { false };
 
 protected:
   [[nodiscard]] auto CreateCommandQueue(const QueueKey&, QueueRole)
