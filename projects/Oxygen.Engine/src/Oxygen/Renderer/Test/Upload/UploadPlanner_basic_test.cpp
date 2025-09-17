@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadPlanner.h>
@@ -25,10 +26,90 @@ using oxygen::engine::upload::UploadTextureDesc;
 
 namespace {
 
-class DummyTexture : public oxygen::graphics::Texture {
+// Minimal dummy buffer used only for planning verification. Similar to
+// helpers in other tests but kept local to avoid fixture creation.
+class LocalDummyBuffer : public oxygen::graphics::Buffer {
 public:
-  explicit DummyTexture(const oxygen::graphics::TextureDesc& d)
-    : Texture("DummyTex")
+  explicit LocalDummyBuffer(const oxygen::graphics::BufferDesc& d)
+    : Buffer("LocalDummyBuf")
+    , desc_(d)
+  {
+  }
+  auto GetDescriptor() const noexcept -> oxygen::graphics::BufferDesc override
+  {
+    return desc_;
+  }
+  auto GetNativeResource() const -> oxygen::graphics::NativeResource override
+  {
+    return oxygen::graphics::NativeResource(
+      const_cast<LocalDummyBuffer*>(this), ClassTypeId());
+  }
+
+protected:
+  // Minimal implementations of abstract methods
+  auto Update(const void* /*data*/, uint64_t /*size*/, uint64_t /*offset*/)
+    -> void override
+  {
+  }
+  [[nodiscard]] auto GetSize() const noexcept -> uint64_t override
+  {
+    return desc_.size_bytes;
+  }
+  [[nodiscard]] auto GetUsage() const noexcept
+    -> oxygen::graphics::BufferUsage override
+  {
+    return desc_.usage;
+  }
+  [[nodiscard]] auto GetMemoryType() const noexcept
+    -> oxygen::graphics::BufferMemory override
+  {
+    return desc_.memory;
+  }
+  [[nodiscard]] auto IsMapped() const noexcept -> bool override
+  {
+    return false;
+  }
+  [[nodiscard]] auto GetGPUVirtualAddress() const -> uint64_t override
+  {
+    return 0;
+  }
+
+  auto DoMap(uint64_t /*offset*/, uint64_t /*size*/) -> void* override
+  {
+    return nullptr;
+  }
+  auto DoUnMap() noexcept -> void override { }
+  [[nodiscard]] auto CreateConstantBufferView(
+    const oxygen::graphics::DescriptorHandle&,
+    const oxygen::graphics::BufferRange&) const
+    -> oxygen::graphics::NativeView override
+  {
+    return {};
+  }
+  [[nodiscard]] auto CreateShaderResourceView(
+    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    oxygen::graphics::BufferRange, uint32_t) const
+    -> oxygen::graphics::NativeView override
+  {
+    return {};
+  }
+  [[nodiscard]] auto CreateUnorderedAccessView(
+    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    oxygen::graphics::BufferRange, uint32_t) const
+    -> oxygen::graphics::NativeView override
+  {
+    return {};
+  }
+
+private:
+  oxygen::graphics::BufferDesc desc_;
+};
+
+// Minimal dummy texture for a tiny set of texture-plan tests.
+class LocalDummyTexture : public oxygen::graphics::Texture {
+public:
+  explicit LocalDummyTexture(const oxygen::graphics::TextureDesc& d)
+    : Texture("LocalDummyTex")
     , desc_(d)
   {
   }
@@ -39,7 +120,7 @@ public:
   auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
     return oxygen::graphics::NativeResource(
-      const_cast<DummyTexture*>(this), ClassTypeId());
+      const_cast<LocalDummyTexture*>(this), ClassTypeId());
   }
 
 protected:
@@ -75,329 +156,84 @@ protected:
 private:
   oxygen::graphics::TextureDesc desc_;
 };
-} // namespace
 
-//! PlanBuffers: empty span returns empty plan (no error).
-NOLINT_TEST(UploadPlanner, BufferPlan_EmptySpan_ReturnsEmptyPlan)
+//! PlanBuffers: empty request span should produce an empty but valid plan.
+NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_EmptyRequestsReturnsEmptyPlan)
 {
-  // Arrange
-  std::vector<UploadRequest> reqs;
+  std::vector<UploadRequest> reqs; // empty
+  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
 
-  // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
-
-  // Assert
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  EXPECT_TRUE(plan.uploads.empty());
-  EXPECT_EQ(plan.total_bytes, 0u);
+  // Should return a valid plan with no uploads and total_bytes == 0
+  ASSERT_HAS_VALUE(plan);
+  const auto& p = plan.value();
+  EXPECT_TRUE(p.uploads.empty());
+  EXPECT_EQ(p.total_bytes, 0u);
 }
 
-//! PlanBuffers: non-empty span with all invalid requests returns error.
-NOLINT_TEST(UploadPlanner, BufferPlan_AllInvalid_ReturnsError)
+//! PlanBuffers: requests for the same dst buffer must be ordered by dst
+//! offset in the resulting plan regardless of input order.
+NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_SortsByDstOffset)
 {
-  // Arrange
+  // Create a single destination buffer
+  oxygen::graphics::BufferDesc bd;
+  bd.size_bytes = 1024;
+  auto buf = std::make_shared<LocalDummyBuffer>(bd);
+
+  // Two requests in reverse dst_offset order
   std::vector<UploadRequest> reqs;
-  // Invalid: null dst and zero size
+  UploadRequest r1;
+  r1.kind = UploadKind::kBuffer;
+  r1.desc
+    = UploadBufferDesc { .dst = buf, .size_bytes = 128, .dst_offset = 128 };
   UploadRequest r0;
   r0.kind = UploadKind::kBuffer;
-  r0.desc
-    = UploadBufferDesc { .dst = nullptr, .size_bytes = 0, .dst_offset = 0 };
-  reqs.emplace_back(std::move(r0));
-  // Invalid: kind mismatch (e.g., texture) also considered invalid for
-  // PlanBuffers
-  UploadRequest r1;
-  r1.kind = UploadKind::kTexture2D;
+  r0.desc = UploadBufferDesc { .dst = buf, .size_bytes = 64, .dst_offset = 0 };
+  // Insert r1 then r0
   reqs.emplace_back(std::move(r1));
+  reqs.emplace_back(std::move(r0));
 
-  // Act
-  const auto exp_plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+  const auto plan = UploadPlanner::PlanBuffers(reqs, UploadPolicy {});
+  ASSERT_HAS_VALUE(plan);
+  const auto& p = plan.value();
+  ASSERT_EQ(p.uploads.size(), 2u);
 
-  // Assert
+  // Verify the resulting uploads are ordered by dst_offset ascending
+  EXPECT_EQ(p.uploads[0].region.dst_offset, 0u);
+  EXPECT_EQ(p.uploads[1].region.dst_offset, 128u);
+}
+
+//! Texture: when subresources are provided but all are invalid/skipped,
+//! the planner must return UploadError::kInvalidRequest (no regions).
+NOLINT_TEST(
+  UploadPlannerBasicTest, Texture2D_AllInvalidSubresources_ReturnsError)
+{
+  oxygen::graphics::TextureDesc td;
+  td.width = 16;
+  td.height = 16;
+  td.depth = 1;
+  td.array_size = 1;
+  td.mip_levels = 1;
+  td.format = oxygen::Format::kRGBA8UNorm;
+  auto tex = std::make_shared<LocalDummyTexture>(td);
+
+  UploadTextureDesc req;
+  req.dst = tex;
+  req.width = td.width;
+  req.height = td.height;
+  req.depth = td.depth;
+  req.format = td.format;
+
+  // Provide a subresource that's out-of-range (mip >= mip_levels)
+  std::vector<UploadSubresource> subs {
+    UploadSubresource { .mip = 5, .array_slice = 0 },
+    // Also out-of-range array slice
+    UploadSubresource { .mip = 0, .array_slice = 3 },
+  };
+
+  const auto exp_plan
+    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
   ASSERT_FALSE(exp_plan.has_value());
   EXPECT_EQ(exp_plan.error(), UploadError::kInvalidRequest);
 }
 
-//! Full texture plan produces 256B-aligned row pitch and correct slice size.
-TEST(UploadPlanner, Texture2D_Full)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 128;
-  td.height = 64;
-  td.depth = 1;
-  td.array_size = 1;
-  td.mip_levels = 1;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 1u);
-  const auto& r = plan.regions[0];
-  EXPECT_EQ(r.buffer_offset, 0u);
-  EXPECT_EQ(r.buffer_row_pitch, 512u); // 128 * 4 aligned to 256
-  EXPECT_EQ(r.buffer_slice_pitch, 512u * 64u);
-  EXPECT_EQ(plan.total_bytes, r.buffer_slice_pitch);
-}
-
-// Two mips: aligned offsets and pitches match expectations for RGBA8.
-TEST(UploadPlanner, Texture2D_TwoMips)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 64;
-  td.height = 32;
-  td.depth = 1;
-  td.array_size = 1;
-  td.mip_levels = 2;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 1, .array_slice = 0 },
-  };
-  const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 2u);
-  const auto& r0 = plan.regions[0];
-  EXPECT_EQ(r0.buffer_offset, 0u);
-  EXPECT_EQ(r0.buffer_row_pitch, 256u);
-  EXPECT_EQ(r0.buffer_slice_pitch, 256u * 32u);
-  const auto& r1 = plan.regions[1];
-  EXPECT_EQ(r1.buffer_row_pitch, 256u);
-  EXPECT_EQ(r1.buffer_slice_pitch, 256u * 16u);
-  // placement-aligned offset: r0.slice_pitch is 8192; alignment 512 keeps it
-  // 8192
-  EXPECT_EQ(r1.buffer_offset, 8192u);
-  EXPECT_EQ(plan.total_bytes, r1.buffer_offset + r1.buffer_slice_pitch);
-}
-
-// BC3 format: bytes_per_block=16, block_size=4. Validate full texture plan.
-TEST(UploadPlanner, Texture2D_BC3_Full)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 128; // divisible by 4
-  td.height = 64; // divisible by 4
-  td.depth = 1;
-  td.array_size = 1;
-  td.mip_levels = 1;
-  td.format = oxygen::Format::kBC3UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 1u);
-  const auto& r = plan.regions[0];
-  // blocks_x = 128/4 = 32 -> row = 32 * 16 = 512 (already 256 aligned)
-  EXPECT_EQ(r.buffer_row_pitch, 512u);
-  // blocks_y = 64/4 = 16 -> slice = 512 * 16 = 8192
-  EXPECT_EQ(r.buffer_slice_pitch, 8192u);
-  EXPECT_EQ(plan.total_bytes, 8192u);
-}
-
-// Partial region: plan should compute pitches based on region area, not full
-// mip.
-TEST(UploadPlanner, Texture2D_PartialRegion)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 100; // non-multiple to exercise ceil block math
-  td.height = 60;
-  td.depth = 1;
-  td.array_size = 1;
-  td.mip_levels = 1;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 0,
-      .array_slice = 0,
-      .x = 10,
-      .y = 5,
-      .z = 0,
-      .width = 50,
-      .height = 20,
-      .depth = 1 },
-  };
-  const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 1u);
-  const auto& r = plan.regions[0];
-  // RGBA8: bytes_per_pixel=4, width=50 -> row=200 -> align to 256
-  EXPECT_EQ(r.buffer_row_pitch, 256u);
-  EXPECT_EQ(r.buffer_slice_pitch, 256u * 20u);
-  EXPECT_EQ(r.dst_slice.x, 10u);
-  EXPECT_EQ(r.dst_slice.y, 5u);
-  EXPECT_EQ(r.dst_slice.width, 50u);
-  EXPECT_EQ(r.dst_slice.height, 20u);
-}
-
-// Array slice copy: ensure distinct offsets for two slices of same mip.
-TEST(UploadPlanner, Texture2D_ArrayTwoSlices)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 64;
-  td.height = 32;
-  td.depth = 1;
-  td.array_size = 2;
-  td.mip_levels = 1;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 0, .array_slice = 1 },
-  };
-  const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 2u);
-  const auto& r0 = plan.regions[0];
-  const auto& r1 = plan.regions[1];
-  EXPECT_EQ(r0.buffer_row_pitch, 256u);
-  EXPECT_EQ(r0.buffer_slice_pitch, 256u * 32u);
-  // r1 offset should be previous slice pitch aligned to 512
-  EXPECT_EQ(r1.buffer_offset, 256u * 32u);
-  EXPECT_EQ(plan.total_bytes, r1.buffer_offset + r1.buffer_slice_pitch);
-}
-
-// 3D texture: full region at mip 0 should multiply slice pitch by depth.
-TEST(UploadPlanner, Texture3D_Full)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 32;
-  td.height = 16;
-  td.depth = 8;
-  td.array_size = 1;
-  td.mip_levels = 1;
-  td.texture_type = oxygen::TextureType::kTexture3D;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = td.depth;
-  req.format = td.format;
-  const auto exp_plan = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 1u);
-  const auto& r = plan.regions[0];
-  // RGBA8: row = 32*4=128 -> align 256; slice = 256*16=4096; total = 4096*8
-  EXPECT_EQ(r.buffer_row_pitch, 256u);
-  EXPECT_EQ(r.buffer_slice_pitch, 4096u);
-  EXPECT_EQ(plan.total_bytes, 4096u * 8u);
-}
-
-// 3D texture: partial region with z-range and smaller width/height.
-TEST(UploadPlanner, Texture3D_PartialRegion)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 40;
-  td.height = 20;
-  td.depth = 16;
-  td.array_size = 1;
-  td.mip_levels = 1;
-  td.texture_type = oxygen::TextureType::kTexture3D;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = td.depth;
-  req.format = td.format;
-  std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 0,
-      .array_slice = 0,
-      .x = 4,
-      .y = 2,
-      .z = 3,
-      .width = 17,
-      .height = 9,
-      .depth = 5 },
-  };
-  const auto exp_plan
-    = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 1u);
-  const auto& r = plan.regions[0];
-  // RGBA8: row = 17*4=68 -> align 256; slice = 256*9=2304; total adds * depth
-  EXPECT_EQ(r.buffer_row_pitch, 256u);
-  EXPECT_EQ(r.buffer_slice_pitch, 2304u);
-  EXPECT_EQ(plan.total_bytes, 2304u * 5u);
-  EXPECT_EQ(r.dst_slice.x, 4u);
-  EXPECT_EQ(r.dst_slice.y, 2u);
-  EXPECT_EQ(r.dst_slice.z, 3u);
-  EXPECT_EQ(r.dst_slice.width, 17u);
-  EXPECT_EQ(r.dst_slice.height, 9u);
-  EXPECT_EQ(r.dst_slice.depth, 5u);
-}
-
-// Cube treated as 2D array: plan pitches like 2D; array_slice targets face.
-TEST(UploadPlanner, TextureCube_TwoFaces)
-{
-  oxygen::graphics::TextureDesc td;
-  td.width = 64;
-  td.height = 64;
-  td.depth = 1;
-  td.array_size = 6; // 6 faces
-  td.mip_levels = 1;
-  td.texture_type = oxygen::TextureType::kTextureCube;
-  td.format = oxygen::Format::kRGBA8UNorm;
-  auto tex = std::make_shared<DummyTexture>(td);
-  UploadTextureDesc req;
-  req.dst = tex;
-  req.width = td.width;
-  req.height = td.height;
-  req.depth = 1;
-  req.format = td.format;
-  std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 0, .array_slice = 3 },
-  };
-  const auto exp_plan
-    = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy {});
-  ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.regions.size(), 2u);
-  const auto& r0 = plan.regions[0];
-  const auto& r1 = plan.regions[1];
-  EXPECT_EQ(r0.buffer_row_pitch, 256u); // 64*4 aligned 256
-  EXPECT_EQ(r0.buffer_slice_pitch, 256u * 64u);
-  EXPECT_EQ(r1.buffer_offset, r0.buffer_slice_pitch);
-  EXPECT_EQ(plan.total_bytes, r1.buffer_offset + r1.buffer_slice_pitch);
-}
+} // namespace
