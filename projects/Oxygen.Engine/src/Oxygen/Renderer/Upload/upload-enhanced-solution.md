@@ -19,8 +19,6 @@ uploads and safe reclamation.
   - [Atlas growth](#atlas-growth-hybrid-primary-resize-then-overflow-chunks)
 - [Detailed migration plan](#detailed-migration-plan-transformuploader)
 - [Provider/API hardening](#providerapi-hardening)
-- [Acceptance criteria](#acceptance-criteria)
-- [Verification plan](#verification-plan-usage-of-provider-and-coordinator)
 
 ## Goals
 
@@ -32,13 +30,6 @@ uploads and safe reclamation.
   justify complexity.
 
 ## Remaining TODOs summary
-
-Phase 1 (Atlas-only)
-
-| Item | Status |
-|---|---|
-| Unit tests: AtlasBuffer allocator, provider alignment, planner/coordinator grouping | Optional |
-| Refactor shared math/hash helpers out of TransformUploader | Optional |
 
 Phase 2 (Dynamic SRV + mixing)
 
@@ -135,12 +126,6 @@ Phase 2 (Dynamic SRV + mixing)
   `RingBufferStaging` overrides it to set the active partition without RTTI.
 - Telemetry integrated: AtlasBuffer and StagingProvider expose Stats;
   TransformUploader prints aligned, scoped summaries.
-
-### Pending for Phase 1
-
-- Optional: unit tests for AtlasBuffer allocator and planner/coordinator
-  grouping logic (mocked).
-- Optional: move math/hash helpers from TransformUploader into a shared util.
 
 ### Impact
 
@@ -423,12 +408,6 @@ for copies. Bindless SRV indices remain stable and are managed by
 
 ## Concrete TODO checklist (authoritative)
 
-Phase 1 (Atlas-only)
-
-1) Unit tests (optional but recommended): AtlasBuffer allocator
-(allocate/free/recycle), provider alignment, planner/coordinator grouping and
-barrier batching correctness (mocked D3D12 interface).
-
 Phase 2 (Dynamic SRV + mixing)
 
 1) Implement dynamic per-frame DEFAULT buffers and per-frame descriptor update
@@ -453,41 +432,3 @@ update lifetime rules).
 3) Tests
    - Add unit tests: partition isolation, growth behavior preserving old
      allocations, alignment correctness, and coordinator integration.
-
-## Acceptance criteria
-
-### Phase 1
-
-- Functional
-  - Stable bindless indices for atlas (worlds, normals) resources.
-  - Worlds and normals reuse the same `AtlasBuffer` component (duplication
-    removed; minimal API surface).
-  - Correct transforms read in shaders across frames and updates (atlas only).
-- Performance
-  - Stable entries only upload on change; reduced bytes/frame vs legacy path.
-- Robustness
-  - Staging alignment validated; allocator refuses misaligned sizes.
-  - Growth path preserves data and maintains SRV indices.
-  - Tests cover allocator and coordinator/provider integration.
-
-### Phase 2
-
-- Functional: dynamic path correctness; LUT mixing.
-- Performance: only frequently changing entries go to dynamic buffers.
-- Robustness: descriptor hazards avoided per chosen strategy.
-
-## Verification plan (usage of provider and coordinator)
-
-### StagingProvider usage
-
-- Pass `RingBufferStaging` to every `UploadCoordinator::Submit*` call.
-- Call `RingBufferStaging::SetActivePartition(frame_slot)` at frame start.
-- `UploadCoordinator` will invoke `StagingProvider::Allocate()` during
-  submission and `StagingProvider::RetireCompleted()` during retirement.
-
-### UploadCoordinator usage
-
-- Use `SubmitMany` to batch all atlas updates for the frame.
-- Call `RetireCompleted()` once per frame to advance the fence and recycle
-  staging provider state.
-- Do not perform barriers or copy recording in `TransformUploader`.
