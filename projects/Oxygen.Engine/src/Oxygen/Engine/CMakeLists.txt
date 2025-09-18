@@ -50,7 +50,6 @@ set(
   OXYGEN_ENGINE_HEADERS
   "api_export.h"
   "AsyncEngine.h"
-  "EngineProps.h"
   "EngineTag.h"
   "Epoch.h"
   "FrameContext.h"

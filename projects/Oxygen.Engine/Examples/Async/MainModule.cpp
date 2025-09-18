@@ -448,7 +448,7 @@ MainModule::MainModule(std::shared_ptr<Platform> platform,
 
 MainModule::~MainModule()
 {
-  LOG_SCOPE_F(INFO, "Destroying MainModule (AsyncEngine)");
+  LOG_SCOPE_F(ERROR, "Destroying MainModule (AsyncEngine)");
 
   // Cleanup graphics resources
   if (!gfx_weak_.expired()) {
@@ -1213,7 +1213,10 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
 {
   LOG_SCOPE_F(2, "MainModule::ExecuteRenderCommands");
 
-  if (gfx_weak_.expired() || !scene_) {
+  // Early-out if graphics, scene, window, or surface are not available. This
+  // can happen during shutdown or immediately after the window has been
+  // closed, while modules may still receive callbacks within the frame.
+  if (gfx_weak_.expired() || !scene_ || window_weak_.expired() || !surface_) {
     co_return;
   }
 
@@ -1238,13 +1241,19 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // frame slot due to resize or present timing; querying the surface avoids
   // D3D12 validation errors (WRONGSWAPCHAINBUFFERREFERENCE).
   const auto backbuffer_index = surface_->GetCurrentBackBufferIndex();
+  if (framebuffers_.empty() || backbuffer_index >= framebuffers_.size()) {
+    // Surface is not ready or has been torn down.
+    co_return;
+  }
   const auto fb = framebuffers_.at(backbuffer_index);
+  if (!fb) {
+    co_return;
+  }
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 
   // Create render context for renderer
-  engine::RenderContext render_context;
-  render_context.framebuffer = fb;
+  render_context_.framebuffer = fb;
 
   // Execute render graph using the configured passes
   co_await renderer_->ExecuteRenderGraph(
@@ -1276,7 +1285,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
         co_await transparent_pass_->Execute(context, *recorder);
       }
     },
-    render_context, context);
+    render_context_, context);
 
   LOG_F(2, "Command recording completed for frame {}", current_frame);
 

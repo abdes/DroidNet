@@ -13,7 +13,7 @@
 //! the heavy simulator header and its dependencies just to access these types.
 //!
 //! Key types include:
-//! - EngineProps: Engine configuration
+//! - EngineConfig: Engine configuration
 //! - FrameSnapshot: Immutable frame state for parallel tasks
 //! - RenderSurface: Surface description and state
 //! - Task types: SyntheticTaskSpec, ParallelResult, AsyncJobState
@@ -61,7 +61,7 @@ struct FrameMetrics {
 };
 
 //! Engine configuration properties.
-struct EngineProps {
+struct EngineConfig {
   uint32_t target_fps { 0 }; //!< 0 = uncapped
 };
 

@@ -124,14 +124,14 @@ auto RegisterEngineModules(AsyncEngineApp& app) -> void
     // observer_ptr for MainModule
     auto renderer_unique
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
+
+    // Graphics main module (replaces RenderController/RenderThread pattern)
     auto renderer_observer = observer_ptr { renderer_unique.get() };
+    register_module(std::make_unique<oxygen::examples::async::MainModule>(
+      app.platform, app.gfx_weak, app.fullscreen, renderer_observer));
 
     // Register as module
     register_module(std::move(renderer_unique));
-
-    // Graphics main module (replaces RenderController/RenderThread pattern)
-    register_module(std::make_unique<oxygen::examples::async::MainModule>(
-      app.platform, app.gfx_weak, app.fullscreen, renderer_observer));
   }
 }
 
@@ -274,10 +274,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     app.engine = std::make_shared<AsyncEngine>(
       app.platform,
       app.gfx_weak,
-      EngineProps {
+      EngineConfig {
         .application = { .name = "Async Example", .version = 1u, },
         .target_fps = target_fps,
         .frame_count = frames,
+        .timing = {
+          .pacing_safety_margin = 250us,
+        }
       }
     );
 

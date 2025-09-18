@@ -63,6 +63,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
@@ -85,12 +86,72 @@ class ThreadPool;
 
 namespace oxygen::engine {
 
-struct EngineConfig;
 struct AssetRegistry;
 struct ShaderCompilationDb;
 
 struct ResourceIntegrationData; // FIXME: placeholder for future
 struct FrameProfiler; // FIXME: placeholder for future
+
+//=== Timing data ===---------------------------------------------------------//
+
+//! Module-accessible timing data.
+struct ModuleTimingData {
+  //! Variable timestep delta time, affected by time scaling and pause state
+  /*!
+   Time elapsed since the last frame for variable timestep systems like
+   rendering, UI, and effects. This value is scaled by time_scale and becomes
+   zero when the game is paused.
+  */
+  std::chrono::microseconds game_delta_time { 0 };
+
+  //! Fixed timestep delta time for deterministic simulation systems
+  /*!
+   Constant time step used for physics, networking, and other systems requiring
+   deterministic behavior. Typically 16.67ms (60Hz). This value is never
+   affected by time scaling or pause state.
+  */
+  std::chrono::microseconds fixed_delta_time { 16667 };
+
+  //! Current time scaling factor applied to game_delta_time
+  /*!
+   Multiplier for game time progression. Values > 1.0 speed up time,
+   values < 1.0 slow down time, and 0.0 effectively pauses game time.
+   Does not affect fixed_delta_time.
+  */
+  float time_scale { 1.0f };
+
+  //! Whether game time progression is currently paused
+  /*!
+   When true, game_delta_time becomes zero regardless of actual frame time.
+   Fixed timestep systems continue running normally to maintain deterministic
+   behavior and network synchronization.
+  */
+  bool is_paused { false };
+
+  //! Interpolation factor for smooth rendering between fixed timestep updates
+  /*!
+   Value in range [0,1] indicating how far between the last and next fixed
+   timestep update the current frame represents. Used for smooth visual
+   interpolation of physics objects and other fixed-timestep data.
+  */
+  float interpolation_alpha { 0.0f };
+
+  //! Current measured frame rate for adaptive quality control
+  /*!
+   Smoothed frame rate measurement used by systems for adaptive quality
+   decisions. Systems can reduce visual fidelity when FPS drops below
+   target thresholds.
+  */
+  float current_fps { 0.0f };
+
+  //! Number of fixed timestep updates executed this frame
+  /*!
+   Count of fixed timestep iterations performed during the current frame.
+   Values > 1 indicate the engine is catching up after frame drops.
+   Useful for performance monitoring and adaptive quality decisions.
+  */
+  uint32_t fixed_steps_this_frame { 0 };
+};
 
 //=== Error Reporting System ===----------------------------------------------//
 
@@ -306,6 +367,9 @@ struct FrameSnapshot {
   uint64_t epoch { 0 };
   std::chrono::steady_clock::time_point frame_start_time;
   std::chrono::microseconds frame_budget { 16667 }; // ~60 FPS default
+
+  // Module-accessible timing data for parallel tasks
+  ModuleTimingData timing;
 
   // Engine coordination context for adaptive scheduling
   struct BudgetContext {
@@ -654,6 +718,24 @@ public:
 
   auto GetFrameStartTime() const noexcept { return frame_start_time_; }
 
+  //=== Professional Timing System Access ===-------------------------------//
+
+  // Engine-only: set module timing data for current frame
+  OXGN_NGIN_API auto SetModuleTimingData(
+    const ModuleTimingData& timing, EngineTag) noexcept -> void;
+
+  // Module access to timing data - clean, focused API
+  [[nodiscard]] auto GetModuleTimingData() const noexcept
+    -> const ModuleTimingData&;
+  [[nodiscard]] auto GetGameDeltaTime() const noexcept
+    -> std::chrono::microseconds;
+  [[nodiscard]] auto GetFixedDeltaTime() const noexcept
+    -> std::chrono::microseconds;
+  [[nodiscard]] auto GetInterpolationAlpha() const noexcept -> float;
+  [[nodiscard]] auto GetTimeScale() const noexcept -> float;
+  [[nodiscard]] auto IsGamePaused() const noexcept -> bool;
+  [[nodiscard]] auto GetCurrentFPS() const noexcept -> float;
+
   // Engine-only budget statistics for adaptive scheduling RATIONALE: Budget
   // management is part of engine performance control and should not be modified
   // by application modules directly
@@ -815,6 +897,9 @@ private:
   frame::SequenceNumber frame_index_ { 0 };
   frame::Slot frame_slot_ { 0 };
   std::chrono::steady_clock::time_point frame_start_time_ {};
+
+  // Module-accessible timing data (clean interface)
+  ModuleTimingData module_timing_ {};
 
   // Immutable dependencies provided at construction and valid for app lifetime
   Immutable immutable_;

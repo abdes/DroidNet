@@ -8,19 +8,19 @@
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Engine/EngineProps.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/Platform/Platform.h>
 
 using oxygen::AsyncEngine;
+using oxygen::EngineConfig;
 using oxygen::GraphicsConfig;
 using oxygen::Platform;
 using oxygen::PlatformConfig;
-using oxygen::engine::EngineProps;
 using oxygen::graphics::BackendType;
 
 auto main(int argc, char** argv) -> int
@@ -54,7 +54,7 @@ auto main(int argc, char** argv) -> int
   auto gfx_weak = loader.LoadBackend(BackendType::kHeadless, gfx_config);
 
   {
-    const EngineProps props {};
+    const EngineConfig props {};
     AsyncEngine engine(platform, gfx_weak, props);
     std::cout << "AsyncEngine link test successful\n";
   }

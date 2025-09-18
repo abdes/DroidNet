@@ -43,7 +43,8 @@ public:
 
   OXGN_NGIN_API ~ModuleManager();
 
-  // Register a module (takes ownership). Modules are sorted by priority.
+  // Register a module (takes ownership). 'modules_' preserves attach order;
+  // per-phase execution order is computed from priorities in the phase cache.
   OXGN_NGIN_API auto RegisterModule(
     std::unique_ptr<EngineModule> module) noexcept -> bool;
 

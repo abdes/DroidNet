@@ -129,6 +129,52 @@ auto FrameContext::SetFrameStartTime(
   frame_start_time_ = t;
 }
 
+//=== Professional Timing System Implementation ===-------------------------//
+
+auto FrameContext::SetModuleTimingData(
+  const ModuleTimingData& timing, EngineTag) noexcept -> void
+{
+  module_timing_ = timing;
+}
+
+auto FrameContext::GetModuleTimingData() const noexcept
+  -> const ModuleTimingData&
+{
+  return module_timing_;
+}
+
+auto FrameContext::GetGameDeltaTime() const noexcept
+  -> std::chrono::microseconds
+{
+  return module_timing_.game_delta_time;
+}
+
+auto FrameContext::GetFixedDeltaTime() const noexcept
+  -> std::chrono::microseconds
+{
+  return module_timing_.fixed_delta_time;
+}
+
+auto FrameContext::GetInterpolationAlpha() const noexcept -> float
+{
+  return module_timing_.interpolation_alpha;
+}
+
+auto FrameContext::GetTimeScale() const noexcept -> float
+{
+  return module_timing_.time_scale;
+}
+
+auto FrameContext::IsGamePaused() const noexcept -> bool
+{
+  return module_timing_.is_paused;
+}
+
+auto FrameContext::GetCurrentFPS() const noexcept -> float
+{
+  return module_timing_.current_fps;
+}
+
 auto FrameContext::SetBudgetStats(const BudgetStats& stats, EngineTag) noexcept
   -> void
 {
@@ -390,6 +436,9 @@ auto FrameContext::PopulateFrameSnapshot(FrameSnapshot& frame_snapshot,
   frame_snapshot.frame_budget
     = std::chrono::duration_cast<std::chrono::microseconds>(
       metrics_.budget.cpuBudget);
+
+  // Enhanced timing data for parallel tasks
+  frame_snapshot.timing = module_timing_;
 
   // Budget context for adaptive scheduling
   frame_snapshot.budget.cpu_budget = metrics_.budget.cpuBudget;
