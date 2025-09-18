@@ -411,6 +411,51 @@ NOLINT_TEST_F(BroadcastChannelTest, StressTestWithManyReadersAndWriters)
   });
 }
 
+// Small polymorphic hierarchy for testing
+struct Base {
+  virtual ~Base() = default;
+  virtual std::string GetName() const = 0;
+};
+
+struct Derived : Base {
+  std::string GetName() const override { return "Derived"; }
+};
+
+class BroadcastChannelSmartPtrTest : public OxCoTestFixture { };
+
+NOLINT_TEST_F(
+  BroadcastChannelSmartPtrTest, TrySendUniquePtrPreservesDynamicType)
+{
+  BroadcastChannel<Base> channel;
+  auto reader = channel.ForRead();
+  auto& writer = channel.ForWrite();
+
+  // TrySend with unique_ptr should succeed and reader should get a
+  // std::shared_ptr<Base> pointing to a Derived instance.
+  EXPECT_TRUE(writer.TrySend(std::make_unique<Derived>()));
+
+  const auto received = reader.TryReceive();
+  ASSERT_NE(received, nullptr);
+  EXPECT_EQ(received->GetName(), "Derived");
+}
+
+NOLINT_TEST_F(
+  BroadcastChannelSmartPtrTest, AsyncSendUniquePtrPreservesDynamicType)
+{
+  ::Run(*el_, []() -> Co<> {
+    BroadcastChannel<Base> channel;
+    auto reader = channel.ForRead();
+    auto& writer = channel.ForWrite();
+
+    // Async send using a unique_ptr
+    EXPECT_TRUE(co_await writer.Send(std::make_unique<Derived>()));
+
+    const auto received = co_await reader.Receive();
+    EXPECT_NE(received, nullptr);
+    EXPECT_EQ(received->GetName(), "Derived");
+  });
+}
+
 } // namespace
 
 // NOLINTEND(*-avoid-capturing-lambda-coroutines)

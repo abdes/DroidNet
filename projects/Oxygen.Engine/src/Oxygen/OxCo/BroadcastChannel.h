@@ -12,6 +12,7 @@
 #include <Oxygen/OxCo/Detail/IntrusivePtr.h>
 #include <Oxygen/OxCo/Detail/ParkingLotImpl.h>
 #include <Oxygen/OxCo/Detail/Queue.h>
+#include <type_traits>
 
 namespace oxygen::co {
 
@@ -19,6 +20,21 @@ template <typename T> class BroadcastChannel;
 template <typename T> class ReaderContext;
 
 namespace detail::channel {
+
+  // Helper type traits to detect smart pointer wrappers and extract element
+  // types in a SFINAE-friendly way.
+  template <typename> struct is_shared_ptr : std::false_type { };
+  template <typename X>
+  struct is_shared_ptr<std::shared_ptr<X>> : std::true_type {
+    using element_type = X;
+  };
+
+  template <typename> struct is_unique_ptr : std::false_type { };
+  template <typename X>
+  struct is_unique_ptr<std::unique_ptr<X>> : std::true_type {
+    using element_type = X;
+  };
+
   template <typename T> class MultiplexedReader;
   template <typename T> class BroadcastingWriter;
 } // namespace detail::channel
@@ -199,7 +215,26 @@ namespace detail::channel {
       // Broadcast to all readers; use a shared_ptr to avoid expensive
       // copies and to allow readers to eventually communicate together
       // via the shared event value.
-      auto shared_value = std::make_shared<T>(std::forward<U>(value));
+      // Support three common cases:
+      //  - caller passed a std::shared_ptr<T> -> use it directly
+      //  - caller passed a std::unique_ptr<T> -> convert to std::shared_ptr<T>
+      //  - caller passed a T value (or something constructible to T) ->
+      //    construct a shared T via make_shared
+      std::shared_ptr<T> shared_value;
+      using DecayedU = std::decay_t<U>;
+      if constexpr (is_shared_ptr<DecayedU>::value) {
+        using Elem = typename is_shared_ptr<DecayedU>::element_type;
+        static_assert(std::is_convertible_v<Elem*, T*>,
+          "std::shared_ptr element type must be convertible to channel T");
+        shared_value = std::forward<U>(value);
+      } else if constexpr (is_unique_ptr<DecayedU>::value) {
+        using Elem = typename is_unique_ptr<DecayedU>::element_type;
+        static_assert(std::is_convertible_v<Elem*, T*>,
+          "std::unique_ptr element type must be convertible to channel T");
+        shared_value = std::shared_ptr<T>(std::forward<U>(value));
+      } else {
+        shared_value = std::make_shared<T>(std::forward<U>(value));
+      }
       for (auto& reader : channel_.readers_) {
         reader.buffer_.PushBack(shared_value);
         reader.UnParkOne();
