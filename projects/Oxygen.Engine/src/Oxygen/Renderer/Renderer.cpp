@@ -131,10 +131,10 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
 }
 
 auto Renderer::PreExecute(
-  RenderContext& context, const FrameContext& frame_context) -> void
+  RenderContext& render_context, const FrameContext& frame_context) -> void
 {
   // Contract checks (kept inline per style preference)
-  DCHECK_F(!context.scene_constants,
+  DCHECK_F(!render_context.scene_constants,
     "RenderContext.scene_constants must be null; renderer sets it via "
     "ModifySceneConstants/PreExecute");
   // Legacy AoS draw list path (opaque_items_) removed from PreExecute. All
@@ -172,12 +172,12 @@ auto Renderer::PreExecute(
 
   MaybeUpdateSceneConstants(frame_context);
 
-  WireContext(context);
+  WireContext(render_context);
 
   // Wire PreparedSceneFrame pointer (SoA finalized snapshot). This enables
   // passes to start consuming SoA data incrementally. Null remains valid if
   // finalization produced an empty frame.
-  context.prepared_frame.reset(&prepared_frame_);
+  render_context.prepared_frame.reset(&prepared_frame_);
 
   // Ensure any upload command lists are submitted promptly for this frame.
   // if (uploader_) {
@@ -187,15 +187,19 @@ auto Renderer::PreExecute(
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-auto Renderer::PostExecute(RenderContext& context) -> void
+auto Renderer::PostExecute(RenderContext& render_context) -> void
 {
   // RenderContext::Reset now clears per-frame injected buffers (scene &
   // material).
-  context.Reset();
+  render_context.Reset();
 }
 
 auto Renderer::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
+  if (skip_frame_render_) {
+    co_return;
+  }
+
   // FIXME: temporary: single view rendering only
   // Pick the first available view from FrameContext's view-transform view
   bool found = false;
@@ -208,6 +212,7 @@ auto Renderer::OnFrameGraph(FrameContext& context) -> co::Co<>
   }
   if (!found) {
     LOG_F(WARNING, "Renderer::OnFrameGraph: no views in FrameContext");
+    skip_frame_render_ = true;
     co_return;
   }
 
@@ -298,15 +303,15 @@ auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
   last_uploaded_scene_const_version_ = current_version;
 }
 
-auto Renderer::WireContext(RenderContext& context) -> void
+auto Renderer::WireContext(RenderContext& render_context) -> void
 {
-  context.scene_constants = scene_const_buffer_;
+  render_context.scene_constants = scene_const_buffer_;
   // Material constants are now accessed through bindless table, not direct CBV
   const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error("Graphics expired in Renderer::WireContext");
   }
-  context.SetRenderer(this, graphics_ptr.get());
+  render_context.SetRenderer(this, graphics_ptr.get());
 }
 
 // Removed obsolete Set/GetDrawMetadata accessors
@@ -323,11 +328,16 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   scene_prep_->Finalize();
 
   PublishPreparedFrameSpans();
-
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
-  DLOG_F(2, "BuildFrame: finalized {} draws (SoA only)", draw_count);
+  if (draw_count == 0) {
+    // No draws; frame SHOULD NOT be rendered. Render passes will find nothing
+    // to do.
+    skip_frame_render_ = true;
+  }
+
+  DLOG_F(2, "BuildFrame: finalized {} draws", draw_count);
   return draw_count;
 }
 
@@ -390,6 +400,9 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context.GetFrameSlot();
+
+  // Initially mark the frame as renderable
+  skip_frame_render_ = false;
 
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.

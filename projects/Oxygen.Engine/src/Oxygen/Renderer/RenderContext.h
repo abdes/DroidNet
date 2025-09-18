@@ -87,12 +87,6 @@ static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
  @see Renderer, RenderPass
 */
 struct RenderContext {
-  // Engine data
-  uint64_t frame_index = 0;
-  float frame_time = 0.0f;
-  uint32_t random_seed = 0;
-  // ... profiling/timing context fields ...
-
   // Application data
   // Camera parameters
   // (view/projection matrices, camera position, frustum, etc.)
@@ -233,6 +227,7 @@ private:
     graphics_.reset(nullptr);
     scene_constants.reset();
     material_constants.reset();
+    prepared_frame.reset();
   }
   mutable observer_ptr<Renderer> renderer_ { nullptr };
   mutable observer_ptr<oxygen::Graphics> graphics_ { nullptr };

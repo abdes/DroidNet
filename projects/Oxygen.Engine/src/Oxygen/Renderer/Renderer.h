@@ -103,11 +103,19 @@ public:
   //! Executes a render graph coroutine with the given context.
   template <typename RenderGraphCoroutine>
   auto ExecuteRenderGraph(RenderGraphCoroutine&& graph_coroutine,
-    RenderContext& context, const FrameContext& frame_context) -> co::Co<>
+    RenderContext& render_context, const FrameContext& frame_context)
+    -> co::Co<>
   {
-    PreExecute(context, frame_context);
-    co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(context);
-    PostExecute(context);
+    // If the renderer encounters fatal errors while preparing the scene or the
+    // frame, then this is a garbage frame that should not be rendered.
+    if (skip_frame_render_) {
+      co_return;
+    }
+
+    PreExecute(render_context, frame_context);
+    co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(
+      render_context);
+    PostExecute(render_context);
   }
 
   // Legacy AoS accessors removed (opaque_items_ no longer drives frame build).
@@ -152,7 +160,6 @@ private:
   //! Compute current finalized draw count (post-sort) from prepared frame.
   auto CurrentDrawCount() const noexcept -> std::size_t;
 
-  //=== SoA Finalization Decomposition (Task 6+ incremental) ===============//
   //! Publish spans into PreparedSceneFrame using TransformUploader data
   //! directly.
   auto PublishPreparedFrameSpans() -> void;
@@ -172,10 +179,12 @@ private:
   MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
 
-  //=== SoA Finalization (in-progress) ===----------------------------------//
   // CPU-owning storage populated during finalization each frame. Spans inside
   // PreparedSceneFrame alias these vectors (no ownership transfer).
   PreparedSceneFrame prepared_frame_ {}; // view object
+  // if true, skip rendering this frame, either because it's garbage due to
+  // errors, or because it has no draws.
+  bool skip_frame_render_ { false };
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each BuildFrame while retaining
