@@ -333,14 +333,14 @@ auto InputEvents::ProcessPlatformEvents() -> co::Co<>
     if (input_event) {
       // Try to send synchronously if possible
       if (!channel_.Full()) {
-        const auto success = channel_writer_.TrySend(std::move(*input_event));
+        const auto success = channel_writer_.TrySend(std::move(input_event));
         DCHECK_F(success);
       } else {
         // We can unlock the event pump here as we are already full , and we
         // will most likely not be able to process the next event anyway. This
         // will allow other components to process their events.
         lock.Release();
-        co_await channel_writer_.Send(std::move(*input_event));
+        co_await channel_writer_.Send(std::move(input_event));
       }
       event.SetHandled();
     }
