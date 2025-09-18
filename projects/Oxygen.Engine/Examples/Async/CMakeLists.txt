@@ -64,6 +64,7 @@ target_link_libraries(
     oxygen::oxco
     oxygen::clap
     oxygen::platform
+    oxygen::input
     oxygen::loader
     oxygen::graphics-headless
     oxygen::graphics-common

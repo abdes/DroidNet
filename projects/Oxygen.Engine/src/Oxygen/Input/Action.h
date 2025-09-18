@@ -15,6 +15,10 @@
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/api_export.h>
 
+namespace oxygen::engine {
+class InputSystem;
+} // namespace oxygen::engine
+
 namespace oxygen::input {
 
 class ActionTrigger;
@@ -54,7 +58,7 @@ public:
   [[nodiscard]] auto GetCurrentStates() const -> ActionState;
 
   // In order to clear the action's triggered state
-  friend class InputSystem;
+  friend class oxygen::engine::InputSystem;
 
 protected:
   // protected so we can unit test the class
