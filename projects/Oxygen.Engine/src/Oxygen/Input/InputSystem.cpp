@@ -25,10 +25,12 @@
 
 using oxygen::engine::SystemUpdateContext;
 using oxygen::input::InputMappingContext;
-using oxygen::input::InputSystem;
 using oxygen::platform::InputEvent;
 using oxygen::platform::InputSlot;
 using oxygen::platform::InputSlots;
+
+using namespace oxygen::input;
+using oxygen::engine::InputSystem;
 
 namespace {
 [[nodiscard]] auto FindInputMappingContextEntry(
@@ -42,19 +44,37 @@ namespace {
 }
 } // namespace
 
-InputSystem::InputSystem(PlatformPtr platform)
+namespace oxygen::engine {
+
+InputSystem::InputSystem(std::shared_ptr<Platform> platform)
   : platform_(std::move(platform))
+{
+  AddComponent<ObjectMetadata>("InputSystem");
+}
+
+auto InputSystem::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
 {
   platform_->Async().Nursery().Start([this]() -> co::Co<> {
     auto input = platform_->Input().ForRead();
     while (true) {
       auto event = co_await input.Receive();
-      ProcessInputEvent(*event);
+      ProcessInputEvent(event);
     }
   });
+  return true;
 }
 
-void InputSystem::ProcessInputEvent(const InputEvent& event)
+auto InputSystem::GetName() const noexcept -> std::string_view
+{
+  return GetComponent<ObjectMetadata>().GetName();
+}
+
+void InputSystem::SetName(std::string_view name) noexcept
+{
+  GetComponent<ObjectMetadata>().SetName(name);
+}
+
+void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent> event)
 {
   using platform::KeyEvent;
   using platform::MouseButtonEvent;
@@ -65,19 +85,21 @@ void InputSystem::ProcessInputEvent(const InputEvent& event)
   using platform::input::MouseMotionComponent;
   using platform::input::MouseWheelComponent;
 
+  DLOG_F(2, "Processing input event of type {}", event->GetTypeNamePretty());
+
   // Keyboard events
-  if (const auto event_type = event.GetTypeId();
+  if (const auto event_type = event->GetTypeId();
     event_type == KeyEvent::ClassTypeId()) {
-    DCHECK_F(event.HasComponent<platform::input::KeyComponent>());
+    DCHECK_F(event->HasComponent<platform::input::KeyComponent>());
     const auto key_code
-      = event.GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode();
+      = event->GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode();
     const auto& slot = Platform::GetInputSlotForKey(key_code);
-    HandleInput(slot, event);
+    HandleInput(slot, *event);
   }
   // Mouse button events
   else if (event_type == MouseButtonEvent::ClassTypeId()) {
-    DCHECK_F(event.HasComponent<platform::input::MouseButtonComponent>());
-    const auto button = event.GetComponent<MouseButtonComponent>().GetButton();
+    DCHECK_F(event->HasComponent<platform::input::MouseButtonComponent>());
+    const auto button = event->GetComponent<MouseButtonComponent>().GetButton();
     const InputSlot* slot { nullptr };
 
     using enum platform::MouseButton;
@@ -102,32 +124,32 @@ void InputSystem::ProcessInputEvent(const InputEvent& event)
     }
     assert(slot != nullptr);
     if (slot != nullptr && *slot != InputSlots::None) {
-      HandleInput(*slot, event);
+      HandleInput(*slot, *event);
     }
   }
   // Mouse motion events
   else if (event_type == MouseMotionEvent::ClassTypeId()) {
-    DCHECK_F(event.HasComponent<platform::input::MouseMotionComponent>());
+    DCHECK_F(event->HasComponent<platform::input::MouseMotionComponent>());
     if (const auto [dx, dy]
-      = event.GetComponent<MouseMotionComponent>().GetMotion();
+      = event->GetComponent<MouseMotionComponent>().GetMotion();
       std::abs(dx) > 0 || std::abs(dy) > 0) {
-      HandleInput(InputSlots::MouseXY, event);
+      HandleInput(InputSlots::MouseXY, *event);
     }
   }
   // Mouse wheel events
   else if (event_type == MouseWheelEvent::ClassTypeId()) {
-    DCHECK_F(event.HasComponent<platform::input::MouseWheelComponent>());
+    DCHECK_F(event->HasComponent<platform::input::MouseWheelComponent>());
     const auto [dx, dy]
-      = event.GetComponent<MouseWheelComponent>().GetScrollAmount();
+      = event->GetComponent<MouseWheelComponent>().GetScrollAmount();
     if (abs(dx) > 0 && abs(dy) > 0) {
-      HandleInput(InputSlots::MouseWheelXY, event);
+      HandleInput(InputSlots::MouseWheelXY, *event);
       return;
     }
     if (abs(dx) > 0) {
-      HandleInput(InputSlots::MouseWheelX, event);
+      HandleInput(InputSlots::MouseWheelX, *event);
     }
     if (abs(dy) > 0) {
-      HandleInput(InputSlots::MouseWheelY, event);
+      HandleInput(InputSlots::MouseWheelY, *event);
     }
   }
 }
@@ -144,6 +166,7 @@ void InputSystem::HandleInput(const InputSlot& slot, const InputEvent& event)
   }
 }
 
+#if 0
 void InputSystem::Update(const SystemUpdateContext& update_context)
 {
   // iterate over mapping contexts in the reverse order (higher priority first)
@@ -165,6 +188,7 @@ void InputSystem::Update(const SystemUpdateContext& update_context)
     action->ClearTriggeredState();
   }
 }
+#endif
 
 void InputSystem::AddAction(const std::shared_ptr<Action>& action)
 {
@@ -266,3 +290,5 @@ void InputSystem::DeactivateMappingContext(
   }
   found->is_active = false;
 }
+
+} // namespace oxygen::engine

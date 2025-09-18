@@ -26,6 +26,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
@@ -49,6 +50,8 @@ namespace {
 // Wrap engine plus running flag to model an event loop subject.
 struct AsyncEngineApp {
   bool headless { false };
+  bool fullscreen { false };
+  graphics::SharedTransferQueueStrategy queue_strategy;
   std::shared_ptr<Platform> platform;
   std::weak_ptr<Graphics> gfx_weak;
   std::shared_ptr<AsyncEngine> engine;
@@ -93,6 +96,45 @@ template <> struct co::EventLoopTraits<AsyncEngineApp> {
 };
 
 namespace {
+
+auto RegisterEngineModules(AsyncEngineApp& app) -> void
+{
+
+  // Register engine modules
+  LOG_F(INFO, "Registering engine modules...");
+
+  // Helper lambda to register modules with error checking
+  auto register_module = [&](auto&& module) {
+    const bool registered
+      = app.engine->RegisterModule(std::forward<decltype(module)>(module));
+    if (!registered) {
+      LOG_F(ERROR, "Failed to register module");
+      throw std::runtime_error("Module registration failed");
+    }
+  };
+
+  // Register built-in engine modules (one-time)
+  {
+    register_module(std::make_unique<InputSystem>(app.platform));
+
+    oxygen::RendererConfig renderer_config {
+      .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
+    };
+    // Create the Renderer - we need unique_ptr for registration and
+    // observer_ptr for MainModule
+    auto renderer_unique
+      = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
+    auto renderer_observer = observer_ptr { renderer_unique.get() };
+
+    // Register as module
+    register_module(std::move(renderer_unique));
+
+    // Graphics main module (replaces RenderController/RenderThread pattern)
+    register_module(std::make_unique<oxygen::examples::async::MainModule>(
+      app.platform, app.gfx_weak, app.fullscreen, renderer_observer));
+  }
+}
+
 auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> co::Co<int>
 {
   // Structured concurrency scope.
@@ -100,6 +142,8 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> co::Co<int>
   {
     app.running.store(true, std::memory_order_relaxed);
 
+    // PLatform started and running is a prerequisite for many of the modules
+    // and the other subsystems.
     co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
     app.platform->Run();
 
@@ -110,6 +154,9 @@ auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> co::Co<int>
 
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
+
+    // Everything is started, now register modules
+    RegisterEngineModules(app);
 
     co_await app.engine->Completed();
 
@@ -127,8 +174,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing
   bool headless = false;
-  bool fullscreen = false;
   bool enable_vsync = true;
+  AsyncEngineApp app {};
 
   try {
     CommandBuilder default_command(Command::DEFAULT);
@@ -164,7 +211,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("fullscreen")
-        .StoreTo(&fullscreen)
+        .StoreTo(&app.fullscreen)
         .Build());
     default_command.WithOption(Option::WithKey("vsync")
         .About("Enable vertical synchronization (limits FPS to monitor refresh "
@@ -197,12 +244,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     LOG_F(INFO, "Parsed frames option = {}", frames);
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
-    LOG_F(INFO, "Parsed fullscreen option = {}", fullscreen);
+    LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
-
-    AsyncEngineApp app {};
 
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {
@@ -219,13 +264,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_vsync = enable_vsync,
       .extra = {},
     };
-    const auto queue_strategy = graphics::SharedTransferQueueStrategy();
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
       headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config);
     CHECK_F(
       !app.gfx_weak.expired()); // Expect a valid graphics backend, or abort
-    app.gfx_weak.lock()->CreateCommandQueues(queue_strategy);
+    app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
 
     app.engine = std::make_shared<AsyncEngine>(
       app.platform,
@@ -236,38 +280,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .frame_count = frames,
       }
     );
-
-    // Register engine modules
-    LOG_F(INFO, "Registering engine modules...");
-
-    // Helper lambda to register modules with error checking
-    auto register_module = [&](auto&& module) {
-      const bool registered
-        = app.engine->RegisterModule(std::forward<decltype(module)>(module));
-      if (!registered) {
-        LOG_F(ERROR, "Failed to register module");
-        throw std::runtime_error("Module registration failed");
-      }
-    };
-
-    // Register built-in engine modules (one-time)
-    {
-      oxygen::RendererConfig renderer_config {
-        .upload_queue_key = queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-      };
-      // Create the Renderer - we need unique_ptr for registration and
-      // observer_ptr for MainModule
-      auto renderer_unique
-        = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
-      auto renderer_observer = observer_ptr { renderer_unique.get() };
-
-      // Register as module
-      register_module(std::move(renderer_unique));
-
-      // Graphics main module (replaces RenderController/RenderThread pattern)
-      register_module(std::make_unique<oxygen::examples::async::MainModule>(
-        app.platform, app.gfx_weak, fullscreen, renderer_observer));
-    }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 

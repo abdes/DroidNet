@@ -12,63 +12,91 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Engine/InputHandler.h>
-#include <Oxygen/Engine/System.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Input/api_export.h>
-#include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/Platform.h>
 
 namespace oxygen::input {
-
 class Action;
 class InputMappingContext;
+} // namespace oxygen::input
 
-class InputSystem : public engine::System {
+namespace oxygen::engine {
+
+class InputSystem : public EngineModule, public Composition, public Named {
+  OXYGEN_TYPED(InputSystem)
 public:
   struct InputMappingContextEntry {
     int32_t priority;
     bool is_active { false };
-    std::shared_ptr<InputMappingContext> mapping_context;
+    std::shared_ptr<input::InputMappingContext> mapping_context;
   };
 
-  OXGN_NPUT_API explicit InputSystem(PlatformPtr platform);
+  OXGN_NPUT_API explicit InputSystem(std::shared_ptr<Platform> platform);
   OXGN_NPUT_API ~InputSystem() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(InputSystem)
   OXYGEN_MAKE_NON_MOVABLE(InputSystem)
 
-  OXGN_NPUT_API void AddAction(const std::shared_ptr<Action>& action);
-  OXGN_NPUT_API void RemoveAction(const std::shared_ptr<Action>& action);
+  // Metadata
+  OXGN_NPUT_NDAPI auto GetName() const noexcept -> std::string_view override;
+
+  [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
+  {
+    return ModulePriority { kModulePriorityHighest };
+  }
+  [[nodiscard]] auto GetSupportedPhases() const noexcept
+    -> ModulePhaseMask override
+  {
+    return MakeModuleMask<core::PhaseId::kInput, core::PhaseId::kFrameStart,
+      core::PhaseId::kFrameEnd>();
+  }
+
+  [[nodiscard]] virtual auto IsCritical() const noexcept -> bool
+  {
+    return true;
+  }
+
+  void SetName(std::string_view name) noexcept;
+
+  OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+    -> bool override;
+
+  OXGN_NPUT_API void AddAction(const std::shared_ptr<input::Action>& action);
+  OXGN_NPUT_API void RemoveAction(const std::shared_ptr<input::Action>& action);
   OXGN_NPUT_API void ClearAllActions();
   [[nodiscard]] OXGN_NPUT_API auto GetActionByName(std::string_view name) const
-    -> std::shared_ptr<Action>;
+    -> std::shared_ptr<input::Action>;
 
   OXGN_NPUT_API void AddMappingContext(
-    const std::shared_ptr<InputMappingContext>& context, int32_t priority);
+    const std::shared_ptr<input::InputMappingContext>& context,
+    int32_t priority);
   OXGN_NPUT_API void RemoveMappingContext(
-    const std::shared_ptr<InputMappingContext>& context);
+    const std::shared_ptr<input::InputMappingContext>& context);
   OXGN_NPUT_API void ClearAllMappingContexts();
   [[nodiscard]] OXGN_NPUT_API auto GetMappingContextByName(
-    std::string_view name) const -> std::shared_ptr<InputMappingContext>;
+    std::string_view name) const -> std::shared_ptr<input::InputMappingContext>;
   OXGN_NPUT_API void ActivateMappingContext(
-    const std::shared_ptr<InputMappingContext>& context);
+    const std::shared_ptr<input::InputMappingContext>& context);
   OXGN_NPUT_API void DeactivateMappingContext(
-    const std::shared_ptr<InputMappingContext>& context);
+    const std::shared_ptr<input::InputMappingContext>& context);
 
-  OXGN_NPUT_API void Update(
-    const engine::SystemUpdateContext& update_context) override;
+  // OXGN_NPUT_API void Update(const engine::SystemUpdateContext&
+  // update_context);
 
 private:
-  void ProcessInputEvent(const platform::InputEvent& event);
+  void ProcessInputEvent(std::shared_ptr<platform::InputEvent> event);
   void HandleInput(
     const platform::InputSlot& slot, const platform::InputEvent& event);
 
-  std::vector<std::shared_ptr<Action>> actions_;
+  std::vector<std::shared_ptr<input::Action>> actions_;
   std::list<InputMappingContextEntry> mapping_contexts_;
 
-  PlatformPtr platform_;
+  std::shared_ptr<Platform> platform_;
 };
 
-} // namespace oxygen::input
+} // namespace oxygen::engine
 
 // Variables
 
