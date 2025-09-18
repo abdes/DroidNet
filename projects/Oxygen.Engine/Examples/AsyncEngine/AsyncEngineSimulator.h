@@ -40,7 +40,7 @@ namespace oxygen::engine::asyncsim {
 class AsyncEngineSimulator final {
 public:
   explicit AsyncEngineSimulator(
-    oxygen::co::ThreadPool& pool, EngineProps props = {}) noexcept;
+    oxygen::co::ThreadPool& pool, EngineConfig props = {}) noexcept;
   ~AsyncEngineSimulator();
 
   OXYGEN_MAKE_NON_COPYABLE(AsyncEngineSimulator)
@@ -153,7 +153,7 @@ private:
   std::vector<AsyncJobState> async_jobs_ {};
 
   oxygen::co::ThreadPool& pool_;
-  EngineProps props_ {};
+  EngineConfig props_ {};
   co::Nursery* nursery_ { nullptr };
   uint64_t frame_index_ { 0 };
 

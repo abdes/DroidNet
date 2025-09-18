@@ -18,6 +18,7 @@
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -44,7 +45,6 @@ namespace scene {
 namespace engine {
   class FrameContext;
   class Renderer;
-  struct RenderContext;
   class DepthPrePass;
   struct DepthPrePassConfig;
   class ShaderPass;
@@ -149,6 +149,7 @@ namespace examples::async {
     //! Dependencies.
     std::shared_ptr<Platform> platform_;
     std::weak_ptr<Graphics> gfx_weak_;
+    engine::RenderContext render_context_;
 
     //! Configuration.
     bool fullscreen_;

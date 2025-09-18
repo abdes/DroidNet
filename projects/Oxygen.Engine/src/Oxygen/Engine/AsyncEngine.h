@@ -10,11 +10,12 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Engine/EngineProps.h>
 #include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -35,7 +36,8 @@ class Graphics;
 class AsyncEngine final : public co::LiveObject {
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> graphics, engine::EngineProps props = {}) noexcept;
+    std::weak_ptr<Graphics> graphics,
+    oxygen::EngineConfig config = {}) noexcept;
 
   OXGN_NGIN_API ~AsyncEngine() override;
 
@@ -85,6 +87,10 @@ public:
 
   // Optional: unregister by name. Returns true if removed.
   OXGN_NGIN_API auto UnregisterModule(std::string_view name) noexcept -> void;
+
+  //! Get current engine configuration
+  [[nodiscard]] auto GetEngineConfig() const noexcept
+    -> const oxygen::EngineConfig&;
 
 private:
   auto Shutdown() -> co::Co<>;
@@ -148,6 +154,9 @@ private:
   //! loop should continue or not.
   auto NextFrame() -> bool;
 
+  // Professional timing system integration
+  auto UpdateFrameTiming(engine::FrameContext& context) -> void;
+
   // void SetRenderGraphBuilder(engine::FrameContext& context);
   // void ClearRenderGraphBuilder(engine::FrameContext& context);
 
@@ -157,7 +166,8 @@ private:
   // std::mutex parallel_results_mutex_;
   // std::vector<AsyncJobState> async_jobs_ {};
 
-  engine::EngineProps props_ {};
+  bool shutdown_requested_ { false };
+  oxygen::EngineConfig config_; // Engine configuration
   co::Nursery* nursery_ { nullptr };
   frame::SequenceNumber frame_number_ { 0 };
   frame::Slot frame_slot_ { 0 };
@@ -166,6 +176,17 @@ private:
   std::chrono::steady_clock::time_point frame_start_ts_ {};
   std::chrono::microseconds phase_accum_ { 0 };
   engine::FrameSnapshot snapshot_ {};
+
+  // Enhanced timing state
+  std::chrono::steady_clock::time_point last_frame_time_;
+  std::chrono::microseconds accumulated_fixed_time_ { 0 };
+  // Targeted frame scheduler deadline (monotonic, deadline-based pacing)
+  std::chrono::steady_clock::time_point next_frame_deadline_ {};
+
+  // Frame time smoothing
+  static constexpr size_t kTimingSamples = 10;
+  std::array<std::chrono::microseconds, kTimingSamples> timing_history_ {};
+  size_t timing_index_ { 0 };
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;

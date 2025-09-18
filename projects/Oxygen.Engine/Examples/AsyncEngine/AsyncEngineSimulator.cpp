@@ -27,7 +27,7 @@ EngineTag EngineTagFactory::Get() noexcept { return EngineTag {}; }
 namespace oxygen::engine::asyncsim {
 
 AsyncEngineSimulator::AsyncEngineSimulator(
-  oxygen::co::ThreadPool& pool, EngineProps props) noexcept
+  oxygen::co::ThreadPool& pool, EngineConfig props) noexcept
   : pool_(pool)
   , props_(props)
 {

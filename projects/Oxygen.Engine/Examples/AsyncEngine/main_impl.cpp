@@ -162,7 +162,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     asio::io_context io_ctx; // local context for thread pool
     oxygen::co::ThreadPool pool(
       io_ctx, std::max(1u, std::thread::hardware_concurrency()));
-    AsyncEngineSimulator engine { pool, EngineProps { target_fps } };
+    AsyncEngineSimulator engine { pool,
+      EngineConfig { .target_fps = target_fps } };
 
     // Register engine modules
     LOG_F(INFO, "Registering engine modules...");

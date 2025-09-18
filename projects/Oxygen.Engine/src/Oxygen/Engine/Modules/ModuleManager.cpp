@@ -31,6 +31,7 @@
 //    - This allows modules to use standard exception handling patterns
 //
 
+#include <algorithm>
 #include <concepts>
 #include <type_traits>
 #include <utility>
@@ -59,10 +60,17 @@ ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
 
 ModuleManager::~ModuleManager()
 {
-  for (const auto& m : modules_) {
-    m->OnShutdown();
+  // Reverse-order shutdown with immediate destruction: remove each module
+  // from the container before shutting it down, so resources are released
+  // right after OnShutdown returns.
+  while (!modules_.empty()) {
+    auto up = std::move(modules_.back());
+    modules_.pop_back();
+    if (up) {
+      up->OnShutdown();
+    }
+    // 'up' is destroyed here
   }
-  modules_.clear();
 }
 
 auto ModuleManager::RegisterModule(
@@ -86,11 +94,6 @@ auto ModuleManager::RegisterModule(
 
   modules_.push_back(std::move(module));
 
-  // Sort by priority ascending
-  std::ranges::sort(modules_, [](const auto& a, const auto& b) {
-    return a->GetPriority().get() < b->GetPriority().get();
-  });
-
   RebuildPhaseCache();
   return true;
 }
@@ -103,10 +106,16 @@ auto ModuleManager::UnregisterModule(std::string_view name) noexcept -> void
     return;
   }
 
-  // Not allowed to fail
-  (*it)->OnShutdown();
-
+  // Extract and erase first so destruction happens immediately after
+  // OnShutdown returns and to avoid leaving the module in the list during
+  // shutdown.
+  std::unique_ptr<EngineModule> victim = std::move(*it);
   modules_.erase(it);
+
+  // Not allowed to fail
+  if (victim) {
+    victim->OnShutdown();
+  }
   RebuildPhaseCache();
 }
 
@@ -149,6 +158,15 @@ auto ModuleManager::RebuildPhaseCache() noexcept -> void
         phase_cache_[p].push_back(m.get());
       }
     }
+  }
+
+  // Sort each phase bucket by ascending priority for execution ordering,
+  // leaving 'modules_' untouched to preserve attach order for shutdown.
+  for (auto p = PhaseIndex::begin(); p < PhaseIndex::end(); ++p) {
+    auto& bucket = phase_cache_[p];
+    std::ranges::sort(bucket, [](const EngineModule* a, const EngineModule* b) {
+      return a->GetPriority().get() < b->GetPriority().get();
+    });
   }
 }
 
