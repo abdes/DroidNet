@@ -6,12 +6,14 @@
 
 #include <chrono>
 
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Platform.h>
 
 using oxygen::Platform;
 using oxygen::platform::AsyncOps;
 using oxygen::platform::EventPump;
 using oxygen::platform::InputEvents;
+using oxygen::platform::InputSlots;
 using oxygen::platform::WindowManager;
 
 using namespace std::chrono_literals;
@@ -28,6 +30,9 @@ auto Platform::Run() -> void
     // This is a headless platform and will not have any coroutines
     return;
   }
+
+  // Initialize the input slots
+  InputSlots::Initialize();
 
   DLOG_F(INFO, "Starting Platform async tasks...");
 
