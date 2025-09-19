@@ -11,6 +11,7 @@
 #include <string>
 
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Core/Time/Types.h>
 
 namespace oxygen {
 
@@ -22,7 +23,9 @@ struct TimingConfig {
    Used for physics simulation, networking, and other systems requiring
    deterministic behavior regardless of frame rate.
   */
-  std::chrono::microseconds fixed_delta { 16667 }; // 60Hz default
+  time::CanonicalDuration fixed_delta { // 60Hz default}
+    time::CanonicalDuration::UnderlyingType(16'666'667)
+  };
 
   //! Maximum accumulated time before clamping to prevent spiral of death
   /*!
@@ -30,7 +33,9 @@ struct TimingConfig {
    to catch up with too many fixed timestep iterations, which would make
    the problem worse. Typically 2-3x the fixed_delta.
   */
-  std::chrono::microseconds max_accumulator { 50000 }; // ~3 frames worth
+  time::CanonicalDuration max_accumulator { // ~3 frames worth
+    time::CanonicalDuration::UnderlyingType(50'000)
+  };
 
   //! Maximum fixed timestep iterations per frame
   /*!
@@ -46,7 +51,7 @@ struct TimingConfig {
    yielding to finish. This compensates for OS sleep jitter/overshoot.
    Tune per platform; typical values 150–300 microseconds.
   */
-  std::chrono::microseconds pacing_safety_margin { 200 }; // µs
+  std::chrono::microseconds pacing_safety_margin { 200 }; // use chrono here
 };
 
 struct EngineConfig {

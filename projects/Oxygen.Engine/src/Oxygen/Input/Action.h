@@ -94,7 +94,6 @@ public:
   struct FrameTransition {
     ActionState from_state;
     ActionState to_state;
-    std::chrono::steady_clock::time_point timestamp;
     ActionValue value_at_transition;
   };
 

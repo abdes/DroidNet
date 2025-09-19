@@ -23,11 +23,12 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Input.h>
 
-namespace {
+using namespace std::chrono_literals;
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
+using oxygen::input::ActionValueType;
 using oxygen::input::InputActionMapping;
 using oxygen::input::InputMappingContext;
 using oxygen::input::testing::InputSystemTest;
@@ -35,13 +36,14 @@ using oxygen::platform::ButtonState;
 using oxygen::platform::InputSlots;
 using oxygen::platform::Key;
 
+namespace {
+
 //! Basic: Space pressed triggers Jump via Pressed trigger
 NOLINT_TEST_F(InputSystemTest, ProcessesPressedForJump)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto jump
-      = std::make_shared<Action>("Jump", oxygen::input::ActionValueType::kBool);
+    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
     input_system_->AddAction(jump);
 
     auto ctx = std::make_shared<InputMappingContext>("ctx");
@@ -74,11 +76,10 @@ NOLINT_TEST_F(InputSystemTest, ConsumptionPreventsSecondMapping)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto primary = std::make_shared<Action>(
-      "Primary", oxygen::input::ActionValueType::kBool);
+    auto primary = std::make_shared<Action>("Primary", ActionValueType::kBool);
     primary->SetConsumesInput(true);
-    auto secondary = std::make_shared<Action>(
-      "Secondary", oxygen::input::ActionValueType::kBool);
+    auto secondary
+      = std::make_shared<Action>("Secondary", ActionValueType::kBool);
     input_system_->AddAction(primary);
     input_system_->AddAction(secondary);
 
@@ -124,8 +125,7 @@ NOLINT_TEST_F(InputSystemTest, TapTriggersOnSameFramePressRelease)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto tap
-      = std::make_shared<Action>("Tap", oxygen::input::ActionValueType::kBool);
+    auto tap = std::make_shared<Action>("Tap", ActionValueType::kBool);
     input_system_->AddAction(tap);
 
     auto ctx = std::make_shared<InputMappingContext>("ctx");
@@ -159,8 +159,7 @@ NOLINT_TEST_F(InputSystemTest, ContextActivationToggle)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto act
-      = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
+    auto act = std::make_shared<Action>("A", ActionValueType::kBool);
     input_system_->AddAction(act);
     auto ctx = std::make_shared<InputMappingContext>("ctx");
     auto mapping = std::make_shared<InputActionMapping>(act, InputSlots::Space);
@@ -211,12 +210,9 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseMotionToAxisMappings)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto look_x = std::make_shared<Action>(
-      "LookX", oxygen::input::ActionValueType::kAxis1D);
-    auto look_y = std::make_shared<Action>(
-      "LookY", oxygen::input::ActionValueType::kAxis1D);
-    auto look_xy = std::make_shared<Action>(
-      "Look", oxygen::input::ActionValueType::kAxis2D);
+    auto look_x = std::make_shared<Action>("LookX", ActionValueType::kAxis1D);
+    auto look_y = std::make_shared<Action>("LookY", ActionValueType::kAxis1D);
+    auto look_xy = std::make_shared<Action>("Look", ActionValueType::kAxis2D);
     input_system_->AddAction(look_x);
     input_system_->AddAction(look_y);
     input_system_->AddAction(look_xy);
@@ -281,12 +277,9 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelToAxisMappings)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto wheel_x = std::make_shared<Action>(
-      "WheelX", oxygen::input::ActionValueType::kAxis1D);
-    auto wheel_y = std::make_shared<Action>(
-      "WheelY", oxygen::input::ActionValueType::kAxis1D);
-    auto wheel_xy = std::make_shared<Action>(
-      "Wheel", oxygen::input::ActionValueType::kAxis2D);
+    auto wheel_x = std::make_shared<Action>("WheelX", ActionValueType::kAxis1D);
+    auto wheel_y = std::make_shared<Action>("WheelY", ActionValueType::kAxis1D);
+    auto wheel_xy = std::make_shared<Action>("Wheel", ActionValueType::kAxis2D);
     input_system_->AddAction(wheel_x);
     input_system_->AddAction(wheel_y);
     input_system_->AddAction(wheel_xy);
@@ -352,14 +345,10 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelDirectionalSlots)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto up = std::make_shared<Action>(
-      "WheelUp", oxygen::input::ActionValueType::kBool);
-    auto down = std::make_shared<Action>(
-      "WheelDown", oxygen::input::ActionValueType::kBool);
-    auto left = std::make_shared<Action>(
-      "WheelLeft", oxygen::input::ActionValueType::kBool);
-    auto right = std::make_shared<Action>(
-      "WheelRight", oxygen::input::ActionValueType::kBool);
+    auto up = std::make_shared<Action>("WheelUp", ActionValueType::kBool);
+    auto down = std::make_shared<Action>("WheelDown", ActionValueType::kBool);
+    auto left = std::make_shared<Action>("WheelLeft", ActionValueType::kBool);
+    auto right = std::make_shared<Action>("WheelRight", ActionValueType::kBool);
     input_system_->AddAction(up);
     input_system_->AddAction(down);
     input_system_->AddAction(left);
@@ -462,10 +451,8 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange: two contexts, one mapping Right, the other mapping Down
-    auto right = std::make_shared<Action>(
-      "WheelRight", oxygen::input::ActionValueType::kBool);
-    auto down = std::make_shared<Action>(
-      "WheelDown", oxygen::input::ActionValueType::kBool);
+    auto right = std::make_shared<Action>("WheelRight", ActionValueType::kBool);
+    auto down = std::make_shared<Action>("WheelDown", ActionValueType::kBool);
     input_system_->AddAction(right);
     input_system_->AddAction(down);
 
@@ -516,11 +503,9 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange: Two contexts, higher priority consumes on Space, lower has a
     // Pressed on Space
-    auto consume = std::make_shared<Action>(
-      "Consume", oxygen::input::ActionValueType::kBool);
+    auto consume = std::make_shared<Action>("Consume", ActionValueType::kBool);
     consume->SetConsumesInput(true);
-    auto lower = std::make_shared<Action>(
-      "Lower", oxygen::input::ActionValueType::kBool);
+    auto lower = std::make_shared<Action>("Lower", ActionValueType::kBool);
     input_system_->AddAction(consume);
     input_system_->AddAction(lower);
 
@@ -571,10 +556,8 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
 NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
-    auto shift = std::make_shared<Action>(
-      "Shift", oxygen::input::ActionValueType::kBool);
-    auto super = std::make_shared<Action>(
-      "Super", oxygen::input::ActionValueType::kBool);
+    auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
+    auto super = std::make_shared<Action>("Super", ActionValueType::kBool);
     input_system_->AddAction(shift);
     input_system_->AddAction(super);
 
@@ -627,8 +610,8 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
     // Provide module timing to accumulate enough delta time beyond tap window
     {
       oxygen::engine::ModuleTimingData timing;
-      timing.game_delta_time = std::chrono::milliseconds(200);
-      timing.fixed_delta_time = std::chrono::milliseconds(200);
+      timing.game_delta_time = oxygen::time::CanonicalDuration { 200ms };
+      timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
     input_system_->OnFrameStart(*frame_context_);
@@ -641,8 +624,8 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
     // Long frame 1
     {
       oxygen::engine::ModuleTimingData timing;
-      timing.game_delta_time = std::chrono::milliseconds(200);
-      timing.fixed_delta_time = std::chrono::milliseconds(200);
+      timing.game_delta_time = oxygen::time::CanonicalDuration { 200ms };
+      timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
     input_system_->OnFrameStart(*frame_context_);
@@ -652,8 +635,8 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
     // Long frame 2
     {
       oxygen::engine::ModuleTimingData timing;
-      timing.game_delta_time = std::chrono::milliseconds(250);
-      timing.fixed_delta_time = std::chrono::milliseconds(250);
+      timing.game_delta_time = oxygen::time::CanonicalDuration { 250ms };
+      timing.fixed_delta_time = oxygen::time::CanonicalDuration { 250ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
     input_system_->OnFrameStart(*frame_context_);

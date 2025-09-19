@@ -54,7 +54,6 @@
 #include <optional>
 #include <ranges>
 #include <shared_mutex>
-#include <span>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -105,15 +104,16 @@ struct ModuleTimingData {
    rendering, UI, and effects. This value is scaled by time_scale and becomes
    zero when the game is paused.
   */
-  std::chrono::microseconds game_delta_time { 0 };
+  time::CanonicalDuration game_delta_time { std::chrono::nanoseconds(0) };
 
   //! Fixed timestep delta time for deterministic simulation systems
   /*!
    Constant time step used for physics, networking, and other systems requiring
-   deterministic behavior. Typically 16.67ms (60Hz). This value is never
+   deterministic behavior. Typically, 16.67ms (60Hz). This value is never
    affected by time scaling or pause state.
   */
-  std::chrono::microseconds fixed_delta_time { 16667 };
+  time::CanonicalDuration fixed_delta_time { std::chrono::nanoseconds(
+    16'666'667) };
 
   //! Current time scaling factor applied to game_delta_time
   /*!
@@ -185,7 +185,7 @@ struct FrameError {
 // zero or many associated views. Each view references exactly one surface (or
 // null). Surfaces and views are expected to be finalized by the coordinator
 // during FrameStart and remain frozen afterward.
-class RenderableView : public oxygen::Named {
+class RenderableView : public Named {
 public:
   RenderableView() = default;
 
@@ -197,7 +197,7 @@ public:
   virtual [[nodiscard]] auto GetSurface() const noexcept
     -> std::expected<std::reference_wrapper<graphics::Surface>, std::string>
     = 0;
-  virtual [[nodiscard]] auto Resolve() const noexcept -> oxygen::View = 0;
+  virtual [[nodiscard]] auto Resolve() const noexcept -> View = 0;
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -732,9 +732,9 @@ public:
   OXGN_CORE_NDAPI auto GetModuleTimingData() const noexcept
     -> const ModuleTimingData&;
   OXGN_CORE_NDAPI auto GetGameDeltaTime() const noexcept
-    -> std::chrono::microseconds;
+    -> time::CanonicalDuration;
   OXGN_CORE_NDAPI auto GetFixedDeltaTime() const noexcept
-    -> std::chrono::microseconds;
+    -> time::CanonicalDuration;
   OXGN_CORE_NDAPI auto GetInterpolationAlpha() const noexcept -> float;
   OXGN_CORE_NDAPI auto GetTimeScale() const noexcept -> float;
   OXGN_CORE_NDAPI auto IsGamePaused() const noexcept -> bool;

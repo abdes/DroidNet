@@ -6,19 +6,19 @@
 
 //! Tests for ActionTriggerTap
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
-namespace {
-
-using oxygen::Duration;
-using oxygen::SecondsToDuration;
 using oxygen::input::ActionTriggerTap;
 using oxygen::input::ActionValue;
+using oxygen::time::CanonicalDuration;
+using namespace std::chrono_literals;
 
-TEST(ActionTriggerTap_Basic, TriggersOnQuickRelease)
+namespace {
+
+NOLINT_TEST(ActionTriggerTap, TriggersOnQuickRelease)
 {
   ActionTriggerTap trigger;
   trigger.SetTapTimeThreshold(0.2F);
@@ -27,15 +27,15 @@ TEST(ActionTriggerTap_Basic, TriggersOnQuickRelease)
 
   // Press and quick release
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
 //! Triggers when released exactly at the threshold boundary (<= threshold)
-NOLINT_TEST(ActionTriggerTap_Boundary, FiresAtExactThreshold)
+NOLINT_TEST(ActionTriggerTap, FiresAtExactThreshold)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -44,16 +44,16 @@ NOLINT_TEST(ActionTriggerTap_Boundary, FiresAtExactThreshold)
 
   // Act
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.20F));
+  trigger.UpdateState(v, CanonicalDuration { 200ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
 //! After too-long hold, release cancels the tap (no Triggered)
-NOLINT_TEST(ActionTriggerTap_Cancel, SetsCanceledOnRelease)
+NOLINT_TEST(ActionTriggerTap, SetsCanceledOnRelease)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -62,9 +62,9 @@ NOLINT_TEST(ActionTriggerTap_Cancel, SetsCanceledOnRelease)
 
   // Act: hold longer than threshold then release
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.15F));
+  trigger.UpdateState(v, CanonicalDuration { 150ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert
   EXPECT_FALSE(trigger.IsTriggered());
@@ -72,7 +72,7 @@ NOLINT_TEST(ActionTriggerTap_Cancel, SetsCanceledOnRelease)
 }
 
 //! After cancel, a subsequent quick tap should trigger normally
-NOLINT_TEST(ActionTriggerTap_Rearm, TriggersAfterCancel)
+NOLINT_TEST(ActionTriggerTap, TriggersAfterCancel)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -81,9 +81,9 @@ NOLINT_TEST(ActionTriggerTap_Rearm, TriggersAfterCancel)
 
   // Act 1: cancel
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.20F));
+  trigger.UpdateState(v, CanonicalDuration { 200ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert 1
   EXPECT_FALSE(trigger.IsTriggered());
@@ -91,16 +91,16 @@ NOLINT_TEST(ActionTriggerTap_Rearm, TriggersAfterCancel)
 
   // Act 2: quick tap
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert 2
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
 //! Two quick taps should trigger twice (no auto-repeat while held)
-NOLINT_TEST(ActionTriggerTap_Sequence, DoubleTapFiresTwice)
+NOLINT_TEST(ActionTriggerTap, DoubleTapFiresTwice)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -109,21 +109,21 @@ NOLINT_TEST(ActionTriggerTap_Sequence, DoubleTapFiresTwice)
 
   // Act & Assert: first tap
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Act & Assert: second tap
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.04F));
+  trigger.UpdateState(v, CanonicalDuration { 40ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
 //! Below actuation threshold, press+release should not trigger
-NOLINT_TEST(ActionTriggerTap_Threshold, NoTriggerBelowActuationThreshold)
+NOLINT_TEST(ActionTriggerTap, NoTriggerBelowActuationThreshold)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -134,16 +134,16 @@ NOLINT_TEST(ActionTriggerTap_Threshold, NoTriggerBelowActuationThreshold)
 
   // Act: press/release with boolean value; should not actuate
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert
   EXPECT_FALSE(trigger.IsTriggered());
 }
 
 //! Extremely short press+release still within window should trigger
-NOLINT_TEST(ActionTriggerTap_Sanity, VeryShortPressTriggers)
+NOLINT_TEST(ActionTriggerTap, VeryShortPressTriggers)
 {
   // Arrange
   ActionTriggerTap trigger;
@@ -152,36 +152,36 @@ NOLINT_TEST(ActionTriggerTap_Sanity, VeryShortPressTriggers)
 
   // Act
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   // Assert
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
-TEST(ActionTriggerTap_Basic, DoesNotTriggerOnLongHold)
+NOLINT_TEST(ActionTriggerTap, DoesNotTriggerOnLongHold)
 {
   ActionTriggerTap trigger;
   trigger.SetTapTimeThreshold(0.1F);
 
   ActionValue v { false };
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.2F));
+  trigger.UpdateState(v, CanonicalDuration { 200ms });
   v.Update(false);
-  trigger.UpdateState(v, SecondsToDuration(0.0F));
+  trigger.UpdateState(v, CanonicalDuration {});
 
   EXPECT_FALSE(trigger.IsTriggered());
 }
 
 //! Does not trigger if never released
-TEST(ActionTriggerTap_Edge, NoTriggerIfNotReleased)
+NOLINT_TEST(ActionTriggerTap, NoTriggerIfNotReleased)
 {
   ActionTriggerTap trigger;
   trigger.SetTapTimeThreshold(0.2F);
   ActionValue v { false };
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.1F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   // No release within test
   EXPECT_FALSE(trigger.IsTriggered());
 }

@@ -88,6 +88,14 @@ set(
   "Bindless/Generated.Heaps.D3D12.h"
   "Bindless/Generated.Meta.h"
   "Bindless/Generated.RootSignature.h"
+  # Time subsystem
+  "Time/AuditClock.h"
+  "Time/Conversion.h"
+  "Time/NetworkClock.h"
+  "Time/PhysicalClock.h"
+  "Time/PresentationClock.h"
+  "Time/SimulationClock.h"
+  "Time/Types.h"
 )
 # Remove any headers that do not exist so we only add existing files to the
 # target. We modify OXYGEN_CORE_HEADERS in-place rather than creating a new
@@ -105,9 +113,15 @@ set(
   OXYGEN_CORE_PRIVATE_SOURCES
   "Detail/FormatUtils.cpp"
   "Detail/ToStringConverters.cpp"
+  "FrameContext.cpp"
+  "Time/AuditClock.cpp"
+  "Time/Conversion.cpp"
+  "Time/NetworkClock.cpp"
+  "Time/PhysicalClock.cpp"
+  "Time/PresentationClock.cpp"
+  "Time/SimulationClock.cpp"
   "Types/Frustum.cpp"
   "Types/View.cpp"
-  "FrameContext.cpp"
   "Version.cpp"
 )
 

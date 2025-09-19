@@ -61,15 +61,21 @@ NOLINT_TEST(InputSnapshot, Edge_SpecificTransitionPredicate)
   auto a
     = std::make_shared<Action>("door", oxygen::input::ActionValueType::kBool);
   a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = true,
-                   .ongoing = false,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = true,
+      .ongoing = false,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
-  a->UpdateState(Action::State { .triggered = false,
-                   .ongoing = false,
-                   .completed = true,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = false,
+      .completed = true,
+      .canceled = false,
+    },
     ActionValue { false });
   a->EndFrameTracking();
 
@@ -111,15 +117,21 @@ NOLINT_TEST(InputSnapshot, Edge_Start_OngoingThenTrigger)
   auto a
     = std::make_shared<Action>("sprint", oxygen::input::ActionValueType::kBool);
   a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = false,
-                   .ongoing = true,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = true,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
-  a->UpdateState(Action::State { .triggered = true,
-                   .ongoing = true,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = true,
+      .ongoing = true,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
   a->EndFrameTracking();
 
@@ -140,15 +152,21 @@ NOLINT_TEST(InputSnapshot, Edge_ReleaseWithinFrame)
   auto a
     = std::make_shared<Action>("grab", oxygen::input::ActionValueType::kBool);
   a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = false,
-                   .ongoing = true,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = true,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
-  a->UpdateState(Action::State { .triggered = false,
-                   .ongoing = false,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = false,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { false });
   a->EndFrameTracking();
 
@@ -168,30 +186,42 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
   auto ac = std::make_shared<Action>(
     "complete", oxygen::input::ActionValueType::kBool);
   ac->BeginFrameTracking();
-  ac->UpdateState(Action::State { .triggered = true,
-                    .ongoing = false,
-                    .completed = false,
-                    .canceled = false },
+  ac->UpdateState(
+    Action::State {
+      .triggered = true,
+      .ongoing = false,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
-  ac->UpdateState(Action::State { .triggered = false,
-                    .ongoing = false,
-                    .completed = true,
-                    .canceled = false },
+  ac->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = false,
+      .completed = true,
+      .canceled = false,
+    },
     ActionValue { false });
   ac->EndFrameTracking();
 
   auto an
     = std::make_shared<Action>("cancel", oxygen::input::ActionValueType::kBool);
   an->BeginFrameTracking();
-  an->UpdateState(Action::State { .triggered = false,
-                    .ongoing = true,
-                    .completed = false,
-                    .canceled = false },
+  an->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = true,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
-  an->UpdateState(Action::State { .triggered = false,
-                    .ongoing = false,
-                    .completed = false,
-                    .canceled = true },
+  an->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = false,
+      .completed = false,
+      .canceled = true,
+    },
     ActionValue { false });
   an->EndFrameTracking();
 
@@ -214,10 +244,13 @@ NOLINT_TEST(InputSnapshot, Edge_ValueUpdate)
   auto a
     = std::make_shared<Action>("move", oxygen::input::ActionValueType::kBool);
   a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = false,
-                   .ongoing = true,
-                   .completed = false,
-                   .canceled = false },
+  a->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = true,
+      .completed = false,
+      .canceled = false,
+    },
     ActionValue { true });
   a->EndFrameTracking();
 

@@ -8,8 +8,8 @@
 
 #include <memory>
 
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
@@ -17,6 +17,8 @@
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Testing/GTest.h>
+
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -27,7 +29,6 @@ using ::testing::SizeIs;
 
 using oxygen::Axis1D;
 using oxygen::Axis2D;
-using oxygen::Duration;
 using oxygen::TimePoint;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
@@ -44,8 +45,9 @@ using oxygen::platform::kInvalidWindowId;
 using oxygen::platform::MouseMotionEvent;
 using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::WindowIdType;
+using oxygen::time::CanonicalDuration;
 
-class InputMappingContextFixture : public ::testing::Test {
+class InputMappingContextTest : public ::testing::Test {
 protected:
   void SetUp() override { InputSlots::Initialize(); }
 
@@ -63,7 +65,7 @@ protected:
 
 //! MouseXY events must route to MouseX mapping when dx!=0 and to MouseY when
 //! dy!=0
-NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseXYToXorY)
+NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseXYToXorY)
 {
   // Arrange
   InputMappingContext ctx("ctx");
@@ -85,7 +87,7 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseXYToXorY)
   // Act: MouseXY dx only
   const auto ev_dx = MakeMouseMotion(6.0F, 0.0F);
   ctx.HandleInput(InputSlots::MouseXY, ev_dx);
-  ctx.Update(Duration::zero());
+  ctx.Update(CanonicalDuration {});
 
   // Assert: only X mapping updated; Y remained untouched
   EXPECT_EQ(act_x->GetValue().GetAs<Axis1D>().x, 6.0F);
@@ -94,12 +96,12 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseXYToXorY)
   // Act: MouseXY dy only
   const auto ev_dy = MakeMouseMotion(0.0F, -3.0F);
   ctx.HandleInput(InputSlots::MouseXY, ev_dy);
-  ctx.Update(Duration::zero());
+  ctx.Update(CanonicalDuration {});
   EXPECT_EQ(act_y->GetValue().GetAs<Axis1D>().x, -3.0F);
 }
 
 //! MouseWheelXY routes to directional and individual axes based on dx/dy signs
-NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseWheelVariants)
+NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseWheelVariants)
 {
   // Arrange
   InputMappingContext ctx("ctx2");
@@ -133,7 +135,7 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseWheelVariants)
   // Act: dx<0, dy>0
   const auto ev = MakeMouseWheel(-2.0F, 1.0F);
   ctx.HandleInput(InputSlots::MouseWheelXY, ev);
-  ctx.Update(Duration::zero());
+  ctx.Update(CanonicalDuration {});
 
   // Assert: X updated (-2), Left fired, Y updated (1), Down not since dy>0
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, -2.0F);
@@ -143,8 +145,7 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_RoutesMouseWheelVariants)
 }
 
 //! When an earlier mapping consumes input, later mappings get CancelInput()
-NOLINT_TEST_F(
-  InputMappingContextFixture, Update_ConsumptionCancelsLaterMappings)
+NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
 {
   // Arrange
   InputMappingContext ctx("ctx3");
@@ -173,7 +174,7 @@ NOLINT_TEST_F(
   ctx.HandleInput(InputSlots::Space, key);
 
   // Update: should return true (consumed) and cancel second mapping
-  const bool consumed = ctx.Update(Duration::zero());
+  const bool consumed = ctx.Update(CanonicalDuration {});
 
   // Assert
   EXPECT_TRUE(consumed);
@@ -182,7 +183,7 @@ NOLINT_TEST_F(
 }
 
 //! If no mapping consumes input, all mappings can process normally
-NOLINT_TEST_F(InputMappingContextFixture, Update_NoConsumptionProcessesAll)
+NOLINT_TEST_F(InputMappingContextTest, Update_NoConsumptionProcessesAll)
 {
   // Arrange
   InputMappingContext ctx("ctx4");
@@ -209,7 +210,7 @@ NOLINT_TEST_F(InputMappingContextFixture, Update_NoConsumptionProcessesAll)
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key);
-  const bool consumed = ctx.Update(Duration::zero());
+  const bool consumed = ctx.Update(CanonicalDuration {});
 
   // Assert: both triggered, not consumed
   EXPECT_FALSE(consumed);
@@ -218,7 +219,7 @@ NOLINT_TEST_F(InputMappingContextFixture, Update_NoConsumptionProcessesAll)
 }
 
 //! Implicit-only triggers: action triggers only when all implicit triggers fire
-NOLINT_TEST_F(InputMappingContextFixture, ImplicitOnly_AllMustTrigger)
+NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_AllMustTrigger)
 {
   // Arrange: one implicit Down (immediate) and one implicit Hold (delayed)
   InputMappingContext ctx("ctx_implicit");
@@ -245,16 +246,16 @@ NOLINT_TEST_F(InputMappingContextFixture, ImplicitOnly_AllMustTrigger)
   ctx.HandleInput(InputSlots::Space, key_down);
 
   // First update with small dt: Hold not yet satisfied -> no trigger
-  EXPECT_FALSE(ctx.Update(oxygen::SecondsToDuration(0.05F)));
+  EXPECT_FALSE(ctx.Update(CanonicalDuration { 50ms }));
   EXPECT_FALSE(act->IsTriggered());
 
   // Next update after threshold while still ongoing -> now triggers
-  EXPECT_FALSE(ctx.Update(oxygen::SecondsToDuration(0.06F)));
+  EXPECT_FALSE(ctx.Update(CanonicalDuration { 60ms }));
   EXPECT_TRUE(act->IsTriggered());
 }
 
 //! Implicit-only: if not all implicits are satisfied, no trigger
-NOLINT_TEST_F(InputMappingContextFixture, ImplicitOnly_NotAll_NoTrigger)
+NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_NotAll_NoTrigger)
 {
   // Arrange: two implicit triggers, only one becomes true within dt
   InputMappingContext ctx("ctx_implicit2");
@@ -279,7 +280,7 @@ NOLINT_TEST_F(InputMappingContextFixture, ImplicitOnly_NotAll_NoTrigger)
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key_down);
-  EXPECT_FALSE(ctx.Update(oxygen::SecondsToDuration(0.1F)));
+  EXPECT_FALSE(ctx.Update(CanonicalDuration { 100ms }));
 
   // Assert: no trigger because not all implicits satisfied
   EXPECT_FALSE(act->IsTriggered());
@@ -287,7 +288,7 @@ NOLINT_TEST_F(InputMappingContextFixture, ImplicitOnly_NotAll_NoTrigger)
 
 //! Chain trigger across contexts: second mapping requires first action armed
 NOLINT_TEST_F(
-  InputMappingContextFixture, Chain_AcrossContexts_RequiresLinkedAction)
+  InputMappingContextTest, Chain_AcrossContexts_RequiresLinkedAction)
 {
   // Arrange: Context A provides Shift Down; Context B requires chain to A +
   // Space press
@@ -320,34 +321,34 @@ NOLINT_TEST_F(
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctxB.HandleInput(InputSlots::Space, space_down);
-  ctxB.Update(Duration::zero());
+  ctxB.Update(CanonicalDuration {});
   EXPECT_FALSE(act_combo->IsTriggered());
   // Release to reset 'Pressed' trigger depletion
   const KeyEvent space_up(TimePoint {}, kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kReleased);
   ctxB.HandleInput(InputSlots::Space, space_up);
-  ctxB.Update(Duration::zero());
+  ctxB.Update(CanonicalDuration {});
 
   // Act 2: Press Shift to arm chain
   const KeyEvent shift_down(TimePoint {}, kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kLeftShift, false),
     ButtonState::kPressed);
   ctxA.HandleInput(InputSlots::LeftShift, shift_down);
-  ctxA.Update(Duration::zero());
+  ctxA.Update(CanonicalDuration {});
   EXPECT_TRUE(act_shift->IsTriggered());
 
   // Give chain a chance to arm on ctxB without local press first
-  ctxB.Update(Duration::zero());
+  ctxB.Update(CanonicalDuration {});
 
   // Act 3: Press Space after Shift -> combo should trigger on this update
   ctxB.HandleInput(InputSlots::Space, space_down);
-  ctxB.Update(Duration::zero());
+  ctxB.Update(CanonicalDuration {});
   EXPECT_TRUE(act_combo->IsTriggered());
 }
 
 //! Events on non-similar slots must not dispatch to unrelated mappings
-NOLINT_TEST_F(InputMappingContextFixture, Routing_NonSimilarSlots_NoDispatch)
+NOLINT_TEST_F(InputMappingContextTest, Routing_NonSimilarSlots_NoDispatch)
 {
   // Arrange
   InputMappingContext ctx("ctx_non_similar");
@@ -363,7 +364,7 @@ NOLINT_TEST_F(InputMappingContextFixture, Routing_NonSimilarSlots_NoDispatch)
   // Act: send a MouseWheelXY event which is not similar to MouseX
   const auto wheel = MakeMouseWheel(2.0F, -1.0F);
   ctx.HandleInput(InputSlots::MouseWheelXY, wheel);
-  const bool consumed = ctx.Update(Duration::zero());
+  const bool consumed = ctx.Update(CanonicalDuration {});
 
   // Assert: mapping not invoked, nothing consumed
   EXPECT_FALSE(consumed);
@@ -371,7 +372,7 @@ NOLINT_TEST_F(InputMappingContextFixture, Routing_NonSimilarSlots_NoDispatch)
 }
 
 //! MouseXY with both dx and dy should route to both X and Y mappings
-NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_MouseXY_BothAxes)
+NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_MouseXY_BothAxes)
 {
   // Arrange
   InputMappingContext ctx("ctx_xy_both");
@@ -395,7 +396,7 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_MouseXY_BothAxes)
   // Act: MouseXY with both components
   const auto ev = MakeMouseMotion(5.0F, -4.0F);
   ctx.HandleInput(InputSlots::MouseXY, ev);
-  const bool consumed = ctx.Update(Duration::zero());
+  const bool consumed = ctx.Update(CanonicalDuration {});
 
   // Assert: both mappings updated; context did not consume
   EXPECT_FALSE(consumed);
@@ -406,7 +407,7 @@ NOLINT_TEST_F(InputMappingContextFixture, SimilarSlots_MouseXY_BothAxes)
 }
 
 //! ConsumesInput only applies when the consuming mapping actually triggers
-NOLINT_TEST_F(InputMappingContextFixture, Consumption_OnlyOnTrigger)
+NOLINT_TEST_F(InputMappingContextTest, Consumption_OnlyOnTrigger)
 {
   // Arrange
   InputMappingContext ctx("ctx_consume_on_trigger");
@@ -443,7 +444,7 @@ NOLINT_TEST_F(InputMappingContextFixture, Consumption_OnlyOnTrigger)
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, space_down);
-  const bool consumed = ctx.Update(Duration::zero());
+  const bool consumed = ctx.Update(CanonicalDuration {});
 
   // Assert: not consumed because only the non-consuming mapping triggered
   EXPECT_FALSE(consumed);

@@ -8,10 +8,10 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -150,7 +150,8 @@ void InputActionMapping::AbortStaged() noexcept
   clear_value_after_update_ = false;
 }
 
-auto InputActionMapping::Update(const Duration delta_time) -> bool
+auto InputActionMapping::Update(
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   const auto input_consumed = DoUpdate(delta_time);
 
@@ -172,7 +173,8 @@ auto InputActionMapping::Update(const Duration delta_time) -> bool
   return input_consumed;
 }
 
-auto InputActionMapping::DoUpdate(const Duration delta_time) -> bool
+auto InputActionMapping::DoUpdate(
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   // If the mapping has no triggers, it cannot and should not do anything with
   // the input events and state updates.
