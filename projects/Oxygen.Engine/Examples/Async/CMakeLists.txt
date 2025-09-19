@@ -30,6 +30,7 @@ find_package(asio CONFIG REQUIRED)
 
 add_executable(
   ${META_MODULE_TARGET}
+  "AsyncEngineApp.h"
   "main_impl.cpp"
   "MainModule.cpp"
   "../main.cpp"

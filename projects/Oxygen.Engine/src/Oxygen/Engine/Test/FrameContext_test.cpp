@@ -518,7 +518,8 @@ NOLINT_TEST(FrameContext_basic_test, SetInputSnapshotPhaseMatrix)
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, tag);
 
-    auto inp = std::make_shared<oxygen::engine::InputSnapshot>();
+    auto inp = std::shared_ptr<const void> { nullptr };
+    // Using nullptr is allowed for interface tests; only phase gating checked
     if (phase == PhaseId::kInput) {
       ctx.SetInputSnapshot(inp, tag);
     } else {

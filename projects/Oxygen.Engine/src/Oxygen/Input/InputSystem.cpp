@@ -153,7 +153,7 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
   // Freeze input for this frame: build the snapshot now so it is available to
   // subsequent phases (FixedSim, Gameplay, etc.). Then end frame tracking so
   // edges do not accumulate past this phase.
-  current_snapshot_ = std::make_unique<input::InputSnapshot>(actions_);
+  current_snapshot_ = std::make_shared<input::InputSnapshot>(actions_);
 
   for (auto& action : actions_) {
     action->EndFrameTracking();
