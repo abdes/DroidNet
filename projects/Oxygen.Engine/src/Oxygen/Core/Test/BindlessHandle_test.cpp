@@ -157,7 +157,7 @@ NOLINT_TEST(Versioned, ToString_IncludesIndexAndGenerationExact)
   auto s = to_string(v);
 
   // Assert
-  EXPECT_THAT(s, HasSubstr("BindlessHeapIndex(i:7, g:3)"));
+  EXPECT_THAT(s, HasSubstr("VersionedBindlessHandle(i:7, g:3)"));
 }
 
 //! to_string for the invalid sentinel should render the invalid numeric index
@@ -189,7 +189,7 @@ NOLINT_TEST(Versioned, ToString_MaxValuesFormatting)
   auto s = to_string(v);
 
   // Assert
-  const auto expected = std::string("BindlessHeapIndex(i:")
+  const auto expected = std::string("VersionedBindlessHandle(i:")
     + std::to_string(max) + ", g:" + std::to_string(max) + ")";
   EXPECT_THAT(s, HasSubstr(expected));
 }
@@ -740,7 +740,7 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Versioned:"));
-  EXPECT_THAT(output, HasSubstr("BindlessHeapIndex(i:42, g:7)"));
+  EXPECT_THAT(output, HasSubstr("VersionedBindlessHandle(i:42, g:7)"));
 }
 
 //! Verify that Generation type can be logged using LOG_F macro.
@@ -795,7 +795,7 @@ NOLINT_TEST_F(LoggingTests,
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Invalid versioned:"));
-  EXPECT_THAT(output, HasSubstr("BindlessHeapIndex(i:"));
+  EXPECT_THAT(output, HasSubstr("VersionedBindlessHandle(i:"));
   EXPECT_THAT(output, HasSubstr(std::to_string(oxygen::kInvalidBindlessIndex)));
   EXPECT_THAT(output, HasSubstr("g:0)"));
 }
@@ -829,7 +829,7 @@ NOLINT_TEST_F(
   EXPECT_THAT(output,
     AllOf(HasSubstr("Handle:"), HasSubstr("10"), HasSubstr("Count:"),
       HasSubstr("20"), HasSubstr("Capacity:"), HasSubstr("100"),
-      HasSubstr("Versioned:"), HasSubstr("BindlessHeapIndex(i:5, g:2)")));
+      HasSubstr("Versioned:"), HasSubstr("VersionedBindlessHandle(i:5, g:2)")));
 }
 
 //! Verify that edge case values (zero, max) can be logged correctly.
@@ -860,7 +860,8 @@ NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
   EXPECT_THAT(output,
     AllOf(HasSubstr("Zero:"), HasSubstr("0"), HasSubstr("Max:"),
       HasSubstr(max_str), HasSubstr("MaxVersioned:"),
-      HasSubstr("BindlessHeapIndex(i:" + max_str + ", g:" + max_str + ")")));
+      HasSubstr(
+        "VersionedBindlessHandle(i:" + max_str + ", g:" + max_str + ")")));
 }
 
 //! Verify that bindless namespace aliases work with logging.
