@@ -25,7 +25,7 @@ namespace oxygen::engine::asyncsim {
 #include "Scheduler.h"
 #include "Types.h"
 #include "Validator.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::engine::asyncsim {

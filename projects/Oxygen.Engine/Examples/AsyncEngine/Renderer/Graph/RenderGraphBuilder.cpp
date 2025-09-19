@@ -20,7 +20,7 @@
 #include "RenderGraph.h"
 #include "Scheduler.h"
 #include "Validator.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 

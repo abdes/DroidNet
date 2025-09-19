@@ -50,19 +50,13 @@ set(
   OXYGEN_ENGINE_HEADERS
   "api_export.h"
   "AsyncEngine.h"
-  "EngineTag.h"
-  "Epoch.h"
-  "FrameContext.h"
-  "System.h"
   "InputHandler.h"
-  "Modules/EngineModule.h"
-  "Modules/ModuleManager.h"
+  "ModuleManager.h"
 )
 set(
   OXYGEN_ENGINE_PRIVATE_SOURCES
   "AsyncEngine.cpp"
-  "FrameContext.cpp"
-  "Modules/ModuleManager.cpp"
+  "ModuleManager.cpp"
 )
 
 target_sources(

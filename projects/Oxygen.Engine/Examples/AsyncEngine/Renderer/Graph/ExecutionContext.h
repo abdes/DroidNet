@@ -13,7 +13,7 @@
 #include "Resource.h"
 #include "Types.h"
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 // Forward declarations for AsyncEngine integration
 namespace oxygen::engine::asyncsim {

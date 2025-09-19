@@ -15,7 +15,7 @@
 #include "../Renderer/Graph/ExecutionContext.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Types.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 using namespace std::chrono_literals;
 

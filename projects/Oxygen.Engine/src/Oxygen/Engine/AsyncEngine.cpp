@@ -11,10 +11,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Engine/EngineTag.h>
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/Modules/ModuleManager.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Algorithms.h>

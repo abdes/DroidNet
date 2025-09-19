@@ -7,7 +7,7 @@
 #pragma once
 
 #include "./RendererFacade.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 using oxygen::engine::asyncsim::RendererFacade;
 

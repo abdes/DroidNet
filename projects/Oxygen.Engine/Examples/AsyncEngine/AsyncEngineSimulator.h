@@ -28,7 +28,7 @@
 
 #include "EngineTypes.h"
 #include "GraphicsLayer.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine {
 class ModuleManager;

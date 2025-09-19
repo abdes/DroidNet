@@ -15,8 +15,8 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {

@@ -39,8 +39,8 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/Modules/ModuleManager.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 

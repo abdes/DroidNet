@@ -64,7 +64,10 @@ set(
   "AnyCache.h"
   "Bindless/Types.h"
   "Detail/FormatUtils.h"
-  "Modules/EngineModule.h"
+  "EngineModule.h"
+  "EngineTag.h"
+  "Epoch.h"
+  "FrameContext.h"
   "PhaseRegistry.h"
   "Resources.h"
   "SafeCall.h"
@@ -104,6 +107,7 @@ set(
   "Detail/ToStringConverters.cpp"
   "Types/Frustum.cpp"
   "Types/View.cpp"
+  "FrameContext.cpp"
   "Version.cpp"
 )
 
@@ -133,6 +137,7 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
+    oxygen::oxco
     oxygen::composition
 )
 

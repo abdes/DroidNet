@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "../Renderer/Graph/RenderGraphBuilder.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 

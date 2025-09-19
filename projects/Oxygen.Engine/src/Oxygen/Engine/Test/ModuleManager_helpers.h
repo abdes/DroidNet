@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Engine/Modules/EngineModule.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 

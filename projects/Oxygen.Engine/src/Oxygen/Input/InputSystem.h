@@ -13,7 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Engine/Modules/EngineModule.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/api_export.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>

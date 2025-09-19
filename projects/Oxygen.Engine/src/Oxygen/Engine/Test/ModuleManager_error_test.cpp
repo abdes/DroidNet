@@ -6,9 +6,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/Modules/EngineModule.h>
-#include <Oxygen/Engine/Modules/ModuleManager.h>
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/Test/ModuleManager_helpers.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>

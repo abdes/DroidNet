@@ -15,8 +15,8 @@
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>

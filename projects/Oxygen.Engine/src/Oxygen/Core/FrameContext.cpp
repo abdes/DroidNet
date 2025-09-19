@@ -12,7 +12,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 using oxygen::engine::FrameContext;
 using PhaseId = oxygen::core::PhaseId;

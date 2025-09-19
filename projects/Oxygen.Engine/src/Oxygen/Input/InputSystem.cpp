@@ -15,9 +15,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Engine/EngineTag.h>
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/System.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
@@ -26,7 +25,6 @@
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>
 
-using oxygen::engine::SystemUpdateContext;
 using oxygen::input::InputMappingContext;
 using oxygen::platform::InputEvent;
 using oxygen::platform::InputSlot;

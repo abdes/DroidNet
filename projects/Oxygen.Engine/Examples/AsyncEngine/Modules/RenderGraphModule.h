@@ -16,7 +16,7 @@
 #include "../Renderer/Graph/Cache.h"
 #include "../Renderer/Graph/RenderGraph.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 

@@ -14,7 +14,7 @@
 #include "../Passes/RenderPass.h"
 #include "Resource.h"
 #include "Types.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 

@@ -62,14 +62,14 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Engine/EngineTag.h>
-#include <Oxygen/Engine/api_export.h>
-#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen::scene {
 class Scene;
@@ -77,6 +77,9 @@ class Scene;
 
 namespace oxygen {
 class Graphics;
+namespace graphics {
+  class Surface;
+} // namespace graphics
 } // namespace oxygen
 
 // Forward declaration for ThreadPool from the OxCo module
@@ -502,10 +505,10 @@ public:
   };
 
   //! Default constructor initializing empty snapshot buffers.
-  OXGN_NGIN_API FrameContext();
+  OXGN_CORE_API FrameContext();
 
   //! Construct with immutable dependencies that live for application lifetime.
-  OXGN_NGIN_API explicit FrameContext(const Immutable& imm);
+  OXGN_CORE_API explicit FrameContext(const Immutable& imm);
 
   OXYGEN_MAKE_NON_COPYABLE(FrameContext)
   OXYGEN_MAKE_NON_MOVABLE(FrameContext)
@@ -594,7 +597,7 @@ public:
   // Scene pointer (engine-managed). Provided for modules like TransformsModule
   // and ScenePrep. Lifetime managed externally; FrameContext only observes.
   // Scene is module-managed (not EngineState); no EngineTag required.
-  OXGN_NGIN_API auto SetScene(observer_ptr<scene::Scene> s) noexcept -> void;
+  OXGN_CORE_API auto SetScene(observer_ptr<scene::Scene> s) noexcept -> void;
 
   [[nodiscard]] auto GetScene() const noexcept -> observer_ptr<scene::Scene>
   {
@@ -616,7 +619,7 @@ public:
   // UnifiedSnapshot (engine-only). Consumers should not access snapshots via
   // global getters; the engine passes the snapshot reference to parallel tasks
   // directly.
-  OXGN_NGIN_API auto PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&;
+  OXGN_CORE_API auto PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&;
 
   //! Stage typed module data for inclusion in next snapshot
   /*!
@@ -654,9 +657,9 @@ public:
   //! Get mutable facade for staging module data during mutation phases. The
   //! ModuleDataMutable only has non-mutating APIs, and can still be mutated
   //! only through `StageModuleData`.
-  OXGN_NGIN_API auto GetStagingModuleData() noexcept -> ModuleDataMutable&;
+  OXGN_CORE_API auto GetStagingModuleData() noexcept -> ModuleDataMutable&;
 
-  OXGN_NGIN_API auto SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
+  OXGN_CORE_API auto SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
     -> void;
 
   auto GetInputSnapshot() const noexcept
@@ -671,13 +674,13 @@ public:
   }
 
   // Add individual view with phase validation
-  OXGN_NGIN_API auto AddView(std::shared_ptr<RenderableView> view) noexcept
+  OXGN_CORE_API auto AddView(std::shared_ptr<RenderableView> view) noexcept
     -> void;
 
   // Clear views with phase validation
-  OXGN_NGIN_API auto ClearViews(EngineTag) noexcept -> void;
+  OXGN_CORE_API auto ClearViews(EngineTag) noexcept -> void;
 
-  OXGN_NGIN_API auto SetCurrentPhase(core::PhaseId p, EngineTag) noexcept
+  OXGN_CORE_API auto SetCurrentPhase(core::PhaseId p, EngineTag) noexcept
     -> void;
 
   auto GetCurrentPhase() const noexcept { return engine_state_.current_phase; }
@@ -706,7 +709,7 @@ public:
   // EngineTag to make accidental external mutation harder. RATIONALE: Frame
   // timing affects adaptive scheduling and budget decisions that must be
   // coordinated by the engine to maintain frame rate targets
-  OXGN_NGIN_API auto SetFrameTiming(const FrameTiming& t, EngineTag) noexcept
+  OXGN_CORE_API auto SetFrameTiming(const FrameTiming& t, EngineTag) noexcept
     -> void;
 
   auto GetFrameTiming() const noexcept { return metrics_.timing; }
@@ -714,7 +717,7 @@ public:
   // Engine-only: set/get the recorded frame start time (used for snapshot
   // coordination). Setter requires EngineTag to prevent accidental updates from
   // modules.
-  OXGN_NGIN_API auto SetFrameStartTime(
+  OXGN_CORE_API auto SetFrameStartTime(
     std::chrono::steady_clock::time_point t, EngineTag) noexcept -> void;
 
   auto GetFrameStartTime() const noexcept { return frame_start_time_; }
@@ -722,25 +725,25 @@ public:
   //=== Professional Timing System Access ===-------------------------------//
 
   // Engine-only: set module timing data for current frame
-  OXGN_NGIN_API auto SetModuleTimingData(
+  OXGN_CORE_API auto SetModuleTimingData(
     const ModuleTimingData& timing, EngineTag) noexcept -> void;
 
   // Module access to timing data - clean, focused API
-  [[nodiscard]] auto GetModuleTimingData() const noexcept
+  OXGN_CORE_NDAPI auto GetModuleTimingData() const noexcept
     -> const ModuleTimingData&;
-  OXGN_NGIN_API [[nodiscard]] auto GetGameDeltaTime() const noexcept
+  OXGN_CORE_NDAPI auto GetGameDeltaTime() const noexcept
     -> std::chrono::microseconds;
-  OXGN_NGIN_API [[nodiscard]] auto GetFixedDeltaTime() const noexcept
+  OXGN_CORE_NDAPI auto GetFixedDeltaTime() const noexcept
     -> std::chrono::microseconds;
-  [[nodiscard]] auto GetInterpolationAlpha() const noexcept -> float;
-  [[nodiscard]] auto GetTimeScale() const noexcept -> float;
-  [[nodiscard]] auto IsGamePaused() const noexcept -> bool;
-  [[nodiscard]] auto GetCurrentFPS() const noexcept -> float;
+  OXGN_CORE_NDAPI auto GetInterpolationAlpha() const noexcept -> float;
+  OXGN_CORE_NDAPI auto GetTimeScale() const noexcept -> float;
+  OXGN_CORE_NDAPI auto IsGamePaused() const noexcept -> bool;
+  OXGN_CORE_NDAPI auto GetCurrentFPS() const noexcept -> float;
 
   // Engine-only budget statistics for adaptive scheduling RATIONALE: Budget
   // management is part of engine performance control and should not be modified
   // by application modules directly
-  OXGN_NGIN_API auto SetBudgetStats(
+  OXGN_CORE_API auto SetBudgetStats(
     const BudgetStats& stats, EngineTag) noexcept -> void;
 
   auto GetBudgetStats() const noexcept { return metrics_.budget; }
@@ -748,7 +751,7 @@ public:
   // Combined metrics access for unified performance monitoring RATIONALE:
   // Provides consolidated access to all performance-related data for monitoring
   // and adaptive scheduling decisions
-  OXGN_NGIN_API auto SetMetrics(const Metrics& metrics, EngineTag) noexcept
+  OXGN_CORE_API auto SetMetrics(const Metrics& metrics, EngineTag) noexcept
     -> void;
 
   auto GetMetrics() const noexcept { return metrics_; }
@@ -770,37 +773,37 @@ public:
   // (FrameStart / SceneMutation) only. PHASE RESTRICTION: Surface modifications
   // are only allowed during early setup phases when the frame structure is
   // being established.
-  OXGN_NGIN_API auto AddSurface(
+  OXGN_CORE_API auto AddSurface(
     const std::shared_ptr<graphics::Surface>& s) noexcept -> void;
 
   // TODO: think if we want to allow removing surfaces directly using the
   // original pointer, or if we want to manage surface changesets and only allow
   // removal by index.
-  OXGN_NGIN_API auto RemoveSurfaceAt(size_t index) noexcept -> bool;
+  OXGN_CORE_API auto RemoveSurfaceAt(size_t index) noexcept -> bool;
 
-  OXGN_NGIN_API auto ClearSurfaces(EngineTag) noexcept -> void;
+  OXGN_CORE_API auto ClearSurfaces(EngineTag) noexcept -> void;
 
   // Engine-only surface management for internal operations RATIONALE: Some
   // surface operations (like swapchain recreation) are engine-internal and
   // should bypass normal phase restrictions
-  OXGN_NGIN_API auto SetSurfaces(
+  OXGN_CORE_API auto SetSurfaces(
     std::vector<std::shared_ptr<graphics::Surface>> surfaces,
     EngineTag) noexcept -> void;
 
-  OXGN_NGIN_API auto SetSurfacePresentable(
+  OXGN_CORE_API auto SetSurfacePresentable(
     size_t index, bool presentable) noexcept -> void;
 
-  OXGN_NGIN_API auto IsSurfacePresentable(size_t index) const noexcept -> bool;
+  OXGN_CORE_API auto IsSurfacePresentable(size_t index) const noexcept -> bool;
 
   auto GetPresentableFlags() const noexcept -> std::vector<uint8_t>
   {
     return presentable_flags_;
   }
 
-  OXGN_NGIN_API auto GetPresentableSurfaces() const noexcept
+  OXGN_CORE_API auto GetPresentableSurfaces() const noexcept
     -> std::vector<std::shared_ptr<graphics::Surface>>;
 
-  OXGN_NGIN_API auto ClearPresentableFlags(EngineTag) noexcept -> void;
+  OXGN_CORE_API auto ClearPresentableFlags(EngineTag) noexcept -> void;
 
   // Acquire a shared_ptr to the graphics backend if still available.
   // Coordinator or recording code should call this and check for null.
@@ -838,14 +841,14 @@ public:
   }
 
   //! Report an error using a TypeId directly.
-  OXGN_NGIN_API auto ReportError(TypeId source_type_id, std::string message,
+  OXGN_CORE_API auto ReportError(TypeId source_type_id, std::string message,
     std::optional<std::string> source_key = std::nullopt) noexcept -> void;
 
   //! Check if any errors have been reported this frame.
-  OXGN_NGIN_NDAPI [[nodiscard]] auto HasErrors() const noexcept -> bool;
+  OXGN_CORE_NDAPI [[nodiscard]] auto HasErrors() const noexcept -> bool;
 
   //! Get a thread-safe copy of all reported errors.
-  OXGN_NGIN_NDAPI [[nodiscard]] auto GetErrors() const noexcept
+  OXGN_CORE_NDAPI [[nodiscard]] auto GetErrors() const noexcept
     -> std::vector<FrameError>;
 
   //! Clear errors from a specific typed module source.
@@ -855,32 +858,32 @@ public:
   }
 
   //! Clear errors from a specific module source by TypeId.
-  OXGN_NGIN_API auto ClearErrorsFromSource(TypeId source_type_id) noexcept
+  OXGN_CORE_API auto ClearErrorsFromSource(TypeId source_type_id) noexcept
     -> void;
 
   //! Clear errors from a specific module source by TypeId and source key.
-  OXGN_NGIN_API auto ClearErrorsFromSource(TypeId source_type_id,
+  OXGN_CORE_API auto ClearErrorsFromSource(TypeId source_type_id,
     const std::optional<std::string>& source_key) noexcept -> void;
 
   //! Clear all reported errors.
-  OXGN_NGIN_API auto ClearAllErrors() noexcept -> void;
+  OXGN_CORE_API auto ClearAllErrors() noexcept -> void;
 
 private:
   //------------------------------------------------------------------------
   // Private helper methods
   //------------------------------------------------------------------------
   //! Type-erased staging entry point used by the template wrapper.
-  OXGN_NGIN_API auto StageModuleDataErased(
+  OXGN_CORE_API auto StageModuleDataErased(
     TypeId type_id, std::shared_ptr<void> data) -> void;
 
   // Create and populate both GameStateSnapshot and FrameSnapshot into target
-  OXGN_NGIN_API auto CreateUnifiedSnapshot(
+  OXGN_CORE_API auto CreateUnifiedSnapshot(
     UnifiedSnapshot& out, uint64_t version) noexcept -> void;
 
   // Populate FrameSnapshot within a GameStateSnapshot with coordination
   // context and views. Caller is the engine during kSnapshot on the main
   // thread; phase gating guarantees no concurrent mutation.
-  OXGN_NGIN_API auto PopulateFrameSnapshot(FrameSnapshot& frame_snapshot,
+  OXGN_CORE_API auto PopulateFrameSnapshot(FrameSnapshot& frame_snapshot,
     const GameStateSnapshot& game_snapshot) const noexcept -> void;
 
   // (one-off buffer index computation is inlined at call site)
@@ -888,7 +891,7 @@ private:
   // Populate the immutable GameStateSnapshot value (capture + convert +
   // version). Called by the engine during publish; non-concurrent by
   // invariant, so no extra locks required beyond phase checks.
-  OXGN_NGIN_API auto PopulateGameStateSnapshot(
+  OXGN_CORE_API auto PopulateGameStateSnapshot(
     GameStateSnapshot& out, uint64_t version) noexcept -> void;
 
   //------------------------------------------------------------------------

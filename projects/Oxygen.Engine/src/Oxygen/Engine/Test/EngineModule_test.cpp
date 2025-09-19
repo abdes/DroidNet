@@ -6,7 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Engine/Modules/EngineModule.h>
+#include <Oxygen/Core/EngineModule.h>
 
 namespace {
 
