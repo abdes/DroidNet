@@ -32,8 +32,7 @@ FrameContext::FrameContext()
 {
   // Unified snapshot slots initialize their gameSnapshot by default constructor
   visible_snapshot_index_ = 0u;
-  std::atomic_store(
-    &atomic_input_snapshot_, std::shared_ptr<const InputSnapshot> {});
+  std::atomic_store(&atomic_input_snapshot_, InputBlobPtr {});
 }
 
 FrameContext::FrameContext(const Immutable& imm)
@@ -41,8 +40,7 @@ FrameContext::FrameContext(const Immutable& imm)
 {
   // Unified snapshot slots initialize their gameSnapshot by default constructor
   visible_snapshot_index_ = 0u;
-  std::atomic_store(
-    &atomic_input_snapshot_, std::shared_ptr<const InputSnapshot> {});
+  std::atomic_store(&atomic_input_snapshot_, InputBlobPtr {});
 }
 
 auto FrameContext::SetScene(observer_ptr<scene::Scene> s) noexcept -> void
@@ -71,8 +69,8 @@ auto FrameContext::PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&
   return unified;
 }
 
-auto FrameContext::SetInputSnapshot(
-  std::shared_ptr<const InputSnapshot> inp, EngineTag) noexcept -> void
+auto FrameContext::SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
+  -> void
 {
   CHECK_F(engine_state_.current_phase == PhaseId::kInput);
   // Coordinator-only: publish the input snapshot atomically for readers.

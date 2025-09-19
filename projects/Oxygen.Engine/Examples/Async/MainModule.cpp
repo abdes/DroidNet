@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MainModule.h"
+#include "AsyncEngineApp.h"
 
 #include <algorithm>
 #include <chrono>
@@ -39,6 +40,10 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/InputSnapshot.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
@@ -431,16 +436,11 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 } // namespace
 
-MainModule::MainModule(std::shared_ptr<Platform> platform,
-  std::weak_ptr<Graphics> gfx_weak, bool fullscreen,
-  observer_ptr<engine::Renderer> renderer)
-  : platform_(std::move(platform))
-  , gfx_weak_(std::move(gfx_weak))
-  , fullscreen_(fullscreen)
-  , renderer_(renderer)
+MainModule::MainModule(const examples::async::AsyncEngineApp& app)
+  : app_(app)
 {
-  DCHECK_NOTNULL_F(platform_);
-  DCHECK_F(!gfx_weak_.expired());
+  DCHECK_NOTNULL_F(app_.platform);
+  DCHECK_F(!app_.gfx_weak.expired());
 
   // Record start time for animations (use time_point for robust delta)
   start_time_ = std::chrono::steady_clock::now();
@@ -448,11 +448,9 @@ MainModule::MainModule(std::shared_ptr<Platform> platform,
 
 MainModule::~MainModule()
 {
-  LOG_SCOPE_F(ERROR, "Destroying MainModule (AsyncEngine)");
-
   // Cleanup graphics resources
-  if (!gfx_weak_.expired()) {
-    const auto gfx = gfx_weak_.lock();
+  if (!app_.gfx_weak.expired()) {
+    const auto gfx = app_.gfx_weak.lock();
     const graphics::SingleQueueStrategy queues;
     if (auto queue
       = gfx->GetCommandQueue(queues.KeyFor(graphics::QueueRole::kGraphics))) {
@@ -461,10 +459,9 @@ MainModule::~MainModule()
   }
 
   framebuffers_.clear();
-  renderer_.reset();
   surface_.reset();
   scene_.reset();
-  platform_.reset();
+  // app_ is non-owning; do not reset here
 }
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
@@ -485,6 +482,7 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
     SetupSurface();
     SetupRenderer();
     SetupShaders();
+    SetupInput();
     initialized_ = true;
   }
 
@@ -789,6 +787,30 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   const double delta_time = delta_seconds;
   UpdateAnimations(delta_time);
 
+  // Handle per-frame input affecting the drone speed.
+  // Contract: Input Snapshot MUST be available after PhaseInput.
+  // Enforce the contract in debug; in release, gracefully no-op if missing.
+  const auto eng_snap = context.GetInputSnapshot();
+  DCHECK_F(static_cast<bool>(eng_snap),
+    "InputSnapshot must be available after PhaseInput");
+  if (eng_snap) {
+    const auto typed
+      = std::shared_ptr<const oxygen::input::InputSnapshot>(eng_snap,
+        static_cast<const oxygen::input::InputSnapshot*>(eng_snap.get()));
+    if (typed) {
+      if (typed->DidActionTrigger("DroneSpeedUp")) {
+        camera_drone_.path_speed
+          = (std::min)(camera_drone_.path_speed + 0.5, 30.0);
+        LOG_F(INFO, "Drone speed up -> {}", camera_drone_.path_speed);
+      }
+      if (typed->DidActionTrigger("DroneSpeedDown")) {
+        camera_drone_.path_speed
+          = (std::max)(camera_drone_.path_speed - 0.5, 0.5);
+        LOG_F(INFO, "Drone speed down -> {}", camera_drone_.path_speed);
+      }
+    }
+  }
+
   // Store last frame timestamp for next update
   last_frame_time_ = now;
 
@@ -814,7 +836,7 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(2, "MainModule::OnCommandRecord");
 
-  if (gfx_weak_.expired() || !scene_) {
+  if (app_.gfx_weak.expired() || !scene_) {
     co_return;
   }
 
@@ -848,12 +870,12 @@ auto MainModule::SetupMainWindow() -> void
   props.extent = { .width = kWindowWidth, .height = kWindowHeight };
   props.flags = { .hidden = false,
     .always_on_top = false,
-    .full_screen = fullscreen_,
+    .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
     .borderless = false };
-  window_weak_ = platform_->Windows().MakeWindow(props);
+  window_weak_ = app_.platform->Windows().MakeWindow(props);
   if (const auto window = window_weak_.lock()) {
     LOG_F(INFO, "Main window {} is created", window->Id());
   }
@@ -861,10 +883,10 @@ auto MainModule::SetupMainWindow() -> void
 
 auto MainModule::SetupSurface() -> void
 {
-  CHECK_F(!gfx_weak_.expired());
+  CHECK_F(!app_.gfx_weak.expired());
   CHECK_F(!window_weak_.expired());
 
-  const auto gfx = gfx_weak_.lock();
+  const auto gfx = app_.gfx_weak.lock();
 
   auto queue = gfx->GetCommandQueue(graphics::QueueRole::kGraphics);
   if (!queue) {
@@ -879,15 +901,83 @@ auto MainModule::SetupSurface() -> void
 
 auto MainModule::SetupRenderer() -> void
 {
-  CHECK_NOTNULL_F(renderer_, "Renderer was not provided to MainModule");
+  CHECK_NOTNULL_F(app_.renderer, "Renderer was not provided to MainModule");
   LOG_F(INFO, "Using provided Renderer for AsyncEngine");
+}
+
+auto MainModule::SetupInput() -> void
+{
+  using oxygen::input::Action;
+  using oxygen::input::ActionTriggerPressed;
+  using oxygen::input::ActionValueType;
+  using oxygen::input::InputActionMapping;
+  using oxygen::platform::InputSlots;
+
+  if (!app_.input_system) {
+    LOG_F(WARNING, "InputSystem not available; skipping input bindings");
+    return;
+  }
+
+  // Create actions
+  action_speed_up_
+    = std::make_shared<Action>("DroneSpeedUp", ActionValueType::kBool);
+  action_speed_down_
+    = std::make_shared<Action>("DroneSpeedDown", ActionValueType::kBool);
+
+  app_.input_system->AddAction(action_speed_up_);
+  app_.input_system->AddAction(action_speed_down_);
+
+  // Create mapping context
+  input_ctx_
+    = std::make_shared<oxygen::input::InputMappingContext>("async-demo");
+
+  // Map W -> speed up (Pressed)
+  {
+    auto m
+      = std::make_shared<InputActionMapping>(action_speed_up_, InputSlots::W);
+    auto t = std::make_shared<ActionTriggerPressed>();
+    t->MakeExplicit();
+    m->AddTrigger(t);
+    // Add auto-repeat while held (Pulse)
+    {
+      auto pulse = std::make_shared<oxygen::input::ActionTriggerPulse>();
+      // Fire roughly every 120ms while held; do not trigger immediately
+      // (Pressed already provides the initial edge)
+      pulse->SetInterval(0.12f);
+      pulse->MakeExplicit();
+      m->AddTrigger(pulse);
+    }
+    input_ctx_->AddMapping(m);
+  }
+
+  // Map S -> slow down (Pressed)
+  {
+    auto m
+      = std::make_shared<InputActionMapping>(action_speed_down_, InputSlots::S);
+    auto t = std::make_shared<ActionTriggerPressed>();
+    t->MakeExplicit();
+    m->AddTrigger(t);
+    // Add auto-repeat while held (Pulse)
+    {
+      auto pulse = std::make_shared<oxygen::input::ActionTriggerPulse>();
+      pulse->SetInterval(0.12f);
+      pulse->MakeExplicit();
+      m->AddTrigger(pulse);
+    }
+    input_ctx_->AddMapping(m);
+  }
+
+  app_.input_system->AddMappingContext(input_ctx_, /*priority*/ 0);
+  app_.input_system->ActivateMappingContext(input_ctx_);
+  LOG_F(INFO,
+    "Input bindings set: W(speed up, autorepeat), S(slow down, autorepeat)");
 }
 
 auto MainModule::SetupFramebuffers() -> void
 {
-  CHECK_F(!gfx_weak_.expired());
+  CHECK_F(!app_.gfx_weak.expired());
   CHECK_F(surface_ != nullptr, "Surface must be created before framebuffers");
-  auto gfx = gfx_weak_.lock();
+  auto gfx = app_.gfx_weak.lock();
 
   // Get actual surface dimensions (important for full-screen mode)
   const auto surface_width = surface_->Width();
@@ -919,8 +1009,8 @@ auto MainModule::SetupFramebuffers() -> void
 
 auto MainModule::SetupShaders() -> void
 {
-  CHECK_F(!gfx_weak_.expired());
-  const auto gfx = gfx_weak_.lock();
+  CHECK_F(!app_.gfx_weak.expired());
+  const auto gfx = app_.gfx_weak.lock();
 
   // Verify that the shaders can be loaded by the Graphics backend
   const auto vertex_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
@@ -1216,11 +1306,12 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // Early-out if graphics, scene, window, or surface are not available. This
   // can happen during shutdown or immediately after the window has been
   // closed, while modules may still receive callbacks within the frame.
-  if (gfx_weak_.expired() || !scene_ || window_weak_.expired() || !surface_) {
+  if (app_.gfx_weak.expired() || !scene_ || window_weak_.expired()
+    || !surface_) {
     co_return;
   }
 
-  auto gfx = gfx_weak_.lock();
+  auto gfx = app_.gfx_weak.lock();
 
   // Use frame slot provided by the engine context
   const auto current_frame = context.GetFrameSlot().get();
@@ -1256,7 +1347,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   render_context_.framebuffer = fb;
 
   // Execute render graph using the configured passes
-  co_await renderer_->ExecuteRenderGraph(
+  co_await app_.renderer->ExecuteRenderGraph(
     [&](const engine::RenderContext& context) -> co::Co<> {
       // Depth Pre-Pass execution
       if (depth_pass_) {

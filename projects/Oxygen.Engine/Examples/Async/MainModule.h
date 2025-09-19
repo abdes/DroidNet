@@ -14,6 +14,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
@@ -22,6 +24,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+#include "AsyncEngineApp.h"
 
 namespace oxygen {
 
@@ -81,15 +85,11 @@ namespace examples::async {
     OXYGEN_MAKE_NON_COPYABLE(MainModule)
     OXYGEN_MAKE_NON_MOVABLE(MainModule)
 
-    //! Constructor with Platform and Graphics dependencies.
+    //! Constructor using the aggregated AsyncEngineApp state.
     /*!
-     @param platform Platform services for window management and events
-     @param gfx_weak Weak reference to Graphics backend
-     @param fullscreen Whether to create the window in full-screen mode
+     @param app Aggregated application context (non-owning reference)
     */
-    explicit MainModule(std::shared_ptr<Platform> platform,
-      std::weak_ptr<Graphics> gfx_weak, bool fullscreen = false,
-      observer_ptr<engine::Renderer> renderer = nullptr);
+    explicit MainModule(const AsyncEngineApp& app);
 
     ~MainModule() override;
 
@@ -130,6 +130,8 @@ namespace examples::async {
     auto SetupRenderer() -> void;
     auto SetupFramebuffers() -> void;
     auto SetupShaders() -> void;
+    // Input actions/mappings for camera drone speed control
+    auto SetupInput() -> void;
 
     //! Scene and rendering functions.
     auto EnsureExampleScene() -> void;
@@ -146,13 +148,9 @@ namespace examples::async {
     //! Command recording (execute render graph).
     auto ExecuteRenderCommands(engine::FrameContext& context) -> co::Co<>;
 
-    //! Dependencies.
-    std::shared_ptr<Platform> platform_;
-    std::weak_ptr<Graphics> gfx_weak_;
+    //! Dependencies (aggregated app context, non-owning).
+    const AsyncEngineApp& app_;
     engine::RenderContext render_context_;
-
-    //! Configuration.
-    bool fullscreen_;
 
     //! Graphics resources.
     std::weak_ptr<platform::Window> window_weak_;
@@ -161,7 +159,6 @@ namespace examples::async {
 
     //! Scene and rendering.
     std::shared_ptr<scene::Scene> scene_;
-    observer_ptr<engine::Renderer> renderer_;
 
     //! Render passes (configured during frame graph, executed during command
     //! record).
@@ -258,6 +255,11 @@ namespace examples::async {
     // Camera update helper
     void InitializeDefaultFlightPath();
     auto UpdateCameraDrone(double delta_time) -> void;
+
+    // --- Input actions for drone speed control ---
+    std::shared_ptr<oxygen::input::Action> action_speed_up_;
+    std::shared_ptr<oxygen::input::Action> action_speed_down_;
+    std::shared_ptr<oxygen::input::InputMappingContext> input_ctx_;
   };
 
 } // namespace examples::async

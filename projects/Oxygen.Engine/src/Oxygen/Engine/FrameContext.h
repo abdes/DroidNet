@@ -439,10 +439,11 @@ template <typename MutationPolicy> struct GameData {
 using GameDataMutable = GameData<MutablePolicy>;
 using GameDataImmutable = GameData<ImmutablePolicy>;
 
-//! Opaque input snapshot container for type-erased input data.
-struct InputSnapshot {
-  std::shared_ptr<const void> blob; // host-specific input snapshot
-};
+// Opaque input snapshot pointer (type-erased). Published once per frame
+// by the engine coordinator during PhaseId::kInput.
+// Thread-safety: stored/retrieved via atomic shared_ptr with
+// release-store/acquire-load semantics.
+using InputBlobPtr = std::shared_ptr<const void>;
 
 //! Read-only immutable snapshot of authoritative game state.
 /*!
@@ -460,7 +461,7 @@ struct InputSnapshot {
 */
 struct GameStateSnapshot {
   std::vector<std::shared_ptr<const RenderableView>> views;
-  std::shared_ptr<const InputSnapshot> input; // input snapshot at capture time
+  InputBlobPtr input; // input snapshot at capture time (type-erased)
 
   // Cross-module game data using immutable policy
   GameDataImmutable gameData;
@@ -655,8 +656,8 @@ public:
   //! only through `StageModuleData`.
   OXGN_NGIN_API auto GetStagingModuleData() noexcept -> ModuleDataMutable&;
 
-  OXGN_NGIN_API auto SetInputSnapshot(
-    std::shared_ptr<const InputSnapshot> inp, EngineTag) noexcept -> void;
+  OXGN_NGIN_API auto SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
+    -> void;
 
   auto GetInputSnapshot() const noexcept
   {
@@ -984,7 +985,7 @@ private:
   uint64_t snapshot_version_ { 0 };
 
   // Lock-free input snapshot pointer (written once per frame by coordinator)
-  std::atomic<std::shared_ptr<const InputSnapshot>> atomic_input_snapshot_;
+  std::atomic<InputBlobPtr> atomic_input_snapshot_;
 
   // Error reporting system state
   mutable std::shared_mutex error_mutex_;

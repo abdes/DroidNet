@@ -105,7 +105,18 @@ private:
   // Frame processing
   co::ReaderContext<platform::InputEvent> input_reader_;
   std::vector<std::shared_ptr<platform::InputEvent>> frame_events_;
-  std::unique_ptr<input::InputSnapshot> current_snapshot_;
+  // Frozen per-frame snapshot at end of kInput; shared so the engine can
+  // publish it into FrameContext for early access and later freezing.
+  std::shared_ptr<const input::InputSnapshot> current_snapshot_;
+
+public:
+  // Accessor used by the engine coordinator after kInput to publish the
+  // snapshot into FrameContext. Returns nullptr if no snapshot is available.
+  [[nodiscard]] auto GetCurrentSnapshot() const
+    -> std::shared_ptr<const input::InputSnapshot>
+  {
+    return current_snapshot_;
+  }
 };
 
 } // namespace oxygen::engine

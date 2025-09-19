@@ -24,6 +24,7 @@
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -38,6 +39,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+#include "AsyncEngineApp.h"
 #include "MainModule.h"
 
 using namespace oxygen;
@@ -47,21 +49,9 @@ using namespace std::chrono_literals;
 
 namespace {
 
-// Wrap engine plus running flag to model an event loop subject.
-struct AsyncEngineApp {
-  bool headless { false };
-  bool fullscreen { false };
-  graphics::SharedTransferQueueStrategy queue_strategy;
-  std::shared_ptr<Platform> platform;
-  std::weak_ptr<Graphics> gfx_weak;
-  std::shared_ptr<AsyncEngine> engine;
-  //! Flag toggled to request loop continue/stop
-  std::atomic_bool running { false };
-};
-
 //! Event loop tick: drives the engine's asio context (if supplied) and
 //! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
-auto EventLoopRun(const AsyncEngineApp& app) -> void
+auto EventLoopRun(const oxygen::examples::async::AsyncEngineApp& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
 
@@ -79,17 +69,23 @@ auto EventLoopRun(const AsyncEngineApp& app) -> void
 }
 } // namespace
 
-template <> struct co::EventLoopTraits<AsyncEngineApp> {
-  static auto Run(AsyncEngineApp& app) -> void { EventLoopRun(app); }
-  static auto Stop(AsyncEngineApp& app) -> void
+template <>
+struct co::EventLoopTraits<oxygen::examples::async::AsyncEngineApp> {
+  static auto Run(oxygen::examples::async::AsyncEngineApp& app) -> void
+  {
+    EventLoopRun(app);
+  }
+  static auto Stop(oxygen::examples::async::AsyncEngineApp& app) -> void
   {
     app.running.store(false, std::memory_order_relaxed);
   }
-  static auto IsRunning(const AsyncEngineApp& app) -> bool
+  static auto IsRunning(const oxygen::examples::async::AsyncEngineApp& app)
+    -> bool
   {
     return app.running.load(std::memory_order_relaxed);
   }
-  static auto EventLoopId(AsyncEngineApp& app) -> EventLoopID
+  static auto EventLoopId(oxygen::examples::async::AsyncEngineApp& app)
+    -> EventLoopID
   {
     return EventLoopID(&app);
   }
@@ -97,16 +93,15 @@ template <> struct co::EventLoopTraits<AsyncEngineApp> {
 
 namespace {
 
-auto RegisterEngineModules(AsyncEngineApp& app) -> void
+auto RegisterEngineModules(oxygen::examples::async::AsyncEngineApp& app) -> void
 {
 
   // Register engine modules
   LOG_F(INFO, "Registering engine modules...");
 
   // Helper lambda to register modules with error checking
-  auto register_module = [&](auto&& module) {
-    const bool registered
-      = app.engine->RegisterModule(std::forward<decltype(module)>(module));
+  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) {
+    const bool registered = app.engine->RegisterModule(std::move(module));
     if (!registered) {
       LOG_F(ERROR, "Failed to register module");
       throw std::runtime_error("Module registration failed");
@@ -115,7 +110,10 @@ auto RegisterEngineModules(AsyncEngineApp& app) -> void
 
   // Register built-in engine modules (one-time)
   {
-    register_module(std::make_unique<InputSystem>(app.platform));
+    auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
+      app.platform->Input().ForRead());
+    app.input_system = observer_ptr { input_sys.get() };
+    register_module(std::move(input_sys));
 
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
@@ -126,16 +124,16 @@ auto RegisterEngineModules(AsyncEngineApp& app) -> void
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
 
     // Graphics main module (replaces RenderController/RenderThread pattern)
-    auto renderer_observer = observer_ptr { renderer_unique.get() };
-    register_module(std::make_unique<oxygen::examples::async::MainModule>(
-      app.platform, app.gfx_weak, app.fullscreen, renderer_observer));
+    app.renderer = observer_ptr { renderer_unique.get() };
+    register_module(std::make_unique<oxygen::examples::async::MainModule>(app));
 
     // Register as module
     register_module(std::move(renderer_unique));
   }
 }
 
-auto AsyncMain(AsyncEngineApp& app, uint32_t frames) -> co::Co<int>
+auto AsyncMain(oxygen::examples::async::AsyncEngineApp& app, uint32_t frames)
+  -> co::Co<int>
 {
   // Structured concurrency scope.
   OXCO_WITH_NURSERY(n)
@@ -175,7 +173,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U; // desired frame pacing
   bool headless = false;
   bool enable_vsync = true;
-  AsyncEngineApp app {};
+  oxygen::examples::async::AsyncEngineApp app {};
 
   try {
     CommandBuilder default_command(Command::DEFAULT);

@@ -13,8 +13,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/EngineTag.h>
+#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Engine/Modules/ModuleManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
@@ -145,7 +147,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
   while (true) {
     if (shutdown_requested_) {
       LOG_F(INFO, "Shutdown requested, stopping frame loop...");
-      Shutdown();
+      co_await Shutdown();
       break;
     }
     // Check for termination requets
@@ -329,6 +331,27 @@ auto AsyncEngine::PhaseInput(FrameContext& context) -> co::Co<>
 
   // Execute module input processing first
   co_await module_manager_->ExecutePhase(PhaseId::kInput, context);
+
+  // Publish the input snapshot built by the InputSystem so that it becomes
+  // available early in the frame to subsequent phases. The FrameContext
+  // contract requires SetInputSnapshot to be called during kInput.
+  if (module_manager_) {
+    // Find the InputSystem module (by type id) and publish its snapshot if any
+    for (auto& mod_ref : module_manager_->GetModules()) {
+      auto* mod_ptr = &mod_ref;
+      if (mod_ptr
+        && mod_ptr->GetTypeId() == engine::InputSystem::ClassTypeId()) {
+        auto* input_sys = static_cast<engine::InputSystem*>(mod_ptr);
+        auto snap = input_sys->GetCurrentSnapshot();
+        if (snap) {
+          // Publish type-erased input snapshot directly as blob
+          context.SetInputSnapshot(
+            std::static_pointer_cast<const void>(std::move(snap)), tag);
+        }
+        break;
+      }
+    }
+  }
 }
 
 auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
