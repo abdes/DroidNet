@@ -16,9 +16,10 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Engine/EngineTag.h>
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/core/EngineTag.h>
 
 namespace oxygen::engine::internal {
 auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }

@@ -14,9 +14,9 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>

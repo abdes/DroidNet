@@ -12,8 +12,8 @@
 
 #include "./Modules/RenderGraphModule.h"
 #include "Renderer/Graph/RenderGraphBuilder.h"
-#include <Oxygen/Engine/FrameContext.h>
-#include <Oxygen/Engine/Modules/ModuleManager.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/ModuleManager.h>
 
 using namespace std::chrono_literals;
 

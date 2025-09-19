@@ -23,7 +23,7 @@
 #include "Resource.h"
 #include "Scheduler.h"
 #include "Types.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 #include <Oxygen/Base/Hash.h>
 

@@ -103,7 +103,7 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::platform
-    oxygen::engine
+    oxygen::core
 )
 
 # ------------------------------------------------------------------------------

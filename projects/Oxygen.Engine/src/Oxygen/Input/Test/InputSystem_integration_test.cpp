@@ -6,7 +6,6 @@
 
 #include <Oxygen/Input/Test/InputSystemTest.h>
 
-#include <Oxygen/Engine/EngineTag.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>

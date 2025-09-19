@@ -14,7 +14,7 @@
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Validator.h"
 #include "../Renderer/Integration/GraphicsLayerIntegration.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 

@@ -13,7 +13,7 @@
 // Test utilities and core types needed by the reusable fixture
 #include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>

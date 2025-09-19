@@ -12,8 +12,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Engine/Modules/EngineModule.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>

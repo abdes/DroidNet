@@ -15,8 +15,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Engine/FrameContext.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>

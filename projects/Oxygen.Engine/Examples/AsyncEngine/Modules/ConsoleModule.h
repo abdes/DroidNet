@@ -17,7 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 
 #include "../IEngineModule.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 using namespace std::chrono_literals;
 

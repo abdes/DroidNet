@@ -15,7 +15,7 @@
 #include "../IEngineModule.h"
 #include "../Renderer/Graph/RenderGraphBuilder.h"
 #include "../Renderer/Graph/Types.h"
-#include <Oxygen/Engine/FrameContext.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::engine::asyncsim {
 
