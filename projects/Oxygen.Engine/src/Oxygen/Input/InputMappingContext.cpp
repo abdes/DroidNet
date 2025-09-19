@@ -114,3 +114,10 @@ auto InputMappingContext::Update(const Duration delta_time) const -> bool
   }
   return input_consumed;
 }
+
+void InputMappingContext::FlushPending() const
+{
+  for (const auto& mapping : mappings_) {
+    mapping->AbortStaged();
+  }
+}

@@ -14,7 +14,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Engine/Modules/EngineModule.h>
+#include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/api_export.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/Platform/Platform.h>
 
 namespace oxygen::input {
@@ -33,7 +35,8 @@ public:
     std::shared_ptr<input::InputMappingContext> mapping_context;
   };
 
-  OXGN_NPUT_API explicit InputSystem(std::shared_ptr<Platform> platform);
+  OXGN_NPUT_API explicit InputSystem(
+    co::ReaderContext<platform::InputEvent> input_reader);
   OXGN_NPUT_API ~InputSystem() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(InputSystem)
@@ -49,8 +52,8 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> ModulePhaseMask override
   {
-    return MakeModuleMask<core::PhaseId::kInput, core::PhaseId::kFrameStart,
-      core::PhaseId::kFrameEnd>();
+    return MakeModuleMask<core::PhaseId::kInput, core::PhaseId::kSnapshot,
+      core::PhaseId::kFrameStart, core::PhaseId::kFrameEnd>();
   }
 
   [[nodiscard]] virtual auto IsCritical() const noexcept -> bool
@@ -62,6 +65,12 @@ public:
 
   OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
+
+  // Frame phase handlers
+  OXGN_NPUT_API auto OnFrameStart(FrameContext& context) -> void override;
+  OXGN_NPUT_API auto OnInput(FrameContext& context) -> co::Co<> override;
+  OXGN_NPUT_API auto OnSnapshot(FrameContext& context) -> void override;
+  OXGN_NPUT_API auto OnFrameEnd(FrameContext& context) -> void override;
 
   OXGN_NPUT_API void AddAction(const std::shared_ptr<input::Action>& action);
   OXGN_NPUT_API void RemoveAction(const std::shared_ptr<input::Action>& action);
@@ -93,7 +102,10 @@ private:
   std::vector<std::shared_ptr<input::Action>> actions_;
   std::list<InputMappingContextEntry> mapping_contexts_;
 
-  std::shared_ptr<Platform> platform_;
+  // Frame processing
+  co::ReaderContext<platform::InputEvent> input_reader_;
+  std::vector<std::shared_ptr<platform::InputEvent>> frame_events_;
+  std::unique_ptr<input::InputSnapshot> current_snapshot_;
 };
 
 } // namespace oxygen::engine

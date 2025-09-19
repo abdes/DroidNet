@@ -38,16 +38,22 @@ namespace input {
 
     OXGN_NPUT_API void HandleInput(const platform::InputEvent& event);
     OXGN_NPUT_API void CancelInput();
+    // Abort any staged input/evaluation without emitting Action edges.
+    // Clears transient flags so no stale input persists across frames.
+    OXGN_NPUT_API void AbortStaged() noexcept;
+    //! Evaluate triggers and advance time-based logic.
+    //!
+    //! @param delta_time Elapsed time since the previous call to Update for
+    //! this mapping. Time-based triggers (e.g., Hold, Pulse, Tap, Chain
+    //! windows) advance using this value. Note that platform input event
+    //! timestamps are not used by the mapping; only @p delta_time advances
+    //! trigger timing.
     OXGN_NPUT_API [[nodiscard]] auto Update(Duration delta_time) -> bool;
 
   private:
     [[nodiscard]] auto DoUpdate(Duration delta_time) -> bool;
-
     void StartEvaluation();
-    void CompleteEvaluation();
     void NotifyActionCanceled();
-    void NotifyActionTriggered();
-    void NotifyActionOngoing();
 
     std::shared_ptr<Action> action_;
     const platform::InputSlot& slot_;
@@ -57,13 +63,10 @@ namespace input {
     ActionValue last_action_value_;
     bool evaluation_ongoing_ { false };
     bool event_processing_ { false };
-    bool found_explicit_trigger_ { false };
     bool any_explicit_triggered_ { false };
     bool any_explicit_ongoing_ { false };
     bool all_implicits_triggered_ { true };
-    bool trigger_ongoing_ { false };
     bool blocked_ { false };
-    bool action_ongoing_ { false };
     bool clear_value_after_update_ { false };
   };
 

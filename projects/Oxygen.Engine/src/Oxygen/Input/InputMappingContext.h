@@ -36,6 +36,11 @@ namespace input {
 
     OXGN_NPUT_API [[nodiscard]] bool Update(Duration delta_time) const;
 
+    // Flush staged input state from all mappings without producing action
+    // edges. Use this when a higher-priority context consumed input to
+    // prevent stale staged input from leaking into subsequent frames.
+    OXGN_NPUT_API void FlushPending() const;
+
   private:
     std::string name_;
 

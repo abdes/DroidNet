@@ -727,9 +727,9 @@ public:
   // Module access to timing data - clean, focused API
   [[nodiscard]] auto GetModuleTimingData() const noexcept
     -> const ModuleTimingData&;
-  [[nodiscard]] auto GetGameDeltaTime() const noexcept
+  OXGN_NGIN_API [[nodiscard]] auto GetGameDeltaTime() const noexcept
     -> std::chrono::microseconds;
-  [[nodiscard]] auto GetFixedDeltaTime() const noexcept
+  OXGN_NGIN_API [[nodiscard]] auto GetFixedDeltaTime() const noexcept
     -> std::chrono::microseconds;
   [[nodiscard]] auto GetInterpolationAlpha() const noexcept -> float;
   [[nodiscard]] auto GetTimeScale() const noexcept -> float;

@@ -31,7 +31,8 @@ InputActionMapping::InputActionMapping(
 
 void InputActionMapping::StartEvaluation()
 {
-  // Reset Action value
+  // Reset local evaluation aggregates; Action itself has per-frame lifecycle
+  // maintained by InputSystem::BeginFrameTracking/EndFrameTracking.
   switch (action_->GetValueType()) {
   case ActionValueType::kBool:
     action_value_.Set(false);
@@ -43,41 +44,25 @@ void InputActionMapping::StartEvaluation()
     action_value_.Set(Axis2D { .x = 0.0F, .y = 0.0F });
     break;
   }
-  DLOG_F(2, "action {} triggers evaluation started", action_->GetName());
-  action_->OnStarted()(*action_);
   evaluation_ongoing_ = true;
-  found_explicit_trigger_ = false;
   any_explicit_triggered_ = false;
+  any_explicit_ongoing_ = false;
   all_implicits_triggered_ = true;
   blocked_ = false;
 }
 
 void InputActionMapping::NotifyActionCanceled()
 {
-  DLOG_F(2, "action {} cancelled", action_->GetName());
-  action_->OnCanceled()(*action_);
-  CompleteEvaluation();
-}
-void InputActionMapping::NotifyActionTriggered()
-{
-  LOG_F(INFO, "===> action triggered : {}", action_->GetName());
-  action_->OnTriggered()(*action_, action_value_);
-  any_explicit_triggered_ = false;
-  all_implicits_triggered_ = true;
-}
-void InputActionMapping::NotifyActionOngoing()
-{
-  DLOG_F(2, "action {} trigger evaluation ongoing", action_->GetName());
-  action_->OnOngoing()(*action_);
-  action_ongoing_ = true;
-}
-
-void InputActionMapping::CompleteEvaluation()
-{
-  DLOG_F(2, "action {} trigger evaluation completed", action_->GetName());
-  action_->OnCompleted()(*action_);
+  DLOG_F(2, "action {} canceled", action_->GetName());
+  action_->UpdateState(
+    Action::State {
+      .triggered = false,
+      .ongoing = false,
+      .completed = false,
+      .canceled = true,
+    },
+    action_value_);
   evaluation_ongoing_ = false;
-  action_ongoing_ = false;
 }
 
 void InputActionMapping::AddTrigger(std::shared_ptr<ActionTrigger> trigger)
@@ -117,7 +102,14 @@ void InputActionMapping::HandleInput(const platform::InputEvent& event)
     DCHECK_F(event.HasComponent<MouseMotionComponent>());
     const auto& comp = event.GetComponent<MouseMotionComponent>();
     const auto& [dx, dy] = comp.GetMotion();
-    action_value_.Update({ .x = dx, .y = dy });
+    // Respect mapping slot: MouseX/MouseY/MouseXY
+    if (slot_ == InputSlots::MouseX) {
+      action_value_.Update(Axis1D { dx });
+    } else if (slot_ == InputSlots::MouseY) {
+      action_value_.Update(Axis1D { dy });
+    } else {
+      action_value_.Update({ .x = dx, .y = dy });
+    }
     clear_value_after_update_ = true;
   } else if (event_type == platform::MouseWheelEvent::ClassTypeId()) {
     DCHECK_F(event.HasComponent<MouseWheelComponent>());
@@ -144,7 +136,18 @@ void InputActionMapping::CancelInput()
 {
   event_processing_ = false;
   action_value_ = last_action_value_;
-  CompleteEvaluation();
+  // Mark canceled for this evaluation
+  NotifyActionCanceled();
+}
+
+void InputActionMapping::AbortStaged() noexcept
+{
+  // Drop any staged input without producing Action edges. This prevents
+  // stale event_processing_ or evaluation_ongoing_ from leaking into next
+  // frames when a higher-priority context consumes input.
+  event_processing_ = false;
+  evaluation_ongoing_ = false;
+  clear_value_after_update_ = false;
 }
 
 auto InputActionMapping::Update(const Duration delta_time) -> bool
@@ -152,7 +155,17 @@ auto InputActionMapping::Update(const Duration delta_time) -> bool
   const auto input_consumed = DoUpdate(delta_time);
 
   if (clear_value_after_update_) {
-    action_value_.Update({ .x = 0.0F, .y = 0.0F });
+    switch (action_->GetValueType()) {
+    case ActionValueType::kBool:
+      action_value_.Update(false);
+      break;
+    case ActionValueType::kAxis1D:
+      action_value_.Update(Axis1D { 0.0F });
+      break;
+    case ActionValueType::kAxis2D:
+      action_value_.Update(Axis2D { .x = 0.0F, .y = 0.0F });
+      break;
+    }
     clear_value_after_update_ = false;
   }
 
@@ -167,53 +180,116 @@ auto InputActionMapping::DoUpdate(const Duration delta_time) -> bool
     return false;
   }
 
-  trigger_ongoing_ = false;
+  // Recompute aggregation fresh for this update
+  any_explicit_triggered_ = false;
   any_explicit_ongoing_ = false;
+  all_implicits_triggered_ = true;
+  blocked_ = false;
 
+  // Detect if this mapping contains any explicit triggers at all. If yes,
+  // we require at least one explicit to fire to allow triggering.
+  bool has_explicit_triggers = false;
+  for (const auto& t : triggers_) {
+    if (t->IsExplicit()) {
+      has_explicit_triggers = true;
+      break;
+    }
+  }
+
+  bool any_trigger_ongoing = false;
+  // Implicit gating policy:
+  // - For non-chain implicits (e.g., Hold, Tap windows), require Triggered
+  //   in the same update; Ongoing alone is not sufficient.
+  // - For chain implicits, allow the prerequisite gate to be satisfied by
+  //   Triggered or Ongoing (armed) since it represents a prerequisite state
+  //   rather than a punctual edge.
+  bool all_non_chain_implicits_triggered = true;
+  bool all_chain_implicits_ok = true;
+  bool canceled = false;
   for (const auto& trigger : triggers_) {
-    if (!event_processing_ && !trigger->IsOngoing()) {
+    // Always evaluate implicit/blocker triggers even without fresh input so
+    // they can react to time or external action state (e.g., chains/holds).
+    const bool should_evaluate = event_processing_ || trigger->IsOngoing()
+      || trigger->IsImplicit() || trigger->IsBlocker();
+    if (!should_evaluate) {
       continue;
     }
 
     trigger->UpdateState(action_value_, delta_time);
 
     if (trigger->IsExplicit()) {
-      found_explicit_trigger_ = true;
       any_explicit_triggered_ |= trigger->IsTriggered();
       any_explicit_ongoing_ |= trigger->IsOngoing();
-      if (trigger->IsCanceled())
-        NotifyActionCanceled();
+      if (trigger->IsCanceled()) {
+        canceled = true;
+      }
     } else if (trigger->IsImplicit()) {
-      all_implicits_triggered_ &= trigger->IsTriggered();
+      const bool tr = trigger->IsTriggered();
+      const bool on = trigger->IsOngoing();
+      if (trigger->GetType() == ActionTriggerType::kActionChain) {
+        // Chains act as prerequisite gates; accept armed (ongoing) or edge.
+        all_chain_implicits_ok &= (tr || on);
+      } else {
+        // Time/value-based implicits must fire this update.
+        all_non_chain_implicits_triggered &= tr;
+      }
     } else if (trigger->IsBlocker()) {
       blocked_ |= trigger->IsTriggered();
     }
-    trigger_ongoing_ |= trigger->IsOngoing();
+    any_trigger_ongoing |= trigger->IsOngoing();
   }
 
   const bool handling_input = event_processing_;
   event_processing_ = false;
 
+  if (canceled) {
+    // Short-circuit: preserve canceled edge without overwriting later
+    NotifyActionCanceled();
+    return false;
+  }
+
   if (blocked_) {
-    CompleteEvaluation();
+    // Blocked: set idle snapshot (no edges), end evaluation
+    action_->UpdateState(
+      Action::State {
+        .triggered = false,
+        .ongoing = false,
+        .completed = false,
+        .canceled = false,
+      },
+      action_value_);
+    evaluation_ongoing_ = false;
     return false;
   }
 
   bool input_consumed { false };
+  // Aggregate final snapshot for this evaluation
+  const bool allow_explicit
+    = has_explicit_triggers ? any_explicit_triggered_ : true;
 
-  if ((!found_explicit_trigger_ || any_explicit_triggered_)
-    && all_implicits_triggered_) {
-    NotifyActionTriggered();
-    input_consumed = (handling_input && action_->ConsumesInput());
-    if (input_consumed) {
-      DLOG_F(2, "Input was consumed by action: {}", action_->GetName());
-    }
-  }
+  // Implicit gating: all non-chain implicits must Trigger this update; chain
+  // gates are satisfied by Triggered or Ongoing (armed prerequisite).
+  const bool implicits_ok
+    = all_non_chain_implicits_triggered && all_chain_implicits_ok;
+  bool should_trigger = allow_explicit && implicits_ok;
+  const bool action_ongoing = any_explicit_ongoing_;
 
-  if (!any_explicit_ongoing_) {
-    CompleteEvaluation();
-  } else {
-    NotifyActionOngoing();
+  // Aggregate final snapshot for this update without preserving prior frame
+  // edges at the mapping level. The InputSystem frame lifecycle is
+  // responsible for edge visibility semantics across micro-updates.
+  action_->UpdateState(
+    Action::State {
+      .triggered = should_trigger,
+      .ongoing = action_ongoing,
+      .completed = false,
+      .canceled = false,
+    },
+    action_value_);
+
+  input_consumed = should_trigger && handling_input && action_->ConsumesInput();
+  // Keep evaluation running while any trigger (including implicits) is ongoing
+  if (!any_trigger_ongoing) {
+    evaluation_ongoing_ = false;
   }
   return input_consumed;
 }

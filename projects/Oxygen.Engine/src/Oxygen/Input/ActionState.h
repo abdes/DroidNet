@@ -6,11 +6,13 @@
 
 #pragma once
 
+#include <cstdint>
+#include <type_traits>
+
 namespace oxygen::input {
 
 enum class ActionState : uint8_t {
   kNone = 0,
-  kStarted = 1 << 0,
   kOngoing = 1 << 1,
   kCanceled = 1 << 2,
   kCompleted = 1 << 3,
