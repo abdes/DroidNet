@@ -11,8 +11,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
@@ -98,7 +98,8 @@ void InputMappingContext::HandleInput(
   }
 }
 
-auto InputMappingContext::Update(const Duration delta_time) const -> bool
+auto InputMappingContext::Update(
+  const oxygen::time::CanonicalDuration delta_time) const -> bool
 {
   // Iterate over all mapping contexts associated with the slot that had the
   // input event.

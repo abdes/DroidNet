@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -96,16 +96,16 @@ public:
     return triggered_ && (state_ == State::kIdle);
   }
 
-  OXGN_NPUT_API void UpdateState(
-    const ActionValue& action_value, Duration delta_time);
+  OXGN_NPUT_API void UpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time);
 
 protected:
   enum class State : uint8_t {
     kIdle,
     kOngoing,
   };
-  virtual auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool
+  virtual auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool
     = 0;
 
   void SetTriggerState(State state)
@@ -147,8 +147,8 @@ public:
   }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
   bool depleted_ { false };
@@ -171,7 +171,8 @@ public:
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
-    Duration delta_time [[maybe_unused]]) -> bool override;
+    oxygen::time::CanonicalDuration delta_time [[maybe_unused]])
+    -> bool override;
 };
 
 //-- ActionTriggerDown ---------------------------------------------------------
@@ -202,8 +203,8 @@ public:
   }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
   bool triggered_once_ { false };
@@ -224,16 +225,17 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ActionTriggerTimed);
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
-  [[nodiscard]] virtual auto GetHeldDuration() const -> Duration
+  [[nodiscard]] virtual auto GetHeldDuration() const
+    -> oxygen::time::CanonicalDuration
   {
     return held_duration_;
   }
 
 private:
-  Duration held_duration_ { 0 };
+  oxygen::time::CanonicalDuration held_duration_ {};
 };
 
 //-- ActionTriggerHold ---------------------------------------------------------
@@ -255,7 +257,10 @@ public:
 
   void SetHoldDurationThreshold(const float threshold_seconds)
   {
-    hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
+    hold_duration_threshold_ = oxygen::time::CanonicalDuration {
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<float>(threshold_seconds))
+    };
   }
 
   [[nodiscard]] auto GetHoldDurationThreshold() const
@@ -272,11 +277,11 @@ public:
   }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  Duration hold_duration_threshold_ { 0 };
+  oxygen::time::CanonicalDuration hold_duration_threshold_ {};
   bool one_shot_ { true };
   bool triggered_once_ { false };
 };
@@ -300,7 +305,10 @@ public:
 
   void SetHoldDurationThreshold(const float threshold_seconds)
   {
-    hold_duration_threshold_ = SecondsToDuration(threshold_seconds);
+    hold_duration_threshold_ = oxygen::time::CanonicalDuration {
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<float>(threshold_seconds))
+    };
   }
 
   [[nodiscard]] auto GetHoldDurationThreshold() const
@@ -309,11 +317,11 @@ public:
   }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  Duration hold_duration_threshold_ { 0 };
+  oxygen::time::CanonicalDuration hold_duration_threshold_ {};
 };
 
 //-- ActionTriggerPulse --------------------------------------------------------
@@ -342,7 +350,10 @@ public:
 
   void SetInterval(const float interval_seconds)
   {
-    interval_ = SecondsToDuration(interval_seconds);
+    interval_ = oxygen::time::CanonicalDuration {
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<float>(interval_seconds))
+    };
   }
 
   [[nodiscard]] auto GetInterval() const { return interval_; }
@@ -376,27 +387,29 @@ public:
     float end_interval_seconds, float ramp_duration_seconds);
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  Duration interval_ { std::chrono::seconds { 1 } };
+  oxygen::time::CanonicalDuration interval_ { std::chrono::seconds { 1 } };
   bool trigger_on_start_ { false };
   uint32_t trigger_limit_ { 0 };
   uint32_t trigger_count_ { 0 };
 
   // Stability controls
-  Duration jitter_tolerance_ { Duration::zero() };
+  oxygen::time::CanonicalDuration jitter_tolerance_ { {} };
   bool phase_align_ { true };
-  Duration ramp_start_ { Duration::zero() };
-  Duration ramp_end_ { Duration::zero() };
-  Duration ramp_duration_ { Duration::zero() };
+  oxygen::time::CanonicalDuration ramp_start_ { {} };
+  oxygen::time::CanonicalDuration ramp_end_ { {} };
+  oxygen::time::CanonicalDuration ramp_duration_ { {} };
   bool ramp_enabled_ { false };
 
   // Internal accumulators
-  Duration leftover_ { Duration::zero() }; // carry-over past interval
-  Duration time_since_actuation_ { Duration::zero() }; // absolute since press
-  Duration accum_since_last_ { Duration::zero() }; // since last pulse
+  oxygen::time::CanonicalDuration leftover_ { {} }; // carry-over past interval
+  oxygen::time::CanonicalDuration time_since_actuation_ {
+    {}
+  }; // absolute since press
+  oxygen::time::CanonicalDuration accum_since_last_ { {} }; // since last pulse
 };
 
 //-- ActionTriggerTap ----------------------------------------------------------
@@ -418,7 +431,10 @@ public:
 
   void SetTapTimeThreshold(const float threshold_seconds)
   {
-    threshold_ = SecondsToDuration(threshold_seconds);
+    threshold_ = oxygen::time::CanonicalDuration {
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<float>(threshold_seconds))
+    };
   }
 
   [[nodiscard]] auto GetTapTimeThreshold() const { return threshold_; }
@@ -433,11 +449,11 @@ public:
   }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  Duration threshold_ { 0 };
+  oxygen::time::CanonicalDuration threshold_ {};
 };
 
 //-- ActionTriggerChain --------------------------------------------------------
@@ -474,8 +490,8 @@ public:
   OXGN_NPUT_API void RequirePrerequisiteHeld(bool enable = true);
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
   std::shared_ptr<Action> linked_action_;
@@ -485,8 +501,8 @@ private:
   // idles/cancels
   bool armed_ { false };
   // Max delay window after arming; 0 disables
-  Duration max_delay_ { Duration::zero() };
-  Duration window_elapsed_ { Duration::zero() };
+  oxygen::time::CanonicalDuration max_delay_ { {} };
+  oxygen::time::CanonicalDuration window_elapsed_ { {} };
   // Require prerequisite to be ongoing at the moment of local press
   bool require_prereq_held_ { false };
   // If we expire due to max-delay, don't re-arm until prerequisite idles
@@ -498,7 +514,7 @@ private:
 struct InputComboStep {
   std::shared_ptr<Action> action;
   ActionState completion_states;
-  Duration time_to_complete;
+  oxygen::time::CanonicalDuration time_to_complete;
 };
 
 struct InputComboBreaker {
@@ -536,14 +552,14 @@ public:
   [[nodiscard]] auto GetComboBreakers() const { return combo_breakers_; }
 
 protected:
-  OXGN_NPUT_API auto DoUpdateState(
-    const ActionValue& action_value, Duration delta_time) -> bool override;
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
   std::vector<InputComboStep> combo_steps_;
   std::vector<InputComboBreaker> combo_breakers_;
 
-  Duration waited_time_ { 0 };
+  oxygen::time::CanonicalDuration waited_time_ {};
   size_t current_step_index_ { 0 };
 };
 

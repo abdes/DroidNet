@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/api_export.h>
 
@@ -48,10 +48,12 @@ namespace input {
     //! windows) advance using this value. Note that platform input event
     //! timestamps are not used by the mapping; only @p delta_time advances
     //! trigger timing.
-    OXGN_NPUT_API [[nodiscard]] auto Update(Duration delta_time) -> bool;
+    OXGN_NPUT_API [[nodiscard]] auto Update(
+      oxygen::time::CanonicalDuration delta_time) -> bool;
 
   private:
-    [[nodiscard]] auto DoUpdate(Duration delta_time) -> bool;
+    [[nodiscard]] auto DoUpdate(oxygen::time::CanonicalDuration delta_time)
+      -> bool;
     void StartEvaluation();
     void NotifyActionCanceled();
 

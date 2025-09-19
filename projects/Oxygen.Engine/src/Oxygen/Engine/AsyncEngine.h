@@ -5,8 +5,6 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
-#include "Oxygen/OxCo/LiveObject.h"
-
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -14,30 +12,40 @@
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::engine {
 class EngineModule;
 class ModuleManager;
+class TimeManager;
 } // namespace oxygen::engine
 
 namespace oxygen {
+namespace time {
+  class SimulationClock;
+  class PresentationClock;
+  class NetworkClock;
+  class AuditClock;
+} // namespace time
 
 class Platform;
 class Graphics;
 
 //! Async engine simulator orchestrating frame phases.
-class AsyncEngine final : public co::LiveObject {
+class AsyncEngine final : public co::LiveObject, public Composition {
+  OXYGEN_TYPED(AsyncEngine)
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> graphics,
-    oxygen::EngineConfig config = {}) noexcept;
+    std::weak_ptr<Graphics> graphics, EngineConfig config = {}) noexcept;
 
   OXGN_NGIN_API ~AsyncEngine() override;
 
@@ -64,7 +72,7 @@ public:
   //! Example:
   //!   if(sim.Completed()) { /* already finished */ }
   //!   co_await sim.Completed(); // suspend until finished (if not yet)
-  [[nodiscard]] auto& Completed() noexcept { return completed_; }
+  [[nodiscard]] auto Completed() noexcept -> auto& { return completed_; }
   [[nodiscard]] auto Completed() const noexcept
   {
     return completed_.Triggered();
@@ -89,8 +97,26 @@ public:
   OXGN_NGIN_API auto UnregisterModule(std::string_view name) noexcept -> void;
 
   //! Get current engine configuration
-  [[nodiscard]] auto GetEngineConfig() const noexcept
-    -> const oxygen::EngineConfig&;
+  OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
+
+  // Clock accessors
+  OXGN_NGIN_NDAPI auto GetPhysicalClock() const noexcept
+    -> const time::PhysicalClock&;
+  OXGN_NGIN_NDAPI auto GetPhysicalClock() noexcept -> time::PhysicalClock&;
+
+  OXGN_NGIN_NDAPI auto GetSimulationClock() const noexcept
+    -> const time::SimulationClock&;
+  OXGN_NGIN_NDAPI auto GetSimulationClock() noexcept -> time::SimulationClock&;
+  OXGN_NGIN_NDAPI auto GetPresentationClock() const noexcept
+    -> const time::PresentationClock&;
+  OXGN_NGIN_NDAPI auto GetPresentationClock() noexcept
+    -> time::PresentationClock&;
+  OXGN_NGIN_NDAPI auto GetNetworkClock() const noexcept
+    -> const time::NetworkClock&;
+  OXGN_NGIN_NDAPI auto GetNetworkClock() noexcept -> time::NetworkClock&;
+  OXGN_NGIN_NDAPI auto GetAuditClock() const noexcept
+    -> const time::AuditClock&;
+  OXGN_NGIN_NDAPI auto GetAuditClock() noexcept -> time::AuditClock&;
 
 private:
   auto Shutdown() -> co::Co<>;
@@ -167,32 +193,24 @@ private:
   // std::vector<AsyncJobState> async_jobs_ {};
 
   bool shutdown_requested_ { false };
-  oxygen::EngineConfig config_; // Engine configuration
+  EngineConfig config_; // Engine configuration
   co::Nursery* nursery_ { nullptr };
   frame::SequenceNumber frame_number_ { 0 };
   frame::Slot frame_slot_ { 0 };
 
-  // Timing helpers
-  std::chrono::steady_clock::time_point frame_start_ts_ {};
-  std::chrono::microseconds phase_accum_ { 0 };
   engine::FrameSnapshot snapshot_ {};
-
-  // Enhanced timing state
-  std::chrono::steady_clock::time_point last_frame_time_;
-  std::chrono::microseconds accumulated_fixed_time_ { 0 };
-  // Targeted frame scheduler deadline (monotonic, deadline-based pacing)
-  std::chrono::steady_clock::time_point next_frame_deadline_ {};
-
-  // Frame time smoothing
-  static constexpr size_t kTimingSamples = 10;
-  std::array<std::chrono::microseconds, kTimingSamples> timing_history_ {};
-  size_t timing_index_ { 0 };
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;
 
   // Module management system
   std::unique_ptr<engine::ModuleManager> module_manager_;
+
+  // Time system integration
+  time::PhysicalTime frame_start_ts_ {};
+  time::PhysicalTime next_frame_deadline_ {};
+  time::PhysicalClock physical_clock_ {};
+  engine::TimeManager* time_manager_ { nullptr }; // Owned by Composition
 
   // Signals completion when FrameLoop exits.
   co::Event completed_ {};

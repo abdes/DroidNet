@@ -8,20 +8,21 @@
 
 #include <memory>
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
-namespace {
-
-using oxygen::Duration;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
 using oxygen::input::ActionValue;
+using oxygen::time::CanonicalDuration;
+using namespace std::chrono_literals;
 
-NOLINT_TEST(ActionTriggerChain_Basic, TriggersWhenLinkedActionTriggers)
+namespace {
+
+NOLINT_TEST(ActionTriggerChain, TriggersWhenLinkedActionTriggers)
 {
   auto linked
     = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
@@ -41,27 +42,27 @@ NOLINT_TEST(ActionTriggerChain_Basic, TriggersWhenLinkedActionTriggers)
 
   // Act: chain observes linked action ongoing, but needs local press to fire
   ActionValue press_down { true };
-  chain.UpdateState(press_down, Duration::zero());
+  chain.UpdateState(press_down, CanonicalDuration {});
 
   // Assert: chain fires on local press while prerequisite active
   EXPECT_TRUE(chain.IsTriggered());
 
   // No repeat while held
-  chain.UpdateState(ActionValue { true }, Duration::zero());
+  chain.UpdateState(ActionValue { true }, CanonicalDuration {});
   EXPECT_FALSE(chain.IsTriggered());
 
   // Rising edge again should fire
-  chain.UpdateState(ActionValue { false }, Duration::zero());
-  chain.UpdateState(ActionValue { true }, Duration::zero());
+  chain.UpdateState(ActionValue { false }, CanonicalDuration {});
+  chain.UpdateState(ActionValue { true }, CanonicalDuration {});
   EXPECT_TRUE(chain.IsTriggered());
 }
 
-NOLINT_TEST(ActionTriggerChain_Edge, DoesNotTriggerWhenUnlinkedOrIdle)
+NOLINT_TEST(ActionTriggerChain, DoesNotTriggerWhenUnlinkedOrIdle)
 {
   // Unlinked
   ActionTriggerChain chain_unlinked;
   ActionValue dummy { false };
-  chain_unlinked.UpdateState(dummy, Duration::zero());
+  chain_unlinked.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(chain_unlinked.IsTriggered());
 
   // Linked but idle
@@ -71,7 +72,7 @@ NOLINT_TEST(ActionTriggerChain_Edge, DoesNotTriggerWhenUnlinkedOrIdle)
   chain_linked.SetLinkedAction(linked);
   linked->BeginFrameTracking();
   // No trigger update on linked -> remains idle
-  chain_linked.UpdateState(dummy, Duration::zero());
+  chain_linked.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(chain_linked.IsTriggered());
   EXPECT_TRUE(chain_linked.IsIdle());
 
@@ -84,13 +85,13 @@ NOLINT_TEST(ActionTriggerChain_Edge, DoesNotTriggerWhenUnlinkedOrIdle)
       .canceled = false,
     },
     ActionValue { false });
-  chain_linked.UpdateState(ActionValue { false }, Duration::zero());
+  chain_linked.UpdateState(ActionValue { false }, CanonicalDuration {});
   EXPECT_FALSE(chain_linked.IsTriggered());
-  chain_linked.UpdateState(ActionValue { true }, Duration::zero());
+  chain_linked.UpdateState(ActionValue { true }, CanonicalDuration {});
   EXPECT_TRUE(chain_linked.IsTriggered());
 }
 
-NOLINT_TEST(ActionTriggerChain_Options, ExpiresArmAfterMaxDelay)
+NOLINT_TEST(ActionTriggerChain, ExpiresArmAfterMaxDelay)
 {
   auto linked
     = std::make_shared<Action>("C", oxygen::input::ActionValueType::kBool);
@@ -110,14 +111,14 @@ NOLINT_TEST(ActionTriggerChain_Options, ExpiresArmAfterMaxDelay)
     ActionValue { false });
 
   // Advance time beyond window without local press
-  chain.UpdateState(ActionValue { false }, oxygen::SecondsToDuration(0.11F));
+  chain.UpdateState(ActionValue { false }, CanonicalDuration { 110ms });
 
   // Now press: should NOT fire because window expired
-  chain.UpdateState(ActionValue { true }, Duration::zero());
+  chain.UpdateState(ActionValue { true }, CanonicalDuration {});
   EXPECT_FALSE(chain.IsTriggered());
 }
 
-NOLINT_TEST(ActionTriggerChain_Options, RequiresPrerequisiteHeldOnPress)
+NOLINT_TEST(ActionTriggerChain, RequiresPrerequisiteHeldOnPress)
 {
   auto linked
     = std::make_shared<Action>("D", oxygen::input::ActionValueType::kBool);
@@ -146,7 +147,7 @@ NOLINT_TEST(ActionTriggerChain_Options, RequiresPrerequisiteHeldOnPress)
     ActionValue { false });
 
   // Even with local press, requirement of held prerequisite blocks firing
-  chain.UpdateState(ActionValue { true }, Duration::zero());
+  chain.UpdateState(ActionValue { true }, CanonicalDuration {});
   EXPECT_FALSE(chain.IsTriggered());
 }
 

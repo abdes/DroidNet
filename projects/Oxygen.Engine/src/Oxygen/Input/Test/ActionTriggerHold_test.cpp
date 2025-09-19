@@ -6,20 +6,20 @@
 
 //! Tests for ActionTriggerHold
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
-namespace {
-
 using oxygen::Axis1D;
-using oxygen::Duration;
-using oxygen::SecondsToDuration;
 using oxygen::input::ActionTriggerHold;
 using oxygen::input::ActionValue;
+using oxygen::time::CanonicalDuration;
+using namespace std::chrono_literals;
 
-NOLINT_TEST(ActionTriggerHold_Basic, TriggersAfterThreshold)
+namespace {
+
+NOLINT_TEST(ActionTriggerHold, TriggersAfterThreshold)
 {
   ActionTriggerHold trigger;
   trigger.SetHoldDurationThreshold(0.1F);
@@ -29,25 +29,25 @@ NOLINT_TEST(ActionTriggerHold_Basic, TriggersAfterThreshold)
 
   // Press and accumulate time
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross threshold
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Held more -> one-shot, no further triggers
-  trigger.UpdateState(v, SecondsToDuration(0.5F));
+  trigger.UpdateState(v, CanonicalDuration { 500ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Release -> completed
   v.Update(false);
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsCompleted());
 }
 
 //! Does not trigger if released before threshold
-NOLINT_TEST(ActionTriggerHold_Edge, NoTriggerIfReleasedBeforeThreshold)
+NOLINT_TEST(ActionTriggerHold, NoTriggerIfReleasedBeforeThreshold)
 {
   ActionTriggerHold trigger;
   trigger.SetHoldDurationThreshold(0.2F);
@@ -55,16 +55,16 @@ NOLINT_TEST(ActionTriggerHold_Edge, NoTriggerIfReleasedBeforeThreshold)
 
   ActionValue v { false };
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.1F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   v.Update(false);
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
 
   EXPECT_FALSE(trigger.IsTriggered());
   EXPECT_TRUE(trigger.IsCanceled());
 }
 
 //! Fires when held exactly at the threshold boundary (>= threshold)
-NOLINT_TEST(ActionTriggerHold_Boundary, FiresAtExactThreshold)
+NOLINT_TEST(ActionTriggerHold, FiresAtExactThreshold)
 {
   // Arrange
   ActionTriggerHold trigger;
@@ -74,19 +74,19 @@ NOLINT_TEST(ActionTriggerHold_Boundary, FiresAtExactThreshold)
 
   // Act: press and hold exactly the threshold duration
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.20F));
+  trigger.UpdateState(v, CanonicalDuration { 200ms });
 
   // Assert
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Release -> completed
   v.Update(false);
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsCompleted());
 }
 
 //! Axis inputs: triggers only when abs(value) held long enough
-NOLINT_TEST(ActionTriggerHold_Axis, TriggersOnAxisAboveThreshold)
+NOLINT_TEST(ActionTriggerHold, TriggersOnAxisAboveThreshold)
 {
   // Arrange
   ActionTriggerHold trigger;
@@ -97,30 +97,30 @@ NOLINT_TEST(ActionTriggerHold_Axis, TriggersOnAxisAboveThreshold)
 
   // Below threshold -> accumulate but no ongoing state; ensure no trigger
   v.Update(Axis1D { 0.39F });
-  trigger.UpdateState(v, SecondsToDuration(0.20F));
+  trigger.UpdateState(v, CanonicalDuration { 200ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross positive threshold and hold
   v.Update(Axis1D { 0.41F });
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_FALSE(trigger.IsTriggered());
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Release -> completed
   v.Update(Axis1D { 0.0F });
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsCompleted());
 
   // Negative side: cross threshold and hold
   v.Update(Axis1D { -0.50F });
-  trigger.UpdateState(v, SecondsToDuration(0.10F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   EXPECT_TRUE(trigger.IsTriggered());
 }
 
 //! When OneShot(false), Hold can retrigger while held (every update >=
 //! threshold)
-NOLINT_TEST(ActionTriggerHold_Repeat, RepeatsIfOneShotDisabled)
+NOLINT_TEST(ActionTriggerHold, RepeatsIfOneShotDisabled)
 {
   // Arrange
   ActionTriggerHold trigger;
@@ -130,22 +130,22 @@ NOLINT_TEST(ActionTriggerHold_Repeat, RepeatsIfOneShotDisabled)
 
   // Act: press and hold; first crossing -> trigger
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Still held and beyond threshold -> triggers again since OneShot is false
-  trigger.UpdateState(v, SecondsToDuration(0.05F));
+  trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Release -> no more triggers, not completed (since not part of completed
   // semantics), but IsIdle
   v.Update(false);
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsIdle());
 }
 
 //! OneShot(true): no extra triggers while continuously held beyond first fire
-NOLINT_TEST(ActionTriggerHold_OneShot, NoExtraTriggersWhileHeld)
+NOLINT_TEST(ActionTriggerHold, NoExtraTriggersWhileHeld)
 {
   // Arrange
   ActionTriggerHold trigger;
@@ -155,24 +155,24 @@ NOLINT_TEST(ActionTriggerHold_OneShot, NoExtraTriggersWhileHeld)
 
   // Act: press and hold; just below threshold -> no trigger
   v.Update(true);
-  trigger.UpdateState(v, SecondsToDuration(0.04F));
+  trigger.UpdateState(v, CanonicalDuration { 40ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross threshold -> trigger once
-  trigger.UpdateState(v, SecondsToDuration(0.01F));
+  trigger.UpdateState(v, CanonicalDuration { 10ms });
   EXPECT_TRUE(trigger.IsTriggered());
 
   // Keep holding well beyond threshold -> no further triggers
-  trigger.UpdateState(v, SecondsToDuration(0.10F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   EXPECT_FALSE(trigger.IsTriggered());
-  trigger.UpdateState(v, SecondsToDuration(0.10F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   EXPECT_FALSE(trigger.IsTriggered());
-  trigger.UpdateState(v, SecondsToDuration(0.10F));
+  trigger.UpdateState(v, CanonicalDuration { 100ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Release -> completed
   v.Update(false);
-  trigger.UpdateState(v, Duration::zero());
+  trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsCompleted());
 }
 

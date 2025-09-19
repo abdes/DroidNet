@@ -8,21 +8,21 @@
 
 #include <memory>
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
-namespace {
-
-using oxygen::Duration;
-using oxygen::SecondsToDuration;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerCombo;
 using oxygen::input::ActionValue;
+using oxygen::time::CanonicalDuration;
+using namespace std::chrono_literals;
 
-NOLINT_TEST(ActionTriggerCombo_Basic, TriggersWhenStepsCompleteInOrder)
+namespace {
+
+NOLINT_TEST(ActionTriggerCombo, TriggersWhenStepsCompleteInOrder)
 {
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
@@ -44,7 +44,7 @@ NOLINT_TEST(ActionTriggerCombo_Basic, TriggersWhenStepsCompleteInOrder)
 
   // Update combo
   ActionValue dummy { false };
-  combo.UpdateState(dummy, SecondsToDuration(0.1F));
+  combo.UpdateState(dummy, CanonicalDuration { 100ms });
   EXPECT_FALSE(combo.IsTriggered());
 
   // Step 2: B triggers within time
@@ -58,11 +58,11 @@ NOLINT_TEST(ActionTriggerCombo_Basic, TriggersWhenStepsCompleteInOrder)
     },
     ActionValue { false });
 
-  combo.UpdateState(dummy, SecondsToDuration(0.1F));
+  combo.UpdateState(dummy, CanonicalDuration { 100ms });
   EXPECT_TRUE(combo.IsTriggered());
 }
 
-NOLINT_TEST(ActionTriggerCombo_Edge, BreakerResetsProgress)
+NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
 {
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
@@ -86,7 +86,9 @@ NOLINT_TEST(ActionTriggerCombo_Edge, BreakerResetsProgress)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.1F));
+  combo.UpdateState(dummy,
+    CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(0.1F)) });
 
   // Breaker triggers -> should reset
   X->BeginFrameTracking();
@@ -98,7 +100,7 @@ NOLINT_TEST(ActionTriggerCombo_Edge, BreakerResetsProgress)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
 
   // B triggers (out-of-order) -> should not complete
   B->BeginFrameTracking();
@@ -110,11 +112,11 @@ NOLINT_TEST(ActionTriggerCombo_Edge, BreakerResetsProgress)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(combo.IsTriggered());
 }
 
-NOLINT_TEST(ActionTriggerCombo_Edge, OutOfOrderStepResets)
+NOLINT_TEST(ActionTriggerCombo, OutOfOrderStepResets)
 {
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
@@ -134,7 +136,7 @@ NOLINT_TEST(ActionTriggerCombo_Edge, OutOfOrderStepResets)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(combo.IsTriggered());
 }
 
@@ -147,7 +149,7 @@ NOLINT_TEST(ActionTriggerCombo_Edge, OutOfOrderStepResets)
 namespace {
 
 //! Step timeout resets combo if exceeded (timeout applies from step 2 onwards)
-NOLINT_TEST(ActionTriggerCombo_Timing, StepTimeoutResets)
+NOLINT_TEST(ActionTriggerCombo, StepTimeoutResets)
 {
   // Arrange
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
@@ -168,17 +170,17 @@ NOLINT_TEST(ActionTriggerCombo_Timing, StepTimeoutResets)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
 
   // Wait beyond B's allowed window
   // Clear per-action frame states to avoid residual Triggered flags, and
   // accumulate timeout across two updates to ensure deterministic reset
   A->BeginFrameTracking();
   B->BeginFrameTracking();
-  combo.UpdateState(dummy, SecondsToDuration(0.30F));
+  combo.UpdateState(dummy, CanonicalDuration { 300ms });
   A->BeginFrameTracking();
   B->BeginFrameTracking();
-  combo.UpdateState(dummy, SecondsToDuration(0.30F));
+  combo.UpdateState(dummy, CanonicalDuration { 300ms });
 
   // Now trigger B -> should not complete (combo reset to step 0)
   B->BeginFrameTracking();
@@ -190,12 +192,12 @@ NOLINT_TEST(ActionTriggerCombo_Timing, StepTimeoutResets)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(combo.IsTriggered());
 }
 
 //! Boundary: completing within exactly the allowed delay should succeed
-NOLINT_TEST(ActionTriggerCombo_Timing, BoundaryExactDelaySucceeds)
+NOLINT_TEST(ActionTriggerCombo, BoundaryExactDelaySucceeds)
 {
   // Arrange
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
@@ -216,10 +218,10 @@ NOLINT_TEST(ActionTriggerCombo_Timing, BoundaryExactDelaySucceeds)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
 
   // Wait exactly boundary
-  combo.UpdateState(dummy, SecondsToDuration(0.10F));
+  combo.UpdateState(dummy, CanonicalDuration { 100ms });
 
   // Step 2 at boundary -> should complete
   B->BeginFrameTracking();
@@ -231,14 +233,14 @@ NOLINT_TEST(ActionTriggerCombo_Timing, BoundaryExactDelaySucceeds)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_TRUE(combo.IsTriggered());
 }
 
 //! First step has no timeout; long wait before B is acceptable as long as
 //! B's own window is measured after step 1 is done (here we trigger B
 //! immediately).
-NOLINT_TEST(ActionTriggerCombo_Timing, FirstStepHasNoTimeout)
+NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
 {
   // Arrange
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
@@ -250,7 +252,7 @@ NOLINT_TEST(ActionTriggerCombo_Timing, FirstStepHasNoTimeout)
   ActionValue dummy { false };
 
   // Wait a long time before even starting the combo
-  combo.UpdateState(dummy, SecondsToDuration(10.0F));
+  combo.UpdateState(dummy, CanonicalDuration { 10s });
   EXPECT_FALSE(combo.IsTriggered());
 
   // Start with A
@@ -263,7 +265,7 @@ NOLINT_TEST(ActionTriggerCombo_Timing, FirstStepHasNoTimeout)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
 
   // Trigger B immediately within its window
   B->BeginFrameTracking();
@@ -275,12 +277,12 @@ NOLINT_TEST(ActionTriggerCombo_Timing, FirstStepHasNoTimeout)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_TRUE(combo.IsTriggered());
 }
 
 //! After a successful combo, the next sequence should start fresh at step 0
-NOLINT_TEST(ActionTriggerCombo_Repeat, ResetsAfterCompletion)
+NOLINT_TEST(ActionTriggerCombo, ResetsAfterCompletion)
 {
   // Arrange
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
@@ -301,7 +303,7 @@ NOLINT_TEST(ActionTriggerCombo_Repeat, ResetsAfterCompletion)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   B->BeginFrameTracking();
   B->UpdateState(
     Action::State {
@@ -311,7 +313,7 @@ NOLINT_TEST(ActionTriggerCombo_Repeat, ResetsAfterCompletion)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_TRUE(combo.IsTriggered());
 
   // Start again: must require A first, B alone shouldn't complete
@@ -324,7 +326,7 @@ NOLINT_TEST(ActionTriggerCombo_Repeat, ResetsAfterCompletion)
       .canceled = false,
     },
     dummy);
-  combo.UpdateState(dummy, SecondsToDuration(0.0F));
+  combo.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(combo.IsTriggered());
 }
 

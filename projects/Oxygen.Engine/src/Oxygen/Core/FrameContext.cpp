@@ -141,14 +141,12 @@ auto FrameContext::GetModuleTimingData() const noexcept
   return module_timing_;
 }
 
-auto FrameContext::GetGameDeltaTime() const noexcept
-  -> std::chrono::microseconds
+auto FrameContext::GetGameDeltaTime() const noexcept -> time::CanonicalDuration
 {
   return module_timing_.game_delta_time;
 }
 
-auto FrameContext::GetFixedDeltaTime() const noexcept
-  -> std::chrono::microseconds
+auto FrameContext::GetFixedDeltaTime() const noexcept -> time::CanonicalDuration
 {
   return module_timing_.fixed_delta_time;
 }
@@ -219,19 +217,18 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   {
     std::unique_lock view_lock(views_mutex_);
     // Erase-remove idiom: keep views whose surface != removed_surface_ptr
-    auto new_end
-      = std::remove_if(views_.begin(), views_.end(), [&](const auto& vptr) {
-          DCHECK_NOTNULL_F(vptr);
-          if (auto surf_res = vptr->GetSurface()) {
-            const auto& surf = surf_res.value().get();
-            if (&surf == removed_surface_ptr) {
-              LOG_F(INFO, "Removing view '{}' due to surface removal",
-                vptr->GetName());
-              return true; // remove this view
-            }
-          }
-          return false;
-        });
+    auto new_end = std::ranges::remove_if(views_, [&](const auto& view_ptr) {
+      DCHECK_NOTNULL_F(view_ptr);
+      if (auto surf_res = view_ptr->GetSurface()) {
+        const auto& surf = surf_res.value().get();
+        if (&surf == removed_surface_ptr) {
+          LOG_F(INFO, "Removing view '{}' due to surface removal",
+            view_ptr->GetName());
+          return true; // remove this view
+        }
+      }
+      return false;
+    }).begin();
 
     if (new_end != views_.end()) {
       views_.erase(new_end, views_.end());
@@ -403,7 +400,7 @@ auto FrameContext::PopulateGameStateSnapshot(
   // function to guarantee consistent copies of coordinator-owned state.
   out.views.clear();
   out.views.resize(views_.size());
-  for (const auto view_ptr : views_) {
+  for (auto view_ptr : views_) {
     out.views.emplace_back(std::move(view_ptr));
   }
 

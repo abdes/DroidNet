@@ -95,10 +95,11 @@ void Action::RecordTransition(
   // TODO(abdes): Timebase consistency — use engine time consistently for
   // timestamps. For now, use SecondsToDuration(0) placeholder or a suitable
   // engine clock when available in this TU.
-  frame_transitions_.push_back({ .from_state = from,
+  frame_transitions_.push_back({
+    .from_state = from,
     .to_state = to,
-    .timestamp = std::chrono::steady_clock::now(),
-    .value_at_transition = value });
+    .value_at_transition = value,
+  });
 }
 
 // --- Convenience per-frame edge queries -------------------------------------

@@ -17,6 +17,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
@@ -91,7 +92,7 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
     for (const auto& [priority, is_active, mapping_context] :
       std::ranges::reverse_view(mapping_contexts_)) {
       if (is_active) {
-        if (mapping_context->Update(Duration::zero())) {
+        if (mapping_context->Update(oxygen::time::CanonicalDuration {})) {
           DLOG_F(1,
             "Stopping updates to mapping contexts after event (input "
             "consumed)");
@@ -121,7 +122,7 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
   // Per-frame pass: advance time for triggers using the game delta time.
   // Skip this pass when delta time is zero to avoid immediately clearing
   // transient motion/wheel values after micro-updates in the same frame.
-  if (context.GetGameDeltaTime() > Duration::zero()) {
+  if (context.GetGameDeltaTime() > time::CanonicalDuration {}) {
     for (const auto& [priority, is_active, mapping_context] :
       std::ranges::reverse_view(mapping_contexts_)) {
       if (is_active) {
@@ -265,30 +266,6 @@ void InputSystem::HandleInput(const InputSlot& slot, const InputEvent& event)
     }
   }
 }
-
-#if 0
-void InputSystem::Update(const SystemUpdateContext& update_context)
-{
-  // iterate over mapping contexts in the reverse order (higher priority first)
-  for (const auto& [priority, is_active, mapping_context] :
-    std::ranges::reverse_view(mapping_contexts_)) {
-    if (is_active) {
-      if (mapping_context->Update(update_context.delta_time)) {
-        // Input is consumed
-        DLOG_F(1, "Stopping updates to mapping contexts (input consumed)");
-        break;
-      }
-    }
-  }
-
-  // Reset the triggered state of all actions at each tick. The state will be
-  // re-evaluated fresh for use by chained action triggers and any listeners on
-  // the action state changes.
-  for (const auto& action : actions_) {
-    action->ClearTriggeredState();
-  }
-}
-#endif
 
 void InputSystem::AddAction(const std::shared_ptr<Action>& action)
 {

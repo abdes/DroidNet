@@ -52,11 +52,13 @@ set(
   "AsyncEngine.h"
   "InputHandler.h"
   "ModuleManager.h"
+  "TimeManager.h"
 )
 set(
   OXYGEN_ENGINE_PRIVATE_SOURCES
   "AsyncEngine.cpp"
   "ModuleManager.cpp"
+  "TimeManager.cpp"
 )
 
 target_sources(

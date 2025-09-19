@@ -20,6 +20,7 @@ using oxygen::input::ActionTriggerDown;
 using oxygen::input::ActionTriggerHoldAndRelease;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
+using oxygen::input::ActionValueType;
 using oxygen::input::InputActionMapping;
 using oxygen::input::InputMappingContext;
 using oxygen::input::testing::InputSystemTest;
@@ -49,18 +50,13 @@ NOLINT_TEST_F(
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange ---------------------------------------------------------------
-    auto attack = std::make_shared<Action>(
-      "Attack", oxygen::input::ActionValueType::kBool);
-    auto charged = std::make_shared<Action>(
-      "ChargedAttack", oxygen::input::ActionValueType::kBool);
-    auto jump
-      = std::make_shared<Action>("Jump", oxygen::input::ActionValueType::kBool);
-    auto move
-      = std::make_shared<Action>("Move", oxygen::input::ActionValueType::kBool);
-    auto roll
-      = std::make_shared<Action>("Roll", oxygen::input::ActionValueType::kBool);
-    auto dodge = std::make_shared<Action>(
-      "DodgeRoll", oxygen::input::ActionValueType::kBool);
+    auto attack = std::make_shared<Action>("Attack", ActionValueType::kBool);
+    auto charged
+      = std::make_shared<Action>("ChargedAttack", ActionValueType::kBool);
+    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+    auto move = std::make_shared<Action>("Move", ActionValueType::kBool);
+    auto roll = std::make_shared<Action>("Roll", ActionValueType::kBool);
+    auto dodge = std::make_shared<Action>("DodgeRoll", ActionValueType::kBool);
 
     // Consumption rules so mutually-exclusive actions suppress others
     attack->SetConsumesInput(true);
@@ -256,8 +252,12 @@ NOLINT_TEST_F(
       // Set timing
       {
         oxygen::engine::ModuleTimingData timing;
-        timing.game_delta_time = std::chrono::milliseconds(step.dt_ms);
-        timing.fixed_delta_time = std::chrono::milliseconds(step.dt_ms);
+        timing.game_delta_time = oxygen::time::CanonicalDuration {
+          std::chrono::milliseconds(step.dt_ms)
+        };
+        timing.fixed_delta_time = oxygen::time::CanonicalDuration {
+          std::chrono::milliseconds(step.dt_ms)
+        };
         frame_context_->SetModuleTimingData(timing, engine_tag);
       }
 

@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Input/ActionTriggers.h>
-
 #include <algorithm>
 #include <cassert>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 
 using oxygen::input::ActionTrigger;
@@ -27,16 +26,16 @@ using oxygen::input::ActionTriggerTimed;
 
 //-- ActionTrigger -------------------------------------------------------------
 
-void ActionTrigger::UpdateState(
-  const ActionValue& action_value, const Duration delta_time)
+void ActionTrigger::UpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time)
 {
   triggered_ = DoUpdateState(action_value, delta_time);
 }
 
 //-- ActionTriggerPressed ------------------------------------------------------
 
-auto ActionTriggerPressed::DoUpdateState(
-  const ActionValue& action_value, Duration /*delta_time*/) -> bool
+auto ActionTriggerPressed::DoUpdateState(const ActionValue& action_value,
+  oxygen::time::CanonicalDuration /*delta_time*/) -> bool
 {
   if (!depleted_ && action_value.IsActuated(GetActuationThreshold())) {
     SetTriggerState(State::kIdle);
@@ -51,8 +50,8 @@ auto ActionTriggerPressed::DoUpdateState(
 
 //-- ActionTriggerReleased -----------------------------------------------------
 
-auto ActionTriggerReleased::DoUpdateState(
-  const ActionValue& action_value, Duration /*delta_time*/) -> bool
+auto ActionTriggerReleased::DoUpdateState(const ActionValue& action_value,
+  oxygen::time::CanonicalDuration /*delta_time*/) -> bool
 {
   // We only support these button family of input events
   if (IsIdle() && action_value.IsActuated(GetActuationThreshold())) {
@@ -70,8 +69,8 @@ auto ActionTriggerReleased::DoUpdateState(
 
 ActionTriggerDown::ActionTriggerDown() { SetActuationThreshold(0.5F); }
 
-auto ActionTriggerDown::DoUpdateState(
-  const ActionValue& action_value, Duration /*delta_time*/) -> bool
+auto ActionTriggerDown::DoUpdateState(const ActionValue& action_value,
+  oxygen::time::CanonicalDuration /*delta_time*/) -> bool
 {
   // We only support these button family of input events
   if (action_value.IsActuated(GetActuationThreshold())) {
@@ -90,12 +89,12 @@ auto ActionTriggerDown::DoUpdateState(
 
 //-- ActionTriggerTimed --------------------------------------------------------
 
-auto ActionTriggerTimed::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerTimed::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   if (action_value.IsActuated(GetActuationThreshold())) {
     if (IsIdle() || (IsTriggered() && IsOngoing())) {
-      held_duration_ = Duration::zero();
+      held_duration_ = {};
       SetTriggerState(State::kOngoing);
     }
     held_duration_ += delta_time;
@@ -107,8 +106,8 @@ auto ActionTriggerTimed::DoUpdateState(
 
 //-- ActionTriggerHold ---------------------------------------------------------
 
-auto ActionTriggerHold::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerHold::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   if (IsCompleted()) {
     triggered_once_ = false;
@@ -125,8 +124,8 @@ auto ActionTriggerHold::DoUpdateState(
 
 //-- ActionTriggerHoldAndRelease -----------------------------------------------
 
-auto ActionTriggerHoldAndRelease::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerHoldAndRelease::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   ActionTriggerTimed::DoUpdateState(action_value, delta_time);
   if (!action_value.IsActuated(GetActuationThreshold())) {
@@ -139,15 +138,15 @@ auto ActionTriggerHoldAndRelease::DoUpdateState(
 
 //-- ActionTriggerPulse --------------------------------------------------------
 
-auto ActionTriggerPulse::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerPulse::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   // Reset counters on full idle
   if (IsIdle() && GetPreviousState() == State::kIdle) {
     trigger_count_ = 0;
-    leftover_ = Duration::zero();
-    time_since_actuation_ = Duration::zero();
-    accum_since_last_ = Duration::zero();
+    leftover_ = {};
+    time_since_actuation_ = {};
+    accum_since_last_ = {};
   }
 
   // Update base timed state and timers
@@ -169,21 +168,30 @@ auto ActionTriggerPulse::DoUpdateState(
   const bool just_started = (GetPreviousState() == State::kIdle) && IsOngoing();
   if (just_started && trigger_on_start_) {
     ++trigger_count_;
-    accum_since_last_ = Duration::zero();
+    accum_since_last_ = {};
     return true;
   }
 
   // Compute current effective interval (apply optional ramp)
   time_since_actuation_ += delta_time;
-  Duration effective_interval = interval_;
-  if (ramp_enabled_ && ramp_duration_ > Duration::zero()) {
-    const auto t = std::clamp(static_cast<float>(time_since_actuation_.count())
-        / static_cast<float>(ramp_duration_.count()),
+  auto effective_interval = interval_;
+  if (ramp_enabled_
+    && static_cast<std::chrono::nanoseconds>(ramp_duration_)
+      > std::chrono::nanoseconds::zero()) {
+    const auto t = std::clamp(
+      static_cast<float>(
+        static_cast<std::chrono::nanoseconds>(time_since_actuation_).count())
+        / static_cast<float>(
+          static_cast<std::chrono::nanoseconds>(ramp_duration_).count()),
       0.0F, 1.0F);
-    const auto start_s = static_cast<float>(ramp_start_.count());
-    const auto end_s = static_cast<float>(ramp_end_.count());
-    const auto lerp_s = start_s + (end_s - start_s) * t;
-    effective_interval = Duration { static_cast<Duration::rep>(lerp_s) };
+    const auto start_ns = static_cast<float>(
+      static_cast<std::chrono::nanoseconds>(ramp_start_).count());
+    const auto end_ns = static_cast<float>(
+      static_cast<std::chrono::nanoseconds>(ramp_end_).count());
+    const auto lerp_ns = start_ns + (end_ns - start_ns) * t;
+    effective_interval = oxygen::time::CanonicalDuration {
+      std::chrono::nanoseconds { static_cast<long long>(lerp_ns) }
+    };
   }
 
   // Accumulate delta toward the next interval
@@ -191,14 +199,16 @@ auto ActionTriggerPulse::DoUpdateState(
 
   // Windowed triggering: fire if within [interval - tolerance, interval +
   // tolerance]
-  const Duration target = effective_interval;
-  const Duration tolerance = jitter_tolerance_;
+  const auto target = effective_interval;
+  const auto tolerance = jitter_tolerance_;
   bool fired = false;
   if (accum_since_last_ + tolerance >= target) {
     // Fire if we're not far overdue. We drop pulses only when the frame is
     // significantly late (>= 2x the interval), which avoids bursty behavior
     // but keeps slightly-late frames responsive.
-    const Duration far_overdue = Duration { target.count() * 2 };
+    const auto far_overdue = oxygen::time::CanonicalDuration {
+      static_cast<std::chrono::nanoseconds>(target) * 2
+    };
     if (accum_since_last_ < far_overdue) {
       // on-time or slightly late
       ++trigger_count_;
@@ -207,7 +217,7 @@ auto ActionTriggerPulse::DoUpdateState(
       if (phase_align_) {
         leftover_ = accum_since_last_ - target;
       } else {
-        leftover_ = Duration::zero();
+        leftover_ = {};
       }
       accum_since_last_ = leftover_;
     } else {
@@ -218,7 +228,7 @@ auto ActionTriggerPulse::DoUpdateState(
       if (phase_align_) {
         leftover_ = accum_since_last_ % target;
       } else {
-        leftover_ = Duration::zero();
+        leftover_ = {};
       }
       accum_since_last_ = leftover_;
     }
@@ -236,7 +246,10 @@ auto ActionTriggerPulse::DoUpdateState(
 
 void ActionTriggerPulse::SetJitterTolerance(const float seconds)
 {
-  jitter_tolerance_ = SecondsToDuration(seconds);
+  jitter_tolerance_ = oxygen::time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(seconds))
+  };
 }
 
 void ActionTriggerPulse::EnablePhaseAlignment(const bool enable)
@@ -247,16 +260,26 @@ void ActionTriggerPulse::EnablePhaseAlignment(const bool enable)
 void ActionTriggerPulse::SetRateRamp(const float start_interval_seconds,
   const float end_interval_seconds, const float ramp_duration_seconds)
 {
-  ramp_start_ = SecondsToDuration(start_interval_seconds);
-  ramp_end_ = SecondsToDuration(end_interval_seconds);
-  ramp_duration_ = SecondsToDuration(ramp_duration_seconds);
-  ramp_enabled_ = ramp_duration_ > Duration::zero();
+  ramp_start_ = oxygen::time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(start_interval_seconds))
+  };
+  ramp_end_ = oxygen::time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(end_interval_seconds))
+  };
+  ramp_duration_ = oxygen::time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(ramp_duration_seconds))
+  };
+  ramp_enabled_ = static_cast<std::chrono::nanoseconds>(ramp_duration_)
+    > std::chrono::nanoseconds::zero();
 }
 
 //-- ActionTriggerTap ----------------------------------------------------------
 
-auto ActionTriggerTap::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerTap::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   ActionTriggerTimed::DoUpdateState(action_value, delta_time);
   // Trigger only on true release (Ongoing -> Idle) within the tap threshold.
@@ -279,8 +302,8 @@ void ActionTriggerChain::SetLinkedAction(std::shared_ptr<Action> action)
   linked_action_ = std::move(action);
 }
 
-auto ActionTriggerChain::DoUpdateState(
-  const ActionValue& action_value, const Duration delta_time) -> bool
+auto ActionTriggerChain::DoUpdateState(const ActionValue& action_value,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   // Chain is a gate: it becomes active only if the prerequisite
   // (linked_action_) is active. Once active, Chain evaluates its own condition
@@ -289,7 +312,7 @@ auto ActionTriggerChain::DoUpdateState(
     SetTriggerState(State::kIdle);
     prev_actuated_ = false;
     armed_ = false;
-    window_elapsed_ = Duration::zero();
+    window_elapsed_ = {};
     disarmed_until_idle_ = false;
     return false;
   }
@@ -299,7 +322,7 @@ auto ActionTriggerChain::DoUpdateState(
     SetTriggerState(State::kIdle);
     prev_actuated_ = false;
     armed_ = false;
-    window_elapsed_ = Duration::zero();
+    window_elapsed_ = {};
     disarmed_until_idle_ = false; // allow re-arming after going idle
     return false;
   }
@@ -311,7 +334,7 @@ auto ActionTriggerChain::DoUpdateState(
     // Arm only once it has actually triggered at least once
     if (linked_action_->IsTriggered()) {
       if (!armed_) {
-        window_elapsed_ = Duration::zero();
+        window_elapsed_ = {};
       }
       armed_ = true;
     }
@@ -325,14 +348,16 @@ auto ActionTriggerChain::DoUpdateState(
   }
 
   // Track max-delay window if enabled
-  if (max_delay_ > Duration::zero()) {
+  if (static_cast<std::chrono::nanoseconds>(max_delay_)
+    > std::chrono::nanoseconds::zero()) {
     window_elapsed_ += delta_time;
-    if (window_elapsed_ > max_delay_) {
+    if (static_cast<std::chrono::nanoseconds>(window_elapsed_)
+      > static_cast<std::chrono::nanoseconds>(max_delay_)) {
       // Expire armed state until prerequisite triggers again
       armed_ = false;
       disarmed_until_idle_ = true;
       prev_actuated_ = false;
-      window_elapsed_ = Duration::zero();
+      window_elapsed_ = {};
       return false;
     }
   }
@@ -352,7 +377,7 @@ auto ActionTriggerChain::DoUpdateState(
       // Once fired, reset the arm; require prerequisite to re-trigger for next
       // chain
       armed_ = false;
-      window_elapsed_ = Duration::zero();
+      window_elapsed_ = {};
     }
   }
   prev_actuated_ = actuated;
@@ -361,7 +386,10 @@ auto ActionTriggerChain::DoUpdateState(
 
 void ActionTriggerChain::SetMaxDelaySeconds(const float seconds)
 {
-  max_delay_ = SecondsToDuration(seconds);
+  max_delay_ = oxygen::time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(seconds))
+  };
 }
 
 void ActionTriggerChain::RequirePrerequisiteHeld(const bool enable)
@@ -378,7 +406,9 @@ void ActionTriggerCombo::AddComboStep(std::shared_ptr<Action> action,
   if (action) {
     combo_steps_.push_back({ .action = std::move(action),
       .completion_states = completion_states,
-      .time_to_complete = SecondsToDuration(time_to_complete_seconds) });
+      .time_to_complete = oxygen::time::CanonicalDuration {
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::duration<float>(time_to_complete_seconds)) } });
   }
 }
 
@@ -412,8 +442,8 @@ void ActionTriggerCombo::RemoveComboBreaker(const uint32_t index)
 
 void ActionTriggerCombo::ClearComboBreakers() { combo_breakers_.clear(); }
 
-auto ActionTriggerCombo::DoUpdateState(
-  const ActionValue& /*action_value*/, const Duration delta_time) -> bool
+auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
+  const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   if (combo_steps_.empty()) {
     return false;
@@ -457,7 +487,7 @@ auto ActionTriggerCombo::DoUpdateState(
     if (occurred_this_frame(step.action, step.completion_states)) {
       // Reset combo on out-of-order future step
       current_step_index_ = 0;
-      waited_time_ = Duration::zero();
+      waited_time_ = {};
       current_step = combo_steps_[current_step_index_];
       break;
     }
@@ -470,7 +500,7 @@ auto ActionTriggerCombo::DoUpdateState(
     if (waited_time_ > current_step.time_to_complete) {
       // Reset combo
       current_step_index_ = 0;
-      waited_time_ = Duration::zero();
+      waited_time_ = {};
       current_step = combo_steps_[current_step_index_];
     }
   }
@@ -478,7 +508,7 @@ auto ActionTriggerCombo::DoUpdateState(
   if (occurred_this_frame(
         current_step.action, current_step.completion_states)) {
     current_step_index_++;
-    waited_time_ = Duration::zero();
+    waited_time_ = {};
     if (current_step_index_ == combo_steps_.size()) {
       current_step_index_ = 0;
       SetTriggerState(State::kIdle);

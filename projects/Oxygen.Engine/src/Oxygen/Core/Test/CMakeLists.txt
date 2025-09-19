@@ -52,3 +52,13 @@ m_gtest_program(
 )
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
+m_gtest_program(
+  Time
+  SOURCES
+    "Time/PhysicalClock_test.cpp"
+    "Time/AuditClock_test.cpp"
+    "Time/SimulationClock_test.cpp"
+    "Time/PresentationClock_test.cpp"
+    "Time/NetworkClock_test.cpp"
+    "Time/Conversion_test.cpp"
+)

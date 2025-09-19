@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/api_export.h>
 
 namespace oxygen {
@@ -34,7 +34,8 @@ namespace input {
     OXGN_NPUT_API void HandleInput(
       const platform::InputSlot& slot, const platform::InputEvent& event) const;
 
-    OXGN_NPUT_API [[nodiscard]] bool Update(Duration delta_time) const;
+    OXGN_NPUT_API [[nodiscard]] bool Update(
+      oxygen::time::CanonicalDuration delta_time) const;
 
     // Flush staged input state from all mappings without producing action
     // edges. Use this when a higher-priority context consumed input to
