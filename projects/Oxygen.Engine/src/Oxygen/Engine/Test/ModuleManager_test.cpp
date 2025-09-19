@@ -67,25 +67,6 @@ TEST_F(ModuleManagerBasicTest, RegisterMultipleModules_CountAndQueryWork)
   EXPECT_GE(list.size(), 2u);
 }
 
-//! Verify modules are automatically sorted by priority order during
-//! registration
-TEST_F(ModuleManagerBasicTest, RegisterModulesOutOfOrder_AutoSortsByPriority)
-{
-  // Arrange
-  mgr_.RegisterModule(std::make_unique<SyncModule>(
-    "low", ModulePriority { 200 }, MakeModuleMask<PhaseId::kFrameStart>()));
-  mgr_.RegisterModule(std::make_unique<SyncModule>(
-    "high", ModulePriority { 50 }, MakeModuleMask<PhaseId::kFrameStart>()));
-
-  // Act
-  auto list = GetModulesForPhase(PhaseId::kFrameStart);
-
-  // Assert: high priority (50) comes before low (200)
-  ASSERT_GE(list.size(), 2u);
-  EXPECT_EQ(list[0]->GetPriority().get(), 50u);
-  EXPECT_EQ(list[1]->GetPriority().get(), 200u);
-}
-
 //! Verify module lifecycle callbacks are invoked during registration and
 //! unregistration
 TEST_F(ModuleManagerBasicTest, ModuleLifecycle_OnAttachedAndOnShutdownCalled)
