@@ -30,6 +30,7 @@ enum class ActionTriggerType : uint8_t {
   kHoldAndRelease,
   kPulse,
   kTap,
+  kChord,
   kActionChain,
   kCombo,
 };
@@ -95,7 +96,8 @@ public:
     return triggered_ && (state_ == State::kIdle);
   }
 
-  void UpdateState(const ActionValue& action_value, Duration delta_time);
+  OXGN_NPUT_API void UpdateState(
+    const ActionValue& action_value, Duration delta_time);
 
 protected:
   enum class State : uint8_t {
@@ -168,7 +170,7 @@ public:
   }
 
 protected:
-  auto DoUpdateState(const ActionValue& action_value,
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
     Duration delta_time [[maybe_unused]]) -> bool override;
 };
 
@@ -316,10 +318,15 @@ private:
 
 //-- ActionTriggerPulse --------------------------------------------------------
 
-// Trigger that fires at an Interval, in seconds, while input is actuated.
-// Completed only fires when the repeat limit is reached or when input is
-// released immediately after being triggered. Otherwise, Canceled is fired when
-// input is released.
+// Trigger that fires at a fixed interval while the input remains actuated.
+// Behavior:
+// - Enters Ongoing as soon as the input actuates (press/down).
+// - Emits Triggered events each time the configured interval elapses while
+//   held (metronome-like behavior).
+// - Cancels when the input is released (Idle after having been Ongoing).
+// Notes:
+// - There is no "completed" terminal state for Pulse; releasing input ends the
+//   pulse sequence via cancellation.
 class ActionTriggerPulse : public ActionTriggerTimed {
 public:
   explicit ActionTriggerPulse() = default;
@@ -349,17 +356,24 @@ public:
     trigger_limit_ = trigger_limit;
   }
 
-  [[nodiscard]] auto IsCompleted() const -> bool override
-  {
-    return ((trigger_count_ == 1) || (trigger_count_ == trigger_limit_))
-      && (IsIdle());
-  }
+  [[nodiscard]] auto IsCompleted() const -> bool override { return false; }
 
   [[nodiscard]] auto IsCanceled() const -> bool override
   {
-    return ((trigger_count_ != 1) && (trigger_count_ < trigger_limit_))
-      && IsIdle() && (GetPreviousState() == State::kOngoing);
+    return IsIdle() && (GetPreviousState() == State::kOngoing);
   }
+
+  //=== Optional stability controls ===---------------------------------------//
+
+  //! Allow slightly late frames to count as on-time pulses
+  OXGN_NPUT_API void SetJitterTolerance(float seconds);
+
+  //! When enabled, carry over overshoot so pulses stay phase-aligned to start
+  OXGN_NPUT_API void EnablePhaseAlignment(bool enable = true);
+
+  //! Linearly ramp the interval from start->end over ramp_duration seconds
+  OXGN_NPUT_API void SetRateRamp(float start_interval_seconds,
+    float end_interval_seconds, float ramp_duration_seconds);
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(
@@ -367,9 +381,22 @@ protected:
 
 private:
   Duration interval_ { std::chrono::seconds { 1 } };
-  bool trigger_on_start_ { true };
+  bool trigger_on_start_ { false };
   uint32_t trigger_limit_ { 0 };
   uint32_t trigger_count_ { 0 };
+
+  // Stability controls
+  Duration jitter_tolerance_ { Duration::zero() };
+  bool phase_align_ { true };
+  Duration ramp_start_ { Duration::zero() };
+  Duration ramp_end_ { Duration::zero() };
+  Duration ramp_duration_ { Duration::zero() };
+  bool ramp_enabled_ { false };
+
+  // Internal accumulators
+  Duration leftover_ { Duration::zero() }; // carry-over past interval
+  Duration time_since_actuation_ { Duration::zero() }; // absolute since press
+  Duration accum_since_last_ { Duration::zero() }; // since last pulse
 };
 
 //-- ActionTriggerTap ----------------------------------------------------------
@@ -386,19 +413,24 @@ public:
 
   [[nodiscard]] auto GetType() const -> ActionTriggerType override
   {
-    return ActionTriggerType::kHoldAndRelease;
+    return ActionTriggerType::kTap;
   }
 
-  void SetTapReleaseThreshold(const float threshold_seconds)
+  void SetTapTimeThreshold(const float threshold_seconds)
   {
     threshold_ = SecondsToDuration(threshold_seconds);
   }
 
-  [[nodiscard]] auto GetTapReleaseThreshold() const { return threshold_; }
+  [[nodiscard]] auto GetTapTimeThreshold() const { return threshold_; }
 
-  // Canceled does not make sense for this trigger
-  // TODO(abdes) restrict events supported for action events
-  [[nodiscard]] auto IsCanceled() const -> bool override { return false; }
+  // Cancel only when released after a press that exceeded the tap window
+  [[nodiscard]] auto IsCanceled() const -> bool override
+  {
+    // We consider it a cancel if we just transitioned Ongoing -> Idle,
+    // did not trigger, and the held duration exceeded the tap threshold.
+    return IsIdle() && (GetPreviousState() == State::kOngoing) && !IsTriggered()
+      && (GetHeldDuration() > threshold_);
+  }
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(
@@ -433,12 +465,32 @@ public:
     return linked_action_;
   }
 
+  //=== Optional temporal/strict controls ===--------------------------------//
+  //! Expire the armed gate if local condition doesn't occur in time.
+  //! 0 seconds disables the window (default disabled).
+  OXGN_NPUT_API void SetMaxDelaySeconds(float seconds);
+
+  //! Require prerequisite to be Ongoing at the instant of local press.
+  OXGN_NPUT_API void RequirePrerequisiteHeld(bool enable = true);
+
 protected:
   OXGN_NPUT_API auto DoUpdateState(
     const ActionValue& action_value, Duration delta_time) -> bool override;
 
 private:
   std::shared_ptr<Action> linked_action_;
+  // Tracks local input edge to implement a simple "press" condition
+  bool prev_actuated_ { false };
+  // Armed once prerequisite has triggered; reset when prerequisite
+  // idles/cancels
+  bool armed_ { false };
+  // Max delay window after arming; 0 disables
+  Duration max_delay_ { Duration::zero() };
+  Duration window_elapsed_ { Duration::zero() };
+  // Require prerequisite to be ongoing at the moment of local press
+  bool require_prereq_held_ { false };
+  // If we expire due to max-delay, don't re-arm until prerequisite idles
+  bool disarmed_until_idle_ { false };
 };
 
 //-- ActionTriggerCombo --------------------------------------------------------
