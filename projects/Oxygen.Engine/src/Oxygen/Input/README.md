@@ -75,7 +75,7 @@ sequenceDiagram
   actor Device
   participant Channel as BroadcastChannel<InputEvent>
   participant IS as InputSystem
-  participant Ctx as InputMappingContext (active, highest->lowest)
+  participant Ctx as InputMappingContext<br>(active, highest->lowest)
   participant Map as InputActionMapping
   participant Trig as ActionTrigger(s)
   participant Act as Action
@@ -83,7 +83,7 @@ sequenceDiagram
   Device->>Channel: InputEvent
   IS->>IS: OnFrameStart(): BeginFrameTracking() on all Actions
   Channel-->>IS: TryReceive()*
-  IS->>IS: ProcessInputEvent(event)\nresolve InputSlot
+  IS->>IS: ProcessInputEvent(event)<br>resolve InputSlot
   IS->>Ctx: HandleInput(slot, event) [reverse priority]
   Ctx->>Map: HandleInput(event)
   Map->>Map: Update internal ActionValue
@@ -92,7 +92,7 @@ sequenceDiagram
   Ctx->>Map: Update(delta_time)
   Map->>Trig: UpdateState(value, dt)*
   Map->>Map: Aggregate explicit/implicit/blocker
-  Map->>Act: UpdateState(triggered, ongoing,\ncompleted=false, canceled=cancel_only, value)
+  Map->>Act: UpdateState(triggered, ongoing,<br>completed=false, canceled=cancel_only, value)
   Map-->>IS: return inputConsumed?
   IS->>IS: stop lower-priority when consumed
   IS->>IS: OnSnapshot(): InputSnapshot(actions)
@@ -133,7 +133,7 @@ sequenceDiagram
     participant Act as Action
 
     Map->>Tr: UpdateState(value, dt)*
-    Tr-->>Map: flags: triggered, ongoing, canceled,<br/>behavior(explicit/implicit/blocker)
+    Tr-->>Map: flags: triggered, ongoing, canceled,<br>behavior(explicit/implicit/blocker)
 
     Map->>Map: anyExplicitTriggered = any(explicit.triggered)
     Map->>Map: anyExplicitOngoing = any(explicit.ongoing)
@@ -141,13 +141,17 @@ sequenceDiagram
     Map->>Map: blocked = any(blocker.triggered)
 
     alt blocked
-      Map->>Act: UpdateState(triggered=false,\nongoing=false,\ncompleted=true,\ncanceled=false)
+      Map->>Act: UpdateState(triggered=false,<br>ongoing=false,<br>completed=true,<br>canceled=false)
     else ((no explicit) or anyExplicitTriggered) and allImplicitsTriggered
-      Map->>Act: UpdateState(triggered=true,\nongoing=false,\ncompleted=false,\ncanceled=false)
+      Map->>Act: UpdateState(triggered=true,<br>ongoing=false,<br>completed=false,<br>canceled=false)
     end
-
-    Note over Map,Act: Mapping writes exactly one snapshot per Update\nwithout preserving previous-frame edges.\nPer-frame edge visibility is managed by\nAction.BeginFrameTracking/EndFrameTracking and the InputSystem frame model.\nMapping may set canceled=true only via CancelInput()\nor when a trigger reports cancellation during this Update.
 ```
+
+> Mapping writes exactly one snapshot per Update without preserving
+> previous-frame edges. Per-frame edge visibility is managed by
+> `Action.BeginFrameTracking/EndFrameTracking` and the `InputSystem` frame model.
+> Mapping may set `canceled=true` only via `CancelInput()`, or when a trigger
+> reports cancellation during this Update.
 
 ## Context priority and input consumption
 
