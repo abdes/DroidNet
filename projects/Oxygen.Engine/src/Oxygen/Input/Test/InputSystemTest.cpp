@@ -24,9 +24,6 @@ void InputSystemTest::SetUp()
   // CRITICAL: Initialize platform input slots mapping
   oxygen::platform::InputSlots::Initialize();
 
-  // Initialize simulation time
-  current_time_ = oxygen::TimePoint(std::chrono::microseconds(0));
-
   // Arrange - Create test broadcast channel for input events
   input_channel_ = std::make_unique<
     oxygen::co::BroadcastChannel<oxygen::platform::InputEvent>>(32);
@@ -54,8 +51,8 @@ void InputSystemTest::SendKeyEvent(
 
   auto key_info = KeyInfo(key, false); // Not a repeat
 
-  auto event = std::make_shared<KeyEvent>(
-    current_time_, kInvalidWindowId, key_info, state);
+  auto event
+    = std::make_shared<KeyEvent>(Now(), kInvalidWindowId, key_info, state);
 
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
@@ -69,7 +66,7 @@ void InputSystemTest::SendMouseButtonEvent(oxygen::platform::MouseButton button,
   using oxygen::platform::MouseButtonEvent;
 
   auto event = std::make_shared<MouseButtonEvent>(
-    current_time_, kInvalidWindowId, position, button, state);
+    Now(), kInvalidWindowId, position, button, state);
 
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
@@ -83,7 +80,7 @@ void InputSystemTest::SendMouseMotion(
   using oxygen::platform::MouseMotionEvent;
 
   auto event = std::make_shared<MouseMotionEvent>(
-    current_time_, kInvalidWindowId, position, SubPixelMotion { dx, dy });
+    Now(), kInvalidWindowId, position, SubPixelMotion { dx, dy });
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
   ASSERT_TRUE(sent) << "Failed to send mouse motion event to broadcast channel";
@@ -96,7 +93,7 @@ void InputSystemTest::SendMouseWheel(
   using oxygen::platform::MouseWheelEvent;
 
   auto event = std::make_shared<MouseWheelEvent>(
-    current_time_, kInvalidWindowId, position, SubPixelMotion { dx, dy });
+    Now(), kInvalidWindowId, position, SubPixelMotion { dx, dy });
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
   ASSERT_TRUE(sent) << "Failed to send mouse wheel event to broadcast channel";

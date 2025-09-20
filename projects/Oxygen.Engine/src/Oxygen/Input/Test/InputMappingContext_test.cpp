@@ -8,6 +8,8 @@
 
 #include <memory>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
@@ -16,7 +18,8 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Input/Test/InputSystemTest.h>
 
 using namespace std::chrono_literals;
 
@@ -29,7 +32,6 @@ using ::testing::SizeIs;
 
 using oxygen::Axis1D;
 using oxygen::Axis2D;
-using oxygen::TimePoint;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
 using oxygen::input::ActionTriggerDown;
@@ -47,19 +49,17 @@ using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::WindowIdType;
 using oxygen::time::CanonicalDuration;
 
-class InputMappingContextTest : public ::testing::Test {
+class InputMappingContextTest : public oxygen::input::testing::InputSystemTest {
 protected:
   void SetUp() override { InputSlots::Initialize(); }
 
-  static auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
+  auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
   {
-    return MouseMotionEvent(
-      TimePoint {}, kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseMotionEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
   }
-  static auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
+  auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
   {
-    return MouseWheelEvent(
-      TimePoint {}, kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseWheelEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
   }
 };
 
@@ -168,7 +168,7 @@ NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
   ctx.AddMapping(m2);
 
   // Act: route a space press to both mappings
-  const KeyEvent key(TimePoint {}, kInvalidWindowId,
+  const KeyEvent key(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key);
@@ -206,7 +206,7 @@ NOLINT_TEST_F(InputMappingContextTest, Update_NoConsumptionProcessesAll)
   ctx.AddMapping(m2);
 
   // Act
-  const KeyEvent key(TimePoint {}, kInvalidWindowId,
+  const KeyEvent key(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key);
@@ -240,7 +240,7 @@ NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_AllMustTrigger)
   ctx.AddMapping(map);
 
   // Act: press space (routes through context)
-  const KeyEvent key_down(TimePoint {}, kInvalidWindowId,
+  const KeyEvent key_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key_down);
@@ -276,7 +276,7 @@ NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_NotAll_NoTrigger)
   ctx.AddMapping(map);
 
   // Act: press, update with short dt so hold not met
-  const KeyEvent key_down(TimePoint {}, kInvalidWindowId,
+  const KeyEvent key_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key_down);
@@ -317,21 +317,21 @@ NOLINT_TEST_F(
   ctxB.AddMapping(map_combo);
 
   // Act 1: Space without Shift -> should not trigger
-  const KeyEvent space_down(TimePoint {}, kInvalidWindowId,
+  const KeyEvent space_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctxB.HandleInput(InputSlots::Space, space_down);
   ctxB.Update(CanonicalDuration {});
   EXPECT_FALSE(act_combo->IsTriggered());
   // Release to reset 'Pressed' trigger depletion
-  const KeyEvent space_up(TimePoint {}, kInvalidWindowId,
+  const KeyEvent space_up(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kReleased);
   ctxB.HandleInput(InputSlots::Space, space_up);
   ctxB.Update(CanonicalDuration {});
 
   // Act 2: Press Shift to arm chain
-  const KeyEvent shift_down(TimePoint {}, kInvalidWindowId,
+  const KeyEvent shift_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kLeftShift, false),
     ButtonState::kPressed);
   ctxA.HandleInput(InputSlots::LeftShift, shift_down);
@@ -440,7 +440,7 @@ NOLINT_TEST_F(InputMappingContextTest, Consumption_OnlyOnTrigger)
   ctx.AddMapping(m2);
 
   // Act: Press Space; m1 should not trigger (chain unmet), m2 should trigger
-  const KeyEvent space_down(TimePoint {}, kInvalidWindowId,
+  const KeyEvent space_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, space_down);

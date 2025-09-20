@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 
@@ -22,6 +23,7 @@ using oxygen::platform::MouseMotionEvent;
 using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::input::KeyInfo;
 using oxygen::platform::sdl::GetKeyName;
+using oxygen::time::PhysicalTime;
 
 namespace {
 auto MapKeyCode(const SDL_Keycode code)
@@ -191,10 +193,11 @@ auto TranslateKeyboardEvent(const SDL_Event& event)
   const ButtonState button_state
     = event.key.down ? ButtonState::kPressed : ButtonState::kReleased;
 
+  // Convert the timestamp to a PhysicalTime time point
+  const auto ts = PhysicalTime { PhysicalTime::UnderlyingType {
+    std::chrono::nanoseconds(event.key.timestamp) } };
   return std::make_unique<KeyEvent>(
-    std::chrono::duration_cast<oxygen::TimePoint>(
-      std::chrono::nanoseconds(event.key.timestamp)),
-    event.key.windowID, key_info, button_state);
+    ts, event.key.windowID, key_info, button_state);
 }
 
 auto MapMouseButton(auto button)
@@ -234,10 +237,10 @@ auto TranslateMouseButtonEvent(const SDL_Event& event)
   const ButtonState button_state
     = event.button.down ? ButtonState::kPressed : ButtonState::kReleased;
 
-  return std::make_unique<MouseButtonEvent>(
-    std::chrono::duration_cast<oxygen::TimePoint>(
-      std::chrono::nanoseconds(event.button.timestamp)),
-    event.key.windowID,
+  // Convert the timestamp to a PhysicalTime time point
+  const auto ts = PhysicalTime { PhysicalTime::UnderlyingType {
+    std::chrono::nanoseconds(event.button.timestamp) } };
+  return std::make_unique<MouseButtonEvent>(ts, event.button.windowID,
     SubPixelPosition {
       .x = event.button.x,
       .y = event.button.y,
@@ -252,18 +255,18 @@ auto TranslateMouseMotionEvent(const SDL_Event& event)
   DLOG_F(2, "dx = {}", event.motion.xrel);
   DLOG_F(2, "dy = {}", event.motion.yrel);
 
-  auto motion_event = std::make_unique<MouseMotionEvent>(
-    std::chrono::duration_cast<oxygen::TimePoint>(
-      std::chrono::nanoseconds(event.motion.timestamp)),
-    event.key.windowID,
-    SubPixelPosition {
-      .x = event.motion.x,
-      .y = event.motion.y,
-    },
-    SubPixelMotion {
-      .dx = event.motion.xrel,
-      .dy = event.motion.yrel,
-    });
+  const auto ts = PhysicalTime { PhysicalTime::UnderlyingType {
+    std::chrono::nanoseconds(event.motion.timestamp) } };
+  auto motion_event
+    = std::make_unique<MouseMotionEvent>(ts, event.motion.windowID,
+      SubPixelPosition {
+        .x = event.motion.x,
+        .y = event.motion.y,
+      },
+      SubPixelMotion {
+        .dx = event.motion.xrel,
+        .dy = event.motion.yrel,
+      });
   return motion_event;
 }
 
@@ -277,10 +280,9 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
   const auto direction
     = event.wheel.direction == SDL_MOUSEWHEEL_NORMAL ? 1.0F : -1.0F;
 
-  return std::make_unique<MouseWheelEvent>(
-    std::chrono::duration_cast<oxygen::TimePoint>(
-      std::chrono::nanoseconds(event.wheel.timestamp)),
-    event.key.windowID,
+  const auto ts = PhysicalTime { PhysicalTime::UnderlyingType {
+    std::chrono::nanoseconds(event.wheel.timestamp) } };
+  return std::make_unique<MouseWheelEvent>(ts, event.wheel.windowID,
     SubPixelPosition {
       .x = event.wheel.mouse_x,
       .y = event.wheel.mouse_y,
