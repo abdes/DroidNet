@@ -103,6 +103,7 @@ target_link_libraries(
     oxygen::base
     oxygen::composition
     oxygen::oxco
+    oxygen::core
     SDL3::SDL3
 )
 

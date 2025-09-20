@@ -14,7 +14,7 @@ using namespace oxygen::time;
 namespace oxygen::engine {
 
 TimeManager::TimeManager(
-  PhysicalClock& physical_clock, const Config& config) noexcept
+  const PhysicalClock& physical_clock, const Config& config) noexcept
   : physical_clock_ { &physical_clock }
   , simulation_clock_ { config.fixed_timestep }
   , presentation_clock_ { simulation_clock_, config.animation_scale }
