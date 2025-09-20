@@ -35,7 +35,6 @@ include(GTestHelpers)
 
 m_gtest_program(Macros SOURCES "Macros_test.cpp")
 m_gtest_program(Config SOURCES "Platform_test.cpp")
-m_gtest_program(TimeUtils SOURCES "Time_test.cpp")
 m_gtest_program(Types SOURCES "Types_test.cpp")
 m_gtest_program(StringUtils SOURCES "StringUtils_test.cpp")
 m_gtest_program(Finally SOURCES "Finally_test.cpp")

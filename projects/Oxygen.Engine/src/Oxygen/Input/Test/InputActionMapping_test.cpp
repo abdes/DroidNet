@@ -8,6 +8,8 @@
 
 #include <memory>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
@@ -15,7 +17,8 @@
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Input/Test/InputSystemTest.h>
 
 using namespace std::chrono_literals;
 
@@ -28,7 +31,6 @@ using ::testing::SizeIs;
 
 using oxygen::Axis1D;
 using oxygen::Axis2D;
-using oxygen::TimePoint;
 using oxygen::input::Action;
 using oxygen::input::ActionTrigger;
 using oxygen::input::ActionTriggerDown;
@@ -47,29 +49,27 @@ using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::WindowIdType;
 using oxygen::time::CanonicalDuration;
 
-class InputActionMappingTest : public ::testing::Test {
+class InputActionMappingTest : public oxygen::input::testing::InputSystemTest {
 protected:
   void SetUp() override { InputSlots::Initialize(); }
 
   // Helpers to craft events
-  static auto MakeKey(ButtonState s) -> KeyEvent
+  auto MakeKey(ButtonState s) -> KeyEvent
   {
-    return KeyEvent(TimePoint {}, kInvalidWindowId,
+    return KeyEvent(Now(), kInvalidWindowId,
       oxygen::platform::input::KeyInfo(Key::kSpace, false), s);
   }
-  static auto MakeMouseBtn(MouseButton b, ButtonState s) -> MouseButtonEvent
+  auto MakeMouseBtn(MouseButton b, ButtonState s) -> MouseButtonEvent
   {
-    return MouseButtonEvent(TimePoint {}, kInvalidWindowId, { 0, 0 }, b, s);
+    return MouseButtonEvent(Now(), kInvalidWindowId, { 0, 0 }, b, s);
   }
-  static auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
+  auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
   {
-    return MouseMotionEvent(
-      TimePoint {}, kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseMotionEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
   }
-  static auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
+  auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
   {
-    return MouseWheelEvent(
-      TimePoint {}, kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseWheelEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
   }
 };
 

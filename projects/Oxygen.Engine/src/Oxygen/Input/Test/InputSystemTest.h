@@ -10,10 +10,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-// Test utilities and core types needed by the reusable fixture
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -60,11 +59,7 @@ protected:
   void SendMouseWheel(
     float dx, float dy, oxygen::SubPixelPosition position = { 0.0f, 0.0f });
 
-  //! Helper to advance simulation time for realistic trigger timing
-  void AdvanceSimulationTime(std::chrono::milliseconds ms)
-  {
-    current_time_ += std::chrono::duration_cast<std::chrono::microseconds>(ms);
-  }
+  [[nodiscard]] auto Now() const noexcept { return phy_time_.Now(); }
 
 protected:
   oxygen::co::testing::TestEventLoop loop_;
@@ -73,7 +68,7 @@ protected:
   std::unique_ptr<oxygen::engine::InputSystem> input_system_;
   std::unique_ptr<oxygen::engine::FrameContext> frame_context_;
 
-  oxygen::TimePoint current_time_; // Simulation time for realistic event timing
+  oxygen::time::PhysicalClock phy_time_;
 };
 
 } // namespace oxygen::input::testing

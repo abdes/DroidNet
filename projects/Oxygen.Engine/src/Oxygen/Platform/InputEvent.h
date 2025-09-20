@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Types.h>
 
@@ -24,7 +24,8 @@ namespace input {
   class EventInfoComponent final : public Component {
     OXYGEN_COMPONENT(EventInfoComponent)
   public:
-    EventInfoComponent(const TimePoint time, const WindowIdType window_id)
+    EventInfoComponent(
+      const time::PhysicalTime time, const WindowIdType window_id)
       : window_id_(window_id)
       , time_(time)
     {
@@ -35,7 +36,7 @@ namespace input {
 
   private:
     WindowIdType window_id_ { kInvalidWindowId };
-    TimePoint time_ {};
+    time::PhysicalTime time_ {};
   };
 
   class EventPositionComponent final : public Component {
@@ -140,7 +141,7 @@ namespace input {
 class InputEvent : public Composition {
   OXYGEN_TYPED(InputEvent)
 public:
-  InputEvent(const TimePoint time, const WindowIdType window_id)
+  InputEvent(const time::PhysicalTime time, const WindowIdType window_id)
   {
     AddComponent<input::EventInfoComponent>(time, window_id);
   }
@@ -168,7 +169,7 @@ public:
 class KeyEvent : public InputEvent {
   OXYGEN_TYPED(KeyEvent)
 public:
-  KeyEvent(const TimePoint& time, const WindowIdType window_id,
+  KeyEvent(const time::PhysicalTime& time, const WindowIdType window_id,
     input::KeyInfo key, ButtonState state)
     : InputEvent(time, window_id)
   {
@@ -198,7 +199,7 @@ public:
 class MouseButtonEvent : public InputEvent {
   OXYGEN_TYPED(MouseButtonEvent)
 public:
-  MouseButtonEvent(const TimePoint& time, const WindowIdType window_id,
+  MouseButtonEvent(const time::PhysicalTime& time, const WindowIdType window_id,
     SubPixelPosition position, MouseButton button, ButtonState state)
     : InputEvent(time, window_id)
   {
@@ -231,7 +232,7 @@ public:
 class MouseMotionEvent : public InputEvent {
   OXYGEN_TYPED(MouseMotionEvent)
 public:
-  MouseMotionEvent(const TimePoint& time, const WindowIdType window_id,
+  MouseMotionEvent(const time::PhysicalTime& time, const WindowIdType window_id,
     SubPixelPosition position, SubPixelMotion motion)
     : InputEvent(time, window_id)
   {
@@ -258,7 +259,7 @@ public:
 class MouseWheelEvent : public InputEvent {
   OXYGEN_TYPED(MouseWheelEvent)
 public:
-  MouseWheelEvent(const TimePoint& time, const WindowIdType window_id,
+  MouseWheelEvent(const time::PhysicalTime& time, const WindowIdType window_id,
     SubPixelPosition position, SubPixelMotion scroll_amount)
     : InputEvent(time, window_id)
   {

@@ -78,7 +78,6 @@ set(
   "StaticVector.h"
   "StringTypes.h"
   "StringUtils.h"
-  "TimeUtils.h"
   "TypeList.h"
   "Types/Geometry.h"
   "Types/Overload.h"

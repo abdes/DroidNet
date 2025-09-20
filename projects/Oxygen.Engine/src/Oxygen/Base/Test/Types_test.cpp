@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Endian.h>
-#include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Base/Types/Geometry.h>
 
 #include <cstdint>
@@ -39,19 +38,6 @@ NOLINT_TEST(CommonTypes, HaveToString)
   CHECK_HAS_TO_STRING(SubPixelMotion);
   CHECK_HAS_TO_STRING(Axis1D);
   CHECK_HAS_TO_STRING(Axis2D);
-}
-
-NOLINT_TEST(CommonTypes, ConvertSecondsToDuration)
-{
-  constexpr float whole_value = 2.0F;
-  constexpr int64_t whole_value_duration = 2'000'000;
-  constexpr float fraction_value = .5F;
-  constexpr int64_t fraction_value_duration = 500'000;
-
-  EXPECT_EQ(
-    oxygen::SecondsToDuration(whole_value).count(), whole_value_duration);
-  EXPECT_EQ(
-    oxygen::SecondsToDuration(fraction_value).count(), fraction_value_duration);
 }
 
 //===----------------------------------------------------------------------===//
