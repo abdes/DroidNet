@@ -15,7 +15,6 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -35,6 +34,7 @@ namespace time {
   class PresentationClock;
   class NetworkClock;
   class AuditClock;
+  class PhysicalClock;
 } // namespace time
 
 class Platform;
@@ -102,7 +102,6 @@ public:
   // Clock accessors
   OXGN_NGIN_NDAPI auto GetPhysicalClock() const noexcept
     -> const time::PhysicalClock&;
-  OXGN_NGIN_NDAPI auto GetPhysicalClock() noexcept -> time::PhysicalClock&;
 
   OXGN_NGIN_NDAPI auto GetSimulationClock() const noexcept
     -> const time::SimulationClock&;
@@ -209,7 +208,6 @@ private:
   // Time system integration
   time::PhysicalTime frame_start_ts_ {};
   time::PhysicalTime next_frame_deadline_ {};
-  time::PhysicalClock physical_clock_ {};
   engine::TimeManager* time_manager_ { nullptr }; // Owned by Composition
 
   // Signals completion when FrameLoop exits.

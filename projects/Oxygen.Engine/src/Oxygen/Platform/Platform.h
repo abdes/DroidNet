@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -292,8 +293,16 @@ public:
   static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key)
     -> platform::InputSlot;
 
+  [[nodiscard]] auto GetPhysicalClock() const noexcept
+    -> const time::PhysicalClock&
+  {
+    return physical_clock_;
+  }
+
 private:
   auto Compose(const PlatformConfig& config) -> void;
+
+  time::PhysicalClock physical_clock_ {};
 };
 
 #if 0

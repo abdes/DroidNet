@@ -14,6 +14,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/TimeManager.h>
@@ -64,7 +65,7 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
       .animation_scale = 1.0,
       .network_smoothing_factor = 0.1,
     };
-    time_manager_ = &AddComponent<TimeManager>(physical_clock_, tm_cfg);
+    time_manager_ = &AddComponent<TimeManager>(GetPhysicalClock(), tm_cfg);
   }
 
   // Initialize detached services (Category D)
@@ -153,7 +154,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
   frame_number_ = frame::SequenceNumber { 0 };
   frame_slot_ = frame::Slot { 0 };
   // Initialize pacing deadline to now() to start immediately
-  next_frame_deadline_ = physical_clock_.Now();
+  next_frame_deadline_ = GetPhysicalClock().Now();
 
   while (true) {
     if (shutdown_requested_) {
@@ -252,7 +253,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
         next_frame_deadline_
           = t::PhysicalTime { next_frame_deadline_.get() + period_ns };
       }
-      const auto now = physical_clock_.Now();
+      const auto now = GetPhysicalClock().Now();
       // If we fell significantly behind, re-synchronize to avoid accumulating
       // lag (late by more than one period).
       if (now.get() > next_frame_deadline_.get() + period_ns) {
@@ -270,7 +271,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
         }
         // Finish: cooperative tiny pauses until the deadline.
         for (;;) {
-          const auto n2 = physical_clock_.Now();
+          const auto n2 = GetPhysicalClock().Now();
           if (n2.get() >= next_frame_deadline_.get()) {
             break;
           }
@@ -294,7 +295,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
   context.SetCurrentPhase(PhaseId::kFrameStart, tag);
-  frame_start_ts_ = physical_clock_.Now();
+  frame_start_ts_ = GetPhysicalClock().Now();
 
   // TODO: setup all the properties of context that need to be set
 
@@ -657,7 +658,7 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
   }
   gfx->EndFrame(frame_number_, frame_slot_);
 
-  const auto frame_end = physical_clock_.Now();
+  const auto frame_end = GetPhysicalClock().Now();
   const auto total
     = duration_cast<microseconds>((frame_end.get() - frame_start_ts_.get()));
   LOG_F(2, "Frame {} end | total={}us", frame_number_, total.count());
@@ -785,11 +786,7 @@ auto AsyncEngine::UpdateFrameTiming(FrameContext& context) -> void
 auto AsyncEngine::GetPhysicalClock() const noexcept
   -> const time::PhysicalClock&
 {
-  return physical_clock_;
-}
-auto AsyncEngine::GetPhysicalClock() noexcept -> time::PhysicalClock&
-{
-  return physical_clock_;
+  return platform_->GetPhysicalClock();
 }
 
 auto AsyncEngine::GetSimulationClock() const noexcept

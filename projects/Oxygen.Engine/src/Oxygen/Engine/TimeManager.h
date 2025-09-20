@@ -71,8 +71,8 @@ public:
   };
 
   //! Construct with a physical clock and configuration.
-  OXGN_NGIN_API explicit TimeManager(
-    time::PhysicalClock& physical_clock, const Config& config = {}) noexcept;
+  OXGN_NGIN_API explicit TimeManager(const time::PhysicalClock& physical_clock,
+    const Config& config = {}) noexcept;
   OXGN_NGIN_API ~TimeManager() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(TimeManager)
@@ -148,7 +148,7 @@ public:
 
 private:
   // Dependencies
-  observer_ptr<time::PhysicalClock> physical_clock_;
+  observer_ptr<const time::PhysicalClock> physical_clock_;
 
   // Clocks
   time::SimulationClock simulation_clock_;
