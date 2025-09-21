@@ -16,6 +16,7 @@
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -24,7 +25,6 @@
 
 namespace oxygen::engine {
 class EngineModule;
-class ModuleManager;
 class TimeManager;
 } // namespace oxygen::engine
 
@@ -95,6 +95,21 @@ public:
 
   // Optional: unregister by name. Returns true if removed.
   OXGN_NGIN_API auto UnregisterModule(std::string_view name) noexcept -> void;
+
+  // Lookup a module by name (delegates to ModuleManager)
+  OXGN_NGIN_NDAPI auto GetModule(std::string_view name) const noexcept
+    -> std::optional<std::reference_wrapper<engine::EngineModule>>
+  {
+    return module_manager_->GetModule(name);
+  }
+
+  // Typed lookup by module class T (must provide ClassTypeId())
+  template <typename T>
+  [[nodiscard]] auto GetModule() const noexcept
+    -> std::optional<std::reference_wrapper<T>>
+  {
+    return module_manager_->GetModule<T>();
+  }
 
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
