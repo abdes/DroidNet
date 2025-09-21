@@ -57,7 +57,22 @@ public:
   }
 
   OXGN_NGIN_NDAPI auto GetModule(std::string_view name) const noexcept
-    -> std::optional<std::reference_wrapper<const EngineModule>>;
+    -> std::optional<std::reference_wrapper<EngineModule>>;
+
+  // Typed lookup by module class T (must provide ClassTypeId())
+  template <IsTyped ModuleT>
+  [[nodiscard]] auto GetModule() const noexcept
+    -> std::optional<std::reference_wrapper<ModuleT>>
+  {
+    for (const auto& m : modules_) {
+      if (m && m->GetTypeId() == ModuleT::ClassTypeId()) {
+        // Cast the stored EngineModule reference to the requested ModuleT
+        // and return a reference_wrapper to the derived type.
+        return std::make_optional(std::ref(static_cast<ModuleT&>(*m)));
+      }
+    }
+    return std::nullopt;
+  }
 
   // Execute a single phase. This is the canonical entry point used by the
   // engine coordinator. Implementations for many phase types are trivial

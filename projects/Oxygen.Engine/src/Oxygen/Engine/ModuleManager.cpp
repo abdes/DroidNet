@@ -120,7 +120,7 @@ auto ModuleManager::UnregisterModule(std::string_view name) noexcept -> void
 }
 
 auto ModuleManager::GetModule(std::string_view name) const noexcept
-  -> std::optional<std::reference_wrapper<const EngineModule>>
+  -> std::optional<std::reference_wrapper<EngineModule>>
 {
   auto it = std::ranges::find_if(
     modules_, [&](const auto& e) { return e->GetName() == name; });
@@ -130,9 +130,9 @@ auto ModuleManager::GetModule(std::string_view name) const noexcept
   // `it` is an iterator to std::unique_ptr<EngineModule>. Get the raw
   // EngineModule pointer and construct an optional reference_wrapper to the
   // const EngineModule to match the function return type.
-  const EngineModule* ptr = it->get();
+  EngineModule* ptr = it->get();
   DCHECK_NOTNULL_F(ptr);
-  return std::cref(*ptr);
+  return std::ref(*ptr);
 }
 
 auto ModuleManager::RebuildPhaseCache() noexcept -> void

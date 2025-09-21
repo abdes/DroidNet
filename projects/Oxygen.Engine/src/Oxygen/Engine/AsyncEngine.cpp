@@ -16,7 +16,6 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
