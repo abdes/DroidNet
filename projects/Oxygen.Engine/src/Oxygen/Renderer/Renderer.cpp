@@ -332,12 +332,6 @@ auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
   UpdateSceneConstantsFromView(view);
 
   const auto draw_count = CurrentDrawCount();
-  if (draw_count == 0) {
-    // No draws; frame SHOULD NOT be rendered. Render passes will find nothing
-    // to do.
-    skip_frame_render_ = true;
-  }
-
   DLOG_F(2, "BuildFrame: finalized {} draws", draw_count);
   return draw_count;
 }
