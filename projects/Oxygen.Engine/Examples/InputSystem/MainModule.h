@@ -149,7 +149,12 @@ private:
   float min_cam_distance_ { 0.75f };
   float max_cam_distance_ { 40.0f };
   float pan_sensitivity_ { 0.005f }; // world units per pixel
-  std::chrono::steady_clock::time_point last_frame_time_ {};
+
+  // Demo mode: ground vs swimming
+  bool swimming_mode_ { false };
+  float swim_up_speed_ { 2.5f }; // units per second when Space is held
+  // Defer sphere reset to a phase before transform propagation
+  bool pending_ground_reset_ { false };
 };
 
 } // namespace oxygen::engine::examples

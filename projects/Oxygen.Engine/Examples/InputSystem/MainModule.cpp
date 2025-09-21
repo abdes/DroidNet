@@ -34,13 +34,154 @@
 #include <Oxygen/Scene/Scene.h>
 #include <imgui.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
+#include <unordered_map>
 #include <variant>
 
 namespace {
 
-constexpr std::uint32_t kWindowWidth = 1600;
+constexpr std::uint32_t kWindowWidth = 1900;
 constexpr std::uint32_t kWindowHeight = 900;
+
+//=== ImGui Quick-Visual Helpers ---------------------------------------------//
+
+//! Draw a simple keyboard/mouse keycap (rounded rect + centered label).
+static void DrawKeycap(ImDrawList* dl, ImVec2 p, const char* label, ImU32 bg,
+  ImU32 border, ImU32 text, float scale = 1.0f)
+{
+  const float pad = 6.0f * scale;
+  const ImVec2 text_size = ImGui::CalcTextSize(label);
+  const ImVec2 size
+    = ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
+  const float r = 6.0f * scale;
+
+  const ImVec2 p_max(p.x + size.x, p.y + size.y);
+  dl->AddRectFilled(p, p_max, bg, r);
+  dl->AddRect(p, p_max, border, r, 0, 1.5f * scale);
+
+  const ImVec2 tp = ImVec2(
+    p.x + (size.x - text_size.x) * 0.5f, p.y + (size.y - text_size.y) * 0.5f);
+  dl->AddText(tp, text, label, label + std::strlen(label));
+}
+
+//! Compute the rendered size of a keycap for spacing/layout.
+static ImVec2 MeasureKeycap(const char* label, float scale = 1.0f)
+{
+  const float pad = 6.0f * scale;
+  const ImVec2 text_size = ImGui::CalcTextSize(label);
+  return ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
+}
+
+//! Draw a tiny horizontal analog bar for scalar values in [vmin, vmax].
+static void DrawAnalogBar(ImDrawList* dl, ImVec2 p, ImVec2 sz, float v,
+  float vmin = -1.0f, float vmax = 1.0f, ImU32 bg = IM_COL32(30, 30, 34, 255),
+  ImU32 fg = IM_COL32(90, 170, 255, 255))
+{
+  const ImVec2 p_max(p.x + sz.x, p.y + sz.y);
+  dl->AddRectFilled(p, p_max, bg, 3.0f);
+  const float t = (v - vmin) / (vmax - vmin);
+  const float tt = std::clamp(t, 0.0f, 1.0f);
+  const ImVec2 fill = ImVec2(p.x + sz.x * tt, p.y + sz.y);
+  dl->AddRectFilled(p, ImVec2(fill.x, fill.y), fg, 3.0f);
+  // zero line
+  const float zt = (-vmin) / (vmax - vmin);
+  const float zx = p.x + sz.x * std::clamp(zt, 0.0f, 1.0f);
+  dl->AddLine(ImVec2(zx, p.y), ImVec2(zx, p.y + sz.y),
+    IM_COL32(180, 180, 190, 120), 1.0f);
+}
+
+//! Plot a tiny sparkline from a circular buffer (values[filled], head==next).
+static void PlotSparkline(const char* id, const float* values, int filled,
+  int head, int capacity, ImVec2 size)
+{
+  if (!values || filled <= 0) {
+    return;
+  }
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+  ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
+  ImGui::PushStyleColor(ImGuiCol_PlotLines, IM_COL32(140, 200, 255, 220));
+  // rotate to chronological order into a small local buffer
+  static float tmp[128];
+  const int N = (std::min)(filled, 128);
+  const int cap = (std::min)(capacity, 128);
+  // Start at the oldest sample index in the ring buffer
+  const int start = (head - filled + cap) % cap;
+  for (int i = 0; i < N; ++i) {
+    tmp[i] = values[(start + i) % cap];
+  }
+  ImGui::PlotLines(id, tmp, N, 0, nullptr, -1.0f, 1.0f, size);
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar();
+}
+
+struct History {
+  static constexpr int kCapacity = 64;
+  float values[kCapacity] = {};
+  int head = 0; // next write index
+  int count = 0; // number of valid samples (<= kCapacity)
+  void Push(float v) noexcept
+  {
+    values[head] = v;
+    head = (head + 1) % kCapacity;
+    if (count < kCapacity) {
+      ++count;
+    }
+  }
+};
+
+//! Compute an action state label and color for a compact badge.
+static std::pair<const char*, ImU32> ActionStateBadge(
+  const std::shared_ptr<oxygen::input::Action>& a)
+{
+  if (!a) {
+    return { "<null>", IM_COL32(80, 80, 90, 255) };
+  }
+  if (a->WasCanceledThisFrame()) {
+    return { "Canceled", IM_COL32(230, 120, 70, 255) };
+  }
+  if (a->WasCompletedThisFrame()) {
+    return { "Completed", IM_COL32(110, 200, 120, 255) };
+  }
+  if (a->WasTriggeredThisFrame()) {
+    return { "Triggered", IM_COL32(90, 170, 255, 255) };
+  }
+  if (a->WasReleasedThisFrame()) {
+    return { "Released", IM_COL32(160, 160, 200, 255) };
+  }
+  if (a->IsOngoing()) {
+    return { "Ongoing", IM_COL32(200, 200, 80, 255) };
+  }
+  return { "Idle", IM_COL32(70, 70, 80, 255) };
+}
+
+//! Compute a scalar analog value in [-1, 1] for plotting bars/sparklines.
+//! For bool actions, returns 0 or 1. For Axis2D, returns magnitude.
+static float ActionScalarValue(
+  const std::shared_ptr<oxygen::input::Action>& a) noexcept
+{
+  if (!a) {
+    return 0.0f;
+  }
+  // Try Axis2D first
+  try {
+    const auto& axis = a->GetValue().GetAs<oxygen::Axis2D>();
+    const float mag = std::sqrt(axis.x * axis.x + axis.y * axis.y);
+    return (std::min)(mag, 1.0f);
+  } catch (const std::bad_variant_access&) {
+    // Not Axis2D; fallthrough
+  }
+  // Try bool
+  try {
+    const bool b = a->GetValue().GetAs<bool>();
+    return b ? 1.0f : 0.0f;
+  } catch (const std::bad_variant_access&) {
+    // Not bool; default 0
+  }
+  return 0.0f;
+}
 
 // Helper: make a solid-color material asset snapshot (opaque by default)
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
@@ -153,11 +294,24 @@ auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 }
 
-auto MainModule::OnGameplay(engine::FrameContext& /*context*/) -> co::Co<>
+auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 {
   // Check input edges during gameplay. InputSystem finalized edges during
   // kInput earlier in the frame; they remain valid until next frame start.
   using namespace std::chrono;
+  const auto u_game_dt = context.GetGameDeltaTime().get(); // nanoseconds
+  const float dt = duration<float>(u_game_dt).count(); // seconds
+
+  // Apply any pending sphere reset requested by UI toggles
+  if (pending_ground_reset_) {
+    pending_ground_reset_ = false;
+    if (sphere_node_.IsAlive()) {
+      auto tf = sphere_node_.GetTransform();
+      tf.SetLocalPosition(sphere_base_pos_);
+    }
+    sphere_vel_y_ = 0.0f;
+    sphere_in_air_ = false;
+  }
 
   // Camera zoom via mouse wheel actions
   if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
@@ -189,7 +343,7 @@ auto MainModule::OnGameplay(engine::FrameContext& /*context*/) -> co::Co<>
     for (const auto& tr : pan_action_->GetFrameTransitions()) {
       // Attempt Axis2D; skip if not set
       try {
-        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
+        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
         if (std::abs(v.x) > 0.0f || std::abs(v.y) > 0.0f) {
           pan_delta.x += v.x;
           pan_delta.y += v.y;
@@ -209,28 +363,37 @@ auto MainModule::OnGameplay(engine::FrameContext& /*context*/) -> co::Co<>
     }
   }
 
-  // Sphere jump actions
-  if (jump_higher_action_ && jump_higher_action_->WasTriggeredThisFrame()) {
-    if (!sphere_in_air_) {
-      sphere_in_air_ = true;
-      sphere_vel_y_ = jump_higher_impulse_;
+  // Movement: ground vs swimming
+  if (swimming_mode_) {
+    // Swimming: hold Space (swim_up_action_) to move upwards
+    if (swim_up_action_ && swim_up_action_->IsOngoing()) {
+      if (sphere_node_.IsAlive()) {
+        auto tf = sphere_node_.GetTransform();
+        auto pos = tf.GetLocalPosition().value_or(sphere_base_pos_);
+        pos.y += swim_up_speed_ * dt;
+        tf.SetLocalPosition(pos);
+      }
     }
-  } else if (jump_action_ && jump_action_->WasTriggeredThisFrame()) {
-    if (!sphere_in_air_) {
-      sphere_in_air_ = true;
-      sphere_vel_y_ = jump_impulse_;
+    // No gravity in swimming mode
+    sphere_in_air_ = false;
+    sphere_vel_y_ = 0.0f;
+  } else {
+    // Ground mode: jump actions
+    if (jump_higher_action_ && jump_higher_action_->WasTriggeredThisFrame()) {
+      if (!sphere_in_air_) {
+        sphere_in_air_ = true;
+        sphere_vel_y_ = jump_higher_impulse_;
+      }
+    } else if (jump_action_ && jump_action_->WasTriggeredThisFrame()) {
+      if (!sphere_in_air_) {
+        sphere_in_air_ = true;
+        sphere_vel_y_ = jump_impulse_;
+      }
     }
   }
 
   // Integrate simple vertical physics when sphere is in air
-  const auto now = steady_clock::now();
-  if (last_frame_time_.time_since_epoch().count() == 0) {
-    last_frame_time_ = now;
-  }
-  const float dt = duration<float>(now - last_frame_time_).count();
-  last_frame_time_ = now;
-
-  if (sphere_in_air_ && sphere_node_.IsAlive()) {
+  if (!swimming_mode_ && sphere_in_air_ && sphere_node_.IsAlive()) {
     sphere_vel_y_ += gravity_ * dt;
     auto tf = sphere_node_.GetTransform();
     const auto opt_pos = tf.GetLocalPosition();
@@ -724,10 +887,12 @@ auto MainModule::InitInputBindings() noexcept -> bool
   // Setup mapping context when swimming
   swimming_ctx_ = std::make_shared<InputMappingContext>("swimming");
   {
-    auto trigger = std::make_shared<ActionTriggerPressed>();
+    auto trig_down = std::make_shared<ActionTriggerDown>();
+    trig_down->MakeExplicit();
+    trig_down->SetActuationThreshold(0.1F);
     auto mapping = std::make_shared<InputActionMapping>(
       swim_up_action_, InputSlots::Space);
-    mapping->AddTrigger(trigger);
+    mapping->AddTrigger(trig_down);
     swimming_ctx_->AddMapping(mapping);
     app_.input_system->AddMappingContext(swimming_ctx_, 0);
   }
@@ -779,98 +944,214 @@ auto MainModule::SetupFramebuffers() -> bool
 
 auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
 {
-  // Simple HelloWorld debug window
+  // Quick win UI: compact action cards with keycaps, bar, sparkline.
   ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(360, 320), ImGuiCond_FirstUseEver);
-  if (ImGui::Begin("Input Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::TextUnformatted("HelloWorld!");
-    ImGui::Separator();
+  ImGui::SetNextWindowSize(ImVec2(460, 420), ImGuiCond_FirstUseEver);
+  if (!ImGui::Begin(
+        "Input Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::End();
+    return;
+  }
 
-    // Camera position
-    if (main_camera_.IsAlive()) {
-      const auto tf = main_camera_.GetTransform();
-      const auto pos
-        = tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 5.0F));
-      ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-    } else {
-      ImGui::TextUnformatted("Camera: <not alive>");
+  // Camera position
+  if (main_camera_.IsAlive()) {
+    const auto tf = main_camera_.GetTransform();
+    const auto pos
+      = tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 5.0F));
+    ImGui::Text("Camera: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
+  } else {
+    ImGui::TextUnformatted("Camera: <not alive>");
+  }
+
+  // ImGui mouse capture state
+  const auto& io = ImGui::GetIO();
+  ImGui::Text("WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
+  ImGui::Separator();
+
+  // Toggle between Ground and Swimming mapping contexts
+  {
+    bool prev_mode = swimming_mode_;
+    ImGui::Checkbox("Swimming mode", &swimming_mode_);
+    if (swimming_mode_ != prev_mode && app_.input_system) {
+      if (swimming_mode_) {
+        app_.input_system->DeactivateMappingContext(ground_movement_ctx_);
+        app_.input_system->ActivateMappingContext(swimming_ctx_);
+      } else {
+        app_.input_system->DeactivateMappingContext(swimming_ctx_);
+        app_.input_system->ActivateMappingContext(ground_movement_ctx_);
+        // Defer sphere reset to avoid accessing world data before propagation
+        pending_ground_reset_ = true;
+      }
     }
+  }
 
-    // ImGui mouse capture state
-    const auto& io = ImGui::GetIO();
-    ImGui::Text(
-      "ImGui WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
-    ImGui::Separator();
+  // Gather actions to show. Keep labels small and stable.
+  struct Row {
+    const char* label;
+    std::shared_ptr<oxygen::input::Action> act;
+  };
+  Row rows[] = {
+    { "Shift", shift_action_ },
+    { "LMB", left_mouse_action_ },
+    { "Pan", pan_action_ },
+    { "Zoom In", zoom_in_action_ },
+    { "Zoom Out", zoom_out_action_ },
+    { "Jump", jump_action_ },
+    { "Jump Higher", jump_higher_action_ },
+    { "Swim Up", swim_up_action_ },
+  };
 
-    // Helper lambda to print action state concisely
-    const auto draw_action
-      = [](const char* label, const std::shared_ptr<input::Action>& a) {
-          if (!a) {
-            ImGui::Text("%s: <null>", label);
-            return;
+  // Keep defined order; no sorting.
+
+  static bool show_inactive = true;
+  ImGui::Checkbox("Show inactive", &show_inactive);
+  ImGui::Spacing();
+
+  // Per-action history ring buffers keyed by label pointer (stable literals).
+  static std::unordered_map<const char*, History> histories;
+
+  // Table layout for cards: Label | Glyphs | State | Value | Sparkline
+  if (ImGui::BeginTable("##actions", 5, ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn(
+      "Bindings", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    ImGui::TableSetupColumn(
+      "History", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+
+    // Track recent triggers to flash a fading highlight per action row.
+    static std::unordered_map<const char*, double> last_trigger_time;
+    const double now = ImGui::GetTime();
+
+    for (const auto& r : rows) {
+      const bool active = r.act
+        && (r.act->IsOngoing() || r.act->WasTriggeredThisFrame()
+          || r.act->WasCompletedThisFrame() || r.act->WasReleasedThisFrame()
+          || r.act->WasCanceledThisFrame()
+          || r.act->WasValueUpdatedThisFrame());
+      if (!show_inactive && !active) {
+        continue;
+      }
+
+      // Bump trigger time stamp
+      if (r.act && r.act->WasTriggeredThisFrame()) {
+        last_trigger_time[r.label] = now;
+      }
+
+      // Scope all row widgets with a unique ID to avoid label collisions
+      ImGui::PushID(r.label);
+
+      // Update history with current scalar value
+      const float v = ActionScalarValue(r.act);
+      auto& hist = histories[r.label];
+      hist.Push(v);
+
+      const auto [state_text, state_col] = ActionStateBadge(r.act);
+
+      ImGui::TableNextRow();
+      // Flash background highlight for recent trigger
+      {
+        float flash_alpha = 0.0f;
+        constexpr float kFlashDuration = 1.5f; // seconds
+        auto it = last_trigger_time.find(r.label);
+        if (it != last_trigger_time.end()) {
+          const float age = static_cast<float>(now - it->second);
+          if (age >= 0.0f && age < kFlashDuration) {
+            float t = 1.0f - (age / kFlashDuration);
+            t = t * t; // ease-out quad
+            flash_alpha = t;
           }
-          ImGui::Text("%s: ongoing=%s trig=%s comp=%s canc=%s rel=%s valUpd=%s",
-            label, a->IsOngoing() ? "1" : "0",
-            a->WasTriggeredThisFrame() ? "1" : "0",
-            a->WasCompletedThisFrame() ? "1" : "0",
-            a->WasCanceledThisFrame() ? "1" : "0",
-            a->WasReleasedThisFrame() ? "1" : "0",
-            a->WasValueUpdatedThisFrame() ? "1" : "0");
+        }
+        if (flash_alpha > 0.0f) {
+          const int a = static_cast<int>(flash_alpha * 110.0f);
+          const ImU32 col = IM_COL32(255, 220, 120, a);
+          ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
+        }
+      }
+
+      // Action label
+      ImGui::TableSetColumnIndex(0);
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted(r.label);
+
+      // Bindings (quick illustrative keycaps; not wired to real mappings yet)
+      ImGui::TableSetColumnIndex(1);
+      {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        const float scale = ImGui::GetIO().FontGlobalScale;
+        const float gap = 8.0f * scale;
+        float used_w = 0.0f;
+        float used_h = 0.0f;
+        auto draw_and_advance = [&](const char* cap) {
+          const ImVec2 sz = MeasureKeycap(cap, scale);
+          DrawKeycap(dl, p, cap, IM_COL32(40, 40, 46, 255),
+            IM_COL32(80, 80, 90, 255), IM_COL32(230, 230, 240, 255), scale);
+          p.x += sz.x + gap;
+          used_w += sz.x + gap;
+          used_h = (std::max)(used_h, sz.y);
         };
 
-    // Modifier and button actions
-    draw_action("Shift", shift_action_);
-    draw_action("LMB", left_mouse_action_);
-
-    // Pan action details
-    draw_action("Pan", pan_action_);
-    if (pan_action_) {
-      // Axis2D value (safe): the stored variant may be uninitialized (bool)
-      // until the first MouseXY event updates it; guard access.
-      bool printed_axis = false;
-      if (pan_action_->WasValueUpdatedThisFrame() || pan_action_->IsOngoing()) {
-        try {
-          const auto& axis = pan_action_->GetValue().GetAs<Axis2D>();
-          ImGui::Text("Pan Axis: (x=%.2f, y=%.2f)", axis.x, axis.y);
-          printed_axis = true;
-        } catch (const std::bad_variant_access&) {
-          // Fallthrough to print placeholder
+        if (r.label == std::string("Pan")) {
+          draw_and_advance("Shift");
+          draw_and_advance("LMB");
+        } else if (r.label == std::string("Zoom In")) {
+          draw_and_advance("Wheel+");
+        } else if (r.label == std::string("Zoom Out")) {
+          draw_and_advance("Wheel-");
+        } else if (r.label == std::string("Jump")) {
+          draw_and_advance("Space");
+        } else if (r.label == std::string("Jump Higher")) {
+          draw_and_advance("Shift");
+          draw_and_advance("Space");
+        } else if (r.label == std::string("Shift")) {
+          draw_and_advance("Shift");
+        } else if (r.label == std::string("LMB")) {
+          draw_and_advance("LMB");
+        } else if (r.label == std::string("Swim Up")) {
+          draw_and_advance("Space");
+        }
+        if (used_w > 0.0f && used_h > 0.0f) {
+          // Remove trailing gap from width reservation
+          used_w -= gap;
+          ImGui::Dummy(ImVec2(used_w, used_h));
+        } else {
+          ImGui::Dummy(ImVec2(1, 26.0f * scale));
         }
       }
-      if (!printed_axis) {
-        ImGui::TextUnformatted("Pan Axis: <not set>");
+
+      // State badge
+      ImGui::TableSetColumnIndex(2);
+      ImGui::AlignTextToFramePadding();
+      {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, state_col);
+        ImGui::TextDisabled("  %s  ", state_text);
+        ImGui::PopStyleColor();
       }
 
-      // Also show per-frame summed delta from transitions
-      glm::vec2 pan_delta(0.0f);
-      for (const auto& tr : pan_action_->GetFrameTransitions()) {
-        try {
-          const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-          pan_delta.x += v.x;
-          pan_delta.y += v.y;
-        } catch (const std::bad_variant_access&) {
-          // ignore
-        }
+      // Analog bar
+      ImGui::TableSetColumnIndex(3);
+      {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        DrawAnalogBar(dl, p, ImVec2(160, 8), v, 0.0f, 1.0f);
+        ImGui::Dummy(ImVec2(160, 10));
       }
-      if (std::abs(pan_delta.x) > 0.0f || std::abs(pan_delta.y) > 0.0f) {
-        ImGui::Text(
-          "Pan Delta (sum): (x=%.2f, y=%.2f)", pan_delta.x, pan_delta.y);
-      }
+
+      // Sparkline
+      ImGui::TableSetColumnIndex(4);
+      PlotSparkline("##spark", hist.values, hist.count, hist.head,
+        History::kCapacity, ImVec2(160, 28));
+
+      ImGui::PopID();
     }
-
-    // Zoom action edges
-    draw_action("Zoom In", zoom_in_action_);
-    draw_action("Zoom Out", zoom_out_action_);
-
-    // Jump actions
-    draw_action("Jump", jump_action_);
-    draw_action("Jump Higher", jump_higher_action_);
-
-    // Params
-    ImGui::Separator();
-    ImGui::Text(
-      "pan_sensitivity=%.4f, zoom_step=%.3f", pan_sensitivity_, zoom_step_);
+    ImGui::EndTable();
   }
+
+  ImGui::Separator();
+  ImGui::Text(
+    "pan_sensitivity=%.4f, zoom_step=%.3f", pan_sensitivity_, zoom_step_);
   ImGui::End();
 }
 
