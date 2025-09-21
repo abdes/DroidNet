@@ -1,6 +1,7 @@
 # SafeCall Pattern
 
 ## Pattern Classification
+
 - **Type**: Behavioral Pattern
 - **Category**: Error Handling / Validation
 - **Complexity**: Medium
@@ -10,12 +11,14 @@
 
 In complex systems like game engines, objects frequently transition between
 valid and invalid states due to:
+
 - Resource loading/unloading cycles
 - Asynchronous operations
 - Component lifecycle management
 - Multi-threaded access patterns
 
 Traditional approaches to validation often lead to:
+
 - **Scattered validation logic** throughout the codebase
 - **Inconsistent error handling** across different components
 - **Performance overhead** from repeated validation checks
@@ -45,6 +48,7 @@ operations, with automatic error handling and optional logging, while
 maintaining performance in critical paths through optional unsafe variants.
 
 The SafeCall pattern addresses validation challenges by:
+
 - Centralizing validation logic within each class
 - Providing consistent error handling and logging
 - Enabling performance-critical paths through unsafe variants
@@ -53,7 +57,7 @@ The SafeCall pattern addresses validation challenges by:
 
 ## Structure
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                 SafeCall Pattern                    │
 ├─────────────────────────────────────────────────────┤
@@ -77,24 +81,28 @@ The SafeCall pattern addresses validation challenges by:
 
 ## Participants
 
-**SafeCall Template Function**
+### SafeCall Template Function
+
 - Core template function providing validated execution
 - Handles const/non-const operations automatically
 - Provides exception safety guarantees
-- Returns std::optional<T> for type-safe error handling
+- Returns `std::optional<T>` for type-safe error handling
 
-**Target Object**
+### Target Object
+
 - Object whose operations are being validated and executed
 - Implements validation logic appropriate to its state
 - Optionally implements logging interface for error reporting
 - Provides both safe and unsafe operation variants
 
-**Validator**
+### Validator
+
 - Callable (lambda, function pointer, or member function) that validates object state
 - Returns std::optional<std::string> (nullopt = valid, string = error message)
 - Can be customized per operation or shared across operations
 
-**Optional Logger (Concept-based)**
+### Optional Logger (Concept-based)
+
 - Detected via HasLogSafeCallError concept
 - Provides LogSafeCallError(const char*) method
 - Enables automatic error logging without tight coupling
@@ -108,6 +116,7 @@ template <typename TargetRef, typename Validator, typename Func>
     requires std::invocable<Func, TargetRef> && std::invocable<Validator, TargetRef>
 auto SafeCall(TargetRef&& target, Validator&& validate, Func&& func) noexcept;
 ```
+
 [_Full implementation on GitHub_](https://github.com/abdes/DroidNet/blob/master/projects/Oxygen.Engine/src/Oxygen/Core/SafeCall.h)
 
 Supports any callable, including `std::function`, lambda, methods, frerform
@@ -137,6 +146,7 @@ returns, ensuring noexcept behavior for the SafeCall wrapper.
 ### Flexible Validation
 
 Validation can be implemented as:
+
 - **Lambda functions** for inline validation logic
 - **Member function pointers** for reusable validation methods
 - **External function pointers** for shared validation across classes
@@ -167,6 +177,7 @@ safe/unsafe variants, concept-based logging, and template validation hidden in
 the implementation file:
 
 **ResourceManager.h:**
+
 ```cpp
 #pragma once
 #include <vector>
@@ -274,6 +285,7 @@ private:
 ```
 
 **ResourceManager.cpp:**
+
 ```cpp
 #include "ResourceManager.h"
 #include "Resource.h"
@@ -361,14 +373,16 @@ Use the SafeCall pattern when:
 ## Consequences
 
 **Benefits:**
+
 - **Centralized validation logic** - Each class controls its own validation rules
-- **Consistent error handling** - Uniform std::optional<T> return pattern
+- **Consistent error handling** - Uniform `std::optional<T>` return pattern
 - **Exception safety** - Automatic exception catching and conversion
 - **Optional logging** - Concept-based detection without inheritance requirements
 - **Performance flexibility** - Safe and unsafe variants available
 - **Type safety** - Template-based with compile-time validation
 
 **Drawbacks:**
+
 - **Template complexity** - Advanced C++ template techniques required
 - **Compilation overhead** - Template instantiation for each usage
 - **Learning curve** - Developers must understand the wrapper pattern
@@ -376,35 +390,42 @@ Use the SafeCall pattern when:
 
 ## Implementation Considerations
 
-##### Performance Characteristics
+### Performance Characteristics
+
 - **Safe path**: Validation + operation + error handling overhead
 - **Unsafe path**: Direct operation call with no overhead
 - **Template inlining**: Most overhead eliminated in optimized builds
 
-##### Memory Footprint
+### Memory Footprint
+
 - **Zero runtime overhead** for logging detection (concept-based)
-- **Minimal memory usage** - std::optional<T> return values only
+- **Minimal memory usage** - `std::optional<T>` return values only
 - **No vtable overhead** - Template-based, not inheritance-based
 
-##### Thread Safety
+### Thread Safety
+
 - **No inherent thread safety** - validation and operations must handle concurrency
 - **Exception safety guaranteed** - All exceptions caught and converted
 - **Atomic operations supported** - Can be used with atomic state variables
 
-#### Related Patterns
+## Related Patterns
 
-**Command Pattern**
+### Command Pattern
+
 - SafeCall can wrap Command execution for validated command processing
 - Provides error handling for command validation and execution
 
-**Template Method Pattern**
+### Template Method Pattern
+
 - Validation step is customizable while execution flow is fixed
 - Different classes can provide different validation algorithms
 
-**Decorator Pattern**
+### Decorator Pattern
+
 - SafeCall decorates operations with validation and error handling
 - Can be composed with other decorators for additional functionality
 
-**RAII (Resource Acquisition Is Initialization)**
+### RAII (Resource Acquisition Is Initialization)
+
 - Often used together for resource management with state validation
 - SafeCall ensures resources are only used when in valid states
