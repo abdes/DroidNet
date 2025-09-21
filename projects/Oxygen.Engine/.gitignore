@@ -12,6 +12,7 @@ vs2022
 ConanPresets.json
 /Testing
 .pytest_cache/
+imgui.ini
 
 .clwb
 .vs
