@@ -68,7 +68,7 @@ struct DrawMetadata; // forward declaration for predicate signature
 */
 class RenderPass : public Composition, public Named {
 public:
-  explicit RenderPass(std::string_view name);
+  OXGN_RNDR_API explicit RenderPass(std::string_view name);
   ~RenderPass() override = default;
 
   OXYGEN_DEFAULT_COPYABLE(RenderPass)
@@ -117,7 +117,7 @@ public:
   OXGN_RNDR_API auto SetName(std::string_view name) noexcept -> void override;
 
 protected:
-  auto Context() const -> const RenderContext&;
+  OXGN_RNDR_NDAPI auto Context() const -> const RenderContext&;
   auto LastBuiltPsoDesc() const -> const auto& { return last_built_pso_desc_; }
 
   virtual auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -128,7 +128,8 @@ protected:
   virtual auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc = 0;
   virtual auto NeedRebuildPipelineState() const -> bool = 0;
 
-  static auto BuildRootBindings() -> std::vector<graphics::RootBindingItem>;
+  OXGN_RNDR_NDAPI static auto BuildRootBindings()
+    -> std::vector<graphics::RootBindingItem>;
 
   // Issue draw calls over a specific pass partition.
   // Iterates PreparedSceneFrame partitions and emits draws only within the
