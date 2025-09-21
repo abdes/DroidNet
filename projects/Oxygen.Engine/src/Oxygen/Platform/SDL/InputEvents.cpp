@@ -296,14 +296,12 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
 
 auto InputEvents::ProcessPlatformEvents() -> co::Co<>
 {
-  DLOG_F(INFO, "Platform Input Events async processing started");
   while (async_->IsRunning()) {
     // Check if the event pump is still running. If not, the next event is a
     // dummy one that we should just ignore, and this loop should immediately
     // terminate.
     if (!event_pump_->IsRunning()) {
       event_pump_ = nullptr;
-      DLOG_F(1, "Platform Input Events async processing stopped");
       break;
     }
 
@@ -347,4 +345,5 @@ auto InputEvents::ProcessPlatformEvents() -> co::Co<>
       event.SetHandled();
     }
   }
+  DLOG_F(INFO, "DONE: platform Input Events async processing");
 }

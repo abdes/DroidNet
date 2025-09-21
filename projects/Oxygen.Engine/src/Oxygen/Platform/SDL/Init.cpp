@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 
@@ -19,11 +20,14 @@ Platform::Platform(const PlatformConfig& config)
 
   platform::sdl::Init(SDL_INIT_VIDEO);
   platform::sdl::SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+
+  // Initialize the input slots
+  platform::InputSlots::Initialize();
 }
 
 Platform::~Platform()
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   // ->Final<- thing to do is to terminate SDL3.
   platform::sdl::Terminate();
