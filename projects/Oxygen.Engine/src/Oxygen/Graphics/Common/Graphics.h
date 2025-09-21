@@ -49,10 +49,6 @@ namespace graphics {
   } // namespace detail
 } // namespace graphics
 
-namespace imgui {
-  class ImguiModule;
-} // namespace imgui
-
 //! Backend-agnostic graphics device and frame orchestrator.
 /*!
  The Graphics class represents the engine's device-level entry point for the
