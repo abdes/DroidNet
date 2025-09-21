@@ -8,8 +8,11 @@
 
 #include <array>
 #include <atomic>
+#include <concepts>
 #include <deque>
+#include <functional>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include <asio/signal_set.hpp>
@@ -290,6 +293,27 @@ public:
     return GetComponent<platform::WindowManager>();
   }
 
+  //! Register a single platform event filter callable executed before
+  //! standard platform processors. Only one filter is supported; attempts
+  //! to register a second one will abort.
+  /*!
+    Accept any `Callable` that is invocable with a single argument of type
+    `PlatformEvent&` and whose return type is exactly `void`. The callable is
+    type-erased and stored as `std::function<void(PlatformEvent&)>`.
+  */
+  template <typename Callable>
+    requires std::invocable<Callable, const platform::PlatformEvent&>
+    && std::same_as<void,
+      std::invoke_result_t<Callable, const platform::PlatformEvent&>>
+  void RegisterEventFilter(Callable&& filter)
+  {
+    // Erase the callable into a std::function<void(platform::PlatformEvent&)>
+    event_filter_ = std::function<void(const platform::PlatformEvent&)>(
+      std::forward<Callable>(filter));
+  }
+
+  void ClearEventFilter() { event_filter_ = {}; }
+
   static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key)
     -> platform::InputSlot;
 
@@ -302,149 +326,10 @@ public:
 private:
   auto Compose(const PlatformConfig& config) -> void;
 
+  [[nodiscard]] auto FilterPlatformEvents() -> co::Co<>;
+  std::function<void(const platform::PlatformEvent&)> event_filter_ {};
+
   time::PhysicalClock physical_clock_ {};
 };
-
-#if 0
-namespace imgui {
-    class ImGuiPlatformBackend;
-} // namespace imgui
-
-class PlatformBase {
-public:
-    OXGN_PLAT_API PlatformBase();
-    virtual ~PlatformBase() = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(PlatformBase)
-    OXYGEN_MAKE_NON_MOVABLE(PlatformBase)
-
-    // ---------------------------------------------------------------------------
-
-#  if defined(OXYGEN_VULKAN)
-    [[nodiscard]] virtual auto GetRequiredInstanceExtensions() const
-        -> std::vector<const char*>
-        = 0;
-#  endif // OXYGEN_VULKAN
-
-    // -- Displays ---------------------------------------------------------------
-
-    [[nodiscard]] virtual auto Displays() const
-        -> std::vector<std::unique_ptr<platform::Display>>
-        = 0;
-
-    [[nodiscard]] virtual auto DisplayFromId(
-        const platform::Display::IdType& display_id) const
-        -> std::unique_ptr<platform::Display>
-        = 0;
-
-    // -- Window Management ------------------------------------------------------
-
-    virtual auto MakeWindow(std::string const& title, PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window>
-        = 0;
-
-    virtual auto MakeWindow(std::string const& title,
-        PixelExtent const& extent,
-        platform::Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window>
-        = 0;
-
-    virtual auto MakeWindow(std::string const& title,
-        PixelPosition const& position,
-        PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window>
-        = 0;
-
-    virtual auto MakeWindow(std::string const& title,
-        PixelPosition const& position,
-        PixelExtent const& extent,
-        platform::Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window>
-        = 0;
-
-    // -- Events -----------------------------------------------------------------
-
-    //! Poll the platform event loop to process one event, awaking and executing
-    //! all async handlers waiting for that event.
-    /*!
-     The `PollOne()` method polls for at most one platform event, and executes
-     all async handlers that are ready to run, without blocking.
-
-     \return The number of async event handlers that were executed.
-     */
-    virtual auto PollOne() -> size_t = 0;
-
-    auto InputEvent() -> co::ParkingLot& { return platform_input_; }
-    auto LastWindowClosed() -> co::Event& { return last_window_closed_; }
-
-    // -- Slots ------------------------------------------------------------------
-
-    [[nodiscard]] auto OnLastWindowClosed() -> auto&
-    {
-        return on_last_window_closed_;
-    }
-
-    [[nodiscard]] auto OnWindowClosed() -> auto& { return on_window_closed_; }
-
-    [[nodiscard]] auto OnDisplayConnected() -> auto&
-    {
-        return on_display_connected_;
-    }
-
-    [[nodiscard]] auto OnDisplayDisconnected() -> auto&
-    {
-        return on_display_disconnected_;
-    }
-
-    // To get the new orientation, find the display from its id and query its
-    // orientation.
-    [[nodiscard]] auto OnDisplayOrientationChanged() -> auto&
-    {
-        return on_display_orientation_changed_;
-    }
-
-    static void GetAllInputSlots(std::vector<platform::InputSlot>& out_keys);
-    static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
-
-    auto GetInputCategoryDisplayName(std::string_view category_name) -> std::string_view;
-
-    [[nodiscard]] virtual auto CreateImGuiBackend(platform::WindowIdType window_id) const
-        -> std::unique_ptr<imgui::ImGuiPlatformBackend>
-        = 0;
-
-private:
-    co::ParkingLot platform_input_;
-    co::Event last_window_closed_;
-
-    sigslot::signal<> on_last_window_closed_;
-    sigslot::signal<platform::Window const&> on_window_closed_;
-
-    sigslot::signal<platform::Display::IdType> on_display_connected_;
-    sigslot::signal<platform::Display::IdType> on_display_disconnected_;
-    sigslot::signal<platform::Display::IdType> on_display_orientation_changed_;
-};
-
-template <typename T>
-class PlatformEvent {
-public:
-    [[nodiscard]] auto NativeEvent() const& { return native_event_; }
-    [[nodiscard]] auto NativeEventPtr() { return &native_event_; }
-    [[nodiscard]] auto IsHandled() const { return handled_; }
-    void SetHandled() { handled_ = true; }
-
-private:
-    bool handled_ { false };
-    T native_event_ {};
-};
-
-template <typename T>
-class EventProducer {
-public:
-    auto Event() const& { return polled_event_; }
-
-protected:
-    std::optional<PlatformEvent<T>> polled_event_;
-};
-#endif
 
 } // namespace oxygen

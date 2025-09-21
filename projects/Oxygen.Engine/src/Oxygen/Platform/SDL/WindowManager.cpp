@@ -82,7 +82,6 @@ auto WindowManager::MakeWindow(const window::Properties& props)
 
 auto WindowManager::ProcessPlatformEvents() -> co::Co<>
 {
-  DLOG_F(INFO, "Window Manager async event processing started");
   while (async_->IsRunning() && event_pump_->IsRunning()) {
     // Check if the event pump is still running. If not, the next event is a
     // dummy one that we should just ignore, and this loop should immediately
@@ -133,6 +132,7 @@ auto WindowManager::ProcessPlatformEvents() -> co::Co<>
       event.SetHandled();
     }
   }
+  DLOG_F(INFO, "DONE: window manager async processing");
 }
 
 auto WindowManager::WindowFromId(WindowIdType window_id) const -> Window&

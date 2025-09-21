@@ -29,7 +29,7 @@ EventPump::EventPump()
     co_return std::move(event);
   })
 {
-  DLOG_F(1, "Platform event pump created");
+  DLOG_F(INFO, "Platform event pump created");
 }
 
 auto EventPump::PollOne() -> bool
@@ -51,5 +51,5 @@ auto EventPump::Shutdown() -> void
   poll_.UnParkAll();
 
   DLOG_F(
-    INFO, "EventPump shutdown requested - no more events will be processed");
+    INFO, "EventPump shutdown requested -> no more events will be processed");
 }
