@@ -28,6 +28,7 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
+  "AsyncEngineApp.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -44,9 +45,15 @@ target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
-    oxygen::platform-sdl
+    oxygen::platform
     oxygen::input
     oxygen::core
+    oxygen::clap
+    oxygen::engine
+    oxygen::imgui
+    oxygen::graphics-direct3d12
+    oxygen::renderer
+    oxygen::loader
 )
 
 # -- Utility to dump SDL3 code names -------------------------------------------

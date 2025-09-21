@@ -481,7 +481,7 @@ auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
   using namespace core;
   return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-    PhaseId::kTransformPropagation, PhaseId::kFrameGraph,
+    PhaseId::kTransformPropagation, PhaseId::kGuiUpdate, PhaseId::kFrameGraph,
     PhaseId::kCommandRecord, PhaseId::kFrameEnd>();
 }
 
@@ -902,8 +902,7 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // Temporary: build the ImGui overlay here for now
-  DrawDebugOverlay(context);
+  // ImGui overlay moved to GUI phase; FrameGraph no longer builds ImGui UI
 
   // Setup framebuffers if needed
   if (framebuffers_.empty()) {
@@ -914,6 +913,34 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
   SetupRenderPasses();
 
   TrackFrameAction("Frame graph and render passes configured");
+  TrackPhaseEnd();
+  co_return;
+}
+
+auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+{
+  LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
+  TrackPhaseStart("GUI Update");
+
+  if (window_weak_.expired()) {
+    TrackFrameAction("GUI update skipped - window expired");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  // Set ImGui context before making ImGui calls
+  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  if (imgui_module_ref) {
+    auto& imgui_module = imgui_module_ref->get();
+    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
+      ImGui::SetCurrentContext(imgui_context);
+    }
+  }
+
+  // Build ImGui overlay here
+  DrawDebugOverlay(context);
+
+  TrackFrameAction("GUI overlay built");
   TrackPhaseEnd();
   co_return;
 }
@@ -958,13 +985,15 @@ auto MainModule::SetupMainWindow() -> void
   // Set up the main window
   WindowProps props("Oxygen Graphics Demo - AsyncEngine");
   props.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  props.flags = { .hidden = false,
+  props.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   window_weak_ = app_.platform->Windows().MakeWindow(props);
   if (const auto window = window_weak_.lock()) {
     LOG_F(INFO, "Main window {} is created", window->Id());

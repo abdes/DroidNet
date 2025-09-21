@@ -128,6 +128,7 @@ namespace examples::async {
     auto OnFrameGraph(engine::FrameContext& context) -> co::Co<> override;
     auto OnCommandRecord(engine::FrameContext& context) -> co::Co<> override;
     auto OnFrameEnd(engine::FrameContext& context) -> void override;
+    auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
   private:
     //! Setup functions (called once).
