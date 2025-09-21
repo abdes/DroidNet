@@ -67,10 +67,6 @@ def _validate_heap_entries(heaps: Dict[str, Any]) -> List[Tuple[int, int, str]]:
             id_type = id_type.strip()
             id_vis = id_vis.strip().lower()
             expected_vis = "gpu" if bool(shader_visible) else "cpu"
-            if id_type != str(htype):
-                raise ValueError(
-                    f"Heap id '{name}' type prefix '{id_type}' does not match declared type '{htype}'"
-                )
             if id_vis not in ("gpu", "cpu"):
                 raise ValueError(
                     f"Heap id '{name}' visibility suffix '{id_vis}' must be 'gpu' or 'cpu'"
