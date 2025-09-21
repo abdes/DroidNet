@@ -24,8 +24,6 @@ namespace oxygen::input {
 
 class ActionTrigger;
 
-//=== Action -----------------------------------------------------------------//
-
 //! High-level input Action with per-frame edges and persistent level state.
 /*!
  Maintains a persistent "level" state (ongoing/value) across frames and
@@ -144,7 +142,7 @@ public:
     return frame_transitions_;
   }
 
-  // -- Convenience per-frame edge queries -----------------------------------
+  // -- Convenience per-frame edge queries -------------------------------------
 
   //! True if the action transitioned Idle->Ongoing in this frame
   OXGN_NPUT_NDAPI auto WasStartedThisFrame() const -> bool;
@@ -184,16 +182,6 @@ private:
   //! Helper to record a state transition
   void RecordTransition(
     ActionState from, ActionState to, const ActionValue& value);
-
-  // TODO(abdes): Timebase consistency: use engine time (see TimeUtils.h) for
-  // timestamps in transitions for consistent combo/chain timing.
 };
 
 } // namespace oxygen::input
-
-// TODO(abdes) ass some debugging counters for the action.
-
-// ElapsedProcessedTime:	How long it took from started to
-// completed/canceled.
-
-// LastTriggeredWorldTime:	last time it evaluated to a triggered state.
