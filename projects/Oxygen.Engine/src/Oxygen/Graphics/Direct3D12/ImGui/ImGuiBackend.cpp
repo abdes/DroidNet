@@ -99,11 +99,6 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
     throw std::runtime_error("Failed to initialize ImGui D3D12 backend");
   }
 
-  // Configure ImGui for this backend
-  ImGuiIO& io = ImGui::GetIO();
-  io.BackendRendererName = "ImGui D3D12 Backend";
-  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
-
   initialized_ = true;
 }
 
@@ -116,6 +111,7 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
 auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
 {
   if (initialized_) {
+    ImGui::SetCurrentContext(imgui_context_);
     ImGui_ImplDX12_Shutdown();
     initialized_ = false;
   }

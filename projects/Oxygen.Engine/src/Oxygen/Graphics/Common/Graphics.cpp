@@ -96,7 +96,7 @@ auto Graphics::IsRunning() const -> bool { return nursery_ != nullptr; }
 
 auto Graphics::Flush() -> void
 {
-  DLOG_SCOPE_F(1, "Graphics::Shutdown");
+  DLOG_SCOPE_FUNCTION(1);
   // Flush all command queues
   FlushCommandQueues();
 
