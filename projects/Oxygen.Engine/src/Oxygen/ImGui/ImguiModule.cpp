@@ -4,90 +4,115 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <imgui.h>
-
-#include "SDL/ImGuiSdl3Backend.h"
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Engine/Engine.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Imgui/ImGuiPlatformBackend.h>
-#include <Oxygen/Imgui/ImguiModule.h>
-#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 
-using oxygen::imgui::ImguiModule;
+namespace oxygen::imgui {
 
-ImguiModule::~ImguiModule()
+ImGuiModule::ImGuiModule(std::shared_ptr<Platform> platform,
+  std::unique_ptr<ImGuiGraphicsBackend> graphics_backend)
+  : platform_(std::move(platform))
+  , graphics_backend_(std::move(graphics_backend))
 {
 }
 
-void ImguiModule::OnInitialize(const Graphics* gfx)
+ImGuiModule::~ImGuiModule() { OnShutdown(); }
+
+auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
+  -> bool
 {
-    DCHECK_NOTNULL_F(gfx);
+  DCHECK_NOTNULL_F(graphics_backend_);
 
-    IMGUI_CHECKVERSION();
-    imgui_context_ = ImGui::CreateContext();
-    ImGui::StyleColorsDark();
+  CHECK_NOTNULL_F(engine);
+  auto gfx_weak = engine->GetGraphics();
+  CHECK_F(!gfx_weak.expired());
 
-    // TODO: FIXME Implement this
-    // imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
-    imgui_platform_ = std::make_shared<sdl3::ImGuiSdl3Backend>(nullptr, platform::kInvalidWindowId, imgui_context_);
-    if (!imgui_platform_) {
-        LOG_F(ERROR, "Failed to create ImGui platform backend.");
-        return;
+  // Initialize graphics backend with engine's Graphics instance
+  try {
+    graphics_backend_->Init(std::move(gfx_weak));
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "ImGuiModule: graphics backend Init failed: {}", e.what());
+    return false;
+  }
+
+  // Create ImGuiPass with the graphics backend
+  try {
+    render_pass_ = std::make_unique<ImGuiPass>(graphics_backend_);
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "ImGuiModule: failed to create ImGuiPass: {}", e.what());
+    return false;
+  }
+
+  return true;
+}
+
+auto ImGuiModule::OnShutdown() noexcept -> void
+{
+  // Stop event processing immediately
+  platform_backend_.reset();
+  try {
+    if (graphics_backend_) {
+      graphics_backend_->Shutdown();
     }
-    ImGuiBackendInit(gfx);
-
-    LOG_F(INFO, "[{}] initialized with `{}`", Name(), imgui_platform_->GetName());
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "exception while shutting down ImGuiModule: {}", ex.what());
+  }
 }
 
-void ImguiModule::OnShutdown() noexcept
+auto ImGuiModule::OnFrameStart(engine::FrameContext& frame_context) -> void
 {
-    try {
-        ImGuiBackendShutdown();
-        imgui_platform_.reset();
-        ImGui::DestroyContext();
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to shutdown ImGui module: {}", e.what());
-    }
+  // We should always have a graphics backend
+  DCHECK_NOTNULL_F(graphics_backend_);
+
+  if (!platform_backend_) {
+    // Maybe no window yet, or window is closing/closed. There is nothing to do
+    // for ImGui with no window.
+    LOG_F(WARNING, "platform backend not valid, skipping frame");
+    return;
+  }
+
+  // Platform backend handles SDL events and sets up display info FIRST
+  platform_backend_->NewFrame();
+
+  // Graphics backend handles ImGui context and calls ImGui::NewFrame()
+  graphics_backend_->NewFrame();
 }
 
-auto ImguiModule::NewFrame(const Graphics* gfx) -> void
+auto ImGuiModule::GetRenderPass() const noexcept -> observer_ptr<ImGuiPass>
 {
-    DCHECK_NOTNULL_F(gfx);
-    DCHECK_NOTNULL_F(imgui_context_);
-
-    ImGuiBackendNewFrame();
-    imgui_platform_->NewFrame();
-    ImGui::NewFrame();
+  if (!platform_backend_ || !graphics_backend_) {
+    return {};
+  }
+  return observer_ptr { render_pass_.get() };
 }
 
-auto ImguiModule::ImGuiRender(const Graphics* gfx) -> std::unique_ptr<graphics::CommandList>
+auto ImGuiModule::SetWindowId(platform::WindowIdType window_id) -> void
 {
-    DCHECK_NOTNULL_F(gfx);
-    DCHECK_NOTNULL_F(imgui_context_);
+  // Store the window ID for later use in OnFrameStart
+  window_id_ = window_id;
 
-    ImGui::Render();
-    return ImGuiBackendRenderRawData(gfx, ImGui::GetDrawData());
+  if (window_id == platform::kInvalidWindowId) {
+    platform_backend_.reset();
+    render_pass_->Disable();
+    return;
+  }
+
+  // Create platform backend if needed, and if we have a valid window ID
+  try {
+    platform_backend_ = std::make_unique<sdl3::ImGuiSdl3Backend>(
+      platform_, window_id_, graphics_backend_->GetImGuiContext());
+    render_pass_->Enable();
+  } catch (const std::exception& ex) {
+    LOG_F(
+      ERROR, "exception while creating ImGui platform backend: {}", ex.what());
+  }
 }
 
-void ImguiModule::ProcessInput(const platform::InputEvent& /*event*/)
+// FIXME: Temporarily, the ImGui context is unique and owned by the backend
+auto ImGuiModule::GetImGuiContext() const noexcept -> ImGuiContext*
 {
-    DCHECK_NOTNULL_F(imgui_context_);
-    // Input is processed directly by the platform backend.
+  return graphics_backend_ ? graphics_backend_->GetImGuiContext() : nullptr;
 }
 
-void ImguiModule::Update(Duration /*delta_time*/)
-{
-    DCHECK_NOTNULL_F(imgui_context_);
-}
-
-void ImguiModule::FixedUpdate()
-{
-    DCHECK_NOTNULL_F(imgui_context_);
-}
-
-auto ImguiModule::GetRenderInterface() -> ImGuiRenderInterface
-{
-    return ImGuiRenderInterface { this };
-}
+} // namespace oxygen::imgui

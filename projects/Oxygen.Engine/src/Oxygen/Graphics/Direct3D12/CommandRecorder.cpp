@@ -9,6 +9,7 @@
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
 #include <Oxygen/Base/VariantHelpers.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -205,13 +206,15 @@ CommandRecorder::~CommandRecorder()
 auto CommandRecorder::Begin() -> void { graphics::CommandRecorder::Begin(); }
 
 namespace {
-// Modern bindless root signature layout:
+// Bindless root signature layout indices must match Generated.RootSignature.h
 // Root Param 0: Single unbounded SRV descriptor table (t0, space0)
-// Root Param 1: Direct CBV for SceneConstants (b1, space0)
-// Root Param 2: Direct CBV for MaterialConstants (b2, space0) - graphics only
-constexpr UINT kRootIndex_UnboundedSRV_Table = 0;
-constexpr UINT kRootIndex_SceneConstants_CBV = 1;
-constexpr UINT kRootIndex_MaterialConstants_CBV = 2;
+// Root Param 1: Sampler descriptor table (s0, space0)
+// Root Param 2: SceneConstants CBV (b1, space0)
+// Root Param 3: DrawIndex root constants (b2, space0)
+constexpr UINT kRootIndex_UnboundedSRV_Table
+  = static_cast<UINT>(oxygen::engine::binding::RootParam::kBindlessSrvTable);
+constexpr UINT kRootIndex_Sampler_Table
+  = static_cast<UINT>(oxygen::engine::binding::RootParam::kSamplerTable);
 } // namespace
 
 auto CommandRecorder::SetupDescriptorTables(
@@ -278,12 +281,8 @@ auto CommandRecorder::SetupDescriptorTables(
       set_table(kRootIndex_UnboundedSRV_Table, heap_info.gpu_handle);
 
     } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
-      // Note: Current root signature doesn't include sampler tables
-      // If samplers are needed, they would need to be added to the root
-      // signature
-      DLOG_F(WARNING,
-        "Sampler descriptor heap detected but no sampler table in root "
-        "signature");
+      // Bind the sampler descriptor heap to the sampler table
+      set_table(kRootIndex_Sampler_Table, heap_info.gpu_handle);
     } else {
       DLOG_F(WARNING,
         "Unsupported descriptor heap type for root table binding: {}",
@@ -884,8 +883,15 @@ auto CommandRecorder::BindIndexBuffer(
     break;
   default:
     DCHECK_F(false, "Unsupported index buffer format");
+    // ReSharper disable once CppUnreachableCode
     ib_view.Format = DXGI_FORMAT_UNKNOWN;
     break;
   }
   command_list.GetCommandList()->IASetIndexBuffer(&ib_view);
+}
+
+auto CommandRecorder::GetD3D12CommandList() const -> ID3D12GraphicsCommandList*
+{
+  const auto& command_list_impl = GetConcreteCommandList();
+  return command_list_impl.GetCommandList();
 }

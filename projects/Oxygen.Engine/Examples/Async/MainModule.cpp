@@ -40,6 +40,8 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/ImGui/ImGuiPass.h>
+#include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputSnapshot.h>
@@ -262,30 +264,33 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 
 // Evaluate closed Catmull-Rom spline at parameter u in [0,1). Control points
 // must have size >= 4
-static glm::vec3 EvalClosedCatmullRom(
-  const std::vector<glm::vec3>& pts, double u)
+auto EvalClosedCatmullRom(const std::vector<glm::vec3>& pts, double u)
+  -> glm::vec3
 {
   const size_t n = pts.size();
-  if (n == 0)
+  if (n == 0) {
     return glm::vec3(0.0f);
-  if (n < 4)
+  }
+  if (n < 4) {
     return pts[0];
+  }
   // Map u to segment index
   const double total = u * static_cast<double>(n);
   int i0 = static_cast<int>(std::floor(total));
   double local_t = total - static_cast<double>(i0);
   i0 = i0 % static_cast<int>(n);
-  if (i0 < 0)
+  if (i0 < 0) {
     i0 += static_cast<int>(n);
+  }
 
   const int i1 = (i0 + 1) % static_cast<int>(n);
   const int i_1 = (i0 - 1 + static_cast<int>(n)) % static_cast<int>(n);
   const int i2 = (i0 + 2) % static_cast<int>(n);
 
-  const glm::dvec3 P0 = glm::dvec3(pts[i_1]);
-  const glm::dvec3 P1 = glm::dvec3(pts[i0]);
-  const glm::dvec3 P2 = glm::dvec3(pts[i1]);
-  const glm::dvec3 P3 = glm::dvec3(pts[i2]);
+  const auto P0 = glm::dvec3(pts[i_1]);
+  const auto P1 = glm::dvec3(pts[i0]);
+  const auto P2 = glm::dvec3(pts[i1]);
+  const auto P3 = glm::dvec3(pts[i2]);
 
   const double t = local_t;
   const double t2 = t * t;
@@ -301,13 +306,14 @@ static glm::vec3 EvalClosedCatmullRom(
 
 // Build an arc-length lookup table for a closed Catmull-Rom spline.
 // Returns cumulative lengths (s) and corresponding parameters (u).
-static void BuildArcLengthLut(const std::vector<glm::vec3>& pts, int samples,
-  std::vector<double>& out_u, std::vector<double>& out_s)
+auto BuildArcLengthLut(const std::vector<glm::vec3>& pts, int samples,
+  std::vector<double>& out_u, std::vector<double>& out_s) -> void
 {
   out_u.clear();
   out_s.clear();
-  if (pts.size() < 4 || samples < 2)
+  if (pts.size() < 4 || samples < 2) {
     return;
+  }
 
   out_u.reserve(static_cast<size_t>(samples) + 1);
   out_s.reserve(static_cast<size_t>(samples) + 1);
@@ -327,26 +333,31 @@ static void BuildArcLengthLut(const std::vector<glm::vec3>& pts, int samples,
 }
 
 // Given an arc-length s in [0, total_len), find u in [0,1) using the LUT.
-static double ArcLengthToParamU(double s, const std::vector<double>& u_samples,
-  const std::vector<double>& s_samples)
+auto ArcLengthToParamU(double s, const std::vector<double>& u_samples,
+  const std::vector<double>& s_samples) -> double
 {
-  if (u_samples.empty() || s_samples.empty())
+  if (u_samples.empty() || s_samples.empty()) {
     return 0.0;
+  }
   const double total = s_samples.back();
-  if (total <= 0.0)
+  if (total <= 0.0) {
     return 0.0;
+  }
   // Wrap s into [0,total)
   s = std::fmod(s, total);
-  if (s < 0.0)
+  if (s < 0.0) {
     s += total;
+  }
 
   // Binary search for segment
   auto it = std::lower_bound(s_samples.begin(), s_samples.end(), s);
   size_t idx = static_cast<size_t>(std::distance(s_samples.begin(), it));
-  if (idx == 0)
+  if (idx == 0) {
     return u_samples.front();
-  if (idx >= s_samples.size())
+  }
+  if (idx >= s_samples.size()) {
     return u_samples.back();
+  }
 
   const double s0 = s_samples[idx - 1];
   const double s1 = s_samples[idx];
@@ -357,11 +368,12 @@ static double ArcLengthToParamU(double s, const std::vector<double>& u_samples,
 }
 
 // Approximate path length by sampling
-static double ApproximatePathLength(
-  const std::vector<glm::vec3>& pts, int samples = 256)
+auto ApproximatePathLength(const std::vector<glm::vec3>& pts, int samples = 256)
+  -> double
 {
-  if (pts.empty())
+  if (pts.empty()) {
     return 0.0;
+  }
   double len = 0.0;
   glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
   for (int i = 1; i <= samples; ++i) {
@@ -379,20 +391,20 @@ auto SetupFixedCamera(oxygen::scene::SceneNode& camera_node) -> void
 {
   constexpr float radius = 15.0F;
   constexpr float pitch_deg = 10.0F;
-  const float pitch = glm::radians(pitch_deg);
+  constexpr float pitch = glm::radians(pitch_deg);
   // Place camera on negative Z so quad (facing +Z) is front-facing.
   const glm::vec3 position(
     radius * 0.0F, radius * std::sin(pitch), -radius * std::cos(pitch));
   auto transform = camera_node.GetTransform();
   transform.SetLocalPosition(position);
-  const glm::vec3 target(0.0F);
-  const glm::vec3 up(0.0F, 1.0F, 0.0F);
+  constexpr glm::vec3 target(0.0F);
+  constexpr glm::vec3 up(0.0F, 1.0F, 0.0F);
   const glm::vec3 dir = glm::normalize(target - position);
   transform.SetLocalRotation(glm::quatLookAtRH(dir, up));
 }
 
 // Convert hue [0,1] to an RGB color (simple H->RGB approx)
-static glm::vec3 ColorFromHue(double h)
+auto ColorFromHue(double h) -> glm::vec3
 {
   // h in [0,1)
   const double hh = std::fmod(h, 1.0);
@@ -436,7 +448,7 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 } // namespace
 
-MainModule::MainModule(const examples::async::AsyncEngineApp& app)
+MainModule::MainModule(const AsyncEngineApp& app)
   : app_(app)
 {
   DCHECK_NOTNULL_F(app_.platform);
@@ -483,6 +495,14 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
     SetupRenderer();
     SetupShaders();
     SetupInput();
+
+    // --- ImGuiPass configuration ---
+    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      auto& imgui_module = imgui_module_ref->get();
+      imgui_module.SetWindowId(window_weak_.lock()->Id());
+    }
+
     initialized_ = true;
   }
 
@@ -507,19 +527,20 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 }
 
 // Initialize a default looping flight path over the scene (few control points)
-void MainModule::InitializeDefaultFlightPath()
+auto MainModule::InitializeDefaultFlightPath() -> void
 {
-  if (!camera_drone_.path_points.empty())
+  if (!camera_drone_.path_points.empty()) {
     return;
+  }
 
   camera_drone_.path_points.clear();
   camera_drone_.pois.clear();
 
   // Figure-eight (horizontal) path using a Gerono lemniscate pattern.
   // Produces a horizontal 8-loop at a fixed altitude that loops seamlessly.
-  const int points = 96; // control polygon resolution
-  const float a = 36.0f; // horizontal scale (half-width of loops)
-  const float altitude = 14.0f; // fixed altitude for the 8-loop
+  constexpr int points = 96; // control polygon resolution
+  constexpr float a = 36.0f; // horizontal scale (half-width of loops)
+  constexpr float altitude = 14.0f; // fixed altitude for the 8-loop
 
   camera_drone_.path_points.reserve(points + 4);
   for (int i = 0; i < points; ++i) {
@@ -536,8 +557,9 @@ void MainModule::InitializeDefaultFlightPath()
   // wraps indices, and duplicating the first point can create seam artifacts.
 
   camera_drone_.path_length = ApproximatePathLength(camera_drone_.path_points);
-  if (camera_drone_.path_length <= 0.0)
+  if (camera_drone_.path_length <= 0.0) {
     camera_drone_.path_length = 1.0;
+  }
   camera_drone_.path_u = 0.0;
   camera_drone_.path_s = 0.0;
 
@@ -565,24 +587,26 @@ void MainModule::InitializeDefaultFlightPath()
     const glm::vec3 p_a
       = EvalClosedCatmullRom(camera_drone_.path_points, u_eps);
     glm::vec3 tangent = glm::normalize(p_a - start);
-    if (glm::length(tangent) < 1e-6f)
+    if (glm::length(tangent) < 1e-6f) {
       tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
 
-    const glm::vec3 center = glm::vec3(0.0f, 2.5f, 0.0f);
+    constexpr auto center = glm::vec3(0.0f, 2.5f, 0.0f);
     glm::vec3 to_center = center - camera_drone_.current_pos;
-    if (glm::length(to_center) > 1e-6f)
+    if (glm::length(to_center) > 1e-6f) {
       to_center = glm::normalize(to_center);
-    else
+    } else {
       to_center = tangent;
+    }
 
     // Rotate tangent toward the center by at most 45 degrees
     auto RotateTowardByAngle
       = [](glm::vec3 from, glm::vec3 to, float max_angle) {
-          const float eps_axis = 1e-6f;
+          constexpr float eps_axis = 1e-6f;
           const float dotv = glm::clamp(glm::dot(from, to), -1.0f, 1.0f);
           const float ang = std::acos(dotv);
           // focus_strength controls how strongly we bias toward the target.
-          const float focus_strength = 0.6f; // in [0,1]
+          constexpr float focus_strength = 0.6f; // in [0,1]
           const float apply_angle = glm::min(max_angle, ang * focus_strength);
           glm::vec3 axis = glm::cross(from, to);
           if (glm::length(axis) < eps_axis) {
@@ -635,11 +659,13 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
   }
 
   // Advance along the path by distance (arc-length) for constant speed
-  if (d.path_length <= 0.0)
+  if (d.path_length <= 0.0) {
     d.path_length = 1.0;
+  }
   d.path_s = std::fmod(d.path_s + d.path_speed * dt, d.path_length);
-  if (d.path_s < 0.0)
+  if (d.path_s < 0.0) {
     d.path_s += d.path_length;
+  }
   const double u
     = ArcLengthToParamU(d.path_s, d.arc_lut.u_samples, d.arc_lut.s_samples);
 
@@ -651,48 +677,53 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
     d.path_s + eps_s, d.arc_lut.u_samples, d.arc_lut.s_samples);
   const glm::vec3 p_a = EvalClosedCatmullRom(d.path_points, u_eps);
   glm::vec3 tangent = p_a - p;
-  if (glm::length(tangent) > 1e-6f)
+  if (glm::length(tangent) > 1e-6f) {
     tangent = glm::normalize(tangent);
-  else
+  } else {
     tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+  }
 
   const glm::vec3 cam_pos = p;
 
   // Compute a forward vector biased toward the scene focal point but within
   // rotation constraints (max 45 degrees). Keep camera primarily forward.
-  const glm::vec3 focus_target(static_cast<float>(d.focus_offset.x),
-    d.focus_height, static_cast<float>(d.focus_offset.y));
+  const glm::vec3 focus_target(
+    d.focus_offset.x, d.focus_height, d.focus_offset.y);
   glm::vec3 focus_dir = focus_target - cam_pos;
-  if (glm::length(focus_dir) > 1e-6f)
+  if (glm::length(focus_dir) > 1e-6f) {
     focus_dir = glm::normalize(focus_dir);
-  else
+  } else {
     focus_dir = tangent;
+  }
 
-  const float max_rot = glm::radians(180.0f);
-  const float focus_strength = 0.8f; // how strongly to bias toward focus
+  constexpr float max_rot = glm::radians(180.0f);
+  constexpr float focus_strength = 0.8f; // how strongly to bias toward focus
   const float dotv = glm::clamp(glm::dot(tangent, focus_dir), -1.0f, 1.0f);
   const float ang = std::acos(dotv);
   const float apply_angle = glm::min(max_rot, ang * focus_strength);
   glm::vec3 axis = glm::cross(tangent, focus_dir);
-  if (glm::length(axis) < 1e-6f)
+  if (glm::length(axis) < 1e-6f) {
     axis = glm::vec3(0.0f, 1.0f, 0.0f);
-  else
+  } else {
     axis = glm::normalize(axis);
+  }
   const glm::quat rot = glm::angleAxis(apply_angle, axis);
   glm::vec3 final_fwd = glm::normalize(rot * tangent);
 
   // Clamp pitch to +/-45 degrees
   auto ClampForwardPitch = [](glm::vec3 fwd) {
-    const float max_pitch = glm::radians(45.0f);
+    constexpr float max_pitch = glm::radians(45.0f);
     glm::vec3 horiz = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
-    if (glm::length(horiz) < 1e-6f)
+    if (glm::length(horiz) < 1e-6f) {
       return fwd;
+    }
     const float current_pitch = std::asin(glm::clamp(fwd.y, -1.0f, 1.0f));
     if (current_pitch > max_pitch) {
       const float y = std::sin(max_pitch);
       const float scale = std::cos(max_pitch);
       return glm::normalize(glm::vec3(horiz.x * scale, y, horiz.z * scale));
-    } else if (current_pitch < -max_pitch) {
+    }
+    if (current_pitch < -max_pitch) {
       const float y = std::sin(-max_pitch);
       const float scale = std::cos(-max_pitch);
       return glm::normalize(glm::vec3(horiz.x * scale, y, horiz.z * scale));
@@ -701,7 +732,7 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
   };
   final_fwd = ClampForwardPitch(final_fwd);
 
-  const glm::vec3 base_up(0.0f, 1.0f, 0.0f);
+  constexpr glm::vec3 base_up(0.0f, 1.0f, 0.0f);
   const glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
 
   // Simple smoothing for position and rotation
@@ -794,9 +825,8 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   DCHECK_F(static_cast<bool>(eng_snap),
     "InputSnapshot must be available after PhaseInput");
   if (eng_snap) {
-    const auto typed
-      = std::shared_ptr<const oxygen::input::InputSnapshot>(eng_snap,
-        static_cast<const oxygen::input::InputSnapshot*>(eng_snap.get()));
+    const auto typed = std::shared_ptr<const input::InputSnapshot>(
+      eng_snap, static_cast<const input::InputSnapshot*>(eng_snap.get()));
     if (typed) {
       if (typed->DidActionTrigger("DroneSpeedUp")) {
         camera_drone_.path_speed
@@ -820,6 +850,36 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
 auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(2, "MainModule::OnFrameGraph");
+
+  // Set ImGui context before making ImGui calls
+  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  if (imgui_module_ref) {
+    auto& imgui_module = imgui_module_ref->get();
+    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
+      ImGui::SetCurrentContext(imgui_context);
+    }
+  }
+
+  // Temporary: build the ImGui overlay here for now
+  ImGui::Begin("Info (AsyncEngine)");
+  ImGui::Text("Oxygen AsyncEngine Demo");
+  ImGui::Separator();
+  ImGui::Text("Frame: %u", context.GetFrameSequenceNumber().get());
+  ImGui::Text("Time: %.2f s",
+    std::chrono::duration<float>(context.GetFrameStartTime() - start_time_)
+      .count());
+  ImGui::Text("Drone speed: %.1f units/s", camera_drone_.path_speed);
+  ImGui::Text(
+    "Drone flight: %s", camera_drone_.enabled ? "Enabled" : "Disabled");
+
+  if (ImGui::Button(
+        camera_drone_.enabled ? "Disable flight" : "Enable flight")) {
+    camera_drone_.enabled = !camera_drone_.enabled;
+    if (camera_drone_.enabled) {
+      InitializeDefaultFlightPath();
+    }
+  }
+  ImGui::End();
 
   // Setup framebuffers if needed
   if (framebuffers_.empty()) {
@@ -907,11 +967,11 @@ auto MainModule::SetupRenderer() -> void
 
 auto MainModule::SetupInput() -> void
 {
-  using oxygen::input::Action;
-  using oxygen::input::ActionTriggerPressed;
-  using oxygen::input::ActionValueType;
-  using oxygen::input::InputActionMapping;
-  using oxygen::platform::InputSlots;
+  using input::Action;
+  using input::ActionTriggerPressed;
+  using input::ActionValueType;
+  using input::InputActionMapping;
+  using platform::InputSlots;
 
   if (!app_.input_system) {
     LOG_F(WARNING, "InputSystem not available; skipping input bindings");
@@ -928,8 +988,7 @@ auto MainModule::SetupInput() -> void
   app_.input_system->AddAction(action_speed_down_);
 
   // Create mapping context
-  input_ctx_
-    = std::make_shared<oxygen::input::InputMappingContext>("async-demo");
+  input_ctx_ = std::make_shared<input::InputMappingContext>("async-demo");
 
   // Map W -> speed up (Pressed)
   {
@@ -940,7 +999,7 @@ auto MainModule::SetupInput() -> void
     m->AddTrigger(t);
     // Add auto-repeat while held (Pulse)
     {
-      auto pulse = std::make_shared<oxygen::input::ActionTriggerPulse>();
+      auto pulse = std::make_shared<input::ActionTriggerPulse>();
       // Fire roughly every 120ms while held; do not trigger immediately
       // (Pressed already provides the initial edge)
       pulse->SetInterval(0.12f);
@@ -959,7 +1018,7 @@ auto MainModule::SetupInput() -> void
     m->AddTrigger(t);
     // Add auto-repeat while held (Pulse)
     {
-      auto pulse = std::make_shared<oxygen::input::ActionTriggerPulse>();
+      auto pulse = std::make_shared<input::ActionTriggerPulse>();
       pulse->SetInterval(0.12f);
       pulse->MakeExplicit();
       m->AddTrigger(pulse);
@@ -1033,7 +1092,7 @@ auto MainModule::EnsureExampleScene() -> void
     return;
   }
 
-  using oxygen::scene::Scene;
+  using scene::Scene;
 
   scene_ = std::make_shared<Scene>("ExampleScene");
 
@@ -1072,8 +1131,7 @@ auto MainModule::EnsureExampleScene() -> void
     // Configure LOD policy per-sphere (disabled during diagnostics)
     if (!kDisableSphereLodPolicy) {
       if (auto obj = node.GetObject()) {
-        auto& r = obj->get()
-                    .GetComponent<oxygen::scene::detail::RenderableComponent>();
+        auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
         DistancePolicy pol;
         pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
         pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
@@ -1082,7 +1140,7 @@ auto MainModule::EnsureExampleScene() -> void
     }
 
     // Randomized parameters: seed ensures reproducible runs
-    const double two_pi = static_cast<double>(glm::two_pi<float>());
+    constexpr double two_pi = glm::two_pi<float>();
     const double base_phase
       = (two_pi * static_cast<double>(i)) / static_cast<double>(kNumSpheres);
     const double jitter = phase_jitter(rng);
@@ -1093,19 +1151,16 @@ auto MainModule::EnsureExampleScene() -> void
 
     // Apply per-sphere material override (transparent glass-like)
     if (auto obj = node.GetObject()) {
-      auto& r
-        = obj->get().GetComponent<oxygen::scene::detail::RenderableComponent>();
+      auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
       const std::string mat_name
         = std::string("SphereMat_") + std::to_string(i);
       const auto rgb = ColorFromHue(hue);
       const bool is_transparent
         = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
       const float alpha = is_transparent ? 0.35f : 1.0f;
-      const auto domain = is_transparent
-        ? oxygen::data::MaterialDomain::kAlphaBlended
-        : oxygen::data::MaterialDomain::kOpaque;
-      const glm::vec4 color(static_cast<float>(rgb.x),
-        static_cast<float>(rgb.y), static_cast<float>(rgb.z), alpha);
+      const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
+                                         : data::MaterialDomain::kOpaque;
+      const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
       const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
       // Apply override for submesh index 0 across all LODs so switching LOD
       // retains the material override. Use EffectiveLodCount() to iterate.
@@ -1140,8 +1195,8 @@ auto MainModule::EnsureExampleScene() -> void
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
-  using oxygen::scene::PerspectiveCamera;
-  using oxygen::scene::camera::ProjectionConvention;
+  using scene::PerspectiveCamera;
+  using scene::camera::ProjectionConvention;
 
   if (!scene_) {
     return;
@@ -1169,7 +1224,7 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
     cam.SetAspectRatio(aspect);
     cam.SetNearPlane(0.1F);
     cam.SetFarPlane(600.0F);
-    cam.SetViewport(oxygen::ViewPort { .top_left_x = 0.0f,
+    cam.SetViewport(ViewPort { .top_left_x = 0.0f,
       .top_left_y = 0.0f,
       .width = static_cast<float>(width),
       .height = static_cast<float>(height),
@@ -1185,7 +1240,7 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
   constexpr double kMaxDelta = 0.05;
   const double effective_dt = (delta_time > kMaxDelta) ? kMaxDelta : delta_time;
 
-  const double two_pi = static_cast<double>(glm::two_pi<float>());
+  constexpr double two_pi = glm::two_pi<float>();
 
   // Absolute-time sampling for deterministic, jitter-free animation
   anim_time_ += effective_dt;
@@ -1306,9 +1361,15 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // Early-out if graphics, scene, window, or surface are not available. This
   // can happen during shutdown or immediately after the window has been
   // closed, while modules may still receive callbacks within the frame.
-  if (app_.gfx_weak.expired() || !scene_ || window_weak_.expired()
-    || !surface_) {
+  if (app_.gfx_weak.expired() || !scene_ || !surface_) {
     co_return;
+  }
+  if (window_weak_.expired()) {
+    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      auto& imgui_module = imgui_module_ref->get();
+      imgui_module.SetWindowId(platform::kInvalidWindowId);
+    }
   }
 
   auto gfx = app_.gfx_weak.lock();
@@ -1374,6 +1435,16 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
         }
         co_await transparent_pass_->PrepareResources(context, *recorder);
         co_await transparent_pass_->Execute(context, *recorder);
+      }
+
+      // --- ImGuiPass configuration ---
+      auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+      if (imgui_module_ref) {
+        auto& imgui_module = imgui_module_ref->get();
+        auto imgui_pass = imgui_module.GetRenderPass();
+        if (imgui_pass) {
+          co_await imgui_pass->Render(*recorder);
+        }
       }
     },
     render_context_, context);

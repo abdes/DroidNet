@@ -6,43 +6,40 @@
 
 #pragma once
 
-#include <Oxygen/ImGui/ImGuiPlatformBackend.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/ImGui/api_export.h>
 #include <Oxygen/Platform/Types.h>
 
+struct ImGuiContext;
+
+namespace oxygen::platform {
+class PlatformEvent;
+} // namespace oxygen::platform
+
 namespace oxygen::imgui::sdl3 {
 
-class ImGuiSdl3Backend final : public ImGuiPlatformBackend {
+class ImGuiSdl3Backend final {
 public:
-    ImGuiSdl3Backend(
-        std::shared_ptr<const Platform> platform,
-        const platform::WindowIdType window_id,
-        ImGuiContext* imgui_context)
-        : ImGuiPlatformBackend("ImGui SDL3 Backend")
-        , platform_(std::move(platform))
-        , window_id_(window_id)
-    {
-        OnInitialize(imgui_context);
-    }
+  OXGN_IMGUI_API ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
+    platform::WindowIdType window_id, ImGuiContext* imgui_context);
 
-    OXYGEN_IMGUI_API ~ImGuiSdl3Backend() override
-    {
-        OnShutdown();
-    }
+  OXGN_IMGUI_API ~ImGuiSdl3Backend();
 
-    OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend);
-    OXYGEN_MAKE_NON_MOVABLE(ImGuiSdl3Backend);
+  OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend)
+  OXYGEN_MAKE_NON_MOVABLE(ImGuiSdl3Backend)
 
-    OXYGEN_IMGUI_API void NewFrame() override;
+  OXGN_IMGUI_API auto NewFrame() -> void;
 
-protected:
-    void OnInitialize(ImGuiContext* imgui_context);
-    void OnShutdown();
+  // Coroutine that participates in platform event processing. This method
+  // will be started by the Platform as an event filter so ImGui receives
+  // the first opportunity to handle native events.
+  OXGN_IMGUI_API auto ProcessPlatformEvents(
+    const platform::PlatformEvent& event) -> void;
 
 private:
-    std::shared_ptr<const Platform> platform_;
-    platform::WindowIdType window_id_;
+  std::shared_ptr<Platform> platform_;
+  observer_ptr<ImGuiContext> imgui_context_;
 };
 
 } // namespace oxygen

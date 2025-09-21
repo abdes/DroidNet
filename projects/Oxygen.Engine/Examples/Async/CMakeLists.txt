@@ -23,6 +23,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(asio CONFIG REQUIRED)
+find_package(sdl3 CONFIG REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Sources
@@ -66,6 +67,7 @@ target_link_libraries(
     oxygen::clap
     oxygen::platform
     oxygen::input
+    oxygen::imgui
     oxygen::loader
     oxygen::graphics-headless
     oxygen::graphics-common
@@ -75,7 +77,15 @@ target_link_libraries(
     oxygen::data
     oxygen::scene
 )
-
+add_custom_command(
+  TARGET ${META_MODULE_TARGET}
+  POST_BUILD
+  COMMAND_EXPAND_LISTS
+  COMMAND
+    ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_RUNTIME_DLLS:${META_MODULE_TARGET}>
+    $<TARGET_FILE_DIR:${META_MODULE_TARGET}>
+)
 # ------------------------------------------------------------------------------
 # Install
 # ------------------------------------------------------------------------------

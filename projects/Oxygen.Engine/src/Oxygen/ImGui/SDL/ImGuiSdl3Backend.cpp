@@ -4,69 +4,94 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/ImGui/SDL/ImGuiSdl3Backend.h>
-
 #include <SDL3/SDL.h>
+#include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/ImGui/SDL/ImGuiSdl3Backend.h>
 #include <Oxygen/ImGui/SDL/imgui_impl_sdl3.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/PlatformEvent.h>
 
-using oxygen::imgui::sdl3::ImGuiSdl3Backend;
+namespace oxygen::imgui::sdl3 {
 
-void ImGuiSdl3Backend::NewFrame()
+ImGuiSdl3Backend::ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
+  const platform::WindowIdType window_id, ImGuiContext* imgui_context)
+  : platform_(std::move(platform))
+  , imgui_context_(imgui_context)
 {
-    ImGui_ImplSDL3_NewFrame();
+  DCHECK_NOTNULL_F(platform_);
+  DCHECK_NOTNULL_F(imgui_context_);
+  DCHECK_NE_F(window_id, platform::kInvalidWindowId);
+
+  // Store context for async event forwarding
+  ImGui::SetCurrentContext(imgui_context_.get());
+
+  const auto window = SDL_GetWindowFromID(window_id);
+  DCHECK_NOTNULL_F(window);
+  ImGui_ImplSDL3_InitForD3D(window);
+
+  // Adjust the scaling to take into account the current DPI
+  const float window_scale = SDL_GetWindowDisplayScale(window);
+  DLOG_F(INFO, "Using DPI scale: {}", window_scale);
+  auto& io = ImGui::GetIO();
+  io.FontGlobalScale = window_scale;
+  ImGui::GetStyle().ScaleAllSizes(window_scale);
+
+  // The Platform will invoke an event filter, if registered, before other event
+  // processors. We'll register ours so ImGui gets the first opportunity to
+  // handle events.
+  platform_->RegisterEventFilter([&](const platform::PlatformEvent& event) {
+    ProcessPlatformEvents(event);
+  });
 }
 
-void ImGuiSdl3Backend::OnInitialize(ImGuiContext* imgui_context)
+ImGuiSdl3Backend::~ImGuiSdl3Backend()
 {
-    DCHECK_NOTNULL_F(imgui_context);
-    ImGui::SetCurrentContext(imgui_context);
+  // Clear the context pointer and unregister our event filter to immediately
+  // prevent further event processing
+  imgui_context_ = nullptr;
+  platform_->ClearEventFilter();
 
-    const auto window = SDL_GetWindowFromID(window_id_);
-
-    DCHECK_NOTNULL_F(window);
-    ImGui_ImplSDL3_InitForD3D(window);
-
-    // Adjust the scaling to take into account the current DPI
-    const float window_scale = SDL_GetWindowDisplayScale(window);
-    DLOG_F(INFO, "[{}] Using DPI scale: {}", this->GetName(), window_scale);
-    auto& io = ImGui::GetIO();
-    io.FontGlobalScale = window_scale;
-    ImGui::GetStyle().ScaleAllSizes(window_scale);
-
-    // Register to process SDL events
-    const auto sdl3_platform = std::static_pointer_cast<const Platform>(platform_);
-    DCHECK_NOTNULL_F(sdl3_platform);
-
-    // TODO: FIXME - imgui connect to platform events
-#if 0
-    sdl3_platform->OnPlatformEvent().connect(
-        [this](const SDL_Event& event, bool& capture_mouse, bool& capture_keyboard) {
-            // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-            // tell if dear imgui wants to use your inputs.
-            // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-            //   your main application, or clear/overwrite your copy of the mouse
-            //   data.
-            // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-            //   data to your main application, or clear/overwrite your copy of the
-            //   keyboard data.
-            //   Generally you may always pass all inputs to dear imgui, and hide them
-            //   from your application based on those two flags. If you have multiple
-            //   SDL events and some of them are not meant to be used by dear imgui,
-            //   you may need to filter events based on their windowID field.
-
-            if (const auto handled = ImGui_ImplSDL3_ProcessEvent(&event); !handled) {
-                capture_mouse = capture_keyboard = false;
-            } else {
-                capture_mouse = ImGui::GetIO().WantCaptureMouse;
-                capture_keyboard = ImGui::GetIO().WantCaptureKeyboard;
-            }
-        });
-#endif
+  // Shutdown ImGui platform backend and allow the forwarder coroutine to
+  // exit naturally when platform shuts down.
+  ImGui_ImplSDL3_Shutdown();
 }
 
-void ImGuiSdl3Backend::OnShutdown()
+// ReSharper disable once CppMemberFunctionMayBeStatic
+auto ImGuiSdl3Backend::NewFrame() -> void { ImGui_ImplSDL3_NewFrame(); }
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto ImGuiSdl3Backend::ProcessPlatformEvents(
+  const platform::PlatformEvent& event) -> void
 {
-    ImGui_ImplSDL3_Shutdown();
+  // Bailout immediately if we have no context to work with.
+  if (!imgui_context_) {
+    return;
+  }
+  if (const auto sdl_event_ptr = event.NativeEventAs<SDL_Event>()) {
+    const auto& sdl_event = *sdl_event_ptr;
+    ImGui::SetCurrentContext(imgui_context_.get());
+    if (ImGui_ImplSDL3_ProcessEvent(&sdl_event)) {
+      const auto& io = ImGui::GetIO();
+
+      const bool is_keyboard_event = (sdl_event.type == SDL_EVENT_KEY_DOWN
+        || sdl_event.type == SDL_EVENT_KEY_UP
+        || sdl_event.type == SDL_EVENT_TEXT_EDITING
+        || sdl_event.type == SDL_EVENT_TEXT_INPUT);
+
+      const bool is_mouse_event = (sdl_event.type == SDL_EVENT_MOUSE_MOTION
+        || sdl_event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+        || sdl_event.type == SDL_EVENT_MOUSE_BUTTON_UP
+        || sdl_event.type == SDL_EVENT_MOUSE_WHEEL);
+
+      if ((io.WantCaptureKeyboard && is_keyboard_event)
+        || (io.WantCaptureMouse && is_mouse_event)) {
+        event.SetHandled();
+      }
+    }
+  }
 }
+
+} // namespace oxygen::imgui::sdl3

@@ -218,12 +218,6 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
   return plane_count;
 }
 
-// auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType
-// window_id) const -> std::unique_ptr<imgui::ImguiModule>
-// {
-//     return std::make_unique<ImGuiModule>(std::move(engine), window_id);
-// }
-
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::shared_ptr<Surface>

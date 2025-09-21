@@ -78,7 +78,7 @@ set(
   "GraphicResource.h"
   "Graphics.h"
   "Texture.h"
-  # "ImGui/ImGuiModule.h"
+  "ImGui/ImGuiBackend.h"
 )
 set(
   OXYGEN_GFX_D3D12_PRIVATE_SOURCES
@@ -108,13 +108,14 @@ set(
   "Devices/DebugLayer.h"
   "Devices/DeviceManager.cpp"
   "Graphics.cpp"
+  "ImGui/imgui_impl_dx12.cpp"
   "ImGui/imgui_impl_dx12.h"
   "Shaders/EngineShaders.cpp"
   "Shaders/EngineShaders.h"
   "Shaders/ShaderCompiler.cpp"
   "Shaders/ShaderCompiler.h"
   "Texture.cpp"
-  # "ImGui/ImGuiModule.cpp"
+  "ImGui/ImGuiBackend.cpp"
 )
 
 target_sources(
@@ -158,10 +159,11 @@ target_link_libraries(
     oxygen::platform
     oxygen::core
     oxygen::graphics-common
-    # oxygen::imgui
+    oxygen::imgui
     glm::glm
     nlohmann_json::nlohmann_json
     dxcompiler
+    d3dcompiler
     d3d12
     dxgi
     dxguid
