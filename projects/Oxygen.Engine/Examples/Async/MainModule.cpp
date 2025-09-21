@@ -57,6 +57,7 @@
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <imgui.h>
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -488,6 +489,10 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameStart");
 
+  // Start frame tracking
+  StartFrameTracking();
+  TrackFrameAction("Frame started");
+
   // Initialize on first frame
   if (!initialized_) {
     SetupMainWindow();
@@ -532,6 +537,8 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   // Ensure scene and camera are set up
   EnsureExampleScene();
   context.SetScene(observer_ptr { scene_.get() });
+
+  TrackFrameAction("Scene and camera configured");
 }
 
 // Initialize a default looping flight path over the scene (few control points)
@@ -762,8 +769,13 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(3, "MainModule::OnSceneMutation");
+  TrackPhaseStart("Scene Mutation");
+  current_frame_tracker_.scene_mutation_occurred = true;
+  TrackFrameAction("Scene mutation phase started");
+
   if (!surface_ || window_weak_.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
+    TrackPhaseEnd();
     co_return;
   }
 
@@ -792,6 +804,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     = std::chrono::duration<float>(now - start_time_).count();
   UpdateSceneMutations(delta_time);
 
+  TrackFrameAction("Scene mutations updated");
+  TrackPhaseEnd();
   co_return;
 }
 
@@ -799,8 +813,13 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   -> co::Co<>
 {
   LOG_SCOPE_F(3, "MainModule::OnTransformPropagation");
+  TrackPhaseStart("Transform Propagation");
+  current_frame_tracker_.transform_propagation_occurred = true;
+  TrackFrameAction("Transform propagation phase started");
+
   if (!surface_ || window_weak_.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
+    TrackPhaseEnd();
     co_return;
   }
 
@@ -854,14 +873,23 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   // Store last frame timestamp for next update
   last_frame_time_ = now;
 
+  current_frame_tracker_.spheres_updated
+    = static_cast<std::uint32_t>(spheres_.size());
+  TrackFrameAction("Animations and transforms updated");
+  TrackPhaseEnd();
   co_return;
 }
 
 auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameGraph");
+  TrackPhaseStart("Frame Graph");
+  current_frame_tracker_.frame_graph_setup = true;
+  TrackFrameAction("Frame graph setup started");
+
   if (!surface_ || window_weak_.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
+    TrackPhaseEnd();
     co_return;
   }
 
@@ -875,25 +903,7 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
   }
 
   // Temporary: build the ImGui overlay here for now
-  ImGui::Begin("Info (AsyncEngine)");
-  ImGui::Text("Oxygen AsyncEngine Demo");
-  ImGui::Separator();
-  ImGui::Text("Frame: %u", context.GetFrameSequenceNumber().get());
-  ImGui::Text("Time: %.2f s",
-    std::chrono::duration<float>(context.GetFrameStartTime() - start_time_)
-      .count());
-  ImGui::Text("Drone speed: %.1f units/s", camera_drone_.path_speed);
-  ImGui::Text(
-    "Drone flight: %s", camera_drone_.enabled ? "Enabled" : "Disabled");
-
-  if (ImGui::Button(
-        camera_drone_.enabled ? "Disable flight" : "Enable flight")) {
-    camera_drone_.enabled = !camera_drone_.enabled;
-    if (camera_drone_.enabled) {
-      InitializeDefaultFlightPath();
-    }
-  }
-  ImGui::End();
+  DrawDebugOverlay(context);
 
   // Setup framebuffers if needed
   if (framebuffers_.empty()) {
@@ -903,28 +913,44 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
   // Setup render passes (frame graph configuration)
   SetupRenderPasses();
 
+  TrackFrameAction("Frame graph and render passes configured");
+  TrackPhaseEnd();
   co_return;
 }
 
 auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
+  TrackPhaseStart("Command Recording");
+  current_frame_tracker_.command_recording = true;
+  TrackFrameAction("Command recording started");
+
   if (!surface_ || window_weak_.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
+    TrackFrameAction("Command recording skipped - no surface");
+    TrackPhaseEnd();
     co_return;
   }
 
   if (app_.gfx_weak.expired() || !scene_) {
+    TrackFrameAction("Command recording skipped - no graphics or scene");
+    TrackPhaseEnd();
     co_return;
   }
 
   // Execute the actual rendering commands
   co_await ExecuteRenderCommands(context);
+
+  TrackFrameAction("Command recording completed");
+  TrackPhaseEnd();
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
+
+  TrackFrameAction("Frame ended");
+  EndFrameTracking();
 }
 
 auto MainModule::SetupMainWindow() -> void
@@ -1362,6 +1388,10 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
 {
   LOG_SCOPE_F(3, "MainModule::ExecuteRenderCommands");
 
+  // Estimate render items (spheres + multisubmesh quad)
+  current_frame_tracker_.render_items_count
+    = static_cast<std::uint32_t>(spheres_.size() + 1);
+
   // Early-out if graphics, scene, window, or surface are not available. This
   // can happen during shutdown or immediately after the window has been
   // closed, while modules may still receive callbacks within the frame.
@@ -1456,4 +1486,421 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   LOG_F(3, "Command recording completed for frame {}", current_frame);
 
   co_return;
+}
+
+//=== Debug Overlay Implementation ===========================================//
+
+auto MainModule::DrawDebugOverlay(engine::FrameContext& context) -> void
+{
+  // Main debug window with docking capabilities
+  ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
+
+  if (ImGui::Begin("Debug - Oxygen Engine", nullptr,
+        ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_AlwaysAutoResize)) {
+
+    if (ImGui::BeginMenuBar()) {
+      if (ImGui::BeginMenu("View")) {
+        static bool show_performance = true;
+        static bool show_actions = true;
+        static bool show_scene = true;
+        static bool show_render_passes = true;
+
+        ImGui::MenuItem("Performance", nullptr, &show_performance);
+        ImGui::MenuItem("Frame Actions", nullptr, &show_actions);
+        ImGui::MenuItem("Scene Info", nullptr, &show_scene);
+        ImGui::MenuItem("Render Passes", nullptr, &show_render_passes);
+        ImGui::EndMenu();
+      }
+      ImGui::EndMenuBar();
+    }
+
+    // Basic frame info at the top
+    ImGui::Text("Frame: %u", context.GetFrameSequenceNumber().get());
+    ImGui::SameLine();
+    const auto frame_time
+      = std::chrono::duration<float>(context.GetFrameStartTime() - start_time_)
+          .count();
+    ImGui::Text("Time: %.2f s", frame_time);
+
+    ImGui::Separator();
+
+    // Tabbed interface for different panels
+    if (ImGui::BeginTabBar("DebugTabs")) {
+      if (ImGui::BeginTabItem("Performance")) {
+        DrawPerformancePanel();
+        ImGui::EndTabItem();
+      }
+
+      if (ImGui::BeginTabItem("Actions")) {
+        DrawFrameActionsPanel();
+        ImGui::EndTabItem();
+      }
+
+      if (ImGui::BeginTabItem("Scene")) {
+        DrawSceneInfoPanel();
+        ImGui::EndTabItem();
+      }
+
+      if (ImGui::BeginTabItem("Render")) {
+        DrawRenderPassesPanel();
+        ImGui::EndTabItem();
+      }
+
+      ImGui::EndTabBar();
+    }
+  }
+  ImGui::End();
+}
+
+auto MainModule::DrawPerformancePanel() -> void
+{
+  ImGui::Text("Performance Metrics");
+  ImGui::Separator();
+
+  // Current frame timing
+  if (!current_frame_tracker_.phase_timings.empty()) {
+    ImGui::Text("Current Frame Phases:");
+    ImGui::Indent();
+
+    float total_time = 0.0f;
+    for (const auto& [phase, duration] : current_frame_tracker_.phase_timings) {
+      const float ms = duration.count() / 1000.0f;
+      total_time += ms;
+
+      // Color code based on timing
+      ImVec4 color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
+      if (ms > 5.0f)
+        color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow
+      if (ms > 10.0f)
+        color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); // Red
+
+      ImGui::TextColored(color, "  %s: %.2f ms", phase.c_str(), ms);
+    }
+
+    ImGui::Unindent();
+    ImGui::Text("Total Frame: %.2f ms (%.1f FPS)", total_time,
+      total_time > 0 ? 1000.0f / total_time : 0.0f);
+  } else {
+    // Show frame time even if we don't have phase breakdown
+    if (current_frame_tracker_.frame_start_time.time_since_epoch().count()
+      > 0) {
+      const auto now = std::chrono::steady_clock::now();
+      const auto duration
+        = std::chrono::duration_cast<std::chrono::microseconds>(
+          now - current_frame_tracker_.frame_start_time);
+      const float ms = duration.count() / 1000.0f;
+
+      ImVec4 color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
+      if (ms > 16.67f)
+        color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow (>60fps)
+      if (ms > 33.33f)
+        color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); // Red (>30fps)
+
+      ImGui::TextColored(color, "Frame Time: %.2f ms (%.1f FPS)", ms,
+        ms > 0 ? 1000.0f / ms : 0.0f);
+    }
+  }
+
+  // Frame history graph
+  if (frame_history_.size() > 1) {
+    ImGui::Spacing();
+    ImGui::Text("Frame Time History:");
+
+    std::vector<float> frame_times;
+    frame_times.reserve(frame_history_.size());
+
+    for (const auto& frame : frame_history_) {
+      float total = 0.0f;
+      if (!frame.phase_timings.empty()) {
+        for (const auto& [_, duration] : frame.phase_timings) {
+          total += duration.count() / 1000.0f;
+        }
+      } else {
+        // Fallback: calculate total frame time directly
+        const auto duration
+          = std::chrono::duration_cast<std::chrono::microseconds>(
+            frame.frame_end_time - frame.frame_start_time);
+        total = duration.count() / 1000.0f;
+      }
+      frame_times.push_back(total);
+    }
+
+    // Calculate appropriate scale based on data
+    float max_time = 0.0f;
+    for (float time : frame_times) {
+      max_time = std::max(max_time, time);
+    }
+
+    // Use a reasonable scale: either the max value * 1.2, or at least 33ms
+    // (30fps)
+    float scale_max = std::max(max_time * 1.2f, 33.33f);
+
+    ImGui::PlotLines("##FrameTimes", frame_times.data(),
+      static_cast<int>(frame_times.size()), 0,
+      ("Max: " + std::to_string(max_time) + "ms").c_str(), 0.0f, scale_max,
+      ImVec2(0, 80));
+
+    // Add reference lines info
+    ImGui::Text("Reference: 16.7ms (60fps), 33.3ms (30fps)");
+  }
+}
+
+auto MainModule::DrawFrameActionsPanel() -> void
+{
+  ImGui::Text("Frame Actions");
+  ImGui::Separator();
+
+  // Show previous completed frame status since current frame is still in
+  // progress
+  if (!frame_history_.empty()) {
+    const auto& last_frame = frame_history_.back();
+    ImGui::Text("Last Completed Frame:");
+    ImGui::Indent();
+
+    // Phase status indicators with more detail
+    const char* status_icon
+      = last_frame.scene_mutation_occurred ? "[OK]" : "[ - ]";
+    ImVec4 color = last_frame.scene_mutation_occurred
+      ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+      : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+    ImGui::TextColored(color, "%s Scene Mutation", status_icon);
+
+    status_icon = last_frame.transform_propagation_occurred ? "[OK]" : "[ - ]";
+    color = last_frame.transform_propagation_occurred
+      ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+      : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+    ImGui::TextColored(color, "%s Transform Propagation", status_icon);
+
+    status_icon = last_frame.frame_graph_setup ? "[OK]" : "[ - ]";
+    color = last_frame.frame_graph_setup ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+                                         : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+    ImGui::TextColored(color, "%s Frame Graph Setup", status_icon);
+
+    status_icon = last_frame.command_recording ? "[OK]" : "[ - ]";
+    color = last_frame.command_recording ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+                                         : ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+    ImGui::TextColored(color, "%s Command Recording", status_icon);
+
+    ImGui::Unindent();
+  }
+
+  // Current frame in progress
+  ImGui::Spacing();
+  ImGui::Text("Current Frame (In Progress):");
+  ImGui::Indent();
+
+  // Show what phases have completed so far in current frame
+  const char* status_icon
+    = current_frame_tracker_.scene_mutation_occurred ? "[OK]" : "[ - ]";
+  ImVec4 color = current_frame_tracker_.scene_mutation_occurred
+    ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+    : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+  ImGui::TextColored(color, "%s Scene Mutation", status_icon);
+
+  status_icon
+    = current_frame_tracker_.transform_propagation_occurred ? "[OK]" : "[ - ]";
+  color = current_frame_tracker_.transform_propagation_occurred
+    ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+    : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+  ImGui::TextColored(color, "%s Transform Propagation", status_icon);
+
+  status_icon = current_frame_tracker_.frame_graph_setup ? "[OK]" : "[ - ]";
+  color = current_frame_tracker_.frame_graph_setup
+    ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+    : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+  ImGui::TextColored(color, "%s Frame Graph Setup", status_icon);
+
+  // Command recording happens after frame graph, so it's always pending here
+  ImGui::TextColored(
+    ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[...] Command Recording (Pending)");
+
+  ImGui::Unindent();
+
+  // Actions list
+  if (!current_frame_tracker_.frame_actions.empty()) {
+    ImGui::Spacing();
+    ImGui::Text("Current Frame Actions:");
+    ImGui::Indent();
+
+    for (const auto& action : current_frame_tracker_.frame_actions) {
+      ImGui::BulletText("%s", action.c_str());
+    }
+
+    ImGui::Unindent();
+  }
+
+  // Statistics
+  ImGui::Spacing();
+  ImGui::Text("Statistics:");
+  ImGui::Indent();
+
+  if (!frame_history_.empty()) {
+    const auto& last_frame = frame_history_.back();
+    ImGui::Text("Last Frame - Spheres: %u, Render Items: %u",
+      last_frame.spheres_updated, last_frame.render_items_count);
+  }
+  ImGui::Unindent();
+}
+
+auto MainModule::DrawSceneInfoPanel() -> void
+{
+  ImGui::Text("Scene Information");
+  ImGui::Separator();
+
+  if (scene_) {
+    // Camera drone info
+    ImGui::Text("Camera Drone:");
+    ImGui::Indent();
+
+    ImGui::Text(
+      "Status: %s", camera_drone_.enabled ? "[FLYING]" : "[GROUNDED]");
+    ImGui::Text("Speed: %.1f units/s", camera_drone_.path_speed);
+    ImGui::Text("Position: (%.1f, %.1f, %.1f)", camera_drone_.current_pos.x,
+      camera_drone_.current_pos.y, camera_drone_.current_pos.z);
+    ImGui::Text("Path Progress: %.1f%%", camera_drone_.path_u * 100.0);
+
+    // Interactive controls
+    if (ImGui::Button(camera_drone_.enabled ? "Land Drone" : "Launch Drone")) {
+      camera_drone_.enabled = !camera_drone_.enabled;
+      if (camera_drone_.enabled) {
+        InitializeDefaultFlightPath();
+        TrackFrameAction("Camera drone launched");
+      } else {
+        TrackFrameAction("Camera drone landed");
+      }
+    }
+
+    float drone_speed = static_cast<float>(camera_drone_.path_speed);
+    if (ImGui::SliderFloat("Drone Speed", &drone_speed, 1.0f, 15.0f, "%.1f")) {
+      camera_drone_.path_speed = static_cast<double>(drone_speed);
+    }
+
+    ImGui::Unindent();
+
+    // Spheres info
+    ImGui::Spacing();
+    ImGui::Text("Animated Spheres:");
+    ImGui::Indent();
+
+    ImGui::Text("Count: %zu", spheres_.size());
+
+    if (!spheres_.empty()) {
+      for (size_t i = 0; i < spheres_.size() && i < 5; ++i) {
+        const auto& sphere = spheres_[i];
+        ImGui::Text("Sphere %zu: Speed %.1f, Radius %.1f", i + 1, sphere.speed,
+          sphere.radius);
+      }
+
+      if (spheres_.size() > 5) {
+        ImGui::Text("... and %zu more", spheres_.size() - 5);
+      }
+    }
+
+    ImGui::Unindent();
+
+    // Animation info
+    ImGui::Spacing();
+    ImGui::Text("Animation:");
+    ImGui::Indent();
+    ImGui::Text("Time: %.2f s", anim_time_);
+    ImGui::ProgressBar(static_cast<float>(std::fmod(anim_time_, 10.0) / 10.0),
+      ImVec2(0.0f, 0.0f), "10s cycle");
+    ImGui::Unindent();
+  } else {
+    ImGui::TextColored(
+      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] No scene loaded");
+  }
+}
+
+auto MainModule::DrawRenderPassesPanel() -> void
+{
+  ImGui::Text("Render Pipeline");
+  ImGui::Separator();
+
+  // Render pass status
+  ImGui::Text("Configured Passes:");
+  ImGui::Indent();
+
+  const char* pass_icon = depth_pass_ ? "[OK]" : "[--]";
+  ImGui::Text("%s Depth Pre-Pass", pass_icon);
+
+  pass_icon = shader_pass_ ? "[OK]" : "[--]";
+  ImGui::Text("%s Shader Pass", pass_icon);
+
+  pass_icon = transparent_pass_ ? "[OK]" : "[--]";
+  ImGui::Text("%s Transparent Pass", pass_icon);
+
+  ImGui::Unindent();
+
+  // Framebuffer info
+  ImGui::Spacing();
+  ImGui::Text("Framebuffers:");
+  ImGui::Indent();
+  ImGui::Text("Count: %zu", framebuffers_.size());
+  ImGui::Unindent();
+
+  // Surface info
+  if (surface_) {
+    ImGui::Spacing();
+    ImGui::Text("Surface: Active");
+  } else {
+    ImGui::TextColored(
+      ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[WARN] Surface: Not Available");
+  }
+}
+
+auto MainModule::TrackPhaseStart(const std::string& phase_name) -> void
+{
+  phase_start_time_ = std::chrono::steady_clock::now();
+  current_phase_name_ = phase_name;
+}
+
+auto MainModule::TrackPhaseEnd() -> void
+{
+  if (phase_start_time_ != std::chrono::steady_clock::time_point {}) {
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - phase_start_time_);
+
+    // Add timing to current frame tracker
+    current_frame_tracker_.phase_timings.emplace_back(
+      current_phase_name_, duration);
+
+    // Reset for next phase
+    phase_start_time_ = std::chrono::steady_clock::time_point {};
+    current_phase_name_.clear();
+  }
+}
+
+auto MainModule::TrackFrameAction(const std::string& action) -> void
+{
+  current_frame_tracker_.frame_actions.push_back(action);
+}
+
+auto MainModule::StartFrameTracking() -> void
+{
+  current_frame_tracker_ = FrameActionTracker {};
+  current_frame_tracker_.frame_start_time = std::chrono::steady_clock::now();
+}
+
+auto MainModule::EndFrameTracking() -> void
+{
+  current_frame_tracker_.frame_end_time = std::chrono::steady_clock::now();
+
+  // Calculate total frame time if we don't have phase timings
+  if (current_frame_tracker_.phase_timings.empty()) {
+    const auto total_duration
+      = std::chrono::duration_cast<std::chrono::microseconds>(
+        current_frame_tracker_.frame_end_time
+        - current_frame_tracker_.frame_start_time);
+    current_frame_tracker_.phase_timings.emplace_back(
+      "Total Frame", total_duration);
+  }
+
+  // Add to history and maintain size limit
+  frame_history_.push_back(current_frame_tracker_);
+  if (frame_history_.size() > kMaxFrameHistory) {
+    frame_history_.erase(frame_history_.begin());
+  }
 }
