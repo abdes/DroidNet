@@ -7,12 +7,13 @@
 #pragma once
 
 #include <array>
-#include <cassert>
 #include <cinttypes>
 #include <type_traits>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Macros.h>
+
+// ReSharper disable CppClangTidyPerformanceEnumSize
 
 namespace oxygen::core {
 
@@ -77,15 +78,16 @@ enum class PhaseId : std::uint32_t {
   kSnapshot = 8,
   kParallelTasks = 9,
   kPostParallel = 10,
-  kFrameGraph = 11,
-  kCommandRecord = 12,
-  kPresent = 13,
-  kAsyncPoll = 14,
-  kBudgetAdapt = 15,
-  kFrameEnd = 16,
-  kDetachedServices = 17,
+  kGuiUpdate = 11,
+  kFrameGraph = 12,
+  kCommandRecord = 13,
+  kPresent = 14,
+  kAsyncPoll = 15,
+  kBudgetAdapt = 16,
+  kFrameEnd = 17,
+  kDetachedServices = 18,
 
-  kCount = 18, // Must be last
+  kCount = 19, // Must be last
 };
 using PhaseIndex = EnumAsIndex<PhaseId>;
 
@@ -106,8 +108,7 @@ using PhaseMask = std::uint32_t;
 */
 constexpr auto MakePhaseMask(PhaseId id) noexcept
 {
-  return static_cast<PhaseMask>(1u)
-    << static_cast<std::underlying_type_t<PhaseId>>(id);
+  return 1u << static_cast<std::underlying_type_t<PhaseId>>(id);
 }
 
 //! Barrier identifiers
@@ -221,15 +222,6 @@ struct PhaseDesc {
   }
 };
 
-// Forward declarations for detail docstring accessors so PhaseDesc can be
-// declared above the detail namespace where the tables live.
-namespace detail {
-  constexpr auto PhaseName(PhaseId id) noexcept -> const char*;
-  constexpr auto PhaseDescription(PhaseId id) noexcept -> const char*;
-  constexpr auto BarrierName(BarrierId id) noexcept -> const char*;
-  constexpr auto BarrierDescription(BarrierId id) noexcept -> const char*;
-} // namespace detail
-
 namespace detail {
   //! Compact storage for documentation strings separated from metadata so the
   //! PhaseDesc/BarrierDesc remain small and constexpr-friendly.
@@ -242,101 +234,126 @@ namespace detail {
   constexpr std::array<DocStrings, static_cast<std::size_t>(PhaseId::kCount)>
     kPhaseDocStrings = {
       DocStrings {
-        R"(FrameStart)",
-        R"(Advance the global frame index and perform coordinator-side
+        .name = R"(FrameStart)",
+        .description
+        = R"(Advance the global frame index and perform coordinator-side
 epoch and fence reclamation. Runs deferred resource reclamation and other
 engine bookkeeping that prepare the coordinator-visible EngineState for the
 upcoming frame. Does not publish a GameState snapshot.)",
       },
       DocStrings {
-        R"(Input)",
-        R"(Sample platform and user input and publish a stabilized per-frame
+        .name = R"(Input)",
+        .description
+        = R"(Sample platform and user input and publish a stabilized per-frame
 input snapshot consisting of captured input events and sampling state.
 This snapshot contains input data only (captured events/state) and is not
 the engine's FrameSnapshot or a view over GameState or EngineState.)",
       },
       DocStrings {
-        R"(NetworkReconciliation)",
-        R"(Apply authoritative network updates and reconcile client-side
+        .name = R"(NetworkReconciliation)",
+        .description
+        = R"(Apply authoritative network updates and reconcile client-side
 predictions. Mutations performed here update authoritative GameState so that
 subsequent simulation phases observe the reconciled state.)",
       },
       DocStrings {
-        R"(RandomSeedManagement)",
-        R"(Manage deterministic RNG and per-frame seed state used by gameplay
+        .name = R"(RandomSeedManagement)",
+        .description
+        = R"(Manage deterministic RNG and per-frame seed state used by gameplay
 and simulation systems. This updates EngineState RNG bookkeeping and does
 not mutate the GameState.)",
       },
       DocStrings {
-        R"(FixedSimulation)",
-        R"(Execute fixed-timestep deterministic physics and simulation
+        .name = R"(FixedSimulation)",
+        .description
+        = R"(Execute fixed-timestep deterministic physics and simulation
 integrations that produce authoritative GameState updates. Results are
 authoritative and will be visible to downstream ordered phases.)",
       },
       DocStrings {
-        R"(Gameplay)",
-        R"(Run high-level game logic that mutates authoritative GameState.
+        .name = R"(Gameplay)",
+        .description
+        = R"(Run high-level game logic that mutates authoritative GameState.
 Gameplay may stage structural edits (spawn/despawn) that are later applied
 in SceneMutation.)",
       },
       DocStrings {
-        R"(SceneMutation)",
-        R"(Apply structural scene edits (spawns, despawns, handle and
+        .name = R"(SceneMutation)",
+        .description
+        = R"(Apply structural scene edits (spawns, despawns, handle and
 component allocations). These changes modify GameState topology and are
 required to be visible before transform propagation.)",
       },
       DocStrings {
-        R"(TransformPropagation)",
-        R"(Propagate hierarchical transforms and finalize spatial
+        .name = R"(TransformPropagation)",
+        .description
+        = R"(Propagate hierarchical transforms and finalize spatial
 relationships. After this phase the engine will publish an immutable
 FrameSnapshot that parallel readers may consume; the snapshot reflects the
 current GameState.)",
       },
       DocStrings {
-        R"(Snapshot)",
-        R"(Publish an immutable FrameSnapshot (a lightweight view over the
+        .name = R"(Snapshot)",
+        .description
+        = R"(Publish an immutable FrameSnapshot (a lightweight view over the
 GameState) for parallel readers. The snapshot is intended for read-only
 consumption by Category C tasks and does not permit direct GameState
 mutations. FrameState (transient per-frame outputs) is produced after this
 phase and integrated later.)",
       },
       DocStrings {
-        R"(ParallelTasks)",
-        R"(Run parallel Category C tasks that consume the immutable
+        .name = R"(ParallelTasks)",
+        .description
+        = R"(Run parallel Category C tasks that consume the immutable
 FrameSnapshot (read-only GameState view). Tasks must not mutate GameState or
 EngineState directly; they write results into per-job outputs (FrameState)
 for later integration at the post-parallel barrier.)",
       },
       DocStrings {
-        R"(PostParallel)",
-        R"(Integrate per-job FrameState outputs produced by parallel tasks
+        .name = R"(PostParallel)",
+        .description
+        = R"(Integrate per-job FrameState outputs produced by parallel tasks
 into authoritative GameState and FrameOutputs. This phase may also perform
 EngineState updates required to publish descriptors, resource transitions,
 or other cross-frame metadata.)",
       },
       DocStrings {
-        R"(FrameGraph)",
-        R"(Assemble GPU frame graph and rendering plans from the published
+        .name = R"(UIUpdate)",
+        .description
+        = R"(Process UI systems including ImGui, game UI, and debug overlays.
+Generates UI rendering artifacts (draw lists, vertex buffers, textures) that
+will be consumed by the frame graph. May perform async UI work such as
+layout calculations, text rendering, and animation updates. Should not
+mutate authoritative GameState; UI interactions queue events for the next
+frame's gameplay phase.)",
+      },
+      DocStrings {
+        .name = R"(FrameGraph)",
+        .description
+        = R"(Assemble GPU frame graph and rendering plans from the published
 FrameSnapshot and integration outputs (FrameState). FrameGraph produces
 FrameState artifacts (draw lists, barriers) and records plan metadata into
 EngineState; it should not mutate authoritative GameState.)",
       },
       DocStrings {
-        R"(CommandRecord)",
-        R"(Record GPU command lists from FrameState artifacts and the
+        .name = R"(CommandRecord)",
+        .description
+        = R"(Record GPU command lists from FrameState artifacts and the
 FrameSnapshot. Command recording produces GPU submission artifacts (FrameState)
 and records submission metadata into EngineState (fence/epoch markers). It
 must not mutate authoritative GameState.)",
       },
       DocStrings {
-        R"(Present)",
-        R"(Perform swapchain present and finalize platform submission
+        .name = R"(Present)",
+        .description
+        = R"(Perform swapchain present and finalize platform submission
 bookkeeping. Presentation is a coordinator-side operation that touches
 EngineState (swapchain/timing) but does not modify GameState.)",
       },
       DocStrings {
-        R"(AsyncPoll)",
-        R"(Poll long-running multi-frame async pipelines and integrate
+        .name = R"(AsyncPoll)",
+        .description
+        = R"(Poll long-running multi-frame async pipelines and integrate
 completed results. Async pipelines should publish ready resources and
 transient FrameState artifacts into thread-safe staging areas; they must not
 mutate authoritative GameState from background threads. When the coordinator
@@ -345,20 +362,23 @@ integration phase where controlled GameState updates (if required) may be
 applied.)",
       },
       DocStrings {
-        R"(BudgetAdapt)",
-        R"(Adjust per-frame budgets and scheduling heuristics to adapt
+        .name = R"(BudgetAdapt)",
+        .description
+        = R"(Adjust per-frame budgets and scheduling heuristics to adapt
 performance and pacing. This phase updates EngineState scheduling metadata
 and does not directly mutate GameState.)",
       },
       DocStrings {
-        R"(FrameEnd)",
-        R"(Finalize end-of-frame bookkeeping, perform deferred resource
+        .name = R"(FrameEnd)",
+        .description
+        = R"(Finalize end-of-frame bookkeeping, perform deferred resource
 releases, and prepare epoch markers for the next frame. These operations
 update EngineState reclamation and do not mutate GameState.)",
       },
       DocStrings {
-        R"(DetachedServices)",
-        R"(Run opportunistic background services (logging, telemetry,
+        .name = R"(DetachedServices)",
+        .description
+        = R"(Run opportunistic background services (logging, telemetry,
 compaction) that operate outside the frame-critical path. Detached
 services must not mutate GameState; EngineState-side diagnostics are
 allowed through thread-safe channels.)",
@@ -369,53 +389,61 @@ allowed through thread-safe channels.)",
   constexpr std::array<DocStrings, static_cast<std::size_t>(BarrierId::kCount)>
     kBarrierDocStrings = {
       DocStrings {
-        R"(B0_InputSnapshot)",
-        R"(Stable input and epoch reclamation point. Ensures platform
+        .name = R"(B0_InputSnapshot)",
+        .description
+        = R"(Stable input and epoch reclamation point. Ensures platform
 and user input sampling is complete and that any GPU/CPU epoch-based
 reclamation ran so downstream phases observe consistent, coordinator-
 visible input state. The snapshot here is the input/FrameSnapshot used by
 downstream GameState consumers.)",
       },
       DocStrings {
-        R"(B1_NetworkReconciled)",
-        R"(Network reconciliation completion. Authoritative network updates
+        .name = R"(B1_NetworkReconciled)",
+        .description
+        = R"(Network reconciliation completion. Authoritative network updates
 and client prediction replay are applied so subsequent simulation phases
 observe the reconciled GameState.)",
       },
       DocStrings {
-        R"(B2_SimulationComplete)",
-        R"(Simulation completion barrier. Guarantees that deterministic
+        .name = R"(B2_SimulationComplete)",
+        .description
+        = R"(Simulation completion barrier. Guarantees that deterministic
 physics and simulation integrations have finished and that authoritative
 GameState updates are visible to later phases.)",
       },
       DocStrings {
-        R"(B3_SceneStable)",
-        R"(Scene stability barrier. Structural edits (spawns/despawns and
+        .name = R"(B3_SceneStable)",
+        .description
+        = R"(Scene stability barrier. Structural edits (spawns/despawns and
 handle allocations) are applied and made visible before transform
 propagation and snapshot publication.)",
       },
       DocStrings {
-        R"(B4_SnapshotReady)",
-        R"(Frame snapshot published. Indicates transforms are finalized and
+        .name = R"(B4_SnapshotReady)",
+        .description
+        = R"(Frame snapshot published. Indicates transforms are finalized and
 an immutable FrameSnapshot (read-only view over GameState) is available
 for parallel Category C tasks. Downstream tasks produce FrameState outputs
 based on this snapshot.)",
       },
       DocStrings {
-        R"(B5_ParallelComplete)",
-        R"(Parallel join barrier. All Category C parallel tasks have
+        .name = R"(B5_ParallelComplete)",
+        .description
+        = R"(Parallel join barrier. All Category C parallel tasks have
 completed and their per-job FrameState outputs are ready to be integrated
 into authoritative GameState or FrameOutputs at the post-parallel phase.)",
       },
       DocStrings {
-        R"(B6_CommandReady)",
-        R"(Command readiness barrier. Command recording and resource-state
+        .name = R"(B6_CommandReady)",
+        .description
+        = R"(Command readiness barrier. Command recording and resource-state
 preparation are complete; submission metadata (fence/epoch markers) are
 captured into EngineState for reclamation and ordering guarantees.)",
       },
       DocStrings {
-        R"(B7_AsyncPublishReady)",
-        R"(Async publish readiness. Multi-frame async pipelines have
+        .name = R"(B7_AsyncPublishReady)",
+        .description
+        = R"(Async publish readiness. Multi-frame async pipelines have
 produced ready resources that can be atomically published into EngineState
 registries during coordinator-side integration.)",
       },
@@ -536,6 +564,13 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations = AllowMutation::kGameState | AllowMutation::kFrameState,
     .thread_safe = false,
+  },
+  PhaseDesc {
+    .id = PhaseId::kGuiUpdate,
+    .category = ExecutionModel::kBarrieredConcurrency,
+    .allowed_mutations
+    = AllowMutation::kFrameState | AllowMutation::kEngineState,
+    .thread_safe = true,
   },
   PhaseDesc {
     .id = PhaseId::kFrameGraph,

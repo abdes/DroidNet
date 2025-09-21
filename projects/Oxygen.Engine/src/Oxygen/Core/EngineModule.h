@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -55,7 +54,7 @@ consteval auto MakeModuleMask() -> ModulePhaseMask
 class EngineModule : public Object {
 public:
   EngineModule() = default;
-  virtual ~EngineModule() = default;
+  ~EngineModule() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(EngineModule)
   OXYGEN_MAKE_NON_MOVABLE(EngineModule)
@@ -129,6 +128,9 @@ public:
   {
     co_return;
   }
+
+  virtual auto OnGuiUpdate(FrameContext& /*context*/) -> co::Co<> { co_return; }
+
   virtual auto OnFrameGraph(FrameContext& /*context*/) -> co::Co<>
   {
     co_return;

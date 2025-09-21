@@ -206,6 +206,9 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Serial post-parallel integration (Category A resumes after B4)
     co_await PhasePostParallel(context);
 
+    // UI update phase: process UI systems, generate rendering artifacts
+    co_await PhaseGuiUpdate(context);
+
     {
       // SetRenderGraphBuilder(context);
 
@@ -358,21 +361,13 @@ auto AsyncEngine::PhaseInput(FrameContext& context) -> co::Co<>
   // Publish the input snapshot built by the InputSystem so that it becomes
   // available early in the frame to subsequent phases. The FrameContext
   // contract requires SetInputSnapshot to be called during kInput.
-  if (module_manager_) {
-    // Find the InputSystem module (by type id) and publish its snapshot if any
-    for (auto& mod_ref : module_manager_->GetModules()) {
-      auto* mod_ptr = &mod_ref;
-      if (mod_ptr && mod_ptr->GetTypeId() == InputSystem::ClassTypeId()) {
-        auto* input_sys = static_cast<InputSystem*>(mod_ptr);
-        auto snap = input_sys->GetCurrentSnapshot();
-        if (snap) {
-          // Publish type-erased input snapshot directly as blob
-          context.SetInputSnapshot(
-            std::static_pointer_cast<const void>(std::move(snap)), tag);
-        }
-        break;
-      }
-    }
+  const auto input_sys_opt = module_manager_->GetModule<InputSystem>();
+  DCHECK_F(input_sys_opt.has_value());
+  const auto& input_sys = input_sys_opt.value().get();
+  if (auto snap = input_sys.GetCurrentSnapshot()) {
+    // Publish type-erased input snapshot directly as blob
+    context.SetInputSnapshot(
+      std::static_pointer_cast<const void>(std::move(snap)), tag);
   }
 }
 
@@ -390,12 +385,11 @@ auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
   // modular efficiency.
 
   // Fixed timestep migration: use SimulationClock from TimeManager
-  uint32_t steps = 0;
   if (time_manager_) {
     auto& sim = time_manager_->GetSimulationClock();
     const auto max_substeps = config_.timing.max_substeps;
     const auto result = sim.ExecuteFixedSteps(max_substeps);
-    steps = result.steps_executed;
+    const uint32_t steps = result.steps_executed;
 
     for (uint32_t s = 0; s < steps; ++s) {
       auto module_timing = context.GetModuleTimingData();
@@ -489,6 +483,7 @@ auto AsyncEngine::PhaseRandomSeedManagement(FrameContext& context) -> void
   // This is pure computation - no I/O, no waiting, deterministic timing
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseSceneMutation(FrameContext& context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
@@ -560,6 +555,20 @@ auto AsyncEngine::PhaseSnapshot(FrameContext& context)
 //     observer_ptr<RenderGraphBuilder> {}, tag);
 //   render_graph_builder_.reset();
 // }
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto AsyncEngine::PhaseGuiUpdate(FrameContext& context) -> co::Co<>
+{
+  const auto tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(PhaseId::kGuiUpdate, tag);
+
+  LOG_F(2,
+    "[F{}][A] PhaseGuiUpdate - UI systems and rendering artifact generation",
+    frame_number_);
+
+  // Execute module UI update work - modules generate UI rendering artifacts
+  co_await module_manager_->ExecutePhase(PhaseId::kGuiUpdate, context);
+}
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseFrameGraph(FrameContext& context) -> co::Co<>

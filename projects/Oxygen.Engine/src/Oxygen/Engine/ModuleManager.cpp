@@ -7,7 +7,7 @@
 //
 // ModuleManager - Module Execution and Error Handling
 //
-// ERROR HANDLING BEHAVIOR:
+// BEHAVIOR:
 // 1. Synchronous phases (FrameStart, Snapshot, FrameEnd):
 //    - Errors are handled immediately as each module executes
 //    - Failed modules are processed right after the exception is caught
@@ -15,7 +15,7 @@
 // 2. Concurrent phases (Input, Gameplay, FrameGraph, etc.):
 //    - Module execution happens in parallel using AllOf()
 //    - Errors are collected during execution but NOT processed immediately
-//    - After AllOf() completes, all errors are processed together
+//    - After AllOf() completes, all errors get processed together
 //    - This ensures we don't modify the module list while coroutines are
 //    running
 //
@@ -60,6 +60,8 @@ ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
 
 ModuleManager::~ModuleManager()
 {
+  LOG_SCOPE_FUNCTION(INFO);
+
   // Reverse-order shutdown with immediate destruction: remove each module
   // from the container before shutting it down, so resources are released
   // right after OnShutdown returns.
@@ -67,6 +69,7 @@ ModuleManager::~ModuleManager()
     auto up = std::move(modules_.back());
     modules_.pop_back();
     if (up) {
+      LOG_F(INFO, "Shutting down module '{}'", up->GetName());
       up->OnShutdown();
     }
     // 'up' is destroyed here
@@ -179,7 +182,7 @@ auto ModuleManager::FindModuleByTypeId(TypeId type_id) const noexcept
 }
 
 auto ModuleManager::HandleModuleErrors(
-  FrameContext& ctx, core::PhaseId /*phase*/) noexcept -> void
+  FrameContext& ctx, PhaseId /*phase*/) noexcept -> void
 {
   const auto& errors = ctx.GetErrors();
   if (errors.empty()) {
@@ -190,7 +193,7 @@ auto ModuleManager::HandleModuleErrors(
   // source_key
   auto normalized_errors = errors
     | std::views::transform([this](auto error) { // Copy error to modify it
-        EngineModule* module = nullptr;
+        EngineModule* module;
 
         if (error.source_key.has_value()) {
           // Has key - find module by name
@@ -258,7 +261,7 @@ auto ModuleManager::HandleModuleErrors(
 // synchronous void. We adapt synchronous calls into coroutines.
 namespace {
 
-auto RunHandlerImpl(oxygen::co::Co<> awaitable, EngineModule* module,
+auto RunHandlerImpl(oxygen::co::Co<> awaitable, const EngineModule* module,
   FrameContext& ctx) -> oxygen::co::Co<>
 {
   try {
@@ -383,6 +386,9 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
     case PhaseId::kPostParallel:
       tasks.emplace_back(RunHandlerImpl(m->OnPostParallel(ctx), m, ctx));
       break;
+    case PhaseId::kGuiUpdate:
+      tasks.emplace_back(RunHandlerImpl(m->OnGuiUpdate(ctx), m, ctx));
+      break;
     case PhaseId::kFrameGraph:
       tasks.emplace_back(RunHandlerImpl(m->OnFrameGraph(ctx), m, ctx));
       break;
@@ -452,6 +458,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   case PhaseId::kSceneMutation:
   case PhaseId::kTransformPropagation:
   case PhaseId::kPostParallel:
+  case PhaseId::kGuiUpdate:
   case PhaseId::kFrameGraph:
   case PhaseId::kCommandRecord:
   case PhaseId::kAsyncPoll: {
