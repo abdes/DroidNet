@@ -8,11 +8,12 @@
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Examples.Async.exe",
-      "args": ["-v", "1"],
+      "args": ["-v", "2"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],
-      "internalConsoleOptions": "neverOpen"
+      "internalConsoleOptions": "neverOpen",
+      "console": "externalTerminal",
     },
     {
       "name": "(Dump PAK Simple) Launch",
