@@ -136,7 +136,7 @@ private:
   auto Shutdown() -> co::Co<>;
 
   // Ordered phases (Category A) - now with module integration
-  auto PhaseFrameStart(engine::FrameContext& context) -> co::Co<>; // synchrnous
+  auto PhaseFrameStart(engine::FrameContext& context) -> co::Co<>;
   auto PhaseInput(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
   auto PhaseNetworkReconciliation(engine::FrameContext& context)
@@ -160,6 +160,9 @@ private:
     const engine::UnifiedSnapshot& snapshot) -> co::Co<>;
   auto PhasePostParallel(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
+
+  auto PhaseGuiUpdate(engine::FrameContext& context)
+    -> co::Co<>; // async UI processing
 
   auto PhaseFrameGraph(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
