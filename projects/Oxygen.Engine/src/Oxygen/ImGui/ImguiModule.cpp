@@ -7,6 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 
 namespace oxygen::imgui {
 
@@ -60,7 +61,7 @@ auto ImGuiModule::OnShutdown() noexcept -> void
   }
 }
 
-auto ImGuiModule::OnFrameStart(engine::FrameContext& frame_context) -> void
+auto ImGuiModule::OnFrameStart(engine::FrameContext& /*frame_context*/) -> void
 {
   // We should always have a graphics backend
   DCHECK_NOTNULL_F(graphics_backend_);
@@ -90,6 +91,10 @@ auto ImGuiModule::GetRenderPass() const noexcept -> observer_ptr<ImGuiPass>
 
 auto ImGuiModule::SetWindowId(platform::WindowIdType window_id) -> void
 {
+  if (window_id_ == window_id) {
+    return; // No change
+  }
+
   // Store the window ID for later use in OnFrameStart
   window_id_ = window_id;
 
@@ -101,7 +106,7 @@ auto ImGuiModule::SetWindowId(platform::WindowIdType window_id) -> void
 
   // Create platform backend if needed, and if we have a valid window ID
   try {
-    platform_backend_ = std::make_unique<sdl3::ImGuiSdl3Backend>(
+    platform_backend_ = std::make_unique<platform::imgui::ImGuiSdl3Backend>(
       platform_, window_id_, graphics_backend_->GetImGuiContext());
     render_pass_->Enable();
   } catch (const std::exception& ex) {

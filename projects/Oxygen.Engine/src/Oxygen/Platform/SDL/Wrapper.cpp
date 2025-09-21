@@ -59,13 +59,13 @@ auto TranslateFlagsToProperties(const SDL_PropertiesID props,
 
 auto oxygen::platform::sdl::SdlCheck(const bool status) -> void
 {
-  // zero indicates success
+  // 'status' is true on success, false on failure. Throw on failure.
   if (status) {
     return;
   }
 
   const auto* error_message = SDL_GetError();
-  throw std::runtime_error(error_message);
+  throw std::runtime_error(error_message ? error_message : "SDL error");
 }
 
 auto oxygen::platform::sdl::MakeWindow(const char* title, const uint32_t pos_x,
