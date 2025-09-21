@@ -144,3 +144,60 @@ auto WindowManager::WindowFromId(WindowIdType window_id) const -> Window&
     "We should only call this method when we are sure the window id is valid");
   return **found;
 }
+
+auto WindowManager::QueueWindowForClosing(WindowIdType window_id) -> void
+{
+  LOG_F(
+    INFO, "Window [id = {}] queued for closing at next frame start", window_id);
+  pending_close_windows_.push_back(window_id);
+}
+
+auto WindowManager::ProcessPendingCloses() -> void
+{
+  if (pending_close_windows_.empty()) {
+    return;
+  }
+
+  LOG_F(INFO, "Processing {} pending window closures",
+    pending_close_windows_.size());
+
+  for (const auto window_id : pending_close_windows_) {
+    // Find the window and destroy its SDL window before removing it
+    const auto found = std::ranges::find_if(windows_,
+      [window_id](const auto& window) { return window->Id() == window_id; });
+
+    if (found != windows_.end()) {
+      auto& window = **found;
+      // Destroy the native SDL window through the manager interface
+      window.GetManagerInterface().DestroyNativeWindow();
+    }
+
+    // Remove the window from the windows_ table
+    std::erase_if(windows_,
+      [window_id](const auto& window) { return window->Id() == window_id; });
+    LOG_F(INFO, "Window [id = {}] is closed", window_id);
+  }
+
+  // Check if all windows are now closed
+  if (windows_.empty()) {
+    last_window_closed_.Trigger();
+  }
+
+  pending_close_windows_.clear();
+}
+
+auto WindowManager::ScanForPendingCloses() -> void
+{
+  for (const auto& window : windows_) {
+    if (window->GetManagerInterface().IsPendingClose()) {
+      const auto window_id = window->Id();
+      // Only queue if not already queued
+      const auto already_queued
+        = std::ranges::find(pending_close_windows_, window_id)
+        != pending_close_windows_.end();
+      if (!already_queued) {
+        QueueWindowForClosing(window_id);
+      }
+    }
+  }
+}

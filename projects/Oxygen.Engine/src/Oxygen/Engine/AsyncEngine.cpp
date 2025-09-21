@@ -329,6 +329,9 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
   }
   gfx->BeginFrame(frame_number_, frame_slot_);
 
+  // Process platform frame start operations (deferred window closes, etc.)
+  platform_->OnFrameStart();
+
   // Execute module frame start work
   co_await module_manager_->ExecutePhase(PhaseId::kFrameStart, context);
 

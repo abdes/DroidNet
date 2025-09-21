@@ -30,6 +30,12 @@ namespace platform::window {
 
     virtual auto DispatchEvent(Event event) const -> void = 0;
     virtual auto InitiateClose(co::Nursery& n) -> void = 0;
+
+    //! Check if this window is pending close (for WindowManager use only)
+    virtual auto IsPendingClose() const -> bool = 0;
+
+    //! Actually destroy the native window (for WindowManager use only)
+    virtual auto DestroyNativeWindow() -> void = 0;
   };
 
 } // namespace platform::window
