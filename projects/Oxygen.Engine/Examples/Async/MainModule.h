@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -149,6 +151,18 @@ namespace examples::async {
     //! Frame graph setup (configure render passes).
     auto SetupRenderPasses() -> void;
 
+    //! Debug overlay methods.
+    auto DrawDebugOverlay(engine::FrameContext& context) -> void;
+    auto DrawPerformancePanel() -> void;
+    auto DrawFrameActionsPanel() -> void;
+    auto DrawSceneInfoPanel() -> void;
+    auto DrawRenderPassesPanel() -> void;
+    auto TrackPhaseStart(const std::string& phase_name) -> void;
+    auto TrackPhaseEnd() -> void;
+    auto TrackFrameAction(const std::string& action) -> void;
+    auto StartFrameTracking() -> void;
+    auto EndFrameTracking() -> void;
+
     //! Command recording (execute render graph).
     auto ExecuteRenderCommands(engine::FrameContext& context) -> co::Co<>;
 
@@ -182,6 +196,31 @@ namespace examples::async {
     // Elapsed animation time in seconds since module start, computed from
     // engine frame timestamp for stable sampling across phases.
     double anim_time_ { 0.0 };
+
+    //! Debug overlay tracking structures
+    struct FrameActionTracker {
+      std::chrono::steady_clock::time_point frame_start_time;
+      std::chrono::steady_clock::time_point frame_end_time;
+      std::vector<std::pair<std::string, std::chrono::microseconds>>
+        phase_timings;
+      std::vector<std::string> frame_actions;
+      std::uint32_t spheres_updated { 0 };
+      std::uint32_t render_items_count { 0 };
+      bool scene_mutation_occurred { false };
+      bool transform_propagation_occurred { false };
+      bool frame_graph_setup { false };
+      bool command_recording { false };
+    };
+
+    FrameActionTracker current_frame_tracker_;
+    std::vector<FrameActionTracker> frame_history_;
+    static constexpr std::size_t kMaxFrameHistory
+      = 60; // Keep 1 second at 60fps
+
+    // Per-phase timing helpers
+    std::chrono::steady_clock::time_point phase_start_time_;
+    std::string current_phase_name_;
+
     // Per-sphere animation state (multiple spheres with different speeds)
     struct SphereState {
       scene::SceneNode node;
