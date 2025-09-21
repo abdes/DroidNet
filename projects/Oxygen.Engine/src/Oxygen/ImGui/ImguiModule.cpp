@@ -68,7 +68,8 @@ auto ImGuiModule::OnFrameStart(engine::FrameContext& frame_context) -> void
   if (!platform_backend_) {
     // Maybe no window yet, or window is closing/closed. There is nothing to do
     // for ImGui with no window.
-    LOG_F(WARNING, "platform backend not valid, skipping frame");
+    LOG_F(2, "platform backend not valid, skipping frame");
+    render_pass_->Disable();
     return;
   }
 

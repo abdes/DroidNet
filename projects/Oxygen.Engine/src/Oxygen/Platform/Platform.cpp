@@ -114,6 +114,17 @@ auto Platform::Stop() -> void
   DLOG_F(INFO, "Platform Live Object stopped");
 }
 
+auto Platform::OnFrameStart() -> void
+{
+  if (HasComponent<WindowManager>()) {
+    auto& window_manager = Windows();
+    // Process windows that were queued for closing in previous frames
+    window_manager.ProcessPendingCloses();
+    // Scan for new windows that are pending close and queue them for next frame
+    window_manager.ScanForPendingCloses();
+  }
+}
+
 auto Platform::Compose(const PlatformConfig& config) -> void
 {
   AddComponent<AsyncOps>(config);

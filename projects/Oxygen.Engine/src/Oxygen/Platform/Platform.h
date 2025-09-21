@@ -217,6 +217,15 @@ namespace platform {
       return last_window_closed_;
     }
 
+    //! Queue a window for closing at the next frame start
+    OXGN_PLAT_API auto QueueWindowForClosing(WindowIdType window_id) -> void;
+
+    //! Process all windows queued for closing
+    OXGN_PLAT_API auto ProcessPendingCloses() -> void;
+
+    //! Scan for windows that are pending close and queue them
+    OXGN_PLAT_API auto ScanForPendingCloses() -> void;
+
   protected:
     auto UpdateDependencies(
       const std::function<Component&(TypeId)>& get_component) noexcept
@@ -249,6 +258,7 @@ namespace platform {
     co::Event last_window_closed_;
 
     std::vector<std::shared_ptr<Window>> windows_;
+    std::vector<WindowIdType> pending_close_windows_;
   };
 
 } // namespace platform
@@ -268,6 +278,9 @@ public:
   OXGN_PLAT_API auto Stop() -> void override;
 
   OXGN_PLAT_API auto Shutdown() -> co::Co<>;
+
+  //! Called at the start of each frame to handle deferred operations
+  OXGN_PLAT_API auto OnFrameStart() -> void;
 
   auto Async() -> platform::AsyncOps&
   {

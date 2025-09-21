@@ -69,6 +69,7 @@ public:
   WindowIdType id_ { kInvalidWindowId };
   mutable bool should_close_ { false };
   mutable bool forced_close_ { false };
+  mutable bool pending_close_ { false };
 };
 
 class Window::ManagerInterfaceImpl final : public Component,
@@ -95,6 +96,8 @@ public:
     events_.Set(event);
   }
   auto InitiateClose(co::Nursery& n) -> void override;
+  auto IsPendingClose() const -> bool override;
+  auto DestroyNativeWindow() -> void override;
   auto DoClose() const -> void;
   auto RecordVote() const -> void
   {
@@ -174,8 +177,23 @@ auto Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n) -> void
 
 auto Window::ManagerInterfaceImpl::DoClose() const -> void
 {
-  LOG_F(INFO, "SDL3 Window[{}] is closing", data_->id_);
-  sdl::DestroyWindow(data_->sdl_window_);
+  LOG_F(
+    INFO, "SDL3 Window[{}] marked for closing at next frame start", data_->id_);
+  data_->pending_close_ = true;
+}
+
+auto Window::ManagerInterfaceImpl::IsPendingClose() const -> bool
+{
+  return data_->pending_close_;
+}
+
+auto Window::ManagerInterfaceImpl::DestroyNativeWindow() -> void
+{
+  if (data_->sdl_window_ != nullptr) {
+    LOG_F(INFO, "SDL3 Window[{}] native window being destroyed", data_->id_);
+    sdl::DestroyWindow(data_->sdl_window_);
+    data_->sdl_window_ = nullptr;
+  }
 }
 
 Window::Window(const window::Properties& props)

@@ -486,7 +486,7 @@ auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
-  LOG_SCOPE_F(2, "MainModule::OnFrameStart");
+  LOG_SCOPE_F(3, "MainModule::OnFrameStart");
 
   // Initialize on first frame
   if (!initialized_) {
@@ -511,6 +511,14 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
     // Window expired, reset surface
     LOG_F(WARNING, "Window expired, resetting surface");
     surface_.reset();
+    context.RemoveSurfaceAt(0); // FIXME: find our surface index
+    // Disable ImGui rendering for the closed window
+    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      auto& imgui_module = imgui_module_ref->get();
+      imgui_module.SetWindowId(platform::kInvalidWindowId);
+    }
+
     return;
   }
 
@@ -519,7 +527,7 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   // time
   DCHECK_NOTNULL_F(surface_);
   context.AddSurface(surface_);
-  LOG_F(2, "Surface '{}' added to FrameContext for frame", surface_->GetName());
+  LOG_F(3, "Surface '{}' added to FrameContext for frame", surface_->GetName());
 
   // Ensure scene and camera are set up
   EnsureExampleScene();
@@ -753,11 +761,9 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(2, "MainModule::OnSceneMutation");
+  LOG_SCOPE_F(3, "MainModule::OnSceneMutation");
   if (!surface_ || window_weak_.expired()) {
-    LOG_F(ERROR, "Window or Surface is no longer valid");
-    surface_.reset();
-    context.RemoveSurfaceAt(0); // FIXME: find our surface index
+    LOG_F(3, "Window or Surface is no longer valid");
     co_return;
   }
 
@@ -792,7 +798,11 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   -> co::Co<>
 {
-  LOG_SCOPE_F(2, "MainModule::OnTransformPropagation");
+  LOG_SCOPE_F(3, "MainModule::OnTransformPropagation");
+  if (!surface_ || window_weak_.expired()) {
+    LOG_F(3, "Window or Surface is no longer valid");
+    co_return;
+  }
 
   // Update animations and transforms (no scene mutations)
   // Compute per-frame delta from engine frame timestamp. Clamp delta to a
@@ -849,7 +859,11 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
 
 auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(2, "MainModule::OnFrameGraph");
+  LOG_SCOPE_F(3, "MainModule::OnFrameGraph");
+  if (!surface_ || window_weak_.expired()) {
+    LOG_F(3, "Window or Surface is no longer valid");
+    co_return;
+  }
 
   // Set ImGui context before making ImGui calls
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -894,7 +908,11 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(2, "MainModule::OnCommandRecord");
+  LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
+  if (!surface_ || window_weak_.expired()) {
+    LOG_F(3, "Window or Surface is no longer valid");
+    co_return;
+  }
 
   if (app_.gfx_weak.expired() || !scene_) {
     co_return;
@@ -906,21 +924,7 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
-  LOG_SCOPE_F(2, "MainModule::OnFrameEnd");
-
-  // In AsyncEngine, modules do NOT present surfaces directly.
-  // The engine handles presentation in PhasePresent() by calling
-  // gfx->PresentSurfaces() on surfaces marked as presentable.
-  //
-  // Module responsibilities:
-  // 1. Add surfaces to FrameContext during OnFrameStart
-  // 2. Mark surfaces presentable after OnCommandRecord
-  // 3. Engine handles actual presentation
-  //
-  // NOTE: FrameContext is recreated each frame, so surface registration and
-  // presentable flags are fresh for each frame.
-
-  LOG_F(2, "Frame end - surface presentation handled by AsyncEngine");
+  LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 }
 
 auto MainModule::SetupMainWindow() -> void
@@ -1317,7 +1321,7 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
 
 auto MainModule::SetupRenderPasses() -> void
 {
-  LOG_SCOPE_F(2, "MainModule::SetupRenderPasses");
+  LOG_SCOPE_F(3, "MainModule::SetupRenderPasses");
 
   // --- DepthPrePass configuration ---
   if (!depth_pass_config_) {
@@ -1356,7 +1360,7 @@ auto MainModule::SetupRenderPasses() -> void
 auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   -> co::Co<>
 {
-  LOG_SCOPE_F(2, "MainModule::ExecuteRenderCommands");
+  LOG_SCOPE_F(3, "MainModule::ExecuteRenderCommands");
 
   // Early-out if graphics, scene, window, or surface are not available. This
   // can happen during shutdown or immediately after the window has been
@@ -1377,7 +1381,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // Use frame slot provided by the engine context
   const auto current_frame = context.GetFrameSlot().get();
 
-  DLOG_F(1, "Recording commands for frame index {}", current_frame);
+  DLOG_F(3, "Recording commands for frame index {}", current_frame);
 
   auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   auto recorder
@@ -1449,7 +1453,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
     },
     render_context_, context);
 
-  LOG_F(2, "Command recording completed for frame {}", current_frame);
+  LOG_F(3, "Command recording completed for frame {}", current_frame);
 
   co_return;
 }
