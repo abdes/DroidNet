@@ -8,13 +8,14 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/ImGui/SDL/ImGuiSdl3Backend.h>
-#include <Oxygen/ImGui/SDL/imgui_impl_sdl3.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
+#include <Oxygen/Platform/ImGui/imgui_impl_sdl3.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/PlatformEvent.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
 
-namespace oxygen::imgui::sdl3 {
+namespace oxygen::platform::imgui {
 
 ImGuiSdl3Backend::ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
   const platform::WindowIdType window_id, ImGuiContext* imgui_context)
@@ -28,12 +29,12 @@ ImGuiSdl3Backend::ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
   // Store context for async event forwarding
   ImGui::SetCurrentContext(imgui_context_.get());
 
-  const auto window = SDL_GetWindowFromID(window_id);
+  const auto window = platform::sdl::GetWindowFromId(window_id);
   DCHECK_NOTNULL_F(window);
   ImGui_ImplSDL3_InitForD3D(window);
 
   // Adjust the scaling to take into account the current DPI
-  const float window_scale = SDL_GetWindowDisplayScale(window);
+  const float window_scale = platform::sdl::GetWindowDisplayScale(window);
   DLOG_F(INFO, "Using DPI scale: {}", window_scale);
   auto& io = ImGui::GetIO();
   io.FontGlobalScale = window_scale;
@@ -94,4 +95,4 @@ auto ImGuiSdl3Backend::ProcessPlatformEvents(
   }
 }
 
-} // namespace oxygen::imgui::sdl3
+} // namespace oxygen::platform::imgui

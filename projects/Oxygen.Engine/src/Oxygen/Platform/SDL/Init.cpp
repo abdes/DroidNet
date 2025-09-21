@@ -16,10 +16,10 @@ Platform::Platform(const PlatformConfig& config)
 {
   LOG_SCOPE_F(INFO, "Platform (SDL3) Init");
 
-  Compose(config);
-
   platform::sdl::Init(SDL_INIT_VIDEO);
   platform::sdl::SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+
+  Compose(config);
 
   // Initialize the input slots
   platform::InputSlots::Initialize();

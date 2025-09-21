@@ -8,8 +8,9 @@
 
 #include <string>
 
-#include <Oxygen/Platform/Window.h>
 #include <SDL3/SDL.h>
+
+#include <Oxygen/Platform/Window.h>
 
 // ReSharper disable CppClangTidyBugproneNarrowingConversions
 
@@ -87,6 +88,16 @@ inline auto GetNativeWindow(SDL_Window* window) -> window::NativeHandles
 inline auto GetWindowFlags(SDL_Window* window) -> uint64_t
 {
   return SDL_GetWindowFlags(window);
+}
+
+inline auto GetWindowFromId(platform::WindowIdType window_id) -> SDL_Window*
+{
+  return SDL_GetWindowFromID(window_id);
+}
+
+inline auto GetWindowDisplayScale(SDL_Window* window) -> float
+{
+  return SDL_GetWindowDisplayScale(window);
 }
 
 inline auto SetWindowFullScreen(SDL_Window* window, const bool full_screen)

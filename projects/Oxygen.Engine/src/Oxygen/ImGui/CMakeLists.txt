@@ -55,10 +55,6 @@ set(
 )
 set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
-  "SDL/imgui_impl_sdl3.h"
-  "SDL/imgui_impl_sdl3.cpp"
-  "SDL/ImGuiSdl3Backend.h"
-  "SDL/ImGuiSdl3Backend.cpp"
   "ImGuiPass.cpp"
   "ImGuiModule.cpp"
 )

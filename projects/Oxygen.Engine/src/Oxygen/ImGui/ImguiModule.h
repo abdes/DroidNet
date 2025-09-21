@@ -17,11 +17,14 @@
 #include <Oxygen/ImGui/api_export.h>
 #include <Oxygen/Imgui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Imgui/ImGuiPass.h>
-#include <Oxygen/Imgui/SDL/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Types.h>
 
 struct ImGuiContext;
 struct ImDrawData;
+
+namespace oxygen::platform::imgui {
+class ImGuiSdl3Backend;
+} // namespace oxygen::platform::imgui
 
 namespace oxygen::engine {
 class FrameContext;
@@ -50,9 +53,7 @@ public:
 
   [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
   {
-    return engine::ModulePriority {
-      1000
-    }; // Run after MainModule sets window ID
+    return engine::ModulePriority { 1000 };
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
@@ -85,7 +86,7 @@ public:
 
 private:
   std::shared_ptr<Platform> platform_ {};
-  std::unique_ptr<sdl3::ImGuiSdl3Backend> platform_backend_ {};
+  std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_ {};
   // Store graphics backend as shared so we can share it with the ImGuiPass
   // while keeping ownership in the module.
   std::shared_ptr<ImGuiGraphicsBackend> graphics_backend_ {};

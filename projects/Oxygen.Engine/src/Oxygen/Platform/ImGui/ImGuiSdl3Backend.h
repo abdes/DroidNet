@@ -8,8 +8,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/ImGui/api_export.h>
 #include <Oxygen/Platform/Types.h>
+#include <Oxygen/Platform/api_export.h>
 
 struct ImGuiContext;
 
@@ -17,29 +17,29 @@ namespace oxygen::platform {
 class PlatformEvent;
 } // namespace oxygen::platform
 
-namespace oxygen::imgui::sdl3 {
+namespace oxygen::platform::imgui {
 
 class ImGuiSdl3Backend final {
 public:
-  OXGN_IMGUI_API ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
+  OXGN_PLAT_API ImGuiSdl3Backend(std::shared_ptr<Platform> platform,
     platform::WindowIdType window_id, ImGuiContext* imgui_context);
 
-  OXGN_IMGUI_API ~ImGuiSdl3Backend();
+  OXGN_PLAT_API ~ImGuiSdl3Backend();
 
   OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend)
   OXYGEN_MAKE_NON_MOVABLE(ImGuiSdl3Backend)
 
-  OXGN_IMGUI_API auto NewFrame() -> void;
+  OXGN_PLAT_API auto NewFrame() -> void;
 
   // Coroutine that participates in platform event processing. This method
   // will be started by the Platform as an event filter so ImGui receives
   // the first opportunity to handle native events.
-  OXGN_IMGUI_API auto ProcessPlatformEvents(
-    const platform::PlatformEvent& event) -> void;
+  OXGN_PLAT_API auto ProcessPlatformEvents(const platform::PlatformEvent& event)
+    -> void;
 
 private:
   std::shared_ptr<Platform> platform_;
   observer_ptr<ImGuiContext> imgui_context_;
 };
 
-} // namespace oxygen
+} // namespace oxygen::platform::imgui

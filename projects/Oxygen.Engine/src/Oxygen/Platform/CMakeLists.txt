@@ -21,6 +21,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(fmt CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -56,6 +57,8 @@ set(
   "PlatformEvent.h"
   "Types.h"
   "Window.h"
+  "SDL/Wrapper.h"
+  "ImGui/ImGuiSdl3Backend.h"
   "api_export.h"
 )
 set(
@@ -65,7 +68,6 @@ set(
   "Input.cpp"
   "Platform.cpp"
   # SDL Specific
-  "SDL/Wrapper.h"
   "SDL/Wrapper.cpp"
   "SDL/Window.cpp"
   "SDL/Display.cpp"
@@ -74,6 +76,10 @@ set(
   "SDL/InputEvents.cpp"
   "SDL/Init.cpp"
   "SDL/SdlEventUtils.cpp"
+  # ImGui
+  "ImGui/imgui_impl_sdl3.h"
+  "ImGui/imgui_impl_sdl3.cpp"
+  "ImGui/ImGuiSdl3Backend.cpp"
 )
 
 target_sources(
@@ -105,6 +111,7 @@ target_link_libraries(
     oxygen::oxco
     oxygen::core
     SDL3::SDL3
+    imgui::imgui
 )
 
 # ------------------------------------------------------------------------------
