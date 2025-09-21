@@ -274,7 +274,10 @@ auto InputActionMapping::DoUpdate(
   const bool implicits_ok
     = all_non_chain_implicits_triggered && all_chain_implicits_ok;
   bool should_trigger = allow_explicit && implicits_ok;
-  const bool action_ongoing = any_explicit_ongoing_;
+  // Only consider the action ongoing if explicit input is ongoing AND all
+  // implicit gates (e.g., chains/holds) are satisfied. This ensures level
+  // state aligns with gating semantics.
+  const bool action_ongoing = any_explicit_ongoing_ && implicits_ok;
 
   // Aggregate final snapshot for this update without preserving prior frame
   // edges at the mapping level. The InputSystem frame lifecycle is
