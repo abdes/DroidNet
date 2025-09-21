@@ -45,7 +45,6 @@ public:
 
   // clang-format off
   // NOLINTBEGIN(modernize-use-trailing-return-type)
-  // MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
   MOCK_METHOD((const oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));

@@ -11,6 +11,7 @@
 set(SHADER_FullScreenTriangle_TYPES "VS;PS")
 set(SHADER_DepthPrePass_TYPES "VS;PS")
 set(SHADER_LightCulling_TYPES "CS")
+set(SHADER_ImGui_TYPES "VS;PS")
 
 set(dxc_exe "${dxc_bin_path}/dxc.exe")
 message(STATUS "Using DXC Compiler: ${dxc_exe}")

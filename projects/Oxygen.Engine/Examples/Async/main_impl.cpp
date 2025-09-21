@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include <SDL3/SDL.h>
 #include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -26,7 +27,10 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/ImGui/SDL/ImGuiSdl3Backend.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>
@@ -95,7 +99,6 @@ namespace {
 
 auto RegisterEngineModules(oxygen::examples::async::AsyncEngineApp& app) -> void
 {
-
   // Register engine modules
   LOG_F(INFO, "Registering engine modules...");
 
@@ -129,6 +132,16 @@ auto RegisterEngineModules(oxygen::examples::async::AsyncEngineApp& app) -> void
 
     // Register as module
     register_module(std::move(renderer_unique));
+
+    // ImGui module (last): only when not headless and when a graphics backend
+    // exists
+    if (!app.headless) {
+      auto imgui_backend = std::make_unique<
+        oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
+      auto imgui_module = std::make_unique<oxygen::imgui::ImGuiModule>(
+        app.platform, std::move(imgui_backend));
+      register_module(std::move(imgui_module));
+    }
   }
 }
 
@@ -247,6 +260,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
 
+    SDL_Init(SDL_INIT_VIDEO);
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {
       .headless = headless,

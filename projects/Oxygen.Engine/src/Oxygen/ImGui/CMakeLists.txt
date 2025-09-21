@@ -35,7 +35,7 @@ set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
     DEFINE_SYMBOL
-      "OXYGEN_IMGUI_EXPORTS"
+      "OXGN_IMGUI_EXPORTS"
     OUTPUT_NAME
       $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
@@ -46,37 +46,53 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_IMGUI_HEADERS
+  "api_export.h"
+  "ImGuiModule.h"
+  "ImGuiGraphicsBackend.h"
+  "ImGuiPass.h"
+)
+set(
+  OXYGEN_IMGUI_PRIVATE_SOURCES
+  "SDL/imgui_impl_sdl3.h"
+  "SDL/imgui_impl_sdl3.cpp"
+  "SDL/ImGuiSdl3Backend.h"
+  "SDL/ImGuiSdl3Backend.cpp"
+  "ImGuiPass.cpp"
+  "ImGuiModule.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "ImGuiModule.cpp"
-    "ImGuiRenderInterface.cpp"
-    "SDL/imgui_impl_sdl3.h"
-    "SDL/imgui_impl_sdl3.cpp"
-    "SDL/ImGuiSdl3Backend.h"
-    "SDL/ImGuiSdl3Backend.cpp"
+    ${OXYGEN_IMGUI_PRIVATE_SOURCES}
+    ${OXYGEN_IMGUI_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "ImGuiModule.h"
-      "ImGuiPlatformBackend.h"
-      "ImGuiRenderInterface.h"
+    FILES ${OXYGEN_IMGUI_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_IMGUI_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_IMGUI_STATIC>
 )
 
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
+    oxygen::base
+    oxygen::core
+    oxygen::renderer
+    oxygen::graphics-common
     oxygen::engine
     oxygen::platform
+    oxygen::renderer
     imgui::imgui
 )
 

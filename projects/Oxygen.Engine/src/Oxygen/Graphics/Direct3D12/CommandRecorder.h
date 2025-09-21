@@ -50,6 +50,11 @@ public:
 
   auto Begin() -> void override;
 
+  //! Returns the underlying native D3D12 command list for cases where backend
+  //! implementations need direct access to the ID3D12GraphicsCommandList.
+  //! Use sparingly; prefer the CommandRecorder abstraction where possible.
+  auto GetD3D12CommandList() const -> ID3D12GraphicsCommandList*;
+
   auto SetPipelineState(GraphicsPipelineDesc desc) -> void override;
   auto SetPipelineState(ComputePipelineDesc desc) -> void override;
   auto SetGraphicsRootConstantBufferView(uint32_t root_parameter_index,

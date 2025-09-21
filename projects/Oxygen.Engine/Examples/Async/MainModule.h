@@ -57,6 +57,10 @@ namespace engine {
   using ModulePhaseMask = core::PhaseMask;
 } // namespace engine
 
+namespace imgui {
+  class ImGuiPass;
+}
+
 namespace examples::async {
 
   //! Next-generation graphics module demonstrating AsyncEngine integration.

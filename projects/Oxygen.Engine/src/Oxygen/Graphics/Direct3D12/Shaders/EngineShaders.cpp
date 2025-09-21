@@ -24,7 +24,7 @@ using oxygen::graphics::d3d12::EngineShaders;
 namespace {
 // Specification of engine shaders. Each entry is a ShaderProfile corresponding
 // to one of the shaders we want to automatically compile, package and load.
-const std::array<ShaderInfo, 5> kEngineShaders = {
+const std::array<ShaderInfo, 7> kEngineShaders = {
   {
     {
       .type = ShaderType::kPixel,
@@ -50,6 +50,16 @@ const std::array<ShaderInfo, 5> kEngineShaders = {
       .type = ShaderType::kCompute,
       .relative_path = "LightCulling.hlsl",
       .entry_point = "CS",
+    },
+    {
+      .type = ShaderType::kVertex,
+      .relative_path = "ImGui.hlsl",
+      .entry_point = "VS",
+    },
+    {
+      .type = ShaderType::kPixel,
+      .relative_path = "ImGui.hlsl",
+      .entry_point = "PS",
     },
   },
 };
