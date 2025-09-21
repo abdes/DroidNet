@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -220,6 +221,28 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
     // lifetime of the nursery.
     co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
     platform->Run();
+
+    // Start a lightweight frame tick task that calls Platform::OnFrameStart()
+    // each frame. The Platform implementation now requires a per-frame
+    // OnFrameStart() call so that internal window lifecycle and timers are
+    // advanced; without this the window may never close. Run at ~60Hz.
+    n.Start([platform]() -> oxygen::co::Co<> {
+      const auto frame_period = std::chrono::milliseconds(16); // ~60 FPS
+      while (oxygen::co::EventLoopTraits<Platform>::IsRunning(*platform)) {
+        // Call OnFrameStart on the platform to advance per-frame state.
+        try {
+          platform->OnFrameStart();
+        } catch (const std::exception& e) {
+          DLOG_F(WARNING, "Platform::OnFrameStart() threw: {}", e.what());
+        } catch (...) {
+          DLOG_F(WARNING, "Platform::OnFrameStart() threw unknown exception");
+        }
+
+        co_await platform->Async().SleepFor(frame_period);
+      }
+
+      co_return;
+    });
 
     WindowProps props("Oxygen Window Playground - Interactive Controls");
     props.extent = { .width = 800, .height = 600 };
