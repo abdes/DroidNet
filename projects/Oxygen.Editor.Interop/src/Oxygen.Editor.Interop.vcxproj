@@ -12,12 +12,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
-    <ClCompile Include="Base\LoguruWrapper.cpp" />
     <ClCompile Include="OxygenWorld.cpp" />
-    <ClCompile Include="OxygenWrapper.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Oxygen\oxygen.vcxproj">
+    <ProjectReference Include="$(OxygenEditorInterfaceProject)">
       <Project>{1e967650-3973-4151-b313-ab8f3fbac717}</Project>
       <Private>true</Private>
       <CopyLocalSatelliteAssemblies>false</CopyLocalSatelliteAssemblies>
@@ -25,7 +23,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h" />
-    <ClInclude Include="OxygenWrapper.h" />
     <ClInclude Include="OxygenWorld.h" />
   </ItemGroup>
   <ItemGroup>
@@ -37,10 +34,10 @@
     <ProjectGuid>{FB1BE623-1DF5-4201-8DFB-F3648378DD21}</ProjectGuid>
     <Keyword>NetCoreCProj</Keyword>
     <RootNamespace>OxygenEditorInterop</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
     <TargetFramework>net8.0</TargetFramework>
     <ProjectName>Oxygen.Editor.Interop</ProjectName>
-    <WindowsTargetPlatformMinVersion>10.0.22621.0</WindowsTargetPlatformMinVersion>
+    <WindowsTargetPlatformMinVersion>10.0.26100.4654</WindowsTargetPlatformMinVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -64,19 +61,9 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\Properties\OutputDirs.props" />
-    <Import Project="..\..\Properties\LinkerFlags.props" />
-    <Import Project="..\..\Properties\CompilerFlags.props" />
-    <Import Project="..\..\Properties\CompilerDefines.props" />
-    <Import Project="..\..\Properties\VcpkgConfig.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\Properties\OutputDirs.props" />
-    <Import Project="..\..\Properties\LinkerFlags.props" />
-    <Import Project="..\..\Properties\CompilerFlags.props" />
-    <Import Project="..\..\Properties\CompilerDefines.props" />
-    <Import Project="..\..\Properties\VcpkgConfig.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -97,6 +84,8 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Engine\src;$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\full_deploy\host</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <AdditionalDependencies />

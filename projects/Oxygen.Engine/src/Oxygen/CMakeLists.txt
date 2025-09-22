@@ -28,6 +28,7 @@ add_subdirectory("Renderer")
 add_subdirectory("Scene")
 add_subdirectory("Serio")
 add_subdirectory("TextWrap")
+add_subdirectory("EditorInterface")
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Testing")

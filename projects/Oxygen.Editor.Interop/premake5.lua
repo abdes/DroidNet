@@ -8,7 +8,7 @@
 -- Again, deal with the limited support of C++/CLI projects in premake5
 local function FixManagedProject(cfg)
      premake.w('<EnableManagedPackageReferenceSupport>true</EnableManagedPackageReferenceSupport>')
-     premake.w('<WindowsTargetPlatformMinVersion>10.0.22621.0</WindowsTargetPlatformMinVersion>')
+     premake.w('<WindowsTargetPlatformMinVersion>10.0.26100.4654</WindowsTargetPlatformMinVersion>')
 end
 
 project "Oxygen.Editor.Interop"
