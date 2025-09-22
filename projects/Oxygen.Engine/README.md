@@ -81,8 +81,7 @@ $ conan remote add mycenter ./conan-center-index
 
 $ cd DroidNet/projects/Oxygen.Engine
 
-$  conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
-
+$ conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
 ```
 
 ## Useful commands
