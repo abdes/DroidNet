@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
 
         <!-- Reference the wrapped native project so that its DLL gets copied to our output directory -->
         <!--
