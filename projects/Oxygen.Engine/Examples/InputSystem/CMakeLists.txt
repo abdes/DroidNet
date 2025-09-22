@@ -9,8 +9,18 @@
 # ------------------------------------------------------------------------------
 
 asap_module_declare(
-  MODULE_NAME "Oxygen.InputSystem.Example"
-  DESCRIPTION "An example using the Oxygen input system"
+  MODULE_NAME "Oxygen.Examples.InputSystem"
+  DESCRIPTION [=[
+An example demonstrating the Oxygen engine InputSystem: it creates and registers
+typed Actions and InputActionMappings, groups mappings into InputMappingContexts
+(modifier keys, ground movement, camera controls, swimming), uses ActionTriggers
+(Down, Tap, Chain) and trigger chains to express actuation rules and
+prerequisites, and binds engine-agnostic InputSlots (keyboard, mouse, wheel,
+MouseXY) to actions. It includes a compact ImGui debug overlay that visualises
+action state, analog values and per-action sparklines; the sample shows how
+gameplay code queries action edge events and Axis2D values to implement camera
+pan/zoom and simple movement behaviours.
+]=]
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
