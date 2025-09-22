@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <ContentDialog
     x:Class="Oxygen.Editor.ProjectBrowser.Views.NewProjectDialog"
@@ -6,6 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
     xmlns:viewModels="using:Oxygen.Editor.ProjectBrowser.ViewModels"
     Title="Configure your new project"
@@ -51,23 +52,37 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+
+        <!--  InfoBar placed under the title  -->
+        <muxc:InfoBar
+            x:Name="FeedbackMessageInfoBar"
+            Title="Error"
+            Grid.Row="0"
+            Margin="0,8,0,0"
+            HorizontalAlignment="Stretch"
+            IsClosable="True"
+            IsOpen="{x:Bind ViewModel.IsFeedbackMessageVisible, Mode=OneWay}"
+            Message="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}"
+            Severity="Error" />
+
         <TextBox
             x:Name="ProjectNameTextBox"
-            Grid.Row="0"
+            Grid.Row="1"
             Margin="0,20,0,0"
             Header="Project name"
             PlaceholderText="Name"
             Text="{Binding Path=ProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
         <TextBlock
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="0,20,0,10"
             Text="Location" />
 
         <Expander
             x:Name="LocationExpander"
-            Grid.Row="2"
+            Grid.Row="3"
             HorizontalAlignment="Stretch">
             <Expander.Header>
                 <Grid>
@@ -106,7 +121,10 @@
                         ItemClick="OnLocationItemClick"
                         ItemTemplate="{StaticResource PinnedLocationListItem}"
                         ItemsSource="{x:Bind ViewModel.PinnedLocations}" />
-                    <HyperlinkButton HorizontalAlignment="Right" Content="Browse..." />
+                    <HyperlinkButton
+                        HorizontalAlignment="Right"
+                        Click="OnBrowseClick"
+                        Content="Browse..." />
                 </StackPanel>
             </Expander.Content>
         </Expander>
