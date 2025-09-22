@@ -37,14 +37,14 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     /// <inheritdoc />
-    protected override int DoGetChildrenCount() => scene.Entities.Count;
+    protected override int DoGetChildrenCount() => scene.Nodes.Count;
 
     /// <inheritdoc />
     protected override async Task LoadChildren()
     {
         this.ClearChildren();
 
-        foreach (var entity in this.AttachedObject.Entities)
+        foreach (var entity in this.AttachedObject.Nodes)
         {
             this.AddChildInternal(
                 new GameEntityAdapter(entity) { IsExpanded = false });

@@ -187,7 +187,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
 
         var newEntity
             = new GameEntityAdapter(
-                new SceneNode(parent.AttachedObject) { Name = $"New Entity {parent.AttachedObject.Entities.Count}" });
+                new SceneNode(parent.AttachedObject) { Name = $"New Entity {parent.AttachedObject.Nodes.Count}" });
 
         await this.InsertItemAsync(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }
@@ -325,7 +325,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         var parentAdapter = args.Parent as SceneAdapter;
         Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
         var scene = parentAdapter.AttachedObject;
-        scene.Entities.Add(entity);
+        scene.Nodes.Add(entity);
     }
 
     private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
@@ -341,7 +341,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         var parentAdapter = entityAdapter.Parent as SceneAdapter;
         Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
         var scene = parentAdapter.AttachedObject;
-        _ = scene.Entities.Remove(entity);
+        _ = scene.Nodes.Remove(entity);
     }
 
     [LoggerMessage(
