@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Storage;
@@ -10,28 +11,36 @@ using Oxygen.Editor.Storage;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-/// Provides methods for managing projects within the Oxygen Editor, including loading, saving, and managing
-/// project information and scenes for projects which storage is provided by the <see cref="IStorageProvider"/>
-/// specified by <paramref name="storage"/>.
+///     Provides methods for managing projects within the Oxygen Editor, including loading, saving, and managing
+///     project information and scenes for projects which storage is provided by the <see cref="IStorageProvider" />
+///     specified by <paramref name="storage" />.
 /// </summary>
 /// <param name="storage">The <see cref="IStorageProvider" /> that can be used to access locally stored items.</param>
 /// <param name="loggerFactory">
-/// Optional factory for creating loggers. If provided, enables detailed logging of the recognition
-/// process. If <see langword="null"/>, logging is disabled.
+///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null) : IProjectManagerService
+public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null)
+    : IProjectManagerService
 {
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
+    [SuppressMessage(
+        "Performance",
+        "CA1823:Avoid unused private fields",
+        Justification = "used by generated logging methods")]
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ??
+                                      NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IProject? CurrentProject { get; private set; }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IStorageProvider GetCurrentProjectStorageProvider() => storage;
 
-    /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as null return value")]
+    /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures are logged and propagated as null return value")]
     public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath)
     {
         try
@@ -55,8 +64,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return null;
     }
 
-    /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as false return value")]
+    /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures are logged and propagated as false return value")]
     public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
     {
         Debug.Assert(projectInfo.Location != null, "The project location must be valid!");
@@ -78,8 +90,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return false;
     }
 
-    /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as false return value")]
+    /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures are logged and propagated as false return value")]
     public async Task<bool> LoadProjectAsync(IProjectInfo projectInfo)
     {
         Debug.Assert(projectInfo.Location is not null, "should not load a project with an invalid project info");
@@ -105,7 +120,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return true;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public async Task<bool> LoadSceneAsync(Scene scene)
     {
         var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(true);
@@ -114,10 +129,10 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return false;
         }
 
-        scene.Entities.Clear();
-        foreach (var entity in loadedScene.Entities)
+        scene.Nodes.Clear();
+        foreach (var sceneNode in loadedScene.Nodes)
         {
-            scene.Entities.Add(entity);
+            scene.Nodes.Add(sceneNode);
         }
 
         return true;
@@ -145,7 +160,10 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as null return value")]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures are logged and propagated as null return value")]
     private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");

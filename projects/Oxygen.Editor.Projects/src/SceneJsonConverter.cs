@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Projects;
 ///     The <see cref="SceneJsonConverter" /> class provides custom serialization and deserialization logic for the
 ///     <see cref="Scene" /> class.
 ///     It ensures that the <see cref="Scene" /> object is correctly serialized and deserialized, including its properties
-///     and nested entities.
+///     and nested scene nodes.
 /// </remarks>
 internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
 {
@@ -33,17 +33,19 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         var name = nameElement.ToString();
         var scene = new Scene(project) { Name = name };
 
-        if (sceneElement.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
-            entitiesElement.ValueKind == JsonValueKind.Array)
+        if (!sceneElement.TryGetProperty(nameof(Scene.Nodes), out var entitiesElement) ||
+            entitiesElement.ValueKind != JsonValueKind.Array)
         {
-            scene.Entities.Clear();
-            foreach (var entityElement in entitiesElement.EnumerateArray())
+            return scene;
+        }
+
+        scene.Nodes.Clear();
+        foreach (var nodeElement in entitiesElement.EnumerateArray())
+        {
+            var sceneNode = SceneNode.FromJson(nodeElement.GetRawText(), scene);
+            if (sceneNode != null)
             {
-                var entity = SceneNode.FromJson(entityElement.GetRawText(), scene);
-                if (entity != null)
-                {
-                    scene.Entities.Add(entity);
-                }
+                scene.Nodes.Add(sceneNode);
             }
         }
 
@@ -57,8 +59,8 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
 
         writer.WriteString(nameof(GameObject.Name), value.Name);
 
-        writer.WritePropertyName(nameof(Scene.Entities));
-        JsonSerializer.Serialize(writer, value.Entities, options);
+        writer.WritePropertyName(nameof(Scene.Nodes));
+        JsonSerializer.Serialize(writer, value.Nodes, options);
 
         writer.WriteEndObject();
     }

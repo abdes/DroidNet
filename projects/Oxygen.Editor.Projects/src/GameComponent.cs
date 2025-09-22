@@ -12,30 +12,34 @@ using Oxygen.Editor.Projects.Utils;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-///     Represents a component of a game entity, such as transform, geometry, material, etc.
+///     Represents a component of a scene node, such as transform, geometry, material, etc.
 /// </summary>
-/// <param name="entity">The owner <see cref="SceneNode" />.</param>
+/// <param name="node">The owner <see cref="SceneNode" />.</param>
 [JsonDerivedType(typeof(Transform), "Transform")]
 [JsonDerivedType(typeof(GameComponent), "Base")]
-public partial class GameComponent(SceneNode entity) : GameObject
+public partial class GameComponent(SceneNode node) : GameObject
 {
     /// <summary>
     ///     JsonSerializer options for <see cref="GameComponent" /> object, internally visible to be
-    ///     available when a <see cref="SceneNode" /> is manuall serializing its components.
+    ///     available when a <see cref="SceneNode" /> is manually serializing its components.
     /// </summary>
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         AllowTrailingCommas = true,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new Vector3JsonConverter() }
+        Converters = { new Vector3JsonConverter() },
     };
 
     /// <summary>
-    ///     Gets the owner <see cref="SceneNode" /> of this component.
+    ///     Gets the owner scene node of this component.
     /// </summary>
+    /// <remarks>
+    ///     Allow the owning assembly (SceneNode converter) to set the Node after
+    ///     deserialization.
+    /// </remarks>
     [JsonIgnore]
-    public SceneNode Entity { get; } = entity;
+    public SceneNode Node { get; internal set; } = node;
 
     /// <summary>
     ///     Deserializes a JSON string into a <see cref="GameComponent" /> object.

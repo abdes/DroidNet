@@ -17,7 +17,7 @@ public class SceneTests
     private readonly JsonSerializerOptions jsonOptions = new();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SceneTests"/> class.
+    ///     Initializes a new instance of the <see cref="SceneTests" /> class.
     /// </summary>
     public SceneTests()
     {
@@ -32,17 +32,19 @@ public class SceneTests
     {
         // Arrange
         var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
-        scene.Entities.Add(new GameEntity(scene) { Name = "Entity 1" });
-        scene.Entities.Add(new GameEntity(scene) { Name = "Entity 2" });
+        using var node1 = new SceneNode(scene) { Name = "Node 1" };
+        using var node2 = new SceneNode(scene) { Name = "Node 2" };
+        scene.Nodes.Add(node1);
+        scene.Nodes.Add(node2);
 
         // Act
         var json = JsonSerializer.Serialize(scene, this.jsonOptions);
 
         // Assert
         _ = json.Should().Contain("\"Name\":\"Scene Name\"");
-        _ = json.Should().Contain("\"Entities\"");
-        _ = json.Should().Contain("\"Name\":\"Entity 1\"");
-        _ = json.Should().Contain("\"Name\":\"Entity 2\"");
+        _ = json.Should().Contain("\"Nodes\"");
+        _ = json.Should().Contain("\"Name\":\"Node 1\"");
+        _ = json.Should().Contain("\"Name\":\"Node 2\"");
         _ = json.Should().NotContain("\"Project\"");
     }
 
@@ -55,12 +57,12 @@ public class SceneTests
             """
             {
                "Name":"Scene Name",
-               "Entities":[
+               "Nodes":[
                    {
-                       "Name":"Entity 1"
+                       "Name":"Node 1"
                    },
                    {
-                       "Name":"Entity 2"
+                       "Name":"Node 2"
                    }
                ]
             }
@@ -74,13 +76,13 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Entities.Should().HaveCount(2);
-        _ = scene.Entities[0].Name.Should().Be("Entity 1");
-        _ = scene.Entities[1].Name.Should().Be("Entity 2");
+        _ = scene.Nodes.Should().HaveCount(2);
+        _ = scene.Nodes.ElementAt(0).Name.Should().Be("Node 1");
+        _ = scene.Nodes.ElementAt(1).Name.Should().Be("Node 2");
     }
 
     [TestMethod]
-    public void Should_Handle_Empty_Entities()
+    public void Should_Handle_Empty_Nodes()
     {
         // Arrange
         const string json =
@@ -88,7 +90,7 @@ public class SceneTests
             """
             {
                 "Name":"Scene Name",
-                "Entities":[]
+                "Nodes":[]
             }
             """;
 
@@ -100,7 +102,7 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Entities.Should().BeEmpty();
+        _ = scene.Nodes.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -111,12 +113,12 @@ public class SceneTests
             /*lang=json,strict*/
             """
             {
-                "Entities":[
+                "Nodes":[
                     {
-                        "Name":"Entity 1"
+                        "Name":"Node 1"
                     },
                     {
-                        "Name":"Entity 2"
+                        "Name":"Node 2"
                     }
                 ]
             }
@@ -134,17 +136,19 @@ public class SceneTests
     {
         // Arrange
         var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
-        scene.Entities.Add(new GameEntity(scene) { Name = "Entity 1" });
-        scene.Entities.Add(new GameEntity(scene) { Name = "Entity 2" });
+        using var node1 = new SceneNode(scene) { Name = "Node 1" };
+        using var node2 = new SceneNode(scene) { Name = "Node 2" };
+        scene.Nodes.Add(node1);
+        scene.Nodes.Add(node2);
 
         // Act
         var json = Scene.ToJson(scene);
 
         // Assert
         _ = json.Should().Contain("\"Name\": \"Scene Name\"");
-        _ = json.Should().Contain("\"Entities\"");
-        _ = json.Should().Contain("\"Name\": \"Entity 1\"");
-        _ = json.Should().Contain("\"Name\": \"Entity 2\"");
+        _ = json.Should().Contain("\"Nodes\"");
+        _ = json.Should().Contain("\"Name\": \"Node 1\"");
+        _ = json.Should().Contain("\"Name\": \"Node 2\"");
         _ = json.Should().NotContain("\"Project\"");
     }
 
@@ -157,12 +161,12 @@ public class SceneTests
             """
             {
                "Name":"Scene Name",
-               "Entities":[
+               "Nodes":[
                    {
-                       "Name":"Entity 1"
+                       "Name":"Node 1"
                    },
                    {
-                       "Name":"Entity 2"
+                       "Name":"Node 2"
                    }
                ]
             }
@@ -176,8 +180,66 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Entities.Should().HaveCount(2);
-        _ = scene.Entities[0].Name.Should().Be("Entity 1");
-        _ = scene.Entities[1].Name.Should().Be("Entity 2");
+        _ = scene.Nodes.Should().HaveCount(2);
+        _ = scene.Nodes.ElementAt(0).Name.Should().Be("Node 1");
+        _ = scene.Nodes.ElementAt(1).Name.Should().Be("Node 2");
+    }
+
+    [TestMethod]
+    public void Should_RoundTrip_Scene_Serialization()
+    {
+        // Arrange
+        var scene = new Scene(this.ExampleProject) { Name = "RoundTrip Scene" };
+        using var node1 = new SceneNode(scene) { Name = "Node A" };
+        using var node2 = new SceneNode(scene) { Name = "Node B" };
+        node1.Components.Add(new GameComponent(node1) { Name = "GC1" });
+        scene.Nodes.Add(node1);
+        scene.Nodes.Add(node2);
+
+        // Act
+        var json = Scene.ToJson(scene);
+        var deserialized = Scene.FromJson(json, this.ExampleProject);
+
+        // Assert
+        _ = deserialized.Should().NotBeNull();
+        Debug.Assert(deserialized is not null, "deserialized != null");
+        _ = deserialized!.Name.Should().Be(scene.Name);
+        _ = deserialized.Project.Should().BeSameAs(this.ExampleProject);
+        _ = deserialized.Nodes.Should().HaveCount(2);
+        _ = deserialized.Nodes.ElementAt(0).Name.Should().Be("Node A");
+        _ = deserialized.Nodes.ElementAt(1).Name.Should().Be("Node B");
+        // Nodes should reference their parent scene
+        foreach (var n in deserialized.Nodes)
+        {
+            _ = n.Scene.Should().BeSameAs(deserialized);
+        }
+    }
+
+    [TestMethod]
+    public void Should_Set_Node_Scene_On_Deserialize()
+    {
+        // Arrange
+        const string json =
+            /*lang=json,strict*/
+            """
+            {
+               "Name":"Scene Name",
+               "Nodes":[
+                   { "Name":"Node 1" },
+                   { "Name":"Node 2" }
+               ]
+            }
+            """;
+
+        // Act
+        var scene = JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
+
+        // Assert
+        _ = scene.Should().NotBeNull();
+        Debug.Assert(scene is not null, "scene != null");
+        foreach (var node in scene!.Nodes)
+        {
+            _ = node.Scene.Should().BeSameAs(scene);
+        }
     }
 }
