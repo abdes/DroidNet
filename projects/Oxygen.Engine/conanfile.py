@@ -1,14 +1,22 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
 import os
-from conan import ConanFile
-from conan.tools.cmake import CMakeToolchain, CMakeDeps
-from conan.tools.files import load, copy
-from conan.tools.cmake import cmake_layout, CMake
-from conan.tools.microsoft import is_msvc_static_runtime, is_msvc
+from typing import Any
+from conan import ConanFile  # type: ignore
+from conan.tools.cmake import CMakeToolchain, CMakeDeps  # type: ignore
+from conan.tools.files import load, copy  # type: ignore
+from conan.tools.cmake import cmake_layout, CMake  # type: ignore
+from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
 from pathlib import Path
-from conan.tools.env import VirtualBuildEnv
 
 
 class OxygenConan(ConanFile):
+    deploy_folder: str  # let Pyright know this exists
+
     # Reference
     name = "Oxygen"
 
@@ -21,7 +29,7 @@ class OxygenConan(ConanFile):
 
     # Binary model: Settings and Options
     settings = "os", "arch", "compiler", "build_type"
-    options = {
+    options: Any = {
         # Options
         "shared": [True, False],
         "fPIC": [True, False],
@@ -67,18 +75,17 @@ class OxygenConan(ConanFile):
         ".clangd.in",
         "cmake/**",
         "src/**",
-        "examples/**",
-        "tests/**",
-        "benchmarks/**",
+        "Examples/**",
         "tools/**",
-        "share/**",
-        "third_party/**",
         "!out/**",
         "!build/**",
         "!cmake-build-*/**",
     )
 
     def set_version(self):
+        assert (
+            self.recipe_folder is not None
+        ), "recipe_folder must be set before set_version()"
         self.version = load(self, Path(self.recipe_folder) / "VERSION").strip()
 
     def requirements(self):
@@ -91,10 +98,11 @@ class OxygenConan(ConanFile):
         self.requires("json-schema-validator/2.3.0")
         self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
+
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.
         self._test_deps = set()
-        ref = "gtest/master"
+        ref = "gtest/master"  # google test recommends using 'master'
         self.test_requires(ref)
         self._test_deps.add(ref.split("/")[0])
 
@@ -120,64 +128,6 @@ class OxygenConan(ConanFile):
         # Link to test frameworks always as static libs
         self.options["gtest"].shared = False
         self.options["catch2"].shared = False
-
-    # def configure(self):
-    #     if self.options.shared:
-    #         self.options.rm_safe("fPIC")
-    #     # evaluated options for _check_prereq
-    #     options = {k: v[0] == 'T' for k, v in self.options.items()}
-    #     # Dependent options
-    #     if options['widgets']:
-    #         del self.options.text
-    #         options['text'] = True
-    #     if options['text']:
-    #         del self.options.graphics
-    #         options['graphics'] = True
-    #     if options['script']:
-    #         del self.options.data
-    #         options['data'] = True
-    #     if options['script'] or options['graphics']:
-    #         del self.options.vfs
-    #         options['vfs'] = True
-    #     if not options['tools']:
-    #         del self.options.dar_tool
-    #         del self.options.dati_tool
-    #         del self.options.ff_tool
-    #         del self.options.fire_tool
-    #         del self.options.shed_tool
-    #         del self.options.tc_tool
-    #         options['dar_tool'] = False
-    #         options['dati_tool'] = False
-    #         options['ff_tool'] = False
-    #         options['fire_tool'] = False
-    #         options['shed_tool'] = False
-    #         options['tc_tool'] = False
-    #     else:
-    #         if not options['widgets']:
-    #             del self.options.shed_tool
-    #             options['shed_tool'] = False
-    #         if not options['script']:
-    #             del self.options.fire_tool
-    #             options['fire_tool'] = False
-    #         if not options['data']:
-    #             del self.options.dati_tool
-    #             options['dati_tool'] = False
-    #         if not options['vfs']:
-    #             del self.options.dar_tool
-    #             options['dar_tool'] = False
-    #         if not options['with_hyperscan']:
-    #             del self.options.ff_tool
-    #             options['ff_tool'] = False
-
-    #     # Remove system_ options for disabled components
-    #     for info in self._requirements():
-    #         if not self._check_prereq(info['prereq'], options):
-    #             delattr(self.options, info['option'])
-
-    #     # Remove dependent / implicit options
-    #     if self.settings.os == "Emscripten" and 'system_zlib' in self.options:
-    #         # These are imported from Emscripten Ports
-    #         del self.options.system_zlib
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -211,13 +161,14 @@ class OxygenConan(ConanFile):
         cmake_layout(self, build_folder="out/build")
         # and add the generated headers to the includedirs
         generated_headers = os.path.join(self.folders.build, "include")
-        self.cpp.source.includedirs.append(generated_headers)
+        build_info: Any = self.cpp.build  # type: ignore
+        build_info.includedirs.append(generated_headers)
 
     def _set_cmake_defs(self, defs):
         defs["OXYGEN_BUILD_TOOLS"] = self.options.tools
         defs["OXYGEN_BUILD_EXAMPLES"] = self.options.examples
         defs["OXYGEN_BUILD_TESTS"] = self.options.tests
-        defs["OXYGEN_BUILD_BENCHMARKS"] = self.options.tests
+        defs["OXYGEN_BUILD_BENCHMARKS"] = self.options.benchmarks
         defs["OXYGEN_BUILD_DOCS"] = self.options.docs
         defs["BUILD_SHARED_LIBS"] = self.options.shared
 
@@ -234,35 +185,24 @@ class OxygenConan(ConanFile):
         cmake = CMake(self)
         cmake.install()
 
-    def _add_dep(self, opt: str, component, cmake_dep: str, conan_dep=None):
-        opt_val = self.options.get_safe(opt)
-        if opt_val is None:  # system option deleted
-            return
-        if opt_val:
-            component.system_libs = [cmake_dep]
-        else:
-            component.requires += [
-                conan_dep if conan_dep is not None else cmake_dep
-            ]
-
     def _library_name(self, component: str):
         # Split the string into segments
         segments = component.split("-")
         # Capitalize the first letter of each segment (except the first one)
         lib_name = "Oxygen." + ".".join(word.capitalize() for word in segments)
-        self.output.debug("Library for component 'component' is 'lib_name")
+        self.output.debug(
+            f"Library for component '{component}' is '{lib_name}'"
+        )
         return lib_name
 
     def package_info(self):
-        for name in "OxCo":
+        for name in ["OxCo", "Base"]:
             if not self.options.get_safe(name.lower(), True):
                 continue  # component is disabled
+
             component = self.cpp_info.components["oxygen-" + name]
-            component.includedirs = ["include"]
-            component.builddirs = ["lib/cmake/oxygen"]
             component.libs = []
             component.libdirs = []
-            # TODO: need to investigate how to define target with namespace
             component.set_property(
                 "cmake_target_name", "oxygen-" + name.lower()
             )
@@ -270,18 +210,23 @@ class OxygenConan(ConanFile):
                 "cmake_target_aliases", ["oxygen::" + name.lower()]
             )
 
-        for name in ["Base"]:
-            if not self.options.get_safe(name.lower(), True):
-                continue  # component is disabled
-            component = self.cpp_info.components["oxygen-" + name]
-            component.libs = [self._library_name(name)]
-            component.libdirs = ["lib"]
+        # Define Base component (compiled library)
+        if self.options.get_safe("base", True):
+            base = self.cpp_info.components["oxygen-Base"]
+            base.libs = [self._library_name("Base")]
+            base.libdirs = ["lib"]
+            # Expose CMake target and alias oxygen::base for consumers
 
-        component = self.cpp_info.components["Base"]
-        self._add_dep("system_fmt", component, "fmt::fmt")
-
-        component = self.cpp_info.components["OxCo"]
-        component.requires += ["Base"]
+        # Define OxCo component (header-only/meta; depends on Base)
+        if self.options.get_safe("oxco", True):
+            oxco = self.cpp_info.components["oxygen-OxCo"]
+            oxco.includedirs = ["include"]
+            oxco.builddirs = ["lib/cmake/oxygen"]
+            oxco.libs = []
+            oxco.libdirs = []
+            # Internal dependency on Base component when available
+            if self.options.get_safe("base", True):
+                oxco.requires = ["oxygen-Base"]
 
     # def build_requirements(self):
     #     self.build_requires("cmake/[>=3.25.0]")
@@ -309,6 +254,7 @@ class OxygenConan(ConanFile):
 
             # ---- Headers (namespaced per package) ----
             for incdir in dep.cpp_info.includedirs:
+
                 copy(
                     self,
                     "*",
@@ -316,15 +262,63 @@ class OxygenConan(ConanFile):
                     dst=os.path.join(self.deploy_folder, "include"),
                 )
 
-            # ---- Libraries (flat under lib/) ----
-            lib_dir = os.path.join(self.deploy_folder)
-            copy(self, "*.lib", src=dep.package_folder, dst=lib_dir)
-            copy(self, "*.a", src=dep.package_folder, dst=lib_dir)
-            copy(self, "*.so*", src=dep.package_folder, dst=lib_dir)
-            copy(self, "*.dylib*", src=dep.package_folder, dst=lib_dir)
+            # Static + import libs
+            for libdir in dep.cpp_info.libdirs:
+                copy(
+                    self,
+                    "*.lib",
+                    src=libdir,
+                    dst=os.path.join(self.deploy_folder, "lib"),
+                )
+                copy(
+                    self,
+                    "*.a",
+                    src=libdir,
+                    dst=os.path.join(self.deploy_folder, "lib"),
+                )
+                # DLLs sometimes land here too
+                copy(
+                    self,
+                    "*.dll",
+                    src=libdir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
+                copy(
+                    self,
+                    "*.so*",
+                    src=libdir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
+                copy(
+                    self,
+                    "*.dylib*",
+                    src=libdir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
 
-            # ---- DLLs / shared libs (flat under bin/) ----
-            bin_dir = os.path.join(self.deploy_folder)
-            copy(self, "*.dll", src=dep.package_folder, dst=bin_dir)
-            copy(self, "*.so*", src=dep.package_folder, dst=bin_dir)
-            copy(self, "*.dylib*", src=dep.package_folder, dst=bin_dir)
+            # Executables + DLLs in bindirs
+            for bindir in dep.cpp_info.bindirs:
+                copy(
+                    self,
+                    "*.exe",
+                    src=bindir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
+                copy(
+                    self,
+                    "*.dll",
+                    src=bindir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
+                copy(
+                    self,
+                    "*.so*",
+                    src=bindir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
+                copy(
+                    self,
+                    "*.dylib*",
+                    src=bindir,
+                    dst=os.path.join(self.deploy_folder, "bin"),
+                )
