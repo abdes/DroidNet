@@ -24,7 +24,7 @@ public partial class Scene(IProject project) : GameObject
     {
         AllowTrailingCommas = true,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     /// <summary>
@@ -36,7 +36,7 @@ public partial class Scene(IProject project) : GameObject
     /// <summary>
     ///     Gets the list of entities within the scene.
     /// </summary>
-    public ICollection<SceneNode> Entities { get; init; } = [];
+    public ICollection<SceneNode> Nodes { get; init; } = [];
 
     /// <summary>
     ///     Deserializes a JSON string into a <see cref="Scene" /> object.

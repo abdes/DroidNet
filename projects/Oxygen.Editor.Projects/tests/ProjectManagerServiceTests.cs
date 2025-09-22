@@ -16,12 +16,12 @@ namespace Oxygen.Editor.Projects.Tests;
 [TestCategory("ProjectManagerService")]
 public class ProjectManagerServiceTests : TestSuiteWithAssertions
 {
-    private readonly Mock<IStorageProvider> mockStorage;
     private readonly Mock<ILogger<ProjectManagerService>> mockLogger;
+    private readonly Mock<IStorageProvider> mockStorage;
     private readonly ProjectManagerService projectManagerService;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectManagerServiceTests"/> class.
+    ///     Initializes a new instance of the <see cref="ProjectManagerServiceTests" /> class.
     /// </summary>
     public ProjectManagerServiceTests()
     {
@@ -95,9 +95,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string projectFolderPath = "path/with/error";
         const string exceptionMessage = "Some error";
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(projectFolderPath, CancellationToken.None))
-            .ThrowsAsync(exception: new InvalidOperationException(exceptionMessage));
+            .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
 
         // Act
         var result = await this.projectManagerService.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
@@ -156,7 +156,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync("normalized/path", CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
 
         // Act
         var result = await this.projectManagerService.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
@@ -194,7 +194,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(scenesFolderMock.Object);
         _ = scenesFolderMock.Setup(f => f.GetDocumentsAsync(It.IsAny<CancellationToken>()))
             .Returns(new List<IDocument> { sceneDocumentMock.Object }.ToAsyncEnumerable());
-        _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
+        _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(true);
         _ = sceneDocumentMock.Setup(d => d.Name).Returns("scene1.scene");
 
         // Act
@@ -283,9 +283,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             """
             {
                 "Name": "scene",
-                "Entities": [
+                "Nodes": [
                     {
-                        "Name": "entity1"
+                        "Name": "node1"
                     }
                 ]
             }
@@ -302,15 +302,15 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(documentMock.Object);
         _ = documentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(sceneJson);
-        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
+        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeTrue();
-        _ = scene.Entities.Should().HaveCount(1);
-        _ = scene.Entities[0].Name.Should().Be("entity1");
+        _ = scene.Nodes.Should().HaveCount(1);
+        _ = scene.Nodes.ElementAt(0).Name.Should().Be("node1");
     }
 
     [TestMethod]
@@ -486,7 +486,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(It.IsAny<string>(), CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);

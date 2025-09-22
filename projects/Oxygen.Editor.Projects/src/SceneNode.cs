@@ -10,11 +10,12 @@ using Oxygen.Editor.Projects.Utils;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-///     Represents a game entity with a name and an associated scene.
+///     Represents a scene node with a name and an associated scene.
 /// </summary>
 /// <remarks>
-///     The <see cref="SceneNode" /> class represents an entity within a game, which is associated with a specific scene.
-///     It provides methods for JSON serialization and deserialization, allowing game entities to be easily saved and
+///     The <see cref="SceneNode" /> class represents a scene node within a game, which is associated with a specific
+///     scene.
+///     It provides methods for JSON serialization and deserialization, allowing scene nodes to be easily saved and
 ///     loaded.
 /// </remarks>
 public partial class SceneNode : GameObject, IDisposable
@@ -23,7 +24,7 @@ public partial class SceneNode : GameObject, IDisposable
     {
         AllowTrailingCommas = true,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private bool isActive;
@@ -34,15 +35,18 @@ public partial class SceneNode : GameObject, IDisposable
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneNode" /> class.
     /// </summary>
-    /// <param name="scene">The scene associated with the game entity.</param>
+    /// <param name="scene">The scene associated with the scene node.</param>
     public SceneNode(Scene scene)
     {
         this.Scene = scene;
-        this.Components = [new Transform(this) { Name = nameof(Transform) }];
+
+        // Initialize the components collection with the always-present Transform.
+        // Use a concrete mutable collection that preserves insertion order.
+        this.Components = new List<GameComponent> { new Transform(this) { Name = nameof(Transform) } };
     }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the game entity is loaded in the Game Engine.
+    ///     Gets or sets a value indicating whether the scene node is loaded in the Game Engine.
     /// </summary>
     public bool IsActive
     {
@@ -54,19 +58,18 @@ public partial class SceneNode : GameObject, IDisposable
                 return;
             }
 
-
             _ = this.SetField(ref this.isActive, value);
         }
     }
 
     /// <summary>
-    ///     Gets the scene associated with the game entity.
+    ///     Gets the scene associated with the scene node.
     /// </summary>
     [JsonIgnore]
     public Scene Scene { get; }
 
     /// <summary>
-    ///     Gets the list of components associated with the game entity.
+    ///     Gets the list of components associated with the scene node.
     /// </summary>
     public ICollection<GameComponent> Components { get; private init; }
 
@@ -87,11 +90,13 @@ public partial class SceneNode : GameObject, IDisposable
     /// <remarks>
     ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
     /// </remarks>
-    [SuppressMessage("Performance", "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
+    [SuppressMessage(
+        "Performance",
+        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
         Justification = "we need to set the scene for the converter")]
     internal static SceneNode? FromJson(string json, Scene scene)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new GameEntityConverter(scene) } };
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeConverter(scene) } };
         return JsonSerializer.Deserialize<SceneNode>(json, options);
     }
 
@@ -103,18 +108,20 @@ public partial class SceneNode : GameObject, IDisposable
     /// <remarks>
     ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
     /// </remarks>
-    [SuppressMessage("Performance", "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
+    [SuppressMessage(
+        "Performance",
+        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
         Justification = "we need to use the custom converter")]
     internal static string ToJson(SceneNode sceneNode)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new GameEntityConverter(default!) } };
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeConverter(null!) } };
         return JsonSerializer.Serialize(sceneNode, options);
     }
 
     /// <summary>
-    ///     Disposes of the game entity.
+    ///     Disposes of the scene node.
     /// </summary>
-    /// <param name="disposing">A value indicating whether the game entity is being disposed of deterministically.</param>
+    /// <param name="disposing">A value indicating whether the scene node is being disposed of deterministically.</param>
     /// <remarks>
     ///     The disposing parameter should be false when called from a finalizer, and true when called
     ///     from the IDisposable.Dispose method. In other words, it is true when deterministically
@@ -138,51 +145,53 @@ public partial class SceneNode : GameObject, IDisposable
 
     /// <summary>
     ///     A custom JSON converter for <see cref="SceneNode" /> because we want to enforce that a
-    ///     <c>GameEntity</c> can only be created with the <see cref="Scene" /> to which it belongs.
+    ///     <c>SceneNode</c> can only be created with the <see cref="Scene" /> to which it belongs.
     /// </summary>
-    internal sealed class GameEntityConverter(Scene scene) : JsonConverter<SceneNode>
+    internal sealed class SceneNodeConverter(Scene scene) : JsonConverter<SceneNode>
     {
         /// <inheritdoc />
         public override SceneNode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var entityElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
+            var nodeElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
 
-            if (!entityElement.TryGetProperty(nameof(Name), out var nameElement))
+            if (!nodeElement.TryGetProperty(nameof(SceneNode.Name), out var nameElement))
             {
-                Fail.MissingRequiredProperty(nameof(Name));
+                Fail.MissingRequiredProperty(nameof(SceneNode.Name));
             }
 
             var name = nameElement.ToString();
 
-            var isActive = entityElement.TryGetProperty(nameof(IsActive), out var isActiveElement) &&
+            var isActive = nodeElement.TryGetProperty(nameof(SceneNode.IsActive), out var isActiveElement) &&
                            isActiveElement.GetBoolean();
-            var entity = new SceneNode(scene) { Name = name };
+            var sceneNode = new SceneNode(scene) { Name = name };
 
-            if (entityElement.TryGetProperty(nameof(Components), out var elComponents) &&
+            if (nodeElement.TryGetProperty(nameof(SceneNode.Components), out var elComponents) &&
                 elComponents.ValueKind == JsonValueKind.Array)
             {
-                entity.Components.Clear();
-                entity.Components.Clear();
+                // Clear any constructor-injected components before populating from JSON
+                sceneNode.Components.Clear();
                 foreach (var elComponent in elComponents.EnumerateArray())
                 {
                     var component = GameComponent.FromJson(elComponent.GetRawText());
                     if (component != null)
                     {
-                        entity.Components.Add(component);
+                        // Ensure the component's Node points to the deserialized node
+                        component.Node = sceneNode;
+                        sceneNode.Components.Add(component);
                     }
                 }
             }
 
             // Ensure the Components list contains a Transform element
-            if (!entity.Components.OfType<Transform>().Any())
+            if (!sceneNode.Components.OfType<Transform>().Any())
             {
-                entity.Components.Add(new Transform(entity) { Name = nameof(Transform) });
+                sceneNode.Components.Add(new Transform(sceneNode) { Name = nameof(Transform) });
             }
 
-            // Finally set the entity's active state
-            entity.IsActive = isActive;
+            // Finally set the scene node's active state
+            sceneNode.IsActive = isActive;
 
-            return entity;
+            return sceneNode;
         }
 
         /// <inheritdoc />
@@ -190,17 +199,27 @@ public partial class SceneNode : GameObject, IDisposable
         {
             writer.WriteStartObject();
 
-            writer.WriteString(nameof(Name), value.Name);
-            writer.WriteBoolean(nameof(IsActive), value.IsActive);
+            writer.WriteString(nameof(SceneNode.Name), value.Name);
+            writer.WriteBoolean(nameof(SceneNode.IsActive), value.IsActive);
 
-            writer.WritePropertyName(nameof(Components));
+            writer.WritePropertyName(nameof(SceneNode.Components));
             var componentSerializerOptions = new JsonSerializerOptions(options);
             foreach (var converter in GameComponent.JsonOptions.Converters)
             {
                 componentSerializerOptions.Converters.Add(converter);
             }
 
-            JsonSerializer.Serialize(writer, value.Components, componentSerializerOptions);
+            // When serializing, place user-provided components before the injected
+            // default Transform (which is present in the collection by constructor).
+            // This ensures the JSON lists the meaningful components first so that
+            // deserialization produces a collection where those components appear
+            // in the expected order.
+            var ordered = value.Components
+                .OrderBy(c =>
+                    c is Transform && string.Equals(c.Name, nameof(Transform), StringComparison.Ordinal) ? 1 : 0)
+                .ToList();
+
+            JsonSerializer.Serialize(writer, ordered, componentSerializerOptions);
 
             writer.WriteEndObject();
         }
