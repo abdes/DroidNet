@@ -6,15 +6,18 @@
 
 #pragma once
 
-#include <vcclr.h>
+#include <Oxygen/Scene/Scene.h>
 
-using System::IntPtr;
-using namespace System::Runtime::InteropServices;
+using namespace System;
+using namespace System::Numerics;
 
-namespace Oxygen::Interop {
+namespace Oxygen::Interop::World {
 
 public
-ref class OxygenWrapper {
+ref class OxygenWorld {
+public:
+  static auto CreateScene(String name) -> bool;
+  static auto RemoveGameEntity(String name) -> bool;
 };
 
 } // namespace Oxygen::Interop::World
