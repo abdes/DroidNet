@@ -7,52 +7,60 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-/// Represents the metadata information about a project within the Oxygen Editor.
+///     Represents the metadata information about a project within the Oxygen Editor.
 /// </summary>
 /// <remarks>
-/// The <see cref="IProjectInfo"/> interface defines the structure for project metadata, including properties for the project's
-/// name, category, location, thumbnail, and last used date. This information is essential for managing and displaying project details within the editor.
+///     The <see cref="IProjectInfo" /> interface defines the structure for project metadata, including properties for the
+///     project's
+///     name, category, location, thumbnail, last used date, and a stable identifier.
 /// </remarks>
 public interface IProjectInfo : IEquatable<ProjectInfo?>
 {
     /// <summary>
-    /// Gets or sets the name of the project.
+    ///     Gets the stable GUID identifier for the project. Used for persistent identity and hashing.
+    /// </summary>
+    public Guid Id { get; }
+
+    /// <summary>
+    ///     Gets or sets the name of the project.
     /// </summary>
     /// <value>
-    /// A <see cref="string"/> representing the name of the project.
+    ///     A <see cref="string" /> representing the name of the project.
     /// </value>
     public string Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the category of the project.
+    ///     Gets or sets the category of the project.
     /// </summary>
     /// <value>
-    /// A <see cref="Projects.Category"/> representing the category of the project.
+    ///     A <see cref="Projects.Category" /> representing the category of the project.
     /// </value>
     public Category Category { get; set; }
 
     /// <summary>
-    /// Gets or sets the location of the project.
+    ///     Gets or sets the location of the project.
     /// </summary>
     /// <value>
-    /// A <see cref="string"/> representing the location of the project. This property is ignored during JSON serialization.
+    ///     A <see cref="string" /> representing the location of the project. This property is ignored during JSON
+    ///     serialization.
     /// </value>
     [JsonIgnore]
     public string? Location { get; set; }
 
     /// <summary>
-    /// Gets or sets the thumbnail image path of the project.
+    ///     Gets or sets the thumbnail image path of the project.
     /// </summary>
     /// <value>
-    /// A <see cref="string"/> representing the path to the thumbnail image of the project.
+    ///     A <see cref="string" /> representing the path to the thumbnail image of the project.
     /// </value>
     public string? Thumbnail { get; set; }
 
     /// <summary>
-    /// Gets or sets the last used date of the project.
+    ///     Gets or sets the last used date of the project.
     /// </summary>
     /// <value>
-    /// A <see cref="DateTime"/> representing the last time the project was used. This property is ignored during JSON serialization.
+    ///     A <see cref="DateTime" /> representing the last time the project was used. This property is ignored during JSON
+    ///     serialization.
     /// </value>
     [JsonIgnore]
     public DateTime LastUsedOn { get; set; }
