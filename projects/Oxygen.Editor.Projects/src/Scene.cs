@@ -2,17 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-/// Represents a scene in a game project.
+///     Represents a scene in a game project.
 /// </summary>
 /// <param name="project">The owner <see cref="Project" />.</param>
 /// <remarks>
-/// The <see cref="Scene"/> class represents a scene within a game project. It includes properties for the project that owns the scene and the entities within the scene. The class also provides methods for JSON serialization and deserialization.
+///     The <see cref="Scene" /> class represents a scene within a game project. It includes properties for the project
+///     that owns the scene and the entities within the scene. The class also provides methods for JSON serialization and
+///     deserialization.
 /// </remarks>
 public partial class Scene(IProject project) : GameObject
 {
@@ -21,30 +24,30 @@ public partial class Scene(IProject project) : GameObject
     {
         AllowTrailingCommas = true,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     /// <summary>
-    /// Gets the project that owns the scene.
+    ///     Gets the project that owns the scene.
     /// </summary>
     [JsonIgnore]
     public IProject Project { get; init; } = project;
 
     /// <summary>
-    /// Gets the list of entities within the scene.
+    ///     Gets the list of entities within the scene.
     /// </summary>
-    public ICollection<GameEntity> Entities { get; init; } = [];
+    public ICollection<SceneNode> Entities { get; init; } = [];
 
     /// <summary>
-    /// Deserializes a JSON string into a <see cref="Scene" /> object.
+    ///     Deserializes a JSON string into a <see cref="Scene" /> object.
     /// </summary>
     /// <param name="json">The JSON string to deserialize.</param>
     /// <param name="project">The project to set in the deserialized <see cref="Scene" /> object.</param>
     /// <returns>The deserialized <see cref="Scene" /> object.</returns>
     /// <remarks>
-    /// This method uses the default <see cref="JsonSerializerOptions"/> defined in <see cref="JsonOptions"/>.
+    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+    [SuppressMessage(
         "Performance",
         "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
         Justification = "we need to set the scene for the converter")]
@@ -55,12 +58,12 @@ public partial class Scene(IProject project) : GameObject
     }
 
     /// <summary>
-    /// Serializes a <see cref="Scene" /> object into a JSON string.
+    ///     Serializes a <see cref="Scene" /> object into a JSON string.
     /// </summary>
     /// <param name="scene">The <see cref="Scene" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="Scene" /> object.</returns>
     /// <remarks>
-    /// This method uses the default <see cref="JsonSerializerOptions"/> defined in <see cref="JsonOptions"/>.
+    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
     /// </remarks>
     internal static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
 }

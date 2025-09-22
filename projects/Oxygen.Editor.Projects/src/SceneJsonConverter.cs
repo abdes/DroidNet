@@ -9,16 +9,18 @@ using Oxygen.Editor.Projects.Utils;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-/// A custom JSON converter for the <see cref="Scene"/> class.
+///     A custom JSON converter for the <see cref="Scene" /> class.
 /// </summary>
 /// <param name="project">The project associated with the scene being serialized or deserialized.</param>
 /// <remarks>
-/// The <see cref="SceneJsonConverter"/> class provides custom serialization and deserialization logic for the <see cref="Scene"/> class.
-/// It ensures that the <see cref="Scene"/> object is correctly serialized and deserialized, including its properties and nested entities.
+///     The <see cref="SceneJsonConverter" /> class provides custom serialization and deserialization logic for the
+///     <see cref="Scene" /> class.
+///     It ensures that the <see cref="Scene" /> object is correctly serialized and deserialized, including its properties
+///     and nested entities.
 /// </remarks>
 internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
 {
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override Scene Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var sceneElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
@@ -29,7 +31,7 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         }
 
         var name = nameElement.ToString();
-        var scene = new Scene(project) { Name = name, };
+        var scene = new Scene(project) { Name = name };
 
         if (sceneElement.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
             entitiesElement.ValueKind == JsonValueKind.Array)
@@ -37,7 +39,7 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
             scene.Entities.Clear();
             foreach (var entityElement in entitiesElement.EnumerateArray())
             {
-                var entity = GameEntity.FromJson(entityElement.GetRawText(), scene);
+                var entity = SceneNode.FromJson(entityElement.GetRawText(), scene);
                 if (entity != null)
                 {
                     scene.Entities.Add(entity);
@@ -48,7 +50,7 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         return scene;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, Scene value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
@@ -62,16 +64,16 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
     }
 
     /// <summary>
-    /// Provides helper methods for throwing JSON-related exceptions during serialization and deserialization.
+    ///     Provides helper methods for throwing JSON-related exceptions during serialization and deserialization.
     /// </summary>
-    private abstract class Fail : JsonThrowHelper<GameEntity>
+    private abstract class Fail : JsonThrowHelper<SceneNode>
     {
         /// <summary>
-        /// Throws a <see cref="JsonException"/> indicating that a required property is missing.
+        ///     Throws a <see cref="JsonException" /> indicating that a required property is missing.
         /// </summary>
         /// <param name="propertyName">The name of the missing property.</param>
         /// <exception cref="JsonException">Always thrown to indicate the missing property.</exception>
         public static new void MissingRequiredProperty(string propertyName)
-            => JsonThrowHelper<GameEntity>.MissingRequiredProperty(propertyName);
+            => JsonThrowHelper<SceneNode>.MissingRequiredProperty(propertyName);
     }
 }

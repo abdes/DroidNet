@@ -25,31 +25,36 @@ using Oxygen.Editor.WorldEditor.Messages;
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
-/// The ViewModel for the <see cref="SceneExplorerView" /> view.
+///     The ViewModel for the <see cref="SceneExplorerView" /> view.
 /// </summary>
 public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRoutingAware, IDisposable
 {
-    private readonly ILogger<SceneExplorerViewModel> logger;
-    private readonly DispatcherQueue dispatcher;
-    private readonly IProjectManagerService projectManager;
-    private readonly IMessenger messenger;
     private readonly IProject currentProject;
-
-    private bool isDisposed;
+    private readonly DispatcherQueue dispatcher;
+    private readonly ILogger<SceneExplorerViewModel> logger;
+    private readonly IMessenger messenger;
+    private readonly IProjectManagerService projectManager;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveSelectedItemsCommand))]
     private bool hasUnlockedSelectedItems;
 
+    private bool isDisposed;
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="SceneExplorerViewModel"/> class.
+    ///     Initializes a new instance of the <see cref="SceneExplorerViewModel" /> class.
     /// </summary>
     /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="projectManager">The project manager service.</param>
-    /// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled.</param>
-    public SceneExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager, IMessenger messenger, ILoggerFactory? loggerFactory = null)
+    /// <param name="loggerFactory">
+    ///     Optional factory for creating loggers. If provided, enables detailed logging of the
+    ///     recognition process. If <see langword="null" />, logging is disabled.
+    /// </param>
+    public SceneExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager,
+        IMessenger messenger, ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
+        this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
+                      NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.dispatcher = hostingContext.Dispatcher;
         this.projectManager = projectManager;
         this.messenger = messenger;
@@ -71,25 +76,21 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     }
 
     /// <summary>
-    /// Gets the current scene adapter.
+    ///     Gets the current scene adapter.
     /// </summary>
     public SceneAdapter? Scene { get; private set; }
 
     /// <summary>
-    /// Gets the undo stack.
+    ///     Gets the undo stack.
     /// </summary>
     public ReadOnlyObservableCollection<IChange> UndoStack { get; }
 
     /// <summary>
-    /// Gets the redo stack.
+    ///     Gets the redo stack.
     /// </summary>
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
-    /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
-        => await this.LoadActiveSceneAsync().ConfigureAwait(false);
-
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.isDisposed)
@@ -104,7 +105,11 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.isDisposed = true;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+        => await this.LoadActiveSceneAsync().ConfigureAwait(false);
+
+    /// <inheritdoc />
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
@@ -125,17 +130,19 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         {
             if (oldValue is MultipleSelectionModel<ITreeItem> oldSelectionModel)
             {
-                ((INotifyCollectionChanged)oldSelectionModel.SelectedItems).CollectionChanged -= this.OnMultipleSelectionChanged;
+                ((INotifyCollectionChanged)oldSelectionModel.SelectedItems).CollectionChanged -=
+                    this.OnMultipleSelectionChanged;
             }
 
             if (this.SelectionModel is MultipleSelectionModel<ITreeItem> currentSelectionModel)
             {
-                ((INotifyCollectionChanged)currentSelectionModel.SelectedIndices).CollectionChanged += this.OnMultipleSelectionChanged;
+                ((INotifyCollectionChanged)currentSelectionModel.SelectedIndices).CollectionChanged +=
+                    this.OnMultipleSelectionChanged;
             }
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
@@ -180,10 +187,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
 
         var newEntity
             = new GameEntityAdapter(
-                new GameEntity(parent.AttachedObject)
-                {
-                    Name = $"New Entity {parent.AttachedObject.Entities.Count}",
-                });
+                new SceneNode(parent.AttachedObject) { Name = $"New Entity {parent.AttachedObject.Entities.Count}" });
 
         await this.InsertItemAsync(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }
@@ -212,7 +216,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         }
 
         this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
-        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+        await this.InitializeRootAsync(this.Scene, false).ConfigureAwait(true);
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -249,7 +253,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
                 break;
 
             case MultipleSelectionModel<ITreeItem> multipleSelection:
-                var selection = multipleSelection.SelectedItems.Where(item => item is GameEntityAdapter).Select(adapter => ((GameEntityAdapter)adapter).AttachedObject).ToList();
+                var selection = multipleSelection.SelectedItems.Where(item => item is GameEntityAdapter)
+                    .Select(adapter => ((GameEntityAdapter)adapter).AttachedObject).ToList();
                 message.Reply(selection);
                 break;
 
@@ -261,7 +266,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.SelectedIndex), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.SelectedIndex),
+                StringComparison.Ordinal))
         {
             return;
         }

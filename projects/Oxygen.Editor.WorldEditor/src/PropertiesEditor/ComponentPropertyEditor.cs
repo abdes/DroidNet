@@ -7,17 +7,16 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-public abstract partial class ComponentPropertyEditor : ObservableObject, IDetailsSection, IPropertyEditor<GameEntity>
+public abstract partial class ComponentPropertyEditor : ObservableObject, IDetailsSection, IPropertyEditor<SceneNode>
 {
-    [ObservableProperty]
-    private bool isExpanded = true;
+    [ObservableProperty] private bool isExpanded = true;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public abstract string Header { get; }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public abstract string Description { get; }
 
-    /// <inheritdoc/>
-    public abstract void UpdateValues(ICollection<GameEntity> items);
+    /// <inheritdoc />
+    public abstract void UpdateValues(ICollection<SceneNode> items);
 }

@@ -9,13 +9,13 @@ using Microsoft.UI.Xaml.Controls;
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-[ViewModel(typeof(EntityComponentsEditorViewModel))]
-public sealed partial class EntityComponentsEditorView : UserControl
+[ViewModel(typeof(SceneNodeViewModel))]
+public sealed partial class SceneNodeEditorView : UserControl
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="EntityComponentsEditorView"/> class.
+    ///     Initializes a new instance of the <see cref="SceneNodeEditorView" /> class.
     /// </summary>
-    public EntityComponentsEditorView()
+    public SceneNodeEditorView()
     {
         this.InitializeComponent();
 

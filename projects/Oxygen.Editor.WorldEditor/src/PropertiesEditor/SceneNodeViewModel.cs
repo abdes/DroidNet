@@ -9,23 +9,22 @@ using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDetails<GameEntity>, IDisposable
+public sealed partial class SceneNodeViewModel : MultiSelectionDetails<SceneNode>, IDisposable
 {
-    private static readonly IDictionary<Type, IPropertyEditor<GameEntity>> AllPropertyEditors = new Dictionary<Type, IPropertyEditor<GameEntity>>()
-    {
-        { typeof(Transform), new TransformViewModel() },
-    };
+    private static readonly IDictionary<Type, IPropertyEditor<SceneNode>> AllPropertyEditors =
+        new Dictionary<Type, IPropertyEditor<SceneNode>> { { typeof(Transform), new TransformViewModel() } };
 
-    private ICollection<GameEntity> items;
-    private bool isDisposed;
     private readonly IMessenger messenger;
+    private bool isDisposed;
+
+    private ICollection<SceneNode> items;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="EntityComponentsEditorViewModel"/> class.
+    ///     Initializes a new instance of the <see cref="SceneNodeViewModel" /> class.
     /// </summary>
     /// <param name="vmToViewConverter"></param>
     /// <param name="messenger"></param>
-    public EntityComponentsEditorViewModel(ViewModelToView vmToViewConverter, IMessenger messenger)
+    public SceneNodeViewModel(ViewModelToView vmToViewConverter, IMessenger messenger)
     {
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;
@@ -40,13 +39,13 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
     }
 
     /// <summary>
-    /// Gets a viewmodel to view converter provided by the local Ioc container, which can resolve
-    /// view from viewmodels registered locally. This converter must be used instead of the default
-    /// Application converter.
+    ///     Gets a viewmodel to view converter provided by the local Ioc container, which can resolve
+    ///     view from viewmodels registered locally. This converter must be used instead of the default
+    ///     Application converter.
     /// </summary>
     public ViewModelToView VmToViewConverter { get; }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.isDisposed)
@@ -59,16 +58,17 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
         this.isDisposed = true;
     }
 
-    /// <inheritdoc/>
-    protected override ICollection<IPropertyEditor<GameEntity>> FilterPropertyEditors()
+    /// <inheritdoc />
+    protected override ICollection<IPropertyEditor<SceneNode>> FilterPropertyEditors()
     {
-        var filteredEditors = new Dictionary<Type, IPropertyEditor<GameEntity>>(AllPropertyEditors);
+        var filteredEditors = new Dictionary<Type, IPropertyEditor<SceneNode>>(AllPropertyEditors);
         var keysToCheck = new HashSet<Type>(AllPropertyEditors.Keys);
 
         foreach (var entity in this.items)
         {
             // Filter out keys for which the entity does not have a component
-            foreach (var key in keysToCheck.ToList().Where(key => entity.Components.All(component => component.GetType() != key)))
+            foreach (var key in keysToCheck.ToList()
+                         .Where(key => entity.Components.All(component => component.GetType() != key)))
             {
                 _ = filteredEditors.Remove(key);
                 _ = keysToCheck.Remove(key);
