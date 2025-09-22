@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -42,21 +43,16 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string projectFolderPath = "valid/path";
         var projectFolderMock = new Mock<IFolder>();
         var projectFileMock = new Mock<IDocument>();
-        var projectInfo = new ProjectInfo
-        {
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-            Location = projectFolderPath,
-        };
-        const string json = /*lang=json,strict*/
-            """
-            {
-              "Name": "name",
-              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-              "Thumbnail": "Media/Preview.png"
-            }
-            """;
+        var projectInfo = new ProjectInfo("name", Category.Games, projectFolderPath, "Media/Preview.png");
+        var json = /*lang=json,strict*/
+            $$"""
+              {
+                "Id": "{{projectInfo.Id}}",
+                "Name": "name",
+                "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+                "Thumbnail": "Media/Preview.png"
+              }
+              """;
 
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(projectFolderPath, CancellationToken.None))
             .ReturnsAsync(projectFolderMock.Object);
@@ -70,7 +66,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
 
         // Assert
         _ = result.Should().NotBeNull();
-        _ = result.Should().BeEquivalentTo(projectInfo, opts => opts.Excluding(pi => pi.LastUsedOn));
+        _ = result.Should().BeEquivalentTo(projectInfo, opts => opts
+            .Excluding(pi => pi.LastUsedOn)
+            .Excluding(pi => pi.Id));
     }
 
     [TestMethod]
@@ -118,13 +116,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task SaveProjectInfoAsync_ShouldReturnTrue_WhenProjectInfoIsSavedSuccessfully()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var documentMock = new Mock<IDocument>();
         _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync(It.IsAny<string>(), CancellationToken.None))
             .ReturnsAsync(documentMock.Object);
@@ -143,15 +135,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task SaveProjectInfoAsync_ShouldReturnFalse_WhenExceptionIsThrown()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "path/with/error",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "path/with/error", "Media/Preview.png");
         const string exceptionMessage = "Some error";
-        _ = this.mockStorage.Setup(s => s.NormalizeRelativeTo(projectInfo.Location, Constants.ProjectFileName))
+        _ = this.mockStorage.Setup(s => s.NormalizeRelativeTo(projectInfo.Location!, Constants.ProjectFileName))
             .Returns("normalized/path");
         _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync("normalized/path", CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
@@ -177,13 +163,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadProjectAsync_ShouldReturnTrue_WhenProjectIsLoadedSuccessfully()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var projectFolderMock = new Mock<IFolder>();
         var scenesFolderMock = new Mock<IFolder>();
         var sceneDocumentMock = new Mock<IDocument>();
@@ -211,13 +191,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadProjectAsync_ShouldReturnFalse_WhenProjectLocationIsNull()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = null,
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, null, "Media/Preview.png");
 
         _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
 
@@ -244,13 +218,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadProjectAsync_ShouldReturnFalse_WhenProjectScenesFailToLoad()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var projectFolderMock = new Mock<IFolder>();
 
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(It.IsAny<string>(), CancellationToken.None))
@@ -270,13 +238,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnTrue_WhenSceneIsLoadedSuccessfully()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
         const string sceneJson =
@@ -317,13 +279,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenSceneFileDoesNotExist()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
         var documentMock = new Mock<IDocument>();
@@ -359,13 +315,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenSceneFileContainsInvalidJson()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "valid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
         const string invalidJson = "";
@@ -403,13 +353,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenProjectLocationIsNull()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = null,
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, null, "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
 
@@ -439,13 +383,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenProjectLocationDoesNotExist()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "invalid/path",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "invalid/path", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
 
@@ -473,13 +411,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenExceptionIsThrown()
     {
         // Arrange
-        var projectInfo = new ProjectInfo
-        {
-            Location = "path/with/error",
-            Name = "name",
-            Category = Category.Games,
-            Thumbnail = "Media/Preview.png",
-        };
+        var projectInfo = new ProjectInfo("name", Category.Games, "path/with/error", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
         const string exceptionMessage = "Some error";
@@ -511,5 +443,67 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
 
         // Assert
         _ = result.Should().Be(this.mockStorage.Object);
+    }
+
+    [TestMethod]
+    public void Ctor_DefaultGeneratesNonEmptyId()
+    {
+        var pi = new ProjectInfo("name", Category.Games, "loc", "thumb");
+        pi.Id.Should().NotBe(Guid.Empty);
+    }
+
+    [TestMethod]
+    public void Ctor_WithExplicitId_PreservesId()
+    {
+        var id = Guid.NewGuid();
+        var pi = new ProjectInfo(id, "name", Category.Games);
+        pi.Id.Should().Be(id);
+    }
+
+    [TestMethod]
+    public void Ctor_WithEmptyId_ThrowsArgumentException()
+    {
+        Action act = () => _ = new ProjectInfo(Guid.Empty, "name", Category.Games);
+        act.Should().Throw<ArgumentException>().WithMessage("*Project Id*");
+    }
+
+    [TestMethod]
+    public void FromJson_ThrowsJsonException_WhenIdMissing()
+    {
+        var json = /*lang=json,strict*/
+            """
+            {
+              "Name": "name",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
+            }
+            """;
+
+        Action act = () => _ = ProjectInfo.FromJson(json);
+        act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    public void FromJson_ThrowsJsonException_WhenIdEmpty()
+    {
+        var json = /*lang=json,strict*/
+            """
+            {
+              "Id": "",
+              "Name": "name",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
+            }
+            """;
+
+        Action act = () => _ = ProjectInfo.FromJson(json);
+        act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    public void ToJsonAndFromJson_PreservesId()
+    {
+        var pi = new ProjectInfo("name", Category.Games, "loc", "thumb");
+        var json = ProjectInfo.ToJson(pi);
+        var des = ProjectInfo.FromJson(json);
+        des.Id.Should().Be(pi.Id);
     }
 }
