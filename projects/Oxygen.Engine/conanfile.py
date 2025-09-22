@@ -53,6 +53,9 @@ class OxygenConan(ConanFile):
         "tests": True,
         "benchmarks": True,
         "docs": True,
+        # Dependencies options:
+        "fmt/*:header_only": True,
+        "sdl/*:shared": True,
     }
 
     exports_sources = (
@@ -88,10 +91,20 @@ class OxygenConan(ConanFile):
         self.requires("json-schema-validator/2.3.0")
         self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
+        # Record test-only dependencies so we can skip them during deploy.
+        # The test_requires call accepts a reference like 'gtest/master'.
+        self._test_deps = set()
+        ref = "gtest/master"
+        self.test_requires(ref)
+        self._test_deps.add(ref.split("/")[0])
 
-        self.test_requires("gtest/master")
-        self.test_requires("benchmark/1.9.1")
-        self.test_requires("catch2/3.8.0")
+        ref = "benchmark/1.9.1"
+        self.test_requires(ref)
+        self._test_deps.add(ref.split("/")[0])
+
+        ref = "catch2/3.8.0"
+        self.test_requires(ref)
+        self._test_deps.add(ref.split("/")[0])
 
     def configure(self):
         if self.options.shared:
@@ -107,8 +120,6 @@ class OxygenConan(ConanFile):
         # Link to test frameworks always as static libs
         self.options["gtest"].shared = False
         self.options["catch2"].shared = False
-        # Use fmt always as header only
-        self.options["fmt"].header_only = True
 
     # def configure(self):
     #     if self.options.shared:
@@ -275,3 +286,45 @@ class OxygenConan(ConanFile):
     # def build_requirements(self):
     #     self.build_requires("cmake/[>=3.25.0]")
     #     self.build_requires("ninja/[>=1.11.0]")
+
+    def deploy(self):
+        test_deps = getattr(self, "_test_deps", set())
+        for dep in self.dependencies.values():
+            # Derive a safe package name (ref may be None for some deps)
+            try:
+                dep_name = dep.ref.name if dep.ref is not None else None
+            except Exception:
+                dep_name = None
+            # Skip test-only dependencies during deploy
+            if dep_name in test_deps:
+                continue
+            if dep_name:
+                name = dep_name
+            else:
+                # Fallback to the package folder basename if ref is not present
+                try:
+                    name = os.path.basename(dep.package_folder)
+                except Exception:
+                    name = "unknown"
+
+            # ---- Headers (namespaced per package) ----
+            for incdir in dep.cpp_info.includedirs:
+                copy(
+                    self,
+                    "*",
+                    src=incdir,
+                    dst=os.path.join(self.deploy_folder, "include"),
+                )
+
+            # ---- Libraries (flat under lib/) ----
+            lib_dir = os.path.join(self.deploy_folder)
+            copy(self, "*.lib", src=dep.package_folder, dst=lib_dir)
+            copy(self, "*.a", src=dep.package_folder, dst=lib_dir)
+            copy(self, "*.so*", src=dep.package_folder, dst=lib_dir)
+            copy(self, "*.dylib*", src=dep.package_folder, dst=lib_dir)
+
+            # ---- DLLs / shared libs (flat under bin/) ----
+            bin_dir = os.path.join(self.deploy_folder)
+            copy(self, "*.dll", src=dep.package_folder, dst=bin_dir)
+            copy(self, "*.so*", src=dep.package_folder, dst=bin_dir)
+            copy(self, "*.dylib*", src=dep.package_folder, dst=bin_dir)

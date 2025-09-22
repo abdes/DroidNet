@@ -202,4 +202,22 @@ oxygen_module_install(
     ${META_MODULE_TARGET}
 )
 
+# dxcompiler is required for this module. Fail configure early if the runtime
+# DLL is not present in the expected package location so the user can fix the
+# package layout before attempting to build or install.
+if(WIN32)
+  if(NOT EXISTS "${dxc_bin_path}/dxcompiler.dll")
+    message(FATAL_ERROR
+      "dxcompiler.dll not found at: ${dxc_bin_path}/dxcompiler.dll\n"
+      "Please install the DXC package into ${CMAKE_SOURCE_DIR}/packages/DXC/"
+    )
+  endif()
+
+  # Install the dxcompiler runtime alongside the module binaries so redistributable
+  # packages include the DXC runtime next to the built DLLs.
+  install(FILES "${dxc_bin_path}/dxcompiler.dll"
+    DESTINATION ${OXYGEN_INSTALL_SHARED}
+  )
+endif()
+
 asap_pop_module("${META_MODULE_NAME}")
