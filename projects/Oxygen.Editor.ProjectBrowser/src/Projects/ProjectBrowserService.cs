@@ -152,6 +152,9 @@ public partial class ProjectBrowserService : IProjectBrowserService
             // Copy all content from template to the new project folder
             CopyTemplateAssetsToProject();
 
+            // After copying the template assets, patch Project.oxy at the project root (if present)
+            UpdateProjectManifest(projectFolder.Location, projectName);
+
             // Load the project info, update it, and save it
             var projectInfo = await this.projectManager.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(true);
             if (projectInfo != null)
@@ -199,6 +202,49 @@ public partial class ProjectBrowserService : IProjectBrowserService
                             overwrite: true);
                     }
                 });
+        }
+
+        void UpdateProjectManifest(string projectFolderPath, string newName)
+        {
+            try
+            {
+                var projectOxyPath = Path.Combine(projectFolderPath, "Project.oxy");
+                if (!File.Exists(projectOxyPath))
+                {
+                    return;
+                }
+
+                // Read JSON and update Id and Name
+                var text = File.ReadAllText(projectOxyPath);
+                try
+                {
+                    // Use System.Text.Json to parse and modify
+                    var node = System.Text.Json.Nodes.JsonNode.Parse(text);
+                    if (node is null)
+                    {
+                        return;
+                    }
+
+                    // Set Name
+                    node["Name"] = newName;
+
+                    // Set Id to a new GUID
+                    node["Id"] = System.Guid.NewGuid().ToString();
+
+                    // Write back with indentation
+                    var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                    var serialized = node.ToJsonString(options);
+                    File.WriteAllText(projectOxyPath, serialized);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // If parsing fails, leave the file as-is (do not crash project creation)
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to patch Project.oxy: {ex.Message}");
+            }
         }
 
         void RemoveFailedProject(IFolder? storageLocation)
