@@ -10,41 +10,33 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 public partial class TransformViewModel : ComponentPropertyEditor
 {
     /// <summary>
-    /// Gets or sets the X position of the game object in the scene. The position can be abosulte
-    /// (relative to the scene) or relative to the parent object.
+    ///     Gets or sets the X position of the game object in the scene. The position can be abosulte
+    ///     (relative to the scene) or relative to the parent object.
     /// </summary>
-    [ObservableProperty]
-    private float? positionX;
+    [ObservableProperty] private float? positionX;
 
-    [ObservableProperty]
-    private float? positionY;
+    [ObservableProperty] private float? positionY;
 
-    [ObservableProperty]
-    private float? positionZ;
+    [ObservableProperty] private float? positionZ;
 
-    [ObservableProperty]
-    private float? rotationX;
+    [ObservableProperty] private float? rotationX;
 
-    [ObservableProperty]
-    private float? rotationY;
+    [ObservableProperty] private float? rotationY;
 
-    [ObservableProperty]
-    private float? rotationZ;
+    [ObservableProperty] private float? rotationZ;
 
-    [ObservableProperty]
-    private float? scaleX;
+    [ObservableProperty] private float? scaleX;
 
-    [ObservableProperty]
-    private float? scaleY;
+    [ObservableProperty] private float? scaleY;
 
-    [ObservableProperty]
-    private float? scaleZ;
+    [ObservableProperty] private float? scaleZ;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string Header => "Transform";
 
-    /// <inheritdoc/>
-    public override string Description => "Defines the position, rotation and scale of a Game Object along the X, Y and Z axis.";
+    /// <inheritdoc />
+    public override string Description =>
+        "Defines the position, rotation and scale of a Game Object along the X, Y and Z axis.";
 
     public PropertyDescriptor PositionProperty { get; } = new() { Name = "Position" };
 
@@ -52,8 +44,8 @@ public partial class TransformViewModel : ComponentPropertyEditor
 
     public PropertyDescriptor ScaleProperty { get; } = new() { Name = "Scale" };
 
-    /// <inheritdoc/>
-    public override void UpdateValues(ICollection<GameEntity> items)
+    /// <inheritdoc />
+    public override void UpdateValues(ICollection<SceneNode> items)
     {
         this.PositionX = MixedValues.GetMixedValue(
             items,

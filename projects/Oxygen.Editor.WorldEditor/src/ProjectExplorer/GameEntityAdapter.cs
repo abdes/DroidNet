@@ -10,28 +10,28 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
-/// A <see cref="DynamicTree" /> item adapter for the <see cref="GameEntity" /> model class.
+///     A <see cref="DynamicTree" /> item adapter for the <see cref="SceneNode" /> model class.
 /// </summary>
-public partial class GameEntityAdapter : TreeItemAdapter, ITreeItem<GameEntity>
+public partial class GameEntityAdapter : TreeItemAdapter, ITreeItem<SceneNode>
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="GameEntityAdapter"/> class.
-    /// A <see cref="DynamicTree" /> item adapter for the <see cref="GameEntity" /> model class.
+    ///     Initializes a new instance of the <see cref="GameEntityAdapter" /> class.
+    ///     A <see cref="DynamicTree" /> item adapter for the <see cref="SceneNode" /> model class.
     /// </summary>
-    /// <param name="gameEntity">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-    public GameEntityAdapter(GameEntity gameEntity)
+    /// <param name="sceneNode">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
+    public GameEntityAdapter(SceneNode sceneNode)
     {
-        this.AttachedObject = gameEntity;
+        this.AttachedObject = sceneNode;
         this.AttachedObject.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName?.Equals(nameof(GameEntity.Name), StringComparison.Ordinal) == true)
+            if (args.PropertyName?.Equals(nameof(SceneNode.Name), StringComparison.Ordinal) == true)
             {
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Label)));
             }
         };
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string Label
     {
         get => this.AttachedObject.Name;
@@ -47,15 +47,15 @@ public partial class GameEntityAdapter : TreeItemAdapter, ITreeItem<GameEntity>
         }
     }
 
-    /// <inheritdoc/>
-    public GameEntity AttachedObject { get; }
+    /// <inheritdoc />
+    public SceneNode AttachedObject { get; }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override int DoGetChildrenCount() => 0;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
 }

@@ -9,12 +9,12 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
-/// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
+///     A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
-/// <param name="scene">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+/// <param name="scene">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
 public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scene>
 {
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string Label
     {
         get => this.AttachedObject.Name;
@@ -30,16 +30,16 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public Scene AttachedObject => scene;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override int DoGetChildrenCount() => scene.Entities.Count;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override async Task LoadChildren()
     {
         this.ClearChildren();
@@ -47,10 +47,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         foreach (var entity in this.AttachedObject.Entities)
         {
             this.AddChildInternal(
-                new GameEntityAdapter(entity)
-                {
-                    IsExpanded = false,
-                });
+                new GameEntityAdapter(entity) { IsExpanded = false });
         }
 
         await Task.CompletedTask.ConfigureAwait(true);
