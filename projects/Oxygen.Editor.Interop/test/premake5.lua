@@ -4,7 +4,7 @@ project "Oxygen.Editor.Interop.Tests"
      location (workspace_root .. "/vs2022/Interop")
      language "C#"
      architecture "x64"
-     dotnetframework "net8.0" -- or the appropriate .NET version
+     dotnetframework "net9.0" -- or the appropriate .NET version
 
      -- Set the root namespace
      namespace ("Oxygen.Editor.Interop.Tests")

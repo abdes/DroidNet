@@ -14,13 +14,13 @@ To create the initial database schema, you can use the `dotnet ef migrations add
 Using an in-memory SQLite database:
 
 ```shell
-dotnet ef migrations add InitialCreate --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --use-in-memory-db
+dotnet ef migrations add InitialCreate --framework net9.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --use-in-memory-db
 ```
 
 Using a file-based SQLite database in development mode:
 
 ```shell
-dotnet ef migrations add InitialCreate --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --mode=dev
+dotnet ef migrations add InitialCreate --framework net9.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --mode=dev
 ```
 
 ## Migrations
@@ -32,13 +32,13 @@ When you make changes to your model, add a new migration to capture those change
 Using an in-memory SQLite database:
 
 ```shell
-dotnet ef migrations add MIGRATION__NAME --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --use-in-memory-db
+dotnet ef migrations add MIGRATION__NAME --framework net9.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --use-in-memory-db
 ```
 
 Using a file-based SQLite database in development mode:
 
 ```shell
-dotnet ef migrations add MIGRATION__NAME --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --mode=dev
+dotnet ef migrations add MIGRATION__NAME --framework net9.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --mode=dev
 ```
 
 ### Reviewing the Migration

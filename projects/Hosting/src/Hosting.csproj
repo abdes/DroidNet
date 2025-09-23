@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <Title>Encapsulate a WinUI application resources and lifetime functionality using the Microsoft.Extensions.Hosting framework.</Title>
         <Description>A small library to easily integrate the WinUI thread as a hosted service in a Microsoft.Extensions.Hosting host which will provide configuration, DI, logging and lifetime management for free.</Description>

@@ -24,13 +24,13 @@ The project has the following structure:
 
 ## Build Output
 
-After building the project, you'll find the output files in the `bin/Debug/net8.0/` folder:
+After building the project, you'll find the output files in the `bin/Debug/net9.0/` folder:
 
 - **DroidNet.NetClassLibrary.dll**: The main assembly file containing the compiled code.
 - **DroidNet.NetClassLibrary.deps.json**: A file listing the assembly's dependencies.
 - **DroidNet.NetClassLibrary.xml**: Generated XML docs for the assembly.
 
-Additionally, you'll find the following notable files in the `obj/Debug/net8.0/` folder:
+Additionally, you'll find the following notable files in the `obj/Debug/net9.0/` folder:
 
 - **NetClassLibrary.AssemblyInfo.cs**: Generated AssemblyInfo.cs.
 - **DroidNet.NetClassLibrary.Version.cs**: Generated assembly version info.
@@ -49,7 +49,7 @@ To use this project template for a real library, follow these steps to customize
 	* Update the `<RootNamespace>` property with your desired namespace.
 	```xml
 	<PropertyGroup>
-	  <TargetFramework>net8.0</TargetFramework>
+	  <TargetFramework>net9.0</TargetFramework>
 	  <ImplicitUsingsEnable>False</ImplicitUsingsEnable>
 	  <Nullable>enable</Nullable>
 	  <RootNamespace>DroidNet.YourLibrary</RootNamespace>
@@ -69,7 +69,7 @@ To use this project template for a real library, follow these steps to customize
 	```xml
     <Project Sdk="Microsoft.NET.Sdk">
         <PropertyGroup>
-            <TargetFramework>net8.0</TargetFramework>
+            <TargetFramework>net9.0</TargetFramework>
             <RootNamespace>$(RootNamespace).YourLibrary.Tests</RootNamespace>
         </PropertyGroup>
 

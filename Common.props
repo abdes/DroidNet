@@ -147,7 +147,7 @@
     <Choose>
         <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
             <PropertyGroup>
-                <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+                <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
                 <IsTestProject>True</IsTestProject>
                 <IsPackable>False</IsPackable>
             </PropertyGroup>

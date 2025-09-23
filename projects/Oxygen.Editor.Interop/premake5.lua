@@ -16,7 +16,7 @@ project "Oxygen.Editor.Interop"
      location (workspace_root .. "/vs2022/Interop")
      language "C++"
      clr "netcore"
-     dotnetframework "net8.0"
+     dotnetframework "net9.0"
      files {
           "src/**.h",
           "src/**.cpp"

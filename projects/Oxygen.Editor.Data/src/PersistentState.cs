@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
-/* Unmerged change from project 'Oxygen.Editor.Data (net8.0-windows10.0.26100.0)'
+/* Unmerged change from project 'Oxygen.Editor.Data (net9.0-windows10.0.26100.0)'
 Added:
 using Oxygen;
 using Oxygen.Editor;
