@@ -8,18 +8,18 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using DryIoc;
-using Microsoft.UI.Dispatching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Oxygen.Editor.WorldEditor.Routing;
-using DroidNet.Hosting.WinUI;
 using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
@@ -73,6 +73,10 @@ public sealed partial class ContentBrowserViewModel(
     // Navigation history management
     private readonly List<string> navigationHistory = [];
 
+    // Breadcrumbs
+    [ObservableProperty]
+    private ObservableCollection<BreadcrumbEntry> breadcrumbs = [];
+
     /// <summary>
     ///     Gets a value indicating whether back navigation is possible.
     /// </summary>
@@ -92,8 +96,9 @@ public sealed partial class ContentBrowserViewModel(
     private bool canGoUp;
 
     private IContainer? childContainer;
-    private string currentAssetsViewPath = "assets/list"; // tracks whether we show list or tiles
+    private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
     private int currentHistoryIndex = -1;
+    private DispatcherQueue? dispatcher;
 
     private bool isDisposed;
     private bool isInitialized;
@@ -108,11 +113,6 @@ public sealed partial class ContentBrowserViewModel(
 
     private IRouter? localRouter;
     private IDisposable? routerEventsSubscription;
-    private DispatcherQueue? dispatcher;
-
-    // Breadcrumbs
-    [ObservableProperty]
-    private ObservableCollection<BreadcrumbEntry> breadcrumbs = [];
 
     /// <summary>
     ///     Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null" /> when the view is loaded.
