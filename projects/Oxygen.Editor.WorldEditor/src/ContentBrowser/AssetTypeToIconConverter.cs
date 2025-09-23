@@ -18,11 +18,12 @@ public partial class AssetTypeToIconConverter : IValueConverter
         {
             return assetType switch
             {
-                AssetType.Image => "\uE8B9", // Example glyph for image
-                AssetType.Scene => "\uE914", // Example glyph for scene
-                AssetType.Mesh => "\uE8C1", // Example glyph for mesh
-                AssetType.Unknown => "\uE8A5", // Example glyph for unknown
-                _ => "\uE8A5", // Example glyph for unknown
+                AssetType.Image => "\uE8B9", // image
+                AssetType.Scene => "\uE914", // scene
+                AssetType.Mesh => "\uE8C1", // mesh
+                AssetType.Folder => "\uE8B7", // folder (filled)
+                AssetType.Unknown => "\uE8A5", // unknown
+                _ => "\uE8A5",
             };
         }
 

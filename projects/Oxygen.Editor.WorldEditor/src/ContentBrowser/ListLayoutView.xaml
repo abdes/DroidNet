@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ListLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,6 +7,7 @@
 
     <UserControl.Resources>
         <local:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <local:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
     </UserControl.Resources>
 
     <Grid>
@@ -27,6 +28,7 @@
                             Width="32"
                             Height="32"
                             Margin="5,0"
+                            Foreground="{x:Bind AssetType, Converter={StaticResource AssetTypeToBrushConverter}}"
                             Glyph="{x:Bind AssetType, Converter={StaticResource AssetTypeToIconConverter}}" />
                         <TextBlock
                             Grid.Column="1"
