@@ -105,6 +105,13 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     [ObservableProperty]
     private bool canGoUp;
 
+    /// <summary>
+    /// Gets a value indicating whether a refresh is currently in progress.
+    /// Used to disable refresh command during execution.
+    /// </summary>
+    [ObservableProperty]
+    private bool isRefreshing;
+
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -484,4 +491,48 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         Level = LogLevel.Information,
         Message = "Navigated Forward to: `{Url}`")]
     private partial void LogHistoryPopForward(string url);
+
+    [LoggerMessage(
+        EventName = $"ui-{nameof(ContentBrowserViewModel)}-RefreshRequested",
+        Level = LogLevel.Information,
+        Message = "Refresh requested for selected folders")]
+    private partial void LogRefreshRequested();
+
+    /// <summary>
+    /// Forces re-indexing of assets for the currently selected folders.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanExecuteRefresh))]
+    private async Task RefreshAsync()
+    {
+        if (this.childContainer is null)
+        {
+            return;
+        }
+
+        if (!this.CanExecuteRefresh())
+        {
+            return;
+        }
+
+        try
+        {
+            this.IsRefreshing = true;
+            this.RefreshCommand.NotifyCanExecuteChanged();
+            this.LogRefreshRequested();
+            // Refresh the project explorer tree first
+            var projectLayout = this.childContainer.Resolve<ProjectLayoutViewModel>();
+            await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
+
+            // Then refresh asset indexing
+            var indexing = this.childContainer.Resolve<AssetsIndexingService>();
+            await indexing.RefreshAssetsAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            this.IsRefreshing = false;
+            this.RefreshCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool CanExecuteRefresh() => !this.IsRefreshing;
 }

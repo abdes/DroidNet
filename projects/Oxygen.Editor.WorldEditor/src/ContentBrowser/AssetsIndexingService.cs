@@ -67,12 +67,16 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
             return;
         }
 
-        // Check if project root is selected (empty path means root)
-        var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty);
+    // Check if project root is selected (empty path or '.' means root)
+    var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty)
+                     || contentBrowserState.SelectedFolders.Contains(".");
 
         if (isProjectRootSelected)
         {
+            // For project root selection, show everything: scenes + all file system assets
+            // but exclude the Scenes folder from the file system pass to avoid duplicates
             await this.LoadProjectScenesDirect().ConfigureAwait(true);
+            await this.LoadFileSystemAssetsDirect(excludeScenesFolder: true).ConfigureAwait(true);
         }
         else
         {
@@ -116,7 +120,7 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private async Task LoadFileSystemAssetsDirect()
+    private async Task LoadFileSystemAssetsDirect(bool excludeScenesFolder = false)
     {
         Debug.Assert(projectManager.CurrentProject is not null, "current should be initialized");
 
@@ -126,14 +130,17 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
             var projectRoot = await storageProvider.GetFolderFromPathAsync(projectManager.CurrentProject.ProjectInfo.Location!).ConfigureAwait(false);
 
             // If specific folders are selected, index only those folders
-            if (contentBrowserState.SelectedFolders.Count > 0 && !contentBrowserState.SelectedFolders.Contains(string.Empty))
+            if (contentBrowserState.SelectedFolders.Count > 0 &&
+                !contentBrowserState.SelectedFolders.Contains(string.Empty) &&
+                !contentBrowserState.SelectedFolders.Contains("."))
             {
-                await this.IndexSelectedFoldersDirect(projectRoot).ConfigureAwait(false);
+                // When explicitly selecting folders, we do not exclude Scenes unless requested
+                await this.IndexSelectedFoldersDirect(projectRoot, excludeScenesFolder).ConfigureAwait(false);
             }
             else
             {
                 // Index all folders when no specific selection or when project root is selected
-                await this.IndexAllFoldersDirect(projectRoot).ConfigureAwait(false);
+                await this.IndexAllFoldersDirect(projectRoot, excludeScenesFolder).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -167,12 +174,10 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private async Task LoadFileSystemAssetsAsync()
-    {
-        await this.BackgroundIndexerAsync().ConfigureAwait(true);
-    }
+    private async Task LoadFileSystemAssetsAsync(bool excludeScenesFolder = false)
+        => await this.BackgroundIndexerAsync(excludeScenesFolder).ConfigureAwait(true);
 
-    private async Task BackgroundIndexerAsync()
+    private async Task BackgroundIndexerAsync(bool excludeScenesFolder = false)
     {
         Debug.Assert(projectManager.CurrentProject is not null, "current should be initialized");
 
@@ -182,14 +187,16 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
             var projectRoot = await storageProvider.GetFolderFromPathAsync(projectManager.CurrentProject.ProjectInfo.Location!).ConfigureAwait(false);
 
             // If specific folders are selected, index only those folders
-            if (contentBrowserState.SelectedFolders.Count > 0 && !contentBrowserState.SelectedFolders.Contains(string.Empty))
+            if (contentBrowserState.SelectedFolders.Count > 0 &&
+                !contentBrowserState.SelectedFolders.Contains(string.Empty) &&
+                !contentBrowserState.SelectedFolders.Contains("."))
             {
-                await this.IndexSelectedFoldersAsync(projectRoot).ConfigureAwait(false);
+                await this.IndexSelectedFoldersAsync(projectRoot, excludeScenesFolder).ConfigureAwait(false);
             }
             else
             {
                 // Index all folders when no specific selection or when project root is selected
-                await this.IndexAllFoldersAsync(projectRoot).ConfigureAwait(false);
+                await this.IndexAllFoldersAsync(projectRoot, excludeScenesFolder).ConfigureAwait(false);
             }
         }
 #pragma warning disable CA1031 // exceptions forwarded to subscribers via OnError
@@ -200,13 +207,18 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
 #pragma warning restore CA1031
     }
 
-    private async Task IndexSelectedFoldersDirect(IFolder projectRoot)
+    private async Task IndexSelectedFoldersDirect(IFolder projectRoot, bool excludeScenesFolder = false)
     {
         foreach (var selectedPath in contentBrowserState.SelectedFolders)
         {
-            if (string.IsNullOrEmpty(selectedPath))
+            if (string.IsNullOrEmpty(selectedPath) || selectedPath == ".")
             {
                 continue; // Skip empty path (project root) for file system indexing
+            }
+
+            if (excludeScenesFolder && IsScenesPath(selectedPath))
+            {
+                continue; // Skip Scenes folder to avoid duplicates when root selection combines sources
             }
 
             try
@@ -224,7 +236,7 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         }
     }
 
-    private async Task IndexAllFoldersDirect(IFolder rootFolder)
+    private async Task IndexAllFoldersDirect(IFolder rootFolder, bool excludeScenesFolder = false)
     {
         var folderQueue = new Queue<IFolder>();
         folderQueue.Enqueue(rootFolder);
@@ -236,6 +248,11 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
 
             await foreach (var subFolder in currentFolder.GetFoldersAsync().ConfigureAwait(false))
             {
+                if (excludeScenesFolder && string.Equals(subFolder.Name, "Scenes", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue; // Skip Scenes folder to avoid duplicates when root is selected
+                }
+
                 folderQueue.Enqueue(subFolder);
             }
         }
@@ -290,13 +307,18 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         }
     }
 
-    private async Task IndexSelectedFoldersAsync(IFolder projectRoot)
+    private async Task IndexSelectedFoldersAsync(IFolder projectRoot, bool excludeScenesFolder = false)
     {
         foreach (var selectedPath in contentBrowserState.SelectedFolders)
         {
-            if (string.IsNullOrEmpty(selectedPath))
+            if (string.IsNullOrEmpty(selectedPath) || selectedPath == ".")
             {
                 continue; // Skip empty path (project root) for file system indexing
+            }
+
+            if (excludeScenesFolder && IsScenesPath(selectedPath))
+            {
+                continue; // Skip Scenes folder to avoid duplicates when root selection combines sources
             }
 
             try
@@ -314,7 +336,7 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         }
     }
 
-    private async Task IndexAllFoldersAsync(IFolder rootFolder)
+    private async Task IndexAllFoldersAsync(IFolder rootFolder, bool excludeScenesFolder = false)
     {
         var folderQueue = new Queue<IFolder>();
         folderQueue.Enqueue(rootFolder);
@@ -326,10 +348,20 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
 
             await foreach (var subFolder in currentFolder.GetFoldersAsync().ConfigureAwait(false))
             {
+                if (excludeScenesFolder && string.Equals(subFolder.Name, "Scenes", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue; // Skip Scenes folder to avoid duplicates when root is selected
+                }
+
                 folderQueue.Enqueue(subFolder);
             }
         }
     }
+
+    private static bool IsScenesPath(string relativePath)
+        => relativePath.Equals("Scenes", StringComparison.OrdinalIgnoreCase)
+           || relativePath.StartsWith("Scenes/", StringComparison.OrdinalIgnoreCase)
+           || relativePath.StartsWith("Scenes\\", StringComparison.OrdinalIgnoreCase);
 
     private async Task IndexFolderDocumentsOnlyAsync(IFolder folder)
     {

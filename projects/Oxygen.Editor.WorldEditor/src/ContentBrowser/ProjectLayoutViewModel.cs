@@ -254,6 +254,75 @@ public partial class ProjectLayoutViewModel(
     }
 
     /// <summary>
+    /// Refreshes the project explorer tree by recreating the root node and reinitializing the tree view.
+    /// Preserves the current selection from ContentBrowserState.
+    /// </summary>
+    public async Task RefreshTreeAsync()
+    {
+        // Rebuild the project root to force a fresh load of children
+        try
+        {
+            // Preserve the current selection BEFORE we touch the tree (InitializeRootAsync clears selection)
+            var previousSelection = contentBrowserState.SelectedFolders.ToList();
+
+            // Temporarily suppress tree selection updates causing state churn while we rebuild
+            this.suppressTreeSelectionEvents = true;
+
+            var projectInfo = this.GetCurrentProjectInfo() ??
+                              throw new InvalidOperationException("Project Layout used with no CurrentProject");
+
+            var storage = projectManager.GetCurrentProjectStorageProvider();
+            var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
+
+            // Dispose previous root to release resources
+            this.projectRoot?.Dispose();
+
+            this.projectRoot = new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, true)
+            {
+                IsExpanded = true,
+            };
+
+            // Reinitialize the tree UI
+            await this.InitializeRootAsync(this.projectRoot, false).ConfigureAwait(true);
+
+            // Allow selection changes to flow again for the explicit selection we apply next
+            this.suppressTreeSelectionEvents = false;
+
+            // Reapply previous selection if it still exists, prioritizing non-root paths
+            var candidates = previousSelection
+                .Where(p => !string.IsNullOrEmpty(p) && p != ".")
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToList();
+
+            FolderTreeItemAdapter? target = null;
+            if (candidates.Count > 0 && this.projectRoot is not null)
+            {
+                foreach (var path in candidates)
+                {
+                    var adapter = await this.FindFolderAdapterAsync(this.projectRoot, path).ConfigureAwait(true);
+                    if (adapter is not null)
+                    {
+                        target = adapter;
+                        break;
+                    }
+                }
+            }
+
+            // Fallback to root if none of the candidates were found, or if previous selection explicitly was root
+            target ??= this.projectRoot;
+
+            if (target is not null)
+            {
+                this.ClearAndSelectItem(target);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.LogPreloadingProjectFoldersError(ex);
+        }
+    }
+
+    /// <summary>
     /// Handles tree selection changes and updates ContentBrowserState accordingly.
     /// This prevents duplicate history entries by using atomic operations.
     /// </summary>
