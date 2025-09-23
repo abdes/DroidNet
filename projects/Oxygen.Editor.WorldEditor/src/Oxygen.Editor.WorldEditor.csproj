@@ -53,4 +53,9 @@
       </Page>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="NewFolder\" />
+      <Folder Include="SceneExplorer\" />
+    </ItemGroup>
+
 </Project>
