@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
+using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 
 namespace Oxygen.Editor.WorldEditor.Utils;
 

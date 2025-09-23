@@ -7,12 +7,12 @@ using DroidNet.Controls;
 using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 
 /// <summary>
 ///     A <see cref="DynamicTree" /> item adapter for the <see cref="SceneNode" /> model class.
 /// </summary>
-public partial class SceneNodeAdapter : TreeItemAdapter, ITreeItem<SceneNode>
+public class SceneNodeAdapter : TreeItemAdapter, ITreeItem<SceneNode>
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneNodeAdapter" /> class.

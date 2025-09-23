@@ -10,6 +10,14 @@
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
     <ItemGroup>
+      <Compile Remove="NewFolder\**" />
+      <Content Remove="NewFolder\**" />
+      <EmbeddedResource Remove="NewFolder\**" />
+      <None Remove="NewFolder\**" />
+      <Page Remove="NewFolder\**" />
+      <PRIResource Remove="NewFolder\**" />
+    </ItemGroup>
+    <ItemGroup>
       <None Remove="InPlaceEditableLabel.xaml" />
     </ItemGroup>
 
@@ -51,11 +59,6 @@
       <Page Update="InPlaceEditableLabel.xaml">
         <Generator>MSBuild:Compile</Generator>
       </Page>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="NewFolder\" />
-      <Folder Include="SceneExplorer\" />
     </ItemGroup>
 
 </Project>
