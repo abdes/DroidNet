@@ -39,15 +39,15 @@ class Transform final : public Resource<resources::kTransform> {
   {
   }
   constexpr Transform() = default; // Creates an invalid entity
-  friend class GameEntity;
+  friend class SceneNode;
 
 public:
-  [[nodiscard]] constexpr auto GetEntityId() const noexcept -> GameEntityId
+  [[nodiscard]] constexpr auto GetEntityId() const noexcept -> SceneNodeId
   {
     // The transform handle is the same as the entity handle except for the
     // resource type.
     ResourceHandle entity_id(GetId());
-    entity_id.SetResourceType(resources::kGameEntity);
+    entity_id.SetResourceType(resources::kSceneNode);
     return entity_id;
   }
 

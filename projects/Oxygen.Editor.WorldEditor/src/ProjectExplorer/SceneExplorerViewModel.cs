@@ -186,7 +186,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         }
 
         var newEntity
-            = new GameEntityAdapter(
+            = new SceneNodeAdapter(
                 new SceneNode(parent.AttachedObject) { Name = $"New Entity {parent.AttachedObject.Nodes.Count}" });
 
         await this.InsertItemAsync(relativeIndex, parent, newEntity).ConfigureAwait(false);
@@ -249,12 +249,12 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         {
             case SingleSelectionModel singleSelection:
                 var selectedItem = singleSelection.SelectedItem;
-                message.Reply(selectedItem is null ? [] : [((GameEntityAdapter)selectedItem).AttachedObject]);
+                message.Reply(selectedItem is null ? [] : [((SceneNodeAdapter)selectedItem).AttachedObject]);
                 break;
 
             case MultipleSelectionModel<ITreeItem> multipleSelection:
-                var selection = multipleSelection.SelectedItems.Where(item => item is GameEntityAdapter)
-                    .Select(adapter => ((GameEntityAdapter)adapter).AttachedObject).ToList();
+                var selection = multipleSelection.SelectedItems.Where(item => item is SceneNodeAdapter)
+                    .Select(adapter => ((SceneNodeAdapter)adapter).AttachedObject).ToList();
                 message.Reply(selection);
                 break;
 
@@ -278,7 +278,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
 
         _ = this.messenger.Send(
             new EntitySelectionChangedMessage(
-                this.SelectionModel?.SelectedItem is not GameEntityAdapter adapter
+                this.SelectionModel?.SelectedItem is not SceneNodeAdapter adapter
                     ? []
                     : [adapter.AttachedObject]));
     }
@@ -306,8 +306,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.HasUnlockedSelectedItems = unlockedSelectedItems;
 
         var selection = multipleSelectionModel.SelectedItems
-            .Where(item => item is GameEntityAdapter)
-            .Select(adapter => ((GameEntityAdapter)adapter).AttachedObject)
+            .Where(item => item is SceneNodeAdapter)
+            .Select(adapter => ((SceneNodeAdapter)adapter).AttachedObject)
             .ToList();
         _ = this.messenger.Send(new EntitySelectionChangedMessage(selection));
     }
@@ -316,7 +316,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     {
         _ = sender; // unused
 
-        if (args.TreeItem is not GameEntityAdapter entityAdapter)
+        if (args.TreeItem is not SceneNodeAdapter entityAdapter)
         {
             return;
         }
@@ -332,7 +332,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     {
         _ = sender; // unused
 
-        if (args.TreeItem is not GameEntityAdapter entityAdapter)
+        if (args.TreeItem is not SceneNodeAdapter entityAdapter)
         {
             return;
         }

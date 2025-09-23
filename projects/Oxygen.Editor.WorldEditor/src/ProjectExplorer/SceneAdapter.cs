@@ -47,7 +47,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         foreach (var entity in this.AttachedObject.Nodes)
         {
             this.AddChildInternal(
-                new GameEntityAdapter(entity) { IsExpanded = false });
+                new SceneNodeAdapter(entity) { IsExpanded = false });
         }
 
         await Task.CompletedTask.ConfigureAwait(true);

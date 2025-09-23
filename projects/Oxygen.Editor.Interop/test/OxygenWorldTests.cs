@@ -20,7 +20,7 @@ public sealed class OxygenWorldTests
     public void TestCreateEntityCreatesTransform()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
 
         var transform = entity.GetTransform();
         transform.Dispose();
@@ -51,7 +51,7 @@ public sealed class OxygenWorldTests
     public void TestSetAndGetPosition()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
         var transform = entity.GetTransform();
 
         var newPosition = new Vector3(10, 20, 30);
@@ -64,7 +64,7 @@ public sealed class OxygenWorldTests
     public void TestSetAndGetRotation()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
         var transform = entity.GetTransform();
 
         var newRotation = new Vector3(5f, 20f, 15f);
@@ -77,7 +77,7 @@ public sealed class OxygenWorldTests
     public void TestSetAndGetScale()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
         var transform = entity.GetTransform();
 
         var newScale = new Vector3(3, 3, 3);
@@ -90,9 +90,9 @@ public sealed class OxygenWorldTests
     public void TestRemoveEntity()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
 
-        var removedCount = OxygenWorld.RemoveGameEntity(entity);
+        var removedCount = OxygenWorld.RemoveSceneNode(entity);
 
         _ = removedCount.Should().Be(1);
     }
@@ -103,10 +103,10 @@ public sealed class OxygenWorldTests
         _ = new OxygenWorld();
 
         var descriptor1 = CreateTestEntityDescriptor(1);
-        using var entity1 = OxygenWorld.CreateGameEntity(descriptor1);
+        using var entity1 = OxygenWorld.CreateSceneNode(descriptor1);
 
         var descriptor2 = CreateTestEntityDescriptor(2);
-        using var entity2 = OxygenWorld.CreateGameEntity(descriptor2);
+        using var entity2 = OxygenWorld.CreateSceneNode(descriptor2);
 
         var transform1 = entity1.GetTransform();
         var transform2 = entity2.GetTransform();
@@ -119,7 +119,7 @@ public sealed class OxygenWorldTests
     public void TestUpdateTransformProperties()
     {
         var descriptor = CreateTestEntityDescriptor(0);
-        using var entity = OxygenWorld.CreateGameEntity(descriptor);
+        using var entity = OxygenWorld.CreateSceneNode(descriptor);
         var transform = entity.GetTransform();
 
         var newPosition = new Vector3(10, 20, 30);
@@ -142,7 +142,7 @@ public sealed class OxygenWorldTests
             for (var i = 0; i < 10; i++)
             {
                 var descriptor = CreateTestEntityDescriptor(i);
-                using var entity = OxygenWorld.CreateGameEntity(descriptor);
+                using var entity = OxygenWorld.CreateSceneNode(descriptor);
                 Debug.WriteLine($"T1 Created entity {entity}");
 
                 var transform = entity.GetTransform();
@@ -166,9 +166,9 @@ public sealed class OxygenWorldTests
             for (var i = 0; i < 10; i++)
             {
                 var descriptor = CreateTestEntityDescriptor(i);
-                using var entity = OxygenWorld.CreateGameEntity(descriptor);
+                using var entity = OxygenWorld.CreateSceneNode(descriptor);
                 Debug.WriteLine($"T2 Created entity {entity}");
-                var removedCount = OxygenWorld.RemoveGameEntity(entity);
+                var removedCount = OxygenWorld.RemoveSceneNode(entity);
                 Debug.WriteLine($"T2 Removed entity {entity}");
                 _ = removedCount.Should().Be(1);
             }
@@ -181,14 +181,14 @@ public sealed class OxygenWorldTests
         }
     }
 
-    private static GameEntityDescriptor CreateTestEntityDescriptor(int i)
+    private static SceneNodeDescriptor CreateTestEntityDescriptor(int i)
     {
         var rotation = new Vector3(
             GetSecureRandomFloat(0, 90),
             GetSecureRandomFloat(0, 90),
             GetSecureRandomFloat(0, 90));
 
-        return new GameEntityDescriptor
+        return new SceneNodeDescriptor
         {
             Transform = new TransformDescriptor
             {

@@ -12,14 +12,14 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// <summary>
 ///     A <see cref="DynamicTree" /> item adapter for the <see cref="SceneNode" /> model class.
 /// </summary>
-public partial class GameEntityAdapter : TreeItemAdapter, ITreeItem<SceneNode>
+public partial class SceneNodeAdapter : TreeItemAdapter, ITreeItem<SceneNode>
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="GameEntityAdapter" /> class.
+    ///     Initializes a new instance of the <see cref="SceneNodeAdapter" /> class.
     ///     A <see cref="DynamicTree" /> item adapter for the <see cref="SceneNode" /> model class.
     /// </summary>
     /// <param name="sceneNode">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
-    public GameEntityAdapter(SceneNode sceneNode)
+    public SceneNodeAdapter(SceneNode sceneNode)
     {
         this.AttachedObject = sceneNode;
         this.AttachedObject.PropertyChanged += (_, args) =>

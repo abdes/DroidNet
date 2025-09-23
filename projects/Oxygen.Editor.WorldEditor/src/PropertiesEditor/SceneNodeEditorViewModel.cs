@@ -9,7 +9,7 @@ using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-public sealed partial class SceneNodeViewModel : MultiSelectionDetails<SceneNode>, IDisposable
+public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, IDisposable
 {
     private static readonly IDictionary<Type, IPropertyEditor<SceneNode>> AllPropertyEditors =
         new Dictionary<Type, IPropertyEditor<SceneNode>> { { typeof(Transform), new TransformViewModel() } };
@@ -20,11 +20,11 @@ public sealed partial class SceneNodeViewModel : MultiSelectionDetails<SceneNode
     private ICollection<SceneNode> items;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="SceneNodeViewModel" /> class.
+    ///     Initializes a new instance of the <see cref="SceneNodeEditorViewModel" /> class.
     /// </summary>
     /// <param name="vmToViewConverter"></param>
     /// <param name="messenger"></param>
-    public SceneNodeViewModel(ViewModelToView vmToViewConverter, IMessenger messenger)
+    public SceneNodeEditorViewModel(ViewModelToView vmToViewConverter, IMessenger messenger)
     {
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;

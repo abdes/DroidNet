@@ -51,31 +51,28 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                     Outlet = "pe",
                     Path = "pe",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(SceneExplorerViewModel)
+                    ViewModelType = typeof(SceneExplorerViewModel),
                 },
                 new Route
                 {
                     Outlet = "cb",
                     Path = "cb",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(ContentBrowserViewModel)
+                    ViewModelType = typeof(ContentBrowserViewModel),
                 },
                 new Route
                 {
                     Outlet = "props",
                     Path = "props",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(SceneNodeViewModel)
+                    ViewModelType = typeof(SceneNodeEditorViewModel),
                 },
                 new Route
                 {
-                    Outlet = "log",
-                    Path = "log",
-                    MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(LogsViewModel)
-                }
-            ])
-        }
+                    Outlet = "log", Path = "log", MatchMethod = PathMatch.Full, ViewModelType = typeof(LogsViewModel),
+                },
+            ]),
+        },
     ]);
 
     /// <inheritdoc />
@@ -95,7 +92,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<LogsViewModel>(Reuse.Singleton);
         childContainer.Register<LogsView>(Reuse.Singleton);
 
-        childContainer.Register<SceneNodeViewModel>(Reuse.Transient);
+        childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);

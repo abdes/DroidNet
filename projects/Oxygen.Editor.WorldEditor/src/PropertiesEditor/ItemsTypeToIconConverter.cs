@@ -9,9 +9,11 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
 public class ItemsTypeToIconConverter : IValueConverter
 {
-    /// <inheritdoc/>
-    public object Convert(object value, Type targetType, object parameter, string language) => new SymbolIcon() { Symbol = Symbol.Audio };
+    /// <inheritdoc />
+    public object Convert(object value, Type targetType, object parameter, string language) =>
+        new SymbolIcon { Symbol = Symbol.Audio };
 
-    /// <inheritdoc/>
-    public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
+        throw new NotSupportedException();
 }

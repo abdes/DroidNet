@@ -8,14 +8,14 @@
 #include "oxygen/world/transform.h"
 #include "gtest/gtest.h"
 
-using oxygen::world::GameEntity;
-using oxygen::world::GameEntityDescriptor;
-using oxygen::world::GameEntityId;
+using oxygen::world::SceneNode;
+using oxygen::world::SceneNodeDescriptor;
+using oxygen::world::SceneNodeId;
 using oxygen::world::Transform;
 using oxygen::world::TransformDescriptor;
 using oxygen::world::TransformId;
-using oxygen::world::entity::CreateGameEntity;
-using oxygen::world::entity::RemoveGameEntity;
+using oxygen::world::entity::CreateSceneNode;
+using oxygen::world::entity::RemoveSceneNode;
 
 // -- Entity tests ---------------------------------------------------------- //
 
@@ -23,15 +23,15 @@ using oxygen::world::entity::RemoveGameEntity;
 TEST(EntityTest, CanCreateAndRemoveEntity)
 {
     TransformDescriptor transform_desc {};
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
 
     ASSERT_TRUE(entity.IsValid());
 
-    const auto removed = RemoveGameEntity(entity);
+    const auto removed = RemoveSceneNode(entity);
     ASSERT_EQ(removed, 1);
 }
 
@@ -41,11 +41,11 @@ TEST(EntityTest, CreateEntityCreatesTransform)
     TransformDescriptor transform_desc { .position = { 1.0f, 2.0f, 3.0f },
         .rotation = { 1.0f, 0.0f, 0.0f, 0.0f },
         .scale = { 1.0f, 1.0f, 1.0f } };
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    const auto entity = CreateGameEntity(entity_desc);
+    const auto entity = CreateSceneNode(entity_desc);
     ASSERT_TRUE(entity.IsValid());
 
     const auto transform = entity.GetTransform();
@@ -59,15 +59,15 @@ TEST(EntityTest, CreateEntityCreatesTransform)
 TEST(EntityTest, RemoveEntityRemovesTransform)
 {
     TransformDescriptor transform_desc {};
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
     ASSERT_TRUE(entity.IsValid());
     ASSERT_TRUE(entity.GetTransform().IsValid());
 
-    const auto removed = RemoveGameEntity(entity);
+    const auto removed = RemoveSceneNode(entity);
     ASSERT_EQ(removed, 1);
     ASSERT_FALSE(entity.GetTransform().IsValid());
 }
@@ -75,12 +75,12 @@ TEST(EntityTest, RemoveEntityRemovesTransform)
 // NOLINTNEXTLINE
 TEST(EntityTest, AbortWhenCreateEntityWithNullTransform)
 {
-    constexpr GameEntityDescriptor entity_desc {
+    constexpr SceneNodeDescriptor entity_desc {
         .transform = nullptr,
     };
 
     EXPECT_DEATH(
-        { CreateGameEntity(entity_desc); },
+        { CreateSceneNode(entity_desc); },
         "all game entities must have a transform component!");
 }
 
@@ -89,50 +89,50 @@ TEST(EntityTest, CreateMultipleEntities)
 {
     TransformDescriptor transform_desc1 {};
     TransformDescriptor transform_desc2 {};
-    GameEntityDescriptor entity_desc1 {
+    SceneNodeDescriptor entity_desc1 {
         .transform = &transform_desc1,
     };
-    GameEntityDescriptor entity_desc2 {
+    SceneNodeDescriptor entity_desc2 {
         .transform = &transform_desc2,
     };
 
-    auto entity1 = CreateGameEntity(entity_desc1);
-    auto entity2 = CreateGameEntity(entity_desc2);
+    auto entity1 = CreateSceneNode(entity_desc1);
+    auto entity2 = CreateSceneNode(entity_desc2);
 
     ASSERT_TRUE(entity1.IsValid());
     ASSERT_TRUE(entity2.IsValid());
     ASSERT_NE(entity1.GetId(), entity2.GetId());
 
-    RemoveGameEntity(entity1);
-    RemoveGameEntity(entity2);
+    RemoveSceneNode(entity1);
+    RemoveSceneNode(entity2);
 }
 
 // NOLINTNEXTLINE
 TEST(EntityTest, RemoveInvalidEntityDoesNothing)
 {
     TransformDescriptor transform_desc {};
-    GameEntity entity = CreateGameEntity(GameEntityDescriptor { &transform_desc });
+    SceneNode entity = CreateSceneNode(SceneNodeDescriptor { &transform_desc });
 
-    ASSERT_EQ(RemoveGameEntity(entity), 1);
+    ASSERT_EQ(RemoveSceneNode(entity), 1);
     ASSERT_FALSE(entity.IsValid());
-    ASSERT_EQ(RemoveGameEntity(entity), 0);
+    ASSERT_EQ(RemoveSceneNode(entity), 0);
 }
 
 // NOLINTNEXTLINE
 TEST(EntityTest, GetTransformId)
 {
     TransformDescriptor transform_desc {};
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
 
     ASSERT_TRUE(entity.IsValid());
     const auto transform_id = entity.GetTransformId();
     ASSERT_EQ(transform_id.ResourceType(), oxygen::world::resources::kTransform);
 
-    RemoveGameEntity(entity);
+    RemoveSceneNode(entity);
 }
 
 // -- Transform tests ------------------------------------------------------- //
@@ -143,11 +143,11 @@ TEST(TransformTest, GetPosition)
     TransformDescriptor transform_desc { .position = { 1.0f, 2.0f, 3.0f },
         .rotation = { 1.0f, 0.0f, 0.0f, 0.0f },
         .scale = { 1.0f, 1.0f, 1.0f } };
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
     ASSERT_TRUE(entity.IsValid());
 
     auto transform = entity.GetTransform();
@@ -156,7 +156,7 @@ TEST(TransformTest, GetPosition)
     auto position = transform.GetPosition();
     ASSERT_EQ(position, transform_desc.position);
 
-    RemoveGameEntity(entity);
+    RemoveSceneNode(entity);
 }
 
 // NOLINTNEXTLINE
@@ -165,11 +165,11 @@ TEST(TransformTest, GetRotation)
     TransformDescriptor transform_desc { .position = { 1.0f, 2.0f, 3.0f },
         .rotation = { 1.0f, 0.0f, 0.0f, 0.0f },
         .scale = { 1.0f, 1.0f, 1.0f } };
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
     ASSERT_TRUE(entity.IsValid());
 
     auto transform = entity.GetTransform();
@@ -178,7 +178,7 @@ TEST(TransformTest, GetRotation)
     auto rotation = transform.GetRotation();
     ASSERT_EQ(rotation, transform_desc.rotation);
 
-    RemoveGameEntity(entity);
+    RemoveSceneNode(entity);
 }
 
 // NOLINTNEXTLINE
@@ -187,11 +187,11 @@ TEST(TransformTest, GetScale)
     TransformDescriptor transform_desc { .position = { 1.0f, 2.0f, 3.0f },
         .rotation = { 1.0f, 0.0f, 0.0f, 0.0f },
         .scale = { 1.0f, 1.0f, 1.0f } };
-    const GameEntityDescriptor entity_desc {
+    const SceneNodeDescriptor entity_desc {
         .transform = &transform_desc,
     };
 
-    auto entity = CreateGameEntity(entity_desc);
+    auto entity = CreateSceneNode(entity_desc);
     ASSERT_TRUE(entity.IsValid());
 
     auto transform = entity.GetTransform();
@@ -200,5 +200,5 @@ TEST(TransformTest, GetScale)
     auto scale = transform.GetScale();
     ASSERT_EQ(scale, transform_desc.scale);
 
-    RemoveGameEntity(entity);
+    RemoveSceneNode(entity);
 }
