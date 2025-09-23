@@ -29,9 +29,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;
 
-        this.items = this.messenger.Send(new EntitySeletionRequestMessage()).SelectedEntities;
+        this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.UpdateItemsCollection(this.items);
-        this.messenger.Register<EntitySelectionChangedMessage>(this, (_, message) =>
+        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
         {
             this.items = message.SelectedEntities;
             this.UpdateItemsCollection(this.items);

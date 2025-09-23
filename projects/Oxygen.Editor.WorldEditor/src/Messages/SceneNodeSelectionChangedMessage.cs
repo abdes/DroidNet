@@ -6,7 +6,7 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.Messages;
 
-internal class EntitySelectionChangedMessage(IList<SceneNode> selectedEntities)
+internal class SceneNodeSelectionChangedMessage(IList<SceneNode> selectedEntities)
 {
     public IList<SceneNode> SelectedEntities { get; } = selectedEntities;
 }
