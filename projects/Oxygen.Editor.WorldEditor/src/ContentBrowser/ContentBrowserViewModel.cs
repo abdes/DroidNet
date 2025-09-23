@@ -13,10 +13,13 @@ using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using DryIoc;
+using Microsoft.UI.Dispatching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Oxygen.Editor.WorldEditor.Routing;
+using DroidNet.Hosting.WinUI;
 using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
@@ -105,9 +108,11 @@ public sealed partial class ContentBrowserViewModel(
 
     private IRouter? localRouter;
     private IDisposable? routerEventsSubscription;
+    private DispatcherQueue? dispatcher;
 
     // Breadcrumbs
-    public ObservableCollection<BreadcrumbEntry> Breadcrumbs { get; } = [];
+    [ObservableProperty]
+    private ObservableCollection<BreadcrumbEntry> breadcrumbs = [];
 
     /// <summary>
     ///     Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null" /> when the view is loaded.
@@ -160,6 +165,17 @@ public sealed partial class ContentBrowserViewModel(
             this.VmToViewConverter = this.childContainer.Resolve<ViewModelToView>();
 
             this.localRouter = this.childContainer.Resolve<IRouter>();
+
+            // Capture the UI Dispatcher from the hosting context to marshal UI-bound updates
+            try
+            {
+                var hostingContext = this.childContainer.Resolve<HostingContext>();
+                this.dispatcher = hostingContext.Dispatcher;
+            }
+            catch
+            {
+                this.dispatcher = DispatcherQueue.GetForCurrentThread();
+            }
 
             // Subscribe to router events to track navigation history
             this.routerEventsSubscription = this.localRouter.Events
@@ -491,46 +507,62 @@ public sealed partial class ContentBrowserViewModel(
 
     private void UpdateBreadcrumbs(string? pathOverride = null)
     {
-        this.Breadcrumbs.Clear();
-        var primary = pathOverride;
-        if (primary is null)
+        // Build the new list fully, then swap the collection on the UI thread to avoid per-item change notifications
+        void UpdateCore()
         {
-            var state = this.childContainer?.Resolve<ContentBrowserState>();
-            primary = this.GetPrimarySelectedFolder(state);
-        }
+            var entries = new List<BreadcrumbEntry>();
 
-        // Determine project name for root label if available
-        var rootLabel = "Project";
-        try
-        {
-            var pm = this.childContainer?.Resolve<IProjectManagerService>();
-            var pn = pm?.CurrentProject?.ProjectInfo?.Name;
-            if (!string.IsNullOrEmpty(pn))
+            var primary = pathOverride;
+            if (primary is null)
             {
-                rootLabel = pn!;
+                var state = this.childContainer?.Resolve<ContentBrowserState>();
+                primary = this.GetPrimarySelectedFolder(state);
             }
-        }
-        catch
-        {
-            // ignore, fallback to default label
+
+            // Determine project name for root label if available
+            var rootLabel = "Project";
+            try
+            {
+                var pm = this.childContainer?.Resolve<IProjectManagerService>();
+                var pn = pm?.CurrentProject?.ProjectInfo?.Name;
+                if (!string.IsNullOrEmpty(pn))
+                {
+                    rootLabel = pn!;
+                }
+            }
+            catch
+            {
+                // ignore, fallback to default label
+            }
+
+            // Always include root breadcrumb
+            entries.Add(new BreadcrumbEntry(rootLabel, "."));
+
+            if (!string.IsNullOrEmpty(primary) && primary != ".")
+            {
+                // Split path and accumulate segments
+                var parts = primary.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var pathSoFar = new List<string>();
+                foreach (var part in parts)
+                {
+                    pathSoFar.Add(part);
+                    var rel = string.Join('/', pathSoFar);
+                    entries.Add(new BreadcrumbEntry(part, rel));
+                }
+            }
+
+            // Swap the entire collection to minimize WinRT collection change handling issues
+            this.Breadcrumbs = new ObservableCollection<BreadcrumbEntry>(entries);
         }
 
-        // Always include root breadcrumb
-        this.Breadcrumbs.Add(new BreadcrumbEntry(rootLabel, "."));
-
-        if (string.IsNullOrEmpty(primary) || primary == ".")
+        // Always enqueue to the UI dispatcher to avoid re-entrancy during input/layout handlers
+        if (this.dispatcher is not null)
         {
-            return; // root only
+            _ = this.dispatcher.TryEnqueue(UpdateCore);
         }
-
-        // Split path and accumulate segments
-        var parts = primary.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var pathSoFar = new List<string>();
-        foreach (var part in parts)
+        else
         {
-            pathSoFar.Add(part);
-            var rel = string.Join('/', pathSoFar);
-            this.Breadcrumbs.Add(new BreadcrumbEntry(part, rel));
+            UpdateCore();
         }
     }
 
