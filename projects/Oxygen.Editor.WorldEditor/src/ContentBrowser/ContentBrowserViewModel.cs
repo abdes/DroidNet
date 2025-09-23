@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Mvvm.Converters;
@@ -71,6 +72,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     private readonly List<string> navigationHistory = [];
     private int currentHistoryIndex = -1;
     private bool isNavigatingFromHistory = false;
+
+    // Breadcrumbs
+    public ObservableCollection<BreadcrumbEntry> Breadcrumbs { get; } = [];
 
     /// <summary>
     /// Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null"/> when the view is loaded.
@@ -166,6 +170,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
 
             // Initialize Up button state
             this.UpdateUpButtonState();
+
+            // Initialize breadcrumbs
+            this.UpdateBreadcrumbs();
         }
 
         // Actions that should happen on every navigation (if any)
@@ -186,6 +193,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
 
             // Update the Up button state based on selection
             this.UpdateUpButtonState();
+
+            // Update breadcrumbs
+            this.UpdateBreadcrumbs();
         }
     }
 
@@ -248,6 +258,12 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
 
         this.UpdateHistoryButtonStates();
+
+        // Ensure UI elements that depend on the current location update immediately.
+        // Rebuild breadcrumbs based on the URL we just navigated to. This avoids waiting
+        // for state propagation when navigation was initiated via router/URL (e.g., breadcrumb click).
+        var selectedFromUrl = ParseFirstSelectedFromUrl(navigationEnd.Url);
+        this.UpdateBreadcrumbs(selectedFromUrl);
     }
 
     private void AddToHistory(string url)
@@ -441,6 +457,78 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         this.GoUpCommand.NotifyCanExecuteChanged();
     }
 
+    private void UpdateBreadcrumbs(string? pathOverride = null)
+    {
+        this.Breadcrumbs.Clear();
+        string? primary = pathOverride;
+        if (primary is null)
+        {
+            var state = this.childContainer?.Resolve<ContentBrowserState>();
+            primary = this.GetPrimarySelectedFolder(state);
+        }
+
+        // Determine project name for root label if available
+        string rootLabel = "Project";
+        try
+        {
+            var pm = this.childContainer?.Resolve<Oxygen.Editor.Projects.IProjectManagerService>();
+            var pn = pm?.CurrentProject?.ProjectInfo?.Name;
+            if (!string.IsNullOrEmpty(pn))
+            {
+                rootLabel = pn!;
+            }
+        }
+        catch
+        {
+            // ignore, fallback to default label
+        }
+
+        // Always include root breadcrumb
+        this.Breadcrumbs.Add(new BreadcrumbEntry(rootLabel, "."));
+
+        if (string.IsNullOrEmpty(primary) || primary == ".")
+        {
+            return; // root only
+        }
+
+        // Split path and accumulate segments
+        var parts = primary.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var pathSoFar = new List<string>();
+        foreach (var part in parts)
+        {
+            pathSoFar.Add(part);
+            var rel = string.Join('/', pathSoFar);
+            this.Breadcrumbs.Add(new BreadcrumbEntry(part, rel));
+        }
+    }
+
+    private static string? ParseFirstSelectedFromUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            return null;
+        }
+
+        var qIndex = url.IndexOf('?');
+        if (qIndex < 0 || qIndex >= url.Length - 1)
+        {
+            return null;
+        }
+
+        var query = url.Substring(qIndex + 1);
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length == 2 && string.Equals(kv[0], "selected", StringComparison.Ordinal))
+            {
+                var value = Uri.UnescapeDataString(kv[1]);
+                return value;
+            }
+        }
+
+        return null;
+    }
+
     private string? GetPrimarySelectedFolder(ContentBrowserState? state)
     {
         if (state is null || state.SelectedFolders.Count == 0)
@@ -472,6 +560,31 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
 
         return relativePath.Substring(0, idx);
+    }
+
+    /// <summary>
+    /// Navigate to a breadcrumb at the given index.
+    /// Called by the view's breadcrumb ItemClicked handler.
+    /// </summary>
+    public async Task NavigateToBreadcrumbAsync(int index)
+    {
+        if (index < 0 || index >= this.Breadcrumbs.Count || this.localRouter is null)
+        {
+            return;
+        }
+
+        var target = this.Breadcrumbs[index];
+        var url = "/(left:project//right:assets/list)";
+        if (target.RelativePath == ".")
+        {
+            url += "?selected=.";
+        }
+        else
+        {
+            url += $"?selected={Uri.EscapeDataString(target.RelativePath)}";
+        }
+
+        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
     }
 
     [LoggerMessage(
