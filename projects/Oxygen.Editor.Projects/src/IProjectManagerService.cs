@@ -57,6 +57,24 @@ public interface IProjectManagerService
     public Task<bool> LoadSceneAsync(Scene scene);
 
     /// <summary>
+    /// Creates a new scene in the current project asynchronously.
+    /// </summary>
+    /// <param name="sceneName">The name of the new scene.</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation. The task result contains the newly created scene if created successfully; otherwise, <see langword="null"/>.
+    /// </returns>
+    public Task<Scene?> CreateSceneAsync(string sceneName);
+
+    /// <summary>
+    /// Saves a scene to storage asynchronously.
+    /// </summary>
+    /// <param name="scene">The scene to save.</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation. The task result is <see langword="true"/> if the scene is saved successfully; otherwise, <see langword="false"/>.
+    /// </returns>
+    public Task<bool> SaveSceneAsync(Scene scene);
+
+    /// <summary>
     /// Gets the current project's storage provider.
     /// </summary>
     /// <returns>

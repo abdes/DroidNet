@@ -34,9 +34,11 @@
     <Grid>
         <GridView
             x:Name="BasicGridView"
+            DoubleTapped="GridView_DoubleTapped"
             IsItemClickEnabled="True"
             ItemTemplate="{StaticResource GameAssetTemplate}"
             ItemsSource="{x:Bind ViewModel.Assets}"
+            PointerPressed="GridView_PointerPressed"
             SelectionMode="Single" />
     </Grid>
 </UserControl>

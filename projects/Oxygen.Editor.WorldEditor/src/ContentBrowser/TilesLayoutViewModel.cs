@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
@@ -10,10 +11,17 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// The ViewModel for the tiles layout view.
 /// </summary>
 /// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
-public class TilesLayoutViewModel(AssetsIndexingService assetsIndexingService)
+public partial class TilesLayoutViewModel(AssetsIndexingService assetsIndexingService) : AssetsLayoutViewModel
 {
     /// <summary>
     /// Gets the collection of game assets.
     /// </summary>
     public ObservableCollection<GameAsset> Assets { get; } = assetsIndexingService.Assets;
+
+    /// <summary>
+    /// Invokes the item.
+    /// </summary>
+    /// <param name="item">The game asset to invoke.</param>
+    [RelayCommand]
+    private void InvokeItem(GameAsset item) => this.OnItemInvoked(item);
 }

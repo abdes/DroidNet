@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+using System.Diagnostics;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -10,27 +13,42 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// The ViewModel for the <see cref="AssetsView"/> view.
+///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
 /// <param name="currentProject">The current project.</param>
 /// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
+/// <param name="contentBrowserState">The content browser state to track selection changes.</param>
+/// <param name="projectManagerService">The project manager service for creating scenes.</param>
+/// <param name="projectLayoutViewModel">The project layout view model for tree navigation.</param>
 public partial class AssetsViewModel(
     IProject currentProject,
     AssetsIndexingService assetsIndexingService,
-    ViewModelToView vmToViewConverter) : AbstractOutletContainer, IRoutingAware
+    ViewModelToView vmToViewConverter,
+    ContentBrowserState contentBrowserState,
+    IProjectManagerService projectManagerService,
+    ProjectLayoutViewModel projectLayoutViewModel) : AbstractOutletContainer, IRoutingAware, IDisposable
 {
+    private bool disposed;
+
     /// <summary>
-    /// Gets the layout view model.
+    ///     Gets the layout view model.
     /// </summary>
     public object? LayoutViewModel => this.Outlets["right"].viewModel;
 
     /// <summary>
-    /// Gets the converter for converting view models to views.
+    ///     Gets the converter for converting view models to views.
     /// </summary>
     public ViewModelToView VmToViewConverter { get; } = vmToViewConverter;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.Outlets.Add("right", (nameof(this.LayoutViewModel), null));
@@ -38,25 +56,124 @@ public partial class AssetsViewModel(
         this.PropertyChanging += this.OnLayoutViewModelChanging;
         this.PropertyChanged += this.OnLayoutViewModelChanged;
 
+        // Listen for changes to ContentBrowserState selection via PropertyChanged
+        contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
+
         await assetsIndexingService.IndexAssetsAsync().ConfigureAwait(true);
+
+        // Trigger initial refresh based on current selection
+        await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
     }
 
-    private void OnAssetItemInvoked(object? sender, AssetsViewItemInvokedEventArgs args)
+    private async void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ContentBrowserState.SelectedFolders))
+        {
+            Debug.WriteLine(
+                $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
+            await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
+            Debug.WriteLine(
+                $"[AssetsViewModel] RefreshAssetsAsync completed. Assets count: {assetsIndexingService.Assets.Count}");
+        }
+    }
+
+    private async void OnAssetItemInvoked(object? sender, AssetsViewItemInvokedEventArgs args)
     {
         _ = sender; // Unused
+
+        Debug.WriteLine(
+            $"[AssetsViewModel] Item invoked: {args.InvokedItem.Name}, Type: {args.InvokedItem.AssetType}, Location: {args.InvokedItem.Location}");
 
         if (args.InvokedItem.AssetType == AssetType.Scene)
         {
             // Update the scene explorer
-            var scene = currentProject.Scenes.FirstOrDefault(scene => string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.Ordinal));
+            var scene = currentProject.Scenes.FirstOrDefault(scene =>
+                string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.Ordinal));
             if (scene is not null)
             {
                 currentProject.ActiveScene = scene;
             }
         }
+        else if (args.InvokedItem.AssetType == AssetType.Folder)
+        {
+            // Navigate into the folder
+            Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.Location}");
+            await NavigateToFolder(args.InvokedItem.Location);
+        }
     }
 
-    private void OnLayoutViewModelChanging(object? sender, System.ComponentModel.PropertyChangingEventArgs args)
+    private async Task NavigateToFolder(string folderPath)
+    {
+        Debug.WriteLine($"[AssetsViewModel] NavigateToFolder called with: {folderPath}");
+
+        try
+        {
+            // Get the storage provider and create an IFolder instance
+            var storageProvider = projectManagerService.GetCurrentProjectStorageProvider();
+            var folder = await storageProvider.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
+
+            // Use ProjectLayoutViewModel to navigate, which will update the tree selection
+            // and trigger the proper data flow
+            await projectLayoutViewModel.NavigateToFolderAsync(folder);
+
+            var relativePath = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+            Debug.WriteLine($"[AssetsViewModel] Requested navigation to folder: {relativePath}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AssetsViewModel] Error navigating to folder '{folderPath}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Creates a new scene with the specified name.
+    /// </summary>
+    /// <param name="sceneName">The name of the new scene.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [RelayCommand]
+    private async Task CreateNewSceneAsync(string? sceneName)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName))
+        {
+            // TODO: Show validation error or prompt for name
+            return;
+        }
+
+        try
+        {
+            var newScene = await projectManagerService.CreateSceneAsync(sceneName).ConfigureAwait(true);
+            if (newScene is not null)
+            {
+                // Refresh the assets view to show the new scene
+                await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
+
+                // TODO: Could add success notification here
+            }
+            // TODO: Show error message to user about scene creation failure
+        }
+        catch (Exception ex)
+        {
+            // TODO: Show error message to user
+            Debug.WriteLine($"Failed to create scene '{sceneName}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Handles the creation of a new scene by prompting for a name.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [RelayCommand]
+    private async Task CreateNewSceneWithPromptAsync()
+    {
+        // For now, create a default name. In a full implementation,
+        // this would show a dialog to get the scene name from the user.
+        var sceneCount = currentProject.Scenes.Count;
+        var defaultName = $"NewScene{sceneCount + 1}";
+
+        await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
+    }
+
+    private void OnLayoutViewModelChanging(object? sender, PropertyChangingEventArgs args)
     {
         if (args.PropertyName?.Equals(nameof(this.LayoutViewModel), StringComparison.Ordinal) == true
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
@@ -65,12 +182,42 @@ public partial class AssetsViewModel(
         }
     }
 
-    private void OnLayoutViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    private void OnLayoutViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName?.Equals(nameof(this.LayoutViewModel), StringComparison.Ordinal) == true
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
         {
             layoutViewModel.ItemInvoked += this.OnAssetItemInvoked;
+        }
+    }
+
+    /// <summary>
+    ///     Releases the unmanaged resources used by the <see cref="AssetsViewModel" /> and optionally releases the managed
+    ///     resources.
+    /// </summary>
+    /// <param name="disposing">
+    ///     true to release both managed and unmanaged resources; false to release only unmanaged
+    ///     resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                // Cleanup event subscriptions
+                contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
+                this.PropertyChanging -= this.OnLayoutViewModelChanging;
+                this.PropertyChanged -= this.OnLayoutViewModelChanged;
+
+                // Cleanup layout view model if necessary
+                if (this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
+                {
+                    layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
+                }
+            }
+
+            this.disposed = true;
         }
     }
 }
