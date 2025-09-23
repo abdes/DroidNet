@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,15 +7,17 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
             <!--  Background  -->
-            <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="SystemControlTransparentRevealBackgroundBrush" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="SystemControlHighlightListLowRevealBackgroundBrush" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="SystemControlHighlightListMediumRevealBackgroundBrush" />
+            <!--  Use ListView item theme resources to ensure good contrast in Dark theme  -->
+            <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="ListViewItemBackground" />
+            <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="ListViewItemBackgroundPointerOver" />
+            <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="ListViewItemBackgroundSelected" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <!--  Background  -->
-            <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="SystemControlTransparentRevealBackgroundBrush" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="SystemControlHighlightListLowRevealBackgroundBrush" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="SystemControlHighlightListMediumRevealBackgroundBrush" />
+            <!--  Use ListView item theme resources to ensure good contrast in Light theme  -->
+            <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="ListViewItemBackground" />
+            <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="ListViewItemBackgroundPointerOver" />
+            <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="ListViewItemBackgroundSelected" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -130,12 +132,12 @@
                                 </VisualState>
                                 <VisualState x:Name="Selected">
                                     <VisualState.Setters>
-                                        <Setter Target="PartRootGrid.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource DynamicTreeItemBackgroundSelected}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="PointerOverSelected">
                                     <VisualState.Setters>
-                                        <Setter Target="PartRootGrid.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource DynamicTreeItemBackgroundSelected}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
