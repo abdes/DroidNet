@@ -11,6 +11,7 @@ using DroidNet.Config;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.Demo.InPlaceEdit;
+using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
@@ -120,6 +121,8 @@ public static partial class Program
         container.Register<DemoBrowserViewModel>(Reuse.Singleton);
         container.Register<OutputLogDemoView>(Reuse.Transient);
         container.Register<OutputLogDemoViewModel>(Reuse.Transient);
+        container.Register<OutputConsoleDemoView>(Reuse.Transient);
+        container.Register<OutputConsoleDemoViewModel>(Reuse.Transient);
         container.Register<ProjectLayoutView>(Reuse.Transient);
         container.Register<ProjectLayoutViewModel>(Reuse.Transient);
         container.Register<InPlaceEditDemoView>(Reuse.Transient);
@@ -149,6 +152,11 @@ public static partial class Program
                         {
                             Path = "output-log",
                             ViewModelType = typeof(OutputLogDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "output-console",
+                            ViewModelType = typeof(OutputConsoleDemoViewModel),
                         },
                         new Route()
                         {
