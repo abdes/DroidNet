@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-[ViewModel(typeof(SceneNodeViewModel))]
+[ViewModel(typeof(SceneNodeEditorViewModel))]
 public sealed partial class SceneNodeEditorView : UserControl
 {
     /// <summary>

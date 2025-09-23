@@ -35,7 +35,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
         => item switch
         {
             SceneAdapter => this.SceneTemplate,
-            GameEntityAdapter => this.EntityTemplate,
+            SceneNodeAdapter => this.EntityTemplate,
             _ => null,
         };
 }

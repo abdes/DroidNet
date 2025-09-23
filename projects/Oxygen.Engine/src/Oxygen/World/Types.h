@@ -41,11 +41,11 @@ namespace resources {
     constexpr ResourceHandle::ResourceTypeT kReserved10 = 10;
 
     // World resources
-    constexpr ResourceHandle::ResourceTypeT kGameEntity = 11;
+    constexpr ResourceHandle::ResourceTypeT kSceneNode = 11;
     constexpr ResourceHandle::ResourceTypeT kTransform = 12;
 } // namespace resources
 
-DECLARE_RESOURCE(entity, GameEntity)
+DECLARE_RESOURCE(entity, SceneNode)
 DECLARE_RESOURCE(transform, Transform)
 
 } // namespace oxygen::world

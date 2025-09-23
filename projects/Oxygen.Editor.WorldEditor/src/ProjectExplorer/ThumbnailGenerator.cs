@@ -46,7 +46,7 @@ public static class ThumbnailGenerator
     /// <param name="adapter">The tree item adapter representing the entity.</param>
     /// <returns>A <see cref="Symbol"/> representing the thumbnail for the entity.</returns>
     public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
-        => adapter is GameEntityAdapter entityAdapter
+        => adapter is SceneNodeAdapter entityAdapter
            && entityAdapter.AttachedObject.Name.EndsWith('1')
             ? Symbol.Camera
             : Symbol.Calculator;

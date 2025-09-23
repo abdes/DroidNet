@@ -35,8 +35,8 @@ namespace entity {
    * @return The created Entity. If the creation fails, an invalid Entity is
    * returned.
    */
-  OXGN_GFX_API auto CreateGameEntity(const GameEntityDescriptor& entity_desc)
-    -> GameEntity;
+  OXGN_GFX_API auto CreateSceneNode(const SceneNodeDescriptor& entity_desc)
+    -> SceneNode;
 
   /**
    * @brief Removes a game entity and its associated transform component.  Upon
@@ -45,7 +45,7 @@ namespace entity {
    * @param entity The entity to be removed.
    * @return The number of entities removed (`1` if successful, `0` otherwise).
    */
-  OXGN_GFX_API auto RemoveGameEntity(GameEntity& entity) -> size_t;
+  OXGN_GFX_API auto RemoveSceneNode(SceneNode& entity) -> size_t;
 
 } // namespace entity
 
@@ -58,16 +58,16 @@ namespace entity {
  *
  * Entity objects can only be created through the factory function.
  *
- * @see CreateGameEntity()
+ * @see CreateSceneNode()
  */
-class GameEntity : public Resource<resources::kGameEntity> {
-  constexpr explicit GameEntity(const GameEntityId& entity_id)
+class SceneNode : public Resource<resources::kSceneNode> {
+  constexpr explicit SceneNode(const SceneNodeId& entity_id)
     : Resource(entity_id)
   {
   }
-  constexpr GameEntity() = default; // Creates an invalid entity
-  friend GameEntity entity::CreateGameEntity(const GameEntityDescriptor&);
-  friend size_t entity::RemoveGameEntity(GameEntity&);
+  constexpr SceneNode() = default; // Creates an invalid entity
+  friend SceneNode entity::CreateSceneNode(const SceneNodeDescriptor&);
+  friend size_t entity::RemoveSceneNode(SceneNode&);
 
 public:
   [[nodiscard]] constexpr auto GetTransformId() const noexcept -> TransformId
@@ -83,7 +83,7 @@ public:
 
 private:
   [[nodiscard]] static auto CreateTransform(
-    const TransformDescriptor& transform_desc, const GameEntityId& entity_id)
+    const TransformDescriptor& transform_desc, const SceneNodeId& entity_id)
     -> Transform;
   static auto RemoveTransform(Transform& transform) -> size_t;
 };

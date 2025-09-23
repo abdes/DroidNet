@@ -14,7 +14,7 @@
 namespace {
 
 using oxygen::ResourceTable;
-using oxygen::world::GameEntity;
+using oxygen::world::SceneNode;
 using oxygen::world::Transform;
 
 #define MAKE_RESOURCE_TABLE(name, type, itemType) \
@@ -22,7 +22,7 @@ using oxygen::world::Transform;
 
 // TODO: table size needs to be moved to a constant
 
-MAKE_RESOURCE_TABLE(entities, GameEntity, GameEntity);
+MAKE_RESOURCE_TABLE(entities, SceneNode, SceneNode);
 MAKE_RESOURCE_TABLE(transforms, Transform, Transform);
 MAKE_RESOURCE_TABLE(positions, glm::vec3, Transform);
 MAKE_RESOURCE_TABLE(rotations, glm::quat, Transform);
@@ -46,9 +46,9 @@ std::shared_mutex entity_mutex;
  * created.
  * @return The created Transform object.
  */
-auto GameEntity::CreateTransform(
+auto SceneNode::CreateTransform(
     const TransformDescriptor& transform_desc,
-    const GameEntityId& entity_id) -> Transform
+    const SceneNodeId& entity_id) -> Transform
 {
     const auto transform_id = transforms.Insert({});
     DCHECK_EQ_F(transform_id.Index(), entity_id.Index());
@@ -75,7 +75,7 @@ auto GameEntity::CreateTransform(
  * @param transform The Transform object to be removed.
  * @return The number of components removed (should be 1 if successful).
  */
-auto GameEntity::RemoveTransform(Transform& transform) -> size_t
+auto SceneNode::RemoveTransform(Transform& transform) -> size_t
 {
     if (!transform.IsValid()) {
         return 0;
@@ -133,7 +133,7 @@ void Transform::SetScale(const glm::vec3 scale) const noexcept
     scales.ItemAt(GetId()) = scale;
 }
 
-auto oxygen::world::entity::CreateGameEntity(const GameEntityDescriptor& entity_desc) -> GameEntity
+auto oxygen::world::entity::CreateSceneNode(const SceneNodeDescriptor& entity_desc) -> SceneNode
 {
     // All game entities must have a transform component.
     CHECK_NOTNULL_F(entity_desc.transform, "all game entities must have a transform component!");
@@ -146,7 +146,7 @@ auto oxygen::world::entity::CreateGameEntity(const GameEntityDescriptor& entity_
     }
 
     // ReSharper disable once CppTooWideScopeInitStatement (we use it for DCHECK)
-    const auto transform = GameEntity::CreateTransform(*entity_desc.transform, entity_id);
+    const auto transform = SceneNode::CreateTransform(*entity_desc.transform, entity_id);
     if (!transform.IsValid()) {
         entities.Erase(entity_id);
         return {};
@@ -155,10 +155,10 @@ auto oxygen::world::entity::CreateGameEntity(const GameEntityDescriptor& entity_
     DCHECK_EQ_F(transform.GetId().Generation(), entity_id.Generation());
 
     LOG_F(INFO, "Game entity created: {}", entity_id.ToString());
-    return GameEntity(entity_id);
+    return SceneNode(entity_id);
 }
 
-auto oxygen::world::entity::RemoveGameEntity(GameEntity& entity) -> size_t
+auto oxygen::world::entity::RemoveSceneNode(SceneNode& entity) -> size_t
 {
     if (!entity.IsValid()) {
         return 0;
@@ -170,7 +170,7 @@ auto oxygen::world::entity::RemoveGameEntity(GameEntity& entity) -> size_t
     const auto entity_removed = entities.Erase(entity.GetId());
     if (entity_removed != 0) {
         auto transform = entity.GetTransform();
-        CHECK_EQ_F(1, GameEntity::RemoveTransform(transform));
+        CHECK_EQ_F(1, SceneNode::RemoveTransform(transform));
         entity.Invalidate();
 
         LOG_F(INFO, "Game entity removed: {}", entity_id);
@@ -178,7 +178,7 @@ auto oxygen::world::entity::RemoveGameEntity(GameEntity& entity) -> size_t
     return entity_removed;
 }
 
-auto GameEntity::GetTransform() const noexcept -> Transform
+auto SceneNode::GetTransform() const noexcept -> Transform
 {
     if (!IsValid()) {
         return {};
