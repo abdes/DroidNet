@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ContentBrowserView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -110,6 +110,20 @@
                     <AppBarButton Icon="Filter" Label="Filter" />
                 </CommandBar.PrimaryCommands>
                 <CommandBar.SecondaryCommands>
+                    <!--  View switching commands  -->
+                    <AppBarButton Command="{x:Bind ViewModel.SwitchToListViewCommand}" Label="List view">
+                        <AppBarButton.Icon>
+                            <!--  Segoe Fluent Icons: List (EA37)  -->
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xEA37;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton Command="{x:Bind ViewModel.SwitchToDetailViewCommand}" Label="Tiles">
+                        <AppBarButton.Icon>
+                            <!--  Segoe Fluent Icons: Tiles (ECA5)  -->
+                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xECA5;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarSeparator />
                     <AppBarButton Icon="Setting" Label="Settings">
                         <AppBarButton.KeyboardAccelerators>
                             <KeyboardAccelerator Key="I" Modifiers="Control" />
