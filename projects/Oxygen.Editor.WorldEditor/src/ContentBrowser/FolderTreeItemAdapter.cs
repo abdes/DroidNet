@@ -16,7 +16,6 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// </summary>
 public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
 {
-    private readonly ContentBrowserState contentBrowserState;
     private readonly ILogger logger;
     private bool disposed;
 
@@ -26,14 +25,12 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     ///     Initializes a new instance of the <see cref="FolderTreeItemAdapter" /> class.
     /// </summary>
     /// <param name="logger">The logger to use for logging errors.</param>
-    /// <param name="contentBrowserState">The state of the content browser.</param>
     /// <param name="folder">The folder represented by this adapter.</param>
     /// <param name="label">The label for the folder.</param>
     /// <param name="isRoot">Indicates if this folder is the root folder.</param>
     /// <param name="isHidden">Indicates if this folder is hidden.</param>
     public FolderTreeItemAdapter(
         ILogger logger,
-        ContentBrowserState contentBrowserState,
         IFolder folder,
         string label,
         bool isRoot = false,
@@ -41,12 +38,8 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
         : base(isRoot, isHidden)
     {
         this.logger = logger;
-        this.contentBrowserState = contentBrowserState;
         this.Folder = folder;
         this.label = label;
-
-        // Initialize selection state from ContentBrowserState
-        this.IsSelected = contentBrowserState.ContainsSelectedFolder(folder);
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
@@ -110,7 +103,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
             try
             {
                 this.AddChildInternal(
-                    new FolderTreeItemAdapter(this.logger, this.contentBrowserState, child, child.Name)
+                    new FolderTreeItemAdapter(this.logger, child, child.Name)
                     {
                         // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
                         // To mark selected items specified in the ActiveRoute query params
@@ -136,19 +129,8 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
             this.OnPropertyChanged(nameof(this.IconGlyph));
         }
 
-        if (e.PropertyName?.Equals(nameof(this.IsSelected), StringComparison.Ordinal) == true)
-        {
-            // When tree selection changes, update the ContentBrowserState to reflect the new selection
-            // This is the tree control driving the data state, not the other way around
-            if (this.IsSelected)
-            {
-                this.contentBrowserState.AddSelectedFolder(this.Folder);
-            }
-            else
-            {
-                this.contentBrowserState.RemoveSelectedFolder(this.Folder);
-            }
-        }
+        // FolderTreeItemAdapter is now a pure tree item - it doesn't update any external state
+        // The ProjectLayoutViewModel will listen to tree selection changes and update ContentBrowserState
     }
 
     /// <summary>
@@ -159,6 +141,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     {
         if (!this.disposed && disposing)
         {
+            // No more event subscriptions to clean up
             this.disposed = true;
         }
     }
