@@ -96,7 +96,7 @@ public partial class AssetsViewModel(
         {
             // Update the scene explorer
             var scene = currentProject.Scenes.FirstOrDefault(scene =>
-                string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.Ordinal));
+                string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.OrdinalIgnoreCase));
             if (scene is not null)
             {
                 currentProject.ActiveScene = scene;
