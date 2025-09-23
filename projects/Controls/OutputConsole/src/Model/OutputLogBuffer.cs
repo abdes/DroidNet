@@ -66,7 +66,8 @@ public class OutputLogBuffer : ObservableCollection<OutputLogEntry>
 
     protected override void OnCollectionChanged(NotifyCollectionChangedEventArgs e)
     {
-        if (!_paused)
+        // Always notify Reset (e.g., Clear) even when paused so UIs can resync immediately.
+        if (!_paused || e.Action == NotifyCollectionChangedAction.Reset)
         {
             base.OnCollectionChanged(e);
         }

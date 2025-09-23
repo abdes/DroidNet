@@ -2,26 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls.OutputLog;
+using DroidNet.Controls.OutputConsole.Model;
 
 namespace Oxygen.Editor.WorldEditor.ViewModels;
 
 /// <summary>
-/// The ViewModel for managing and displaying logs in the application.
+///     The ViewModel for managing and displaying logs in the application.
 /// </summary>
 public class LogsViewModel
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="LogsViewModel"/> class.
-    /// </summary>
-    /// <param name="outputLogSink">The delegating sink for the output log.</param>
-    public LogsViewModel(DelegatingSink<RichTextBlockSink> outputLogSink)
+    public LogsViewModel(OutputLogBuffer buffer)
     {
-        this.OutputLogSink = outputLogSink;
+        this.Buffer = buffer;
     }
 
-    /// <summary>
-    /// Gets the delegating sink for the output log.
-    /// </summary>
-    public DelegatingSink<RichTextBlockSink> OutputLogSink { get; }
+    public OutputLogBuffer Buffer { get; }
 }
