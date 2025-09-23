@@ -3,30 +3,42 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Storage;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// Represents the ViewModel for the project layout in the content browser.
+///     Represents the ViewModel for the project layout in the content browser.
 /// </summary>
 /// <param name="projectManager">The project manager service.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
 /// <param name="loggerFactory">The logger factory to create loggers.</param>
-public partial class ProjectLayoutViewModel(IProjectManagerService projectManager, ContentBrowserState contentBrowserState, ILoggerFactory? loggerFactory)
-    : DynamicTreeViewModel, IRoutingAware
+public partial class ProjectLayoutViewModel(
+    IProjectManagerService projectManager,
+    ContentBrowserState contentBrowserState,
+    ILoggerFactory? loggerFactory)
+    : DynamicTreeViewModel, IRoutingAware, IDisposable
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
+                                      NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
 
-    private FolderTreeItemAdapter? projectRoot;
     private IActiveRoute? activeRoute;
 
-    /// <inheritdoc/>
+    private FolderTreeItemAdapter? projectRoot;
+
+    /// <summary>
+    ///     Disposes the resources used by the ProjectLayoutViewModel.
+    /// </summary>
+    public void Dispose() => this.projectRoot?.Dispose();
+
+    /// <inheritdoc />
     public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
@@ -51,9 +63,15 @@ public partial class ProjectLayoutViewModel(IProjectManagerService projectManage
                 }
             }
         }
+        else
+        {
+            // Default to project root selection if no folders are specified
+            _ = contentBrowserState.SelectedFolders.Add(string.Empty);
+        }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
     private async Task PreloadRecentTemplatesAsync()
     {
         try
@@ -62,15 +80,17 @@ public partial class ProjectLayoutViewModel(IProjectManagerService projectManage
             {
                 // The following method will do sanity checks on the current project and its info. On successful return, we have
                 // guarantee the project info is valid and has a valid location for the project root folder.
-                var projectInfo = this.GetCurrentProjectInfo() ?? throw new InvalidOperationException("Project Layout used with no CurrentProject");
+                var projectInfo = this.GetCurrentProjectInfo() ??
+                                  throw new InvalidOperationException("Project Layout used with no CurrentProject");
 
                 // Create the root TreeItem for the project root folder.
                 var storage = projectManager.GetCurrentProjectStorageProvider();
                 var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-                this.projectRoot = new FolderTreeItemAdapter(this.logger, contentBrowserState, folder, projectInfo.Name, isRoot: true)
-                {
-                    IsExpanded = true,
-                };
+                this.projectRoot =
+                    new FolderTreeItemAdapter(this.logger, contentBrowserState, folder, projectInfo.Name, true)
+                    {
+                        IsExpanded = true,
+                    };
             }
 
             // Preload the project folders
@@ -83,11 +103,12 @@ public partial class ProjectLayoutViewModel(IProjectManagerService projectManage
     }
 
     /// <summary>
-    /// Loads the project asynchronously, starting with the project root folder, and continuing with children that are part of the
-    /// initial selection set. The selection set can be provided via the navigation URL as query parameters.
+    ///     Loads the project asynchronously, starting with the project root folder, and continuing with children that are part
+    ///     of the
+    ///     initial selection set. The selection set can be provided via the navigation URL as query parameters.
     /// </summary>
     /// <returns>
-    /// A <see cref="Task" /> object representing the asynchronous work.
+    ///     A <see cref="Task" /> object representing the asynchronous work.
     /// </returns>
     [RelayCommand]
     private async Task LoadProjectAsync()
@@ -96,7 +117,7 @@ public partial class ProjectLayoutViewModel(IProjectManagerService projectManage
         Debug.Assert(this.activeRoute is not null, "should have an active route");
 
         // We will expand the entire project tree
-        await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
+        await this.InitializeRootAsync(this.projectRoot, false).ConfigureAwait(true);
     }
 
     private IProjectInfo? GetCurrentProjectInfo()
@@ -117,6 +138,68 @@ public partial class ProjectLayoutViewModel(IProjectManagerService projectManage
 #endif
 
         return projectInfo;
+    }
+
+    /// <summary>
+    ///     Navigates to and selects the specified folder in the tree.
+    ///     This is the entry point for programmatic navigation from other ViewModels.
+    /// </summary>
+    /// <param name="folder">The folder to navigate to and select.</param>
+    public async Task NavigateToFolderAsync(IFolder folder)
+    {
+        if (this.projectRoot == null)
+        {
+            return;
+        }
+
+        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+        var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot);
+        if (folderAdapter != null)
+        {
+            // Use the tree control's selection API to properly select the folder
+            this.ClearAndSelectItem(folderAdapter);
+            // The tree control will handle updating ContentBrowserState through FolderTreeItemAdapter
+        }
+    }
+
+    /// <summary>
+    /// Recursively finds a folder adapter by its relative path.
+    /// </summary>
+    /// <param name="currentAdapter">The current adapter to search from.</param>
+    /// <param name="targetPath">The target relative path to find.</param>
+    /// <returns>The folder adapter if found, null otherwise.</returns>
+    private async Task<FolderTreeItemAdapter?> FindFolderAdapterAsync(FolderTreeItemAdapter currentAdapter, string targetPath)
+    {
+        // Get the relative path of the current adapter
+        var currentPath = currentAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+
+        // Normalize paths for comparison (handle . for root)
+        if (currentPath == ".")
+        {
+            currentPath = "";
+        }
+        if (targetPath == ".")
+        {
+            targetPath = "";
+        }
+
+        if (string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return currentAdapter;
+        }
+
+        // Search in children
+        var children = await currentAdapter.Children;
+        foreach (var child in children.OfType<FolderTreeItemAdapter>())
+        {
+            var result = await this.FindFolderAdapterAsync(child, targetPath);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
     }
 
     [LoggerMessage(

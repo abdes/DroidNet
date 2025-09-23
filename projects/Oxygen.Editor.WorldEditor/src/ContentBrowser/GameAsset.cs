@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO;
+
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
@@ -25,6 +27,11 @@ public enum AssetType
     Mesh,
 
     /// <summary>
+    /// Represents a folder.
+    /// </summary>
+    Folder,
+
+    /// <summary>
     /// Represents an unknown asset type.
     /// </summary>
     Unknown,
@@ -45,6 +52,19 @@ public class GameAsset
         this.Name = name;
         this.Location = location;
         this.AssetType = GetAssetType(name);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GameAsset"/> class with a specified asset type.
+    /// </summary>
+    /// <param name="name">The name of the asset.</param>
+    /// <param name="location">The path, relative to the project root, where the asset is located.</param>
+    /// <param name="assetType">The type of the asset.</param>
+    public GameAsset(string name, string location, AssetType assetType)
+    {
+        this.Name = name;
+        this.Location = location;
+        this.AssetType = assetType;
     }
 
     /// <summary>

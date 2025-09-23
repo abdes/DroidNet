@@ -42,6 +42,7 @@
                                 <MenuFlyoutItem
                                     x:Name="NewFile"
                                     AccessKey="F"
+                                    Command="{x:Bind ViewModel.CreateNewSceneWithPromptCommand}"
                                     Text="Scene">
                                     <MenuFlyoutItem.Icon>
                                         <FontIcon Glyph="&#xE7C3;" />

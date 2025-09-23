@@ -12,18 +12,18 @@ using Oxygen.Editor.Storage;
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// Represents a folder item in the content browser's tree structure.
+///     Represents a folder item in the content browser's tree structure.
 /// </summary>
-public partial class FolderTreeItemAdapter : TreeItemAdapter
+public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
 {
-    private readonly ILogger logger;
     private readonly ContentBrowserState contentBrowserState;
-    private readonly IFolder folder;
+    private readonly ILogger logger;
+    private bool disposed;
 
     private string label;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FolderTreeItemAdapter"/> class.
+    ///     Initializes a new instance of the <see cref="FolderTreeItemAdapter" /> class.
     /// </summary>
     /// <param name="logger">The logger to use for logging errors.</param>
     /// <param name="contentBrowserState">The state of the content browser.</param>
@@ -42,15 +42,16 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
     {
         this.logger = logger;
         this.contentBrowserState = contentBrowserState;
-        this.folder = folder;
+        this.Folder = folder;
         this.label = label;
 
-        this.RestoreFromContentBrowserState();
+        // Initialize selection state from ContentBrowserState
+        this.IsSelected = contentBrowserState.ContainsSelectedFolder(folder);
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string Label
     {
         get => this.IsRoot ? $"{this.label} (Project Root)" : this.label;
@@ -67,14 +68,28 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
     }
 
     /// <summary>
-    /// Gets the icon glyph for the folder.
+    ///     Gets the icon glyph for the folder.
     /// </summary>
     public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
 
-    /// <inheritdoc/>
+    /// <summary>
+    ///     Gets the folder represented by this adapter.
+    /// </summary>
+    public IFolder Folder { get; }
+
+    /// <summary>
+    ///     Disposes the resources used by the <see cref="FolderTreeItemAdapter" />.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override int DoGetChildrenCount()
     {
         Debug.Fail("should never be called");
@@ -86,10 +101,11 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         return 1;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override async Task LoadChildren()
     {
-        await foreach (var child in this.folder.GetFoldersAsync().ConfigureAwait(true).ConfigureAwait(false).ConfigureAwait(false))
+        await foreach (var child in this.Folder.GetFoldersAsync().ConfigureAwait(true).ConfigureAwait(false)
+                           .ConfigureAwait(false))
         {
             try
             {
@@ -105,13 +121,13 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
             catch (Exception ex)
             {
                 // Log the failure, but continue with the rest
-                this.CouldNotLoadProjectFolders(this.folder.Location, ex.Message);
+                this.CouldNotLoadProjectFolders(this.Folder.Location, ex.Message);
             }
 #pragma warning restore CA1031
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
@@ -122,19 +138,30 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
 
         if (e.PropertyName?.Equals(nameof(this.IsSelected), StringComparison.Ordinal) == true)
         {
+            // When tree selection changes, update the ContentBrowserState to reflect the new selection
+            // This is the tree control driving the data state, not the other way around
             if (this.IsSelected)
             {
-                this.contentBrowserState.AddSelectedFolder(this.folder);
+                this.contentBrowserState.AddSelectedFolder(this.Folder);
             }
             else
             {
-                this.contentBrowserState.RemoveSelectedFolder(this.folder);
+                this.contentBrowserState.RemoveSelectedFolder(this.Folder);
             }
         }
     }
 
-    private void RestoreFromContentBrowserState()
-        => this.IsSelected = this.contentBrowserState.ContainsSelectedFolder(this.folder);
+    /// <summary>
+    ///     Disposes the resources used by the <see cref="FolderTreeItemAdapter" />.
+    /// </summary>
+    /// <param name="disposing">A value indicating whether the method is called from Dispose.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed && disposing)
+        {
+            this.disposed = true;
+        }
+    }
 
     [LoggerMessage(
         Level = LogLevel.Error,

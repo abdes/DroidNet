@@ -138,6 +138,87 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<Scene?> CreateSceneAsync(string sceneName)
+    {
+        if (this.CurrentProject is null)
+        {
+            this.CouldNotCreateScene(sceneName, "No current project is loaded");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(sceneName))
+        {
+            this.CouldNotCreateScene(sceneName, "Scene name cannot be null or empty");
+            return null;
+        }
+
+        // Check if scene already exists
+        if (this.CurrentProject.Scenes.Any(s => string.Equals(s.Name, sceneName, StringComparison.OrdinalIgnoreCase)))
+        {
+            this.CouldNotCreateScene(sceneName, "A scene with this name already exists");
+            return null;
+        }
+
+        try
+        {
+            // Create new scene object
+            var newScene = new Scene(this.CurrentProject) { Name = sceneName };
+
+            // Save the scene to storage
+            if (!await this.SaveSceneAsync(newScene).ConfigureAwait(true))
+            {
+                return null;
+            }
+
+            // Add to project's scenes collection
+            this.CurrentProject.Scenes.Add(newScene);
+
+            return newScene;
+        }
+        catch (Exception ex)
+        {
+            this.CouldNotCreateScene(sceneName, ex.Message);
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SaveSceneAsync(Scene scene)
+    {
+        if (scene.Project.ProjectInfo.Location is null)
+        {
+            this.CouldNotSaveScene(scene.Name, "Project location is null");
+            return false;
+        }
+
+        try
+        {
+            // Ensure the Scenes folder exists
+            var projectFolder = await storage.GetFolderFromPathAsync(scene.Project.ProjectInfo.Location).ConfigureAwait(true);
+            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+            if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
+            {
+                await scenesFolder.CreateAsync().ConfigureAwait(true);
+            }
+
+            // Create or get the scene file
+            var sceneFileName = scene.Name + Constants.SceneFileExtension;
+            var sceneFile = await scenesFolder.GetDocumentAsync(sceneFileName).ConfigureAwait(true);
+
+            // Serialize and save the scene
+            var sceneJson = Scene.ToJson(scene);
+            await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            this.CouldNotSaveScene(scene.Name, ex.Message);
+            return false;
+        }
+    }
+
     private async Task LoadProjectScenesAsync(Project project)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
@@ -225,4 +306,14 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Level = LogLevel.Error,
         Message = "Could not load scene from `{location}`; {error}")]
     partial void CouldNotLoadSceneEntities(string location, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not create scene `{sceneName}`; {error}")]
+    partial void CouldNotCreateScene(string sceneName, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not save scene `{sceneName}`; {error}")]
+    partial void CouldNotSaveScene(string sceneName, string error);
 }

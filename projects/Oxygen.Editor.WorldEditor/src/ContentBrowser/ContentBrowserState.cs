@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 
@@ -9,9 +10,15 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// Represents the state of the content browser, including selected folders and the project root path.
+/// This is a passive data holder that is updated by ViewModels.
 /// </summary>
-public sealed class ContentBrowserState(IProject currentProject)
+public sealed class ContentBrowserState(IProject currentProject) : INotifyPropertyChanged
 {
+    /// <summary>
+    /// Occurs when a property changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets the set of selected folders.
     /// </summary>
@@ -24,22 +31,56 @@ public sealed class ContentBrowserState(IProject currentProject)
 
     /// <summary>
     /// Adds a folder to the set of selected folders.
+    /// This is a passive operation - no events are fired.
     /// </summary>
     /// <param name="folder">The folder to add.</param>
     public void AddSelectedFolder(IFolder folder)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        _ = this.SelectedFolders.Add(pathRelativeToProjectRoot);
+        if (this.SelectedFolders.Add(pathRelativeToProjectRoot))
+        {
+            this.OnPropertyChanged(nameof(this.SelectedFolders));
+        }
     }
 
     /// <summary>
     /// Removes a folder from the set of selected folders.
+    /// This is a passive operation - no events are fired.
     /// </summary>
     /// <param name="folder">The folder to remove.</param>
     public void RemoveSelectedFolder(IFolder folder)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        _ = this.SelectedFolders.Remove(pathRelativeToProjectRoot);
+        if (this.SelectedFolders.Remove(pathRelativeToProjectRoot))
+        {
+            this.OnPropertyChanged(nameof(this.SelectedFolders));
+        }
+    }
+
+    /// <summary>
+    /// Sets the selected folders to contain only the specified folder.
+    /// This is a passive operation - no events are fired.
+    /// </summary>
+    /// <param name="folder">The folder to select.</param>
+    public void SetSelectedFolder(IFolder folder)
+    {
+        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
+        this.SelectedFolders.Clear();
+        this.SelectedFolders.Add(pathRelativeToProjectRoot);
+        this.OnPropertyChanged(nameof(this.SelectedFolders));
+    }
+
+    /// <summary>
+    /// Clears all selected folders.
+    /// This is a passive operation - no events are fired.
+    /// </summary>
+    public void ClearSelection()
+    {
+        if (this.SelectedFolders.Count > 0)
+        {
+            this.SelectedFolders.Clear();
+            this.OnPropertyChanged(nameof(this.SelectedFolders));
+        }
     }
 
     /// <summary>
@@ -51,5 +92,10 @@ public sealed class ContentBrowserState(IProject currentProject)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
         return this.SelectedFolders.Contains(pathRelativeToProjectRoot);
+    }
+
+    private void OnPropertyChanged(string propertyName)
+    {
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
