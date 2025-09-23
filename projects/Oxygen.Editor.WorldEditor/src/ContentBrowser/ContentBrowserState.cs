@@ -84,6 +84,20 @@ public sealed class ContentBrowserState(IProject currentProject) : INotifyProper
     }
 
     /// <summary>
+    /// Sets the selected folders to the specified collection of relative paths.
+    /// </summary>
+    /// <param name="relativePaths">The relative paths to set as selected.</param>
+    public void SetSelectedFolders(IEnumerable<string> relativePaths)
+    {
+        this.SelectedFolders.Clear();
+        foreach (var path in relativePaths)
+        {
+            this.SelectedFolders.Add(path);
+        }
+        this.OnPropertyChanged(nameof(this.SelectedFolders));
+    }
+
+    /// <summary>
     /// Checks if a folder is in the set of selected folders.
     /// </summary>
     /// <param name="folder">The folder to check.</param>

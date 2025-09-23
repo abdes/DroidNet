@@ -30,6 +30,7 @@ public partial class AssetsViewModel(
     ProjectLayoutViewModel projectLayoutViewModel) : AbstractOutletContainer, IRoutingAware, IDisposable
 {
     private bool disposed;
+    private bool isInitialized;
 
     /// <summary>
     ///     Gets the layout view model.
@@ -42,7 +43,7 @@ public partial class AssetsViewModel(
     public ViewModelToView VmToViewConverter { get; } = vmToViewConverter;
 
     /// <inheritdoc />
-    public void Dispose()
+    public new void Dispose()
     {
         this.Dispose(true);
         GC.SuppressFinalize(this);
@@ -51,17 +52,23 @@ public partial class AssetsViewModel(
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        this.Outlets.Add("right", (nameof(this.LayoutViewModel), null));
+        // One-time initialization for singleton
+        if (!this.isInitialized)
+        {
+            this.Outlets.Add("right", (nameof(this.LayoutViewModel), null));
 
-        this.PropertyChanging += this.OnLayoutViewModelChanging;
-        this.PropertyChanged += this.OnLayoutViewModelChanged;
+            this.PropertyChanging += this.OnLayoutViewModelChanging;
+            this.PropertyChanged += this.OnLayoutViewModelChanged;
 
-        // Listen for changes to ContentBrowserState selection via PropertyChanged
-        contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
+            // Listen for changes to ContentBrowserState selection via PropertyChanged
+            contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-        await assetsIndexingService.IndexAssetsAsync().ConfigureAwait(true);
+            await assetsIndexingService.IndexAssetsAsync().ConfigureAwait(true);
 
-        // Trigger initial refresh based on current selection
+            this.isInitialized = true;
+        }
+
+        // Actions that should happen on every navigation
         await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
     }
 
@@ -112,12 +119,16 @@ public partial class AssetsViewModel(
             var storageProvider = projectManagerService.GetCurrentProjectStorageProvider();
             var folder = await storageProvider.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
 
-            // Use ProjectLayoutViewModel to navigate, which will update the tree selection
-            // and trigger the proper data flow
-            await projectLayoutViewModel.NavigateToFolderAsync(folder);
-
             var relativePath = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-            Debug.WriteLine($"[AssetsViewModel] Requested navigation to folder: {relativePath}");
+            Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {relativePath}");
+
+            // Update ContentBrowserState directly - this will trigger:
+            // 1. ProjectLayoutViewModel to update tree selection via OnContentBrowserStatePropertyChanged
+            // 2. AssetsViewModel to refresh via OnContentBrowserStatePropertyChanged
+            // 3. Router URL update via ProjectLayoutViewModel.UpdateRouterUrl
+            contentBrowserState.SetSelectedFolders([relativePath]);
+
+            Debug.WriteLine($"[AssetsViewModel] ContentBrowserState updated with selected folder: {relativePath}");
         }
         catch (Exception ex)
         {
@@ -199,7 +210,7 @@ public partial class AssetsViewModel(
     ///     true to release both managed and unmanaged resources; false to release only unmanaged
     ///     resources.
     /// </param>
-    protected virtual void Dispose(bool disposing)
+    protected new virtual void Dispose(bool disposing)
     {
         if (!this.disposed)
         {

@@ -60,6 +60,13 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
     {
         this.Assets.Clear();
 
+        // Only load assets if there are selected folders
+        if (contentBrowserState.SelectedFolders.Count == 0)
+        {
+            // No selection = no assets to display
+            return;
+        }
+
         // Check if project root is selected (empty path means root)
         var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty);
 

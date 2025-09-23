@@ -5,6 +5,7 @@
 using DroidNet.Controls.OutputLog.Theming;
 using Serilog.Core;
 using Serilog.Events;
+using System.Collections.Concurrent;
 
 namespace DroidNet.Controls.OutputLog;
 
@@ -43,10 +44,30 @@ public class DelegatingSink<T>(
     ThemeId? theme) : ILogEventSink
     where T : ILogEventSink
 {
+    private const int MaxBufferedEvents = 1000;
+    private readonly ConcurrentQueue<LogEvent> buffer = new();
+    private T? delegateSink;
+
     /// <summary>
     /// Gets or sets the delegate sink to forward log events to.
     /// </summary>
-    public T? DelegateSink { get; set; }
+    public T? DelegateSink
+    {
+        get => this.delegateSink;
+        set
+        {
+            this.delegateSink = value;
+
+            // When a sink attaches (e.g., the view becomes active), flush buffered events
+            if (this.delegateSink is not null)
+            {
+                while (this.buffer.TryDequeue(out var evt))
+                {
+                    this.delegateSink.Emit(evt);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the output template to format log events.
@@ -72,5 +93,26 @@ public class DelegatingSink<T>(
     /// This method forwards the log event to the delegate sink, if it is set.
     /// </para>
     /// </remarks>
-    public void Emit(LogEvent logEvent) => this.DelegateSink?.Emit(logEvent);
+    public void Emit(LogEvent logEvent)
+    {
+        var sink = this.delegateSink;
+        if (sink is not null)
+        {
+            // If we have pending items (race), flush them first to preserve order
+            while (this.buffer.TryDequeue(out var pending))
+            {
+                sink.Emit(pending);
+            }
+
+            sink.Emit(logEvent);
+            return;
+        }
+
+        // No live sink attached yet — buffer the event (bounded)
+        this.buffer.Enqueue(logEvent);
+        while (this.buffer.Count > MaxBufferedEvents && this.buffer.TryDequeue(out _))
+        {
+            // drop oldest to keep memory bounded
+        }
+    }
 }

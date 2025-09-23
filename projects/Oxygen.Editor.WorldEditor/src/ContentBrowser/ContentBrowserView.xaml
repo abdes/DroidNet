@@ -38,11 +38,15 @@
                 Orientation="Horizontal">
 
                 <AppBarButton
+                    Command="{x:Bind ViewModel.GoBackCommand}"
                     Icon="Back"
+                    IsEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
                     Label="Back"
                     LabelPosition="Collapsed" />
                 <AppBarButton
+                    Command="{x:Bind ViewModel.GoForwardCommand}"
                     Icon="Forward"
+                    IsEnabled="{x:Bind ViewModel.CanGoForward, Mode=OneWay}"
                     Label="Forward"
                     LabelPosition="Collapsed" />
                 <AppBarButton
