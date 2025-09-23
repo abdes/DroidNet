@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ContentBrowserView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -50,7 +50,9 @@
                     Label="Forward"
                     LabelPosition="Collapsed" />
                 <AppBarButton
+                    Command="{x:Bind ViewModel.GoUpCommand}"
                     Icon="Up"
+                    IsEnabled="{x:Bind ViewModel.CanGoUp, Mode=OneWay}"
                     Label="Up"
                     LabelPosition="Collapsed" />
                 <AppBarButton

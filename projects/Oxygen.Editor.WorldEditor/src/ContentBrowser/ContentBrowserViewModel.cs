@@ -5,6 +5,7 @@
 using System.Reactive.Linq;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Mvvm.Converters;
@@ -98,6 +99,12 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     [ObservableProperty]
     private bool canGoForward;
 
+    /// <summary>
+    /// Gets a value indicating whether navigating up is possible.
+    /// </summary>
+    [ObservableProperty]
+    private bool canGoUp;
+
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -149,6 +156,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
             // Do NOT add to history here; NavigationEnd handler will record it once
 
             this.isInitialized = true;
+
+            // Initialize Up button state
+            this.UpdateUpButtonState();
         }
 
         // Actions that should happen on every navigation (if any)
@@ -166,6 +176,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
 
             // Only update history, don't trigger router navigation
             this.UpdateHistoryForStateChange(currentUrl);
+
+            // Update the Up button state based on selection
+            this.UpdateUpButtonState();
         }
     }
 
@@ -275,6 +288,9 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         // Notify the commands that their CanExecute state may have changed
         this.GoBackCommand.NotifyCanExecuteChanged();
         this.GoForwardCommand.NotifyCanExecuteChanged();
+
+        // Up button depends on current selection, update it too
+        this.UpdateUpButtonState();
     }
 
     /// <summary>
@@ -357,6 +373,98 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// Navigates to the parent of the currently selected folder in the project tree.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanGoUp))]
+    private async Task GoUpAsync()
+    {
+        if (this.localRouter is null)
+        {
+            return;
+        }
+
+        var state = this.childContainer?.Resolve<ContentBrowserState>();
+        var current = this.GetPrimarySelectedFolder(state);
+
+        // If no current selection, nothing to do
+        if (string.IsNullOrEmpty(current))
+        {
+            return;
+        }
+
+        var parent = GetParentRelativePath(current);
+
+        // If parent is null, we're already at root (no action)
+        if (parent is null)
+        {
+            return;
+        }
+
+        var url = "/(left:project//right:assets/list)";
+        if (parent.Length > 0)
+        {
+            url += $"?selected={Uri.EscapeDataString(parent)}";
+        }
+        else
+        {
+            // Parent is the project root; represent it explicitly as selected=.
+            url += "?selected=.";
+        }
+
+        Debug.WriteLine($"[Navigation] GoUp to: {url} (from '{current}')");
+        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+    }
+
+    private void UpdateUpButtonState()
+    {
+        var state = this.childContainer?.Resolve<ContentBrowserState>();
+        var current = this.GetPrimarySelectedFolder(state);
+        var parent = current is not null ? GetParentRelativePath(current) : null;
+
+        var old = this.CanGoUp;
+        this.CanGoUp = parent is not null;
+        if (old != this.CanGoUp)
+        {
+            Debug.WriteLine($"[Navigation] CanGoUp updated: {this.CanGoUp} (was {old}), current='{current}', parent='{parent}'");
+        }
+
+        this.GoUpCommand.NotifyCanExecuteChanged();
+    }
+
+    private string? GetPrimarySelectedFolder(ContentBrowserState? state)
+    {
+        if (state is null || state.SelectedFolders.Count == 0)
+        {
+            return null;
+        }
+
+        // Choose a deterministic primary folder when multiple are selected: the first in ordinal order
+        return state.SelectedFolders.OrderBy(f => f, StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    private static string? GetParentRelativePath(string? relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath) || relativePath == ".")
+        {
+            return null; // No parent above root
+        }
+
+        // Handle both Windows and URL style separators
+        var idx = relativePath.LastIndexOfAny(new[] { '\\', '/' });
+        if (idx < 0)
+        {
+            return string.Empty; // Parent is project root
+        }
+
+        if (idx == 0)
+        {
+            return string.Empty;
+        }
+
+        return relativePath.Substring(0, idx);
     }
 
     [LoggerMessage(
