@@ -4,6 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
@@ -19,5 +20,16 @@ public sealed partial class ContentBrowserView : UserControl
     public ContentBrowserView()
     {
         this.InitializeComponent();
+    }
+
+    private async void BreadcrumbBar_ItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args)
+    {
+        // Get index of clicked item from the BreadcrumbBar
+        var items = sender.ItemsSource as System.Collections.IList;
+        var index = items?.IndexOf(args.Item) ?? -1;
+        if (index >= 0 && this.ViewModel is ContentBrowserViewModel vm)
+        {
+            await vm.NavigateToBreadcrumbAsync(index);
+        }
     }
 }

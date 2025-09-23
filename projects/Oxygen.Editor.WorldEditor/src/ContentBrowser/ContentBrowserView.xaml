@@ -64,10 +64,24 @@
 
             <Border
                 Grid.Column="1"
-                Height="32"
-                BorderBrush="Beige"
-                BorderThickness="1">
-                <BreadcrumbBar />
+                MinHeight="32"
+                Margin="4,0,8,0"
+                Padding="6,2"
+                VerticalAlignment="Center"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <BreadcrumbBar
+                    x:Name="Breadcrumbs"
+                    ItemClicked="BreadcrumbBar_ItemClicked"
+                    ItemsSource="{x:Bind ViewModel.Breadcrumbs, Mode=OneWay}">
+                    <BreadcrumbBar.ItemTemplate>
+                        <DataTemplate xmlns:viewModels="using:Oxygen.Editor.WorldEditor.ContentBrowser" x:DataType="viewModels:BreadcrumbEntry">
+                            <TextBlock Text="{x:Bind Label}" />
+                        </DataTemplate>
+                    </BreadcrumbBar.ItemTemplate>
+                </BreadcrumbBar>
             </Border>
 
             <Grid Grid.Column="2" HorizontalAlignment="Stretch">
