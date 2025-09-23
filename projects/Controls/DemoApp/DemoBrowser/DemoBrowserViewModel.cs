@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.OutputLog;
+using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -55,6 +56,7 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     [
         new("in-place", "In-Place Edit", typeof(InPlaceEditDemoViewModel)),
         new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
+        new("output-console", "Output Console", typeof(OutputConsoleDemoViewModel)),
         new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),
     ];
 

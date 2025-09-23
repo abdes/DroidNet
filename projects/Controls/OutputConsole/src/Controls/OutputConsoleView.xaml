@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="DroidNet.Controls.OutputConsole.OutputConsoleView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:DroidNet.Controls.OutputConsole"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:Name="Root"
+    mc:Ignorable="d">
+
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator Key="F3" Invoked="OnFindNextAccelerator" />
+        <KeyboardAccelerator
+            Key="F3"
+            Invoked="OnFindPrevAccelerator"
+            Modifiers="Shift" />
+        <KeyboardAccelerator
+            Key="F"
+            Invoked="OnFocusSearchAccelerator"
+            Modifiers="Control" />
+    </UserControl.KeyboardAccelerators>
+
+    <Grid>
+        <Grid.Resources>
+            <local:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+            <local:BoolToTextWrappingConverter x:Key="BoolToWrap" />
+            <local:TimestampToStringConverter x:Key="TsFmt" />
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Toolbar  -->
+        <CommandBar DefaultLabelPosition="Right" IsDynamicOverflowEnabled="False">
+            <AppBarToggleButton
+                x:Name="PauseToggle"
+                Icon="Pause"
+                Label="Pause" />
+            <AppBarToggleButton
+                x:Name="FollowTailToggle"
+                Icon="Play"
+                IsChecked="True"
+                Label="Follow" />
+            <AppBarButton
+                x:Name="ClearButton"
+                Icon="Delete"
+                Label="Clear" />
+            <AppBarSeparator />
+            <AppBarToggleButton x:Name="WrapToggle" Label="Wrap">
+                <AppBarToggleButton.Icon>
+                    <SymbolIcon Symbol="AlignLeft" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarToggleButton
+                x:Name="ShowTimestampsToggle"
+                Icon="Clock"
+                Label="Timestamps" />
+            <CommandBar.Content>
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <DropDownButton x:Name="LevelsDropDown" Content="Levels">
+                        <DropDownButton.Flyout>
+                            <MenuFlyout>
+                                <ToggleMenuFlyoutItem x:Name="LevelVerboseItem" Text="Verbose" />
+                                <ToggleMenuFlyoutItem x:Name="LevelDebugItem" Text="Debug" />
+                                <ToggleMenuFlyoutItem x:Name="LevelInformationItem" Text="Information" />
+                                <ToggleMenuFlyoutItem x:Name="LevelWarningItem" Text="Warning" />
+                                <ToggleMenuFlyoutItem x:Name="LevelErrorItem" Text="Error" />
+                                <ToggleMenuFlyoutItem x:Name="LevelFatalItem" Text="Fatal" />
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <AutoSuggestBox
+                        x:Name="SearchBox"
+                        MinWidth="220"
+                        PlaceholderText="Filter text..."
+                        QueryIcon="Find" />
+                </StackPanel>
+            </CommandBar.Content>
+        </CommandBar>
+
+        <!--  Virtualized list  -->
+        <ListView
+            x:Name="List"
+            Grid.Row="1"
+            FontFamily="Consolas"
+            IsItemClickEnabled="False"
+            SelectedItem="{Binding SelectedItem, ElementName=Root, Mode=TwoWay}"
+            SelectionMode="Extended">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Padding" Value="4,0,4,0" />
+                    <Setter Property="MinHeight" Value="20" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemContainerTransitions>
+                <TransitionCollection />
+            </ListView.ItemContainerTransitions>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="TimestampBlock"
+                            Grid.Column="0"
+                            Margin="0,0,12,0"
+                            FontFamily="Consolas"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="{Binding Timestamp, Converter={StaticResource TsFmt}, ConverterParameter=HH:mm:ss.fff}"
+                            Visibility="Collapsed" />
+                        <TextBlock
+                            x:Name="MessageBlock"
+                            Grid.Column="1"
+                            FontFamily="Consolas"
+                            TextWrapping="NoWrap">
+                            <Run Text="{Binding Message}" />
+                        </TextBlock>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>

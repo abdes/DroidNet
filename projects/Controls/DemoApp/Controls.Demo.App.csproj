@@ -2,6 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <RootNamespace>$(RootNameSpace).Controls.Demo</RootNamespace>
         <AssemblyName>DroidNet.Controls.Demo</AssemblyName>
 
@@ -15,6 +17,10 @@
     <!--These project properties will be included in the generated AssemblyInfo -->
     <PropertyGroup>
         <Product>DroidNet Controls Demo</Product>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     </PropertyGroup>
 
     <ItemGroup>
@@ -32,13 +38,14 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
             <Private>True</Private>
         </ProjectReference>
 
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
+    <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
+    <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
 
         <!--
         For source generator (or analyzer) projects, you need to tweak the project reference element so it works as
@@ -48,8 +55,8 @@
          - ReferenceOutputAssembly="false" tells the project not to reference the source generator project's dll.
         -->
 
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be

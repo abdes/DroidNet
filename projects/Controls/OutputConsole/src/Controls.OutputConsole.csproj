@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+    <RootNamespace>DroidNet.Controls.OutputConsole</RootNamespace>
+    <UseWinUI>true</UseWinUI>
+
+    <Title>OutputConsole Control</Title>
+    <Description>A high-performance, virtualized output console control for WinUI 3. Supports channels, level/text/regex filters, search and navigation, bookmarks, scroll lock/follow tail, retention via ring buffer, export, and clickable links.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>winui;controls;logging;console;virtualized;logview;channels;search</PackageTags>
+    <PackageReleaseNotes>Initial preview.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="DryIoc.dll" />
+    <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
+    <PackageReference Include="Serilog.Expressions" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.Debug" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+  </ItemGroup>
+</Project>
