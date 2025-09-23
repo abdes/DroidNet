@@ -9,6 +9,7 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 

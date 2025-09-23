@@ -7,7 +7,7 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.Messages;
 
-internal class EntitySeletionRequestMessage : RequestMessage<IList<SceneNode>>
+internal class SceneNodeSelectionRequestMessage : RequestMessage<IList<SceneNode>>
 {
     public IList<SceneNode> SelectedEntities => this.Response;
 }

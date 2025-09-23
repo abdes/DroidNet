@@ -3,17 +3,18 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
+using Oxygen.Editor.WorldEditor.ContentBrowser;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
-/// The View for the Project Layout pane in the <see cref="ContentBrowserView" />.
+///     The View for the Project Layout pane in the <see cref="ContentBrowserView" />.
 /// </summary>
 [ViewModel(typeof(ProjectLayoutViewModel))]
 public sealed partial class ProjectLayoutView
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectLayoutView"/> class.
+    ///     Initializes a new instance of the <see cref="ProjectLayoutView" /> class.
     /// </summary>
     public ProjectLayoutView()
     {

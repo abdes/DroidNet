@@ -21,11 +21,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 
 /// <summary>
-///     The ViewModel for the <see cref="SceneExplorerView" /> view.
+///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.
 /// </summary>
 public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRoutingAware, IDisposable
 {
@@ -36,7 +37,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     private readonly IProjectManagerService projectManager;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RemoveSelectedItemsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
     private bool hasUnlockedSelectedItems;
 
     private bool isDisposed;
@@ -72,7 +73,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemAdded += this.OnItemAdded;
 
-        messenger.Register<EntitySeletionRequestMessage>(this, this.OnEntitySeletionRequested);
+        messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
     }
 
     /// <summary>
@@ -143,7 +144,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     }
 
     /// <inheritdoc />
-    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
+    [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
         UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
@@ -243,7 +244,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.LogItemRemoved(args.TreeItem.Label);
     }
 
-    private void OnEntitySeletionRequested(object recipient, EntitySeletionRequestMessage message)
+    private void OnSceneNodeSelectionRequested(object recipient, SceneNodeSelectionRequestMessage message)
     {
         switch (this.SelectionModel)
         {
@@ -277,7 +278,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.HasUnlockedSelectedItems = this.SelectionModel?.SelectedItem?.IsLocked == false;
 
         _ = this.messenger.Send(
-            new EntitySelectionChangedMessage(
+            new SceneNodeSelectionChangedMessage(
                 this.SelectionModel?.SelectedItem is not SceneNodeAdapter adapter
                     ? []
                     : [adapter.AttachedObject]));
@@ -309,7 +310,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
             .Where(item => item is SceneNodeAdapter)
             .Select(adapter => ((SceneNodeAdapter)adapter).AttachedObject)
             .ToList();
-        _ = this.messenger.Send(new EntitySelectionChangedMessage(selection));
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(selection));
     }
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)

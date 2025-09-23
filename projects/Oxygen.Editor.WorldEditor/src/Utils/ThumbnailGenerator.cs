@@ -7,20 +7,21 @@ using System.Security.Cryptography;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.WorldEditor.Utils;
 
 /// <summary>
-/// Provides methods for generating thumbnails for entities in the project explorer.
+///     Provides methods for generating thumbnails for entities in the project explorer.
 /// </summary>
 public static class ThumbnailGenerator
 {
     /// <summary>
-    /// Generates a random image with the specified width and height.
+    ///     Generates a random image with the specified width and height.
     /// </summary>
     /// <param name="width">The width of the image.</param>
     /// <param name="height">The height of the image.</param>
-    /// <returns>A <see cref="WriteableBitmap"/> containing the generated image.</returns>
+    /// <returns>A <see cref="WriteableBitmap" /> containing the generated image.</returns>
     public static WriteableBitmap GenerateRandomImage(int width, int height)
     {
         var bitmap = new WriteableBitmap(width, height);
@@ -41,10 +42,10 @@ public static class ThumbnailGenerator
     }
 
     /// <summary>
-    /// Gets the thumbnail symbol for the specified entity.
+    ///     Gets the thumbnail symbol for the specified entity.
     /// </summary>
     /// <param name="adapter">The tree item adapter representing the entity.</param>
-    /// <returns>A <see cref="Symbol"/> representing the thumbnail for the entity.</returns>
+    /// <returns>A <see cref="Symbol" /> representing the thumbnail for the entity.</returns>
     public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
         => adapter is SceneNodeAdapter entityAdapter
            && entityAdapter.AttachedObject.Name.EndsWith('1')

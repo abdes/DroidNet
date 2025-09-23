@@ -7,11 +7,12 @@ using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.ViewModels;
 using Oxygen.Editor.WorldEditor.Views;
+using SceneExplorerView = Oxygen.Editor.WorldEditor.SceneExplorer.SceneExplorerView;
+using SceneExplorerViewModel = Oxygen.Editor.WorldEditor.SceneExplorer.SceneExplorerViewModel;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
@@ -48,8 +49,8 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                 new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(RendererViewModel) },
                 new Route
                 {
-                    Outlet = "pe",
-                    Path = "pe",
+                    Outlet = "se",
+                    Path = "se",
                     MatchMethod = PathMatch.Full,
                     ViewModelType = typeof(SceneExplorerViewModel),
                 },
@@ -90,7 +91,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
         childContainer.Register<LogsViewModel>(Reuse.Singleton);
-        childContainer.Register<LogsView>(Reuse.Singleton);
+        childContainer.Register<LogsView>(Reuse.Transient);
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
@@ -101,5 +102,5 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//pe:pe;right;w=300//props:props;bottom=pe//cb:cb;bottom;h=300//log:log;with=cb)");
+            "/(renderer:dx//se:se;right;w=300//props:props;bottom=se//cb:cb;bottom;h=300//log:log;with=cb)");
 }
