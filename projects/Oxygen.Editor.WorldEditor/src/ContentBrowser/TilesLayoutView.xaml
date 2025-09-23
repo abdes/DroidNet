@@ -9,24 +9,50 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <!--  ImageTextTemplate:  -->
+        <!--  Converters for icon glyphs and per-asset-type brushes  -->
+        <local:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <local:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
+
+        <!--  Tile template: card with icon area, colored separator line, and details area  -->
         <DataTemplate x:Key="GameAssetTemplate" x:DataType="local:GameAsset">
-            <Grid Width="280">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <SymbolIcon
-                    Height="100"
-                    VerticalAlignment="Top"
-                    Symbol="Folder" />
-                <StackPanel Grid.Column="1" Margin="8,0,0,8">
-                    <TextBlock
-                        Margin="0,0,0,8"
-                        Style="{ThemeResource SubtitleTextBlockStyle}"
-                        Text="{x:Bind Name}" />
-                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind AssetType}" />
-                </StackPanel>
+            <Grid Width="180">
+                <Border CornerRadius="8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="140" />
+                            <RowDefinition Height="2" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!--  Top preview/icon area  -->
+                        <Grid Grid.Row="0">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="48"
+                                Glyph="{x:Bind AssetType, Converter={StaticResource AssetTypeToIconConverter}}" />
+                        </Grid>
+
+                        <!--  Colored separator line per asset type  -->
+                        <Border
+                            Grid.Row="1"
+                            Height="2"
+                            Background="{x:Bind AssetType, Converter={StaticResource AssetTypeToBrushConverter}}" />
+
+                        <!--  Details  -->
+                        <StackPanel Grid.Row="2" Padding="12,8,12,12">
+                            <TextBlock
+                                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Name}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Margin="0,2,0,0"
+                                Opacity="0.8"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind AssetType}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -39,6 +65,12 @@
             ItemTemplate="{StaticResource GameAssetTemplate}"
             ItemsSource="{x:Bind ViewModel.Assets}"
             PointerPressed="GridView_PointerPressed"
-            SelectionMode="Single" />
+            SelectionMode="Single">
+            <GridView.ItemContainerStyle>
+                <Style TargetType="GridViewItem">
+                    <Setter Property="Margin" Value="8" />
+                </Style>
+            </GridView.ItemContainerStyle>
+        </GridView>
     </Grid>
 </UserControl>

@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Linq;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
-using System.Collections.ObjectModel;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Mvvm.Converters;
@@ -14,45 +13,48 @@ using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using DryIoc;
-using Oxygen.Editor.WorldEditor.Routing;
-using IContainer = DryIoc.IContainer;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.WorldEditor.Routing;
+using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// The ViewModel for the <see cref="ContentBrowserView"/> view.
+///     The ViewModel for the <see cref="ContentBrowserView" /> view.
 /// </summary>
 /// <remarks>
-/// This is an <see cref="IOutletContainer"/> with two outlets, the "left" outlet for the left pane, and the "right" outlet for
-/// the right pane.
+///     This is an <see cref="IOutletContainer" /> with two outlets, the "left" outlet for the left pane, and the "right"
+///     outlet for
+///     the right pane.
 /// </remarks>
-public sealed partial class ContentBrowserViewModel(IContainer container, IRouter parentRouter, ILoggerFactory? loggerFactory = null) : AbstractOutletContainer, IRoutingAware
+public sealed partial class ContentBrowserViewModel(
+    IContainer container,
+    IRouter parentRouter,
+    ILoggerFactory? loggerFactory = null) : AbstractOutletContainer, IRoutingAware
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentBrowserViewModel>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<ContentBrowserViewModel>();
     private static readonly Routes RoutesConfig = new(
     [
-        new Route()
+        new Route
         {
             Path = string.Empty,
             MatchMethod = PathMatch.Prefix,
             Children = new Routes(
             [
-                new Route() { Outlet = "left", Path = "project", ViewModelType = typeof(ProjectLayoutViewModel), },
-                new Route()
+                new Route { Outlet = "left", Path = "project", ViewModelType = typeof(ProjectLayoutViewModel) },
+                new Route
                 {
                     Path = string.Empty,
                     Outlet = "right",
                     ViewModelType = typeof(AssetsViewModel),
                     Children = new Routes(
                     [
-                        new Route()
+                        new Route
                         {
                             Path = "assets/tiles", Outlet = "right", ViewModelType = typeof(TilesLayoutViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "assets/list", Outlet = "right", ViewModelType = typeof(ListLayoutViewModel),
                         },
@@ -62,61 +64,67 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         },
     ]);
 
-    private bool isDisposed;
-    private IContainer? childContainer;
-    private IRouter? localRouter;
-    private IDisposable? routerEventsSubscription;
-    private bool isInitialized;
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentBrowserViewModel>() ??
+                                      NullLoggerFactory.Instance.CreateLogger<ContentBrowserViewModel>();
 
     // Navigation history management
     private readonly List<string> navigationHistory = [];
-    private int currentHistoryIndex = -1;
-    private bool isNavigatingFromHistory = false;
-
-    // Breadcrumbs
-    public ObservableCollection<BreadcrumbEntry> Breadcrumbs { get; } = [];
 
     /// <summary>
-    /// Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null"/> when the view is loaded.
-    /// </summary>
-    public ViewModelToView? VmToViewConverter { get; private set; }
-
-    /// <summary>
-    /// Gets the ViewModel for the left pane.
-    /// </summary>
-    public object? LeftPaneViewModel => this.Outlets["left"].viewModel;
-
-    /// <summary>
-    /// Gets the ViewModel for the right pane.
-    /// </summary>
-    public object? RightPaneViewModel => this.Outlets["right"].viewModel;
-
-    /// <summary>
-    /// Gets a value indicating whether back navigation is possible.
+    ///     Gets a value indicating whether back navigation is possible.
     /// </summary>
     [ObservableProperty]
     private bool canGoBack;
 
     /// <summary>
-    /// Gets a value indicating whether forward navigation is possible.
+    ///     Gets a value indicating whether forward navigation is possible.
     /// </summary>
     [ObservableProperty]
     private bool canGoForward;
 
     /// <summary>
-    /// Gets a value indicating whether navigating up is possible.
+    ///     Gets a value indicating whether navigating up is possible.
     /// </summary>
     [ObservableProperty]
     private bool canGoUp;
 
+    private IContainer? childContainer;
+    private string currentAssetsViewPath = "assets/list"; // tracks whether we show list or tiles
+    private int currentHistoryIndex = -1;
+
+    private bool isDisposed;
+    private bool isInitialized;
+    private bool isNavigatingFromHistory;
+
     /// <summary>
-    /// Gets a value indicating whether a refresh is currently in progress.
-    /// Used to disable refresh command during execution.
+    ///     Gets a value indicating whether a refresh is currently in progress.
+    ///     Used to disable refresh command during execution.
     /// </summary>
     [ObservableProperty]
     private bool isRefreshing;
 
-    /// <inheritdoc/>
+    private IRouter? localRouter;
+    private IDisposable? routerEventsSubscription;
+
+    // Breadcrumbs
+    public ObservableCollection<BreadcrumbEntry> Breadcrumbs { get; } = [];
+
+    /// <summary>
+    ///     Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null" /> when the view is loaded.
+    /// </summary>
+    public ViewModelToView? VmToViewConverter { get; private set; }
+
+    /// <summary>
+    ///     Gets the ViewModel for the left pane.
+    /// </summary>
+    public object? LeftPaneViewModel => this.Outlets["left"].viewModel;
+
+    /// <summary>
+    ///     Gets the ViewModel for the right pane.
+    /// </summary>
+    public object? RightPaneViewModel => this.Outlets["right"].viewModel;
+
+    /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         // One-time initialization for singleton
@@ -162,7 +170,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
-            var initialUrl = "/(left:project//right:assets/list)";
+            var initialUrl = "/(left:project//right:" + this.currentAssetsViewPath + ")";
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
             // Do NOT add to history here; NavigationEnd handler will record it once
 
@@ -186,7 +194,8 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
             // Build the new URL for history tracking but DON'T navigate
             var currentUrl = this.BuildCurrentUrl();
 
-            Debug.WriteLine($"[ContentBrowserViewModel] ContentBrowserState changed, updating history only: {currentUrl}");
+            Debug.WriteLine(
+                $"[ContentBrowserViewModel] ContentBrowserState changed, updating history only: {currentUrl}");
 
             // Only update history, don't trigger router navigation
             this.UpdateHistoryForStateChange(currentUrl);
@@ -204,19 +213,20 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         var contentBrowserState = this.childContainer?.Resolve<ContentBrowserState>();
         if (contentBrowserState == null)
         {
-            return "/(left:project//right:assets/list)";
+            return "/(left:project//right:" + this.currentAssetsViewPath + ")";
         }
 
         if (contentBrowserState.SelectedFolders.Count == 0)
         {
             // No folders selected - return URL without query parameters
-            return "/(left:project//right:assets/list)";
+            return "/(left:project//right:" + this.currentAssetsViewPath + ")";
         }
 
         // Sort folders to ensure consistent URL generation
         var sortedFolders = contentBrowserState.SelectedFolders.OrderBy(f => f, StringComparer.Ordinal);
-        var selectedParams = string.Join("&", sortedFolders.Select(folder => $"selected={Uri.EscapeDataString(folder)}"));
-        return $"/(left:project//right:assets/list)?{selectedParams}";
+        var selectedParams =
+            string.Join("&", sortedFolders.Select(folder => $"selected={Uri.EscapeDataString(folder)}"));
+        return $"/(left:project//right:{this.currentAssetsViewPath})?{selectedParams}";
     }
 
     private void UpdateHistoryForStateChange(string url)
@@ -226,35 +236,48 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         // Only update history if this is a new URL
         if (this.navigationHistory.Count == 0 || this.navigationHistory[this.currentHistoryIndex] != url)
         {
-            Debug.WriteLine($"[NavigationHistory] State change URL is new, adding to history");
+            Debug.WriteLine("[NavigationHistory] State change URL is new, adding to history");
             this.AddToHistory(url);
         }
         else
         {
-            Debug.WriteLine($"[NavigationHistory] State change URL is same as current, not adding to history");
+            Debug.WriteLine("[NavigationHistory] State change URL is same as current, not adding to history");
         }
     }
 
     private void OnNavigationEnd(NavigationEnd navigationEnd)
     {
-        Debug.WriteLine($"[NavigationHistory] NavigationEnd event: URL={navigationEnd.Url}, IsFromHistory={this.isNavigatingFromHistory}");
+        Debug.WriteLine(
+            $"[NavigationHistory] NavigationEnd event: URL={navigationEnd.Url}, IsFromHistory={this.isNavigatingFromHistory}");
+
+        // Track current assets view path from the URL (assets/list or assets/tiles)
+        var url = navigationEnd.Url ?? string.Empty;
+        if (url.Contains("assets/tiles", StringComparison.Ordinal))
+        {
+            this.currentAssetsViewPath = "assets/tiles";
+        }
+        else if (url.Contains("assets/list", StringComparison.Ordinal))
+        {
+            this.currentAssetsViewPath = "assets/list";
+        }
 
         if (!this.isNavigatingFromHistory && !string.IsNullOrEmpty(navigationEnd.Url))
         {
             // Avoid pushing duplicate if it's identical to the current entry
-            if (this.navigationHistory.Count == 0 || this.navigationHistory[this.currentHistoryIndex] != navigationEnd.Url)
+            if (this.navigationHistory.Count == 0 ||
+                this.navigationHistory[this.currentHistoryIndex] != navigationEnd.Url)
             {
-                Debug.WriteLine($"[NavigationHistory] Adding NavigationEnd URL to history");
+                Debug.WriteLine("[NavigationHistory] Adding NavigationEnd URL to history");
                 this.AddToHistory(navigationEnd.Url);
             }
             else
             {
-                Debug.WriteLine($"[NavigationHistory] NavigationEnd URL matches current, not adding");
+                Debug.WriteLine("[NavigationHistory] NavigationEnd URL matches current, not adding");
             }
         }
         else
         {
-            Debug.WriteLine($"[NavigationHistory] Skipping NavigationEnd URL (from history or empty)");
+            Debug.WriteLine("[NavigationHistory] Skipping NavigationEnd URL (from history or empty)");
         }
 
         this.UpdateHistoryButtonStates();
@@ -273,7 +296,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         // If the last entry equals the new URL, skip to prevent duplicates
         if (this.navigationHistory.Count > 0 && this.navigationHistory[this.currentHistoryIndex] == url)
         {
-            Debug.WriteLine($"[NavigationHistory] Duplicate of current entry, skipping add");
+            Debug.WriteLine("[NavigationHistory] Duplicate of current entry, skipping add");
             this.UpdateHistoryButtonStates();
             return;
         }
@@ -282,17 +305,20 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         if (this.currentHistoryIndex < this.navigationHistory.Count - 1)
         {
             var removedCount = this.navigationHistory.Count - this.currentHistoryIndex - 1;
-            Debug.WriteLine($"[NavigationHistory] Removing {removedCount} forward history items from index {this.currentHistoryIndex + 1}");
+            Debug.WriteLine(
+                $"[NavigationHistory] Removing {removedCount} forward history items from index {this.currentHistoryIndex + 1}");
             this.navigationHistory.RemoveRange(this.currentHistoryIndex + 1, removedCount);
         }
 
         // Add new URL to history
         this.navigationHistory.Add(url);
         this.currentHistoryIndex = this.navigationHistory.Count - 1;
-    this.LogHistoryPush(url);
+        this.LogHistoryPush(url);
 
-        Debug.WriteLine($"[NavigationHistory] History state: Count={this.navigationHistory.Count}, CurrentIndex={this.currentHistoryIndex}");
-        Debug.WriteLine($"[NavigationHistory] Full history: [{string.Join(", ", this.navigationHistory.Select((u, i) => i == this.currentHistoryIndex ? $"*{u}*" : u))}]");
+        Debug.WriteLine(
+            $"[NavigationHistory] History state: Count={this.navigationHistory.Count}, CurrentIndex={this.currentHistoryIndex}");
+        Debug.WriteLine(
+            $"[NavigationHistory] Full history: [{string.Join(", ", this.navigationHistory.Select((u, i) => i == this.currentHistoryIndex ? $"*{u}*" : u))}]");
 
         this.UpdateHistoryButtonStates();
     }
@@ -305,8 +331,10 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         this.CanGoBack = this.currentHistoryIndex > 0;
         this.CanGoForward = this.currentHistoryIndex < this.navigationHistory.Count - 1;
 
-        Debug.WriteLine($"[NavigationHistory] Button states updated: CanGoBack={this.CanGoBack} (was {oldCanGoBack}), CanGoForward={this.CanGoForward} (was {oldCanGoForward})");
-        Debug.WriteLine($"[NavigationHistory] Current state: Index={this.currentHistoryIndex}, Count={this.navigationHistory.Count}");
+        Debug.WriteLine(
+            $"[NavigationHistory] Button states updated: CanGoBack={this.CanGoBack} (was {oldCanGoBack}), CanGoForward={this.CanGoForward} (was {oldCanGoForward})");
+        Debug.WriteLine(
+            $"[NavigationHistory] Current state: Index={this.currentHistoryIndex}, Count={this.navigationHistory.Count}");
 
         // Notify the commands that their CanExecute state may have changed
         this.GoBackCommand.NotifyCanExecuteChanged();
@@ -317,14 +345,15 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     }
 
     /// <summary>
-    /// Navigates back in the history.
+    ///     Navigates back in the history.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private async Task GoBackAsync()
     {
         if (this.CanGoBack && this.localRouter != null)
         {
-            Debug.WriteLine($"[NavigationHistory] Going back from index {this.currentHistoryIndex} to {this.currentHistoryIndex - 1}");
+            Debug.WriteLine(
+                $"[NavigationHistory] Going back from index {this.currentHistoryIndex} to {this.currentHistoryIndex - 1}");
             this.currentHistoryIndex--;
             var targetUrl = this.navigationHistory[this.currentHistoryIndex];
             Debug.WriteLine($"[NavigationHistory] Navigating back to: {targetUrl}");
@@ -345,14 +374,15 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     }
 
     /// <summary>
-    /// Navigates forward in the history.
+    ///     Navigates forward in the history.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanGoForward))]
     private async Task GoForwardAsync()
     {
         if (this.CanGoForward && this.localRouter != null)
         {
-            Debug.WriteLine($"[NavigationHistory] Going forward from index {this.currentHistoryIndex} to {this.currentHistoryIndex + 1}");
+            Debug.WriteLine(
+                $"[NavigationHistory] Going forward from index {this.currentHistoryIndex} to {this.currentHistoryIndex + 1}");
             this.currentHistoryIndex++;
             var targetUrl = this.navigationHistory[this.currentHistoryIndex];
             Debug.WriteLine($"[NavigationHistory] Navigating forward to: {targetUrl}");
@@ -361,7 +391,8 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
 
             try
             {
-                await this.localRouter.NavigateAsync(this.navigationHistory[this.currentHistoryIndex]).ConfigureAwait(true);
+                await this.localRouter.NavigateAsync(this.navigationHistory[this.currentHistoryIndex])
+                    .ConfigureAwait(true);
                 this.LogHistoryPopForward(targetUrl);
             }
             finally
@@ -372,7 +403,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
@@ -399,7 +430,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     }
 
     /// <summary>
-    /// Navigates to the parent of the currently selected folder in the project tree.
+    ///     Navigates to the parent of the currently selected folder in the project tree.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanGoUp))]
     private async Task GoUpAsync()
@@ -426,7 +457,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
             return;
         }
 
-        var url = "/(left:project//right:assets/list)";
+        var url = "/(left:project//right:" + this.currentAssetsViewPath + ")";
         if (parent.Length > 0)
         {
             url += $"?selected={Uri.EscapeDataString(parent)}";
@@ -451,7 +482,8 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         this.CanGoUp = parent is not null;
         if (old != this.CanGoUp)
         {
-            Debug.WriteLine($"[Navigation] CanGoUp updated: {this.CanGoUp} (was {old}), current='{current}', parent='{parent}'");
+            Debug.WriteLine(
+                $"[Navigation] CanGoUp updated: {this.CanGoUp} (was {old}), current='{current}', parent='{parent}'");
         }
 
         this.GoUpCommand.NotifyCanExecuteChanged();
@@ -460,7 +492,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     private void UpdateBreadcrumbs(string? pathOverride = null)
     {
         this.Breadcrumbs.Clear();
-        string? primary = pathOverride;
+        var primary = pathOverride;
         if (primary is null)
         {
             var state = this.childContainer?.Resolve<ContentBrowserState>();
@@ -468,10 +500,10 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
 
         // Determine project name for root label if available
-        string rootLabel = "Project";
+        var rootLabel = "Project";
         try
         {
-            var pm = this.childContainer?.Resolve<Oxygen.Editor.Projects.IProjectManagerService>();
+            var pm = this.childContainer?.Resolve<IProjectManagerService>();
             var pn = pm?.CurrentProject?.ProjectInfo?.Name;
             if (!string.IsNullOrEmpty(pn))
             {
@@ -563,8 +595,8 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     }
 
     /// <summary>
-    /// Navigate to a breadcrumb at the given index.
-    /// Called by the view's breadcrumb ItemClicked handler.
+    ///     Navigate to a breadcrumb at the given index.
+    ///     Called by the view's breadcrumb ItemClicked handler.
     /// </summary>
     public async Task NavigateToBreadcrumbAsync(int index)
     {
@@ -574,7 +606,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         }
 
         var target = this.Breadcrumbs[index];
-        var url = "/(left:project//right:assets/list)";
+        var url = "/(left:project//right:" + this.currentAssetsViewPath + ")";
         if (target.RelativePath == ".")
         {
             url += "?selected=.";
@@ -584,6 +616,38 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
             url += $"?selected={Uri.EscapeDataString(target.RelativePath)}";
         }
 
+        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    ///     Switch the assets area to list view (details).
+    /// </summary>
+    [RelayCommand]
+    private async Task SwitchToListViewAsync()
+    {
+        if (this.localRouter is null)
+        {
+            return;
+        }
+
+        this.currentAssetsViewPath = "assets/list";
+        var url = this.BuildCurrentUrl();
+        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    ///     Switch the assets area to detail view (tiles grid).
+    /// </summary>
+    [RelayCommand]
+    private async Task SwitchToDetailViewAsync()
+    {
+        if (this.localRouter is null)
+        {
+            return;
+        }
+
+        this.currentAssetsViewPath = "assets/tiles";
+        var url = this.BuildCurrentUrl();
         await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
     }
 
@@ -612,7 +676,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
     private partial void LogRefreshRequested();
 
     /// <summary>
-    /// Forces re-indexing of assets for the currently selected folders.
+    ///     Forces re-indexing of assets for the currently selected folders.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanExecuteRefresh))]
     private async Task RefreshAsync()

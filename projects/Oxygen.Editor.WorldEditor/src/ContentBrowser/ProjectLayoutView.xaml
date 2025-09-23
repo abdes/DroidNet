@@ -11,10 +11,25 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <!--  Theme-aware brush for folder assets/icons  -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="{ThemeResource SystemAccentColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-            <!--  Templates an template selector for Folder  -->
+            <!--  Templates and template selector for Folder  -->
             <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="local:FolderTreeItemAdapter">
-                <FontIcon Foreground="Yellow" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
             <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" DefaultTemplate="{StaticResource FolderThumbnailTemplate}" />
