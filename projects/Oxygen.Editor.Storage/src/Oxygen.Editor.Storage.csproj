@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <Title>Oxygen Editor Document Storage Layer</Title>
         <Description>Abstracts the storage of documents and entities in the Oxygen Editor and include implementation for various strage providers, including the native filesystem.</Description>

@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <Title>Application Resources Helpers</Title>
         <Description>Provides helpers to facilitate locating and using resources defined in the application or any of its dependency assemblies.</Description>
