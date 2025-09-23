@@ -2,6 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+
         <Title>DroidNet MVVM Extensions</Title>
         <Description>DroidNet.Mvvm builds on top of the MVVM framework for .NET/WinUI applications, providing tools and components to manage the separation of concerns between the user interface and application logic. It simplifies association between a View and its ViewModel and provides automatic view location for routing and binding.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

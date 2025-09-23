@@ -2,6 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+
         <UseWinUI>true</UseWinUI>
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 

@@ -37,8 +37,6 @@
         So, if a project wants to multi-target (e.g using EF Core tools), it will not be able to reference other projects in the
         repo because they single TF. So we use TargetFrameworks to allow multi-targeting.
         -->
-        <TargetFrameworks>net8.0-windows10.0.22621.0</TargetFrameworks>
-        <WindowsSdkPackageVersion>10.0.22621.52</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
         <Platforms>x64</Platforms>
@@ -149,7 +147,7 @@
     <Choose>
         <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
             <PropertyGroup>
-                <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+                <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
                 <IsTestProject>True</IsTestProject>
                 <IsPackable>False</IsPackable>
             </PropertyGroup>
