@@ -2,6 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFrameworks>net8.0-windows10.0.26100.0</TargetFrameworks>
+
         <RootNamespace>Oxygen.Editor</RootNamespace>
         <AssemblyName>Oxygen.Editor</AssemblyName>
 

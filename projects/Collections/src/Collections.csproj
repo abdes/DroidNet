@@ -3,6 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net8.0;net8.0-windows10.0.26100.0</TargetFrameworks>
+
         <Title>DroidNet Collections</Title>
         <Description>A lightweight .NET class library providing extension methods and custom collections to fill some gaps in .Net Collections.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
