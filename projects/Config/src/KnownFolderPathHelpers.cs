@@ -2,37 +2,53 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace DroidNet.Config;
 
 /// <summary>
-/// Provides helper methods for retrieving known folder paths.
+///     Provides helper methods for retrieving known folder paths.
 /// </summary>
-internal static class KnownFolderPathHelpers
+internal static partial class KnownFolderPathHelpers
 {
     /// <summary>
-    /// Retrieves the full path of a known folder identified by the folder's Id.
+    ///     Retrieves the full path of a known folder identified by the folder's GUID.
     /// </summary>
-    /// <param name="refToGuid">A reference to the Id that identifies the folder.</param>
-    /// <param name="dwFlags">Flags that specify special retrieval options.</param>
+    /// <param name="folderId">The GUID that identifies the folder.</param>
+    /// <param name="flags">Flags that specify special retrieval options.</param>
     /// <param name="hToken">
-    /// An access token that represents a particular user. If this parameter is NULL, the function
-    /// requests the known folder for the current user.
+    ///     An access token that represents a particular user. If this parameter is NULL, the function
+    ///     requests the known folder for the current user.
     /// </param>
     /// <returns>The path of the known folder.</returns>
     /// <exception cref="System.Runtime.InteropServices.COMException">
-    /// Thrown when the method fails to retrieve the known folder path.
+    ///     Thrown when the method fails to retrieve the known folder path.
     /// </exception>
-    [DllImport("shell32.dll", SetLastError = true, CharSet = CharSet.Unicode, PreserveSig = false)]
+    public static string GetKnownFolderPath(Guid folderId, uint flags = 0, nint hToken = 0)
+    {
+        var hr = SHGetKnownFolderPath(in folderId, flags, hToken, out var ppszPath);
+        if (hr != 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+
+        try
+        {
+            // Convert PWSTR to managed string
+            return Marshal.PtrToStringUni(ppszPath) ?? string.Empty;
+        }
+        finally
+        {
+            // SHGetKnownFolderPath uses CoTaskMem; free with FreeCoTaskMem
+            Marshal.FreeCoTaskMem(ppszPath);
+        }
+    }
+
+    [LibraryImport("shell32.dll", SetLastError = true, EntryPoint = "SHGetKnownFolderPath")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [SuppressMessage(
-        "Interoperability",
-        "SYSLIB1054:Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time",
-        Justification = "LibraryImport does not support marshalling of the Guid")]
-    public static extern string SHGetKnownFolderPath(
-        [MarshalAs(UnmanagedType.LPStruct)] Guid refToGuid,
-        uint dwFlags,
-        nint hToken = default);
+    internal static partial int SHGetKnownFolderPath(
+        in Guid rfid, // REFKNOWNFOLDERID (const GUID*)
+        uint dwFlags, // DWORD
+        nint hToken, // HANDLE (use 0 for current user)
+        out nint ppszPath); // PWSTR* (allocated; must be freed)
 }
