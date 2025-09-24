@@ -19,7 +19,7 @@ public partial class NumberBox
             nameof(NumberValue),
             typeof(float),
             typeof(NumberBox),
-            new PropertyMetadata(defaultValue: 0, OnValuePropertyChanged));
+            new PropertyMetadata(defaultValue: 0.0f, OnValuePropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="DisplayText" /> dependency property.
