@@ -26,7 +26,9 @@ namespace DroidNet.Controls.Selection;
 ///         allowing the UI to update automatically when the selection changes.
 ///     </para>
 /// </remarks>
-[SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global",
+[SuppressMessage(
+    "ReSharper",
+    "VirtualMemberNeverOverridden.Global",
     Justification = "methods need to be overridable for testing and extension of the class")]
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
@@ -58,9 +60,10 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </summary>
     public ReadOnlyObservableCollection<T> SelectedItems
     {
-        // We expect that the majority of use cases will rather use the SelectedIndices collection. Therefore we accept
-        // that access to the SelectedItems collection is done rarely and it will be good enough to create the collection
-        // on the fly when it is needed.
+        // We expect that the majority of use cases will rather use the
+        // SelectedIndices collection. Therefore, we accept that access to the
+        // SelectedItems collection is done rarely, and it will be good enough
+        // to create the collection on the fly when it is needed.
         get
         {
             var selectedItems = this.selectedIndices.Select(this.GetItemAt);
@@ -219,8 +222,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
     ///     If the given <paramref name="startIndex" /> or <paramref name="endIndex" /> index is less than zero, or greater
-    ///     than or equal to the
-    ///     total number of items in the underlying data model).
+    ///     than or equal to the total number of items in the underlying data model.
     /// </exception>
     public virtual void SelectRange(int startIndex, int endIndex)
     {
