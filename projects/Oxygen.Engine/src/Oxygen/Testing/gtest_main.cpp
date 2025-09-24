@@ -42,7 +42,7 @@ auto main(int argc, char** argv) -> int
   if (!list_tests) {
     // Optional, but useful to time-stamp the start of the log.
     // Will also detect verbosity level on command line as -v.
-    loguru::init(argc, argv);
+    loguru::init(argc, const_cast<const char**>(argv));
     loguru::set_thread_name("main");
   }
 

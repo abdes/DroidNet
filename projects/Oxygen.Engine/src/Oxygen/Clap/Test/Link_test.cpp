@@ -14,7 +14,7 @@ using namespace oxygen::clap;
 
 #include <Oxygen/Base/Logging.h>
 
-auto main(int argc, const char** argv) -> int
+auto main(int argc, char** argv) -> int
 {
   loguru::g_preamble_date = false;
   loguru::g_preamble_time = false;
@@ -87,7 +87,7 @@ auto main(int argc, const char** argv) -> int
     return EXIT_FAILURE;
   }
 
-  const auto context = cli->Parse(argc, argv);
+  const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
   return EXIT_SUCCESS;
 }

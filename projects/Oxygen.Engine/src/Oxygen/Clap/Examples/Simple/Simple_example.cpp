@@ -16,7 +16,7 @@ using oxygen::clap::Command;
 using oxygen::clap::CommandBuilder;
 using oxygen::clap::Option;
 
-auto main(const int argc, const char** argv) -> int
+auto main(const int argc, char** argv) -> int
 {
   try {
     bool quiet { false };
@@ -69,7 +69,7 @@ auto main(const int argc, const char** argv) -> int
           .WithHelpCommand()
           .WithCommand(command_builder);
 
-    const auto context = cli->Parse(argc, argv);
+    const auto context = cli->Parse(argc, const_cast<const char**>(argv));
     const auto command_path = context.active_command->PathAsString();
 
     const auto& ovm = context.ovm;

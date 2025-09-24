@@ -48,7 +48,7 @@ Ensure your CMake project links to the Clap module. See the main project
 #include <Oxygen/Clap/Fluent/DSL.h>
 using namespace oxygen::clap;
 
-int main(int argc, const char** argv) {
+int main(int argc, char** argv) {
   auto cli = CliBuilder()
     .ProgramName("myprog")
     .Version("1.0")

@@ -83,7 +83,9 @@ auto main(int argc, char** argv) noexcept -> int
     loguru::g_colorlogtostderr = true;
     // Optional, but useful to time-stamp the start of the log.
     // Will also detect verbosity level on command line as -v.
-    loguru::init(argc, argv);
+    // argv is `char**`, but loguru::init expects `const char **`.
+    // Cast to the expected type explicitly to avoid MSVC C2664 error.
+    loguru::init(argc, const_cast<const char**>(argv));
     loguru::set_thread_name("main");
 
     MainImpl(

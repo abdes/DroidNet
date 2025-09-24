@@ -33,7 +33,7 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_thread = false;
     loguru::g_preamble_header = false;
     loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
-    loguru::init(argc, argv);
+    loguru::init(argc, const_cast<const char**>(argv));
     loguru::g_stderr_verbosity = loguru::Verbosity_1;
   }
 
