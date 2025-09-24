@@ -34,13 +34,13 @@ namespace {
 
 class SceneGraphFunctionalTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Arrange: Create scene for functional testing scenarios
     scene_ = std::make_shared<Scene>("FunctionalTestScene", 2048);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     // Clean up: Reset scene pointer to ensure proper cleanup
     scene_.reset();
@@ -92,8 +92,8 @@ protected:
   }
 
   // Helper: Verify node has expected transform values
-  static void ExpectTransformValues(const SceneNode& node,
-    const glm::vec3& expected_pos, const glm::vec3& expected_scale)
+  static auto ExpectTransformValues(const SceneNode& node,
+    const glm::vec3& expected_pos, const glm::vec3& expected_scale) -> void
   {
     const auto transform = node.GetTransform();
     const auto pos = transform.GetLocalPosition();
@@ -106,7 +106,7 @@ protected:
   }
 
   // Helper: Verify scene integrity (no dangling references)
-  void VerifySceneIntegrity() const
+  auto VerifySceneIntegrity() const -> void
   {
     for (const auto root_nodes = scene_->GetRootHandles();
       const auto& root_handle : root_nodes) {
@@ -117,7 +117,7 @@ protected:
   }
 
   // Helper: Recursively verify node hierarchy integrity
-  static void VerifyNodeHierarchyIntegrity(SceneNode& node)
+  static auto VerifyNodeHierarchyIntegrity(SceneNode& node) -> void
   {
     EXPECT_TRUE(node.IsValid());
 
@@ -183,7 +183,7 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
   ExpectTransformValues(player, { 10.0f, 5.0f, 0.0f }, { 1.5f, 1.5f, 1.5f });
 
   // Act: Modify the game object
-  const auto impl_opt = player.GetObject();
+  const auto impl_opt = player.GetImpl();
   ASSERT_TRUE(impl_opt.has_value());
   auto& impl = impl_opt->get();
   impl.SetName("MainPlayer");
@@ -378,12 +378,12 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, HierarchyDestruction_EntireSceneGraph)
   EXPECT_EQ(scene_->GetNodeCount(), 0);
 
   // Assert: All node handles should be invalid
-  EXPECT_FALSE(root.GetObject().has_value());
-  EXPECT_FALSE(child1.GetObject().has_value());
-  EXPECT_FALSE(children[1].GetObject().has_value());
-  EXPECT_FALSE(children[2].GetObject().has_value());
-  EXPECT_FALSE(grandchild1.GetObject().has_value());
-  EXPECT_FALSE(grandchild2.GetObject().has_value());
+  EXPECT_FALSE(root.GetImpl().has_value());
+  EXPECT_FALSE(child1.GetImpl().has_value());
+  EXPECT_FALSE(children[1].GetImpl().has_value());
+  EXPECT_FALSE(children[2].GetImpl().has_value());
+  EXPECT_FALSE(grandchild1.GetImpl().has_value());
+  EXPECT_FALSE(grandchild2.GetImpl().has_value());
 }
 
 NOLINT_TEST_F(
@@ -461,11 +461,11 @@ NOLINT_TEST_F(
   EXPECT_EQ(final_roots.size(), 3) << "Should still have exactly 3 root nodes";
 
   // Assert: Destroyed subtree nodes should be invalid
-  EXPECT_FALSE(children1[0].GetObject().has_value())
+  EXPECT_FALSE(children1[0].GetImpl().has_value())
     << "Child1A should be destroyed";
-  EXPECT_FALSE(grandchild1A1.GetObject().has_value())
+  EXPECT_FALSE(grandchild1A1.GetImpl().has_value())
     << "GrandChild1A1 should be destroyed";
-  EXPECT_FALSE(grandchild1A2.GetObject().has_value())
+  EXPECT_FALSE(grandchild1A2.GetImpl().has_value())
     << "GrandChild1A2 should be destroyed";
 
   // Assert: Verify scene integrity after partial destruction
@@ -490,8 +490,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
   child_transform.SetLocalScale({ 0.5f, 0.5f, 0.5f });
 
   // Act: Update transforms to compute world space values
-  const auto parent_impl_opt = parent.GetObject();
-  const auto child_impl_opt = child.GetObject();
+  const auto parent_impl_opt = parent.GetImpl();
+  const auto child_impl_opt = child.GetImpl();
   ASSERT_TRUE(parent_impl_opt.has_value());
   ASSERT_TRUE(child_impl_opt.has_value());
 
@@ -532,7 +532,7 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
   transform.SetLocalPosition({ 10.0f, 0.0f, 0.0f });
 
   // Apply local translation (should be in object's local space)
-  const auto impl_opt = object.GetObject();
+  const auto impl_opt = object.GetImpl();
   ASSERT_TRUE(impl_opt.has_value());
   auto& transform_component
     = impl_opt->get().GetComponent<TransformComponent>();
@@ -574,7 +574,7 @@ NOLINT_TEST_F(
   auto child = child_opt.value();
 
   // Act: Set child flags to inherit from parent
-  const auto child_impl_opt = child.GetObject();
+  const auto child_impl_opt = child.GetImpl();
   ASSERT_TRUE(child_impl_opt.has_value());
   auto& child_impl = child_impl_opt->get();
 
@@ -582,7 +582,7 @@ NOLINT_TEST_F(
   child_flags.SetInherited(SceneNodeFlags::kCastsShadows, true);
 
   // Simulate parent flag update
-  const auto parent_impl_opt = parent.GetObject();
+  const auto parent_impl_opt = parent.GetImpl();
   ASSERT_TRUE(parent_impl_opt.has_value());
   auto& parent_impl = parent_impl_opt->get();
   const auto& parent_flags_ref = parent_impl.GetFlags();
@@ -605,8 +605,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, FlagModification_DynamicFlagChanges)
     "HiddenObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, false);
 
   // Act: Toggle visibility flags
-  const auto visible_impl_opt = visible_object.GetObject();
-  const auto hidden_impl_opt = hidden_object.GetObject();
+  const auto visible_impl_opt = visible_object.GetImpl();
+  const auto hidden_impl_opt = hidden_object.GetImpl();
   ASSERT_TRUE(visible_impl_opt.has_value());
   ASSERT_TRUE(hidden_impl_opt.has_value());
 
@@ -725,7 +725,7 @@ NOLINT_TEST_F(
   auto another_object = CreateGameObject("AnotherObject");
 
   // Act: Attempt invalid operations
-  const auto invalid_handle = NodeHandle {}; // Default invalid handle
+  constexpr auto invalid_handle = NodeHandle {}; // Default invalid handle
   const auto invalid_node_opt = scene_->GetNode(invalid_handle);
 
   // Assert: Invalid operations should fail gracefully

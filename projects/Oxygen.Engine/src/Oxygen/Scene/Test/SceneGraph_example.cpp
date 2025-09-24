@@ -133,8 +133,8 @@ auto FormatVec3(const glm::vec3& vec) -> std::string
 }
 
 // Helper to print transform information (called after Scene::Update())
-void PrintTransformInfo(
-  const SceneNode& node, const std::string& label, const bool show_world = true)
+auto PrintTransformInfo(const SceneNode& node, const std::string& label,
+  const bool show_world = true) -> void
 {
   if (!node.IsValid()) {
     std::cout << "  " << label << ": [INVALID NODE]\n";
@@ -163,14 +163,14 @@ void PrintTransformInfo(
 }
 
 // Helper to print a node's name and visibility, with ASCII tree structure
-void PrintNodeInfo(SceneNode& node, const std::string& prefix,
-  const bool is_last, const bool is_root = false)
+auto PrintNodeInfo(SceneNode& node, const std::string& prefix,
+  const bool is_last, const bool is_root = false) -> void
 {
   std::cout << prefix;
   if (!is_root) {
     std::cout << (is_last ? "\\-- " : "|-- ");
   }
-  const auto obj_opt = node.GetObject();
+  const auto obj_opt = node.GetImpl();
   if (obj_opt) {
     const auto& obj = obj_opt->get();
     std::cout << obj.GetName();
@@ -185,8 +185,8 @@ void PrintNodeInfo(SceneNode& node, const std::string& prefix,
 }
 
 // Recursive tree printer with ASCII tree drawing
-void PrintTree(SceneNode& node, const std::string& prefix = "",
-  const bool is_last = true, const bool is_root = true)
+auto PrintTree(SceneNode& node, const std::string& prefix = "",
+  const bool is_last = true, const bool is_root = true) -> void
 {
   PrintNodeInfo(node, prefix, is_last, is_root);
 
@@ -209,7 +209,7 @@ void PrintTree(SceneNode& node, const std::string& prefix = "",
 }
 
 // Helper for fatal error reporting
-[[noreturn]] void PrintErrorAndExit(const std::string& msg)
+[[noreturn]] auto PrintErrorAndExit(const std::string& msg) -> void
 {
   std::cerr << "[ERROR] " << msg << '\n';
   std::cerr.flush();
@@ -218,14 +218,14 @@ void PrintTree(SceneNode& node, const std::string& prefix = "",
 }
 
 // Helper for subsection dividers
-void PrintSubSection(const std::string& title)
+auto PrintSubSection(const std::string& title) -> void
 {
   std::cout << "\n-- " << title << " --\n";
 }
 
 // Helper for aligned status checks
-void PrintStatus(const std::string& label, const std::string& value,
-  const std::string& note = "")
+auto PrintStatus(const std::string& label, const std::string& value,
+  const std::string& note = "") -> void
 {
   std::cout << "  - " << std::left << std::setw(28) << label << ": "
             << std::setw(6) << value << (note.empty() ? "" : "  (" + note + ")")
@@ -236,7 +236,7 @@ void PrintStatus(const std::string& label, const std::string& value,
 // Demo Part 1: Basic Scene Graph Operations
 //=============================================================================
 
-void RunBasicSceneDemo(DemoState& state)
+auto RunBasicSceneDemo(DemoState& state) -> void
 {
   PrintSubSection("Basic Scene Creation");
   std::cout << "  * Scene:         'TransformExampleScene'\n";
@@ -267,7 +267,7 @@ void RunBasicSceneDemo(DemoState& state)
   std::cout << "  * Grandchild:    'Grandchild' (under 'Child1')\n";
 
   // Safe object access
-  const auto child2_obj = state.child2->GetObject();
+  const auto child2_obj = state.child2->GetImpl();
   if (child2_obj) {
     child2_obj->get().SetName("SecondChild");
     std::cout << "  * Renamed:       'Child2' -> 'SecondChild'\n";
@@ -276,7 +276,7 @@ void RunBasicSceneDemo(DemoState& state)
   }
 
   // Safe flag access
-  const auto child1_obj_opt = state.child1->GetObject();
+  const auto child1_obj_opt = state.child1->GetImpl();
   if (!child1_obj_opt) {
     PrintErrorAndExit("Failed to get object for Child1");
   }
@@ -324,7 +324,7 @@ auto CreateTransformNode(Scene& scene, const std::string& name,
   return node;
 }
 
-void RunTransformDemo(DemoState& state)
+auto RunTransformDemo(DemoState& state) -> void
 {
   PrintSubSection("High-Level Transform API Demo");
 
@@ -414,8 +414,8 @@ void RunTransformDemo(DemoState& state)
 //=============================================================================
 
 // Animation update functions
-void UpdateOrbitalTransform(SceneNode& node, const float time,
-  const DemoState::AnimationConfig::OrbitalParams& params)
+auto UpdateOrbitalTransform(SceneNode& node, const float time,
+  const DemoState::AnimationConfig::OrbitalParams& params) -> void
 {
   auto transform = node.GetTransform();
 
@@ -430,8 +430,8 @@ void UpdateOrbitalTransform(SceneNode& node, const float time,
   transform.SetLocalRotation(look_rotation);
 }
 
-void UpdatePendulumTransform(SceneNode& node, const float time,
-  const DemoState::AnimationConfig::PendulumParams& params)
+auto UpdatePendulumTransform(SceneNode& node, const float time,
+  const DemoState::AnimationConfig::PendulumParams& params) -> void
 {
   auto transform = node.GetTransform();
 
@@ -442,8 +442,8 @@ void UpdatePendulumTransform(SceneNode& node, const float time,
   transform.SetLocalRotation(rotation);
 }
 
-void UpdatePulsingScale(SceneNode& node, const float time,
-  const DemoState::AnimationConfig::PulsingParams& params)
+auto UpdatePulsingScale(SceneNode& node, const float time,
+  const DemoState::AnimationConfig::PulsingParams& params) -> void
 {
   auto transform = node.GetTransform();
 
@@ -457,7 +457,7 @@ void UpdatePulsingScale(SceneNode& node, const float time,
 }
 
 // Sets up a hierarchical scene with animated transforms
-void SetupAnimatedScene(DemoState& state)
+auto SetupAnimatedScene(DemoState& state) -> void
 {
   // Create root node
   auto root = CreateTransformNode(*state.animation_scene, "AnimationRoot");
@@ -485,7 +485,7 @@ void SetupAnimatedScene(DemoState& state)
 }
 
 // Simulates one frame of animation using proper game engine pattern
-void SimulateAnimationFrame(DemoState& state, const float time)
+auto SimulateAnimationFrame(DemoState& state, const float time) -> void
 {
   // FRAME STEP 1: Prepare data - Update all local transforms (game logic)
   UpdateOrbitalTransform(
@@ -501,7 +501,7 @@ void SimulateAnimationFrame(DemoState& state, const float time)
   // accessed (This is where you would typically render/draw the frame)
 }
 
-void RunAnimationDemo(DemoState& state)
+auto RunAnimationDemo(DemoState& state) -> void
 {
   PrintSubSection("Setting Up Animation Simulation");
 
@@ -533,7 +533,7 @@ void RunAnimationDemo(DemoState& state)
 
     // Display current transform states (this is the "present" phase)
     for (auto& node : state.animated_nodes) {
-      if (const auto obj = node.GetObject()) {
+      if (const auto obj = node.GetImpl()) {
         PrintTransformInfo(node, std::string(obj->get().GetName()));
       }
     }
@@ -555,13 +555,13 @@ void RunAnimationDemo(DemoState& state)
 // Demo Part 4: Cleanup and Validation
 //=============================================================================
 
-void RunCleanupDemo(DemoState& state)
+auto RunCleanupDemo(DemoState& state) -> void
 {
   PrintSubSection("Parent Lookup (Original Demo)");
   std::cout << "  Parent of 'Grandchild': ";
   if (auto parent_opt = state.grandchild->GetParent()) {
     // Safe parent access
-    const auto parent_obj = parent_opt->GetObject();
+    const auto parent_obj = parent_opt->GetImpl();
     if (parent_obj && parent_obj->get().GetName() == "Child1") {
       std::cout << parent_obj->get().GetName() << " (ok)\n";
     } else {
@@ -583,7 +583,7 @@ void RunCleanupDemo(DemoState& state)
     state.grandchild->IsValid() ? "yes" : "no",
     state.grandchild->IsValid() ? "ok" : "error");
   std::cout << "  - Accessing 'Grandchild' object: ";
-  const auto grandchild_obj = state.grandchild->GetObject();
+  const auto grandchild_obj = state.grandchild->GetImpl();
   if (!grandchild_obj) {
     std::cout << "object not found  (ok)\n";
   } else {

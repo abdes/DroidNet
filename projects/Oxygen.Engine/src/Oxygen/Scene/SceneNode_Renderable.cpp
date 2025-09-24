@@ -74,7 +74,7 @@ protected:
   auto PopulateStateWithRenderable(SafeCallState& state) -> bool
   {
     try {
-      const auto impl_ref = GetRenderable().node_->GetObject();
+      const auto impl_ref = GetRenderable().node_->GetImpl();
       if (!impl_ref.has_value()) [[unlikely]] {
         result_ = fmt::format("node({}) is no longer in scene",
           nostd::to_string(GetNode().GetHandle()));
@@ -119,7 +119,7 @@ public:
       return GetResult();
     }
     try {
-      const auto impl_ref = state.node->GetObject();
+      const auto impl_ref = state.node->GetImpl();
       if (!impl_ref.has_value()) {
         return std::optional<std::string> { fmt::format(
           "node({}) is no longer in scene",
@@ -191,16 +191,14 @@ auto SceneNode::Renderable::SetGeometry(GeometryAssetPtr geometry) -> void
     DCHECK_NOTNULL_F(state.node_impl);
     if (!state.renderable) {
       // No component yet: attach a new one with the geometry
-      state.node_impl->AddComponent<oxygen::scene::detail::RenderableComponent>(
+      state.node_impl->AddComponent<detail::RenderableComponent>(
         std::move(geometry));
       // Refresh pointer for any subsequent operations this frame
       state.renderable
-        = &state.node_impl
-             ->GetComponent<oxygen::scene::detail::RenderableComponent>();
+        = &state.node_impl->GetComponent<detail::RenderableComponent>();
       return;
     }
     state.renderable->SetGeometry(std::move(geometry));
-    return;
   });
 }
 
@@ -222,8 +220,7 @@ auto SceneNode::Renderable::Detach() noexcept -> bool
     if (!state.renderable) {
       return false;
     }
-    state.node_impl
-      ->RemoveComponent<oxygen::scene::detail::RenderableComponent>();
+    state.node_impl->RemoveComponent<detail::RenderableComponent>();
     return true;
   });
 }
@@ -292,7 +289,7 @@ auto SceneNode::Renderable::SelectActiveMesh(ScreenSpaceError e) const noexcept
 }
 
 auto SceneNode::Renderable::GetActiveMesh() const noexcept
-  -> std::optional<oxygen::scene::ActiveMesh>
+  -> std::optional<ActiveMesh>
 {
   return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
     return state.renderable->GetActiveMesh();

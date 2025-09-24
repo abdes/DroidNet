@@ -26,14 +26,14 @@ namespace {
 // Scene Reparenting Tests - MakeNodeRoot Functionality
 //=============================================================================
 
-class SceneReparentTest : public ::testing::Test {
+class SceneReparentTest : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     scene_ = std::make_shared<Scene>("ReparentTestScene", 1024);
   }
 
-  void TearDown() override { scene_.reset(); }
+  auto TearDown() -> void override { scene_.reset(); }
 
   [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
   {
@@ -174,12 +174,12 @@ protected:
   }
 
   // Helper: Set up transform with specific values and update as needed
-  void SetupNodeTransform(SceneNode& node,
+  auto SetupNodeTransform(SceneNode& node,
     const TransformComponent::Vec3& position,
     const TransformComponent::Quat& rotation,
-    const TransformComponent::Vec3& scale) const
+    const TransformComponent::Vec3& scale) const -> void
   {
-    auto node_impl_opt = node.GetObject();
+    auto node_impl_opt = node.GetImpl();
     ASSERT_TRUE(node_impl_opt.has_value());
 
     auto& transform = node_impl_opt->get().GetComponent<TransformComponent>();
@@ -189,14 +189,14 @@ protected:
   // Helper: Get transform component from node
   auto GetTransformComponent(SceneNode& node) const -> TransformComponent&
   {
-    auto node_impl_opt = node.GetObject();
+    auto node_impl_opt = node.GetImpl();
     EXPECT_TRUE(node_impl_opt.has_value())
       << "Node should have valid implementation";
     return node_impl_opt->get().GetComponent<TransformComponent>();
   }
 
   // Helper: Update scene transforms to ensure cached world values are valid
-  void UpdateSceneTransforms() const
+  auto UpdateSceneTransforms() const -> void
   {
     scene_->Update(false); // Update transforms without skipping dirty flags
   }
@@ -221,17 +221,19 @@ protected:
       TransformComponent::Vec3 { x_deg, y_deg, z_deg }) };
   }
   // Helper: Verify node is valid and has expected name
-  static void ExpectNodeWithName(SceneNode& node, const std::string& name)
+  static auto ExpectNodeWithName(SceneNode& node, const std::string& name)
+    -> void
   {
     ASSERT_TRUE(node.IsValid()) << "Node should be valid";
-    const auto obj_opt = node.GetObject();
+    const auto obj_opt = node.GetImpl();
     ASSERT_TRUE(obj_opt.has_value()) << "Node object should be present";
     EXPECT_EQ(obj_opt->get().GetName(), name)
       << "Node name mismatch: expected '" << name << "', got '"
       << obj_opt->get().GetName();
   }
   // Helper: Verify node is valid, has expected name, and is a root node
-  static void ExpectNodeValidAsRoot(SceneNode& node, const std::string& name)
+  static auto ExpectNodeValidAsRoot(SceneNode& node, const std::string& name)
+    -> void
   {
     ExpectNodeWithName(node, name);
     EXPECT_TRUE(node.IsRoot()) << "Node '" << name << "' should be a root node";
@@ -239,8 +241,8 @@ protected:
       << "Root node '" << name << "' should not have a parent";
   }
   // Helper: Verify node is valid, has expected parent, and is not a root
-  static void ExpectNodeValidWithParent(
-    SceneNode& node, const SceneNode& expected_parent)
+  static auto ExpectNodeValidWithParent(
+    SceneNode& node, const SceneNode& expected_parent) -> void
   {
     ASSERT_TRUE(node.IsValid()) << "Node should be valid";
     ASSERT_TRUE(expected_parent.IsValid()) << "Expected parent should be valid";
@@ -256,8 +258,9 @@ protected:
   }
 
   // Helper: Verify vectors are approximately equal
-  static void ExpectVec3Near(const TransformComponent::Vec3& actual,
+  static auto ExpectVec3Near(const TransformComponent::Vec3& actual,
     const TransformComponent::Vec3& expected, const float tolerance = 1e-5f)
+    -> void
   {
     EXPECT_NEAR(actual.x, expected.x, tolerance);
     EXPECT_NEAR(actual.y, expected.y, tolerance);
@@ -265,8 +268,9 @@ protected:
   }
 
   // Helper: Verify quaternions are approximately equal
-  static void ExpectQuatNear(const TransformComponent::Quat& actual,
+  static auto ExpectQuatNear(const TransformComponent::Quat& actual,
     const TransformComponent::Quat& expected, const float tolerance = 1e-5f)
+    -> void
   {
     EXPECT_NEAR(actual.w, expected.w, tolerance);
     EXPECT_NEAR(actual.x, expected.x, tolerance);
@@ -476,7 +480,7 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_UpdatesRootNodesList)
   auto root_nodes = scene_->GetRootNodes();
   const auto found_child
     = std::ranges::find_if(root_nodes, [&](SceneNode& node) {
-        const auto obj_opt = node.GetObject();
+        const auto obj_opt = node.GetImpl();
         return obj_opt.has_value() && obj_opt->get().GetName() == "Child";
       });
   EXPECT_NE(found_child, root_nodes.end());

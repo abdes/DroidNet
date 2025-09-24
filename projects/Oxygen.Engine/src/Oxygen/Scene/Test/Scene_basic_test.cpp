@@ -102,7 +102,7 @@ NOLINT_TEST_F(
 
   // Act: Hack the parent to set its first child to a no longer existing node,
   // bypassing the Scene.
-  auto parent_impl = parent.GetObject();
+  auto parent_impl = parent.GetImpl();
   parent_impl->get().AsGraphNode().SetFirstChild(child_handle);
   const auto first_child = scene_->GetFirstChild(parent);
 

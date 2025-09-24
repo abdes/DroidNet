@@ -233,7 +233,7 @@ auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
  the underlying SceneNodeImpl object, or std::nullopt if the node is invalid or
  expired.
 */
-auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
+auto SceneNode::GetImpl() noexcept -> OptionalRefToImpl
 {
   return SafeCall(NodeIsValidAndInScene(),
     [&](const SafeCallState& state) noexcept -> OptionalRefToImpl {

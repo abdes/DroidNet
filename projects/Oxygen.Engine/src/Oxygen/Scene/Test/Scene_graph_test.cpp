@@ -49,7 +49,8 @@ protected:
   }
 
   // Helper: Verify parent-child relationship exists
-  static void ExpectParentChildRelationship(SceneNode& parent, SceneNode& child)
+  static auto ExpectParentChildRelationship(SceneNode& parent, SceneNode& child)
+    -> void
   {
     // Child should know its parent
     const auto child_parent = child.GetParent();
@@ -64,8 +65,8 @@ protected:
   }
 
   // Helper: Verify hierarchy state flags for a node
-  static void ExpectHierarchyState(SceneNode& node, const bool is_root,
-    const bool has_parent, const bool has_children)
+  static auto ExpectHierarchyState(SceneNode& node, const bool is_root,
+    const bool has_parent, const bool has_children) -> void
   {
     EXPECT_EQ(node.IsRoot(), is_root)
       << "Node root status should match expected";
@@ -96,8 +97,8 @@ protected:
   }
 
   // Helper: Verify all nodes in a list have the same parent
-  static void ExpectAllHaveSameParent(
-    std::vector<SceneNode> nodes, SceneNode& expected_parent)
+  static auto ExpectAllHaveSameParent(
+    std::vector<SceneNode> nodes, SceneNode& expected_parent) -> void
   {
     for (auto& node : nodes) {
       ExpectParentChildRelationship(expected_parent, node);
@@ -105,8 +106,8 @@ protected:
   }
 
   // Helper: Verify expected children count matches actual
-  void ExpectChildrenCount(
-    SceneNode& parent, const std::size_t expected_count) const
+  auto ExpectChildrenCount(
+    SceneNode& parent, const std::size_t expected_count) const -> void
   {
     const auto children = CollectChildrenHandles(parent);
     EXPECT_EQ(children.size(), expected_count)
@@ -520,9 +521,9 @@ NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_AllDescendantsInvalidated)
   EXPECT_TRUE(destroy_result);
 
   // Assert: All nodes should become invalid
-  EXPECT_FALSE(root.GetObject().has_value());
-  EXPECT_FALSE(child.GetObject().has_value());
-  EXPECT_FALSE(grandchild.GetObject().has_value());
+  EXPECT_FALSE(root.GetImpl().has_value());
+  EXPECT_FALSE(child.GetImpl().has_value());
+  EXPECT_FALSE(grandchild.GetImpl().has_value());
 }
 
 NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_RootCollectionUpdated)

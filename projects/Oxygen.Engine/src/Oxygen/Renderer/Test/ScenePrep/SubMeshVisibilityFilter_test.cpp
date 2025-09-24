@@ -153,15 +153,15 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
   const auto lod = Proto().ResolvedMeshIndex();
   // Hide 1 and 3
   DLOG_F(INFO, "TEST: Before SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
   Node().GetRenderable().SetSubmeshVisible(lod, 1, false);
   DLOG_F(INFO,
     "TEST: After first SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
   Node().GetRenderable().SetSubmeshVisible(lod, 3, false);
   DLOG_F(INFO,
     "TEST: After second SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
 
   // Ensure scene reflects the renderable state changes before extraction
   UpdateScene();
@@ -196,11 +196,11 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
   // Ensure LOD policy change is applied to the scene/component state
   DLOG_F(INFO,
     "TEST: Before UpdateScene (SetLodPolicy): Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
   UpdateScene();
   DLOG_F(INFO,
     "TEST: After UpdateScene (SetLodPolicy): Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
   MeshResolver(Context(), State(), Proto());
 
@@ -236,12 +236,12 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllHidden_ResultsInEmptyList)
   DLOG_F(INFO,
     "TEST: Before UpdateScene (SetAllSubmeshesVisible): Node.IsValid={}, "
     "has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
   UpdateScene();
   DLOG_F(INFO,
     "TEST: After UpdateScene (SetAllSubmeshesVisible): Node.IsValid={}, "
     "has_obj={}",
-    Node().IsValid(), Node().GetObject().has_value());
+    Node().IsValid(), Node().GetImpl().has_value());
 
   // Ensure visibility changes are applied
   UpdateScene();

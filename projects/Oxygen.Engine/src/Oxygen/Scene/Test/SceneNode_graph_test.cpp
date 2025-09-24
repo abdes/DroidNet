@@ -133,8 +133,8 @@ NOLINT_TEST_F(SceneNodeGraphTest, MultipleHandlesToSameNode_ShareUnderlyingData)
   EXPECT_EQ(node1.GetHandle(), node2.GetHandle());
 
   // Act: Get implementations from both handles
-  const auto impl1 = node1.GetObject();
-  const auto impl2 = node2.GetObject();
+  const auto impl1 = node1.GetImpl();
+  const auto impl2 = node2.GetImpl();
 
   // Assert: Both should access the same underlying data
   ASSERT_TRUE(impl1.has_value());
