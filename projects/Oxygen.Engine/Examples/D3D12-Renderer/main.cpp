@@ -33,7 +33,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 
   // Optional, but useful to time-stamp the start of the log.
   // Will also detect verbosity level on command line as -v.
-  loguru::init(argc, argv);
+  loguru::init(argc, const_cast<const char**>(argv));
 
   LOG_F(INFO, "{}", oxygen::version::NameVersion());
 

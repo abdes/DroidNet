@@ -586,7 +586,7 @@ static bool parse_vmodule_override(std::string_view override_str)
   return true;
 }
 
-void parse_args(int& argc, char* argv[], const char* verbosity_flag)
+void parse_args(int& argc, const char** argv, const char* verbosity_flag)
 {
   fprintf(stderr, "parse_args called with argc=%d\n", argc);
   int arg_dest = 1;
@@ -1171,7 +1171,7 @@ auto errno_as_text() -> Text
 #  endif
 }
 
-void init(int& argc, char* argv[], const Options& options)
+void init(int& argc, const char** argv, const Options& options)
 {
   CHECK_GT_F(argc, 0, "Expected proper argc/argv");
   CHECK_EQ_F(argv[argc], nullptr, "Expected proper argc/argv");

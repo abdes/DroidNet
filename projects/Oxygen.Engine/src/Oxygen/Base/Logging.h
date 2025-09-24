@@ -416,7 +416,8 @@ struct Options {
         You can you something other than the -v flag by setting the
    verbosity_flag option.
 */
-LOGURU_EXPORT void init(int& argc, char* argv[], const Options& options = {});
+LOGURU_EXPORT void init(
+  int& argc, const char** argv, const Options& options = {});
 
 // Will call remove_all_callbacks(). After calling this, logging will still go
 // to stderr. You generally don't need to call this.
@@ -549,7 +550,7 @@ LOGURU_EXPORT void clear_vmodule_overrides();
 // Parse command line arguments for logging flags (e.g., -v, --vmodule).
 // Modifies argc and argv by removing processed arguments.
 LOGURU_EXPORT void parse_args(
-  int& argc, char* argv[], const char* verbosity_flag);
+  int& argc, const char** argv, const char* verbosity_flag);
 
 // Returns true if a log site in the given file should log messages at the
 // requested verbosity (taking vmodule overrides into account).

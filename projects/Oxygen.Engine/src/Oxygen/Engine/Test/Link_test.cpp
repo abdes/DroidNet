@@ -35,7 +35,7 @@ auto main(int argc, char** argv) -> int
   loguru::g_preamble_header = false;
   loguru::g_stderr_verbosity = loguru::Verbosity_0;
   loguru::g_colorlogtostderr = true;
-  loguru::init(argc, argv);
+  loguru::init(argc, const_cast<const char**>(argv));
   loguru::set_thread_name("main");
 
   const PlatformConfig platform_config {

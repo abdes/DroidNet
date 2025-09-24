@@ -84,7 +84,7 @@ protected:
     std::vector<std::string> args, const char* verbosity_flag = "-v")
   {
     // Convert to char* array for parse_args
-    std::vector<char*> argv;
+    std::vector<const char*> argv;
     for (auto& arg : args) {
       argv.push_back(arg.data());
     }

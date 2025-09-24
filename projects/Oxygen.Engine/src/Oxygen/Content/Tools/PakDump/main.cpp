@@ -13,7 +13,7 @@
 #include "DumpContext.h"
 #include "PakFileDumper.h"
 
-auto ParseCommandLine(int argc, char* argv[]) -> DumpContext
+auto ParseCommandLine(int argc, const char* argv[]) -> DumpContext
 {
   DumpContext ctx;
 
@@ -63,7 +63,7 @@ auto PrintUsage(const char* program_name) -> void
             << " game.pak --verbose --show-data --hex-dump-assets\n";
 }
 
-auto main(int argc, char* argv[]) -> int
+auto main(int argc, char** argv) -> int
 {
   using namespace oxygen::content;
 
@@ -82,11 +82,11 @@ auto main(int argc, char* argv[]) -> int
   loguru::g_preamble_header = false;
   loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
   loguru::g_colorlogtostderr = true;
-  loguru::init(argc, argv);
+  loguru::init(argc, const_cast<const char**>(argv));
   loguru::set_thread_name("main");
 
   // Parse command line options
-  DumpContext ctx = ParseCommandLine(argc, argv);
+  DumpContext ctx = ParseCommandLine(argc, const_cast<const char**>(argv));
   ctx.pak_path = std::filesystem::path(argv[1]);
 
   if (!std::filesystem::exists(ctx.pak_path)) {
