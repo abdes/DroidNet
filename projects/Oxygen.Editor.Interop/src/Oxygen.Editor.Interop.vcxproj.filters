@@ -8,12 +8,14 @@
   <ItemGroup>
     <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="EngineRunner.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="OxygenWorld.h" />
     <ClInclude Include="Base\LoguruWrapper.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="EngineRunner.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="World">

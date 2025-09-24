@@ -11,14 +11,14 @@
 #    define OXGN_EI_API
 #  else
 #    ifdef OXGN_EI_EXPORTS
-#      define OXGN_EI_API extern "C" __declspec(dllexport)
+#      define OXGN_EI_API __declspec(dllexport)
 #    else
-#      define OXGN_EI_API extern "C" __declspec(dllimport)
+#      define OXGN_EI_API __declspec(dllimport)
 #    endif
 #  endif
 #elif defined(__APPLE__) || defined(__linux__)
 #  ifdef OXGN_NGIN_EXPORTS
-#    define OXGN_EI_API extern "C" __attribute__((visibility("default")))
+#    define OXGN_EI_API __attribute__((visibility("default")))
 #  else
 #    define OXGN_EI_API
 #  endif

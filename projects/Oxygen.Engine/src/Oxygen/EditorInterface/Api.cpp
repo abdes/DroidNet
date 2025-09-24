@@ -12,6 +12,8 @@
 
 using oxygen::scene::Scene;
 
+namespace oxygen::engine::interop {
+
 auto CreateScene(const char* name) -> bool
 {
   // Scene name must be a non-null, null terminated string that is not be
@@ -30,3 +32,5 @@ auto RemoveScene(const char* name) -> bool
 
   return false;
 }
+
+} // namespace oxygen::engine::interop
