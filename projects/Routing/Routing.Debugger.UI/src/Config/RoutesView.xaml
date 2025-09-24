@@ -5,9 +5,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:config="using:DroidNet.Routing.Debugger.UI.Config"
-    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
-    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:s="using:DroidNet.Routing.Debugger.UI.Styles"
     xmlns:t="using:DroidNet.Routing.Debugger.UI.TreeView">
 
@@ -28,11 +27,11 @@
                     Source="{ThemeResource OutletIcon}"
                     Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
                 <TextBlock FontSize="16" Text="{x:Bind Label}">
-                    <interactivity:Interaction.Behaviors>
-                        <core:DataTriggerBehavior Binding="{x:Bind IsRoot, Mode=OneWay}" Value="True">
-                            <core:ChangePropertyAction PropertyName="Style" Value="{StaticResource RootNode}" />
-                        </core:DataTriggerBehavior>
-                    </interactivity:Interaction.Behaviors>
+                    <i:Interaction.Behaviors>
+                        <i:DataTriggerBehavior Binding="{x:Bind IsRoot, Mode=OneWay}" Value="True">
+                            <i:ChangePropertyAction PropertyName="Style" Value="{StaticResource RootNode}" />
+                        </i:DataTriggerBehavior>
+                    </i:Interaction.Behaviors>
                 </TextBlock>
             </StackPanel>
         </DataTemplate>

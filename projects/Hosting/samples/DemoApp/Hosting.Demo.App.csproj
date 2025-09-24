@@ -3,6 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <RootNamespace>$(RootNameSpace).Hosting.Demo</RootNamespace>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <AssemblyName>DroidNet.Hosting.Demo</AssemblyName>
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>

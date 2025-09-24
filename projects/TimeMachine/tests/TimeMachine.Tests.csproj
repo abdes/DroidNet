@@ -3,12 +3,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <RootNamespace>$(RootNamespace).TimeMachine.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\src\TimeMachine.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>
 
     <ItemGroup>

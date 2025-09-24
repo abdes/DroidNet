@@ -8,8 +8,4 @@
         <RootNamespace>$(RootNamespace).TestHelpers.Tests</RootNamespace>
     </PropertyGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\src\TestHelpers.csproj" />
-    </ItemGroup>
-
 </Project>

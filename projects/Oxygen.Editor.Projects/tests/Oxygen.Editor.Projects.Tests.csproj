@@ -4,6 +4,8 @@
     <!--https://learn.microsoft.com/en-us/windows/apps/winui/winui3/testing/#how-do-i-test-non-winui-functionality-in-my-app -->
 
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <RootNamespace>Oxygen.Editor.Projects.Tests</RootNamespace>
         <AssemblyName>Oxygen.Editor.Projects.Tests</AssemblyName>
 
