@@ -5,6 +5,7 @@
 
     <RootNamespace>DroidNet.Controls.OutputConsole</RootNamespace>
     <UseWinUI>true</UseWinUI>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
     <Title>OutputConsole Control</Title>
     <Description>A high-performance, virtualized output console control for WinUI 3. Supports channels, level/text/regex filters, search and navigation, bookmarks, scroll lock/follow tail, retention via ring buffer, export, and clickable links.</Description>

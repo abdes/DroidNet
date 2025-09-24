@@ -5,6 +5,8 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -16,277 +18,41 @@ using Windows.Foundation;
 
 namespace DroidNet.Controls.OutputConsole;
 
-public sealed partial class OutputConsoleView : UserControl
+/// <summary>
+///     A UI control that displays log entries in a live, filterable, and searchable console view.
+///     This partial type contains core behavior for view wiring, event handlers and UI helpers.
+/// </summary>
+public sealed partial class OutputConsoleView
 {
     private const double BottomThreshold = 32.0;
-    private readonly ObservableCollection<OutputLogEntry> _viewItems = new();
-    private bool _autoFollowSuspended; // true when user scrolled away from bottom while FollowTail is on
-    private TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs>? _contentChangingHandler;
-    private bool _isLoaded;
-    private ScrollViewer? _scrollViewer;
 
+    // Centralized comparison for user-entered text filters: culture-aware, case-insensitive.
+    private const StringComparison FilterComparison = StringComparison.CurrentCultureIgnoreCase;
+
+    private readonly ObservableCollection<OutputLogEntry> viewItems = [];
+    private Brush? accentBrush;
+    private bool autoFollowSuspended; // true when user scrolled away from bottom while FollowTail is on
+    private TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs>? contentChangingHandler;
+    private Brush? errorBrush;
+    private bool isLoaded;
+    private ScrollViewer? scrollViewer;
+    private Brush? tertiaryBrush;
+    private Brush? warningBrush;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="OutputConsoleView" /> class.
+    /// </summary>
+    /// <remarks>
+    ///     The constructor initializes the component and registers handlers for Loaded, Unloaded
+    ///     and theme changes. Most heavy initialization is performed when the control raises
+    ///     the <see cref="FrameworkElement.Loaded" /> event.
+    /// </remarks>
     public OutputConsoleView()
     {
-        InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        _isLoaded = true;
-        // Bind the ListView to a UI-thread-bound proxy collection
-        List.ItemsSource = _viewItems;
-        _scrollViewer ??= FindDescendant<ScrollViewer>(List);
-        if (_scrollViewer is not null)
-        {
-            _scrollViewer.ViewChanged += OnScrollViewerViewChanged;
-        }
-
-        // Update only the realized container that changes
-        _contentChangingHandler = (_, args) =>
-        {
-            if (args.ItemContainer is ListViewItem container)
-            {
-                var ts = FindDescendant<TextBlock>(container, n => n.Name == "TimestampBlock");
-                if (ts is not null)
-                {
-                    ts.Visibility = ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
-                }
-
-                var msg = FindDescendant<TextBlock>(container, n => n.Name == "MessageBlock");
-                if (msg is not null)
-                {
-                    msg.TextWrapping = WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
-                    if (args.Item is OutputLogEntry entry)
-                    {
-                        ApplyHighlight(msg, entry);
-                    }
-                }
-            }
-        };
-        List.ContainerContentChanging += _contentChangingHandler;
-    // ItemsSource is attached via OnItemsSourceChanged; avoid double subscription here
-    RebuildView();
-        ClearButton.Click += (_, __) =>
-        {
-            if (ItemsSource is OutputLogBuffer buffer)
-            {
-                buffer.Clear();
-            }
-
-            ClearRequested?.Invoke(this, EventArgs.Empty);
-        };
-        FollowTailToggle.Checked += (_, __) =>
-        {
-            FollowTail = true;
-            // If we're not near the bottom, don't yank the user; suspend auto-follow until near bottom
-            _autoFollowSuspended = !IsNearBottom();
-            FollowTailChanged?.Invoke(this, true);
-        };
-        FollowTailToggle.Unchecked += (_, __) =>
-        {
-            FollowTail = false;
-            _autoFollowSuspended = false;
-            FollowTailChanged?.Invoke(this, false);
-        };
-        PauseToggle.Checked += (_, __) =>
-        {
-            IsPaused = true;
-            if (ItemsSource is OutputLogBuffer buffer)
-            {
-                buffer.IsPaused = true;
-            }
-
-            PauseChanged?.Invoke(this, true);
-        };
-        PauseToggle.Unchecked += (_, __) =>
-        {
-            IsPaused = false;
-            if (ItemsSource is OutputLogBuffer buffer)
-            {
-                buffer.IsPaused = false;
-            }
-
-            PauseChanged?.Invoke(this, false);
-        };
-
-        ShowTimestampsToggle.Checked += (_, __) => ShowTimestamps = true;
-        ShowTimestampsToggle.Unchecked += (_, __) => ShowTimestamps = false;
-        WrapToggle.Checked += (_, __) => WordWrap = true;
-        WrapToggle.Unchecked += (_, __) => WordWrap = false;
-        // Levels dropdown items
-        // Initialize sensible defaults if filter is at All
-        if (LevelFilter == LevelMask.All)
-        {
-            LevelFilter = LevelMask.Information | LevelMask.Warning | LevelMask.Error | LevelMask.Fatal;
-        }
-
-        LevelVerboseItem.IsChecked = (LevelFilter & LevelMask.Verbose) != 0;
-        LevelDebugItem.IsChecked = (LevelFilter & LevelMask.Debug) != 0;
-        LevelInformationItem.IsChecked = (LevelFilter & LevelMask.Information) != 0;
-        LevelWarningItem.IsChecked = (LevelFilter & LevelMask.Warning) != 0;
-        LevelErrorItem.IsChecked = (LevelFilter & LevelMask.Error) != 0;
-        LevelFatalItem.IsChecked = (LevelFilter & LevelMask.Fatal) != 0;
-
-        LevelVerboseItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Verbose, LevelVerboseItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        LevelDebugItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Debug, LevelDebugItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        LevelInformationItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Information, LevelInformationItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        LevelWarningItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Warning, LevelWarningItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        LevelErrorItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Error, LevelErrorItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        LevelFatalItem.Click += (_, __) =>
-        {
-            SetLevelFlag(LevelMask.Fatal, LevelFatalItem.IsChecked);
-            RefreshFilter();
-            UpdateLevelsSummary();
-        };
-        SearchBox.TextChanged += (_, e2) =>
-        {
-            if (e2.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
-            {
-                TextFilter = SearchBox.Text;
-                RefreshFilter();
-            }
-        };
-
-        // Apply options initially
-        ApplyViewOptions();
-        UpdateLevelsSummary();
-    }
-
-    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (!_isLoaded)
-        {
-            return;
-        }
-
-        // Marshal changes to UI thread and mirror them into the proxy collection
-        _ = DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!_isLoaded)
-            {
-                return;
-            }
-
-            switch (e.Action)
-            {
-                case NotifyCollectionChangedAction.Add:
-                    foreach (var item in e.NewItems!.OfType<OutputLogEntry>())
-                    {
-                        if (PassesFilter(item))
-                        {
-                            _viewItems.Add(item);
-                        }
-                    }
-
-                    if (FollowTail && ShouldAutoScroll())
-                    {
-                        ScrollToBottom();
-                    }
-
-                    break;
-                case NotifyCollectionChangedAction.Remove:
-                    foreach (var item in e.OldItems!.OfType<OutputLogEntry>())
-                    {
-                        // Remove the first matching instance from the view proxy
-                        var idx = _viewItems.IndexOf(item);
-                        if (idx >= 0)
-                        {
-                            _viewItems.RemoveAt(idx);
-                        }
-                        else
-                        {
-                            // Fallback: if reference differs, remove from head to mirror ring trim
-                            if (_viewItems.Count > 0)
-                            {
-                                _viewItems.RemoveAt(0);
-                            }
-                        }
-                    }
-
-                    break;
-                case NotifyCollectionChangedAction.Reset:
-                    RebuildView();
-                    break;
-                case NotifyCollectionChangedAction.Replace:
-                case NotifyCollectionChangedAction.Move:
-                    // For simplicity, rebuild on complex changes
-                    RebuildView();
-                    break;
-            }
-        });
-    }
-
-    private void AttachCollectionChanged(IEnumerable? items)
-    {
-        if (items is INotifyCollectionChanged incc)
-        {
-            incc.CollectionChanged += OnCollectionChanged;
-        }
-    }
-
-    private void DetachCollectionChanged(IEnumerable? items)
-    {
-        if (items is INotifyCollectionChanged incc)
-        {
-            incc.CollectionChanged -= OnCollectionChanged;
-        }
-    }
-
-    private void ApplyViewOptions()
-    {
-        // Reflect show timestamps and word wrap by updating container style
-        for (var i = 0; i < List.Items.Count; i++)
-        {
-            if (List.ContainerFromIndex(i) is ListViewItem container)
-            {
-                var ts = FindDescendant<TextBlock>(container, n => n.Name == "TimestampBlock");
-                if (ts is not null)
-                {
-                    ts.Visibility = ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
-                }
-
-                var msg = FindDescendant<TextBlock>(container, n => n.Name == "MessageBlock");
-                if (msg is not null)
-                {
-                    msg.TextWrapping = WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
-                }
-            }
-        }
-    }
-
-    private void RefreshFilter() => RebuildView();
-
-    private void SetLevelFlag(LevelMask flag, bool on)
-    {
-        LevelFilter = on ? this.LevelFilter | flag : this.LevelFilter & ~flag;
-        RefreshFilter();
+        this.InitializeComponent();
+        this.Loaded += this.OnLoaded;
+        this.Unloaded += this.OnUnloaded;
+        this.ActualThemeChanged += this.OnActualThemeChanged;
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<FrameworkElement, bool>? predicate = null)
@@ -314,28 +80,337 @@ public sealed partial class OutputConsoleView : UserControl
         return null;
     }
 
-    private void RebuildView()
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (!_isLoaded)
+        this.InitializeLoadedState();
+        this.BindListAndScrollViewer();
+        this.RegisterContainerContentChangingHandler();
+
+        // ItemsSource is attached via OnItemsSourceChanged; avoid double subscription here
+        this.RebuildView();
+
+        this.RegisterControlEventHandlers();
+        this.InitializeLevelItems();
+        this.RegisterSearchBoxHandler();
+
+        // Apply options initially
+        this.ApplyInitialViewOptions();
+    }
+
+    private void InitializeLoadedState()
+    {
+        this.isLoaded = true;
+
+        // Resolve theme resources upfront (cached)
+        this.ResolveThemeResources();
+    }
+
+    private void BindListAndScrollViewer()
+    {
+        // Bind the ListView to a UI-thread-bound proxy collection
+        this.List.ItemsSource = this.viewItems;
+        this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+        if (this.scrollViewer is not null)
+        {
+            this.scrollViewer.ViewChanged += this.OnScrollViewerViewChanged;
+        }
+    }
+
+    private void RegisterContainerContentChangingHandler()
+    {
+        // Update only the realized container that changes
+        this.contentChangingHandler = (_, args) =>
+        {
+            if (args.ItemContainer is ListViewItem container)
+            {
+                var ts = FindDescendant<TextBlock>(
+                    container,
+                    n => string.Equals(n.Name, "TimestampBlock", StringComparison.Ordinal));
+                if (ts is not null)
+                {
+                    ts.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                var msg = FindDescendant<TextBlock>(
+                    container,
+                    n => string.Equals(n.Name, "MessageBlock", StringComparison.Ordinal));
+                if (msg is not null)
+                {
+                    msg.TextWrapping = this.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
+                    if (args.Item is OutputLogEntry entry)
+                    {
+                        this.ApplyHighlight(msg, entry);
+                    }
+                }
+            }
+        };
+        this.List.ContainerContentChanging += this.contentChangingHandler;
+    }
+
+    private void RegisterControlEventHandlers()
+    {
+        this.ClearButton.Click += (_, _) =>
+        {
+            if (this.ItemsSource is OutputLogBuffer buffer)
+            {
+                buffer.Clear();
+            }
+
+            this.ClearRequested?.Invoke(this, EventArgs.Empty);
+        };
+
+        this.FollowTailToggle.Checked += (_, _) =>
+        {
+            this.FollowTail = true;
+
+            // If we're not near the bottom, don't yank the user; suspend auto-follow until near bottom
+            this.autoFollowSuspended = !this.IsNearBottom();
+            this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: true));
+        };
+        this.FollowTailToggle.Unchecked += (_, _) =>
+        {
+            this.FollowTail = false;
+            this.autoFollowSuspended = false;
+            this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
+        };
+
+        this.PauseToggle.Checked += (_, _) =>
+        {
+            this.IsPaused = true;
+            if (this.ItemsSource is OutputLogBuffer buffer)
+            {
+                buffer.IsPaused = true;
+            }
+
+            this.PauseChanged?.Invoke(this, new ToggleEventArgs(isOn: true));
+        };
+        this.PauseToggle.Unchecked += (_, _) =>
+        {
+            this.IsPaused = false;
+            if (this.ItemsSource is OutputLogBuffer buffer)
+            {
+                buffer.IsPaused = false;
+            }
+
+            this.PauseChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
+        };
+
+        this.ShowTimestampsToggle.Checked += (_, _) => this.ShowTimestamps = true;
+        this.ShowTimestampsToggle.Unchecked += (_, _) => this.ShowTimestamps = false;
+        this.WrapToggle.Checked += (_, _) => this.WordWrap = true;
+        this.WrapToggle.Unchecked += (_, _) => this.WordWrap = false;
+    }
+
+    private void InitializeLevelItems()
+    {
+        // Levels dropdown items
+        // Initialize sensible defaults if filter is at All
+        if (this.LevelFilter == LevelMask.All)
+        {
+            this.LevelFilter = LevelMask.Information | LevelMask.Warning | LevelMask.Error | LevelMask.Fatal;
+        }
+
+        this.LevelVerboseItem.IsChecked = (this.LevelFilter & LevelMask.Verbose) == LevelMask.Verbose;
+        this.LevelDebugItem.IsChecked = (this.LevelFilter & LevelMask.Debug) == LevelMask.Debug;
+        this.LevelInformationItem.IsChecked = (this.LevelFilter & LevelMask.Information) == LevelMask.Information;
+        this.LevelWarningItem.IsChecked = (this.LevelFilter & LevelMask.Warning) == LevelMask.Warning;
+        this.LevelErrorItem.IsChecked = (this.LevelFilter & LevelMask.Error) == LevelMask.Error;
+        this.LevelFatalItem.IsChecked = (this.LevelFilter & LevelMask.Fatal) == LevelMask.Fatal;
+
+        this.LevelVerboseItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Verbose, this.LevelVerboseItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+        this.LevelDebugItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Debug, this.LevelDebugItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+        this.LevelInformationItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Information, this.LevelInformationItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+        this.LevelWarningItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Warning, this.LevelWarningItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+        this.LevelErrorItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Error, this.LevelErrorItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+        this.LevelFatalItem.Click += (_, _) =>
+        {
+            this.SetLevelFlag(LevelMask.Fatal, this.LevelFatalItem.IsChecked);
+            this.RefreshFilter();
+            this.UpdateLevelsSummary();
+        };
+    }
+
+    private void RegisterSearchBoxHandler() =>
+        this.SearchBox.TextChanged += (_, e2) =>
+        {
+            if (e2.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                this.TextFilter = this.SearchBox.Text;
+                this.RefreshFilter();
+            }
+        };
+
+    private void ApplyInitialViewOptions()
+    {
+        this.ApplyViewOptions();
+        this.UpdateLevelsSummary();
+    }
+
+    [SuppressMessage(
+        "Maintainability",
+        "MA0051:Method is too long",
+        Justification = "already the smallest possible without artificial splitting")]
+    private void OnCollectionChanged(object? sender /*unused*/, NotifyCollectionChangedEventArgs e)
+    {
+        if (!this.isLoaded)
         {
             return;
         }
 
-        _viewItems.Clear();
-        if (ItemsSource is IEnumerable<OutputLogEntry> src)
+        // Marshal changes to UI thread and mirror them into the proxy collection
+        _ = this.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!this.isLoaded)
+            {
+                return;
+            }
+
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    foreach (var item in e.NewItems!.OfType<OutputLogEntry>())
+                    {
+                        if (this.PassesFilter(item))
+                        {
+                            this.viewItems.Add(item);
+                        }
+                    }
+
+                    if (this.FollowTail && this.ShouldAutoScroll())
+                    {
+                        this.ScrollToBottom();
+                    }
+
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    foreach (var item in e.OldItems!.OfType<OutputLogEntry>())
+                    {
+                        // Remove the first matching instance from the view proxy
+                        var idx = this.viewItems.IndexOf(item);
+                        if (idx >= 0)
+                        {
+                            this.viewItems.RemoveAt(idx);
+                        }
+                        else
+                        {
+                            // Fallback: if reference differs, remove from head to mirror ring trim
+                            if (this.viewItems.Count > 0)
+                            {
+                                this.viewItems.RemoveAt(0);
+                            }
+                        }
+                    }
+
+                    break;
+                case NotifyCollectionChangedAction.Reset:
+                    this.RebuildView();
+                    break;
+                case NotifyCollectionChangedAction.Replace:
+                case NotifyCollectionChangedAction.Move:
+                    // For simplicity, rebuild on complex changes
+                    this.RebuildView();
+                    break;
+            }
+        });
+    }
+
+    private void AttachCollectionChanged(IEnumerable? items)
+    {
+        if (items is INotifyCollectionChanged incc)
+        {
+            incc.CollectionChanged += this.OnCollectionChanged;
+        }
+    }
+
+    private void DetachCollectionChanged(IEnumerable? items)
+    {
+        if (items is INotifyCollectionChanged incc)
+        {
+            incc.CollectionChanged -= this.OnCollectionChanged;
+        }
+    }
+
+    private void ApplyViewOptions()
+    {
+        // Reflect show timestamps and word wrap by updating container style
+        for (var i = 0; i < this.List.Items.Count; i++)
+        {
+            if (this.List.ContainerFromIndex(i) is ListViewItem container)
+            {
+                var ts = FindDescendant<TextBlock>(
+                    container,
+                    n => string.Equals(n.Name, "TimestampBlock", StringComparison.Ordinal));
+                if (ts is not null)
+                {
+                    ts.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                var msg = FindDescendant<TextBlock>(
+                    container,
+                    n => string.Equals(n.Name, "MessageBlock", StringComparison.Ordinal));
+                if (msg is not null)
+                {
+                    msg.TextWrapping = this.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
+                }
+            }
+        }
+    }
+
+    private void RefreshFilter() => this.RebuildView();
+
+    private void SetLevelFlag(LevelMask flag, bool on)
+    {
+        this.LevelFilter = on ? this.LevelFilter | flag : this.LevelFilter & ~flag;
+        this.RefreshFilter();
+    }
+
+    private void RebuildView()
+    {
+        if (!this.isLoaded)
+        {
+            return;
+        }
+
+        this.viewItems.Clear();
+        if (this.ItemsSource is IEnumerable<OutputLogEntry> src)
         {
             foreach (var item in src)
             {
-                if (PassesFilter(item))
+                if (this.PassesFilter(item))
                 {
-                    _viewItems.Add(item);
+                    this.viewItems.Add(item);
                 }
             }
         }
 
-        if (ShouldAutoScroll())
+        if (this.ShouldAutoScroll())
         {
-            ScrollToBottom();
+            this.ScrollToBottom();
         }
     }
 
@@ -352,299 +427,155 @@ public sealed partial class OutputConsoleView : UserControl
             LogEventLevel.Fatal => LevelMask.Fatal,
             _ => LevelMask.All,
         };
-        if ((LevelFilter & levelFlag) == 0)
+        if ((this.LevelFilter & levelFlag) == LevelMask.None)
         {
             return false;
         }
 
         // Text filter (case-insensitive substring)
-        var filter = TextFilter;
-        if (string.IsNullOrWhiteSpace(filter))
+        var filter = this.TextFilter.Trim();
+        if (string.IsNullOrEmpty(filter))
         {
             return true;
         }
 
-        var comparison = StringComparison.OrdinalIgnoreCase;
-        if (item.Message?.IndexOf(filter, comparison) >= 0)
+        // Use culture-aware comparisons for user-visible text.
+        if (item.Message.Contains(filter, FilterComparison))
         {
             return true;
         }
 
-        if (item.Source?.IndexOf(filter, comparison) >= 0)
+        if (item.Source?.Contains(filter, FilterComparison) == true)
         {
             return true;
         }
 
-        if (item.Channel?.IndexOf(filter, comparison) >= 0)
+        if (item.Channel?.Contains(filter, FilterComparison) == true)
         {
             return true;
         }
 
-        if (item.Exception is not null)
+        if (item.Exception is null)
         {
-            if (item.Exception.Message?.IndexOf(filter, comparison) >= 0)
-            {
-                return true;
-            }
-
-            if (item.Exception.ToString().IndexOf(filter, comparison) >= 0)
-            {
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        if (item.Exception.Message.Contains(filter, FilterComparison))
+        {
+            return true;
+        }
+
+        // ToString() may be large; avoid multiple calls
+        var exText = item.Exception.ToString();
+        return exText.Contains(filter, FilterComparison);
     }
 
     private bool ShouldAutoScroll()
     {
-        if (!FollowTail)
+        if (!this.FollowTail)
         {
             return false;
         }
 
         // Auto scroll only when user is near the bottom, or when not suspended
         // If suspended due to user scroll, wait until they come near bottom again
-        return !_autoFollowSuspended && IsNearBottom();
+        return !this.autoFollowSuspended && this.IsNearBottom();
     }
 
     private void ScrollToBottom()
     {
-        var last = _viewItems.LastOrDefault();
+        var last = this.viewItems.LastOrDefault();
         if (last is null)
         {
             return;
         }
 
         // First try standard item-based scroll
-        List.ScrollIntoView(last);
+        this.List.ScrollIntoView(last);
 
         // Schedule another attempt after layout/realization
-        _ = DispatcherQueue.TryEnqueue(() => List.ScrollIntoView(last));
+        _ = this.DispatcherQueue.TryEnqueue(() => this.List.ScrollIntoView(last));
 
         // Also try directly scrolling the underlying ScrollViewer
-        _scrollViewer ??= FindDescendant<ScrollViewer>(List);
-        if (_scrollViewer is not null)
+        this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+        if (this.scrollViewer is not null)
         {
             // Jump to bottom; disable animation to make it deterministic
-            _ = _scrollViewer.ChangeView(null, _scrollViewer.ScrollableHeight, null, true);
+            _ = this.scrollViewer.ChangeView(
+                horizontalOffset: null,
+                this.scrollViewer.ScrollableHeight,
+                zoomFactor: null,
+                disableAnimation: true);
         }
     }
 
     private bool IsNearBottom()
     {
-        _scrollViewer ??= FindDescendant<ScrollViewer>(List);
-        if (_scrollViewer is null)
+        this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+        if (this.scrollViewer is null)
         {
             return true; // if we cannot determine, assume near bottom
         }
 
-        var remaining = _scrollViewer.ScrollableHeight - _scrollViewer.VerticalOffset;
-        return remaining <= BottomThreshold || _scrollViewer.ScrollableHeight == 0;
+        var remaining = this.scrollViewer.ScrollableHeight - this.scrollViewer.VerticalOffset;
+        return remaining <= BottomThreshold || this.scrollViewer.ScrollableHeight == 0;
     }
 
     private void OnScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (!_isLoaded)
+        if (!this.isLoaded)
         {
             return;
         }
 
         // If FollowTail is enabled and user scrolled away from bottom, suspend auto-follow
-        if (FollowTail)
+        if (!this.FollowTail)
         {
-            if (IsNearBottom())
-            {
-                // Resume auto-follow when near bottom
-                _autoFollowSuspended = false;
-            }
-            else
-            {
-                _autoFollowSuspended = true;
-            }
+            return;
         }
+
+        // Resume auto-follow when near bottom
+        this.autoFollowSuspended = !this.IsNearBottom();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _isLoaded = false;
-        if (_contentChangingHandler is not null)
+        this.isLoaded = false;
+        if (this.contentChangingHandler is not null)
         {
-            List.ContainerContentChanging -= _contentChangingHandler;
-            _contentChangingHandler = null;
+            this.List.ContainerContentChanging -= this.contentChangingHandler;
+            this.contentChangingHandler = null;
         }
 
-        if (_scrollViewer is not null)
+        if (this.scrollViewer is not null)
         {
-            _scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
+            this.scrollViewer.ViewChanged -= this.OnScrollViewerViewChanged;
         }
 
-        DetachCollectionChanged(ItemsSource);
+        this.DetachCollectionChanged(this.ItemsSource);
+        this.ActualThemeChanged -= this.OnActualThemeChanged; // safety
     }
 
-    #region Dependency Properties
-
-    public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-        nameof(ItemsSource), typeof(IEnumerable), typeof(OutputConsoleView),
-        new PropertyMetadata(null, OnItemsSourceChanged));
-
-    public IEnumerable? ItemsSource
-    {
-        get => (IEnumerable?)GetValue(ItemsSourceProperty);
-        set => SetValue(ItemsSourceProperty, value);
-    }
-
-    private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var v = (OutputConsoleView)d;
-        v.DetachCollectionChanged(e.OldValue as IEnumerable);
-        // Keep ListView bound to proxy; just rebuild its content from the new source
-        v.AttachCollectionChanged(e.NewValue as IEnumerable);
-        v.RebuildView();
-    }
-
-    public static readonly DependencyProperty FollowTailProperty = DependencyProperty.Register(
-        nameof(FollowTail), typeof(bool), typeof(OutputConsoleView), new PropertyMetadata(true));
-
-    public bool FollowTail
-    {
-        get => (bool)GetValue(FollowTailProperty);
-        set => SetValue(FollowTailProperty, value);
-    }
-
-    public static readonly DependencyProperty IsPausedProperty = DependencyProperty.Register(
-        nameof(IsPaused), typeof(bool), typeof(OutputConsoleView), new PropertyMetadata(false));
-
-    public bool IsPaused
-    {
-        get => (bool)GetValue(IsPausedProperty);
-        set => SetValue(IsPausedProperty, value);
-    }
-
-    public static readonly DependencyProperty ShowTimestampsProperty = DependencyProperty.Register(
-        nameof(ShowTimestamps), typeof(bool), typeof(OutputConsoleView),
-        new PropertyMetadata(false, OnViewOptionChanged));
-
-    public bool ShowTimestamps
-    {
-        get => (bool)GetValue(ShowTimestampsProperty);
-        set => SetValue(ShowTimestampsProperty, value);
-    }
-
-    public static readonly DependencyProperty WordWrapProperty = DependencyProperty.Register(
-        nameof(WordWrap), typeof(bool), typeof(OutputConsoleView), new PropertyMetadata(false, OnViewOptionChanged));
-
-    public bool WordWrap
-    {
-        get => (bool)GetValue(WordWrapProperty);
-        set => SetValue(WordWrapProperty, value);
-    }
-
-    public static readonly DependencyProperty TextFilterProperty = DependencyProperty.Register(
-        nameof(TextFilter), typeof(string), typeof(OutputConsoleView),
-        new PropertyMetadata(string.Empty, OnFilterChanged));
-
-    public string TextFilter
-    {
-        get => (string)GetValue(TextFilterProperty);
-        set => SetValue(TextFilterProperty, value);
-    }
-
-    public static readonly DependencyProperty LevelFilterProperty = DependencyProperty.Register(
-        nameof(LevelFilter), typeof(LevelMask), typeof(OutputConsoleView),
-        new PropertyMetadata(LevelMask.All, OnFilterChanged));
-
-    public LevelMask LevelFilter
-    {
-        get => (LevelMask)GetValue(LevelFilterProperty);
-        set => SetValue(LevelFilterProperty, value);
-    }
-
-    public static readonly DependencyProperty SelectedItemProperty = DependencyProperty.Register(
-        nameof(SelectedItem), typeof(OutputLogEntry), typeof(OutputConsoleView), new PropertyMetadata(null));
-
-    public OutputLogEntry? SelectedItem
-    {
-        get => (OutputLogEntry?)GetValue(SelectedItemProperty);
-        set => SetValue(SelectedItemProperty, value);
-    }
-
-    private static void OnViewOptionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var v = (OutputConsoleView)d;
-        v.ApplyViewOptions();
-    }
-
-    private static void OnFilterChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var v = (OutputConsoleView)d;
-        v.RefreshFilter();
-    }
-
-    #endregion
-
-    #region Events
-
-    public event EventHandler? ClearRequested;
-    public event EventHandler<bool>? FollowTailChanged;
-    public event EventHandler<bool>? PauseChanged;
-
-    #endregion
-
-    #region Helpers: Highlight, Levels summary, Accelerators
-
+    [SuppressMessage(
+        "Maintainability",
+        "MA0051:Method is too long",
+        Justification = "already the smallest possible without artificial splitting")]
     private void ApplyHighlight(TextBlock textBlock, OutputLogEntry item)
     {
-        var text = item.Message ?? string.Empty;
-        var filter = TextFilter;
         textBlock.Inlines.Clear();
 
-        // Theme-aware brushes
-        Brush GetThemeBrush(string resourceKey, Brush fallback)
-        {
-            if (Application.Current?.Resources is not null &&
-                Application.Current.Resources.TryGetValue(resourceKey, out var obj) && obj is Brush br)
-            {
-                return br;
-            }
+        var text = item.Message;
+        var filter = this.TextFilter.Trim();
 
-            return fallback;
-        }
-
+        // Use cached brushes with fallback to default
         var defaultBrush = textBlock.Foreground;
-        var tertiary = GetThemeBrush("TextFillColorTertiaryBrush", defaultBrush);
-        var warning = GetThemeBrush("SystemFillColorCautionBrush", defaultBrush);
-        var error = GetThemeBrush("SystemFillColorCriticalBrush", defaultBrush);
-        Brush? accentBrush = null;
-        if (Application.Current?.Resources is not null &&
-            Application.Current.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out var accentObj) &&
-            accentObj is Brush b)
-        {
-            accentBrush = b;
-        }
+        var tertiary = this.tertiaryBrush ?? defaultBrush;
+        var warning = this.warningBrush ?? defaultBrush;
+        var error = this.errorBrush ?? defaultBrush;
+        var accent = this.accentBrush ?? tertiary; // accent fallback to tertiary (subtle highlight)
 
-        // Build level prefix like [I] with color per level
-        var prefixText = item.Level switch
-        {
-            LogEventLevel.Verbose => "[V] ",
-            LogEventLevel.Debug => "[D] ",
-            LogEventLevel.Information => "[I] ",
-            LogEventLevel.Warning => "[W] ",
-            LogEventLevel.Error => "[E] ",
-            LogEventLevel.Fatal => "[F] ",
-            _ => "",
-        };
-
-        var prefixBrush = item.Level switch
-        {
-            LogEventLevel.Verbose => tertiary,
-            LogEventLevel.Debug => tertiary,
-            LogEventLevel.Information => defaultBrush,
-            LogEventLevel.Warning => warning,
-            LogEventLevel.Error => error,
-            LogEventLevel.Fatal => error,
-            _ => defaultBrush,
-        };
+        var prefixText = PrefixText(item);
+        var prefixBrush = PrefixBrush(item);
 
         if (!string.IsNullOrEmpty(prefixText))
         {
@@ -657,11 +588,11 @@ public sealed partial class OutputConsoleView : UserControl
         }
 
         // For Verbose/Debug, gray-out the entire message text
-        var messageBaseBrush = item.Level == LogEventLevel.Verbose || item.Level == LogEventLevel.Debug
+        var messageBaseBrush = item.Level is LogEventLevel.Verbose or LogEventLevel.Debug
             ? tertiary
             : defaultBrush;
 
-        if (string.IsNullOrWhiteSpace(filter))
+        if (string.IsNullOrEmpty(filter))
         {
             textBlock.Inlines.Add(new Run
             {
@@ -673,17 +604,16 @@ public sealed partial class OutputConsoleView : UserControl
         }
 
         var idx = 0;
-        var comparison = StringComparison.OrdinalIgnoreCase;
         while (idx < text.Length)
         {
-            var matchIndex = text.IndexOf(filter, idx, comparison);
+            var matchIndex = text.IndexOf(filter, idx, FilterComparison);
             if (matchIndex < 0)
             {
                 if (idx < text.Length)
                 {
                     textBlock.Inlines.Add(new Run
                     {
-                        Text = text.Substring(idx),
+                        Text = text[idx..],
                         Foreground = messageBaseBrush,
                         FontFamily = textBlock.FontFamily,
                     });
@@ -696,7 +626,7 @@ public sealed partial class OutputConsoleView : UserControl
             {
                 textBlock.Inlines.Add(new Run
                 {
-                    Text = text.Substring(idx, matchIndex - idx),
+                    Text = text[idx..matchIndex],
                     Foreground = messageBaseBrush,
                     FontFamily = textBlock.FontFamily,
                 });
@@ -704,146 +634,201 @@ public sealed partial class OutputConsoleView : UserControl
 
             var matchRun = new Run
             {
-                Text = text.Substring(matchIndex, filter.Length),
+                Text = text[matchIndex..(matchIndex + filter.Length)],
                 FontFamily = textBlock.FontFamily,
+                Foreground = accent,
             };
-            if (accentBrush is not null)
-            {
-                matchRun.Foreground = accentBrush;
-            }
-            else
-            {
-                matchRun.Foreground = messageBaseBrush;
-            }
-
             textBlock.Inlines.Add(matchRun);
 
             idx = matchIndex + filter.Length;
+        }
+
+        return;
+
+        string PrefixText(OutputLogEntry outputLogEntry)
+        {
+            // Build level prefix like [I] with color per level
+            return outputLogEntry.Level switch
+            {
+                LogEventLevel.Verbose => "[V] ",
+                LogEventLevel.Debug => "[D] ",
+                LogEventLevel.Information => "[I] ",
+                LogEventLevel.Warning => "[W] ",
+                LogEventLevel.Error => "[E] ",
+                LogEventLevel.Fatal => "[F] ",
+                _ => string.Empty,
+            };
+        }
+
+        Brush PrefixBrush(OutputLogEntry item1)
+        {
+            return item1.Level switch
+            {
+                LogEventLevel.Verbose => tertiary,
+                LogEventLevel.Debug => tertiary,
+                LogEventLevel.Information => defaultBrush,
+                LogEventLevel.Warning => warning,
+                LogEventLevel.Error => error,
+                LogEventLevel.Fatal => error,
+                _ => defaultBrush,
+            };
+        }
+    }
+
+    private void ResolveThemeResources()
+    {
+        var resources = Application.Current?.Resources;
+        if (resources is null)
+        {
+            this.tertiaryBrush = null;
+            this.warningBrush = null;
+            this.errorBrush = null;
+            this.accentBrush = null;
+            return;
+        }
+
+        this.tertiaryBrush = TryGet("TextFillColorTertiaryBrush");
+        this.warningBrush = TryGet("SystemFillColorCautionBrush");
+        this.errorBrush = TryGet("SystemFillColorCriticalBrush");
+        this.accentBrush = TryGet("AccentTextFillColorPrimaryBrush");
+        return;
+
+        Brush? TryGet(string key)
+        {
+            return resources.TryGetValue(key, out var obj) && obj is Brush b ? b : null;
+        }
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        this.ResolveThemeResources();
+        this.RefreshHighlights();
+    }
+
+    private void RefreshHighlights()
+    {
+        if (!this.isLoaded)
+        {
+            return;
+        }
+
+        // Re-apply highlight to realized containers only
+        var count = this.List.Items.Count;
+        for (var i = 0; i < count; i++)
+        {
+            if (this.List.ContainerFromIndex(i) is not ListViewItem container)
+            {
+                continue;
+            }
+
+            var msg = FindDescendant<TextBlock>(
+                container,
+                n => string.Equals(n.Name, "MessageBlock", StringComparison.Ordinal));
+            if (msg is not null && this.List.Items[i] is OutputLogEntry entry)
+            {
+                this.ApplyHighlight(msg, entry);
+            }
         }
     }
 
     private void UpdateLevelsSummary()
     {
         // Count selected levels
-        var levels = new (LevelMask Flag, string Name)[]
-        {
-            (LevelMask.Verbose, "Verbose"), (LevelMask.Debug, "Debug"), (LevelMask.Information, "Information"),
-            (LevelMask.Warning, "Warning"), (LevelMask.Error, "Error"), (LevelMask.Fatal, "Fatal"),
-        };
+        (LevelMask level, string name)[] levels =
+        [
+            (level: LevelMask.Verbose, "Verbose"),
+            (level: LevelMask.Debug, "Debug"),
+            (level: LevelMask.Information, "Information"),
+            (level: LevelMask.Warning, "Warning"),
+            (level: LevelMask.Error, "Error"),
+            (level: LevelMask.Fatal, "Fatal"),
+        ];
 
-        var selectedCount = levels.Count(l => (LevelFilter & l.Flag) != 0);
-        var highest = GetHighestSelectedLevelName();
+        var selectedCount = levels.Count(l => (this.LevelFilter & l.level) != LevelMask.None);
+        var highest = this.GetHighestSelectedLevelName();
         var summary = selectedCount == levels.Length ? "All" : highest;
-        LevelsDropDown.Content = $"Levels: {summary} ({selectedCount}/{levels.Length})";
+        this.LevelsDropDown.Content = string.Format(
+            CultureInfo.InvariantCulture,
+            "Levels: {0} ({1}/{2})",
+            summary,
+            selectedCount,
+            levels.Length);
     }
 
-    private string GetHighestSelectedLevelName()
-    {
-        // Highest severity first
-        if ((LevelFilter & LevelMask.Fatal) != 0)
+    private string GetHighestSelectedLevelName() =>
+        this.LevelFilter switch
         {
-            return "Fatal";
-        }
-
-        if ((LevelFilter & LevelMask.Error) != 0)
-        {
-            return "Error";
-        }
-
-        if ((LevelFilter & LevelMask.Warning) != 0)
-        {
-            return "Warning";
-        }
-
-        if ((LevelFilter & LevelMask.Information) != 0)
-        {
-            return "Information";
-        }
-
-        if ((LevelFilter & LevelMask.Debug) != 0)
-        {
-            return "Debug";
-        }
-
-        if ((LevelFilter & LevelMask.Verbose) != 0)
-        {
-            return "Verbose";
-        }
-
-        return "None";
-    }
+            // Highest severity first
+            var f when (f & LevelMask.Fatal) == LevelMask.Fatal => "Fatal",
+            var f when (f & LevelMask.Error) == LevelMask.Error => "Error",
+            var f when (f & LevelMask.Warning) == LevelMask.Warning => "Warning",
+            var f when (f & LevelMask.Information) == LevelMask.Information => "Information",
+            var f when (f & LevelMask.Debug) == LevelMask.Debug => "Debug",
+            var f when (f & LevelMask.Verbose) == LevelMask.Verbose => "Verbose",
+            _ => "None",
+        };
 
     private void OnFindNextAccelerator(object sender, KeyboardAcceleratorInvokedEventArgs e)
     {
         e.Handled = true;
-        if (!_isLoaded || _viewItems.Count == 0)
+        if (!this.isLoaded || this.viewItems.Count == 0)
         {
             return;
         }
 
-        var start = List.SelectedIndex;
+        var start = this.List.SelectedIndex;
         if (start < 0)
         {
             start = -1;
         }
 
-        var n = _viewItems.Count;
-        for (var i = 1; i <= n; i++)
-        {
-            var idx = (start + i) % n;
-            SelectAndScrollToIndex(idx);
-            return;
-        }
+        var n = this.viewItems.Count;
+        var idx = (start + 1) % n;
+        this.SelectAndScrollToIndex(idx);
     }
 
-    private void OnFindPrevAccelerator(object sender, KeyboardAcceleratorInvokedEventArgs e)
+    private void OnFindPrevAccelerator(object sender /*unused*/, KeyboardAcceleratorInvokedEventArgs e)
     {
         e.Handled = true;
-        if (!_isLoaded || _viewItems.Count == 0)
+        if (!this.isLoaded || this.viewItems.Count == 0)
         {
             return;
         }
 
-        var start = List.SelectedIndex;
+        var start = this.List.SelectedIndex;
         if (start < 0)
         {
             start = 0;
         }
 
-        var n = _viewItems.Count;
-        for (var i = 1; i <= n; i++)
+        var n = this.viewItems.Count;
+        var idx = (start - 1) % n;
+        if (idx < 0)
         {
-            var idx = (start - i) % n;
-            if (idx < 0)
-            {
-                idx += n;
-            }
-
-            SelectAndScrollToIndex(idx);
-            return;
+            idx += n;
         }
+
+        this.SelectAndScrollToIndex(idx);
     }
 
-    private void OnFocusSearchAccelerator(object sender, KeyboardAcceleratorInvokedEventArgs e)
+    private void OnFocusSearchAccelerator(object sender /*unused*/, KeyboardAcceleratorInvokedEventArgs e)
     {
         e.Handled = true;
-        _ = SearchBox.Focus(FocusState.Programmatic);
-        var tb = FindDescendant<TextBox>(SearchBox);
+        _ = this.SearchBox.Focus(FocusState.Programmatic);
+        var tb = FindDescendant<TextBox>(this.SearchBox);
         tb?.SelectAll();
     }
 
     private void SelectAndScrollToIndex(int index)
     {
-        if (index < 0 || index >= _viewItems.Count)
+        if (index < 0 || index >= this.viewItems.Count)
         {
             return;
         }
 
-        var item = _viewItems[index];
-        List.SelectedItem = item;
-        SelectedItem = item;
-        List.ScrollIntoView(item);
+        var item = this.viewItems[index];
+        this.List.SelectedItem = item;
+        this.SelectedItem = item;
+        this.List.ScrollIntoView(item);
     }
-
-    #endregion
 }
