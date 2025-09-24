@@ -12,7 +12,7 @@ using Moq.Protected;
 namespace DroidNet.Controls.Tests.Selection;
 
 /// <summary>
-/// Unit test cases for the <see cref="MultipleSelectionModel{T}" /> class.
+///     Unit test cases for the <see cref="MultipleSelectionModel{T}" /> class.
 /// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
@@ -131,7 +131,7 @@ public partial class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedIndices.Should().BeEmpty();
         _ = model.SelectedIndex.Should().Be(-1);
-        _ = model.SelectedItem.Should().Be(default);
+        _ = model.SelectedItem.Should().Be(expected: null);
     }
 
     [TestMethod]
@@ -181,7 +181,7 @@ public partial class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedIndices.Should().BeEmpty();
         _ = model.SelectedIndex.Should().Be(-1);
-        _ = model.SelectedItem.Should().Be(default);
+        _ = model.SelectedItem.Should().Be(expected: null);
     }
 
     [TestMethod]
@@ -464,7 +464,7 @@ public partial class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void Selectall_ShouldRaiseOnlyOneCollectionChanged_WhenItemIsNotAlreadySelected()
+    public void SelectAll_ShouldRaiseOnlyOneCollectionChanged_WhenItemIsNotAlreadySelected()
     {
         // Arrange
         var model = new TestSelectionModel("A", "B", "C", "D", "E", "F", "G", "H", "I", "J");
@@ -615,16 +615,15 @@ public partial class MultipleSelectionModelTests
             .Returns(4);
         _ = mockModel.Protected()
             .Setup<int>("IndexOf", ItExpr.IsAny<string>())
-            .Returns<string>(
-                item =>
-                    item switch
-                    {
-                        "A" => 0,
-                        "B" => 1,
-                        "C" => 2,
-                        "D" => 3,
-                        _ => -1,
-                    });
+            .Returns<string>(item =>
+                item switch
+                {
+                    "A" => 0,
+                    "B" => 1,
+                    "C" => 2,
+                    "D" => 3,
+                    _ => -1,
+                });
 
         // Act
         mockModel.Object.SelectRange("B", "D");
@@ -730,7 +729,7 @@ public partial class MultipleSelectionModelTests
     public void InvertSelection_WhenItemTypeIsNotISelectable_Throws()
     {
         // Arrange
-        var model = new TestSelectionModel([]);
+        var model = new TestSelectionModel();
 
         // Act
         var act = model.InvertSelection;

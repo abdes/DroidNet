@@ -13,18 +13,15 @@ namespace DroidNet.Controls.Tests.Selection;
 [ExcludeFromCodeCoverage]
 public class SelectionObservableCollectionTests
 {
-    private readonly Controls.Selection.SelectionObservableCollection<ISelectable> collection;
+    private readonly SelectionObservableCollection<ISelectable> collection;
     private readonly Mock<ISelectable> mockSelectable;
 
     public SelectionObservableCollectionTests()
     {
         this.mockSelectable = new Mock<ISelectable>();
-        var mockItemGetter = new Mock<Controls.Selection.SelectionObservableCollection<ISelectable>.ItemGetter>();
+        var mockItemGetter = new Mock<SelectionObservableCollection<ISelectable>.ItemGetter>();
         _ = mockItemGetter.Setup(getter => getter(It.IsAny<int>())).Returns(this.mockSelectable.Object);
-        this.collection = new Controls.Selection.SelectionObservableCollection<ISelectable>([])
-        {
-            GetItemAt = mockItemGetter.Object,
-        };
+        this.collection = new SelectionObservableCollection<ISelectable>([]) { GetItemAt = mockItemGetter.Object };
     }
 
     [TestMethod]
@@ -74,7 +71,7 @@ public class SelectionObservableCollectionTests
             this.collection.Add(1);
         }
 
-        this.collection.CollectionChanged
-            += (sender, e) => Assert.Fail("CollectionChanged event should not be raised.");
+        this.collection.CollectionChanged += (_, _)
+            => Assert.Fail("CollectionChanged event should not be raised.");
     }
 }

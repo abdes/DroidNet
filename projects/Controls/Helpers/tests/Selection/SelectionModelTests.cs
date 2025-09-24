@@ -10,7 +10,7 @@ using FluentAssertions;
 namespace DroidNet.Controls.Tests.Selection;
 
 /// <summary>
-/// Unit test cases for the <see cref="SelectionModel{T}" /> class.
+///     Unit test cases for the <see cref="SelectionModel{T}" /> class.
 /// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
@@ -250,10 +250,6 @@ public partial class SelectionModelTests : TestSuiteWithAssertions
                     case nameof(this.IsEmpty):
                         this.IsEmptyEventRaisedInfo.PropertyChanging = true;
                         break;
-
-                    default:
-                        // Ignore
-                        break;
                 }
             };
 
@@ -269,10 +265,6 @@ public partial class SelectionModelTests : TestSuiteWithAssertions
                         break;
                     case nameof(this.IsEmpty):
                         this.IsEmptyEventRaisedInfo.PropertyChanged = true;
-                        break;
-
-                    default:
-                        // Ignore
                         break;
                 }
             };
