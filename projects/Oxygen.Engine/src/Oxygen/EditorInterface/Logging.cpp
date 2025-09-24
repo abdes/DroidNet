@@ -3,7 +3,9 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+
 #include <exception>
+#include <source_location>
 
 #if defined(_WIN32)
 #  include <Windows.h>
@@ -97,6 +99,12 @@ auto ConfigureLogging(const LoggingConfig& config) -> bool
   }
 
   return false;
+}
+
+auto LogInfoMessage(const char* message) -> void
+{
+  auto source = std::source_location::current();
+  LOG_F(INFO, "{}", message);
 }
 
 } // namespace oxygen::engine::interop

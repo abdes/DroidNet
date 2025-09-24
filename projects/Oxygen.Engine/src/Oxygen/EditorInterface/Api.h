@@ -23,6 +23,7 @@ struct LoggingConfig {
 struct EngineConfig { };
 
 OXGN_EI_API auto ConfigureLogging(const LoggingConfig& config) -> bool;
+OXGN_EI_API auto LogInfoMessage(const char* message) -> void;
 OXGN_EI_API auto CreateEngine(const EngineConfig& config) -> bool;
 
 OXGN_EI_API auto CreateScene(const char* name) -> bool;
