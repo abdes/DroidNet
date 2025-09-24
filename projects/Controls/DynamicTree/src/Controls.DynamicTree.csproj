@@ -17,6 +17,10 @@
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+    </PropertyGroup>
+
     <ItemGroup>
         <None Include="..\README.md">
             <Pack>True</Pack>

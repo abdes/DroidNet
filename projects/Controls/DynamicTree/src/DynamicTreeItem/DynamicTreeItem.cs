@@ -16,63 +16,72 @@ using Windows.UI.Core;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
-/// expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
+///     Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
+///     expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The <see cref="DynamicTreeItem"/> control is designed to be used within a <see cref="DynamicTree"/> control,
-/// providing a versatile way to display items in a hierarchical tree where child items can be loaded on demand.
-/// This approach optimizes performance and resource usage, especially when dealing with large data sets or
-/// complex hierarchies.
-/// </para>
-/// <para>
-/// Users can interact with the tree by expanding and collapsing nodes to navigate through the hierarchy.
-/// The control dynamically adjusts the visual representation, with indentation reflecting the depth of each item.
-/// This hierarchical representation offers clear visual cues of parent-child relationships, enhancing navigability
-/// within the tree.
-/// </para>
-/// <para>
-/// Selection handling is a key feature of the <see cref="DynamicTreeItem"/>. Users can select items within the tree,
-/// and the control updates its visual states to reflect the selection status. This is particularly useful in scenarios
-/// where actions need to be performed on specific items, such as editing or deleting. Visual distinctions for selected
-/// items help users keep track of their selections within potentially complex structures.
-/// </para>
-/// <para>
-/// The control also supports in-place renaming, allowing users to rename items directly within the tree.
-/// By double-clicking an item's label, users can initiate edit mode, making the item's name editable.
-/// This streamlines the process of updating labels without the need for separate dialogs or forms.
-/// The control includes validation mechanisms to ensure that new names meet the application's criteria,
-/// providing immediate feedback if an entered name is invalid.
-/// </para>
-/// <para>
-/// Customization is a significant aspect of the <see cref="DynamicTreeItem"/>. Developers can tailor the appearance
-/// and behavior extensively through template parts and visual states. Template parts allow for customization
-/// of specific components within the control, such as the expander icon or content presenter. Visual states enable
-/// smooth transitions based on user interactions or data changes, enhancing the user experience.
-/// </para>
-/// <para>
-/// <strong>Usage Guidelines</strong>
-/// </para>
-/// <para>
-/// To leverage the full capabilities of the <see cref="DynamicTreeItem"/>, use it within a <see cref="DynamicTree"/> control.
-/// Implement data models that support on-demand loading of child items to optimize performance, particularly
-/// with large or complex hierarchies.
-/// </para>
-/// <para>
-/// Customize the control to match your application's theme by redefining template parts. Adjust elements like colors,
-/// fonts, and icons to create a cohesive user interface. Utilize visual states to provide feedback during user interactions,
-/// such as hovering, selecting, or renaming items, resulting in a more responsive and intuitive experience.
-/// </para>
-/// <para>
-/// To enable in-place renaming, handle the necessary events and implement validation logic to ensure item names
-/// meet the application's requirements. Providing immediate feedback during renaming enhances the user experience
-/// and helps prevent invalid data entries.
-/// </para>
+///     <para>
+///         The <see cref="DynamicTreeItem" /> control is designed to be used within a <see cref="DynamicTree" /> control,
+///         providing a versatile way to display items in a hierarchical tree where child items can be loaded on demand.
+///         This approach optimizes performance and resource usage, especially when dealing with large data sets or
+///         complex hierarchies.
+///     </para>
+///     <para>
+///         Users can interact with the tree by expanding and collapsing nodes to navigate through the hierarchy.
+///         The control dynamically adjusts the visual representation, with indentation reflecting the depth of each item.
+///         This hierarchical representation offers clear visual cues of parent-child relationships, enhancing navigability
+///         within the tree.
+///     </para>
+///     <para>
+///         Selection handling is a key feature of the <see cref="DynamicTreeItem" />. Users can select items within the
+///         tree,
+///         and the control updates its visual states to reflect the selection status. This is particularly useful in
+///         scenarios
+///         where actions need to be performed on specific items, such as editing or deleting. Visual distinctions for
+///         selected
+///         items help users keep track of their selections within potentially complex structures.
+///     </para>
+///     <para>
+///         The control also supports in-place renaming, allowing users to rename items directly within the tree.
+///         By double-clicking an item's label, users can initiate edit mode, making the item's name editable.
+///         This streamlines the process of updating labels without the need for separate dialogs or forms.
+///         The control includes validation mechanisms to ensure that new names meet the application's criteria,
+///         providing immediate feedback if an entered name is invalid.
+///     </para>
+///     <para>
+///         Customization is a significant aspect of the <see cref="DynamicTreeItem" />. Developers can tailor the
+///         appearance
+///         and behavior extensively through template parts and visual states. Template parts allow for customization
+///         of specific components within the control, such as the expander icon or content presenter. Visual states enable
+///         smooth transitions based on user interactions or data changes, enhancing the user experience.
+///     </para>
+///     <para>
+///         <strong>Usage Guidelines</strong>
+///     </para>
+///     <para>
+///         To leverage the full capabilities of the <see cref="DynamicTreeItem" />, use it within a
+///         <see cref="DynamicTree" /> control.
+///         Implement data models that support on-demand loading of child items to optimize performance, particularly
+///         with large or complex hierarchies.
+///     </para>
+///     <para>
+///         Customize the control to match your application's theme by redefining template parts. Adjust elements like
+///         colors,
+///         fonts, and icons to create a cohesive user interface. Utilize visual states to provide feedback during user
+///         interactions,
+///         such as hovering, selecting, or renaming items, resulting in a more responsive and intuitive experience.
+///     </para>
+///     <para>
+///         To enable in-place renaming, handle the necessary events and implement validation logic to ensure item names
+///         meet the application's requirements. Providing immediate feedback during renaming enhances the user experience
+///         and helps prevent invalid data entries.
+///     </para>
 /// </remarks>
 /// <example>
-/// <para><strong>Example Usage</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>Example Usage</strong>
+///     </para>
+///     <![CDATA[
 /// <!-- Define the data model -->
 /// public class TreeItemViewModel : ITreeItem
 /// {
@@ -80,18 +89,15 @@ namespace DroidNet.Controls;
 ///     public ObservableCollection<ITreeItem> Children { get; set; }
 ///     // Implement other members of ITreeItem
 /// }
-///
 /// <!-- Use the DynamicTree in XAML -->
 /// <Page
 ///     x:Class="MyApp.MainPage"
 ///     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 ///     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 ///     xmlns:controls="using:DroidNet.Controls">
-///
 ///     <Page.DataContext>
 ///         <local:MainViewModel />
 ///     </Page.DataContext>
-///
 ///     <Grid>
 ///         <controls:DynamicTree ItemsSource="{Binding RootItems}">
 ///             <controls:DynamicTree.ItemTemplate>
@@ -102,12 +108,10 @@ namespace DroidNet.Controls;
 ///         </controls:DynamicTree>
 ///     </Grid>
 /// </Page>
-///
 /// <!-- ViewModel -->
 /// public class MainViewModel
 /// {
 ///     public ObservableCollection<ITreeItem> RootItems { get; set; }
-///
 ///     public MainViewModel()
 ///     {
 ///         RootItems = new ObservableCollection<ITreeItem>
@@ -173,19 +177,19 @@ public partial class DynamicTreeItem : ContentControl
     private const string SelectedVisualState = "Selected";
 
     /// <summary>
-    /// Default indent increment value.
+    ///     Default indent increment value.
     /// </summary>
     private const double DefaultIndentIncrement = 34.0;
 
     private readonly double indentIncrement;
 
-    private DynamicTree? treeControl;
+    private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
     private Expander? expander;
 
-    private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
+    private DynamicTree? treeControl;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DynamicTreeItem"/> class.
+    ///     Initializes a new instance of the <see cref="DynamicTreeItem" /> class.
     /// </summary>
     public DynamicTreeItem()
     {
@@ -205,12 +209,12 @@ public partial class DynamicTreeItem : ContentControl
     }
 
     /// <summary>
-    /// Updates the margin of the item based on its depth in the tree.
+    ///     Updates the margin of the item based on its depth in the tree.
     /// </summary>
     /// <remarks>
-    /// Because of item recycling in the DynamicTree, the item's depth can change when it is reused
-    /// to display a different item. Its margin is updated when its template is applied, but should
-    /// also be updated every time it is prepared to be displayed (<see cref="ItemsRepeater.ElementPrepared"/>).)
+    ///     Because of item recycling in the DynamicTree, the item's depth can change when it is reused
+    ///     to display a different item. Its margin is updated when its template is applied, but should
+    ///     also be updated every time it is prepared to be displayed (<see cref="ItemsRepeater.ElementPrepared" />).
     /// </remarks>
     internal void UpdateItemMargin()
     {
@@ -227,9 +231,9 @@ public partial class DynamicTreeItem : ContentControl
     }
 
     /// <summary>
-    /// Handles recycling of the tree items inside the tree control to properly reset the tree item. In particular,
-    /// this works around the issue where the thumbnail ContentTemplateSelector is not applied when a tree item
-    /// is recycled, resulting in the thumbnail using the wrong template.
+    ///     Handles recycling of the tree items inside the tree control to properly reset the tree item. In particular,
+    ///     this works around the issue where the thumbnail ContentTemplateSelector is not applied when a tree item
+    ///     is recycled, resulting in the thumbnail using the wrong template.
     /// </summary>
     internal void OnElementPrepared()
     {
@@ -239,10 +243,11 @@ public partial class DynamicTreeItem : ContentControl
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
-        _ = this.GetTemplateChild(RootGridPart) as Grid ?? throw new InvalidOperationException($"{nameof(DynamicTreeItem)} template is missing {RootGridPart}");
+        _ = this.GetTemplateChild(RootGridPart) as Grid ??
+            throw new InvalidOperationException($"{nameof(DynamicTreeItem)} template is missing {RootGridPart}");
 
         this.SetupExpanderPart();
         this.SetupItemNameParts();
@@ -329,10 +334,7 @@ public partial class DynamicTreeItem : ContentControl
 
         this.Expand?.Invoke(
             this,
-            new DynamicTreeEventArgs()
-            {
-                TreeItem = (TreeItemAdapter)this.DataContext,
-            });
+            new DynamicTreeEventArgs { TreeItem = (TreeItemAdapter)this.DataContext });
     }
 
     private void OnCollapse(object? sender, EventArgs args)
@@ -342,10 +344,7 @@ public partial class DynamicTreeItem : ContentControl
 
         this.Collapse?.Invoke(
             this,
-            new DynamicTreeEventArgs()
-            {
-                TreeItem = (TreeItemAdapter)this.DataContext,
-            });
+            new DynamicTreeEventArgs { TreeItem = (TreeItemAdapter)this.DataContext });
     }
 
     private void UpdateSelectionVisualState(bool isSelected)
@@ -387,18 +386,18 @@ public partial class DynamicTreeItem : ContentControl
     }
 
     /// <summary>
-    /// Updates the reference to the ancestor <see cref="DynamicTree" /> control. This method gets
-    /// the thumbnail template selector from the ancestor with type <see cref="DynamicTree" /> and
-    /// registers or un-registers property change callbacks as necessary to keep itself in-sync.
-    /// This ensures that we handle properly the case where the item is being moved between two tree
-    /// controls.
+    ///     Updates the reference to the ancestor <see cref="DynamicTree" /> control. This method gets
+    ///     the thumbnail template selector from the ancestor with type <see cref="DynamicTree" /> and
+    ///     registers or un-registers property change callbacks as necessary to keep itself in-sync.
+    ///     This ensures that we handle properly the case where the item is being moved between two tree
+    ///     controls.
     /// </summary>
     /// <remarks>
-    /// This method is called when the layout is updated which happens frequently. It's important to
-    /// minimize the work it does.
+    ///     This method is called when the layout is updated which happens frequently. It's important to
+    ///     minimize the work it does.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the <see cref="DynamicTreeItem" /> is not within a <see cref="DynamicTree" />.
+    ///     Thrown when the <see cref="DynamicTreeItem" /> is not within a <see cref="DynamicTree" />.
     /// </exception>
     private void UpdateAncestorReference()
     {

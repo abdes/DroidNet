@@ -10,31 +10,39 @@ using Microsoft.UI.Xaml.Markup;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a custom thumbnail control that extends the <see cref="ContentControl"/> class.
-/// This control is designed to display content with a customizable template, provided by a
-/// <see cref="DataTemplateSelector"/> for maximum flexibility.
+///     Represents a custom thumbnail control that extends the <see cref="ContentControl" /> class.
+///     This control is designed to display content with a customizable template, provided by a
+///     <see cref="DataTemplateSelector" /> for maximum flexibility.
 /// </summary>
 /// <remarks>
-/// The <see cref="Thumbnail"/> control follows the behavior of <see cref="ContentControl"/> in giving precedence to
-/// <see cref="ContentControl.ContentTemplate"/> when it is set. If <see cref="ContentControl.ContentTemplate"/> is not set,
-/// but <see cref="ContentControl.ContentTemplateSelector"/> is set, the control will use the template selected by the
-/// <see cref="ContentControl.ContentTemplateSelector"/>. If neither is set, after the control is fully initialized, it will use a
-/// default template defined in the application resources.
-/// <para>
-/// <strong>Important:</strong> Ensure that the default template is defined in the application resources with the key
-/// "DefaultThumbnailTemplate". This can be done by merging the resource dictionary containing the default template into the
-/// control library's <see langword="Themes/Generic.xaml"/> file.
-/// </para>
+///     The <see cref="Thumbnail" /> control follows the behavior of <see cref="ContentControl" /> in giving precedence to
+///     <see cref="ContentControl.ContentTemplate" /> when it is set. If <see cref="ContentControl.ContentTemplate" /> is
+///     not set,
+///     but <see cref="ContentControl.ContentTemplateSelector" /> is set, the control will use the template selected by the
+///     <see cref="ContentControl.ContentTemplateSelector" />. If neither is set, after the control is fully initialized,
+///     it will use a
+///     default template defined in the application resources.
+///     <para>
+///         <strong>Important:</strong> Ensure that the default template is defined in the application resources with the
+///         key
+///         "DefaultThumbnailTemplate". This can be done by merging the resource dictionary containing the default template
+///         into the
+///         control library's <see langword="Themes/Generic.xaml" /> file.
+///     </para>
 /// </remarks>
 /// <example>
-/// <para><strong>Example: Using the default template</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>Example: Using the default template</strong>
+///     </para>
+///     <![CDATA[
 /// <local:Thumbnail Content="Sample Content" />
 /// ]]>
 /// </example>
 /// <example>
-/// <para><strong>Example: Using a custom template</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>Example: Using a custom template</strong>
+///     </para>
+///     <![CDATA[
 /// <local:Thumbnail>
 ///     <local:Thumbnail.ContentTemplate>
 ///         <DataTemplate>
@@ -51,17 +59,20 @@ namespace DroidNet.Controls;
 /// ]]>
 /// </example>
 /// <example>
-/// <para><strong>Example: Using a custom template selector</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>Example: Using a custom template selector</strong>
+///     </para>
+///     <![CDATA[
 /// <local:Thumbnail Content="Sample Content" ContentTemplateSelector="{StaticResource CustomTemplateSelector}" />
 /// ]]>
-/// <para><strong>Custom Template Selector Implementation:</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>Custom Template Selector Implementation:</strong>
+///     </para>
+///     <![CDATA[
 /// public class CustomTemplateSelector : DataTemplateSelector
 /// {
 ///     public DataTemplate CameraTemplate { get; set; }
 ///     public DataTemplate DefaultTemplate { get; set; }
-///
 ///     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
 ///     {
 ///         if (item is string content && content == "Camera")
@@ -72,8 +83,10 @@ namespace DroidNet.Controls;
 ///     }
 /// }
 /// ]]>
-/// <para><strong>XAML Definition for CustomTemplateSelector:</strong></para>
-/// <![CDATA[
+///     <para>
+///         <strong>XAML Definition for CustomTemplateSelector:</strong>
+///     </para>
+///     <![CDATA[
 /// <local:CustomTemplateSelector x:Key="CustomTemplateSelector">
 ///     <local:CustomTemplateSelector.CameraTemplate>
 ///         <DataTemplate>
@@ -94,19 +107,19 @@ namespace DroidNet.Controls;
 /// </local:CustomTemplateSelector>
 /// ]]>
 /// </example>
-/// <seealso cref="ContentControl.ContentTemplate"/>
-/// <seealso cref="ContentControl.ContentTemplateSelector"/>
+/// <seealso cref="ContentControl.ContentTemplate" />
+/// <seealso cref="ContentControl.ContentTemplateSelector" />
 [ContentProperty(Name = nameof(Content))]
 public partial class Thumbnail : ContentControl
 {
     private bool isInitialized;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Thumbnail" /> class.
+    ///     Initializes a new instance of the <see cref="Thumbnail" /> class.
     /// </summary>
     /// <remarks>
-    /// This constructor sets the default style key for the <see cref="Thumbnail" /> control to
-    /// ensure it uses the correct style defined in the application resources.
+    ///     This constructor sets the default style key for the <see cref="Thumbnail" /> control to
+    ///     ensure it uses the correct style defined in the application resources.
     /// </remarks>
     public Thumbnail()
     {
@@ -122,10 +135,11 @@ public partial class Thumbnail : ContentControl
         this.Resources.MergedDictionaries.Add(resourceDictionary);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     /// <remarks>
-    /// If the control is already loaded, when this property changes and neither the <see cref="ContentControl.ContentTemplate"/> nor
-    /// the <see cref="ContentControl.ContentTemplateSelector"/> is set, the default template will be used.
+    ///     If the control is already loaded, when this property changes and neither the
+    ///     <see cref="ContentControl.ContentTemplate" /> nor
+    ///     the <see cref="ContentControl.ContentTemplateSelector" /> is set, the default template will be used.
     /// </remarks>
     protected override void OnContentTemplateChanged(DataTemplate oldContentTemplate, DataTemplate newContentTemplate)
     {
@@ -133,26 +147,31 @@ public partial class Thumbnail : ContentControl
         this.UpdateContentTemplate();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     /// <remarks>
-    /// If the control is already loaded, when this property changes and neither the <see cref="ContentControl.ContentTemplate"/> nor
-    /// the <see cref="ContentControl.ContentTemplateSelector"/> is set, the default template will be used.
+    ///     If the control is already loaded, when this property changes and neither the
+    ///     <see cref="ContentControl.ContentTemplate" /> nor
+    ///     the <see cref="ContentControl.ContentTemplateSelector" /> is set, the default template will be used.
     /// </remarks>
-    protected override void OnContentTemplateSelectorChanged(DataTemplateSelector oldContentTemplateSelector, DataTemplateSelector newContentTemplateSelector)
+    protected override void OnContentTemplateSelectorChanged(
+        DataTemplateSelector oldContentTemplateSelector,
+        DataTemplateSelector newContentTemplateSelector)
     {
         base.OnContentTemplateSelectorChanged(oldContentTemplateSelector, newContentTemplateSelector);
         this.UpdateContentTemplate();
     }
 
     /// <summary>
-    /// Handles the <see cref="FrameworkElement.Loaded"/> event of the <see cref="Thumbnail"/> control.
+    ///     Handles the <see cref="FrameworkElement.Loaded" /> event of the <see cref="Thumbnail" /> control.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
     /// <remarks>
-    /// This method sets the <see cref="isInitialized"/> flag to <see langword="true"/> and calls <see cref="UpdateContentTemplate"/>.
-    /// If neither the <see cref="ContentControl.ContentTemplate"/> nor the <see cref="ContentControl.ContentTemplateSelector"/>
-    /// is set, the control will use a default template defined in the application resources.
+    ///     This method sets the <see cref="isInitialized" /> flag to <see langword="true" /> and calls
+    ///     <see cref="UpdateContentTemplate" />.
+    ///     If neither the <see cref="ContentControl.ContentTemplate" /> nor the
+    ///     <see cref="ContentControl.ContentTemplateSelector" />
+    ///     is set, the control will use a default template defined in the application resources.
     /// </remarks>
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
@@ -161,16 +180,18 @@ public partial class Thumbnail : ContentControl
     }
 
     /// <summary>
-    /// Updates the content template of the control based on the current properties.
+    ///     Updates the content template of the control based on the current properties.
     /// </summary>
     /// <remarks>
-    /// This method ensures that the <see cref="ContentControl.ContentTemplate"/> property is set to the appropriate template
-    /// based on the current properties of the control. If <see cref="ContentControl.ContentTemplate"/> is set, it takes
-    /// precedence. If <see cref="ContentControl.ContentTemplate"/> is not set but <see cref="ContentControl.ContentTemplateSelector"/>
-    /// is set, the control will use the template selected by the <see cref="ContentControl.ContentTemplateSelector"/>.
-    /// <para>
-    /// If neither is set, the control will use a default template defined in the application resources.
-    /// </para>
+    ///     This method ensures that the <see cref="ContentControl.ContentTemplate" /> property is set to the appropriate
+    ///     template
+    ///     based on the current properties of the control. If <see cref="ContentControl.ContentTemplate" /> is set, it takes
+    ///     precedence. If <see cref="ContentControl.ContentTemplate" /> is not set but
+    ///     <see cref="ContentControl.ContentTemplateSelector" />
+    ///     is set, the control will use the template selected by the <see cref="ContentControl.ContentTemplateSelector" />.
+    ///     <para>
+    ///         If neither is set, the control will use a default template defined in the application resources.
+    ///     </para>
     /// </remarks>
     private void UpdateContentTemplate()
     {

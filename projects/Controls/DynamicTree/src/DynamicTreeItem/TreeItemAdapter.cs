@@ -10,46 +10,46 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents an abstract base class for tree items in a dynamic tree structure.
+///     Represents an abstract base class for tree items in a dynamic tree structure.
 /// </summary>
 /// <remarks>
-/// The <see cref="TreeItemAdapter" /> class provides the foundational implementation for tree
-/// items, including properties and methods for managing child items, parent references, and event
-/// handling. It extends the <see cref="ObservableObject" /> class and implements the
-/// <see cref="ITreeItem" /> interface.
-/// <para>
-/// The <see cref="Depth" /> property indicates the tree depth at which the item is located, and can
-/// be only set from outside for the root item to hide it. In such case, the depth should be set to
-/// `-1`. Otherwise, it will be automatically updated as the item gets placed under a parent or
-/// removed from the tree.
-/// </para>
-/// <para>
-/// When an item has a <see cref="Parent" />, its <see cref="Depth" /> will always be `1` more than
-/// its parent, and every item has a <see cref="Parent" />, unless it is not currently in the tree,
-/// or it is the <see cref="IsRoot">root</see> item.
-/// </para>
-/// <para>
-/// The collection of the item's <see cref="Children" /> is lazily initialized on first access. This
-/// helps in implementing gradually expanding trees, and reduce the load when the tree is first
-/// displayed. Mark an item as <see cref="IsExpanded" /> to indicate that its <see cref="Children" />
-/// collection should be populated when the item is displayed. This also applies to the
-/// <see cref="ChildrenCount" /> property. It is lazily evaluated. If the <see cref="Children" />
-/// collection has already been populated, the count is obtained from that collection; otherwise, it
-/// is requested from the concrete class implementation via the <see cref="DoGetChildrenCount" />
-/// abstract method.
-/// </para>
+///     The <see cref="TreeItemAdapter" /> class provides the foundational implementation for tree
+///     items, including properties and methods for managing child items, parent references, and event
+///     handling. It extends the <see cref="ObservableObject" /> class and implements the
+///     <see cref="ITreeItem" /> interface.
+///     <para>
+///         The <see cref="Depth" /> property indicates the tree depth at which the item is located, and can
+///         be only set from outside for the root item to hide it. In such case, the depth should be set to
+///         `-1`. Otherwise, it will be automatically updated as the item gets placed under a parent or
+///         removed from the tree.
+///     </para>
+///     <para>
+///         When an item has a <see cref="Parent" />, its <see cref="Depth" /> will always be `1` more than
+///         its parent, and every item has a <see cref="Parent" />, unless it is not currently in the tree,
+///         or it is the <see cref="IsRoot">root</see> item.
+///     </para>
+///     <para>
+///         The collection of the item's <see cref="Children" /> is lazily initialized on first access. This
+///         helps in implementing gradually expanding trees, and reduce the load when the tree is first
+///         displayed. Mark an item as <see cref="IsExpanded" /> to indicate that its <see cref="Children" />
+///         collection should be populated when the item is displayed. This also applies to the
+///         <see cref="ChildrenCount" /> property. It is lazily evaluated. If the <see cref="Children" />
+///         collection has already been populated, the count is obtained from that collection; otherwise, it
+///         is requested from the concrete class implementation via the <see cref="DoGetChildrenCount" />
+///         abstract method.
+///     </para>
 /// </remarks>
 public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 {
     /// <summary>
-    /// Represents the internal collection of child items in the tree. This collection is lazily initialized.
+    ///     Represents the internal collection of child items in the tree. This collection is lazily initialized.
     /// </summary>
     /// <seealso cref="childrenLazy" />
     /// <seealso cref="InitializeChildrenCollectionAsync" />
     private readonly ObservableCollection<ITreeItem> children = [];
 
     /// <summary>
-    /// Lazily initialized read-only view of the collection of child items.
+    ///     Lazily initialized read-only view of the collection of child items.
     /// </summary>
     private readonly Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>> childrenLazy;
 
@@ -57,25 +57,16 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     private bool suspendChildrenCollectionNotifications;
 
-    [ObservableProperty]
-    private bool isExpanded;
-
-    [ObservableProperty]
-    private bool isSelected;
-
-    private int depth = int.MinValue;
-    private bool isLocked;
-    private ITreeItem? parent;
-
     /// <summary>
-    /// Initializes a new instance of the <see cref="TreeItemAdapter" /> class.
+    ///     Initializes a new instance of the <see cref="TreeItemAdapter" /> class.
     /// </summary>
     /// <param name="isRoot">
-    /// Indicates if the item being created is a root item or not. Defaults to <see langword="false" />.
+    ///     Indicates if the item being created is a root item or not. Defaults to <see langword="false" />.
     /// </param>
     /// <param name="isHidden">
-    /// For a <paramref name="isRoot">root</paramref> item, indicates whether it should be hidden (its <see cref="Depth" /> set to
-    /// `-1`).
+    ///     For a <paramref name="isRoot">root</paramref> item, indicates whether it should be hidden (its <see cref="Depth" />
+    ///     set to
+    ///     `-1`).
     /// </param>
     protected TreeItemAdapter(bool isRoot = false, bool isHidden = false)
     {
@@ -89,6 +80,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     /// <inheritdoc />
     public event EventHandler<NotifyCollectionChangedEventArgs>? ChildrenCollectionChanged;
+
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 
     /// <inheritdoc />
     public abstract string Label { get; set; }
@@ -104,19 +101,19 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public bool IsLocked
     {
-        get => this.isLocked;
+        get;
         set
         {
-            if (value == this.isLocked)
+            if (value == field)
             {
                 return;
             }
 
             // Root item is always locked
-            this.isLocked = this.isRoot || value;
+            field = this.isRoot || value;
             this.OnPropertyChanged();
         }
     }
@@ -124,15 +121,15 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// <inheritdoc />
     public int Depth
     {
-        get => this.depth;
+        get;
         private set
         {
-            if (value == this.depth)
+            if (value == field)
             {
                 return;
             }
 
-            this.depth = value;
+            field = value;
             this.OnPropertyChanged();
         }
     }
@@ -142,33 +139,34 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     {
         get
         {
-            Debug.Assert(!this.IsRoot || this.parent is null, "root item must always have a `null` Parent");
-            return this.parent;
+            Debug.Assert(!this.IsRoot || field is null, "root item must always have a `null` Parent");
+            return field;
         }
 
         private set
         {
-            if (Equals(value, this.parent))
+            if (Equals(value, field))
             {
                 return;
             }
 
-            this.parent = value;
+            field = value;
             this.OnPropertyChanged();
-            this.Depth = this.parent is null ? int.MinValue : this.parent.Depth + 1;
+            this.Depth = field is null ? int.MinValue : field.Depth + 1;
         }
     }
 
     /// <summary>
-    /// Gets the collection of child items.
+    ///     Gets the collection of child items.
     /// </summary>
     /// <remarks>
-    /// The collection of child items is lazily initialized. The first call to this property getter will trigger the loading
-    /// of the collection items through the <seealso cref="LoadChildren" />.
+    ///     The collection of child items is lazily initialized. The first call to this property getter will trigger the
+    ///     loading
+    ///     of the collection items through the <seealso cref="LoadChildren" />.
     /// </remarks>
     public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public int ChildrenCount => this.childrenLazy.IsValueCreated
         ? this.children.Count
         : this.DoGetChildrenCount();
@@ -178,7 +176,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">
-    /// Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
+    ///     Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
     /// </exception>
     public async Task AddChildAsync(ITreeItem child)
     {
@@ -196,7 +194,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">
-    /// Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
+    ///     Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
     /// </exception>
     public async Task InsertChildAsync(int index, ITreeItem child)
     {
@@ -221,7 +219,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">
-    /// Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
+    ///     Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
     /// </exception>
     public async Task<int> RemoveChildAsync(ITreeItem child)
     {
@@ -251,35 +249,40 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     }
 
     /// <summary>
-    /// Gets the count of child tree items asynchronously.
+    ///     Gets the count of child tree items asynchronously.
     /// </summary>
     /// <returns>The count of child tree items.</returns>
     /// <remarks>
-    /// Due to the potential that getting the collection of all child items may be very expensive, it is suggested that whenever
-    /// possible, getting the count of children items should be implemented in a lightweight and efficient manner that does not
-    /// require a full update of the <seealso cref="Children" /> collection.
+    ///     Due to the potential that getting the collection of all child items may be very expensive, it is suggested that
+    ///     whenever
+    ///     possible, getting the count of children items should be implemented in a lightweight and efficient manner that does
+    ///     not
+    ///     require a full update of the <seealso cref="Children" /> collection.
     /// </remarks>
     protected abstract int DoGetChildrenCount();
 
     /// <summary>
-    /// Loads the child items asynchronously. Used to lazily initialize the collection of child items.
+    ///     Loads the child items asynchronously. Used to lazily initialize the collection of child items.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
-    /// Loading of child items on demand allows for reducing the workload when displaying the tree. Only expanded items needs
-    /// their children to be loaded.
+    ///     Loading of child items on demand allows for reducing the workload when displaying the tree. Only expanded items
+    ///     needs
+    ///     their children to be loaded.
     /// </remarks>
     protected abstract Task LoadChildren();
 
     /// <summary>
-    /// Remove all child elements from the collection of children.
+    ///     Remove all child elements from the collection of children.
     /// </summary>
     protected void ClearChildren() => this.children.Clear();
 
     /// <summary>
-    /// Adds a child item to the children collection synchronously. Used internally, and by derived classes, to populate the
-    /// collection when items are being added synchronously in batch. Use <see cref="AddChildAsync" /> for regular operations to
-    /// add a child item.
+    ///     Adds a child item to the children collection synchronously. Used internally, and by derived classes, to populate
+    ///     the
+    ///     collection when items are being added synchronously in batch. Use <see cref="AddChildAsync" /> for regular
+    ///     operations to
+    ///     add a child item.
     /// </summary>
     /// <param name="item">The child item to add.</param>
     protected void AddChildInternal(TreeItemAdapter item)
@@ -303,7 +306,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     }
 
     /// <summary>
-    /// Manipulates the child items asynchronously.
+    ///     Manipulates the child items asynchronously.
     /// </summary>
     /// <param name="action">The action to perform on the child item.</param>
     /// <param name="item">The child item to manipulate.</param>
@@ -325,7 +328,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     }
 
     /// <summary>
-    /// Initializes the collection of child items asynchronously.
+    ///     Initializes the collection of child items asynchronously.
     /// </summary>
     /// <returns>A task representing the asynchronous operation, holding the newly created children collection.</returns>
     private async Task<ReadOnlyObservableCollection<ITreeItem>> InitializeChildrenCollectionAsync()
