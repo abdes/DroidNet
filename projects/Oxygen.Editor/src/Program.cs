@@ -39,26 +39,26 @@ using Serilog;
 namespace Oxygen.Editor;
 
 /// <summary>
-/// The Main entry of the application.
-/// <para>
-/// Overrides the usual WinUI XAML entry point in order to be able to control what exactly happens
-/// at the entry point of the application. Customized here to build an application <see cref="Host" />
-/// and populate it with the default services (such as Configuration, Logging, etc...) and a
-/// specialized <see cref="IHostedService" /> for running the User Interface thread.
-/// </para>
+///     The Main entry of the application.
+///     <para>
+///         Overrides the usual WinUI XAML entry point in order to be able to control what exactly happens
+///         at the entry point of the application. Customized here to build an application <see cref="Host" />
+///         and populate it with the default services (such as Configuration, Logging, etc...) and a
+///         specialized <see cref="IHostedService" /> for running the User Interface thread.
+///     </para>
 /// </summary>
 /// <remarks>
-/// <para>
-/// Convenience hosting extension methods are used to simplify the setup of services needed for the
-/// User Interface, logging, etc.
-/// </para>
-/// <para>
-/// The WinUI service configuration supports customization, through a <see cref="HostingContext" />
-/// object placed in the <see cref="IHostApplicationBuilder.Properties" /> of the host builder.
-/// Currently, the IsLifetimeLinked property allows to specify if the User Interface thread lifetime
-/// is linked to the application lifetime or not. When the two lifetimes are linked, terminating
-/// either of them will result in terminating the other.
-/// </para>
+///     <para>
+///         Convenience hosting extension methods are used to simplify the setup of services needed for the
+///         User Interface, logging, etc.
+///     </para>
+///     <para>
+///         The WinUI service configuration supports customization, through a <see cref="HostingContext" />
+///         object placed in the <see cref="IHostApplicationBuilder.Properties" /> of the host builder.
+///         Currently, the IsLifetimeLinked property allows to specify if the User Interface thread lifetime
+///         is linked to the application lifetime or not. When the two lifetimes are linked, terminating
+///         either of them will result in terminating the other.
+///     </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
 public static partial class Program
@@ -120,26 +120,24 @@ public static partial class Program
             ViewModelType = typeof(MainShellViewModel),
             Children = new Routes(
             [
-                new Route()
+                new Route
                 {
                     // The project browser is the root of a navigation view with multiple pages.
                     Path = "pb",
                     ViewModelType = typeof(MainViewModel),
                     Children = new Routes(
                     [
-                        new Route()
+                        new Route
                         {
-                            Path = "home",
-                            MatchMethod = PathMatch.Prefix,
-                            ViewModelType = typeof(HomeViewModel),
+                            Path = "home", MatchMethod = PathMatch.Prefix, ViewModelType = typeof(HomeViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "new",
                             MatchMethod = PathMatch.Prefix,
                             ViewModelType = typeof(NewProjectViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "open",
                             MatchMethod = PathMatch.Prefix,
@@ -155,11 +153,10 @@ public static partial class Program
                         */
                     ]),
                 },
-                new Route()
+                new Route
                 {
                     // The project browser is the root of a navigation view with multiple pages.
-                    Path = "we",
-                    ViewModelType = typeof(WorkspaceViewModel),
+                    Path = "we", ViewModelType = typeof(WorkspaceViewModel),
                 },
             ]),
         },
@@ -197,18 +194,12 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(this IContainer container)
     {
-        /*
-         * Register core services.
-         */
-
+        // Core services
         container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
-        /*
-         * Register domain specific services.
-         */
-
+        // Domain-specific services
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
 
         container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
@@ -237,10 +228,10 @@ public static partial class Program
         container.Register<IAppThemeModeService, AppThemeModeService>();
 
         /*
-         * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
-         * if the view cannot be located.
+         * Set up the view model to view converters. We're using the standard
+         * converter, and a custom one with fall back if the view cannot be
+         * located.
          */
-
         container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
 
@@ -253,9 +244,6 @@ public static partial class Program
          *
          * There should always be a Window registered for the special target <c>_main</c>.
          */
-
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
         container.Register<Window, MainWindow>(Reuse.Transient, serviceKey: Target.Main);
 
         // Views and ViewModels
