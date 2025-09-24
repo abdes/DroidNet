@@ -20,9 +20,9 @@ using oxygen::scene::testing::TestSceneFactory;
 namespace {
 
 //! Example test fixture showing basic TestSceneFactory usage.
-class TestSceneFactoryExample : public ::testing::Test {
+class TestSceneFactoryExample : public testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Reset factory to clean state and configure for our tests
     TestSceneFactory::Instance()
@@ -32,7 +32,7 @@ protected:
       .SetPrefix("Test");
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     // Clean up after each test
     TestSceneFactory::Instance().Reset();
@@ -121,7 +121,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, DefaultNameGenerator)
   ASSERT_EQ(roots.size(), 1);
 
   // Root should be named based on our prefix + role
-  auto root_obj = roots[0].GetObject();
+  auto root_obj = roots[0].GetImpl();
   ASSERT_TRUE(root_obj.has_value());
   EXPECT_TRUE(root_obj->get().GetName().find("Test") != std::string::npos);
 }
@@ -139,7 +139,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, PositionalNameGenerator)
   auto roots = scene->GetRootNodes();
   ASSERT_EQ(roots.size(), 1);
 
-  auto root_obj = roots[0].GetObject();
+  auto root_obj = roots[0].GetImpl();
   ASSERT_TRUE(root_obj.has_value());
   EXPECT_EQ(root_obj->get().GetName(), "NodeFirst");
 }
@@ -189,7 +189,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, SimpleTemplate)
   auto roots = scene->GetRootNodes();
   ASSERT_EQ(roots.size(), 1);
 
-  auto root_obj = roots[0].GetObject();
+  auto root_obj = roots[0].GetImpl();
   ASSERT_TRUE(root_obj.has_value());
   EXPECT_EQ(root_obj->get().GetName(), "SimpleRoot");
 }
@@ -289,7 +289,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
 
   // Validate Player hierarchy
   auto player_it = std::ranges::find_if(roots, [](SceneNode& node) {
-    const auto obj = node.GetObject();
+    const auto obj = node.GetImpl();
     return obj.has_value() && obj->get().GetName() == "Player";
   });
   ASSERT_NE(player_it, roots.end());
@@ -313,7 +313,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
   bool found_weapon_mount = false;
   auto current_child = first_child;
   while (current_child.has_value()) {
-    auto child_obj = current_child->GetObject();
+    auto child_obj = current_child->GetImpl();
     if (child_obj.has_value() && child_obj->get().GetName() == "WeaponMount") {
       found_weapon_mount = true;
 
@@ -379,7 +379,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, DirectJsonCreation)
   ASSERT_EQ(roots.size(), 1);
 
   auto light_system = roots[0];
-  auto light_obj = light_system.GetObject();
+  auto light_obj = light_system.GetImpl();
   ASSERT_TRUE(light_obj.has_value());
   EXPECT_EQ(light_obj->get().GetName(), "LightSystem");
 
@@ -440,7 +440,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
   ASSERT_EQ(roots.size(), 1);
 
   auto root = roots[0];
-  auto root_obj = root.GetObject();
+  auto root_obj = root.GetImpl();
   ASSERT_TRUE(root_obj.has_value());
   EXPECT_EQ(root_obj->get().GetName(), "ExplicitRoot");
 
@@ -454,7 +454,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
   auto child = root.GetFirstChild();
   while (child.has_value()) {
     child_count++;
-    auto child_obj = child->GetObject();
+    auto child_obj = child->GetImpl();
     ASSERT_TRUE(child_obj.has_value());
 
     const auto& name = child_obj->get().GetName();
@@ -510,8 +510,9 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
 
   // Generate buildings programmatically
   for (int i = 0; i < 10; ++i) {
-    if (i > 0)
+    if (i > 0) {
       large_scene += ",";
+    }
     large_scene += fmt::format(R"(
           {{
             "name": "Building{}",
@@ -553,7 +554,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   ASSERT_EQ(roots.size(), 1);
 
   auto city = roots[0];
-  auto city_obj = city.GetObject();
+  auto city_obj = city.GetImpl();
   ASSERT_TRUE(city_obj.has_value());
   EXPECT_EQ(city_obj->get().GetName(), "City");
 
@@ -564,7 +565,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   auto first_building = city.GetFirstChild();
   ASSERT_TRUE(first_building.has_value());
 
-  auto building_obj = first_building->GetObject();
+  auto building_obj = first_building->GetImpl();
   ASSERT_TRUE(building_obj.has_value());
   EXPECT_EQ(building_obj->get().GetName(),
     "Building9"); // Last created building becomes first child
@@ -587,7 +588,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
 
   while (current_building.has_value()) {
     auto current_building_obj
-      = current_building->GetObject(); // Renamed to avoid shadowing
+      = current_building->GetImpl(); // Renamed to avoid shadowing
     ASSERT_TRUE(current_building_obj.has_value());
 
     const auto& name = current_building_obj->get().GetName();

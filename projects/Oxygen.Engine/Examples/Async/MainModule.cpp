@@ -4,9 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainModule.h"
-#include "AsyncEngineApp.h"
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -57,7 +54,9 @@
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
-#include <imgui.h>
+
+#include "AsyncEngineApp.h"
+#include "MainModule.h"
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -1189,13 +1188,11 @@ auto MainModule::EnsureExampleScene() -> void
 
     // Configure LOD policy per-sphere (disabled during diagnostics)
     if (!kDisableSphereLodPolicy) {
-      if (auto obj = node.GetObject()) {
-        auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
-        DistancePolicy pol;
-        pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
-        pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
-        r.SetLodPolicy(std::move(pol));
-      }
+      auto r = node.GetRenderable();
+      DistancePolicy pol;
+      pol.thresholds = { 6.2f }; // switch LOD0->1 around ~6.2
+      pol.hysteresis_ratio = 0.08f; // modest hysteresis to avoid flicker
+      r.SetLodPolicy(std::move(pol));
     }
 
     // Randomized parameters: seed ensures reproducible runs
@@ -1209,24 +1206,21 @@ auto MainModule::EnsureExampleScene() -> void
     const double hue = hue_dist(rng);
 
     // Apply per-sphere material override (transparent glass-like)
-    if (auto obj = node.GetObject()) {
-      auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
-      const std::string mat_name
-        = std::string("SphereMat_") + std::to_string(i);
-      const auto rgb = ColorFromHue(hue);
-      const bool is_transparent
-        = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
-      const float alpha = is_transparent ? 0.35f : 1.0f;
-      const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
-                                         : data::MaterialDomain::kOpaque;
-      const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
-      const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
-      // Apply override for submesh index 0 across all LODs so switching LOD
-      // retains the material override. Use EffectiveLodCount() to iterate.
-      const auto lod_count = r.EffectiveLodCount();
-      for (std::size_t lod = 0; lod < lod_count; ++lod) {
-        r.SetMaterialOverride(lod, 0, mat);
-      }
+    auto r = node.GetRenderable();
+    const std::string mat_name = std::string("SphereMat_") + std::to_string(i);
+    const auto rgb = ColorFromHue(hue);
+    const bool is_transparent
+      = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
+    const float alpha = is_transparent ? 0.35f : 1.0f;
+    const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
+                                       : data::MaterialDomain::kOpaque;
+    const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
+    const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
+    // Apply override for submesh index 0 across all LODs so switching LOD
+    // retains the material override. Use EffectiveLodCount() to iterate.
+    const auto lod_count = r.EffectiveLodCount();
+    for (std::size_t lod = 0; lod < lod_count; ++lod) {
+      r.SetMaterialOverride(lod, 0, mat);
     }
 
     SphereState s;
@@ -1328,48 +1322,46 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
 {
   // Toggle per-submesh visibility and material override over time
   if (multisubmesh_.IsAlive()) {
-    if (auto obj = multisubmesh_.GetObject()) {
-      auto& r = obj->get().GetComponent<scene::detail::RenderableComponent>();
-      constexpr std::size_t lod = 0;
+    auto r = multisubmesh_.GetRenderable();
+    constexpr std::size_t lod = 0;
 
-      // Every 2 seconds, toggle submesh 0 visibility
-      int vis_phase = static_cast<int>(delta_time) / 2;
-      if (vis_phase != last_vis_toggle_) {
-        last_vis_toggle_ = vis_phase;
-        const bool visible = (vis_phase % 2) == 0;
-        r.SetSubmeshVisible(lod, 0, visible);
-        LOG_F(INFO, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
-      }
+    // Every 2 seconds, toggle submesh 0 visibility
+    int vis_phase = static_cast<int>(delta_time) / 2;
+    if (vis_phase != last_vis_toggle_) {
+      last_vis_toggle_ = vis_phase;
+      const bool visible = (vis_phase % 2) == 0;
+      r.SetSubmeshVisible(lod, 0, visible);
+      LOG_F(INFO, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
+    }
 
-      // Every second, toggle an override on submesh 1 (use blue instead of
-      // green)
-      int ovr_phase = static_cast<int>(delta_time);
-      if (ovr_phase != last_ovr_toggle_) {
-        last_ovr_toggle_ = ovr_phase;
-        const bool apply_override = (ovr_phase % 2) == 1;
-        if (apply_override) {
-          data::pak::MaterialAssetDesc desc {};
-          desc.header.asset_type = 7;
-          auto name = "BlueOverride";
-          constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-          const std::size_t n = (std::min)(maxn, std::strlen(name));
-          std::memcpy(desc.header.name, name, n);
-          desc.header.name[n] = '\0';
-          desc.material_domain
-            = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
-          desc.base_color[0] = 0.2f;
-          desc.base_color[1] = 0.3f;
-          desc.base_color[2] = 1.0f;
-          desc.base_color[3] = 1.0f;
-          auto blue = std::make_shared<const data::MaterialAsset>(
-            desc, std::vector<data::ShaderReference> {});
-          r.SetMaterialOverride(lod, 1, blue);
-        } else {
-          r.ClearMaterialOverride(lod, 1);
-        }
-        LOG_F(INFO, "[MultiSubmesh] Submesh 1 override -> {}",
-          apply_override ? "blue" : "clear");
+    // Every second, toggle an override on submesh 1 (use blue instead of
+    // green)
+    int ovr_phase = static_cast<int>(delta_time);
+    if (ovr_phase != last_ovr_toggle_) {
+      last_ovr_toggle_ = ovr_phase;
+      const bool apply_override = (ovr_phase % 2) == 1;
+      if (apply_override) {
+        data::pak::MaterialAssetDesc desc {};
+        desc.header.asset_type = 7;
+        auto name = "BlueOverride";
+        constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
+        const std::size_t n = (std::min)(maxn, std::strlen(name));
+        std::memcpy(desc.header.name, name, n);
+        desc.header.name[n] = '\0';
+        desc.material_domain
+          = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
+        desc.base_color[0] = 0.2f;
+        desc.base_color[1] = 0.3f;
+        desc.base_color[2] = 1.0f;
+        desc.base_color[3] = 1.0f;
+        auto blue = std::make_shared<const data::MaterialAsset>(
+          desc, std::vector<data::ShaderReference> {});
+        r.SetMaterialOverride(lod, 1, blue);
+      } else {
+        r.ClearMaterialOverride(lod, 1);
       }
+      LOG_F(INFO, "[MultiSubmesh] Submesh 1 override -> {}",
+        apply_override ? "blue" : "clear");
     }
   }
 }

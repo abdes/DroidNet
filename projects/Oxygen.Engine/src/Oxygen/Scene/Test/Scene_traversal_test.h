@@ -20,9 +20,9 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 
 // Aliases for gtest/gmock matchers to reduce clutter
-using ::testing::Contains;
-using ::testing::Not;
-using ::testing::UnorderedElementsAreArray;
+using testing::Contains;
+using testing::Not;
+using testing::UnorderedElementsAreArray;
 
 namespace oxygen::scene::testing {
 
@@ -32,12 +32,12 @@ namespace oxygen::scene::testing {
 
 class SceneTraversalTestBase : public ::testing::Test {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     scene_ = std::make_shared<Scene>("TraversalTestScene", 1024);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     scene_.reset();
     visited_nodes_.clear();
@@ -99,9 +99,9 @@ protected:
   }
 
   // Helper: Clear a node's dirty transform flag
-  void UpdateSingleNodeTransforms(SceneNode& node) const
+  auto UpdateSingleNodeTransforms(SceneNode& node) const -> void
   {
-    const auto impl = node.GetObject();
+    const auto impl = node.GetImpl();
     ASSERT_TRUE(impl.has_value());
     // Remove const to call the non-const method
     impl->get().UpdateTransforms(*scene_);
@@ -186,7 +186,8 @@ protected:
   }
 
   // Expectation helpers
-  void ExpectVisitedNodes(const std::vector<std::string>& expected_names) const
+  auto ExpectVisitedNodes(const std::vector<std::string>& expected_names) const
+    -> void
   {
     ASSERT_EQ(visit_order_.size(), expected_names.size());
     for (size_t i = 0; i < expected_names.size(); ++i) {
@@ -195,9 +196,9 @@ protected:
     }
   }
 
-  static void ExpectTraversalResult(const TraversalResult& result,
+  static auto ExpectTraversalResult(const TraversalResult& result,
     const std::size_t expected_visited, const std::size_t expected_filtered,
-    const bool expected_completed = true)
+    const bool expected_completed = true) -> void
   {
     EXPECT_EQ(result.nodes_visited, expected_visited);
     EXPECT_EQ(result.nodes_filtered, expected_filtered);
@@ -205,15 +206,15 @@ protected:
   }
 
   // Helper: Verify all expected nodes are present (order-independent)
-  void ExpectContainsAllNodes(
-    const std::vector<std::string>& expected_nodes) const
+  auto ExpectContainsAllNodes(
+    const std::vector<std::string>& expected_nodes) const -> void
   {
     EXPECT_THAT(visit_order_, UnorderedElementsAreArray(expected_nodes));
   }
 
   // Helper: Verify none of the forbidden nodes are present
-  void ExpectContainsNoForbiddenNodes(
-    const std::vector<std::string>& forbidden_nodes) const
+  auto ExpectContainsNoForbiddenNodes(
+    const std::vector<std::string>& forbidden_nodes) const -> void
   {
     for (const auto& forbidden : forbidden_nodes) {
       EXPECT_THAT(visit_order_, Not(Contains(forbidden)))
@@ -222,9 +223,9 @@ protected:
   }
 
   // Helper: Verify expected nodes are present and forbidden nodes are not
-  void ExpectContainsExactlyNodes(
+  auto ExpectContainsExactlyNodes(
     const std::vector<std::string>& expected_nodes,
-    const std::vector<std::string>& forbidden_nodes = {}) const
+    const std::vector<std::string>& forbidden_nodes = {}) const -> void
   {
     EXPECT_THAT(visit_order_, UnorderedElementsAreArray(expected_nodes));
     for (const auto& forbidden : forbidden_nodes) {
@@ -242,7 +243,7 @@ protected:
 
 class SceneTraversalBasicTest : public SceneTraversalTestBase {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     SceneTraversalTestBase::SetUp();
     // Create a simple test hierarchy:
@@ -270,7 +271,7 @@ protected:
   [[nodiscard]] auto GetNodeCount() const -> std::size_t { return 6; }
 
   // Helper: Verify complete semantic ordering for the basic test hierarchy
-  void ExpectSemanticOrdering(TraversalOrder order) const
+  auto ExpectSemanticOrdering(TraversalOrder order) const -> void
   {
     switch (order) {
     case TraversalOrder::kPreOrder:

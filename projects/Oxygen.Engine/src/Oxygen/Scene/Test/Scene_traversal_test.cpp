@@ -48,7 +48,7 @@ namespace {
 
 class SceneTraversalFromRootsTest : public SceneTraversalTestBase {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     SceneTraversalTestBase::SetUp();
     // Create multiple root hierarchies:
@@ -149,7 +149,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromInvalidHandle)
 
 class SceneTraversalTransformTest : public SceneTraversalTestBase {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     SceneTraversalTestBase::SetUp();
     // Create test hierarchy - nodes are created clean by helper methods
@@ -166,9 +166,9 @@ protected:
   }
 
   // Helper: Mark a node's transform as dirty
-  static void MarkNodeTransformDirty(SceneNode& node)
+  static auto MarkNodeTransformDirty(SceneNode& node) -> void
   {
-    const auto impl = node.GetObject();
+    const auto impl = node.GetImpl();
     ASSERT_TRUE(impl.has_value());
     if (const auto pos = node.GetTransform().GetLocalPosition()) {
       node.GetTransform().SetLocalPosition(
@@ -181,9 +181,10 @@ protected:
   // Helper: Check if a node's transform is dirty
   static auto IsNodeTransformDirty(SceneNode& node) -> bool
   {
-    const auto impl = node.GetObject();
-    if (!impl.has_value())
+    const auto impl = node.GetImpl();
+    if (!impl.has_value()) {
       return false;
+    }
     return impl->get().IsTransformDirty();
   }
 
@@ -218,7 +219,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
   MarkNodeTransformDirty(nodeA_);
   MarkNodeTransformDirty(nodeB_);
   // C will ignore its parent transform
-  nodeC_.GetObject()->get().GetFlags().SetFlag(
+  nodeC_.GetImpl()->get().GetFlags().SetFlag(
     SceneNodeFlags::kIgnoreParentTransform,
     SceneFlag {}.SetEffectiveValueBit(true));
 
@@ -263,7 +264,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
 
 class SceneTraversalBuiltinFilterTest : public SceneTraversalTransformTest {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     SceneTraversalTestBase::SetUp();
     // Create nodes with different visibility states
@@ -417,12 +418,12 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, VisitorStoppingImmediately)
 
 class SceneTraversalComplexTest : public SceneTraversalTransformTest {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     SceneTraversalTestBase::SetUp();
     CreateComplexHierarchy();
   }
-  void CreateComplexHierarchy()
+  auto CreateComplexHierarchy() -> void
   {
     // Create a complex hierarchy:
     //         root

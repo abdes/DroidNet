@@ -52,7 +52,7 @@ protected:
 
     // Ensure node has a default geometry before constructing the proto
     AddDefaultGeometry();
-    proto_.emplace(node_.GetObject()->get());
+    proto_.emplace(node_.GetImpl()->get());
 
     // By default, do not emplace ctx_; tests can call EmplaceContext* helpers
     // Create a default (null-backed) ScenePrepState. Tests can override
@@ -142,7 +142,7 @@ protected:
   /*! Default implementation returns a ScenePrepState with null resource
       managers (suitable for light-weight tests). Override to supply
       uploaders/binders needed by integration tests. */
-  virtual std::unique_ptr<ScenePrepState> CreateScenePrepState()
+  virtual auto CreateScenePrepState() -> std::unique_ptr<ScenePrepState>
   {
     return std::make_unique<ScenePrepState>(nullptr, nullptr, nullptr);
   }
@@ -189,7 +189,6 @@ protected:
     Node().GetRenderable().SetGeometry(geometry);
   }
 
-protected:
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode node_;
   View view_ { View::Params {} };

@@ -164,9 +164,9 @@ protected:
   //! access fails).
   static void ExpectNodeLazyInvalidated(SceneNode& node)
   {
-    // Node may appear valid, but after GetObject() it should be invalidated
+    // Node may appear valid, but after GetImpl() it should be invalidated
     if (node.IsValid()) {
-      const auto obj_opt = node.GetObject();
+      const auto obj_opt = node.GetImpl();
       EXPECT_FALSE(obj_opt.has_value());
       EXPECT_FALSE(node.IsValid());
     }
@@ -227,7 +227,7 @@ protected:
   static void ExpectTransformValues(SceneNode& node,
     const glm::vec3& expected_position, const glm::vec3& expected_scale)
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     const auto& transform
       = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
@@ -243,7 +243,7 @@ protected:
     const detail::TransformComponent::Quat& rotation,
     const detail::TransformComponent::Vec3& scale) const
   {
-    auto node_impl_opt = node.GetObject();
+    auto node_impl_opt = node.GetImpl();
     ASSERT_TRUE(node_impl_opt.has_value());
 
     auto& transform
@@ -255,7 +255,7 @@ protected:
   auto GetTransformComponent(SceneNode& node) const
     -> scene::detail::TransformComponent&
   {
-    auto node_impl_opt = node.GetObject();
+    auto node_impl_opt = node.GetImpl();
     EXPECT_TRUE(node_impl_opt.has_value())
       << "Node should have valid implementation";
     return node_impl_opt->get()
@@ -280,7 +280,7 @@ protected:
   //! Sets the local position of a node.
   static void SetNodePosition(SceneNode& node, const glm::vec3& position)
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
       = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
@@ -290,7 +290,7 @@ protected:
   //! Sets the local scale of a node.
   static void SetNodeScale(SceneNode& node, const glm::vec3& scale)
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
       = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
@@ -301,7 +301,7 @@ protected:
   static void SetNodeTransformValues(
     SceneNode& node, const glm::vec3& position, const glm::vec3& scale)
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
       = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
@@ -312,7 +312,7 @@ protected:
   //! Updates transforms for a single node (clears dirty flags).
   void UpdateSingleNodeTransforms(SceneNode& node) const
   {
-    const auto impl = node.GetObject();
+    const auto impl = node.GetImpl();
     ASSERT_TRUE(impl.has_value());
     impl->get().UpdateTransforms(*scene_);
   }

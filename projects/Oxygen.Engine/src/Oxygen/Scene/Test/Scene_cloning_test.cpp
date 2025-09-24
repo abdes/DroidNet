@@ -34,32 +34,32 @@ namespace {
 //------------------------------------------------------------------------------
 class SceneCloningTestBase : public oxygen::scene::testing::SceneTest {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     source_scene_ = std::make_shared<Scene>("SourceScene", 1024);
     target_scene_ = std::make_shared<Scene>("TargetScene", 1024);
   }
 
-  void TearDown() override
+  auto TearDown() -> void override
   {
     source_scene_.reset();
     target_scene_.reset();
   }
 
-  static void SetTransformValues(
-    SceneNode& node, const glm::vec3& position, const glm::vec3& scale)
+  static auto SetTransformValues(
+    SceneNode& node, const glm::vec3& position, const glm::vec3& scale) -> void
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform = impl_opt->get().GetComponent<TransformComponent>();
     transform.SetLocalPosition(position);
     transform.SetLocalScale(scale);
   }
 
-  static void ExpectTransformValues(SceneNode& node,
-    const glm::vec3& expected_position, const glm::vec3& expected_scale)
+  static auto ExpectTransformValues(SceneNode& node,
+    const glm::vec3& expected_position, const glm::vec3& expected_scale) -> void
   {
-    const auto impl_opt = node.GetObject();
+    const auto impl_opt = node.GetImpl();
     ASSERT_TRUE(impl_opt.has_value());
     const auto& transform = impl_opt->get().GetComponent<TransformComponent>();
     EXPECT_EQ(transform.GetLocalPosition(), expected_position);
@@ -131,7 +131,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
     "initial-transform");
 
   // Change original, assert clone unchanged
-  const auto original_impl_opt = original.GetObject();
+  const auto original_impl_opt = original.GetImpl();
   ASSERT_TRUE(original_impl_opt.has_value());
   auto& original_impl = original_impl_opt->get();
   original_impl.SetName("ModifiedOriginal");
@@ -143,7 +143,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
     "clone-transform");
 
   // Change clone, assert original unchanged
-  const auto cloned_impl_opt = cloned->GetObject();
+  const auto cloned_impl_opt = cloned->GetImpl();
   ASSERT_TRUE(cloned_impl_opt.has_value());
   auto& cloned_impl = cloned_impl_opt->get();
   cloned_impl.SetName("ModifiedClone");
@@ -196,7 +196,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   ASSERT_TRUE(original.IsValid());
   SetTransformValues(original, { 5.0f, 10.0f, 15.0f }, { 2.0f, 3.0f, 4.0f });
 
-  const auto original_impl_opt = original.GetObject();
+  const auto original_impl_opt = original.GetImpl();
   ASSERT_TRUE(original_impl_opt.has_value());
   auto& original_flags = original_impl_opt->get().GetFlags();
   original_flags.SetLocalValue(SceneNodeFlags::kVisible, false);
@@ -213,7 +213,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
                    child_clone, { 5.0f, 10.0f, 15.0f }, { 2.0f, 3.0f, 4.0f }),
     "transform-preserved");
 
-  const auto clone_impl_opt = child_clone.GetObject();
+  const auto clone_impl_opt = child_clone.GetImpl();
   ASSERT_TRUE(clone_impl_opt.has_value());
   const auto& clone_flags = clone_impl_opt->get().GetFlags();
   EXPECT_EQ(clone_flags.GetEffectiveValue(SceneNodeFlags::kVisible), false);

@@ -119,7 +119,7 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObject_ReturnsValidImplementation)
   auto node = scene_->CreateNode("TestNode");
 
   // Act: Get the underlying implementation
-  const auto impl = node.GetObject();
+  const auto impl = node.GetImpl();
 
   // Assert: Implementation should be accessible with the correct name
   ASSERT_TRUE(impl.has_value());
@@ -135,7 +135,7 @@ NOLINT_TEST_F(
   auto node = scene_->CreateNode("TestNode");
 
   // Act: Get the implementation object
-  const auto impl = node.GetObject();
+  const auto impl = node.GetImpl();
 
   // Assert: Should access SceneNodeImpl methods correctly
   ASSERT_TRUE(impl.has_value());
@@ -152,7 +152,7 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObjectWithInvalidNode_ReturnsEmpty)
   scene_->DestroyNode(node);
 
   // Act: Attempt to get object from invalid node
-  const auto impl = node.GetObject();
+  const auto impl = node.GetImpl();
 
   // Assert: Should return empty optional
   EXPECT_FALSE(impl.has_value());
@@ -241,7 +241,7 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, LazyInvalidation_HandlesDestroyedNodes)
   scene_->DestroyNode(node);
 
   // Act: First access should detect invalidity
-  const auto impl = node_copy.GetObject();
+  const auto impl = node_copy.GetImpl();
 
   // Assert: Access should fail and return empty optional
   EXPECT_FALSE(impl.has_value());
@@ -259,7 +259,7 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, SceneExpiration_NodesFailGracefully)
   scene_.reset();
 
   // Act & Assert: Node operations should fail gracefully
-  const auto impl = node.GetObject();
+  const auto impl = node.GetImpl();
   EXPECT_FALSE(impl.has_value());
 
   const auto flags = node.GetFlags();
@@ -282,7 +282,7 @@ NOLINT_TEST_F(SceneNodeLifetimeTest, EmptyScene_NodesFailGracefully)
   scene_->Clear();
 
   // Act: Try to access node after scene clear
-  const auto impl = node.GetObject();
+  const auto impl = node.GetImpl();
 
   // Assert: Node should now be invalid when accessed
   EXPECT_FALSE(impl.has_value());

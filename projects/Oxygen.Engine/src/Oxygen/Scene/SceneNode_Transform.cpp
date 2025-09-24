@@ -17,7 +17,8 @@ using oxygen::scene::SceneNodeImpl;
 // SceneNode::Transform Validator Implementations
 // =============================================================================
 
-void SceneNode::Transform::LogSafeCallError(const char* reason) const noexcept
+auto SceneNode::Transform::LogSafeCallError(const char* reason) const noexcept
+  -> void
 {
   try {
     DLOG_F(ERROR, "Operation on SceneNode::Transform {} failed: {}",
@@ -88,7 +89,7 @@ protected:
     // Then check if the node is still in the scene node table, and retrieve
     // its implementation object.
     try {
-      const auto impl_ref = transform_->node_->GetObject();
+      const auto impl_ref = transform_->node_->GetImpl();
       if (!impl_ref.has_value()) [[unlikely]] {
         result_ = fmt::format(
           "node({}) is no longer in scene", nostd::to_string(GetNode()));

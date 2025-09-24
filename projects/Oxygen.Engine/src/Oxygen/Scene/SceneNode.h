@@ -139,7 +139,7 @@ public:
 
   //! Gets a mutable reference to the underlying SceneNodeImpl object if it
   //! exists.
-  OXGN_SCN_NDAPI auto GetObject() noexcept -> OptionalRefToImpl;
+  OXGN_SCN_NDAPI auto GetImpl() noexcept -> OptionalRefToImpl;
 
   //=== Scene Node Flags Access ===-------------------------------------------//
 
