@@ -10,42 +10,42 @@ using DroidNet.Controls.Selection;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents the ViewModel for a dynamic tree control, providing functionality for managing
-/// hierarchical data structures, including selection, expansion, and manipulation of tree items.
+///     Represents the ViewModel for a dynamic tree control, providing functionality for managing
+///     hierarchical data structures, including selection, expansion, and manipulation of tree items.
 /// </summary>
 public abstract partial class DynamicTreeViewModel
 {
     /// <summary>
-    /// Gets or sets the selection mode for the tree view.
+    ///     Gets or sets the selection mode for the tree view.
     /// </summary>
     [ObservableProperty]
-    private SelectionMode selectionMode = SelectionMode.None;
+    public partial SelectionMode SelectionMode { get; set; } = SelectionMode.None;
 
     /// <summary>
-    /// Gets the current selection model for the tree view.
+    ///     Gets the current selection model for the tree view.
     /// </summary>
     protected SelectionModel<ITreeItem>? SelectionModel { get; private set; }
 
     /// <summary>
-    /// Selects the specified item in the tree view.
+    ///     Selects the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to select.</param>
     public void SelectItem(ITreeItem item) => this.SelectionModel?.SelectItem(item);
 
     /// <summary>
-    /// Clears the selection of the specified item in the tree view.
+    ///     Clears the selection of the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to clear selection for.</param>
     public void ClearSelection(ITreeItem item) => this.SelectionModel?.ClearSelection(item);
 
     /// <summary>
-    /// Clears the current selection and selects the specified item in the tree view.
+    ///     Clears the current selection and selects the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to select.</param>
     public void ClearAndSelectItem(ITreeItem item) => this.SelectionModel?.ClearAndSelectItem(item);
 
     /// <summary>
-    /// Extends the selection to the specified item in the tree view.
+    ///     Extends the selection to the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to extend selection to.</param>
     public void ExtendSelectionTo(ITreeItem item)
@@ -70,7 +70,7 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Toggles the selection of all items in the tree view.
+    ///     Toggles the selection of all items in the tree view.
     /// </summary>
     public void ToggleSelectAll()
     {
@@ -90,20 +90,20 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Called when the selection model changes.
+    ///     Called when the selection model changes.
     /// </summary>
     /// <param name="oldValue">The old selection model.</param>
     protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
         => this.SyncSelectionModelWithItems();
 
     /// <summary>
-    /// Clears the current selection in the tree view.
+    ///     Clears the current selection in the tree view.
     /// </summary>
     [RelayCommand]
     private void SelectNone() => this.SelectionModel?.ClearSelection();
 
     /// <summary>
-    /// Selects all items in the tree view.
+    ///     Selects all items in the tree view.
     /// </summary>
     [RelayCommand]
     private void SelectAll()
@@ -115,7 +115,7 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Inverts the current selection in the tree view.
+    ///     Inverts the current selection in the tree view.
     /// </summary>
     [RelayCommand]
     private void InvertSelection()
@@ -129,7 +129,7 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Called when the selection mode changes.
+    ///     Called when the selection mode changes.
     /// </summary>
     /// <param name="value">The new selection mode.</param>
     partial void OnSelectionModeChanged(SelectionMode value)
@@ -138,7 +138,7 @@ public abstract partial class DynamicTreeViewModel
 
         this.SelectionModel = value switch
         {
-            SelectionMode.None => default,
+            SelectionMode.None => null,
             SelectionMode.Single => new SingleSelectionModel(this),
             SelectionMode.Multiple => new MultipleSelectionModel(this),
             _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode)),
@@ -148,9 +148,9 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// If we have a selection model, ensure that all shown items that are marked as selected, are
-    /// selected in the selection model. Should be called after the shown items collection is
-    /// initialized for the first time, or when the selection model has changed.
+    ///     If we have a selection model, ensure that all shown items that are marked as selected,
+    ///     are selected in the selection model. Should be called after the shown items collection
+    ///     is initialized for the first time, or when the selection model has changed.
     /// </summary>
     private void SyncSelectionModelWithItems()
     {
@@ -170,19 +170,19 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Represents a selection model that allows only a single item to be selected at a time within
-    /// the dynamic tree view model.
+    ///     Represents a selection model that allows only a single item to be selected at a time within
+    ///     the dynamic tree view model.
     /// </summary>
     /// <remarks>
-    /// This class extends the <see cref="SingleSelectionModel{T}"/> to track single selection in the
-    /// <see cref="ShownItems"/> of a dynamic tree and update the selection state of the items accordingly.
+    ///     This class extends the <see cref="SingleSelectionModel{T}" /> to track single selection in the
+    ///     <see cref="ShownItems" /> of a dynamic tree and update the selection state of the items accordingly.
     /// </remarks>
     protected partial class SingleSelectionModel : SingleSelectionModel<ITreeItem>
     {
         private readonly DynamicTreeViewModel model;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SingleSelectionModel"/> class.
+        ///     Initializes a new instance of the <see cref="SingleSelectionModel" /> class.
         /// </summary>
         /// <param name="model">The dynamic tree view model that this selection model is associated with.</param>
         public SingleSelectionModel(DynamicTreeViewModel model)
@@ -215,33 +215,34 @@ public abstract partial class DynamicTreeViewModel
             };
         }
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override ITreeItem GetItemAt(int index) => this.model.ShownItems[index];
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override int GetItemCount() => this.model.ShownItems.Count;
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf((TreeItemAdapter)item);
     }
 
     /// <summary>
-    /// Represents a selection model that allows multiple items to be selected at a time within the dynamic tree view model.
+    ///     Represents a selection model that allows multiple items to be selected at a time within the dynamic tree view
+    ///     model.
     /// </summary>
     /// <param name="model">The dynamic tree view model that this selection model is associated with.</param>
     /// <remarks>
-    /// This class extends the <see cref="MultipleSelectionModel{T}"/> to track multiple selected items in the
-    /// <see cref="ShownItems"/> of a dynamic tree and update the selection state of the items accordingly.
+    ///     This class extends the <see cref="MultipleSelectionModel{T}" /> to track multiple selected items in the
+    ///     <see cref="ShownItems" /> of a dynamic tree and update the selection state of the items accordingly.
     /// </remarks>
     protected partial class MultipleSelectionModel(DynamicTreeViewModel model) : MultipleSelectionModel<ITreeItem>
     {
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override ITreeItem GetItemAt(int index) => model.ShownItems[index];
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override int GetItemCount() => model.ShownItems.Count;
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
         protected override int IndexOf(ITreeItem item) => model.ShownItems.IndexOf((TreeItemAdapter)item);
     }
 }

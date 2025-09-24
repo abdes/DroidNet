@@ -10,8 +10,8 @@ using Microsoft.UI.Xaml;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
-/// expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
+///     Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
+///     expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
 [SuppressMessage(
     "ReSharper",
@@ -20,27 +20,27 @@ namespace DroidNet.Controls;
 public partial class DynamicTreeItem
 {
     /// <summary>
-    /// The backing <see cref="DependencyProperty" /> for the <see cref="ItemAdapter" /> property.
+    ///     The backing <see cref="DependencyProperty" /> for the <see cref="ItemAdapter" /> property.
     /// </summary>
     public static readonly DependencyProperty ItemAdapterProperty = DependencyProperty.Register(
         nameof(ItemAdapter),
         typeof(ITreeItem),
         typeof(DynamicTreeItem),
         new PropertyMetadata(
-            default(TreeItemAdapter),
+            defaultValue: null,
             (d, e) => ((DynamicTreeItem)d).OnItemAdapterChanged((ITreeItem)e.OldValue, (ITreeItem)e.NewValue)));
 
     /// <summary>
-    /// Gets or sets the adapter that provides data for the tree item.
+    ///     Gets or sets the adapter that provides data for the tree item.
     /// </summary>
     /// <value>
-    /// An object that implements the <see cref="ITreeItem" /> interface, which provides data and
-    /// behavior for the tree item.
+    ///     An object that implements the <see cref="ITreeItem" /> interface, which provides data and
+    ///     behavior for the tree item.
     /// </value>
     /// <remarks>
-    /// The <see cref="ItemAdapter" /> property is used to bind the tree item to a data source. When
-    /// the value of this property changes, the <see cref="OnItemAdapterChanged" /> method is called
-    /// to handle any necessary updates.
+    ///     The <see cref="ItemAdapter" /> property is used to bind the tree item to a data source. When
+    ///     the value of this property changes, the <see cref="OnItemAdapterChanged" /> method is called
+    ///     to handle any necessary updates.
     /// </remarks>
     public ITreeItem? ItemAdapter
     {
@@ -49,14 +49,14 @@ public partial class DynamicTreeItem
     }
 
     /// <summary>
-    /// Handles changes to the <see cref="ItemAdapter" /> property.
+    ///     Handles changes to the <see cref="ItemAdapter" /> property.
     /// </summary>
     /// <param name="oldItem">The previous value of the <see cref="ItemAdapter" /> property.</param>
     /// <param name="newItem">The new value of the <see cref="ItemAdapter" /> property.</param>
     /// <remarks>
-    /// This method is called whenever the <see cref="ItemAdapter" /> property changes. It
-    /// un-registers event handlers from the old item adapter and registers event handlers with the
-    /// new item adapter.
+    ///     This method is called whenever the <see cref="ItemAdapter" /> property changes. It
+    ///     un-registers event handlers from the old item adapter and registers event handlers with the
+    ///     new item adapter.
     /// </remarks>
     protected virtual void OnItemAdapterChanged(ITreeItem? oldItem, ITreeItem? newItem)
     {

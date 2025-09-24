@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -12,18 +13,18 @@ using Windows.System;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
-/// expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
+///     Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
+///     expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
 public partial class DynamicTreeItem
 {
-    private ContentPresenter? itemContentPart;
     private Popup? inPlaceRenamePart;
+    private bool isContextMenuOpen;
+    private ContentPresenter? itemContentPart;
     private TextBlock? itemNameTextBlock;
     private TextBox? itemNameTextBox;
-    private string? oldItemName;
-    private bool isContextMenuOpen;
     private bool newNameIsValid;
+    private string? oldItemName;
 
     private void SetupItemNameParts()
     {
@@ -66,7 +67,7 @@ public partial class DynamicTreeItem
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+    [SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "the visual state is used to indicate whether the label is valid or not")]
@@ -107,10 +108,12 @@ public partial class DynamicTreeItem
         this.itemNameTextBox.Visibility = Visibility.Visible;
         this.itemNameTextBox.SelectAll();
 
-        if (this.inPlaceRenamePart is not null)
+#pragma warning disable IDE0031 // cannot be simplified
+        if (this.inPlaceRenamePart != null)
         {
             this.inPlaceRenamePart.IsOpen = true;
         }
+#pragma warning restore IDE0031
 
         _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
 
@@ -137,10 +140,12 @@ public partial class DynamicTreeItem
         this.itemNameTextBox.Visibility = Visibility.Collapsed;
         this.itemNameTextBlock.Visibility = Visibility.Visible;
 
-        if (this.inPlaceRenamePart is not null)
+#pragma warning disable IDE0031 // cannot be simplified
+        if (this.inPlaceRenamePart != null)
         {
             this.inPlaceRenamePart.IsOpen = false;
         }
+#pragma warning restore IDE0031
 
         // Re-focus selected list item
         _ = this.Focus(FocusState.Programmatic);

@@ -16,7 +16,7 @@ using Windows.UI.Core;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// A control to display a tree as a list of expandable items.
+///     A control to display a tree as a list of expandable items.
 /// </summary>
 [TemplatePart(Name = TreeItemPart, Type = typeof(DynamicTreeItem))]
 [TemplatePart(Name = ItemsRepeaterPart, Type = typeof(ItemsRepeater))]
@@ -32,7 +32,7 @@ public partial class DynamicTree : Control
     private Grid? rootGrid;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DynamicTree"/> class.
+    ///     Initializes a new instance of the <see cref="DynamicTree" /> class.
     /// </summary>
     public DynamicTree()
     {
@@ -56,7 +56,7 @@ public partial class DynamicTree : Control
         };
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -135,7 +135,7 @@ public partial class DynamicTree : Control
                 return;
 
             case VirtualKey.I when IsControlKeyDown() && IsShiftKeyDown():
-                this.ViewModel!.InvertSelectionCommand.Execute(default);
+                this.ViewModel!.InvertSelectionCommand.Execute(parameter: null);
                 return;
         }
     }
@@ -230,6 +230,7 @@ public partial class DynamicTree : Control
         _ = element.Focus(FocusState.Programmatic);
     }
 
+    // ReSharper disable once MemberCanBeMadeStatic.Local
     private void TreeItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
         args.Handled = true;
@@ -238,9 +239,11 @@ public partial class DynamicTree : Control
         Debug.WriteLine($"Item double tapped: {sender}");
     }
 
+    [SuppressMessage("ReSharper", "AsyncVoidMethod", Justification = "void event handler")]
     private async void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
         => await this.ViewModel!.ExpandItemAsync(args.TreeItem).ConfigureAwait(true);
 
+    [SuppressMessage("ReSharper", "AsyncVoidMethod", Justification = "void event handler")]
     private async void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
         => await this.ViewModel!.CollapseItemAsync(args.TreeItem).ConfigureAwait(true);
 }
