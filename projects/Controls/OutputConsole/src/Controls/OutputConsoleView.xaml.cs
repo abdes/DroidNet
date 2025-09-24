@@ -161,22 +161,18 @@ public sealed partial class OutputConsoleView
 
         this.FollowTailToggle.Checked += (_, _) =>
         {
-            this.FollowTail = true;
-
             // If we're not near the bottom, don't yank the user; suspend auto-follow until near bottom
             this.autoFollowSuspended = !this.IsNearBottom();
             this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: true));
         };
         this.FollowTailToggle.Unchecked += (_, _) =>
         {
-            this.FollowTail = false;
             this.autoFollowSuspended = false;
             this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
         };
 
         this.PauseToggle.Checked += (_, _) =>
         {
-            this.IsPaused = true;
             if (this.ItemsSource is OutputLogBuffer buffer)
             {
                 buffer.IsPaused = true;
@@ -186,7 +182,6 @@ public sealed partial class OutputConsoleView
         };
         this.PauseToggle.Unchecked += (_, _) =>
         {
-            this.IsPaused = false;
             if (this.ItemsSource is OutputLogBuffer buffer)
             {
                 buffer.IsPaused = false;
@@ -194,65 +189,46 @@ public sealed partial class OutputConsoleView
 
             this.PauseChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
         };
-
-        this.ShowTimestampsToggle.Checked += (_, _) => this.ShowTimestamps = true;
-        this.ShowTimestampsToggle.Unchecked += (_, _) => this.ShowTimestamps = false;
-        this.WrapToggle.Checked += (_, _) => this.WordWrap = true;
-        this.WrapToggle.Unchecked += (_, _) => this.WordWrap = false;
     }
 
     private void InitializeLevelItems()
     {
-        // Levels dropdown items
-        // Initialize sensible defaults if filter is at All
-        if (this.LevelFilter == LevelMask.All)
+        // Apply sensible defaults only if DP still at framework default and still All.
+        if (this.ReadLocalValue(LevelFilterProperty) == DependencyProperty.UnsetValue &&
+            this.LevelFilter == LevelMask.All)
         {
             this.LevelFilter = LevelMask.Information | LevelMask.Warning | LevelMask.Error | LevelMask.Fatal;
         }
 
-        this.LevelVerboseItem.IsChecked = (this.LevelFilter & LevelMask.Verbose) == LevelMask.Verbose;
-        this.LevelDebugItem.IsChecked = (this.LevelFilter & LevelMask.Debug) == LevelMask.Debug;
-        this.LevelInformationItem.IsChecked = (this.LevelFilter & LevelMask.Information) == LevelMask.Information;
-        this.LevelWarningItem.IsChecked = (this.LevelFilter & LevelMask.Warning) == LevelMask.Warning;
-        this.LevelErrorItem.IsChecked = (this.LevelFilter & LevelMask.Error) == LevelMask.Error;
-        this.LevelFatalItem.IsChecked = (this.LevelFilter & LevelMask.Fatal) == LevelMask.Fatal;
+        void Wire(ToggleMenuFlyoutItem item, LevelMask flag)
+        {
+            item.IsChecked = (this.LevelFilter & flag) != LevelMask.None;
+            item.Click += (_, _) =>
+            {
+                this.SetLevelFlag(flag, item.IsChecked);
+                this.SyncLevelMenuChecks();
+                this.UpdateLevelsSummary();
+            };
+        }
 
-        this.LevelVerboseItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Verbose, this.LevelVerboseItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
-        this.LevelDebugItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Debug, this.LevelDebugItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
-        this.LevelInformationItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Information, this.LevelInformationItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
-        this.LevelWarningItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Warning, this.LevelWarningItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
-        this.LevelErrorItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Error, this.LevelErrorItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
-        this.LevelFatalItem.Click += (_, _) =>
-        {
-            this.SetLevelFlag(LevelMask.Fatal, this.LevelFatalItem.IsChecked);
-            this.RefreshFilter();
-            this.UpdateLevelsSummary();
-        };
+        Wire(this.LevelVerboseItem, LevelMask.Verbose);
+        Wire(this.LevelDebugItem, LevelMask.Debug);
+        Wire(this.LevelInformationItem, LevelMask.Information);
+        Wire(this.LevelWarningItem, LevelMask.Warning);
+        Wire(this.LevelErrorItem, LevelMask.Error);
+        Wire(this.LevelFatalItem, LevelMask.Fatal);
+
+        this.UpdateLevelsSummary();
+    }
+
+    private void SyncLevelMenuChecks()
+    {
+        this.LevelVerboseItem.IsChecked = (this.LevelFilter & LevelMask.Verbose) != LevelMask.None;
+        this.LevelDebugItem.IsChecked = (this.LevelFilter & LevelMask.Debug) != LevelMask.None;
+        this.LevelInformationItem.IsChecked = (this.LevelFilter & LevelMask.Information) != LevelMask.None;
+        this.LevelWarningItem.IsChecked = (this.LevelFilter & LevelMask.Warning) != LevelMask.None;
+        this.LevelErrorItem.IsChecked = (this.LevelFilter & LevelMask.Error) != LevelMask.None;
+        this.LevelFatalItem.IsChecked = (this.LevelFilter & LevelMask.Fatal) != LevelMask.None;
     }
 
     private void RegisterSearchBoxHandler() =>
@@ -275,7 +251,7 @@ public sealed partial class OutputConsoleView
         "Maintainability",
         "MA0051:Method is too long",
         Justification = "already the smallest possible without artificial splitting")]
-    private void OnCollectionChanged(object? sender /*unused*/, NotifyCollectionChangedEventArgs e)
+    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (!this.isLoaded)
         {
@@ -385,8 +361,12 @@ public sealed partial class OutputConsoleView
 
     private void SetLevelFlag(LevelMask flag, bool on)
     {
-        this.LevelFilter = on ? this.LevelFilter | flag : this.LevelFilter & ~flag;
-        this.RefreshFilter();
+        var before = this.LevelFilter;
+        this.LevelFilter = on ? before | flag : before & ~flag;
+        if (this.LevelFilter != before)
+        {
+            this.RefreshFilter();
+        }
     }
 
     private void RebuildView()
@@ -733,20 +713,23 @@ public sealed partial class OutputConsoleView
 
     private void UpdateLevelsSummary()
     {
-        // Count selected levels
-        (LevelMask level, string name)[] levels =
-        [
-            (level: LevelMask.Verbose, "Verbose"),
-            (level: LevelMask.Debug, "Debug"),
-            (level: LevelMask.Information, "Information"),
-            (level: LevelMask.Warning, "Warning"),
-            (level: LevelMask.Error, "Error"),
-            (level: LevelMask.Fatal, "Fatal"),
-        ];
+        // Cannot stackalloc tuples containing reference types (string). Use a managed array instead.
+        var levels = new (LevelMask flag, string name)[]
+        {
+            (LevelMask.Verbose, "Verbose"), (LevelMask.Debug, "Debug"), (LevelMask.Information, "Information"),
+            (LevelMask.Warning, "Warning"), (LevelMask.Error, "Error"), (LevelMask.Fatal, "Fatal"),
+        };
 
-        var selectedCount = levels.Count(l => (this.LevelFilter & l.level) != LevelMask.None);
-        var highest = this.GetHighestSelectedLevelName();
-        var summary = selectedCount == levels.Length ? "All" : highest;
+        var selectedCount = 0;
+        foreach (var (flag, _) in levels)
+        {
+            if ((this.LevelFilter & flag) != LevelMask.None)
+            {
+                selectedCount++;
+            }
+        }
+
+        var summary = selectedCount == levels.Length ? "All" : this.GetHighestSelectedLevelName();
         this.LevelsDropDown.Content = string.Format(
             CultureInfo.InvariantCulture,
             "Levels: {0} ({1}/{2})",
@@ -787,7 +770,7 @@ public sealed partial class OutputConsoleView
         this.SelectAndScrollToIndex(idx);
     }
 
-    private void OnFindPrevAccelerator(object sender /*unused*/, KeyboardAcceleratorInvokedEventArgs e)
+    private void OnFindPrevAccelerator(object sender, KeyboardAcceleratorInvokedEventArgs e)
     {
         e.Handled = true;
         if (!this.isLoaded || this.viewItems.Count == 0)
@@ -811,7 +794,7 @@ public sealed partial class OutputConsoleView
         this.SelectAndScrollToIndex(idx);
     }
 
-    private void OnFocusSearchAccelerator(object sender /*unused*/, KeyboardAcceleratorInvokedEventArgs e)
+    private void OnFocusSearchAccelerator(object sender, KeyboardAcceleratorInvokedEventArgs e)
     {
         e.Handled = true;
         _ = this.SearchBox.Focus(FocusState.Programmatic);
