@@ -9,52 +9,52 @@ using System.Diagnostics.CodeAnalysis;
 namespace DroidNet.Controls.Selection;
 
 /// <summary>
-/// A <see cref="SelectionModel{T}"/> which allows multiple indices to be selected at any given time.
+///     A <see cref="SelectionModel{T}" /> which allows multiple indices to be selected at any given time.
 /// </summary>
 /// <typeparam name="T">
-/// The type of the item that can be selected, which is typically the type of items in the control.
+///     The type of the item that can be selected, which is typically the type of items in the control.
 /// </typeparam>
 /// <remarks>
-/// <para>
-/// The <see cref="MultipleSelectionModel{T}"/> class provides a base implementation for managing
-/// multiple selections in controls such as lists or grids.
-/// It allows multiple items to be selected simultaneously.
-/// </para>
-/// <para>
-/// This class raises property change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/>,
-/// <see cref="SelectionModel{T}.SelectedItem"/>, and <see cref="SelectionModel{T}.IsEmpty"/> properties,
-/// allowing the UI to update automatically when the selection changes.
-/// </para>
+///     <para>
+///         The <see cref="MultipleSelectionModel{T}" /> class provides a base implementation for managing
+///         multiple selections in controls such as lists or grids.
+///         It allows multiple items to be selected simultaneously.
+///     </para>
+///     <para>
+///         This class raises property change notifications for the <see cref="SelectionModel{T}.SelectedIndex" />,
+///         <see cref="SelectionModel{T}.SelectedItem" />, and <see cref="SelectionModel{T}.IsEmpty" /> properties,
+///         allowing the UI to update automatically when the selection changes.
+///     </para>
 /// </remarks>
-[SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "methods need to be overridable for testing and extension of the class")]
+[SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global",
+    Justification = "methods need to be overridable for testing and extension of the class")]
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<T> selectedIndices;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MultipleSelectionModel{T}" /> class.
+    ///     Initializes a new instance of the <see cref="MultipleSelectionModel{T}" /> class.
     /// </summary>
     protected MultipleSelectionModel()
     {
         this.selectedIndices
-            = new SelectionObservableCollection<T>([])
-            {
-                GetItemAt = this.GetItemAt,
-            };
+            = new SelectionObservableCollection<T>([]) { GetItemAt = this.GetItemAt };
         this.SelectedIndices = new ReadOnlyObservableCollection<int>(this.selectedIndices);
     }
 
     /// <summary>
-    /// Gets a <see cref="ReadOnlyObservableCollection{T}" /> of all selected indices. The collection will be updated further by
-    /// the selection model to always reflect changes in selection. This can be observed by overriding the
-    /// <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
+    ///     Gets a <see cref="ReadOnlyObservableCollection{T}" /> of all selected indices. The collection will be updated
+    ///     further by
+    ///     the selection model to always reflect changes in selection. This can be observed by overriding the
+    ///     <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
     /// </summary>
     public ReadOnlyObservableCollection<int> SelectedIndices { get; }
 
     /// <summary>
-    /// Gets a <see cref="ReadOnlyObservableCollection{T}" /> of all selected items. The collection will be updated further by
-    /// the selection model to always reflect changes in selection. This can be observed by overriding the
-    /// <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
+    ///     Gets a <see cref="ReadOnlyObservableCollection{T}" /> of all selected items. The collection will be updated further
+    ///     by
+    ///     the selection model to always reflect changes in selection. This can be observed by overriding the
+    ///     <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
     /// </summary>
     public ReadOnlyObservableCollection<T> SelectedItems
     {
@@ -137,22 +137,25 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Set the selection to one or more indices at the same time.
-    /// <para>
-    /// This method will ignore any value that is not within the valid range (i.e. greater than or equal to zero, and less than
-    /// the total number of items in the underlying data model). Any duplication of indices will be ignored.
-    /// </para>
-    /// <para>
-    /// If there is already one or more indices selected in this model, calling this method will <strong>not</strong> clear these
-    /// selections - to do so it is necessary to first call <see cref="ClearSelection()" />.
-    /// </para>
-    /// <para>
-    /// The last valid index given will become the selected index / selected item.
-    /// </para>
+    ///     Set the selection to one or more indices at the same time.
+    ///     <para>
+    ///         This method will ignore any value that is not within the valid range (i.e. greater than or equal to zero, and
+    ///         less than
+    ///         the total number of items in the underlying data model). Any duplication of indices will be ignored.
+    ///     </para>
+    ///     <para>
+    ///         If there is already one or more indices selected in this model, calling this method will <strong>not</strong>
+    ///         clear these
+    ///         selections - to do so it is necessary to first call <see cref="ClearSelection()" />.
+    ///     </para>
+    ///     <para>
+    ///         The last valid index given will become the selected index / selected item.
+    ///     </para>
     /// </summary>
     /// <param name="indices">
-    /// One or more index values that will be added to the selection if they are within the valid range, and do not duplicate
-    /// indices already in the existing selection. If no values are provided, the current selection is cleared.
+    ///     One or more index values that will be added to the selection if they are within the valid range, and do not
+    ///     duplicate
+    ///     indices already in the existing selection. If no values are provided, the current selection is cleared.
     /// </param>
     public virtual void SelectItemsAt(params int[] indices)
     {
@@ -174,41 +177,50 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
         {
-            this.selectedIndices.Clear(); // Don't use ClearSelection() to avoid triggering property change notifications
+            // Don't use ClearSelection() to avoid triggering property change notifications
+            this.selectedIndices.Clear();
 
-            var last = indices
-                .Where(index => index >= 0 && index < itemsCount)
-                .Select(
-                    index =>
-                    {
-                        this.selectedIndices.Add(index);
-                        return index;
-                    })
-                .DefaultIfEmpty(-1)
-                .Last();
+            // Add each valid index, ignoring duplicates. Determine the last valid index provided.
+            var last = -1;
+            foreach (var idx in indices)
+            {
+                if (idx < 0 || idx >= itemsCount)
+                {
+                    continue;
+                }
+
+                // The custom collection will ignore duplicates.
+                this.selectedIndices.Add(idx);
+
+                last = idx;
+            }
 
             _ = this.SetSelectedIndex(last);
         }
     }
 
     /// <summary>
-    /// Selects all indices from the given <paramref name="startIndex" /> index to the item before the given <paramref name="endIndex" />
-    /// index. This means that the selection is inclusive of the <paramref name="startIndex" /> index, and inclusive of the
-    /// <paramref name="endIndex" /> index.
-    /// <para>
-    /// This method will work regardless of whether start &lt; end or start &gt; end: the only constant is that the given
-    /// <paramref name="endIndex" /> index will become the <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
-    /// </para>
+    ///     Selects all indices from the given <paramref name="startIndex" /> index to the item before the given
+    ///     <paramref name="endIndex" />
+    ///     index. This means that the selection is inclusive of the <paramref name="startIndex" /> index, and inclusive of the
+    ///     <paramref name="endIndex" /> index.
+    ///     <para>
+    ///         This method will work regardless of whether start &lt; end or start &gt; end: the only constant is that the
+    ///         given
+    ///         <paramref name="endIndex" /> index will become the
+    ///         <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
+    ///     </para>
     /// </summary>
     /// <param name="startIndex">
-    /// The first index to select - this index will be selected.
+    ///     The first index to select - this index will be selected.
     /// </param>
     /// <param name="endIndex">
-    /// The last index of the selection - this index will be selected.
+    ///     The last index of the selection - this index will be selected.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// If the given <paramref name="startIndex" /> or <paramref name="endIndex" /> index is less than zero, or greater than or equal to the
-    /// total number of items in the underlying data model).
+    ///     If the given <paramref name="startIndex" /> or <paramref name="endIndex" /> index is less than zero, or greater
+    ///     than or equal to the
+    ///     total number of items in the underlying data model).
     /// </exception>
     public virtual void SelectRange(int startIndex, int endIndex)
     {
@@ -232,12 +244,13 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Selects a range of items between the specified start and end items, inclusive.
+    ///     Selects a range of items between the specified start and end items, inclusive.
     /// </summary>
     /// <param name="start">The first item in the range.</param>
     /// <param name="end">The last item in the range.</param>
     /// <exception cref="ArgumentException">
-    /// Thrown when either <paramref name="start" /> or <paramref name="end" /> are not found in the model items collection.
+    ///     Thrown when either <paramref name="start" /> or <paramref name="end" /> are not found in the model items
+    ///     collection.
     /// </exception>
     public void SelectRange(T start, T end)
     {
@@ -257,7 +270,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Convenience method to select all available indices.
+    ///     Convenience method to select all available indices.
     /// </summary>
     public void SelectAll()
     {
@@ -284,10 +297,10 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Inverts the selection state of all items in the collection.
+    ///     Inverts the selection state of all items in the collection.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the underlying data model does not implement <see cref="ISelectable" />.
+    ///     Thrown when the underlying data model does not implement <see cref="ISelectable" />.
     /// </exception>
     public void InvertSelection()
     {
@@ -327,7 +340,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         _ = this.SetSelectedIndex(this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1]);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string ToString()
     {
         var count = this.selectedIndices.Count;
@@ -337,11 +350,14 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Validates the specified index and throws an <see cref="ArgumentOutOfRangeException" /> if the index is out of range.
+    ///     Validates the specified index and throws an <see cref="ArgumentOutOfRangeException" /> if the index is out of
+    ///     range.
     /// </summary>
     /// <param name="index">The index to validate.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the index is less than 0 or greater than or equal to the item
-    /// count.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown when the index is less than 0 or greater than or equal to the item
+    ///     count.
+    /// </exception>
     private void ValidIndexOrThrow(int index)
     {
         if (index < 0 || index >= this.GetItemCount())
