@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="DroidNet.Controls.OutputConsole.OutputConsoleView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -37,18 +37,22 @@
             <AppBarToggleButton
                 x:Name="PauseToggle"
                 Icon="Pause"
+                IsChecked="{x:Bind IsPaused, Mode=TwoWay}"
                 Label="Pause" />
             <AppBarToggleButton
                 x:Name="FollowTailToggle"
                 Icon="Play"
-                IsChecked="True"
+                IsChecked="{x:Bind FollowTail, Mode=TwoWay}"
                 Label="Follow" />
             <AppBarButton
                 x:Name="ClearButton"
                 Icon="Delete"
                 Label="Clear" />
             <AppBarSeparator />
-            <AppBarToggleButton x:Name="WrapToggle" Label="Wrap">
+            <AppBarToggleButton
+                x:Name="WrapToggle"
+                IsChecked="{x:Bind WordWrap, Mode=TwoWay}"
+                Label="Wrap">
                 <AppBarToggleButton.Icon>
                     <SymbolIcon Symbol="AlignLeft" />
                 </AppBarToggleButton.Icon>
@@ -56,6 +60,7 @@
             <AppBarToggleButton
                 x:Name="ShowTimestampsToggle"
                 Icon="Clock"
+                IsChecked="{x:Bind ShowTimestamps, Mode=TwoWay}"
                 Label="Timestamps" />
             <CommandBar.Content>
                 <StackPanel
@@ -78,7 +83,8 @@
                         x:Name="SearchBox"
                         MinWidth="220"
                         PlaceholderText="Filter text..."
-                        QueryIcon="Find" />
+                        QueryIcon="Find"
+                        Text="{x:Bind TextFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
             </CommandBar.Content>
         </CommandBar>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.Views.LogsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -9,6 +9,14 @@
     mc:Ignorable="d">
 
     <Grid Padding="4">
-        <dnc:OutputConsoleView ItemsSource="{x:Bind ViewModel.Buffer, Mode=OneWay}" />
+        <dnc:OutputConsoleView
+            x:Name="OutputConsole"
+            FollowTail="{x:Bind ViewModel.FollowTail, Mode=TwoWay}"
+            IsPaused="{x:Bind ViewModel.IsPaused, Mode=TwoWay}"
+            ItemsSource="{x:Bind ViewModel.Buffer, Mode=OneWay}"
+            LevelFilter="{x:Bind ViewModel.LevelFilter, Mode=TwoWay}"
+            ShowTimestamps="{x:Bind ViewModel.ShowTimestamps, Mode=TwoWay}"
+            TextFilter="{x:Bind ViewModel.TextFilter, Mode=TwoWay}"
+            WordWrap="{x:Bind ViewModel.WordWrap, Mode=TwoWay}" />
     </Grid>
 </UserControl>
