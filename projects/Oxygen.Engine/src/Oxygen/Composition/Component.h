@@ -143,4 +143,4 @@ concept IsComponentWithDependencies = IsComponent<T> && requires {
 } // namespace oxygen
 
 // ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Composition/Detail/ComponentMacros.h>
+#include <Oxygen/Composition/ComponentMacros.h>
