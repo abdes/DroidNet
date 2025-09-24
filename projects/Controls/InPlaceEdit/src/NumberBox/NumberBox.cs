@@ -9,32 +9,35 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
+using Windows.System;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a control that allows the user to input and display numeric values.
+///     Represents a control that allows the user to input and display numeric values.
 /// </summary>
 /// <remarks>
-/// The <see cref="NumberBox"/> control provides a way for users to input numeric values with
-/// optional formatting and validation. It supports various features such as custom masks, value
-/// clamping, and label positioning. The numeric value can be changed by using the mouse scroll
-/// wheel or dragging the mouse left or right.
-/// <para>
-/// Multiple scenarios can be implemented using the mask format. You can limit the number of digits
-/// before or after the decimal point `.` with masks like `#.##` or `##.#`. You can also leave the
-/// digits before the decimal point unbounded with `~`, such as in "~.##". You can also totally
-/// suppress the fractional part (value will be rounded) with "~.". You can also limit the values to
-/// negative or positive values by using the mask "-#.##" or "+#.##".
-/// </para>
-/// <para>
-/// You can also replace any missing digits with '0' to have a fixed size formatting of the number
-/// value. This behavior is enabled through the <see cref="WithPadding"/> property.
-/// </para>
+///     The <see cref="NumberBox" /> control provides a way for users to input numeric values with
+///     optional formatting and validation. It supports various features such as custom masks, value
+///     clamping, and label positioning. The numeric value can be changed by using the mouse scroll
+///     wheel or dragging the mouse left or right.
+///     <para>
+///         Multiple scenarios can be implemented using the mask format. You can limit the number of digits
+///         before or after the decimal point `.` with masks like `#.##` or `##.#`. You can also leave the
+///         digits before the decimal point unbounded with `~`, such as in "~.##". You can also totally
+///         suppress the fractional part (value will be rounded) with "~." . You can also limit the values to
+///         negative or positive values by using the mask "-#.##" or "+#.##".
+///     </para>
+///     <para>
+///         You can also replace any missing digits with '0' to have a fixed size formatting of the number
+///         value. This behavior is enabled through the <see cref="WithPadding" /> property.
+///     </para>
 /// </remarks>
 /// <example>
-/// <para><strong>Example Usage</strong></para>
-/// <code lang="xaml"><![CDATA[
+///     <para>
+///         <strong>Example Usage</strong>
+///     </para>
+///     <code lang="xaml"><![CDATA[
 /// <controls:NumberBox
 ///     x:Name="numberBox"
 ///     Value="123.45"
@@ -47,9 +50,9 @@ namespace DroidNet.Controls;
 ///     HorizontalLabelAlignment="Left"
 ///     Validate="NumberBox_Validate" />
 /// ]]></code>
-/// This example demonstrates how to use the <see cref="NumberBox"/> control in XAML with various
-/// properties set. The control is configured to display a numeric value with a label positioned at
-/// the top, and it uses a custom mask for formatting.
+///     This example demonstrates how to use the <see cref="NumberBox" /> control in XAML with various
+///     properties set. The control is configured to display a numeric value with a label positioned at
+///     the top, and it uses a custom mask for formatting.
 /// </example>
 [TemplatePart(Name = RootGridPartName, Type = typeof(CustomGrid))]
 [TemplatePart(Name = BackgroundBorderPartName, Type = typeof(Border))]
@@ -63,7 +66,6 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = ShowingInvalidValueStateName, GroupName = ValueStatesGroupName)]
 [TemplateVisualState(Name = EditingValidValueStateName, GroupName = ValueStatesGroupName)]
 [TemplateVisualState(Name = EditingInvalidValueStateName, GroupName = ValueStatesGroupName)]
-
 public partial class NumberBox : Control
 {
     private const string EditBoxPartName = "PartEditBox";
@@ -100,7 +102,7 @@ public partial class NumberBox : Control
     private string? originalValue;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="NumberBox"/> class.
+    ///     Initializes a new instance of the <see cref="NumberBox" /> class.
     /// </summary>
     public NumberBox()
     {
@@ -119,7 +121,7 @@ public partial class NumberBox : Control
 
     private bool IsMouseCaptured => this.capturePoint is not null;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -299,11 +301,11 @@ public partial class NumberBox : Control
         this.NumberValue = newValue;
     }
 
-    private float CalculateIncrement(double delta, Windows.System.VirtualKeyModifiers keyModifiers)
+    private float CalculateIncrement(double delta, VirtualKeyModifiers keyModifiers)
     {
         // Check if the Shift modifier is active
         var shiftMultiplier = 1.0;
-        if (keyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Shift))
+        if (keyModifiers.HasFlag(VirtualKeyModifiers.Shift))
         {
             shiftMultiplier = Math.Abs(delta) < 10 ? 0.01 : 0.1;
         }
@@ -366,7 +368,7 @@ public partial class NumberBox : Control
 
     private void CommitEdit()
     {
-        Debug.Assert(this.valueIsValid, "commit onlky when newValueIsValid is true");
+        Debug.Assert(this.valueIsValid, "commit only when newValueIsValid is true");
         this.NumberValue = float.Parse(this.editTextBox!.Text, CultureInfo.CurrentCulture);
         this.EndEdit();
     }
@@ -432,9 +434,9 @@ public partial class NumberBox : Control
         // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
         switch (e.Key)
         {
-            case Windows.System.VirtualKey.Enter when !this.valueIsValid:
+            case VirtualKey.Enter when !this.valueIsValid:
                 return;
-            case Windows.System.VirtualKey.Enter:
+            case VirtualKey.Enter:
                 if (this.valueIsValid)
                 {
                     this.CommitEdit();
@@ -443,7 +445,7 @@ public partial class NumberBox : Control
                 e.Handled = true;
                 break;
 
-            case Windows.System.VirtualKey.Escape:
+            case VirtualKey.Escape:
                 this.CancelEdit();
                 e.Handled = true;
                 break;
@@ -539,11 +541,7 @@ public partial class NumberBox : Control
         void LayoutVertically()
         {
             this.rootGrid.ColumnDefinitions.Add(
-                new ColumnDefinition
-                {
-                    Width = new GridLength(1, GridUnitType.Star),
-                    MinWidth = valueWidth,
-                });
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
             this.rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             this.rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 

@@ -8,20 +8,26 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.System;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a label that can be edited in place. This control allows users to double-click on the label to switch to an edit mode,
-/// where they can modify the text. The control provides visual states for normal, editing, and invalid value scenarios.
+///     Represents a label that can be edited in place. This control allows users to double-click on the label to switch to
+///     an edit mode,
+///     where they can modify the text. The control provides visual states for normal, editing, and invalid value
+///     scenarios.
 /// </summary>
 /// <remarks>
-/// The <see cref="InPlaceEditableLabel"/> control is useful in scenarios where inline editing of text is required. It supports validation
-/// through the <see cref="Validate"/> event, which allows implementors to provide custom validation logic.
+///     The <see cref="InPlaceEditableLabel" /> control is useful in scenarios where inline editing of text is required. It
+///     supports validation
+///     through the <see cref="Validate" /> event, which allows implementors to provide custom validation logic.
 /// </remarks>
 /// <example>
-/// <para><strong>Example Usage</strong></para>
-/// <code><![CDATA[
+///     <para>
+///         <strong>Example Usage</strong>
+///     </para>
+///     <code><![CDATA[
 /// <controls:InPlaceEditableLabel Text="Sample Text" Validate="OnValidate">
 ///     <TextBlock FontSize="18" />
 /// </controls:InPlaceEditableLabel>
@@ -37,47 +43,47 @@ namespace DroidNet.Controls;
 public partial class InPlaceEditableLabel : ContentControl
 {
     /// <summary>
-    /// The name of the root grid part in the control template.
+    ///     The name of the root grid part in the control template.
     /// </summary>
     public const string RootGridPartName = "PartRootGrid";
 
     /// <summary>
-    /// The name of the content presenter part in the control template.
+    ///     The name of the content presenter part in the control template.
     /// </summary>
     public const string LabelContentPresenterPartName = "PartContentPresenter";
 
     /// <summary>
-    /// The name of the edit box part in the control template.
+    ///     The name of the edit box part in the control template.
     /// </summary>
     public const string EditBoxPartName = "PartEditBox";
 
     /// <summary>
-    /// The name of the value error part in the control template.
+    ///     The name of the value error part in the control template.
     /// </summary>
     public const string ValueErrorPartName = "PartValueError";
 
     /// <summary>
-    /// The name of the visual states group for editing states.
+    ///     The name of the visual states group for editing states.
     /// </summary>
     public const string EditingVisualStatesGroupName = "EditingVisualStates";
 
     /// <summary>
-    /// The name of the normal visual state.
+    ///     The name of the normal visual state.
     /// </summary>
     public const string NormalStateName = "Normal";
 
     /// <summary>
-    /// The name of the editing visual state.
+    ///     The name of the editing visual state.
     /// </summary>
     public const string EditingStateName = "Editing";
 
     /// <summary>
-    /// The name of the invalid value visual state.
+    ///     The name of the invalid value visual state.
     /// </summary>
     public const string InvalidValueStateName = "InvalidValue";
 
     /// <summary>
-    /// Identifies the <see cref="Text"/> dependency property.
+    ///     Identifies the <see cref="Text" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty TextProperty =
         DependencyProperty.Register(
@@ -89,14 +95,14 @@ public partial class InPlaceEditableLabel : ContentControl
                 (d, _) => ((InPlaceEditableLabel)d).UpdateDisplayText()));
 
     /// <summary>
-    /// Identifies the <see cref="DisplayText"/> dependency property.
+    ///     Identifies the <see cref="DisplayText" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty DisplayTextProperty =
         DependencyProperty.Register(
             nameof(DisplayText),
             typeof(string),
             typeof(InPlaceEditableLabel),
-            new PropertyMetadata(default));
+            new PropertyMetadata(defaultValue: null));
 
     private bool isEditing;
     private TextBox? editTextBox;
@@ -105,7 +111,7 @@ public partial class InPlaceEditableLabel : ContentControl
     private bool newNameIsValid;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InPlaceEditableLabel"/> class.
+    ///     Initializes a new instance of the <see cref="InPlaceEditableLabel" /> class.
     /// </summary>
     public InPlaceEditableLabel()
     {
@@ -113,12 +119,12 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Occurs when the text is being validated.
+    ///     Occurs when the text is being validated.
     /// </summary>
     public event EventHandler<ValidationEventArgs<string>>? Validate;
 
     /// <summary>
-    /// Gets or sets the text of the label. This is a dependency property.
+    ///     Gets or sets the text of the label. This is a dependency property.
     /// </summary>
     /// <value>The text of the label.</value>
     public string? Text
@@ -128,7 +134,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Gets or sets the display text of the label. This is a dependency property.
+    ///     Gets or sets the display text of the label. This is a dependency property.
     /// </summary>
     /// <value>The display text of the label.</value>
     public string DisplayText
@@ -138,7 +144,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Starts the edit mode, allowing the user to modify the text.
+    ///     Starts the edit mode, allowing the user to modify the text.
     /// </summary>
     internal void StartEdit()
     {
@@ -158,12 +164,12 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Commits the edit and exits the edit mode.
+    ///     Commits the edit and exits the edit mode.
     /// </summary>
     internal void CommitEdit() => this.EndEdit();
 
     /// <summary>
-    /// Cancels the edit and reverts to the original text.
+    ///     Cancels the edit and reverts to the original text.
     /// </summary>
     internal void CancelEdit()
     {
@@ -176,7 +182,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Handles the text changed event and validates the new text.
+    ///     Handles the text changed event and validates the new text.
     /// </summary>
     internal void OnTextChanged()
     {
@@ -185,7 +191,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Handles the lost focus event in the edit box.
+    ///     Handles the lost focus event in the edit box.
     /// </summary>
     internal void OnEditBoxLostFocus()
     {
@@ -200,11 +206,11 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Handles the got focus event in the edit box.
+    ///     Handles the got focus event in the edit box.
     /// </summary>
     internal void OnEditBoxGotFocus() => this.editTextBox?.SelectAll();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -247,11 +253,11 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Finds a visual child of a specified type.
+    ///     Finds a visual child of a specified type.
     /// </summary>
     /// <typeparam name="T">The type of the visual child to find.</typeparam>
     /// <param name="parent">The parent dependency object.</param>
-    /// <returns>The found visual child, or <see langword="null"/> if no child is found.</returns>
+    /// <returns>The found visual child, or <see langword="null" /> if no child is found.</returns>
     private static T? FindVisualChild<T>(DependencyObject parent)
         where T : DependencyObject
     {
@@ -274,7 +280,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Updates the display text based on the current text.
+    ///     Updates the display text based on the current text.
     /// </summary>
     private void UpdateDisplayText()
     {
@@ -284,7 +290,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Updates the visual state of the control.
+    ///     Updates the visual state of the control.
     /// </summary>
     /// <param name="useTransitions">Indicates whether to use transitions.</param>
     private void UpdateVisualState(bool useTransitions = true)
@@ -295,7 +301,7 @@ public partial class InPlaceEditableLabel : ContentControl
             : VisualStateManager.GoToState(this, NormalStateName, useTransitions);
 
     /// <summary>
-    /// Handles the double-tap event on the entity name text block to start editing.
+    ///     Handles the double-tap event on the entity name text block to start editing.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="e">The event data.</param>
@@ -306,7 +312,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Ends the edit mode and updates the visual state.
+    ///     Ends the edit mode and updates the visual state.
     /// </summary>
     private void EndEdit()
     {
@@ -315,7 +321,7 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Validates the current text in the edit box.
+    ///     Validates the current text in the edit box.
     /// </summary>
     private void ValidateName()
     {
@@ -330,23 +336,24 @@ public partial class InPlaceEditableLabel : ContentControl
     }
 
     /// <summary>
-    /// Handles the key down event in the edit box.
+    ///     Handles the key down event in the edit box.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="e">The event data.</param>
-    [SuppressMessage("ReSharper", "SwitchStatementMissingSomeEnumCasesNoDefault", Justification = "we only want to handle specific keys")]
+    [SuppressMessage("ReSharper", "SwitchStatementMissingSomeEnumCasesNoDefault",
+        Justification = "we only want to handle specific keys")]
     private void OnEditBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
         switch (e.Key)
         {
-            case Windows.System.VirtualKey.Enter when !this.newNameIsValid:
+            case VirtualKey.Enter when !this.newNameIsValid:
                 return;
-            case Windows.System.VirtualKey.Enter:
+            case VirtualKey.Enter:
                 this.CommitEdit();
                 e.Handled = true;
                 break;
 
-            case Windows.System.VirtualKey.Escape:
+            case VirtualKey.Escape:
                 this.CancelEdit();
                 e.Handled = true;
                 break;

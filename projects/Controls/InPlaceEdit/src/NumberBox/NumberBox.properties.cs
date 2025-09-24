@@ -7,32 +7,32 @@ using Microsoft.UI.Xaml;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a control that allows the user to input and display numeric values.
+///     Represents a control that allows the user to input and display numeric values.
 /// </summary>
 public partial class NumberBox
 {
     /// <summary>
-    /// Identifies the <see cref="NumberValue"/> dependency property.
+    ///     Identifies the <see cref="NumberValue" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty NumberValueProperty =
         DependencyProperty.Register(
             nameof(NumberValue),
             typeof(float),
             typeof(NumberBox),
-            new PropertyMetadata(default(float), OnValuePropertyChanged));
+            new PropertyMetadata(defaultValue: 0, OnValuePropertyChanged));
 
     /// <summary>
-    /// Identifies the <see cref="DisplayText"/> dependency property.
+    ///     Identifies the <see cref="DisplayText" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty DisplayTextProperty =
         DependencyProperty.Register(
             nameof(DisplayText),
             typeof(string),
             typeof(NumberBox),
-            new PropertyMetadata(default));
+            new PropertyMetadata(defaultValue: null));
 
     /// <summary>
-    /// Identifies the <see cref="Label"/> dependency property.
+    ///     Identifies the <see cref="Label" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty LabelProperty =
         DependencyProperty.Register(
@@ -42,7 +42,7 @@ public partial class NumberBox
             new PropertyMetadata(string.Empty));
 
     /// <summary>
-    /// Identifies the <see cref="LabelPosition"/> dependency property.
+    ///     Identifies the <see cref="LabelPosition" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty LabelPositionProperty =
         DependencyProperty.Register(
@@ -52,7 +52,7 @@ public partial class NumberBox
             new PropertyMetadata(LabelPosition.Left, OnLabelPositionPropertyChanged));
 
     /// <summary>
-    /// Identifies the <see cref="Multiplier"/> dependency property.
+    ///     Identifies the <see cref="Multiplier" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty MultiplierProperty =
         DependencyProperty.Register(
@@ -62,7 +62,7 @@ public partial class NumberBox
             new PropertyMetadata(1));
 
     /// <summary>
-    /// Identifies the <see cref="Mask"/> dependency property.
+    ///     Identifies the <see cref="Mask" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty MaskProperty =
         DependencyProperty.Register(
@@ -72,7 +72,7 @@ public partial class NumberBox
             new PropertyMetadata("~.#", OnMaskPropertyChanged));
 
     /// <summary>
-    /// Identifies the <see cref="HorizontalValueAlignment"/> dependency property.
+    ///     Identifies the <see cref="HorizontalValueAlignment" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty HorizontalValueAlignmentProperty =
         DependencyProperty.Register(
@@ -82,7 +82,7 @@ public partial class NumberBox
             new PropertyMetadata(TextAlignment.Center));
 
     /// <summary>
-    /// Identifies the <see cref="HorizontalLabelAlignment"/> dependency property.
+    ///     Identifies the <see cref="HorizontalLabelAlignment" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty HorizontalLabelAlignmentProperty =
         DependencyProperty.Register(
@@ -92,7 +92,7 @@ public partial class NumberBox
             new PropertyMetadata(HorizontalAlignment.Left));
 
     /// <summary>
-    /// Identifies the <see cref="WithPadding"/> dependency property.
+    ///     Identifies the <see cref="WithPadding" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty WithPaddingProperty =
         DependencyProperty.Register(
@@ -102,7 +102,7 @@ public partial class NumberBox
             new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
 
     /// <summary>
-    /// Gets or sets the numeric value of the <see cref="NumberBox"/>.
+    ///     Gets or sets the numeric value of the <see cref="NumberBox" />.
     /// </summary>
     public float NumberValue
     {
@@ -111,7 +111,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the label text of the <see cref="NumberBox"/>.
+    ///     Gets or sets the label text of the <see cref="NumberBox" />.
     /// </summary>
     public string Label
     {
@@ -120,7 +120,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the position of the label relative to the <see cref="NumberBox"/>.
+    ///     Gets or sets the position of the label relative to the <see cref="NumberBox" />.
     /// </summary>
     public LabelPosition LabelPosition
     {
@@ -129,7 +129,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the multiplier used for value adjustments.
+    ///     Gets or sets the multiplier used for value adjustments.
     /// </summary>
     public int Multiplier
     {
@@ -138,7 +138,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the mask used for parsing and formatting the value.
+    ///     Gets or sets the mask used for parsing and formatting the value.
     /// </summary>
     public string Mask
     {
@@ -147,7 +147,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the display text of the label. This is a dependency property.
+    ///     Gets or sets the display text of the label. This is a dependency property.
     /// </summary>
     /// <value>The display text of the label.</value>
     public string DisplayText
@@ -157,7 +157,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the horizontal alignment of the value text.
+    ///     Gets or sets the horizontal alignment of the value text.
     /// </summary>
     public TextAlignment HorizontalValueAlignment
     {
@@ -166,7 +166,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets the horizontal alignment of the label text.
+    ///     Gets or sets the horizontal alignment of the label text.
     /// </summary>
     public HorizontalAlignment HorizontalLabelAlignment
     {
@@ -175,7 +175,7 @@ public partial class NumberBox
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether to pad the formatted value with zeros.
+    ///     Gets or sets a value indicating whether to pad the formatted value with zeros.
     /// </summary>
     public bool WithPadding
     {

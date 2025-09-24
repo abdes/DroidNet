@@ -2,12 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Parses and formats numeric values based on a specified mask.
+///     Parses and formats numeric values based on a specified mask.
 /// </summary>
 public partial class MaskParser
 {
@@ -20,7 +21,7 @@ public partial class MaskParser
     private readonly float? maxValue;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MaskParser"/> class with the specified mask.
+    ///     Initializes a new instance of the <see cref="MaskParser" /> class with the specified mask.
     /// </summary>
     /// <param name="mask">The mask to use for parsing and formatting values.</param>
     /// <exception cref="ArgumentException">Thrown when the mask format is invalid.</exception>
@@ -64,16 +65,16 @@ public partial class MaskParser
     }
 
     /// <summary>
-    /// Determines whether the specified value is valid according to the mask.
+    ///     Determines whether the specified value is valid according to the mask.
     /// </summary>
     /// <param name="value">The value to validate.</param>
-    /// <returns><see langword="true"/> if the value is valid; otherwise, <see langword="false"/>.</returns>
+    /// <returns><see langword="true" /> if the value is valid; otherwise, <see langword="false" />.</returns>
     public bool IsValidValue(float value) =>
         (this.signRequirement == 0 || Math.Sign(value) == this.signRequirement)
         && (this.isUnbounded || Math.Abs(value) <= this.maxValue);
 
     /// <summary>
-    /// Formats the specified value according to the mask.
+    ///     Formats the specified value according to the mask.
     /// </summary>
     /// <param name="value">The value to format.</param>
     /// <param name="withPadding">Whether to pad the formatted value with zeros.</param>
@@ -94,7 +95,7 @@ public partial class MaskParser
         var afterFormat = this.afterDecimalCount > 0 ? new string('0', this.afterDecimalCount) : string.Empty;
         var numberFormat = this.afterDecimalCount > 0 ? $"{beforeFormat}.{afterFormat}" : beforeFormat;
 
-        var result = value.ToString(numberFormat, System.Globalization.CultureInfo.InvariantCulture);
+        var result = value.ToString(numberFormat, CultureInfo.InvariantCulture);
 
         // Ensure proper handling of 0 value
         if (value == 0 && !result.StartsWith('0'))
@@ -116,7 +117,7 @@ public partial class MaskParser
     }
 
     /// <summary>
-    /// Gets the regular expression used to parse the mask.
+    ///     Gets the regular expression used to parse the mask.
     /// </summary>
     /// <returns>The regular expression for parsing the mask.</returns>
     [GeneratedRegex(
