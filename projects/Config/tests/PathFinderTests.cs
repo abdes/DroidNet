@@ -10,7 +10,7 @@ using Moq;
 namespace DroidNet.Config.Tests;
 
 /// <summary>
-/// Contains unit tests for the <see cref="PathFinder" /> class.
+///     Contains unit tests for the <see cref="PathFinder" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -20,7 +20,7 @@ public class PathFinderTests
     private readonly Mock<IFileSystem> mockFileSystem;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PathFinderTests"/> class.
+    ///     Initializes a new instance of the <see cref="PathFinderTests" /> class.
     /// </summary>
     public PathFinderTests()
     {
@@ -126,7 +126,7 @@ public class PathFinderTests
         var downloadsPath = pathFinder.UserDownloads;
 
         // Assert
-        var knownFolderPath = KnownFolderPathHelpers.SHGetKnownFolderPath(
+        var knownFolderPath = KnownFolderPathHelpers.GetKnownFolderPath(
             new Guid("374DE290-123F-4565-9164-39C4925E467B"),
             0);
         _ = downloadsPath.Should().Be(knownFolderPath);
@@ -285,7 +285,7 @@ public class PathFinderTests
         var oneDrivePath = pathFinder.UserOneDrive;
 
         // Assert
-        var knownFolderPath = KnownFolderPathHelpers.SHGetKnownFolderPath(
+        var knownFolderPath = KnownFolderPathHelpers.GetKnownFolderPath(
             new Guid("A52BBA46-E9E1-435F-B3D9-28DAA648C0F6"),
             0);
         _ = oneDrivePath.Should().Be(knownFolderPath);

@@ -9,7 +9,7 @@ using Moq;
 namespace DroidNet.Hosting.Tests.WinUI;
 
 /// <summary>
-/// Unit tests for <see cref="UserInterfaceHostedService" />.
+///     Unit tests for <see cref="UserInterfaceHostedService" />.
 /// </summary>
 [TestClass]
 [TestCategory("Lifecycle")]
@@ -17,12 +17,12 @@ namespace DroidNet.Hosting.Tests.WinUI;
 public class UserInterfaceHostedServiceTests
 {
     /// <summary>
-    /// Verifies that, when started, the UI service will attempt to start the
-    /// UI thread.
+    ///     Verifies that, when started, the UI service will attempt to start the
+    ///     UI thread.
     /// </summary>
     /// <param name="cancellation">
-    /// A cancellation token that is used to check if the `Start` request has
-    /// been cancelled somewhere else.
+    ///     A cancellation token that is used to check if the `Start` request has
+    ///     been cancelled somewhere else.
     /// </param>
     /// <returns>Asynchronous task.</returns>
     [TestMethod]
@@ -32,7 +32,7 @@ public class UserInterfaceHostedServiceTests
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
-        var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
+        var sut = new UserInterfaceHostedService(mockContext.Object, mockThread.Object, loggerFactory: null);
 
         var cancellationToken = new CancellationToken(cancellation);
         await sut.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -40,12 +40,12 @@ public class UserInterfaceHostedServiceTests
     }
 
     /// <summary>
-    /// Verifies that, when stopped, the UI service will attempt to stop the
-    /// UI thread.
+    ///     Verifies that, when stopped, the UI service will attempt to stop the
+    ///     UI thread.
     /// </summary>
     /// <param name="cancellation">
-    /// A cancellation token that is used to check if the `Stop` request has
-    /// been cancelled somewhere else.
+    ///     A cancellation token that is used to check if the `Stop` request has
+    ///     been cancelled somewhere else.
     /// </param>
     /// <returns>Asynchronous task.</returns>
     [TestMethod]
@@ -55,7 +55,7 @@ public class UserInterfaceHostedServiceTests
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
-        var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
+        var sut = new UserInterfaceHostedService(mockContext.Object, mockThread.Object, loggerFactory: null);
 
         await sut.StartAsync(CancellationToken.None).ConfigureAwait(false);
 

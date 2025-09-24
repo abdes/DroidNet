@@ -3,6 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <AssemblyName>DroidNet.Docking.Tests</AssemblyName>
         <RootNamespace>$(RootNamespace).Docking.Tests</RootNamespace>
     </PropertyGroup>
@@ -12,7 +14,6 @@
         <PackageReference Include="Verify.MSTest" />
 
         <ProjectReference Include="..\src\Docking.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>
 
 </Project>

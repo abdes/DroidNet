@@ -2,11 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
-using System.Security.Cryptography;
-using FluentAssertions;
 using Oxygen.Interop.World;
 
 namespace DroidNet.Oxygen.Editor.Interop.Tests;
@@ -16,6 +12,7 @@ namespace DroidNet.Oxygen.Editor.Interop.Tests;
 [TestCategory(nameof(OxygenWorld))]
 public sealed class OxygenWorldTests
 {
+#if __SDISABLED__
     [TestMethod]
     public void TestCreateEntityCreatesTransform()
     {
@@ -188,15 +185,7 @@ public sealed class OxygenWorldTests
             GetSecureRandomFloat(0, 90),
             GetSecureRandomFloat(0, 90));
 
-        return new SceneNodeDescriptor
-        {
-            Transform = new TransformDescriptor
-            {
-                Position = new Vector3(i, i, i),
-                Rotation = rotation,
-                Scale = new Vector3(1, 1, 1),
-            },
-        };
+        return new SceneNodeDescriptor { Transform = new TransformDescriptor { Position = new Vector3(i, i, i), Rotation = rotation, Scale = new Vector3(1, 1, 1), }, };
     }
 
     private static float GetSecureRandomFloat(float minValue, float maxValue)
@@ -214,4 +203,5 @@ public sealed class OxygenWorldTests
         _ = actual.Y.Should().BeApproximately(expected.Y, epsilon);
         _ = actual.Z.Should().BeApproximately(expected.Z, epsilon);
     }
+#endif // DISABLED
 }

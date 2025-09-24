@@ -3,10 +3,9 @@
     x:Class="DroidNet.Routing.Debugger.UI.Docks.EmbeddedAppView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     HorizontalContentAlignment="Stretch"
     VerticalContentAlignment="Stretch"
@@ -20,10 +19,10 @@
 
     </ContentControl.Resources>
 
-    <interactivity:Interaction.Behaviors>
-        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="True">
-            <core:ChangePropertyAction PropertyName="Content">
-                <core:ChangePropertyAction.Value>
+    <i:Interaction.Behaviors>
+        <i:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="True">
+            <i:ChangePropertyAction PropertyName="Content">
+                <i:ChangePropertyAction.Value>
                     <StackPanel
                         Padding="10"
                         Orientation="Vertical"
@@ -86,17 +85,17 @@
                             </TextBlock>
                         </Grid>
                     </StackPanel>
-                </core:ChangePropertyAction.Value>
-            </core:ChangePropertyAction>
-        </core:DataTriggerBehavior>
-        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="False">
-            <core:ChangePropertyAction PropertyName="Content">
-                <core:ChangePropertyAction.Value>
+                </i:ChangePropertyAction.Value>
+            </i:ChangePropertyAction>
+        </i:DataTriggerBehavior>
+        <i:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="False">
+            <i:ChangePropertyAction PropertyName="Content">
+                <i:ChangePropertyAction.Value>
                     <Border BorderBrush="DarkMagenta" BorderThickness="1">
                         <ContentPresenter Content="{x:Bind ViewModel.ApplicationContent}" />
                     </Border>
-                </core:ChangePropertyAction.Value>
-            </core:ChangePropertyAction>
-        </core:DataTriggerBehavior>
-    </interactivity:Interaction.Behaviors>
+                </i:ChangePropertyAction.Value>
+            </i:ChangePropertyAction>
+        </i:DataTriggerBehavior>
+    </i:Interaction.Behaviors>
 </ContentControl>

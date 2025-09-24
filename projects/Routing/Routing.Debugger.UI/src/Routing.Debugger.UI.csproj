@@ -2,6 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
         <Title>User Interface for the Routing Debugger App</Title>
         <Description>Provides the view, viewmodels and controls used in the UI for the Routing debugger.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

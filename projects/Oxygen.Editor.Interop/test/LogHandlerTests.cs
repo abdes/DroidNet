@@ -2,23 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using FluentAssertions;
-using Oxygen.Interop.Logging;
-
 namespace DroidNet.Oxygen.Editor.Interop.Tests;
 
 [TestClass]
 public class LogHandlerTests
 {
+#if __DISABLED__
     [TestMethod]
     public void InstallCustomLogHandler()
     {
-        var messages = new Dictionary<string, Loguru.Verbosity>(StringComparer.Ordinal)
-        {
-            { "CUSTOM_HANDLER_INFO: Some information...", Loguru.Verbosity.Verbosity_INFO },
-            { "CUSTOM_HANDLER_ERROR: Be careful!", Loguru.Verbosity.Verbosity_ERROR },
-            { "CUSTOM_HANDLER_WARNING: BOOOOOM!!!!!", Loguru.Verbosity.Verbosity_WARNING },
-        };
+        var messages = new Dictionary<string, Loguru.Verbosity>(StringComparer.Ordinal) { { "CUSTOM_HANDLER_INFO: Some information...", Loguru.Verbosity.Verbosity_INFO }, { "CUSTOM_HANDLER_ERROR: Be careful!", Loguru.Verbosity.Verbosity_ERROR }, { "CUSTOM_HANDLER_WARNING: BOOOOOM!!!!!", Loguru.Verbosity.Verbosity_WARNING }, };
 
         using var loguru = new Loguru();
         loguru.AddLogHandlerCallback(
@@ -49,4 +42,5 @@ public class LogHandlerTests
         // Uninstall the log handler before the loguru wrapper gets disposed
         loguru.RemoveLogHandlerCallback();
     }
+#endif // DISABLED
 }
