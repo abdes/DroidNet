@@ -52,6 +52,8 @@ set(
 set(
   OXYGEN_EDITOR_IFCE_PRIVATE_SOURCES
   "Api.cpp"
+  "EngineRunner.cpp"
+  "Logging.cpp"
   "dllmain.cpp"
 )
 

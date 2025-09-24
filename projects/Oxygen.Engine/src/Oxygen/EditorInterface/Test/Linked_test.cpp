@@ -8,9 +8,14 @@
 
 #include <Oxygen/EditorInterface/Api.h>
 
-// NOLINTNEXTLINE
-TEST(LinkedEditorApiTest, CanUseApi)
+using namespace oxygen::engine::interop;
+
+namespace {
+
+NOLINT_TEST(LinkedEditorApiTest, CanUseApi)
 {
   // Call the function
   [[maybe_unused]] auto created = CreateScene("Test Scene");
 }
+
+} // namespace

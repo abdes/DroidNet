@@ -7,7 +7,7 @@
 
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-        <RootNamespace>$(RootNamespace).Oxygen.Editor.Interop.Tests</RootNamespace>
+        <RootNamespace>Oxygen.Editor.Interop.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
