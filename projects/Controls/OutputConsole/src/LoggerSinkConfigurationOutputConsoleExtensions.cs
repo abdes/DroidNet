@@ -13,12 +13,13 @@ using Serilog.Events;
 namespace DroidNet.Controls.OutputConsole;
 
 /// <summary>
-/// Serilog sink configuration helpers to route logs into a shared OutputLogBuffer for the OutputConsole control.
+///     Serilog sink configuration helpers to route logs into a shared OutputLogBuffer for the OutputConsole control.
 /// </summary>
 public static class LoggerSinkConfigurationOutputConsoleExtensions
 {
     /// <summary>
-    /// Configure Serilog to write to an OutputLogBuffer, and register the buffer instance into the DryIoc container for UI binding.
+    ///     Configure Serilog to write to an OutputLogBuffer, and register the buffer instance into the DryIoc container for UI
+    ///     binding.
     /// </summary>
     /// <param name="sinkConfiguration">The Serilog sink configuration.</param>
     /// <param name="container">DryIoc container to register the shared buffer into.</param>

@@ -285,6 +285,7 @@ dotnet_diagnostic.MA0165.severity = silent
 
 # RCS1069: Remove unnecessary case label
 dotnet_diagnostic.RCS1069.severity = none
+dotnet_diagnostic.RCS1163.severity = none
 
 #########################################################################
 ### Stylecop.Analyzers rules
