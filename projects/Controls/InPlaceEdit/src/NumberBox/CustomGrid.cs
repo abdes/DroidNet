@@ -8,15 +8,16 @@ using Microsoft.UI.Xaml.Controls;
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a custom grid that supports setting an input cursor, which is <see langword="protected"/> for a <see cref="Grid"/>.
+///     Represents a custom grid that supports setting an input cursor, which is <see langword="protected" /> for a
+///     <see cref="Grid" />.
 /// </summary>
 /// <remarks>
-/// We need to change the cursor when we are changing the value in a number box through mouse dragging.
+///     We need to change the cursor when we are changing the value in a number-box through mouse dragging.
 /// </remarks>
 internal partial class CustomGrid : Grid
 {
     /// <summary>
-    /// Gets or sets the input cursor for the grid.
+    ///     Gets or sets the input cursor for the grid.
     /// </summary>
     public InputCursor? InputCursor
     {

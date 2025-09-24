@@ -92,7 +92,7 @@ public class MaskParserTests
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
-           .WithMessage("Invalid mask format*");
+            .WithMessage("Invalid mask format*");
     }
 
     [TestMethod]

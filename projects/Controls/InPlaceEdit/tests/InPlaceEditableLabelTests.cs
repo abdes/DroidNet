@@ -21,8 +21,7 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     private TestVisualStateManager? vsm;
 
     [TestMethod]
-    public Task UpdatesDisplayTextWhenTextchanges_Async() => EnqueueAsync(
-    () =>
+    public Task UpdatesDisplayTextWhenTextChanges_Async() => EnqueueAsync(() =>
     {
         // Act
         this.inPlaceEditableLabel!.Text = null;
@@ -32,8 +31,7 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task TransitionsToEditingState_Async() => EnqueueAsync(
-    () =>
+    public Task TransitionsToEditingState_Async() => EnqueueAsync(() =>
     {
         // Act
         this.inPlaceEditableLabel!.StartEdit();
@@ -43,8 +41,7 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task TransitionsToNormalState_Async() => EnqueueAsync(
-    () =>
+    public Task TransitionsToNormalState_Async() => EnqueueAsync(() =>
     {
         // Setup
         this.inPlaceEditableLabel!.StartEdit();
@@ -57,8 +54,7 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task TransitionsToInvalidValueState_Async() => EnqueueAsync(
-    () =>
+    public Task TransitionsToInvalidValueState_Async() => EnqueueAsync(() =>
     {
         // Setup
         this.inPlaceEditableLabel!.StartEdit();
@@ -72,8 +68,7 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task FiresValidateEvent_Async() => EnqueueAsync(
-    () =>
+    public Task FiresValidateEvent_Async() => EnqueueAsync(() =>
     {
         // Setup
         var eventFired = false;
@@ -88,13 +83,19 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task SetsTemplatePartsCorrectly_Async() => EnqueueAsync(
-    () =>
+    public Task SetsTemplatePartsCorrectly_Async() => EnqueueAsync(() =>
     {
         // Assert
-        _ = this.inPlaceEditableLabel!.FindDescendant<TextBox>(e => string.Equals(e.Name, InPlaceEditableLabel.EditBoxPartName, StringComparison.Ordinal)).Should().NotBeNull();
-        _ = this.inPlaceEditableLabel!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, InPlaceEditableLabel.LabelContentPresenterPartName, StringComparison.Ordinal)).Should().NotBeNull();
-        _ = this.inPlaceEditableLabel!.FindDescendant<FontIcon>(e => string.Equals(e.Name, InPlaceEditableLabel.ValueErrorPartName, StringComparison.Ordinal)).Should().NotBeNull();
+        _ = this.inPlaceEditableLabel!
+            .FindDescendant<TextBox>(e =>
+                string.Equals(e.Name, InPlaceEditableLabel.EditBoxPartName, StringComparison.Ordinal))
+            .Should().NotBeNull();
+        _ = this.inPlaceEditableLabel!.FindDescendant<ContentPresenter>(e =>
+                string.Equals(e.Name, InPlaceEditableLabel.LabelContentPresenterPartName, StringComparison.Ordinal))
+            .Should().NotBeNull();
+        _ = this.inPlaceEditableLabel!.FindDescendant<FontIcon>(e =>
+                string.Equals(e.Name, InPlaceEditableLabel.ValueErrorPartName, StringComparison.Ordinal))
+            .Should().NotBeNull();
     });
 
     protected override async Task TestSetupAsync()
@@ -102,24 +103,23 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
         await base.TestSetupAsync().ConfigureAwait(false);
 
         var taskCompletionSource = new TaskCompletionSource();
-        _ = EnqueueAsync(
-            async () =>
+        _ = EnqueueAsync(async () =>
+        {
+            this.inPlaceEditableLabel = new InPlaceEditableLabel
             {
-                this.inPlaceEditableLabel = new InPlaceEditableLabel()
-                {
-                    Text = "Test",
-                    Content = new TextBlock() { Name = "Label", },
-                };
-                await LoadTestContentAsync(this.inPlaceEditableLabel).ConfigureAwait(true);
+                Text = "Test",
+                Content = new TextBlock { Name = "Label" },
+            };
+            await LoadTestContentAsync(this.inPlaceEditableLabel).ConfigureAwait(true);
 
-                this.vsm = new TestVisualStateManager();
-                var vsmTarget = this.inPlaceEditableLabel.FindDescendant<Grid>(
-                    e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal));
-                _ = vsmTarget.Should().NotBeNull();
-                VisualStateManager.SetCustomVisualStateManager(vsmTarget, this.vsm);
+            this.vsm = new TestVisualStateManager();
+            var vsmTarget = this.inPlaceEditableLabel.FindDescendant<Grid>(e =>
+                string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal));
+            _ = vsmTarget.Should().NotBeNull();
+            VisualStateManager.SetCustomVisualStateManager(vsmTarget, this.vsm);
 
-                taskCompletionSource.SetResult();
-            });
+            taskCompletionSource.SetResult();
+        });
         await taskCompletionSource.Task.ConfigureAwait(true);
     }
 }
