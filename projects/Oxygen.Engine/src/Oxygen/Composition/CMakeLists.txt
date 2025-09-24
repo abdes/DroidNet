@@ -73,34 +73,46 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_COMPOSITION_HEADERS
+  "api_export.h"
+  "Detail/ComponentPoolUntyped.h"
+  "Component.h"
+  "ComponentMacros.h"
+  "Composition.h"
+  "ComponentPool.h"
+  "ComponentPoolRegistry.h"
+  "Named.h"
+  "Object.h"
+  "ObjectMetadata.h"
+  "Typed.h"
+  "TypedObject.h"
+  "TypeSystem.h"
+)
+set(
+  OXYGEN_COMPOSITION_PRIVATE_SOURCES
+  "Composition.cpp"
+  "Object.cpp"
+  "ObjectMetadata.cpp"
+  "TypeSystem.cpp"
+  "cs_init.cpp"
+  "ComponentPoolRegistry.cpp"
+  "Internal/FastIntMap.h"
+  "Internal/GetTrulySingleInstance.h"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Composition.cpp"
-    "Object.cpp"
-    "ObjectMetadata.cpp"
-    "TypeSystem.cpp"
-    "cs_init.cpp"
-    "Detail/FastIntMap.h"
-    "Detail/GetTrulySingleInstance.h"
+    ${OXYGEN_COMPOSITION_PRIVATE_SOURCES}
+    ${OXYGEN_COMPOSITION_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "Detail/ComponentMacros.h"
-      "Detail/ComponentPoolUntyped.h"
-      "Component.h"
-      "Composition.h"
-      "ComponentPool.h"
-      "ComponentPoolRegistry.h"
-      "Named.h"
-      "Object.h"
-      "ObjectMetadata.h"
-      "Typed.h"
-      "TypedObject.h"
-      "TypeSystem.h"
+    FILES ${OXYGEN_COMPOSITION_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

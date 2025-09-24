@@ -13,7 +13,7 @@
 
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/ComponentPool.h>
-#include <Oxygen/Composition/Detail/GetTrulySingleInstance.h>
+#include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 
@@ -58,11 +58,8 @@ public:
 
    @note Thread-safe operation
    */
-  static auto Get() -> ComponentPoolRegistry&
-  {
-    return composition::detail::GetTrulySingleInstance<ComponentPoolRegistry>(
-      "ComponentPoolRegistry");
-  }
+  OXGN_COM_NDAPI static auto Get() -> ComponentPoolRegistry&;
+
   //! Get the component pool for a specific pooled component type
   /*!
    Creates the pool on first access with thread-safe lazy initialization.

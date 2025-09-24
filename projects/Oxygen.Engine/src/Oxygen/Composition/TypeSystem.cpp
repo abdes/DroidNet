@@ -7,8 +7,8 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Composition/Detail/FastIntMap.h>
-#include <Oxygen/Composition/Detail/GetTrulySingleInstance.h>
+#include <Oxygen/Composition/Internal/FastIntMap.h>
+#include <Oxygen/Composition/Internal/GetTrulySingleInstance.h>
 #include <Oxygen/Composition/TypeSystem.h>
 
 namespace {
