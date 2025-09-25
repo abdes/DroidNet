@@ -69,6 +69,8 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
 
   // Initialize detached services (Category D)
   InitializeDetachedServices();
+
+  LOG_F(INFO, "AsyncEngine created");
 }
 
 AsyncEngine::~AsyncEngine() = default;
@@ -86,26 +88,20 @@ auto AsyncEngine::Run() -> void
 
   nursery_->Start([this]() -> co::Co<> {
     co_await FrameLoop();
-    // Signal completion once the frame loop has finished executing.
-    LOG_F(INFO, "Engine completed after {} frames", frame_number_);
     co_await Shutdown();
+
+    // Signal completion once the frame loop has finished executing.
     completed_.Trigger();
+    LOG_F(INFO, "Engine completed after {} frames", frame_number_);
   });
 }
 
 auto AsyncEngine::Shutdown() -> co::Co<>
 {
-  // Ensure work is done and deferred reclaims are processed
-  if (!gfx_weak_.expired()) {
-    gfx_weak_.lock()->Flush();
-  }
-  // Shutdown the platform event pump
+  // No need to flush the Graphics backend here, as it should have been done
+  // already when the engine frame loop was terminating.
+  // Shutdown the platform event pump so out modules can finish up.
   co_await platform_->Shutdown();
-
-  if (nursery_) {
-    nursery_->Cancel();
-  }
-  DLOG_F(INFO, "AsyncEngine Live Object stopped");
 
   // This will shut down all modules
   module_manager_.reset();
