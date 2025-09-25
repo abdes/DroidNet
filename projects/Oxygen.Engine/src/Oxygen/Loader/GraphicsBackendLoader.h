@@ -46,7 +46,23 @@ namespace loader {
 class GraphicsBackendLoader {
 public:
   //! Gets the singleton instance of the graphics backend loader.
+  /*!\n   \n   Mutually exclusive with `GetInstanceRelaxed()`. Once one of the
+   * two\n   retrieval methods initializes the singleton, the other cannot be
+   * used and\n   will throw `loader::InvalidOperationError`. Use this strict
+   * variant when the\n   first initialization is guaranteed to occur from the
+   * main executable module.\n  */
   static auto GetInstance(
+    std::shared_ptr<loader::detail::PlatformServices> platform_services
+    = nullptr) -> GraphicsBackendLoader&;
+
+  //! Gets a singleton instance with relaxed initialization rules.
+  /*!\n\n   Mutually exclusive with `GetInstance()`. This relaxed variant allows
+   * the\n   first call to originate from any module (recording that module as
+   * the\n   owner). All subsequent calls (including resets) must originate from
+   * the same\n   module or an `loader::InvalidOperationError` is thrown. Choose
+   * this when\n   initialization might legitimately occur inside a dynamically
+   * loaded module.\n  */
+  static auto GetInstanceRelaxed(
     std::shared_ptr<loader::detail::PlatformServices> platform_services
     = nullptr) -> GraphicsBackendLoader&;
 
@@ -70,7 +86,11 @@ public:
   [[nodiscard]] auto GetBackend() const noexcept -> std::weak_ptr<Graphics>;
 
 private:
-  explicit GraphicsBackendLoader(
+  // Internal constructor capturing the originating module handle. The
+  // originating module's directory is used as the primary base path for
+  // resolving backend dynamic modules (falling back to the executable
+  // directory if it cannot be determined).
+  explicit GraphicsBackendLoader(void* origin_module,
     std::shared_ptr<loader::detail::PlatformServices> platform_services);
 
   class Impl;

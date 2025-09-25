@@ -59,14 +59,14 @@ auto GetLastErrorAsString() -> std::string
   return message;
 }
 
-//! Safely retrieves the filename of a module with buffer size handling.
+//! Safely retrieves the full path of a module with buffer size handling.
 /*!
- Gets the module filename using GetModuleFileNameA with proper buffer
- management. Starts with MAX_PATH but grows the buffer if needed. Returns only
- the filename part without the directory path.
+ Gets the module full path using GetModuleFileNameA with proper buffer
+ management. Starts with MAX_PATH but grows the buffer if needed. Returns the
+ full path (directory + filename) to the module on success.
 
- @param module The module handle to get the filename for.
- @return The filename of the module, or "<unknown module>" on failure.
+ @param module The module handle to get the full path for.
+ @return The full path of the module, or "<unknown module>" on failure.
 
  ### Performance Characteristics
 
@@ -102,10 +102,7 @@ auto GetModuleFileNameSafe(const HMODULE module) -> std::string
   // Resize to actual content length
   buffer.resize(size);
 
-  // Extract only the filename part (without directory path)
-  if (const auto pos = buffer.find_last_of("\\/"); pos != std::string::npos) {
-    return buffer.substr(pos + 1);
-  }
+  // Return full path (do not strip directory)
   return buffer;
 }
 
@@ -164,6 +161,27 @@ auto PlatformServices::GetExecutableDirectory() const -> std::string
   buffer.resize(size);
   if (const auto pos = buffer.find_last_of("\\/"); pos != std::string::npos) {
     return buffer.substr(0, pos + 1);
+  }
+  return {};
+}
+
+auto PlatformServices::GetModuleDirectory(const ModuleHandle module) const
+  -> std::string
+{
+  if (module == nullptr) {
+    return {};
+  }
+  try {
+    const auto full_path = GetModuleFileNameSafe(static_cast<HMODULE>(module));
+    if (full_path == "<unknown module>") {
+      return {};
+    }
+    if (const auto pos = full_path.find_last_of("\\/");
+      pos != std::string::npos) {
+      return full_path.substr(0, pos + 1);
+    }
+  } catch (...) {
+    return {};
   }
   return {};
 }
