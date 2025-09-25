@@ -1,5 +1,70 @@
 # Graphics Backend Loader
 
+The Graphics Backend Loader is a singleton responsible for dynamically loading
+and instantiating a concrete graphics backend implementation (e.g. Direct3D12,
+Headless). It supports two mutually exclusive initialization modes—`strict`
+and `relaxed`—to accommodate both engine runtime and editor / tooling use
+cases.
+
+---
+
+## Initialization Modes
+
+### Strict Mode (`GetInstance`)
+
+Use when the first access is guaranteed to originate from the main executable
+module. Enforcement:
+
+* First call must come from the main executable module (checked via return
+  address → module handle).
+* Subsequent optional resets (injecting custom `PlatformServices`) must also
+  originate from the main module.
+* Loader methods (`LoadBackend`, `UnloadBackend`) enforce the main-module
+  restriction.
+
+### Relaxed Mode (`GetInstanceRelaxed`)
+
+Use when initialization may legitimately occur from a non-executable module
+(e.g. an editor interop DLL). Behavior:
+
+* First call may come from any module; its module handle becomes the
+  "origin module".
+* All subsequent calls (including resets) must come from the same module; any
+  mismatch throws `loader::InvalidOperationError`.
+* Main-module enforcement is skipped in this mode.
+* Backend DLL search base prefers the origin module's directory, falling back
+  to the executable directory if the origin cannot be resolved.
+
+### Mutual Exclusivity
+
+Whichever mode is used first locks the loader. Calling the other accessor
+after initialization throws `loader::InvalidOperationError`.
+
+### Choosing a Mode
+
+| Scenario | Recommended Mode |
+|----------|------------------|
+| Game / shipped runtime | Strict |
+| Unit tests needing controlled injection | Strict (with platform override) |
+| Editor hosting through a plugin / bridge DLL | Relaxed |
+| Dynamic tool loaded into process post-start | Relaxed |
+
+---
+
+## Backend Module Resolution
+
+When loading a backend, the loader constructs a backend DLL name (e.g.
+`Oxygen.Graphics.Direct3D12.dll`, debug builds receive a `-d` suffix). The
+full path is resolved as follows:
+
+1. If in relaxed mode and an origin module directory was captured: use that
+   directory as base.
+2. Otherwise use the executable directory returned by `PlatformServices`.
+
+If the DLL cannot be located or loaded, a `std::runtime_error` is thrown.
+
+---
+
 ## Configuration Data
 
 When an application initializes the Oxygen graphics system, it first constructs
@@ -32,18 +97,25 @@ Below is an example of how the config data is setup on the application side:
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 
-oxygen::GraphicsConfig config;
+oxygen::GraphicsConfig config{};
 config.enable_debug = true;
 config.enable_validation = true;
+config.enable_imgui = true;           // Example additional flag
+config.enable_vsync = true;           // VSync preference
 config.preferred_card_name = "NVIDIA";
 config.preferred_card_device_id = 123456789;
 config.headless = false;
-config.extra = R"({"custom_option": 42, "vsync": true})"; // Backend-specific JSON
+config.extra = R"({"custom_option": 42, "shader_cache": true})"; // Backend-specific JSON
 
-// Load the backend (e.g., Direct3D12)
-auto graphics = oxygen::GraphicsBackendLoader::Instance().LoadBackend(
-    oxygen::graphics::BackendType::Direct3D12, config
-);
+// Strict mode (engine runtime)
+auto& loader_strict = oxygen::GraphicsBackendLoader::GetInstance();
+auto graphics_strict = loader_strict.LoadBackend(
+  oxygen::graphics::BackendType::kDirect3D12, config);
+
+// Relaxed mode (e.g., editor plugin) – call only if strict not already used
+// auto& loader_relaxed = oxygen::GraphicsBackendLoader::GetInstanceRelaxed();
+// auto graphics_relaxed = loader_relaxed.LoadBackend(
+//   oxygen::graphics::BackendType::kDirect3D12, config);
 ```
 
 When this data is passed to the Loader, it gets serialized into a JSON format,
@@ -51,13 +123,16 @@ producing an equivalent string as following:
 
 ```json
 {
+  "backend_type": "Direct3D12",
   "enable_debug": true,
   "enable_validation": true,
+  "headless": false,
+  "enable_imgui": true,
+  "enable_vsync": true,
   "preferred_card_name": "NVIDIA",
   "preferred_card_device_id": 123456789,
-  "headless": false,
   "custom_option": 42,
-  "vsync": true
+  "shader_cache": true
 }
 ```
 
@@ -67,9 +142,42 @@ that entry point should parse the serialized string and use it as appropriate to
 setup the graphics backend:
 
 ```cpp
-void* CreateBackend(const SerializedBackendConfig& config) {
-    std::string json(config.json_data, config.size);
-    auto parsed = nlohmann::json::parse(json);
-    // Use parsed configuration for initialization...
+void* CreateBackend(const SerializedBackendConfig& config)
+{
+  std::string json(config.json_data, config.size);
+  auto parsed = nlohmann::json::parse(json);
+  // Example: read settings
+  const bool enable_debug = parsed.value("enable_debug", false);
+  const std::string backend = parsed.value("backend_type", "");
+  // ... construct and return backend implementation instance ...
 }
+
+---
+
+## Error Handling Summary
+
+| Condition | Exception / Result |
+|-----------|--------------------|
+| Strict mode first call not from main module | `loader::InvalidOperationError` |
+| Calling other mode after initialization | `loader::InvalidOperationError` |
+| Relaxed subsequent call from different module | `loader::InvalidOperationError` |
+| Backend DLL load failure | `std::runtime_error` |
+| Symbol resolution failure | `std::runtime_error` |
+
+---
+
+## Testing & Resets
+
+Both modes allow injecting a custom `PlatformServices` instance on subsequent
+calls for test isolation, subject to their mode-specific module origin rules.
+Resetting recreates the internal implementation and discards any previously
+loaded backend instance.
+
+---
+
+## Future Improvements (Potential)
+
+* Cross-platform implementations of `GetModuleDirectory`.
+* Optional query API to introspect current loader mode.
+* More granular diagnostics / tracing hooks.
 ```

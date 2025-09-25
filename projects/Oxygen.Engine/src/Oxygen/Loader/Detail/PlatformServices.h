@@ -45,6 +45,12 @@ public:
   //! Get the path to the executable directory.
   [[nodiscard]] virtual auto GetExecutableDirectory() const -> std::string;
 
+  //! Get the directory path of a loaded module handle (including trailing
+  //! separator). Returns empty string if handle is null or path cannot be
+  //! determined.
+  [[nodiscard]] virtual auto GetModuleDirectory(ModuleHandle module) const
+    -> std::string;
+
   //! Dynamically loads a module from the given path.
   [[nodiscard]] virtual auto LoadModule(const std::string& path)
     -> ModuleHandle;

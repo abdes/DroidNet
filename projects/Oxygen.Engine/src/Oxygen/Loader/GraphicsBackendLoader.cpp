@@ -160,8 +160,10 @@ auto SerializeConfigToJson(
 // Implementation class that handles all the details
 class GraphicsBackendLoader::Impl {
 public:
-  explicit Impl(std::shared_ptr<PlatformServices> services = nullptr)
-    : platform_services(
+  explicit Impl(PlatformServices::ModuleHandle origin_module,
+    std::shared_ptr<PlatformServices> services = nullptr)
+    : origin_module_(origin_module)
+    , platform_services(
         services ? std::move(services) : std::make_shared<PlatformServices>())
   {
   }
@@ -186,8 +188,14 @@ public:
         // We expect the backend module to be in the same directory as the
         // executable.
         const auto module_name = GetBackendModuleDllName(backend);
-        const auto full_path
-          = platform_services->GetExecutableDirectory() + module_name;
+        // Prefer origin module directory; fallback to executable directory.
+        std::string base_dir
+          = platform_services->GetModuleDirectory(origin_module_);
+        if (base_dir.empty()) {
+          base_dir = platform_services->GetExecutableDirectory();
+        }
+        LOG_F(INFO, "Using base directory for backend modules: {}", base_dir);
+        const auto full_path = base_dir + module_name;
 
         // Load the module directly
         backend_module = platform_services->LoadModule(full_path);
@@ -284,6 +292,7 @@ private:
   // Member variables
   std::shared_ptr<Graphics> backend_instance;
   PlatformServices::ModuleHandle backend_module { nullptr };
+  PlatformServices::ModuleHandle origin_module_ { nullptr };
   std::shared_ptr<PlatformServices> platform_services;
 };
 
@@ -320,12 +329,15 @@ auto EnforceMainModuleRestriction(
 {
   PlatformServices::ModuleHandle moduleHandle
     = platform_services->GetModuleHandleFromReturnAddress(returnAddress);
-
   if (!platform_services->IsMainExecutableModule(moduleHandle)) {
     throw oxygen::loader::InvalidOperationError(
       fmt::format("Function `{}` called from non-main module", functionName));
   }
 }
+
+// Shared initialization mode state (internal linkage)
+enum class LoaderInitMode { kUninitialized, kStrict, kRelaxed };
+static LoaderInitMode g_loader_init_mode = LoaderInitMode::kUninitialized;
 
 } // namespace
 
@@ -367,12 +379,26 @@ auto EnforceMainModuleRestriction(
 auto GraphicsBackendLoader::GetInstance(
   std::shared_ptr<PlatformServices> platform_services) -> GraphicsBackendLoader&
 {
+  // Enforce mutual exclusivity with relaxed variant.
+  if (g_loader_init_mode == LoaderInitMode::kRelaxed) {
+    LOG_F(ERROR,
+      "GraphicsBackendLoader already initialized in relaxed mode; cannot call "
+      "GetInstance (strict) afterwards");
+    throw loader::InvalidOperationError(
+      "GetInstance called after GetInstanceRelaxed initialization");
+  }
+
   static bool first_call = true;
   static std::shared_ptr<PlatformServices> services = platform_services
     ? std::move(platform_services)
     : std::make_shared<PlatformServices>();
+  static PlatformServices::ModuleHandle origin_module_handle = nullptr;
+  if (origin_module_handle == nullptr) {
+    origin_module_handle
+      = services->GetModuleHandleFromReturnAddress(oxygen::ReturnAddress<>());
+  }
   static auto instance = std::unique_ptr<GraphicsBackendLoader>(
-    new GraphicsBackendLoader(services));
+    new GraphicsBackendLoader(origin_module_handle, services));
 
   // Allow to reset the loader by calling it again with a platform services
   // instances (mainly for testing purposes), but only from the main module
@@ -389,8 +415,10 @@ auto GraphicsBackendLoader::GetInstance(
     }
     LOG_F(INFO, "Resetting GraphicsBackendLoader with new platform services");
     services = std::move(platform_services);
+    origin_module_handle
+      = services->GetModuleHandleFromReturnAddress(oxygen::ReturnAddress<>());
     instance = std::unique_ptr<GraphicsBackendLoader>(
-      new GraphicsBackendLoader(services));
+      new GraphicsBackendLoader(origin_module_handle, services));
   }
 
   DCHECK_NOTNULL_F(services);
@@ -408,8 +436,128 @@ auto GraphicsBackendLoader::GetInstance(
       throw;
     }
     first_call = false;
+    g_loader_init_mode = LoaderInitMode::kStrict;
   }
 
+  return *instance;
+}
+
+/*!
+ Gets the singleton instance of the graphics backend loader with relaxed
+ initialization rules. Unlike `GetInstance`, which enforces that the first call
+ must originate from the main executable module, this variant allows the first
+ call to come from ANY module (e.g., a plugin / dynamically loaded module).
+
+ Semantics:
+  - First call: Accepted from any module; the originating module handle is
+    recorded.
+  - Subsequent calls: Must originate from the SAME module; otherwise an
+    `InvalidOperationError` is thrown.
+  - Reset behavior: Passing a non-null `platform_services` after the first
+    call replaces the internal services & instance, but only if the caller
+    module matches the original initializer.
+
+ Rationale: Some integration scenarios (such as tests or tools launched via a
+ plugin) may need to bootstrap the graphics loader from a module that is not
+ the process main module, while still preventing multiple plugin / host copies
+ from racing to reinitialize the singleton.
+
+ @param platform_services Optional custom platform services implementation
+        used for (re)initialization.
+ @return Reference to the singleton instance.
+ @throw loader::InvalidOperationError if a subsequent call originates from a
+        different module than the first caller, or if the caller module cannot
+        be resolved.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) (static local initialization + single module handle
+   comparison).
+ - Memory: Same as `GetInstance` (single static instance + platform services).
+ - Optimization: Avoids main-module enforcement, using lightweight module
+   handle comparison after first call.
+
+ ### Usage Examples
+
+ ```cpp
+ // Initialize from a plugin module
+ auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
+
+ // Later (same module) reset for testing
+ auto mock_services = std::make_shared<MockPlatformServices>();
+ auto& reset_loader = GraphicsBackendLoader::GetInstanceRelaxed(mock_services);
+ (void)reset_loader;
+ ```
+
+ @note Use this only when main-module-first semantics are not viable. For most
+       application code, prefer `GetInstance`.
+*/
+auto GraphicsBackendLoader::GetInstanceRelaxed(
+  std::shared_ptr<PlatformServices> platform_services) -> GraphicsBackendLoader&
+{
+  // Relaxed semantics:
+  //  - First call may originate from ANY module (record that module handle)
+  //  - Subsequent calls (including resets) must originate from the SAME
+  //    module. If not, throw InvalidOperationError.
+  //  - Allows injecting new platform services only from the original module.
+
+  if (g_loader_init_mode == LoaderInitMode::kStrict) {
+    LOG_F(ERROR,
+      "GraphicsBackendLoader already initialized in strict mode; cannot call "
+      "GetInstanceRelaxed afterwards");
+    throw loader::InvalidOperationError(
+      "GetInstanceRelaxed called after GetInstance (strict) initialization");
+  }
+
+  static bool first_call = true;
+  static PlatformServices::ModuleHandle origin_module_handle = nullptr;
+  static std::shared_ptr<PlatformServices> services = platform_services
+    ? std::move(platform_services)
+    : std::make_shared<PlatformServices>();
+  static auto instance = std::unique_ptr<GraphicsBackendLoader>(
+    new GraphicsBackendLoader(origin_module_handle, services));
+
+  // Determine caller module (may differ from services if a different
+  // platform_services was passed on subsequent calls before validation).
+  PlatformServices::ModuleHandle caller_module = nullptr;
+  try {
+    // We purposefully do NOT enforce main module restriction here; instead we
+    // only capture the module handle.
+    caller_module
+      = services->GetModuleHandleFromReturnAddress(oxygen::ReturnAddress<>());
+  } catch (...) {
+    // If we cannot resolve the caller module, treat as error.
+    throw loader::InvalidOperationError(
+      "Unable to resolve caller module in GetInstanceRelaxed");
+  }
+
+  if (first_call) {
+    origin_module_handle = caller_module;
+    first_call = false;
+    g_loader_init_mode = LoaderInitMode::kRelaxed;
+    // Re-create instance now that we have a concrete origin module handle.
+    instance = std::unique_ptr<GraphicsBackendLoader>(
+      new GraphicsBackendLoader(origin_module_handle, services));
+  } else {
+    if (caller_module != origin_module_handle) {
+      LOG_F(ERROR,
+        "GraphicsBackendLoader::GetInstanceRelaxed() called from a different "
+        "module than the original initializer");
+      throw loader::InvalidOperationError(
+        "GetInstanceRelaxed called from different module");
+    }
+  }
+
+  // Reset with new platform services only if caller module is origin.
+  if (!first_call && platform_services) {
+    LOG_F(INFO,
+      "Resetting GraphicsBackendLoader (relaxed) with new platform services");
+    services = std::move(platform_services);
+    instance = std::unique_ptr<GraphicsBackendLoader>(
+      new GraphicsBackendLoader(origin_module_handle, services));
+  }
+
+  DCHECK_NOTNULL_F(services);
   return *instance;
 }
 
@@ -421,9 +569,12 @@ auto GraphicsBackendLoader::GetInstance(
  @param platform_services The platform services implementation to use for module
                           loading and management.
 */
-GraphicsBackendLoader::GraphicsBackendLoader(
-  std::shared_ptr<PlatformServices> platform_services)
-  : pimpl_(std::make_unique<Impl>(std::move(platform_services)))
+GraphicsBackendLoader::GraphicsBackendLoader(void* origin_module,
+  std::shared_ptr<loader::detail::PlatformServices> platform_services)
+  : pimpl_(std::make_unique<Impl>(
+      static_cast<loader::detail::PlatformServices::ModuleHandle>(
+        origin_module),
+      std::move(platform_services)))
 {
 }
 
@@ -436,8 +587,10 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
 
 /*!
  Loads the specified graphics backend from a dynamically loadable module and
- constructs an instance using the provided configuration. Enforces main module
- restriction and ensures only one backend instance is loaded at a time.
+ constructs an instance using the provided configuration. In strict
+ initialization mode (created via `GetInstance`), this method enforces the main
+ module restriction; in relaxed mode (`GetInstanceRelaxed`) the enforcement is
+ skipped. Only one backend instance is loaded at a time.
 
  @param backend The type of graphics backend to load (Direct3D12,...).
  @param config The configuration to use for initializing the backend.
@@ -474,8 +627,10 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
 auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
   const GraphicsConfig& config) const -> std::weak_ptr<Graphics>
 {
-  EnforceMainModuleRestriction(
-    pimpl_->GetPlatformServices(), "LoadBackend", oxygen::ReturnAddress<>());
+  if (g_loader_init_mode == LoaderInitMode::kStrict) {
+    EnforceMainModuleRestriction(
+      pimpl_->GetPlatformServices(), "LoadBackend", oxygen::ReturnAddress<>());
+  }
   return pimpl_->LoadBackend(backend, config);
 }
 
@@ -483,8 +638,9 @@ auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
  Unloads the currently loaded graphics backend, destroying its instance and
  rendering all weak pointers to it unusable. The module's reference count is
  decremented, and if it is no longer referenced, it is automatically unloaded.
- This method enforces main module restriction but handles all exceptions to
- maintain noexcept guarantee.
+ In strict initialization mode (see `GetInstance`) main module restriction is
+ enforced; in relaxed mode it is skipped. All exceptions are swallowed to
+ preserve the noexcept guarantee.
 
  ### Performance Characteristics
 
@@ -505,8 +661,10 @@ auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
 auto GraphicsBackendLoader::UnloadBackend() const noexcept -> void
 {
   try {
-    EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "UnloadBackend",
-      oxygen::ReturnAddress<>());
+    if (g_loader_init_mode == LoaderInitMode::kStrict) {
+      EnforceMainModuleRestriction(pimpl_->GetPlatformServices(),
+        "UnloadBackend", oxygen::ReturnAddress<>());
+    }
     pimpl_->UnloadBackend();
   } catch (...) {
     // Catch any other exceptions to prevent them from propagating
