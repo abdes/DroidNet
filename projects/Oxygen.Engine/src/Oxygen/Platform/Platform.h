@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
