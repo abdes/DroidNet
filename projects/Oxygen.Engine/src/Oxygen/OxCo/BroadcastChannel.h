@@ -6,13 +6,16 @@
 
 #pragma once
 
+#include <type_traits>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/IntrusivePtr.h>
 #include <Oxygen/OxCo/Detail/ParkingLotImpl.h>
 #include <Oxygen/OxCo/Detail/Queue.h>
-#include <type_traits>
 
 namespace oxygen::co {
 
