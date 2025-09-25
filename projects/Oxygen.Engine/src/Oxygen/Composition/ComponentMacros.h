@@ -115,6 +115,22 @@ private:
  @see https://www.scs.stanford.edu/~dm/blog/va-opt.html for macro expansion
 */
 
+#define FOR_EACH_HELPER(a1, ...)                                               \
+  a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
+#define FOR_EACH_AGAIN() FOR_EACH_HELPER
+
+#define PARENS ()
+
+#define OXYGEN_EXPAND(...)                                                     \
+  OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
+#define OXYGEN_EXPAND4(...)                                                    \
+  OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
+#define OXYGEN_EXPAND3(...)                                                    \
+  OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
+#define OXYGEN_EXPAND2(...)                                                    \
+  OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
+#define OXYGEN_EXPAND1(...) __VA_ARGS__
+
 #define OXYGEN_COMPONENT_REQUIRES(...)                                         \
   OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
 #define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                   \
@@ -135,19 +151,3 @@ public:                                                                        \
   }                                                                            \
                                                                                \
 private:
-
-#define FOR_EACH_HELPER(a1, ...)                                               \
-  a1::ClassTypeId(), __VA_OPT__(FOR_EACH_AGAIN PARENS(__VA_ARGS__))
-#define FOR_EACH_AGAIN() FOR_EACH_HELPER
-
-#define PARENS ()
-
-#define OXYGEN_EXPAND(...)                                                     \
-  OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(OXYGEN_EXPAND4(__VA_ARGS__))))
-#define OXYGEN_EXPAND4(...)                                                    \
-  OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(OXYGEN_EXPAND3(__VA_ARGS__))))
-#define OXYGEN_EXPAND3(...)                                                    \
-  OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(OXYGEN_EXPAND2(__VA_ARGS__))))
-#define OXYGEN_EXPAND2(...)                                                    \
-  OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(OXYGEN_EXPAND1(__VA_ARGS__))))
-#define OXYGEN_EXPAND1(...) __VA_ARGS__
