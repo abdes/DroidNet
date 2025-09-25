@@ -48,6 +48,7 @@ set(
   OXYGEN_EDITOR_IFCE_HEADERS
   "api_export.h"
   "Api.h"
+  "EngineContext.h"
 )
 set(
   OXYGEN_EDITOR_IFCE_PRIVATE_SOURCES
@@ -82,7 +83,11 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::core
+    oxygen::platform
     oxygen::scene
+    oxygen::loader
+    oxygen::input
+    oxygen::graphics-direct3d12
 )
 
 # ------------------------------------------------------------------------------

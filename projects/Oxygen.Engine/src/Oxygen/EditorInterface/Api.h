@@ -6,6 +6,11 @@
 
 #pragma once
 
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/EditorInterface/api_export.h>
 
 namespace oxygen::engine::interop {
@@ -20,11 +25,13 @@ struct LoggingConfig {
   const char* vmodules { nullptr };
 };
 
-struct EngineConfig { };
-
 OXGN_EI_API auto ConfigureLogging(const LoggingConfig& config) -> bool;
 OXGN_EI_API auto LogInfoMessage(const char* message) -> void;
-OXGN_EI_API auto CreateEngine(const EngineConfig& config) -> bool;
+
+OXGN_EI_API auto CreateEngine(const EngineConfig& config)
+  -> std::unique_ptr<EngineContext>;
+OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
+OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
 
 OXGN_EI_API auto CreateScene(const char* name) -> bool;
 OXGN_EI_API auto RemoveScene(const char* name) -> bool;

@@ -16,6 +16,8 @@
       <Filter>Base</Filter>
     </ClInclude>
     <ClInclude Include="EngineRunner.h" />
+    <ClInclude Include="EngineContext.h" />
+    <ClInclude Include="Config.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="World">

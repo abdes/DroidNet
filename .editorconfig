@@ -66,7 +66,7 @@ indent_style = space
 resharper_disable_code_formatter = true
 
 #### .NET Code Actions ####
-
+[*.cs]
 # Type members
 dotnet_hide_advanced_members = false
 dotnet_member_insertion_location = with_other_members_of_the_same_kind
@@ -285,7 +285,6 @@ dotnet_diagnostic.MA0026.severity = silent
 MA0051.skip_local_functions = true # skip local functions when counting statements
 # MA0165 - Make interpolated string
 dotnet_diagnostic.MA0165.severity = silent
-#########################################################################
 
 #########################################################################
 ### Roslynator Analyzer rules
@@ -296,16 +295,14 @@ dotnet_diagnostic.RCS1163.severity = none
 
 #########################################################################
 ### Stylecop.Analyzers rules
-
+dotnet_diagnostic.SA1200.severity = none
 
 #########################################################################
 ### DotNet Code Analyzer rules
 dotnet_diagnostic.CA1062.severity = none
 # CA1515: Consider making public types internal
 dotnet_diagnostic.CA1515.severity = suggestion
-
 # don't want this to be auto-fixed because it will delete generated properties before they are generated
-
 # CA1823: Avoid unused private fields
 dotnet_diagnostic.CA1823.severity = suggestion
 # Remove unused private member (duplicate of CA1823)
