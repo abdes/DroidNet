@@ -24,6 +24,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h" />
+    <ClInclude Include="Config.h" />
+    <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="OxygenWorld.h" />
   </ItemGroup>
@@ -89,9 +91,12 @@
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalOptions>/Zc:__cplusplus
+ %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

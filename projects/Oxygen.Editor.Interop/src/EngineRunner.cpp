@@ -294,9 +294,50 @@ namespace Oxygen::Editor::EngineInterface {
     return ConfigureLogging(config);
   }
 
-  auto EngineRunner::CreateEngine(EngineConfig^) -> bool {
-    // TODO: Implement
-    return false;
+  auto EngineRunner::CreateEngine(EngineConfig^ engine_cfg) -> EngineContext^ {
+    if (disposed_) {
+      throw gcnew System::ObjectDisposedException("EngineRunner");
+    }
+
+    try {
+      // Translate (currently empty) managed EngineConfig into native config.
+      oxygen::EngineConfig native_cfg = engine_cfg->ToNative();
+
+      // Create the native engine context (unique ownership from factory).
+      auto native_unique = oxygen::engine::interop::CreateEngine(native_cfg);
+      if (!native_unique) {
+        return nullptr; // creation failed
+      }
+
+      // Promote unique_ptr to shared_ptr for the managed wrapper lifetime model.
+      std::shared_ptr<oxygen::engine::interop::EngineContext> shared(native_unique.release());
+
+      return gcnew EngineContext(shared);
+    }
+    catch (const std::exception& ex) {
+#if defined(_DEBUG) || !defined(NDEBUG)
+      System::Diagnostics::Debug::WriteLine(gcnew System::String(ex.what()));
+#endif
+      return nullptr;
+    }
+    catch (...) {
+#if defined(_DEBUG) || !defined(NDEBUG)
+      System::Diagnostics::Debug::WriteLine("Unknown exception in EngineRunner::CreateEngine");
+#endif
+      return nullptr;
+    }
+  }
+
+  auto EngineRunner::RunEngine(EngineContext^ ctx) -> void
+  {
+    // This call will not return until the engine is stopped or exits.
+    oxygen::engine::interop::RunEngine(ctx->NativeShared());
+  }
+
+  auto EngineRunner::StopEngine(EngineContext^ ctx) -> void
+  {
+    // This call will call any thread that started the RunEngine call to exit.
+    oxygen::engine::interop::StopEngine(ctx->NativeShared());
   }
 
 } // namespace Oxygen::Editor::EngineInterface

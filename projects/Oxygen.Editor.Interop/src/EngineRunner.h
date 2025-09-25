@@ -7,28 +7,10 @@
 #pragma once
 #pragma managed
 
+#include "Config.h"
+#include "EngineContext.h"
+
 namespace Oxygen::Editor::EngineInterface {
-
-  public
-    ref class LoggingConfig sealed {
-    public:
-      LoggingConfig() {
-        // default verbosity (OFF)
-        Verbosity = -9;
-        IsColored = false;
-        ModuleOverrides = gcnew System::String("");
-      }
-
-      property int Verbosity;
-      property bool IsColored;
-      property System::String^ ModuleOverrides;
-  };
-
-  public
-    ref class EngineConfig sealed {
-    public: EngineConfig() {}
-
-  };
 
   // Forward declare the managed LogHandler so EngineRunner header does not expose
   // any logging implementation or native logging headers.
@@ -104,7 +86,11 @@ namespace Oxygen::Editor::EngineInterface {
       /// <returns>
       /// <see langword="true"/> if creation succeeded; otherwise, <see langword="false"/>.
       /// </returns>
-      auto CreateEngine(EngineConfig^ config) -> bool;
+      auto CreateEngine(EngineConfig^ config) -> EngineContext^;
+
+      auto RunEngine(EngineContext^ ctx) -> void;
+
+      auto StopEngine(EngineContext^ ctx) -> void;
 
     private:
       // Encapsulated logging handler (forward-declared above). This hides any
