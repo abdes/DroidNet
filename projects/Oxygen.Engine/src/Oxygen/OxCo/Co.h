@@ -6,12 +6,6 @@
 
 #pragma once
 
-// Check if the required C++ version is available
-#if __cplusplus < 202002L
-#  error                                                                       \
-    "This header-only library requires C++20. Please use a C++20 compliant compiler."
-#endif
-
 #include <Oxygen/OxCo/Detail/CoTag.h>
 #include <Oxygen/OxCo/Detail/Promise.h>
 #include <Oxygen/OxCo/Detail/TaskAwaiter.h>
