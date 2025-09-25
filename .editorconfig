@@ -58,6 +58,13 @@ indent_size = 4
 indent_style = space
 end_of_line = crlf
 
+[*.{cpp,h}]
+indent_size = 2
+indent_style = space
+
+[Oxygen.Editor.Interop/**]
+resharper_disable_code_formatter = true
+
 #### .NET Code Actions ####
 
 # Type members
