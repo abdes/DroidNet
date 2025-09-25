@@ -5,75 +5,113 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-
-struct OxygenEditorForwarder;
-// Forward declare loguru message struct to avoid including logging headers in
-// managed header.
-namespace loguru {
-struct Message;
-}
+#pragma managed
 
 namespace Oxygen::Editor::EngineInterface {
 
-public
-ref class LoggingConfig sealed {
-public:
-  LoggingConfig() {
-    // default verbosity (OFF)
-    Verbosity = -9;
-    IsColored = false;
-    ModuleOverrides = gcnew System::String("");
-  }
+  public
+    ref class LoggingConfig sealed {
+    public:
+      LoggingConfig() {
+        // default verbosity (OFF)
+        Verbosity = -9;
+        IsColored = false;
+        ModuleOverrides = gcnew System::String("");
+      }
 
-  property int Verbosity;
-  property bool IsColored;
-  property System::String ^ ModuleOverrides;
-};
+      property int Verbosity;
+      property bool IsColored;
+      property System::String^ ModuleOverrides;
+  };
 
-public
-ref class EngineConfig sealed{
-  public : EngineConfig(){}
+  public
+    ref class EngineConfig sealed {
+    public: EngineConfig() {}
 
-};
+  };
 
-public
-ref class EngineRunner sealed {
-public:
-  EngineRunner();
-  ~EngineRunner(); // destructor
-  !EngineRunner(); // finalizer (safety)
+  // Forward declare the managed LogHandler so EngineRunner header does not expose
+  // any logging implementation or native logging headers.
+  ref class LogHandler;
 
-  /// <summary>
-  /// Configure native logging (no managed forwarding). CONTRACT: Call before
-  /// any engine logs.
-  /// </summary>
-  auto ConfigureLogging(LoggingConfig ^ config) -> bool;
+  public
+    ref class EngineRunner sealed {
+    public:
+      EngineRunner();
+      ~EngineRunner(); // destructor
+      !EngineRunner(); // finalizer (safety)
 
-  /// <summary>
-  /// Configure native logging and bind a managed ILogger (passed as
-  /// System::Object^). Reflection discovery and delegate caching are done here
-  /// once.
-  /// </summary>
-  auto ConfigureLogging(LoggingConfig ^ config, Object ^ logger)
-      -> bool; // logger: Microsoft.Extensions.Logging.ILogger
+      /// <summary>
+      /// Configures the native engine logging subsystem without binding a managed <c>ILogger</c>.
+      /// Use this overload if you only need native logging (e.g., to <c>stderr</c> or files)
+      /// and do not want managed log forwarding.
+      /// </summary>
+      /// <param name="config">
+      /// The logging configuration, including verbosity, color settings, and per-module overrides.
+      /// </param>
+      /// <returns>
+      /// <see langword="true"/> if the native logging backend was initialized successfully;
+      /// otherwise, <see langword="false"/>.
+      /// </returns>
+      /// <remarks>
+      /// This method must be invoked before any native engine component emits log output
+      /// you want captured. It is safe to call multiple times; subsequent calls will
+      /// reconfigure verbosity and overrides. This overload does not create any managed
+      /// reflection or delegate bindings.
+      /// </remarks>
+      auto ConfigureLogging(LoggingConfig^ config) -> bool;
 
-  auto CreateEngine(EngineConfig ^ config) -> bool;
+      /// <summary>
+      /// Configures the native engine logging subsystem and wires a managed
+      /// <c>Microsoft.Extensions.Logging.ILogger</c> instance so native log messages
+      /// are forwarded into the managed logging pipeline.
+      /// </summary>
+      /// <param name="config">
+      /// The logging configuration, including verbosity, color settings, and per-module overrides.
+      /// </param>
+      /// <param name="logger">
+      /// A managed <c>ILogger</c> instance (boxed as <c>System::Object^</c>) to receive
+      /// forwarded native log events.
+      /// </param>
+      /// <returns>
+      /// <see langword="true"/> if the native logging backend was initialized successfully;
+      /// otherwise, <see langword="false"/>.
+      /// </returns>
+      /// <remarks>
+      /// <para>
+      /// On success, a native callback is registered that captures each native log message,
+      /// maps its verbosity to <c>LogLevel</c>, and invokes <c>ILogger.Log(...)</c>
+      /// via cached reflection metadata. Reflection discovery of the <c>Log</c> method
+      /// and construction of a formatter delegate occur only on the first successful call.
+      /// </para>
+      /// <para>
+      /// If <paramref name="logger"/> is <see langword="nullptr"/>, this overload behaves
+      /// the same as the simpler overload.
+      /// </para>
+      /// <para>
+      /// Safe to call multiple times; the logger reference and cached method info are replaced.
+      /// </para>
+      /// </remarks>
+      auto ConfigureLogging(LoggingConfig^ config, Object^ logger) -> bool;
 
-  auto HandleLog(const loguru::Message &message)
-      -> void; // instance log handler
+      /// <summary>
+      /// Creates and initializes the engine using the supplied configuration.
+      /// (Not yet implemented.)
+      /// </summary>
+      /// <param name="config">
+      /// The engine configuration to use during initialization.
+      /// </param>
+      /// <returns>
+      /// <see langword="true"/> if creation succeeded; otherwise, <see langword="false"/>.
+      /// </returns>
+      auto CreateEngine(EngineConfig^ config) -> bool;
 
-private:
-  auto CacheLoggerArtifacts() -> void;
-  auto RegisterCallbackIfNeeded() -> void;
-  auto ReleaseCallback() -> void;
+    private:
+      // Encapsulated logging handler (forward-declared above). This hides any
+      // references to native logging libraries from this header.
+      LogHandler^ log_handler_;
 
-  // Instance state
-  Object ^ _logger;
-  System::Reflection::MethodInfo ^ _logMethod;
-  System::Delegate ^ _formatterDelegate;
-  bool _callbackRegistered;
-  System::IntPtr _selfHandle; // GCHandle to this (for callback user_data)
-  bool _disposed;
-};
+      bool disposed_;
+  };
 
 } // namespace Oxygen::Editor::EngineInterface
