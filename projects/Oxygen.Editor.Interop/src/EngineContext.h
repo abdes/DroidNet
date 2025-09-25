@@ -10,7 +10,15 @@
 #include <memory>
 
 #include <Oxygen/EditorInterface/EngineContext.h>
+
+// Disable C4793: 'function' : native code generation for 'function' is disabled
+// We have no choice here because the problem is coming from deep inside `asio`
+// and we can't isolate that particular function:
+// 'asio::detail::winsock_init_base::throw_on_error'
+#pragma warning(push)
+#pragma warning(disable:4793)
 #include <Oxygen/Platform/Platform.h>
+#pragma warning(pop)
 
 namespace Oxygen::Editor::EngineInterface {
 
