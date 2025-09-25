@@ -13,8 +13,8 @@
       "name": "base",
       "inherits": "conan-default",
       "hidden": true,
-      "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "../install",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "OXYGEN_USE_CCACHE": "ON"
       }
