@@ -152,9 +152,9 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
             // Ensure all directories in the path exist
             var directoryPath = this.fs.Path.GetDirectoryName(configFilePath);
-            if (!Directory.Exists(directoryPath))
+            if (directoryPath != null && !Directory.Exists(directoryPath))
             {
-                _ = this.fs.Directory.CreateDirectory(configFilePath);
+                _ = this.fs.Directory.CreateDirectory(directoryPath);
             }
 
             this.fs.File.WriteAllText(configFilePath, configText);
