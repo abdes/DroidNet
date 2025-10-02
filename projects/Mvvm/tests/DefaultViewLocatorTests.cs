@@ -167,12 +167,65 @@ public class DefaultViewLocatorTests
                 """);
     }
 
+    /// <summary>
+    /// Test that inheritance scenarios work when both base and derived ViewModels are explicitly registered
+    /// with the same View instance. MyView only implements IViewFor&lt;MyViewModel&gt; but can be registered
+    /// to handle MyExtendedViewModel as well. This demonstrates Option 1 for handling ViewModel inheritance.
+    /// </summary>
+    [TestMethod]
+    public void ViewFromExtendedViewModelWithExplicitRegistration()
+    {
+        // Register the SAME MyView instance for both the base and extended ViewModel types
+        // Note: MyView only implements IViewFor<MyViewModel>, but DI allows us to register
+        // it for IViewFor<MyExtendedViewModel> as well since MyExtendedViewModel : MyViewModel
+        _ = this.serviceLocatorMock!.Setup(m => m.GetService(typeof(IViewFor<MyViewModel>))).Returns(this.view);
+        _ = this.serviceLocatorMock!.Setup(m => m.GetService(typeof(IViewFor<MyExtendedViewModel>))).Returns(this.view);
+
+        // Test that the extended ViewModel resolves to the same MyView instance
+        var resolved = this.viewLocator!.ResolveView(new MyExtendedViewModel());
+
+        _ = resolved.Should()
+            .NotBeNull(
+                """
+                because we have explicitly registered the same MyView instance for both
+                `IViewFor<MyViewModel>` and `IViewFor<MyExtendedViewModel>`. Even though
+                MyView only implements IViewFor<MyViewModel>, the DI registration allows
+                the same view instance to handle derived ViewModels.
+                """);
+
+        _ = resolved.Should().BeOfType<MyView>();
+        _ = resolved.Should().BeSameAs(this.view, "the same view instance should be returned for both base and derived ViewModels");
+    }
+
+    /// <summary>
+    /// Test that demonstrates the default behavior when an extended ViewModel is NOT explicitly registered.
+    /// This shows why Option 1 (explicit registration) is necessary for inheritance scenarios.
+    /// </summary>
+    [TestMethod]
+    public void ExtendedViewModelWithoutExplicitRegistrationReturnsNull()
+    {
+        // Only register the base ViewModel, not the extended one
+        _ = this.serviceLocatorMock!.Setup(m => m.GetService(typeof(IViewFor<MyViewModel>))).Returns(this.view);
+
+        // Try to resolve view for extended ViewModel - should return null
+        var resolved = this.viewLocator!.ResolveView(new MyExtendedViewModel());
+
+        _ = resolved.Should()
+            .BeNull(
+                """
+                because the view locator uses exact type matching and there is no
+                explicit registration for `IViewFor<MyExtendedViewModel>`. Even though
+                MyExtendedViewModel inherits from MyViewModel, the locator does not
+                walk the inheritance hierarchy to find base type registrations.
+                """);
+    }
+
 #pragma warning disable SA1201 // Elements should appear in the correct order
     private interface IMyView;
 
     private interface IMyViewModel;
 
-    private sealed class MyViewModel : BaseViewModel, IBaseViewModel, IMyViewModel;
+    private class MyViewModel : BaseViewModel, IBaseViewModel, IMyViewModel;
 
     private sealed class MyView(MyViewModel viewModel) : BaseView(viewModel), IViewFor<MyViewModel>
     {
@@ -186,6 +239,8 @@ public class DefaultViewLocatorTests
             remove { }
         }
     }
+
+    private sealed class MyExtendedViewModel : MyViewModel;
 #pragma warning restore SA1201 // Elements should appear in the correct order
 }
 

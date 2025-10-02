@@ -21,6 +21,7 @@ The DroidNet.Mvvm project provides advanced MVVM (Model-View-ViewModel) capabili
    - XAML-friendly `ViewModelToView` converter
    - Seamless binding support in XAML templates
    - Example usage:
+
      ```xaml
      <ContentPresenter Content="{x:Bind ViewModel.Workspace,
          Converter={StaticResource VmToViewConverter}}" />
@@ -34,16 +35,19 @@ The DroidNet.Mvvm project provides advanced MVVM (Model-View-ViewModel) capabili
 ## Setup
 
 Register the view locator:
+
 ```cs
 services.AddSingleton<IViewLocator, DefaultViewLocator>();
 ```
 
 Register your views:
+
 ```cs
 services.AddTransient<IViewFor<MyViewModel>, MyView>();
 ```
 
 Configure the converter in App.xaml.cs:
+
 ```cs
 public App([FromKeyedServices("Default")] IValueConverter vmToViewConverter)
 {
