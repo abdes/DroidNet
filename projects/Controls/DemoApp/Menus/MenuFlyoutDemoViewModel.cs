@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.Menus;
@@ -14,6 +15,25 @@ namespace DroidNet.Controls.Demo.Menus;
 /// </summary>
 public partial class MenuFlyoutDemoViewModel : ObservableObject
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MenuFlyoutDemoViewModel"/> class.
+    /// </summary>
+    public MenuFlyoutDemoViewModel()
+    {
+        this.ContextMenu = this.BuildContextMenu();
+        this.SimpleMenu = this.BuildSimpleMenu();
+    }
+
+    /// <summary>
+    /// Gets the menu source leveraged by the dynamic context flyout demo.
+    /// </summary>
+    public IMenuSource ContextMenu { get; }
+
+    /// <summary>
+    /// Gets the simple menu source that powers the static context flyout demo.
+    /// </summary>
+    public IMenuSource SimpleMenu { get; }
+
     [ObservableProperty]
     public partial string LastActionMessage { get; set; } = "Right-click the areas below to see context menus.";
 
@@ -23,114 +43,107 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
     [ObservableProperty]
     public partial string TextAlignment { get; set; } = "Left";
 
-    [ObservableProperty]
-    public partial MenuFlyout? ContextMenuFlyout { get; set; }
-
-    // Store references to menu items for radio group handling
-    private MenuItemData? alignLeftItem;
-    private MenuItemData? alignCenterItem;
-    private MenuItemData? alignRightItem;
-
-    public MenuFlyoutDemoViewModel()
-    {
-        this.BuildContextMenu();
-    }
-
-    /// <summary>
-    /// Builds a context menu demonstration.
-    /// </summary>
-    private void BuildContextMenu()
+    private IMenuSource BuildContextMenu()
     {
         var menuBuilder = new MenuBuilder()
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Context Cut",
-                Icon = new SymbolIconSource { Symbol = Symbol.Cut },
-                AcceleratorText = "Ctrl+X",
-                Command = this.CreateCommand("Text cut to clipboard"),
-            })
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Context Copy",
-                Icon = new SymbolIconSource { Symbol = Symbol.Copy },
-                AcceleratorText = "Ctrl+C",
-                Command = this.CreateCommand("Text copied to clipboard"),
-            })
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Context Paste",
-                Icon = new SymbolIconSource { Symbol = Symbol.Paste },
-                AcceleratorText = "Ctrl+V",
-                Command = this.CreateCommand("Text pasted from clipboard"),
-            })
-            .AddMenuItem(new MenuItemData { IsSeparator = true })
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Context Format",
-                SubItems = new[]
-                {
-                    new MenuItemData
-                    {
-                        Text = "Context Word Wrap",
-                        IsCheckable = true,
-                        IsChecked = this.WordWrapEnabled,
-                        Command = new RelayCommand(() =>
-                        {
-                            this.WordWrapEnabled = !this.WordWrapEnabled;
-                            this.LastActionMessage = $"Word Wrap: {(this.WordWrapEnabled ? "ON" : "OFF")}";
-                        }),
-                    },
-                    new MenuItemData { IsSeparator = true },
-                    this.alignLeftItem = new MenuItemData
-                    {
-                        Text = "Context Align Left",
-                        RadioGroupId = "Alignment",
-                        IsChecked = string.Equals(this.TextAlignment, "Left", StringComparison.Ordinal),
-                        Command = new RelayCommand(() => this.SelectAlignment("Left")),
-                    },
-                    this.alignCenterItem = new MenuItemData
-                    {
-                        Text = "Context Align Center",
-                        RadioGroupId = "Alignment",
-                        IsChecked = string.Equals(this.TextAlignment, "Center", StringComparison.Ordinal),
-                        Command = new RelayCommand(() => this.SelectAlignment("Center")),
-                    },
-                    this.alignRightItem = new MenuItemData
-                    {
-                        Text = "Context Align Right",
-                        RadioGroupId = "Alignment",
-                        IsChecked = string.Equals(this.TextAlignment, "Right", StringComparison.Ordinal),
-                        Command = new RelayCommand(() => this.SelectAlignment("Right")),
-                    },
-                },
-            });
+            .AddMenuItem(this.CreateClipboardItem("Context Cut", Symbol.Cut, "Ctrl+X", "Text cut to clipboard"))
+            .AddMenuItem(this.CreateClipboardItem("Context Copy", Symbol.Copy, "Ctrl+C", "Text copied to clipboard"))
+            .AddMenuItem(this.CreateClipboardItem("Context Paste", Symbol.Paste, "Ctrl+V", "Text pasted from clipboard"))
+            .AddSeparator()
+            .AddMenuItem(this.CreateFormattingSubmenu());
 
-        this.ContextMenuFlyout = menuBuilder.BuildMenuFlyout();
+        return menuBuilder.Build();
     }
 
-    /// <summary>
-    /// Handles alignment selection with proper radio group behavior.
-    /// </summary>
-    /// <param name="alignment">The alignment to select.</param>
-    private void SelectAlignment(string alignment)
+    private IMenuSource BuildSimpleMenu()
     {
-        // Implement radio group behavior - deselect all items in the alignment group
-        this.alignLeftItem?.IsChecked = false;
+        var menuBuilder = new MenuBuilder()
+            .AddMenuItem(new MenuItemData { Text = "📝 Edit", Command = this.CreateCommand("Edit action invoked") })
+            .AddMenuItem(new MenuItemData { Text = "📋 Copy", Command = this.CreateCommand("Copy action invoked") })
+            .AddMenuItem(new MenuItemData { Text = "🗑️ Delete", Command = this.CreateCommand("Delete action invoked") })
+            .AddSeparator()
+            .AddMenuItem(new MenuItemData { Text = "📋 Properties", Command = this.CreateCommand("Properties opened") });
 
-        this.alignCenterItem?.IsChecked = false;
+        return menuBuilder.Build();
+    }
 
-        this.alignRightItem?.IsChecked = false;
-
-        // Select the clicked item
-        var selectedItem = alignment switch
+    private MenuItemData CreateClipboardItem(string text, Symbol symbol, string accelerator, string message)
+    {
+        return new MenuItemData
         {
-            "Left" => this.alignLeftItem,
-            "Center" => this.alignCenterItem,
-            "Right" => this.alignRightItem,
-            _ => null,
+            Text = text,
+            Icon = new SymbolIconSource { Symbol = symbol },
+            AcceleratorText = accelerator,
+            Command = this.CreateCommand(message),
         };
+    }
 
-        selectedItem?.IsChecked = true;
+    private MenuItemData CreateFormattingSubmenu()
+    {
+        return new MenuItemData
+        {
+            Text = "Context Format",
+            SubItems =
+            [
+                this.CreateWordWrapItem(),
+                new MenuItemData { IsSeparator = true },
+                this.CreateAlignmentItem("Left"),
+                this.CreateAlignmentItem("Center"),
+                this.CreateAlignmentItem("Right"),
+            ],
+        };
+    }
+
+    private MenuItemData CreateWordWrapItem()
+    {
+        return new MenuItemData
+        {
+            Text = "Context Word Wrap",
+            IsCheckable = true,
+            IsChecked = this.WordWrapEnabled,
+            Command = new RelayCommand<MenuItemData?>(this.ToggleWordWrap),
+        };
+    }
+
+    private MenuItemData CreateAlignmentItem(string alignment)
+    {
+        return new MenuItemData
+        {
+            Text = alignment switch
+            {
+                "Center" => "Context Align Center",
+                "Right" => "Context Align Right",
+                _ => "Context Align Left",
+            },
+            RadioGroupId = "Alignment",
+            IsChecked = string.Equals(this.TextAlignment, alignment, StringComparison.Ordinal),
+            Command = new RelayCommand<MenuItemData?>(this.SelectAlignment),
+        };
+    }
+
+    private void ToggleWordWrap(MenuItemData? menuItem)
+    {
+        if (menuItem is null)
+        {
+            return;
+        }
+
+        this.WordWrapEnabled = menuItem.IsChecked;
+        this.LastActionMessage = $"Word Wrap: {(menuItem.IsChecked ? "ON" : "OFF")}";
+    }
+
+    private void SelectAlignment(MenuItemData? menuItem)
+    {
+        if (menuItem is null)
+        {
+            return;
+        }
+
+        var alignment = menuItem.Text.Contains("Center", StringComparison.OrdinalIgnoreCase)
+            ? "Center"
+            : menuItem.Text.Contains("Right", StringComparison.OrdinalIgnoreCase)
+                ? "Right"
+                : "Left";
 
         this.TextAlignment = alignment;
         this.LastActionMessage = $"Text aligned {alignment.ToUpperInvariant()}";

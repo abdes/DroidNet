@@ -18,19 +18,5 @@ public sealed partial class MenuBarDemoView
     public MenuBarDemoView()
     {
         this.InitializeComponent();
-        this.Loaded += this.OnLoaded;
-    }
-
-    private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        // Set the MenuBar programmatically since XAML binding can be problematic
-        if (this.ViewModel?.MenuBar != null)
-        {
-            this.DemoMenuBar.Items.Clear();
-            foreach (var item in this.ViewModel.MenuBar.Items)
-            {
-                this.DemoMenuBar.Items.Add(item);
-            }
-        }
     }
 }

@@ -52,8 +52,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
         // Subscribe to the throttled observable to call SetupCustomTitleBar
         _ = throttledObservable.Subscribe(_ => this.DispatcherQueue.TryEnqueue(this.SetupCustomTitleBar));
-
-        this.SettingsButton.Loaded += (_, _) => this.SettingsButton.Flyout = this.ViewModel!.MenuBuilder.BuildMenuFlyout();
     }
 
     /// <inheritdoc/>
@@ -93,15 +91,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         _Y: (int)Math.Round(bounds.Y * scale),
         _Width: (int)Math.Round(bounds.Width * scale),
         _Height: (int)Math.Round(bounds.Height * scale));
-
-    /// <summary>
-    /// Constructs a full identifier string by combining a parent identifier and a child identifier.
-    /// </summary>
-    /// <param name="parentFullId">The parent identifier.</param>
-    /// <param name="id">The child identifier.</param>
-    /// <returns>A combined identifier string.</returns>
-    private static string GetFullId(string parentFullId, string id)
-        => string.IsNullOrEmpty(parentFullId) ? id : $"{parentFullId}.{id}";
 
     /// <summary>
     /// Sets up the custom title bar for the window.
