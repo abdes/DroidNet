@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -19,12 +19,12 @@
     <x:Double x:Key="MenuItemHeight">32</x:Double>
     <x:Double x:Key="MenuItemIconSize">16</x:Double>
     <x:Double x:Key="MenuItemStateSize">16</x:Double>
-    <Thickness x:Key="MenuItemPadding">12,4,12,4</Thickness>
+    <Thickness x:Key="MenuItemPadding">12,6,12,6</Thickness>
     <Thickness x:Key="MenuItemIconMargin">0,0,8,0</Thickness>
     <Thickness x:Key="MenuItemTextMargin">0,0,12,0</Thickness>
     <Thickness x:Key="MenuItemAcceleratorMargin">0,0,8,0</Thickness>
     <Thickness x:Key="MenuItemStateMargin">0</Thickness>
-    <Thickness x:Key="MenuItemSeparatorMargin">0,4,0,4</Thickness>
+    <Thickness x:Key="MenuItemSeparatorMargin">0,1,0,1</Thickness>
 
     <!--  Text styles  -->
     <Style x:Key="MenuItemTextStyle" TargetType="TextBlock">
@@ -57,7 +57,6 @@
     <Style x:Key="DefaultMenuItemStyle" TargetType="local:MenuItem">
         <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-        <Setter Property="Height" Value="{StaticResource MenuItemHeight}" />
         <Setter Property="Padding" Value="{StaticResource MenuItemPadding}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -66,7 +65,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:MenuItem">
-                    <Grid x:Name="PartRootGrid" Background="{TemplateBinding Background}">
+                    <Grid
+                        x:Name="PartRootGrid"
+                        MinHeight="{StaticResource MenuItemHeight}"
+                        Background="{TemplateBinding Background}">
                         <Grid
                             x:Name="PartContentGrid"
                             Padding="{TemplateBinding Padding}"
@@ -230,12 +232,18 @@
                                     <VisualState.Setters>
                                         <Setter Target="PartContentGrid.Visibility" Value="Visible" />
                                         <Setter Target="PartSeparatorBorder.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartRootGrid.MinHeight" Value="{StaticResource MenuItemHeight}" />
+                                        <Setter Target="PartSeparatorBorder.Margin" Value="{StaticResource MenuItemSeparatorMargin}" />
+                                        <Setter Target="PartRootGrid.IsHitTestVisible" Value="True" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Separator">
                                     <VisualState.Setters>
                                         <Setter Target="PartContentGrid.Visibility" Value="Collapsed" />
                                         <Setter Target="PartSeparatorBorder.Visibility" Value="Visible" />
+                                        <Setter Target="PartRootGrid.MinHeight" Value="0" />
+                                        <Setter Target="PartSeparatorBorder.Margin" Value="0" />
+                                        <Setter Target="PartRootGrid.IsHitTestVisible" Value="False" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>

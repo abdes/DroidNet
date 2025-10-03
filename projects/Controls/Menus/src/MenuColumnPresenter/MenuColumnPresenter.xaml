@@ -9,17 +9,19 @@
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <Thickness x:Key="MenuColumnPresenterPadding">8,4</Thickness>
+    <Thickness x:Key="MenuColumnPresenterPadding">12,8</Thickness>
+
     <Style TargetType="controls:MenuColumnPresenter">
         <Setter Property="Background" Value="{ThemeResource FlyoutPresenterBackground}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="{StaticResource MenuColumnPresenterPadding}" />
         <Setter Property="MinWidth" Value="200" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:MenuColumnPresenter">
                     <Border
+                        Padding="{TemplateBinding Padding}"
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
@@ -33,7 +35,7 @@
                             <StackPanel
                                 x:Name="PART_ItemsHost"
                                 Orientation="Vertical"
-                                Spacing="2" />
+                                Spacing="0" />
                         </ScrollViewer>
                     </Border>
                 </ControlTemplate>
