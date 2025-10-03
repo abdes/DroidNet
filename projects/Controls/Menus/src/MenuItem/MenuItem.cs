@@ -358,6 +358,13 @@ public partial class MenuItem : ContentControl
         _ = sender; // unused
         _ = e; // unused
 
+        if (this.ItemData?.IsSeparator == true)
+        {
+            this.IsPointerOver = false;
+            this.UpdateInteractionVisualState();
+            return;
+        }
+
         this.IsPointerOver = true;
 
         if (this.ItemData?.IsSeparator != true && this.ItemData?.IsEnabled == true)
@@ -500,6 +507,13 @@ public partial class MenuItem : ContentControl
 
     private void UpdateInteractionVisualState()
     {
+        if (this.ItemData?.IsSeparator == true)
+        {
+            this.IsPointerOver = false;
+            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
+            return;
+        }
+
         if (this.ItemData?.IsEnabled != true)
         {
             _ = VisualStateManager.GoToState(this, DisabledVisualState, useTransitions: true);
