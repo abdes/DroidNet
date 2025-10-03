@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.Menus.MenuItemDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <!--  Left Side - Demo Area  -->
+        <ScrollViewer Grid.Column="0">
+            <StackPanel Margin="20" Spacing="20">
+
+                <!--  Title and Description  -->
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuItem Demo" />
+                    <TextBlock
+                        Style="{ThemeResource BodyTextBlockStyle}"
+                        Text="This demonstrates the MenuItem control with live property editing. Use the controls on the right to modify the MenuItem properties and see the changes in real-time."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!--  Demo MenuItem Container  -->
+                <Border
+                    MinWidth="300"
+                    MinHeight="44"
+                    MaxWidth="400"
+                    Padding="16"
+                    HorizontalAlignment="Left"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel Spacing="12">
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="Live MenuItem Preview" />
+
+                        <!--  MenuItem Demo Container  -->
+                        <Border
+                            HorizontalAlignment="Stretch"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <controls:MenuItem
+                                x:Name="DemoMenuItem"
+                                Margin="2"
+                                ItemData="{x:Bind ViewModel.MenuItemData, Mode=OneWay}" />
+                        </Border>
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Click the MenuItem to see command execution feedback below." />
+                    </StackPanel>
+                </Border>
+
+                <!--  Command Execution Feedback  -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="Command Execution Feedback" />
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="{x:Bind ViewModel.LastActionMessage, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!--  UX Guidelines  -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel Spacing="12">
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="✨ MenuItem UX Guidelines" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Icon Column: 16×16px semantic icons that represent the action" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Text Column: Clear, concise menu item text" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Accelerator Column: Keyboard shortcuts (e.g., 'Ctrl+S')" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• State Column: Checkmarks for selections, arrows for submenus" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  Column Separator  -->
+        <Border
+            Grid.Column="1"
+            Width="1"
+            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+        <!--  Right Side - Property Editor  -->
+        <ScrollViewer Grid.Column="2">
+            <StackPanel Margin="20" Spacing="16">
+
+                <TextBlock
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Style="{ThemeResource SubtitleTextBlockStyle}"
+                    Text="Property Editor" />
+
+                <!--  Text Property  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Text" />
+                    <TextBox
+                        x:Name="TextTextBox"
+                        PlaceholderText="Enter menu item text"
+                        Text="{x:Bind ViewModel.MenuItemData.Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!--  Icon Selection  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Icon" />
+                    <ComboBox
+                        x:Name="IconComboBox"
+                        ItemsSource="{x:Bind ViewModel.AvailableIcons}"
+                        PlaceholderText="Select an icon"
+                        SelectedValue="{x:Bind ViewModel.SelectedIconName, Mode=TwoWay}"
+                        SelectedValuePath="Key">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon
+                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                        FontSize="16"
+                                        Glyph="{Binding Value}" />
+                                    <TextBlock Text="{Binding Key}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <!--  Accelerator Text  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Accelerator Text" />
+                    <TextBox PlaceholderText="e.g., Ctrl+S" Text="{x:Bind ViewModel.MenuItemData.AcceleratorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!--  Enabled State  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="State Options" />
+                    <ToggleSwitch Header="Is Enabled" IsOn="{x:Bind ViewModel.MenuItemData.IsEnabled, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!--  Checkable State  -->
+                <ToggleSwitch Header="Is Checkable" IsOn="{x:Bind ViewModel.MenuItemData.IsCheckable, Mode=TwoWay}" />
+
+                <!--  Selected State (only when checkable)  -->
+                <ToggleSwitch
+                    Header="Is Checked"
+                    IsEnabled="{x:Bind ViewModel.MenuItemData.IsCheckable, Mode=OneWay}"
+                    IsOn="{x:Bind ViewModel.MenuItemData.IsChecked, Mode=TwoWay}" />
+
+                <!--  Separator  -->
+                <ToggleSwitch Header="Is Separator" IsOn="{x:Bind ViewModel.MenuItemData.IsSeparator, Mode=TwoWay}" />
+
+                <!--  Radio Group  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Radio Group ID" />
+                    <TextBox PlaceholderText="e.g., theme-group" Text="{x:Bind ViewModel.MenuItemData.RadioGroupId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="Items with the same Radio Group ID behave as radio buttons"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!--  Mnemonic  -->
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Mnemonic (single character)" />
+                    <TextBox
+                        x:Name="MnemonicTextBox"
+                        MaxLength="1"
+                        PlaceholderText="e.g., F"
+                        Text="{x:Bind ViewModel.MnemonicText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!--  Reset Button  -->
+                <Button
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Stretch"
+                    Command="{x:Bind ViewModel.ResetToDefaultCommand}"
+                    Content="Reset to Default"
+                    Style="{ThemeResource AccentButtonStyle}" />
+
+            </StackPanel>
+        </ScrollViewer>
+
+    </Grid>
+
+</Page>

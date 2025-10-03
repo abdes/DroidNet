@@ -11,6 +11,7 @@ using DroidNet.Config;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.Demo.InPlaceEdit;
+using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Hosting;
@@ -127,6 +128,12 @@ public static partial class Program
         container.Register<ProjectLayoutViewModel>(Reuse.Transient);
         container.Register<InPlaceEditDemoView>(Reuse.Transient);
         container.Register<InPlaceEditDemoViewModel>(Reuse.Transient);
+        container.Register<MenuBarDemoView>(Reuse.Transient);
+        container.Register<MenuBarDemoViewModel>(Reuse.Transient);
+        container.Register<MenuFlyoutDemoView>(Reuse.Transient);
+        container.Register<MenuFlyoutDemoViewModel>(Reuse.Transient);
+        container.Register<MenuItemDemoView>(Reuse.Transient);
+        container.Register<MenuItemDemoViewModel>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(
@@ -167,6 +174,21 @@ public static partial class Program
                         {
                             Path = "dynamic-tree",
                             ViewModelType = typeof(ProjectLayoutViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "menubar",
+                            ViewModelType = typeof(MenuBarDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "menuflyout",
+                            ViewModelType = typeof(MenuFlyoutDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "menuitem",
+                            ViewModelType = typeof(MenuItemDemoViewModel),
                         },
                     ]),
                 },

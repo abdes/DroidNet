@@ -5,10 +5,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.OutputConsole.Model;
-using DryIoc;
 using Serilog;
 using Serilog.Events;
-using Serilog.Parsing;
 
 namespace DroidNet.Controls.Demo.OutputConsole;
 
@@ -18,7 +16,7 @@ public partial class OutputConsoleDemoViewModel : ObservableObject
 
     public OutputConsoleDemoViewModel(OutputLogBuffer buffer)
     {
-        Buffer = buffer;
+        this.Buffer = buffer;
     }
 
     [RelayCommand]

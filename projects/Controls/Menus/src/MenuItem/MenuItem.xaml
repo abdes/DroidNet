@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Controls">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Use Fluent v2 brush token resources directly (no local alias indirection with StaticResource).
+        ThemeResource ensures dynamic updates on Light/Dark/HighContrast switches.
+        Tokens sourced from WinUI Common_themeresources_any.xaml.
+    -->
+
+    <!--  Layout constants  -->
+    <x:Double x:Key="MenuItemHeight">32</x:Double>
+    <x:Double x:Key="MenuItemIconSize">16</x:Double>
+    <x:Double x:Key="MenuItemStateSize">16</x:Double>
+    <Thickness x:Key="MenuItemPadding">12,4,12,4</Thickness>
+    <Thickness x:Key="MenuItemIconMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="MenuItemTextMargin">0,0,12,0</Thickness>
+    <Thickness x:Key="MenuItemAcceleratorMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="MenuItemStateMargin">0</Thickness>
+    <Thickness x:Key="MenuItemSeparatorMargin">0,4,0,4</Thickness>
+
+    <!--  Text styles  -->
+    <Style x:Key="MenuItemTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style
+        x:Key="MenuItemAcceleratorTextStyle"
+        BasedOn="{StaticResource MenuItemTextStyle}"
+        TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{ThemeResource CaptionTextBlockFontSize}" />
+        <Setter Property="Opacity" Value="0.8" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <Style
+        x:Key="MenuItemStateTextStyle"
+        BasedOn="{StaticResource MenuItemTextStyle}"
+        TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!--  Base MenuItem Style  -->
+    <Style x:Key="DefaultMenuItemStyle" TargetType="local:MenuItem">
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Height" Value="{StaticResource MenuItemHeight}" />
+        <Setter Property="Padding" Value="{StaticResource MenuItemPadding}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="{StaticResource UseSystemFocusVisuals}" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:MenuItem">
+                    <Grid x:Name="PartRootGrid" Background="{TemplateBinding Background}">
+                        <Grid
+                            x:Name="PartContentGrid"
+                            Padding="{TemplateBinding Padding}"
+                            Visibility="Visible">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!--  Icon / Left Checkmark  -->
+                            <Grid
+                                Grid.Column="0"
+                                Width="{StaticResource MenuItemIconSize}"
+                                Height="{StaticResource MenuItemIconSize}"
+                                Margin="{StaticResource MenuItemIconMargin}">
+                                <IconSourceElement
+                                    x:Name="PartIconPresenter"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    IconSource="{Binding ItemData.Icon, RelativeSource={RelativeSource TemplatedParent}}" />
+                                <TextBlock
+                                    x:Name="PartCheckmark"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Style="{StaticResource MenuItemStateTextStyle}"
+                                    Text="&#xE73E;"
+                                    Visibility="Collapsed" />
+                            </Grid>
+
+                            <!--  Text  -->
+                            <TextBlock
+                                x:Name="PartTextBlock"
+                                Grid.Column="1"
+                                Margin="{StaticResource MenuItemTextMargin}"
+                                Foreground="{TemplateBinding Foreground}"
+                                Style="{StaticResource MenuItemTextStyle}"
+                                Text="{Binding ItemData.Text, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                            <!--  Accelerator  -->
+                            <TextBlock
+                                x:Name="PartAcceleratorTextBlock"
+                                Grid.Column="2"
+                                Margin="{StaticResource MenuItemAcceleratorMargin}"
+                                Foreground="{TemplateBinding Foreground}"
+                                Style="{StaticResource MenuItemAcceleratorTextStyle}"
+                                Text="{Binding ItemData.AcceleratorText, RelativeSource={RelativeSource TemplatedParent}}"
+                                Visibility="Collapsed" />
+
+                            <!--  State (Right Checkmark / Submenu Arrow)  -->
+                            <Grid
+                                Grid.Column="3"
+                                Width="{StaticResource MenuItemStateSize}"
+                                Height="{StaticResource MenuItemStateSize}"
+                                Margin="{StaticResource MenuItemStateMargin}">
+                                <TextBlock
+                                    x:Name="PartStateTextBlock"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Style="{StaticResource MenuItemStateTextStyle}"
+                                    Text="&#xE73E;"
+                                    Visibility="Collapsed" />
+                                <TextBlock
+                                    x:Name="PartSubmenuArrow"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource MenuItemStateTextStyle}"
+                                    Text="&#xE76C;"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                        </Grid>
+
+                        <!--  Separator  -->
+                        <Border
+                            x:Name="PartSeparatorBorder"
+                            Height="1"
+                            Margin="{StaticResource MenuItemSeparatorMargin}"
+                            HorizontalAlignment="Stretch"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            Visibility="Collapsed" />
+
+                        <VisualStateManager.VisualStateGroups>
+                            <!--  Common Interaction States  -->
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorDisabledBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                        <Setter Target="PartIconPresenter.Opacity" Value="0.5" />
+                                        <Setter Target="PartCheckmark.Opacity" Value="0.5" />
+                                        <Setter Target="PartStateTextBlock.Opacity" Value="0.5" />
+                                        <Setter Target="PartSubmenuArrow.Opacity" Value="0.5" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!--  Selection (Active) States  -->
+                            <VisualStateGroup x:Name="SelectionStates">
+                                <VisualState x:Name="Unselected" />
+                                <VisualState x:Name="Selected">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!--  Icon States  -->
+                            <VisualStateGroup x:Name="IconStates">
+                                <VisualState x:Name="HasIcon">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartIconPresenter.Visibility" Value="Visible" />
+                                        <Setter Target="PartCheckmark.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="NoIcon">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartIconPresenter.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!--  Accelerator States  -->
+                            <VisualStateGroup x:Name="AcceleratorStates">
+                                <VisualState x:Name="HasAccelerator">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartAcceleratorTextBlock.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="NoAccelerator">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartAcceleratorTextBlock.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!--  Item Type States  -->
+                            <VisualStateGroup x:Name="TypeStates">
+                                <VisualState x:Name="Item">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartContentGrid.Visibility" Value="Visible" />
+                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Separator">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartContentGrid.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!--  Checkmark / Arrow Logic  -->
+                            <VisualStateGroup x:Name="DecorationStates">
+                                <VisualState x:Name="CheckedNoIcon">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartCheckmark.Visibility" Value="Visible" />
+                                        <Setter Target="PartStateTextBlock.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSubmenuArrow.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="CheckedWithIcon">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartCheckmark.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartStateTextBlock.Visibility" Value="Visible" />
+                                        <Setter Target="PartSubmenuArrow.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="WithChildren">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartCheckmark.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartStateTextBlock.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSubmenuArrow.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="NoDecoration">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartCheckmark.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartStateTextBlock.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSubmenuArrow.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  Public style  -->
+    <Style BasedOn="{StaticResource DefaultMenuItemStyle}" TargetType="local:MenuItem" />
+</ResourceDictionary>
