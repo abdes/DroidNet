@@ -45,7 +45,7 @@
 
     <!-- Language Options -->
     <PropertyGroup>
-        <LangVersion>latest</LangVersion>
+        <LangVersion>preview</LangVersion>
         <Features>Strict</Features>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -177,6 +177,8 @@
     <Choose>
         <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
+                <UseWinUI>true</UseWinUI>
+                <EnableMsixTooling>true</EnableMsixTooling>
                 <!-- Disable until https://github.com/microsoft/testfx/issues/4056 is fixed -->
                 <EnableMSTestRunner>false</EnableMSTestRunner>
                 <GenerateTestingPlatformEntryPoint Condition=" '$(EnableMSTestRunner)' == 'true' ">false</GenerateTestingPlatformEntryPoint>
