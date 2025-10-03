@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.Menus.MenuBarDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  MenuBar Demo  -->
+        <MenuBar x:Name="DemoMenuBar" Grid.Row="0" />
+
+        <!--  Content Area  -->
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Margin="20" Spacing="20">
+
+                <!--  Title and Description  -->
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuBar Demo" />
+                    <TextBlock
+                        Style="{ThemeResource BodyTextBlockStyle}"
+                        Text="This demonstrates a traditional WinUI MenuBar built using MenuBuilder. The MenuBar appears at the top of the window and provides standard menu functionality with proper semantic icons and selection states."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!--  UX Pattern Documentation  -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel Spacing="12">
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="✨ UX Pattern: Clear Icon vs Selection Separation" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Semantic icons appear on the LEFT (16×16px) to show what the command does" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Selection indicators appear SEPARATELY on the RIGHT (checkmarks, radio buttons)" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Both can appear together without conflict - the Auto Save item shows both!" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Action Feedback  -->
+                <Border
+                    Padding="12"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                    <StackPanel>
+                        <TextBlock
+                            Margin="0,0,0,4"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Last Action:" />
+                        <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind ViewModel.LastActionMessage, Mode=OneWay}" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Features List  -->
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="Features Demonstrated:" />
+                    <TextBlock Text="• Command items with semantic icons" />
+                    <TextBlock Text="• Checkable items (Auto Save)" />
+                    <TextBlock Text="• Radio button groups (Theme selection)" />
+                    <TextBlock Text="• Keyboard mnemonics and accelerators" />
+                    <TextBlock Text="• Proper separators" />
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+
+    </Grid>
+</Page>

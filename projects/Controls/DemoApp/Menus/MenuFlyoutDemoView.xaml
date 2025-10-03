@@ -1,0 +1,123 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.Menus.MenuFlyoutDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer>
+        <StackPanel Margin="20" Spacing="30">
+
+            <!--  Title and Description  -->
+            <StackPanel Spacing="8">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuFlyout Demo" />
+                <TextBlock
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="This demonstrates MenuFlyout (context menus) built using MenuBuilder. Right-click the areas below to see different context menu styles."
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!--  Context Menu Areas  -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="20">
+
+                <!--  Basic Context Menu  -->
+                <Border
+                    x:Name="ContextTarget1"
+                    Grid.Column="0"
+                    Height="150"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                        <SymbolIcon Opacity="0.6" Symbol="TouchPointer" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Right-click here" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Opacity="0.7"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Context menu with submenus" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Static Simple Menu  -->
+                <Border
+                    Grid.Column="1"
+                    Height="150"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <Border.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="📝 Edit" />
+                            <MenuFlyoutItem Text="📋 Copy" />
+                            <MenuFlyoutItem Text="🗑️ Delete" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="📋 Properties" />
+                        </MenuFlyout>
+                    </Border.ContextFlyout>
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                        <SymbolIcon Opacity="0.6" Symbol="TouchPointer" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Right-click here" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Opacity="0.7"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Simple static menu" />
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+            <!--  UX Pattern Documentation  -->
+            <Border
+                Padding="16"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Style="{ThemeResource SubtitleTextBlockStyle}"
+                        Text="✨ MenuFlyout Features" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Context-sensitive commands that appear on right-click" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Cascading submenus for grouped functionality" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Same UX patterns as MenuBar - icons left, selection right" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Perfect for contextual actions on UI elements" />
+                </StackPanel>
+            </Border>
+
+            <!--  Action Feedback  -->
+            <Border
+                Padding="12"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="4">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="Last Action:" />
+                    <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind ViewModel.LastActionMessage, Mode=OneWay}" />
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

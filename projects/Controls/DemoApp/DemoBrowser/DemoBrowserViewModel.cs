@@ -7,8 +7,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.Demo.InPlaceEdit;
-using DroidNet.Controls.Demo.OutputLog;
+using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
+using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -34,14 +35,14 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     /// Gets or sets the current navigation object.
     /// </summary>
     [ObservableProperty]
-    private object? currentNavigation;
+    public partial object? CurrentNavigation { get; set; }
 
     /// <summary>
     /// Gets or sets the index of the selected navigation item.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedItem), nameof(IsSettingsSelected))]
-    private int selectedItemIndex = InvalidItemIndex;
+    public partial int SelectedItemIndex { get; set; } = InvalidItemIndex;
 
     /// <summary>
     /// Gets the selected navigation item.
@@ -58,6 +59,9 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
         new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
         new("output-console", "Output Console", typeof(OutputConsoleDemoViewModel)),
         new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),
+        new("menubar", "MenuBar Demo", typeof(MenuBarDemoViewModel)),
+        new("menuflyout", "MenuFlyout Demo", typeof(MenuFlyoutDemoViewModel)),
+        new("menuitem", "MenuItem Demo", typeof(MenuItemDemoViewModel)),
     ];
 
     /// <summary>

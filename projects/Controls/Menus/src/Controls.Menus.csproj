@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>$(RootNamespace).Controls</RootNamespace>
+        <AssemblyName>DroidNet.Controls.Menus</AssemblyName>
+
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <UseWinUI>true</UseWinUI>
+
+        <Title>Faster and Smarter Menu controls</Title>
+        <Description>Custom controls to display menus with faster navigations and less clicks.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;controls;menus;custom</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+    </ItemGroup>
+
+
+
+</Project>
