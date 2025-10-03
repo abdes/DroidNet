@@ -7,6 +7,7 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls;
 
@@ -133,6 +134,8 @@ public sealed class MenuBar : Control
         menuItem.SubmenuRequested += this.OnRootMenuItemSubmenuRequested;
         menuItem.HoverEntered += this.OnRootMenuItemHoverEntered;
         menuItem.RadioGroupSelectionRequested += this.OnRootRadioGroupSelectionRequested;
+        menuItem.PointerEntered += this.OnRootMenuItemPointerEntered;
+        menuItem.ShowSubmenuGlyph = false;
     }
 
     private void OnRootItemClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
@@ -146,6 +149,13 @@ public sealed class MenuBar : Control
         menuItem.SubmenuRequested -= this.OnRootMenuItemSubmenuRequested;
         menuItem.HoverEntered -= this.OnRootMenuItemHoverEntered;
         menuItem.RadioGroupSelectionRequested -= this.OnRootRadioGroupSelectionRequested;
+        menuItem.PointerEntered -= this.OnRootMenuItemPointerEntered;
+        menuItem.ShowSubmenuGlyph = true;
+
+        if (ReferenceEquals(menuItem, this.activeRootItem))
+        {
+            this.SetActiveRootMenuItem(null);
+        }
     }
 
     private void OnRootRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
@@ -155,14 +165,62 @@ public sealed class MenuBar : Control
 
     private void OnRootMenuItemHoverEntered(object? sender, MenuItemHoverEventArgs e)
     {
-        if (this.activeFlyout is null || sender is not MenuItem menuItem)
+        if (sender is not MenuItem menuItem)
         {
             return;
         }
 
-        if (!ReferenceEquals(menuItem, this.activeRootItem) && e.MenuItem.HasChildren)
+        this.HandleRootPointerActivation(menuItem, e.MenuItem);
+    }
+
+    private void OnRootMenuItemPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.ItemData is null)
         {
-            this.OpenSubmenuFor(menuItem, e.MenuItem, MenuNavigationMode.PointerInput);
+            return;
+        }
+
+        this.HandleRootPointerActivation(menuItem, menuItem.ItemData);
+    }
+
+    private void HandleRootPointerActivation(MenuItem menuItem, MenuItemData menuItemData)
+    {
+        if (!this.IsSubmenuOpen || !menuItemData.HasChildren)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(menuItem, this.activeRootItem))
+        {
+            menuItemData.IsActive = this.IsSubmenuOpen;
+            return;
+        }
+
+        this.OpenSubmenuFor(menuItem, menuItemData, MenuNavigationMode.PointerInput);
+    }
+
+    private void SetActiveRootMenuItem(MenuItem? menuItem)
+    {
+        if (ReferenceEquals(this.activeRootItem, menuItem))
+        {
+            if (menuItem?.ItemData is { } existingData)
+            {
+                existingData.IsActive = this.IsSubmenuOpen && existingData.HasChildren;
+            }
+
+            return;
+        }
+
+        if (this.activeRootItem?.ItemData is { } previousData)
+        {
+            previousData.IsActive = false;
+        }
+
+        this.activeRootItem = menuItem;
+
+        if (this.activeRootItem?.ItemData is { } newData)
+        {
+            newData.IsActive = this.IsSubmenuOpen && newData.HasChildren;
         }
     }
 
@@ -206,7 +264,7 @@ public sealed class MenuBar : Control
         }
 
         this.IsSubmenuOpen = true;
-        this.activeRootItem = origin;
+        this.SetActiveRootMenuItem(origin);
 
         if (this.activeFlyout is not null)
         {
@@ -222,6 +280,7 @@ public sealed class MenuBar : Control
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
         };
 
+        flyout.OverlayInputPassThroughElement = this;
         flyout.OwnerNavigationMode = navigationMode;
         flyout.ItemInvoked += this.OnFlyoutItemInvoked;
         flyout.Closed += this.OnFlyoutClosed;
@@ -256,10 +315,11 @@ public sealed class MenuBar : Control
 
         this.activeFlyout.ItemInvoked -= this.OnFlyoutItemInvoked;
         this.activeFlyout.Closed -= this.OnFlyoutClosed;
+        this.activeFlyout.OverlayInputPassThroughElement = null;
         this.activeFlyout.Hide();
         this.activeFlyout = null;
-        this.activeRootItem = null;
         this.IsSubmenuOpen = false;
         this.OpenRootIndex = -1;
+        this.SetActiveRootMenuItem(null);
     }
 }
