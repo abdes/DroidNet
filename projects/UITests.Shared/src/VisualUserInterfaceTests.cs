@@ -144,23 +144,21 @@ public class VisualUserInterfaceTests
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "exceptions propagated out of async block")]
     protected static Task EnqueueAsync(Func<Task> function)
     {
-        {
-            var taskCompletionSource = new TaskCompletionSource();
-            _ = VisualUserInterfaceTestsApp.DispatcherQueue.EnqueueAsync(
-                async () =>
+        var taskCompletionSource = new TaskCompletionSource();
+        _ = VisualUserInterfaceTestsApp.DispatcherQueue.EnqueueAsync(
+            async () =>
+            {
+                try
                 {
-                    try
-                    {
-                        await function().ConfigureAwait(true);
-                        taskCompletionSource.SetResult();
-                    }
-                    catch (Exception ex)
-                    {
-                        taskCompletionSource.SetException(ex);
-                    }
-                });
-            return taskCompletionSource.Task;
-        }
+                    await function().ConfigureAwait(true);
+                    taskCompletionSource.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    taskCompletionSource.SetException(ex);
+                }
+            });
+        return taskCompletionSource.Task;
     }
 
     /// <summary>
