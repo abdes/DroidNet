@@ -4,9 +4,11 @@
     x:Class="DroidNet.Aura.MainShellView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:DroidNet.Aura"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:menus="using:DroidNet.Controls"
     xmlns:router="using:DroidNet.Routing.WinUI"
     mc:Ignorable="d">
 
@@ -19,7 +21,7 @@
         <Style BasedOn="{StaticResource CompactButton}" TargetType="Button" />
         <Style BasedOn="{StaticResource CompactButton}" TargetType="ToggleButton" />
 
-        <local:IsSelectedToIconConverter x:Key="IsSelectedToIconConverter" />
+        <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
 
     <Grid x:Name="RootGrid" Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}">
@@ -53,10 +55,9 @@
                 Margin="0,0,10,0"
                 VerticalAlignment="Center"
                 Background="Transparent"
-                Orientation="Horizontal">
-                <Button Name="ExpandMenuButton">
-                    <FontIcon Glyph="&#xE700;" />
-                </Button>
+                Orientation="Horizontal"
+                Spacing="12">
+                <menus:MenuBar VerticalAlignment="Center" MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}" />
             </StackPanel>
             <StackPanel
                 x:Name="SecondaryCommands"
@@ -67,8 +68,10 @@
                 Orientation="Horizontal"
                 Visibility="Collapsed">
                 <Button x:Name="SettingsButton">
+                    <Button.Flyout>
+                        <menus:MenuFlyout MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}" />
+                    </Button.Flyout>
                     <FontIcon FontSize="16" Glyph="&#xE713;" />
-                    <!--  The Settings Button has a MenuFlyout created in code behind  -->
                 </Button>
             </StackPanel>
         </Grid>

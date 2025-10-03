@@ -18,15 +18,5 @@ public sealed partial class MenuFlyoutDemoView
     public MenuFlyoutDemoView()
     {
         this.InitializeComponent();
-        this.Loaded += this.OnLoaded;
-    }
-
-    private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        // Set the context flyout programmatically
-        if (this.ViewModel?.ContextMenuFlyout != null)
-        {
-            this.ContextTarget1.ContextFlyout = this.ViewModel.ContextMenuFlyout;
-        }
     }
 }

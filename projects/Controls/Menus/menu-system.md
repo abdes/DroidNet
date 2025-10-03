@@ -1,38 +1,55 @@
 # DroidNet Menu System Documentation
 
-This document describes the three menu systems provided by DroidNet.Controls.Menus, all built using the unified `MenuBuilder` and `MenuItemData` architecture.
+This document describes the menu system components provided by `DroidNet.Controls.Menus`, all built on the unified `MenuBuilder` and `MenuItemData` architecture.
 
 ## Custom Menu System Overview
 
-**Philosophy**: Single data model (MenuBuilder) with consistent custom presentation across all menu types. No WinUI menu controls - completely custom rendering with your design specifications.
+**Philosophy**: Data-first composition where `MenuBuilder` materializes neutral menu hierarchies and reusable `IMenuSource` instances that are projected by dedicated templated controls. The custom item control is already implemented; container work is underway with WinUI primitives used as interim hosts while bespoke containers come online.
 
-### 1. Custom MenuItem (❌ Needs Custom Implementation)
+### Design Tenets
 
-**What it is**: Individual menu item control that renders your column layout
-**Usage**: Used internally by all menu controls
-**Presentation**: Icon|Text|Accelerator|State columns with proper alignment
-**Status**: ❌ **Needs custom control implementation - FOUNDATION for all menus**
+- **Data-first builder flow** – `MenuBuilder` focuses purely on producing `MenuItemData` hierarchies and an `IMenuSource`, with all WinUI-specific logic removed from its public surface.
+- **Deterministic identifier pipeline** – IDs are normalized, uniquified, and applied top-down so lookup behavior stays predictable across rebuilds.
+- **Centralized traversal helpers** – private helpers own subtree realization, enumeration, and identifier application to keep the fluent API terse and correct.
+- **Lean, cached lookup services** – `MenuServices` snapshots the hierarchy on demand with builder-driven dirty tracking, providing fast lookups and radio-group coordination.
+- **Radio-group safety** – selection logic flips only the relevant items, guaranteeing single-selection semantics without exposing extra APIs.
+- **Reusable menu source** – `MenuSource` pairs the realized `ObservableCollection<MenuItemData>` with the services instance and is reused across successive `Build()` calls to avoid churn.
+- **Test scaffolding ready** – the current structure keeps responsibilities isolated so unit tests can focus on ID regeneration, lookup behavior, and group logic without UI dependencies.
 
-### 2. Custom MenuBar (❌ Needs Custom Implementation)
+### 1. Custom MenuItem (✅ Implemented)
 
-**What it is**: Custom menu bar control with your presentation design
-**Usage**: `<controls:MenuBar MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />`
-**Presentation**: Always-visible horizontal menu with custom MenuItem rendering
-**Status**: ❌ **Needs custom control implementation**
+**What it is**: The `DroidNet.Controls.MenuItem` custom control that renders the four-column layout (Icon | Text | Accelerator | State).
+**Usage**: Used internally by menu containers via `ItemsRepeater`/`ListView` templates or direct composition.
+**Presentation**: Implements the Icon|Text|Accelerator|State column contract with complete visual state management.
+**Highlights**:
 
-### 3. Custom MenuFlyout (❌ Needs Custom Implementation)
+- Rich visual states (hover, pressed, disabled, keyboard-active) and separator support
+- Event surface for `Invoked`, hover change, submenu requests, and radio-group coordination
+- Keyboard support (Enter/Space execution, arrow navigation hooks)
+- Verified by automated UI tests in `Controls.Menus.UI.Tests/MenuItemTests.cs`
 
-**What it is**: Custom popup menu control with your presentation design
-**Usage**: `<controls:MenuFlyout MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />`
-**Presentation**: Popup overlay with custom MenuItem rendering
-**Status**: ❌ **Needs custom control implementation**
+**Status**: ✅ **Implemented and theming-complete (foundation is production-ready)**
 
-### 4. Custom ExpandableMenuBar (❌ Needs Custom Implementation)
+### 2. Custom MenuBar (🚧 Template Design In Progress)
 
-**What it is**: Custom collapsible menu bar with hamburger button
-**Usage**: `<controls:ExpandableMenuBar MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />`
-**Presentation**: Space-swapping hamburger ⟷ menu bar with custom MenuItem rendering
-**Status**: ❌ **Needs custom control implementation**
+**What it is**: A templated control that composes `MenuItem` instances into a horizontal root bar while driving behavior through `MenuSource.Services`.
+**Usage**: Planned API `<controls:MenuBar MenuSource="{x:Bind ViewModel.MainMenu}" />` where `MainMenu` is an `IMenuSource` produced by `MenuBuilder.Build()`.
+**Presentation**: Always-visible horizontal menu with custom `MenuItem` rendering and zero-delay hover switching.
+**Status**: 🚧 **Template specification authored; implementation pending**
+
+### 3. Custom MenuFlyout (🚧 Template Design In Progress)
+
+**What it is**: A popup container that reuses the same templated `MenuItem` visuals inside a `FlyoutBase` surface, backed by `MenuSource`.
+**Usage**: Planned API `<controls:MenuFlyout MenuSource="{x:Bind ViewModel.ContextMenu}" />` with the view model exposing an `IMenuSource` for contextual scenarios.
+**Presentation**: Popup overlay with cascading submenus and shared selection logic sourced from `MenuServices`.
+**Status**: 🚧 **Template specification authored; implementation pending**
+
+### 4. Custom ExpandableMenuBar (🛠️ Design Authored, Build Pending)
+
+**What it is**: Collapsible menu bar with a hamburger entry point that swaps space with the full menu.
+**Usage**: Target API `<controls:ExpandableMenuBar MenuSource="{x:Bind ViewModel.MainMenu}" IsExpanded="{x:Bind ViewModel.IsMenuExpanded, Mode=TwoWay}" />` backed by the shared `IMenuSource` instance.
+**Presentation**: Space-swapping hamburger ↔ menu bar using `MenuItem` rendering and hover-driven navigation.
+**Status**: 🛠️ **Design documented below; implementation not yet started**
 
 ## Table of Contents
 
@@ -84,60 +101,113 @@ This document describes the three menu systems provided by DroidNet.Controls.Men
 - **Checkmark placement**: Left side if no icon, right side if icon present
 - **Consistent alignment**: All ✓ and > indicators align on right edge
 
-### 1. Custom MenuBar
+### 1. Custom MenuBar (🚧 Template in design)
 
-**Purpose**: Always-visible menu bar with your custom presentation
-**XAML Usage**: `<controls:MenuBar MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />`
-**Behavior**: Click root → dropdown with custom item rendering
+**Purpose**: A WinUI templated control that renders the root menu hierarchy as an always-visible horizontal bar while delegating lookup and group behavior to `MenuServices`.
+**Primary contract**: `MenuSource` dependency property of type `IMenuSource`. The control consumes `MenuSource.Items` for composition and forwards interactions to `MenuSource.Services`.
 
-**Implementation**:
+#### Control blueprint
+
+- **Type**: `public sealed class MenuBar : Control`
+- **Template parts**
+  - `PART_RootItemsRepeater` (`ItemsRepeater` or `ListViewBase`)—lays out root items horizontally.
+  - `PART_SubmenuPopupLayer` (`Popup`/`FlyoutPresenter`)—hosts cascading submenu surfaces.
+  - `PART_FocusTracker` helper—tracks keyboard focus and restores location after dismissal.
+- **Dependency properties**
+  - `MenuSource` (`IMenuSource`)—required.
+  - `IsSubmenuOpen` (`bool`)—optional visual-state flag for templates.
+  - `OpenRootIndex` (`int`)—exposes the active root for telemetry or two-way binding.
+- **Visual states**
+  - `RootClosed` / `RootOpen`
+  - `SubmenuIdle` / `SubmenuActive`
+  - `PointerNavigation` / `KeyboardNavigation`
+
+#### Interaction contract
+
+- **Pointer**: Hovering a root item sets `OpenRootIndex`, materializes its children in `PART_SubmenuPopupLayer`, and keeps the bar hot-tracked with no delay.
+- **Submenu surfacing**: The popup layer hosts the shared `MenuColumnPresenter` used by `MenuFlyout`, so every hover or tap on a root item renders the exact same column surface as a flyout would. The menu bar does not spin up a separate `FlyoutBase`; it reuses the flyout presenter template for in-place submenus.
+- **Keyboard**: Arrow keys travel across roots and down column items; `Enter`/`Space` invokes leaf items and defers group toggling to `MenuServices.HandleGroupSelection`.
+- **Selection**: Checkable and radio items always route through `MenuServices.HandleGroupSelection` so that only the relevant group members flip state.
+- **Lifecycle**: The control listens to collection change events on `MenuSource.Items`, and because the builder reuses its `MenuSource`, lookup snapshots stay valid without reallocation.
+
+#### Usage
 
 ```csharp
-// ViewModel - Single source of truth
-public MenuBuilder MenuBuilder { get; } = new MenuBuilder()
-    .AddMenuItem(new MenuItemData {
-        Text = "&File",
-        SubItems = [
-            new MenuItemData { Text = "&New Project", Icon = new SymbolIconSource { Symbol = Symbol.Add }, AcceleratorText = "Ctrl+N", Command = NewCommand },
-            new MenuItemData { Text = "&Save", Icon = new SymbolIconSource { Symbol = Symbol.Save }, AcceleratorText = "Ctrl+S", Command = SaveCommand },
-            new MenuItemData { IsSeparator = true },
-            new MenuItemData { Text = "&Auto Save", Icon = new FontIconSource { Glyph = "\uE74E" }, IsCheckable = true, IsSelected = true }
-        ]
-    });
+// ViewModel – compose once and expose IMenuSource
+public IMenuSource MainMenu { get; } = new MenuBuilder()
+        .AddSubmenu("&File", file => file
+                .AddMenuItem("&New Project", command: NewCommand, icon: new SymbolIconSource { Symbol = Symbol.Add }, acceleratorText: "Ctrl+N")
+                .AddMenuItem("&Save", command: SaveCommand, icon: new SymbolIconSource { Symbol = Symbol.Save }, acceleratorText: "Ctrl+S")
+                .AddSeparator()
+                .AddCheckableMenuItem("&Auto Save", isChecked: true, icon: new FontIconSource { Glyph = "\uE74E" }))
+        .AddSubmenu("&Edit", edit => edit
+                .AddRadioMenuItem("&Light", "theme", isChecked: true)
+                .AddRadioMenuItem("&Dark", "theme"))
+        .Build();
 
-// XAML - Custom control binding to MenuBuilder
-// <controls:MenuBar MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />
+// XAML – bind the templated control to the reusable source
+// <controls:MenuBar MenuSource="{x:Bind ViewModel.MainMenu}" />
 ```
 
-### 2. Custom MenuFlyout
+### 2. Custom MenuFlyout (🚧 Template in design)
 
-**Purpose**: Custom popup menus with your presentation design
-**XAML Usage**: `<controls:MenuFlyout MenuBuilder="{x:Bind ViewModel.MenuBuilder}" />`
-**Behavior**: Right-click or button press → popup with custom item rendering
+**Purpose**: A popup container that reuses the `MenuItem` four-column layout while honoring the same data-first contracts as the `MenuBar`.
+**Primary contract**: `MenuSource` dependency property of type `IMenuSource`, consumed by a custom presenter that supports cascading submenus.
 
-**Implementation**:
+#### Control blueprint
+
+- **Type**: `public sealed class MenuFlyout : FlyoutBase`
+- **Template parts**
+  - `PART_Presenter`—a templated root derived from `FlyoutPresenter` that hosts the layout grid.
+  - `PART_ItemsRepeater`—renders top-level items vertically.
+  - `PART_SubmenuPopupLayer`—manages nested submenus sharing the same template.
+- **Dependency properties**
+  - `MenuSource` (`IMenuSource`)—required.
+  - `MaxColumnHeight` (`double`)—optional to clamp tall menus with internal scrolling.
+- **Visual states**
+  - `Closed` / `Open`
+  - `SubmenuIdle` / `SubmenuActive`
+- **Dismissal**: Closes automatically after executing a leaf command, when `MenuServices.HandleGroupSelection` toggles a radio option, or when focus leaves the flyout.
+
+#### Interaction contract
+
+- `ShowAt` binds `MenuSource.Items` to the presenter, precomputes the lookup dictionary via `MenuServices.GetLookup()`, and primes keyboard focus on the first enabled item.
+- Hovering grouped items delegates to `MenuServices.HandleGroupSelection`, ensuring consistent single-selection semantics between flyout and menubar.
+- Keyboard navigation mirrors standard flyout behavior: arrows move, `Enter` executes, `Escape` dismisses.
+- MenuBar roots dispatch to the same presenter pipeline: when a root opens, its `MenuSource.Items` are shown through the `MenuFlyout` presenter so pointer, tap, and keyboard flows remain identical whether content started life in a bar or a standalone flyout.
+
+#### Shared interaction behaviors
+
+- **Tap/Click**
+  - *MenuBar*: Clicking a root opens its submenu using the shared flyout presenter; clicking a leaf executes the command and collapses the chain.
+  - *MenuFlyout*: Clicking anywhere on the surface follows the same rule—leaf executes and dismisses, parents just expand via the shared presenter.
+- **Hover/Pointer**
+  - *MenuBar*: Hovering a root or submenu item hot-tracks immediately, opening the same presenter columns that the flyout uses.
+  - *MenuFlyout*: Hovering items mirrors the bar, expanding children instantly with the identical presenter and corridor logic.
+- **Keyboard**
+  - *MenuBar*: F10/Alt enters the bar, arrows move across roots and through items, `Enter`/`Space` invokes leaves, `Escape` collapses the current presenter stack.
+  - *MenuFlyout*: When shown, it owns focus; arrows traverse items and levels, `Enter`/`Space` invokes, `Escape` dismisses the flyout just like collapsing from the bar.
+
+#### Usage
 
 ```csharp
-// Same MenuBuilder - different presentation
-public MenuBuilder ContextMenuBuilder { get; } = new MenuBuilder()
-    .AddMenuItem(new MenuItemData { Text = "Cut", Icon = new SymbolIconSource { Symbol = Symbol.Cut }, AcceleratorText = "Ctrl+X", Command = CutCommand })
-    .AddMenuItem(new MenuItemData { Text = "Copy", Icon = new SymbolIconSource { Symbol = Symbol.Copy }, AcceleratorText = "Ctrl+C", Command = CopyCommand })
-    .AddMenuItem(new MenuItemData { Text = "Paste", Icon = new ImageIconSource { UriSource = new Uri("ms-appx:///Assets/paste-icon.png") }, AcceleratorText = "Ctrl+V", Command = PasteCommand })
-    .AddMenuItem(new MenuItemData { IsSeparator = true })
-    .AddMenuItem(new MenuItemData { Text = "Properties", Icon = new FontIconSource { Glyph = "\uE713", FontFamily = new FontFamily("Segoe MDL2 Assets") }, Command = PropertiesCommand });
+private readonly IMenuSource contextMenu = new MenuBuilder()
+        .AddMenuItem("Cut", command: CutCommand, icon: new SymbolIconSource { Symbol = Symbol.Cut }, acceleratorText: "Ctrl+X")
+        .AddMenuItem("Copy", command: CopyCommand, icon: new SymbolIconSource { Symbol = Symbol.Copy }, acceleratorText: "Ctrl+C")
+        .AddMenuItem("Paste", command: PasteCommand, icon: new ImageIconSource { UriSource = new Uri("ms-appx:///Assets/paste-icon.png") }, acceleratorText: "Ctrl+V")
+        .AddSeparator()
+        .AddMenuItem("Properties", command: PropertiesCommand, icon: new FontIconSource { Glyph = "\uE713", FontFamily = new FontFamily("Segoe MDL2 Assets") })
+        .Build();
 
-// XAML - Custom control with same column layout as MenuBar
-// <TextBox>
-//   <TextBox.ContextFlyout>
-//     <controls:MenuFlyout MenuBuilder="{x:Bind ViewModel.ContextMenuBuilder}" />
-//   </TextBox.ContextFlyout>
-// </TextBox>
+// Usage in code-behind
+var flyout = new controls.MenuFlyout { MenuSource = this.contextMenu };
+flyout.ShowAt(this.ContextMenuTarget);
 ```
 
 ### 3. Custom ExpandableMenuBar
 
 **Purpose**: Space-efficient hamburger that expands to full menu bar in title bar
-**XAML Usage**: `<controls:ExpandableMenuBar MenuBuilder="{x:Bind ViewModel.MenuBuilder}" IsExpanded="{x:Bind IsMenuExpanded, Mode=TwoWay}" />`
+**XAML Usage**: Planned API `<controls:ExpandableMenuBar MenuItems="{x:Bind ViewModel.MainMenuItems}" IsExpanded="{x:Bind ViewModel.IsMenuExpanded, Mode=TwoWay}" />`
 **Behavior**: Click hamburger → space-swapping transformation to menu bar
 
 **Key UX Principle**: **SPACE SWAPPING** - not popup overlay!
@@ -170,21 +240,32 @@ Title Bar Area:
 └─────────────────────────────────────┘
 ```
 
-**Implementation**:
+**Implementation (planned API surface)**:
 
 ```csharp
-// Same MenuBuilder - space-swapping presentation
-public MenuBuilder MainMenuBuilder { get; } = new MenuBuilder()
-    .AddMenuItem(new MenuItemData { Text = "File", Items = FileMenuItems })
-    .AddMenuItem(new MenuItemData { Text = "Edit", Items = EditMenuItems })
-    .AddMenuItem(new MenuItemData { Text = "View", Items = ViewMenuItems })
-    .AddMenuItem(new MenuItemData { Text = "Help", Items = HelpMenuItems });
+// Compose once – same MenuBuilder powering MenuBar and MenuFlyout
+public IMenuSource MainMenu { get; } = new MenuBuilder()
+    .AddSubmenu("File", file => file
+        .AddMenuItem("New", command: NewCommand)
+        .AddMenuItem("Open", command: OpenCommand)
+        .AddMenuItem("Save", command: SaveCommand)
+        .AddSeparator()
+        .AddMenuItem("Exit", command: ExitCommand))
+    .AddSubmenu("Edit", edit => edit
+        .AddMenuItem("Undo", command: UndoCommand)
+        .AddMenuItem("Redo", command: RedoCommand))
+    .AddSubmenu("View", view => view
+        .AddCheckableMenuItem("Status Bar", isChecked: true)
+        .AddCheckableMenuItem("Output", isChecked: false))
+    .AddSubmenu("Help", help => help
+        .AddMenuItem("About", command: AboutCommand))
+    .Build();
 
 public bool IsMenuExpanded { get; set; } = false;
 
-// XAML - Custom control that transforms hamburger ↔ menubar in title bar
+// XAML – templated control toggles hamburger ↔ menubar using IMenuSource
 // <controls:ExpandableMenuBar
-//     MenuBuilder="{x:Bind ViewModel.MainMenuBuilder}"
+//     MenuSource="{x:Bind ViewModel.MainMenu}"
 //     IsExpanded="{x:Bind ViewModel.IsMenuExpanded, Mode=TwoWay}" />
 ```
 
@@ -246,7 +327,7 @@ public class CustomMenuItem : ContentControl
 //   <TextBlock Grid.Column="2" Text="{Binding MenuItemData.AcceleratorText}" />
 //
 //   <!-- State Column: Checkmarks, arrows -->
-//   <TextBlock Grid.Column="3" Text="✓" Visibility="{Binding MenuItemData.IsSelected}" />
+//   <TextBlock Grid.Column="3" Text="✓" Visibility="{Binding MenuItemData.IsChecked}" />
 // </Grid>
 ```
 
@@ -256,7 +337,7 @@ public class CustomMenuItem : ContentControl
 
 | Feature | CustomMenuItem | Custom MenuBar | Custom MenuFlyout | Custom ExpandableMenuBar |
 |---------|---------|---------|------------|-------------------|
-| **Status** | 🔥 **CRITICAL - Foundation** | 🔄 **Need Custom Control** | 🔄 **Need Custom Control** | 🔄 **Need Custom Control** |
+| **Status** | ✅ **Implemented** | 🔄 **Need Custom Control** | 🔄 **Need Custom Control** | 🔄 **Need Custom Control** |
 | **Purpose** | Individual item rendering | Menu container | Popup container | Space-swapping container |
 | **Data Source** | Single MenuItemData | MenuBuilder | MenuBuilder | MenuBuilder |
 | **Presentation** | Icon\|Text\|Accel\|State columns | Horizontal menu using CustomMenuItem | Popup using CustomMenuItem | Hamburger ↔ menubar using CustomMenuItem |
@@ -264,7 +345,7 @@ public class CustomMenuItem : ContentControl
 | **Appearance** | Individual menu item | Top of window menu bar | Popup on demand | Hamburger button + space-swapping |
 | **Activation** | Hover/click | Click menu root | Right-click or button | Click hamburger (☰) button |
 | **Dismissal** | N/A - part of container | Click elsewhere | Select item or click outside | Select item, Escape, or click outside |
-| **Implementation** | **CUSTOM CONTROL NEEDED** | **CUSTOM CONTROL NEEDED** | **CUSTOM CONTROL NEEDED** | **CUSTOM CONTROL NEEDED** |
+| **Implementation** | `DroidNet.Controls.MenuItem` custom control with full visual state suite | Interim WinUI `MenuBar` host; custom container pending | Interim WinUI `MenuFlyout` host; custom container pending | Custom control not yet started (design authored) |
 
 ## Which Menu Should You Use?
 
@@ -721,7 +802,8 @@ public sealed class MenuItemData : ObservableObject
     public bool IsSeparator { get; set; }
 
     // Selection state (checkable/toggleable items)
-    public bool IsSelected { get; set; }               // Current selection state
+    public bool IsChecked { get; set; }                // Persistent toggle state for checkable items
+    public bool IsActive { get; set; }                 // Hot-tracked/keyboard active state (transient)
     public bool IsCheckable { get; set; }              // Can be toggled on/off individually
     public string? RadioGroupId { get; set; }          // Grouped items (only one selected per group)
 
@@ -806,15 +888,15 @@ private void OnMenuItemSelected(MenuItemData selectedItem)
 
         foreach (var item in groupItems)
         {
-            item.IsSelected = false;  // Clear all checkmarks in group
+            item.IsChecked = false;  // Clear all checkmarks in group
         }
 
-        selectedItem.IsSelected = true;  // Set checkmark on selected item only
+        selectedItem.IsChecked = true;  // Set checkmark on selected item only
     }
     else if (selectedItem.IsCheckable)
     {
         // Individual checkable item - just toggle
-        selectedItem.IsSelected = !selectedItem.IsSelected;
+        selectedItem.IsChecked = !selectedItem.IsChecked;
     }
 }
 ```
@@ -836,7 +918,7 @@ private void OnMenuItemSelected(MenuItemData selectedItem)
 
 - **Purpose**: Show current toggle/selection state
 - **Position**: Right side State column in custom layout
-- **Behavior**: Checkmark (✓) appears/disappears based on IsSelected
+- **Behavior**: Checkmark (✓) appears/disappears based on IsChecked
 - **Types**:
   - ✅ **Checkable items**: Individual on/off toggle (IsCheckable = true)
   - ✅ **Grouped items**: Only one selected per group (RadioGroupId set, code-behind enforces single selection)
@@ -855,7 +937,7 @@ private void OnMenuItemSelected(MenuItemData selectedItem)
 **Implementation Details**:
 
 - CustomMenuItem renders State column based on `HasSelectionState` property
-- Checkmarks (✓) appear in State column when `IsSelected = true`
+- Checkmarks (✓) appear in State column when `IsChecked = true`
 - Icons and checkmarks can coexist without conflict
 - **Group Logic**: Code-behind handles RadioGroupId - when item selected, unselect others in same group
 
@@ -876,7 +958,8 @@ new MenuItemData
     Text = "Auto Save",
     Icon = new SymbolIcon(Symbol.Save),
     IsCheckable = true,
-    IsSelected = true,  // Shows checkmark
+    IsCheckable = true,
+    IsChecked = true,   // Shows checkmark
     Command = ToggleAutoSaveCommand
 }
 
@@ -885,7 +968,7 @@ new MenuItemData
 {
     Text = "Light Theme",
     RadioGroupId = "Theme",
-    IsSelected = true,  // Shows checkmark ✓ (code-behind ensures only one per group)
+    IsChecked = true,   // Shows checkmark ✓ (code-behind ensures only one per group)
     Command = SetThemeCommand
 }
 ```
@@ -919,137 +1002,86 @@ internal sealed class MenuColumnState
 - **Lazy column creation**: Visual containers created only when needed
 - **Event pooling**: Reuse event args objects to minimize allocations
 
-### Unified MenuBuilder Design
+### Core Data Components
 
-The `MenuBuilder` becomes the **single source of truth** for all menu presentations. It builds the same menu data structure but can render it in different ways:
+#### MenuBuilder
+
+`MenuBuilder` is the fluent factory for hierarchical `MenuItemData` graphs. Its public surface intentionally exposes only the fluent adders and a single `Build()` method that returns an `IMenuSource`.
+
+- Generates deterministic identifiers by normalizing text, enforcing uniqueness per scope, and stamping IDs top-down each time `Build()` is called.
+- Uses private traversal helpers to realize subtrees, enumerate items, and reapply identifiers, keeping the fluent API focused on intent.
+- Keeps an internal dirty flag so changes made after a build automatically refresh the lookup the next time services are accessed.
 
 ```csharp
-public class MenuBuilder  // Enhanced existing class
-{
-    private readonly ObservableCollection<MenuItemData> items = new();
-    private Dictionary<string, MenuItemData> itemsLookup = new();
+var builder = new MenuBuilder()
+    .AddSubmenu("File", file => file
+        .AddMenuItem("New", command: NewCommand)
+        .AddMenuItem("Open", command: OpenCommand)
+        .AddSeparator()
+        .AddMenuItem("Exit", command: ExitCommand))
+    .AddSubmenu("View", view => view
+        .AddRadioMenuItem("Light", "theme", isChecked: true)
+        .AddRadioMenuItem("Dark", "theme"));
 
-    // Fluent building API
-    public MenuBuilder AddMenuItem(string text, ICommand? command = null, IconSource? icon = null)
-    {
-        var item = new MenuItemData(text) { Command = command, Icon = icon };
-        items.Add(item);
-        return this;
-    }
-
-    public MenuBuilder AddSubmenu(string text, Action<MenuBuilder> configureSubmenu, IconSource? icon = null)
-    {
-        var item = new MenuItemData(text) { Icon = icon };
-        var subBuilder = new MenuBuilder();
-        configureSubmenu(subBuilder);
-
-        foreach (var subItem in subBuilder.items)
-            item.Items.Add(subItem);
-
-        items.Add(item);
-        return this;
-    }
-
-    public bool TryGetMenuItemById(string id, out MenuItemData menuItem)
-        => itemsLookup.TryGetValue(id, out menuItem);
-
-    // Build methods for custom controls
-    public ObservableCollection<MenuItemData> BuildMenuItems() => items;     // For all custom controls
-    // Note: Custom controls bind directly to MenuBuilder property - no Build methods needed
-}
+IMenuSource menu = builder.Build();
 ```
 
-**Design Philosophy:**
+#### MenuSource and IMenuSource
 
-- **One data model**: All presentations use the same `MenuItemData` hierarchy
-- **One builder**: Single fluent API to construct menus
-- **Multiple presentations**: Choose the UI style that fits your needs
-- **Consistent behavior**: Same commands, same IDs, same logic everywhere
+`Build()` returns an `IMenuSource` that pairs the realized item collection with the associated `MenuServices` instance:
 
-**Full Application Example:**
+- `Items` – a reusable `ObservableCollection<MenuItemData>` surfaced by the builder. Subsequent `Build()` calls reuse the same collection instance, so bindings remain intact.
+- `Services` – the cached `MenuServices` object that exposes lookup and group-selection helpers.
+
+Because `MenuSource` is reused, templated controls can hold onto the same reference for the lifetime of the app and still observe item or selection changes driven by the builder.
+
+#### MenuServices
+
+`MenuServices` wraps two callbacks supplied by the builder: one to snapshot the lookup dictionary, and another to execute group-selection logic. Consumers get a simple API:
+
+- `TryGetMenuItemById(string id, out MenuItemData? item)` – immediately resolves using the cached dictionary.
+- `GetLookup()` – returns the latest snapshot, rebuilding only when the builder marked the hierarchy as dirty.
+- `HandleGroupSelection(MenuItemData item)` – toggles checkable items or enforces radio-group exclusivity using the builder’s internal traversal helpers.
+
+The services instance is entirely UI-agnostic, making it safe to reuse across templated controls, background logic, or automated tests.
+
+#### Putting it together
 
 ```csharp
-// ViewModel builds complete application menu using fluent API
-public class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject
 {
-    public ObservableCollection<MenuItemData> MenuItems { get; private set; }
+    public IMenuSource MainMenu { get; }
 
     public MainViewModel()
     {
-        MenuItems = new MenuBuilder()
+        MainMenu = new MenuBuilder()
             .AddSubmenu("&File", file => file
-                .AddMenuItem("&New Project", NewProjectCommand, new FontIcon { Glyph = "\uE8A5" })
-                .AddMenuItem("&Open...", OpenCommand, new FontIcon { Glyph = "\uE8E5" })
-                .AddSubmenu("&Recent Files", recent => recent
-                    .AddMenuItem("Project1.proj", OpenRecentCommand)
-                    .AddMenuItem("Document.txt", OpenRecentCommand))
-                .AddMenuItem("-") // Separator
-                .AddMenuItem("&Save", SaveCommand, new FontIcon { Glyph = "\uE74E" })
-                .AddMenuItem("Save &As...", SaveAsCommand)
-                .AddMenuItem("-")
-                .AddMenuItem("E&xit", ExitCommand))
-            .AddSubmenu("&Edit", edit => edit
-                .AddMenuItem("&Undo", UndoCommand, new FontIcon { Glyph = "\uE7A7" })
-                .AddMenuItem("&Redo", RedoCommand, new FontIcon { Glyph = "\uE7A6" })
-                .AddMenuItem("-")
-                .AddMenuItem("Cu&t", CutCommand, new FontIcon { Glyph = "\uE8C6" })
-                .AddMenuItem("&Copy", CopyCommand, new FontIcon { Glyph = "\uE8C8" })
-                .AddMenuItem("&Paste", PasteCommand, new FontIcon { Glyph = "\uE77F" }))
+                .AddMenuItem("&New Project", command: NewProjectCommand, acceleratorText: "Ctrl+N")
+                .AddMenuItem("&Open...", command: OpenCommand, acceleratorText: "Ctrl+O")
+                .AddSeparator()
+                .AddCheckableMenuItem("&Auto Save", isChecked: true))
             .AddSubmenu("&View", view => view
-                .AddMenuItem("&Zoom In", ZoomInCommand)
-                .AddMenuItem("Zoom &Out", ZoomOutCommand)
-                .AddMenuItem("&Reset Zoom", ResetZoomCommand)
-                .AddMenuItem("-")
-                .AddSubmenu("&Panels", panels => panels
-                    .AddMenuItem("&Tool Panel", ToggleToolPanelCommand)
-                    .AddMenuItem("&Properties Panel", TogglePropertiesPanelCommand)
-                    .AddMenuItem("&Output Panel", ToggleOutputPanelCommand)))
-            .BuildMenuItems();
+                .AddRadioMenuItem("&Light", "theme", isChecked: true)
+                .AddRadioMenuItem("&Dark", "theme"))
+            .Build();
     }
 
-    // Commands (ICommand implementations)
-    public ICommand NewProjectCommand { get; }
-    public ICommand OpenCommand { get; }
-    public ICommand SaveCommand { get; }
-    // ... etc
+    public ObservableCollection<MenuItemData> Items => this.MainMenu.Items;
+    public MenuServices Services => this.MainMenu.Services;
 }
 
-// XAML Usage - Simple data binding to ObservableCollection<MenuItemData>
-// <local:ExpandableMenuBar Items="{x:Bind ViewModel.MenuItems}"
-//                          ItemInvoked="OnMenuItemInvoked" />
-
-// The same MenuBuilder works with all custom controls:
-// <controls:ExpandableMenuBar MenuBuilder="{x:Bind MenuBuilder}" />
-// <controls:MenuBar MenuBuilder="{x:Bind MenuBuilder}" />
-// <controls:MenuFlyout MenuBuilder="{x:Bind MenuBuilder}" />
+// XAML usage (once custom controls land)
+// <controls:MenuBar MenuSource="{x:Bind ViewModel.MainMenu}" />
+// <controls:MenuFlyout MenuSource="{x:Bind ViewModel.MainMenu}" />
 ```
 
-**Three Presentations, One Menu System:**
+#### Benefits of the data-first approach
 
-1. **ExpandableMenuBar** (Ultra-fast space-saving menus):
-   - Optimized for power users who know what they want
-   - Instant hover navigation, minimal clicks
-   - Collapsible design saves screen space
-   - Hamburger button reveals full menu with auto-expansion
-
-2. **MenuBar** (Traditional discovery):
-   - Familiar top-level menu bar
-   - Good for new users exploring features
-   - Always visible for discoverability
-
-3. **MenuFlyout** (Context-sensitive):
-   - Right-click context menus
-   - Filtered to show only relevant commands
-   - Same menu items, different filtering logic
-
-**Benefits of this unified approach:**
-
-- **Single source of truth**: Menu structure defined once, used everywhere
-- **Consistent commands**: Same ICommand instances across all presentations
-- **Unified lookup**: `menuBuilder.TryGetMenuItemById()` works for all presentations
-- **Zero duplication**: No need to maintain separate menu definitions
-- **Developer choice**: Pick the presentation that fits each UI context
-- **User choice**: Power users get speed, casual users get discoverability
+- **Single source of truth**: `MenuBuilder` maintains hierarchy, identifiers, and lookup state in one place.
+- **Predictable IDs**: deterministic naming simplifies telemetry, command routing, and deep-linking.
+- **Shared services**: `MenuServices` is reused across controls, ensuring group logic stays consistent.
+- **UI agnostic**: Templated controls, tests, and tooling all work with the same `IMenuSource` contract.
+- **Extendable**: Additional presentations (like the forthcoming templated controls) plug into the same data stream without modifying builder logic.
 
 ---
 
@@ -1105,27 +1137,90 @@ public class MainViewModel : ObservableObject
 
 ## Next Steps: Custom Control Implementation
 
-To complete the custom menu system, you need to implement FOUR custom controls:
-
-**FOUNDATION CONTROL** (Build this first):
-
-1. **`<controls:CustomMenuItem>`** - Individual menu item with your column layout
-   - Icon|Text|Accelerator|State 4-column grid layout
-   - Handles hover states, selection indicators, separators
-   - Used by all other menu controls for consistent rendering
-
-**CONTAINER CONTROLS** (Use CustomMenuItem internally):
+To finish the custom menu system, focus on the three container controls that compose the already-implemented `MenuItem` foundation:
 
 1. **`<controls:MenuBar>`** - Horizontal menu bar container
 2. **`<controls:MenuFlyout>`** - Popup context menu container
 3. **`<controls:ExpandableMenuBar>`** - Space-swapping hamburger ↔ menubar container
 
-All container controls should:
+Each container should:
 
 - Bind to `MenuBuilder` property for data
 - Use `CustomMenuItem` internally for item rendering
 - Support hover navigation and selection states
 - Render completely custom (NO WinUI MenuBar/MenuFlyout usage)
+
+### MenuBar & MenuFlyout Implementation Plan
+
+The following plan translates the high-level goals above into an incremental, best-practice implementation roadmap that keeps WinUI 3 guidance, Fluent v2 theming, and our existing data-first architecture front and center.
+
+#### 1. Shared infrastructure
+
+- **Introduce a `MenuInteractionController` helper** to coordinate hover, pointer corridor, keyboard navigation, and dismissal logic for both containers. It owns active column stacks, focus restoration, and works directly with `MenuServices` for group toggling.
+- **Author a reusable `MenuColumnPresenter` control** that wraps an `ItemsRepeater` for vertical columns, uses `MenuItem` as the item template, and exposes events for hover/press. This ensures identical visuals between menubar submenus and flyouts.
+- **Create a lightweight `MenuPopupHost` service** that manages popup surfaces (using `Popup` for menubar cascades and the flyout presenter for context menus), handles window bounds, RTL flipping, and density/scroll clamping.
+- **Wire telemetry and accessibility** in the shared layer (UIA patterns, `AutomationProperties`, narrator announcements) so both surfaces inherit the same behavior.
+
+#### 2. `MenuBar` control (public surface `DroidNet.Controls.MenuBar`)
+
+- **Class skeleton**: derive from `Control`, set `DefaultStyleKey`, and expose dependency properties `MenuSource` (`IMenuSource`), `OpenRootIndex` (int, two-way), `IsSubmenuOpen` (bool), plus a read-only `ActiveNavigationMode` (Pointer/Keyboard) via `DependencyPropertyKey`.
+- **Template parts** (enforced via `[TemplatePart]`):
+  - `PART_RootHost` (`Grid`) containing layout chrome and keyboard focus scopes.
+  - `PART_RootItemsRepeater` (`ItemsRepeater`) with a `StackLayout` horizontal orientation to render root items via `MenuItem` (using `MenuItemData` with `IsTopLevel=true`).
+  - `PART_SubmenuOverlay` (`Grid` or `Canvas`) hosting cascading popup columns (leveraging `MenuColumnPresenter`).
+  - `PART_FocusTracker` (`Control`) or hidden `ContentControl` to keep logical focus when pointer navigation dominates.
+  - Optional `PART_AccessKeyOverlay` for Alt mnemonic display (align with WinUI AccessKeyManager).
+- **Template styling**: define a dedicated `MenuBar/MenuBar.xaml` resource dictionary merged from `Themes/Generic.xaml`, referencing Fluent v2 tokens like `ControlFillColorDefaultBrush`, `TextFillColorPrimaryBrush`, `StrokeColorNeutralBrush` for separators, and high contrast-safe colors. Root background should respect transparent titlebar scenarios (use `ControlFillColorTransparentBrush`).
+- **Interaction plumbing**:
+  - On `MenuSource` change, bind `ItemsRepeater.ItemsSource` to `MenuSource.Items` and subscribe to `CollectionChanged` for dynamic rebuilds.
+  - Hook `MenuItem` pointer and keyboard events to the `MenuInteractionController`, ensuring hover-to-open (`OpenRootIndex`) is zero-delay and keyboard navigation replicates Windows menu semantics.
+  - Integrate `MenuServices.HandleGroupSelection` on invocation and bubble a `MenuItemInvoked` routed event mirroring the existing `MenuItem` event args.
+  - Maintain a `DispatcherQueueTimer` for pointer corridor grace periods when moving between columns (configurable, default 150ms).
+- **Visual states**: add `RootClosed/RootOpen`, `SubmenuIdle/SubmenuActive`, `PointerNavigation/KeyboardNavigation`, `AccessKeysVisible/AccessKeysHidden` and tie them to template parts for styling cues.
+- **Focus & accessibility**: participate in `AccessKeyManager`, implement `OnProcessKeyboardAccelerators`, expose `MenuFlyoutItemAutomationPeer`-like automation peers for items, and ensure `IsTabStop=false` for container while root items are individually tabbable when menu is active.
+- **Telemetry hooks**: optionally raise diagnostic events when cascades flip direction or when pointer corridor evicts a submenu to aid debugging.
+
+#### 3. `MenuFlyout` control (public surface `DroidNet.Controls.MenuFlyout`)
+
+- **Class skeleton**: derive from `FlyoutBase`, declare dependency properties `MenuSource` (`IMenuSource`) and `MaxColumnHeight` (`double`, default `Double.PositiveInfinity`). Provide `.ShowAt(FrameworkElement target)` overloads that delegate to base after priming data.
+- **Presenter pipeline**:
+  - Implement a sealed `MenuFlyoutPresenter` (derives from `FlyoutPresenter`) with template exposing parts `PART_PresenterRoot`, `PART_ItemsRepeater`, `PART_SubmenuOverlay`, and `PART_ScrollViewer`. Presenters leverage the same `MenuColumnPresenter` as menubar cascades.
+  - Override `FlyoutBase.CreatePresenter` to return `MenuFlyoutPresenter` and feed it with `MenuInteractionController` instance scoped to each flyout opening.
+- **Opening/closing life-cycle**:
+  - Override `OnOpening/OnOpened/OnClosing/OnClosed` to initialize controller state, attach to `MenuSource.Services`, reset selection, and release references to avoid leaks.
+  - Ensure keyboard focus is moved to first enabled item, with `Esc` dismissal and `Enter/Space` invocation consistent with menubar.
+- **Theming**: add `MenuFlyout/MenuFlyout.xaml` resources with Fluent v2 brushes (`FlyoutBackgroundFillColorTertiaryBrush`, `ShadowElevationFlyout` etc.), use rounded corners via `CornerRadius` tokens, and ensure theme transitions via `ThemeResource`.
+- **Sizing/scroll**: enforce `MaxColumnHeight` by wrapping the column presenter in a `ScrollViewer` with `VerticalScrollBarVisibility=Auto`, applying `ScrollViewers.ScrollBar*` theme resources for consistency. Use `SharedHelpers.SafeRect` to confine to window bounds.
+- **Context integration**: support `XamlRoot` boundaries, `Target.AppWindow` overlay, and propagate `MenuItemInvoked` events to consumer via `ItemInvoked` event.
+
+#### 4. Styling & resource delivery
+
+- Add both resource dictionaries to `Themes/Generic.xaml` merge order after `MenuItem` to ensure base resources are available.
+- Store layout constants (margins, corner radius, spacing) in dedicated resources (e.g., `MenuBarRootPadding`, `MenuColumnCornerRadius`) referencing Fluent v2 tokens or derived values.
+- Provide high-contrast overrides using `x:Key="HighContrast"` resource dictionaries or `AppTheme` specific dictionaries if necessary.
+- Create icon glyph resources (e.g., chevron, checkmark) once in shared dictionary to guarantee consistency with `MenuItem` glyphs.
+
+#### 5. State management & command routing
+
+- Centralize selection toggling, radio enforcement, and command execution in the shared controller, delegating to `MenuServices` to keep business logic data-first.
+- For pointer-driven cascades, compute anchor rectangles via `UIElement.TransformToVisual(null)` to position submenu popups precisely relative to `XamlRoot`. Provide fallback for off-thread input by deferring to `Loaded` events.
+- Support `MenuServices.TryGetMenuItemById` for telemetry and potential automation tests.
+
+#### 6. Validation & test coverage
+
+- **Unit tests**: expand `Controls.Menus.Tests` to cover controller state transitions (root switching, corridor timers, radio toggles) using headless test doubles of `MenuItemData`.
+- **UI tests**: add WinUI UITest cases in `Controls.Menus.UI.Tests` verifying pointer hover switching, keyboard navigation (Alt key entry, arrow traversal), Flyout show/close, and theme brush application snapshots (light/dark/high contrast).
+- **Accessibility**: run `AccessibilityInsights` automation in pipeline to confirm UIA roles/ patterns, and add tests that ensure `AutomationPeer` exposes `ControlType` of `MenuBar`/`Menu` appropriately.
+- **Performance**: profile `ItemsRepeater` virtualization with 100+ items using `TraceLogging` to ensure opening cost stays under target (<5 ms per column on reference hardware).
+
+#### 7. Delivery sequencing
+
+- Implement shared infrastructure first, followed by `MenuBar`, then reuse for `MenuFlyout` to minimize duplication.
+- Gate feature behind preview flag or internal namespace until stabilized; update samples/demo apps to showcase both controls.
+- Document public API surface in `README.md` and provide minimal sample XAML demonstrating binding via `MenuBuilder`.
+- Implement shared infrastructure first, followed by `MenuBar`, then reuse for `MenuFlyout` to minimize duplication.
+- Gate feature behind preview flag or internal namespace until stabilized; update samples/demo apps to showcase both controls.
+- Document public API surface in `README.md` and provide minimal sample XAML demonstrating binding via `MenuBuilder`.
 
 ---
 
@@ -1138,10 +1233,10 @@ The foundation is solid - MenuBuilder and MenuItemData provide a complete data m
 - ✅ **MenuBuilder**: Complete fluent API and data model
 - ✅ **MenuItemData**: All properties for icons, text, accelerators, selection states
 - ✅ **Column Layout Design**: Icon|Text|Accelerator|State specifications defined
-- ❌ **CustomMenuItem Control**: FOUNDATION control for individual item rendering
-- ❌ **Container Controls**: MenuBar, MenuFlyout, ExpandableMenuBar that use CustomMenuItem
+- ✅ **CustomMenuItem Control**: Implemented in `DroidNet.Controls.MenuItem` with tests
+- ❌ **Container Controls**: MenuBar, MenuFlyout, ExpandableMenuBar that compose `MenuItem`
 
-**Critical Path**: Build CustomMenuItem first since all other menu controls depend on it for consistent item presentation.
+**Critical Path**: Implement the custom containers using the existing `MenuItem` control and shared data model.
 
 ---
 

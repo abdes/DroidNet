@@ -2,7 +2,8 @@
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuFlyoutDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:menus="using:DroidNet.Controls">
 
     <ScrollViewer>
         <StackPanel Margin="20" Spacing="30">
@@ -29,6 +30,9 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="6">
+                    <Border.ContextFlyout>
+                        <menus:MenuFlyout MenuSource="{x:Bind ViewModel.ContextMenu, Mode=OneWay}" />
+                    </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
@@ -56,13 +60,7 @@
                     BorderThickness="1"
                     CornerRadius="6">
                     <Border.ContextFlyout>
-                        <MenuFlyout>
-                            <MenuFlyoutItem Text="📝 Edit" />
-                            <MenuFlyoutItem Text="📋 Copy" />
-                            <MenuFlyoutItem Text="🗑️ Delete" />
-                            <MenuFlyoutSeparator />
-                            <MenuFlyoutItem Text="📋 Properties" />
-                        </MenuFlyout>
+                        <menus:MenuFlyout MenuSource="{x:Bind ViewModel.SimpleMenu, Mode=OneWay}" />
                     </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
