@@ -29,6 +29,15 @@ public partial class MenuItem
             (d, e) => ((MenuItem)d).OnItemDataChanged((MenuItemData?)e.OldValue, (MenuItemData?)e.NewValue)));
 
     /// <summary>
+    ///     Identifies the <see cref="ShowSubmenuGlyph"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty ShowSubmenuGlyphProperty = DependencyProperty.Register(
+        nameof(ShowSubmenuGlyph),
+        typeof(bool),
+        typeof(MenuItem),
+        new PropertyMetadata(true, OnShowSubmenuGlyphChanged));
+
+    /// <summary>
     ///     Gets or sets the menu item data that provides the content and behavior for this control.
     /// </summary>
     /// <value>
@@ -45,6 +54,16 @@ public partial class MenuItem
     {
         get => (MenuItemData?)this.GetValue(ItemDataProperty);
         set => this.SetValue(ItemDataProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether submenu arrow glyphs should be shown when the
+    ///     underlying data has children. Menu bar root items typically suppress the glyph.
+    /// </summary>
+    public bool ShowSubmenuGlyph
+    {
+        get => (bool)this.GetValue(ShowSubmenuGlyphProperty);
+        set => this.SetValue(ShowSubmenuGlyphProperty, value);
     }
 
     /// <summary>
@@ -80,6 +99,14 @@ public partial class MenuItem
         }
     }
 
+    private static void OnShowSubmenuGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MenuItem menuItem)
+        {
+            menuItem.UpdateCheckmarkVisualState();
+        }
+    }
+
     private void ItemData_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not MenuItemData data)
@@ -97,6 +124,7 @@ public partial class MenuItem
                     break;
 
                 case nameof(MenuItemData.IsActive):
+                    this.UpdateInteractionVisualState();
                     this.UpdateActiveVisualState();
                     break;
 

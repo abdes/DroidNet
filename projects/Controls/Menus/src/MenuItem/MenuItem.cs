@@ -66,8 +66,8 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = CheckedWithIconVisualState, GroupName = DecorationVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = DecorationVisualStates)]
 [TemplateVisualState(Name = NoDecorationVisualState, GroupName = DecorationVisualStates)]
-[TemplateVisualState(Name = ActiveVisualState, GroupName = KeyboardNavigationVisualStates)]
-[TemplateVisualState(Name = InactiveVisualState, GroupName = KeyboardNavigationVisualStates)]
+[TemplateVisualState(Name = ActiveVisualState, GroupName = NavigationVisualStates)]
+[TemplateVisualState(Name = InactiveVisualState, GroupName = NavigationVisualStates)]
 [TemplateVisualState(Name = HasIconVisualState, GroupName = IconVisualStates)]
 [TemplateVisualState(Name = NoIconVisualState, GroupName = IconVisualStates)]
 [TemplateVisualState(Name = HasAcceleratorVisualState, GroupName = AcceleratorVisualStates)]
@@ -185,9 +185,9 @@ public partial class MenuItem : ContentControl
     public const string NoDecorationVisualState = "NoDecoration";
 
     /// <summary>
-    ///     Group name for keyboard navigation (active/inactive) visual states.
+    ///     Group name for navigation (active/inactive) visual states.
     /// </summary>
-    public const string KeyboardNavigationVisualStates = "KeyboardNavigationStates";
+    public const string NavigationVisualStates = "NavigationStates";
 
     /// <summary>
     ///     Visual state representing keyboard-activated (hot-tracked) item.
@@ -362,6 +362,7 @@ public partial class MenuItem : ContentControl
         {
             this.IsPointerOver = false;
             this.UpdateInteractionVisualState();
+            this.UpdateActiveVisualState();
             return;
         }
 
@@ -373,6 +374,7 @@ public partial class MenuItem : ContentControl
         }
 
         this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
     }
 
     /// <summary>
@@ -394,6 +396,7 @@ public partial class MenuItem : ContentControl
         }
 
         this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
     }
 
     /// <summary>
@@ -409,6 +412,7 @@ public partial class MenuItem : ContentControl
         if (this.ItemData?.IsEnabled == true && this.ItemData.IsSeparator != true)
         {
             this.UpdateInteractionVisualState();
+            this.UpdateActiveVisualState();
         }
     }
 
@@ -423,6 +427,7 @@ public partial class MenuItem : ContentControl
         _ = e; // unused
 
         this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
     }
 
     /// <summary>
@@ -518,6 +523,10 @@ public partial class MenuItem : ContentControl
         {
             _ = VisualStateManager.GoToState(this, DisabledVisualState, useTransitions: true);
         }
+        else if (this.ItemData?.IsActive == true)
+        {
+            _ = VisualStateManager.GoToState(this, PointerOverVisualState, useTransitions: true);
+        }
         else if (this.IsPressed)
         {
             _ = VisualStateManager.GoToState(this, PressedVisualState, useTransitions: true);
@@ -559,7 +568,7 @@ public partial class MenuItem : ContentControl
         }
 
         // Priority order: Submenu Arrow > Selection State > Nothing
-        if (this.ItemData.HasChildren)
+        if (this.ItemData.HasChildren && this.ShowSubmenuGlyph)
         {
             _ = VisualStateManager.GoToState(this, WithChildrenVisualState, useTransitions: true);
         }

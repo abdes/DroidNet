@@ -43,7 +43,6 @@ public sealed class MenuFlyout : FlyoutBase
     public MenuFlyout()
     {
         this.Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft;
-        this.LightDismissOverlayMode = LightDismissOverlayMode.Auto;
         this.Opening += this.OnFlyoutOpening;
         this.Opened += this.OnFlyoutOpened;
         this.Closing += this.OnFlyoutClosing;

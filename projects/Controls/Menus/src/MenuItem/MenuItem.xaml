@@ -185,14 +185,14 @@
                                 </VisualState>
                             </VisualStateGroup>
 
-                            <!--  Selection (Active) States  -->
-                            <VisualStateGroup x:Name="SelectionStates">
-                                <VisualState x:Name="Unselected" />
-                                <VisualState x:Name="Selected">
+                            <!--  Navigation (Active) States  -->
+                            <VisualStateGroup x:Name="NavigationStates">
+                                <VisualState x:Name="Inactive" />
+                                <VisualState x:Name="Active">
                                     <VisualState.Setters>
-                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
-                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartAcceleratorTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
