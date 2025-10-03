@@ -8,12 +8,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Windows.Graphics;
 
-namespace DroidNet.Tests;
-
 #if MSTEST_RUNNER
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 #endif
+
+namespace DroidNet.Tests;
 
 /// <summary>
 /// Shared base Application class for all Visual User Interface tests.

@@ -3,10 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml;
-
-// Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT.
-// SPDX-License-Identifier: MIT
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Tests;
@@ -51,7 +47,7 @@ namespace DroidNet.Tests;
 /// }
 /// ]]>
 /// </example>
-internal sealed partial class TestVisualStateManager : VisualStateManager
+public sealed partial class TestVisualStateManager : VisualStateManager
 {
     private readonly Dictionary<FrameworkElement, List<string>> controlStates = [];
 
