@@ -13,17 +13,17 @@ namespace DroidNet.Controls.Demo.InPlaceEdit;
 public partial class InPlaceEditDemoViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string label = "Hello World!";
+    public partial string Label { get; set; } = "Hello World!";
 
     [ObservableProperty]
-    private float numberValue = -20.0f;
+    public partial float NumberValue { get; set; } = -20.0f;
 
     [ObservableProperty]
-    private float rotationX = 0.0f;
+    public partial float RotationX { get; set; } = 0.0f;
 
     [ObservableProperty]
-    private float rotationY = 0.0f;
+    public partial float RotationY { get; set; } = 0.0f;
 
     [ObservableProperty]
-    private float rotationZ = 0.0f;
+    public partial float RotationZ { get; set; } = 0.0f;
 }
