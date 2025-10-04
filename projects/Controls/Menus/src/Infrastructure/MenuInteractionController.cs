@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
 
@@ -17,6 +19,7 @@ namespace DroidNet.Controls;
 public sealed class MenuInteractionController
 {
     private readonly MenuServices services;
+    private readonly Dictionary<int, MenuItemData> activeByColumn = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuInteractionController"/> class.
@@ -37,6 +40,11 @@ public sealed class MenuInteractionController
     ///     the execution event further up the chain.
     /// </summary>
     public event EventHandler<MenuItemInvokedEventArgs>? ItemInvoked;
+
+    /// <summary>
+    ///     Occurs when the current menu chain should be dismissed by host surfaces.
+    /// </summary>
+    public event EventHandler? DismissRequested;
 
     /// <summary>
     ///     Gets the current navigation mode used to open the active menu path.
@@ -71,7 +79,17 @@ public sealed class MenuInteractionController
     public void HandleItemInvoked(MenuItemData menuItem)
     {
         ArgumentNullException.ThrowIfNull(menuItem);
+        var columnLevel = this.FindColumnLevel(menuItem);
+        if (columnLevel < 0)
+        {
+            columnLevel = menuItem.HasChildren ? 0 : this.activeByColumn.Keys.DefaultIfEmpty(-1).Max();
+        }
+
+        this.ActivateItem(menuItem, Math.Max(columnLevel, 0), this.NavigationMode);
+        this.services.HandleGroupSelection(menuItem);
+
         this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = menuItem });
+        this.Dismiss();
     }
 
     /// <summary>
@@ -87,12 +105,70 @@ public sealed class MenuInteractionController
         ArgumentNullException.ThrowIfNull(origin);
         ArgumentNullException.ThrowIfNull(menuItem);
 
-        this.NavigationMode = inputSource;
+        this.ActivateItem(menuItem, columnLevel, inputSource);
+
+        if (!menuItem.HasChildren)
+        {
+            return;
+        }
 
         var bounds = new Rect(0, 0, origin.ActualWidth, origin.ActualHeight);
 
         this.SubmenuRequested?.Invoke(
             this,
             new MenuSubmenuRequestEventArgs(menuItem, origin, bounds, columnLevel, inputSource));
+    }
+
+    /// <summary>
+    ///     Activates a menu item and deactivates any descendants beyond the specified column level.
+    /// </summary>
+    /// <param name="menuItem">The menu item to activate.</param>
+    /// <param name="columnLevel">The zero-based column level for the item (0 == root).</param>
+    /// <param name="inputSource">The navigation mode that triggered the change.</param>
+    public void ActivateItem(MenuItemData menuItem, int columnLevel, MenuNavigationMode inputSource)
+    {
+        ArgumentNullException.ThrowIfNull(menuItem);
+
+        this.NavigationMode = inputSource;
+
+        foreach (var key in this.activeByColumn.Keys.Where(k => k >= columnLevel).ToList())
+        {
+            if (!ReferenceEquals(this.activeByColumn[key], menuItem))
+            {
+                this.activeByColumn[key].IsActive = false;
+            }
+
+            this.activeByColumn.Remove(key);
+        }
+
+        menuItem.IsActive = true;
+        this.activeByColumn[columnLevel] = menuItem;
+    }
+
+    /// <summary>
+    ///     Clears any active menu path and signals dismissal to host surfaces.
+    /// </summary>
+    public void Dismiss()
+    {
+        foreach (var menuItem in this.activeByColumn.Values.Distinct())
+        {
+            menuItem.IsActive = false;
+        }
+
+        this.activeByColumn.Clear();
+        this.DismissRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private int FindColumnLevel(MenuItemData menuItem)
+    {
+        foreach (var entry in this.activeByColumn)
+        {
+            if (ReferenceEquals(entry.Value, menuItem))
+            {
+                return entry.Key;
+            }
+        }
+
+        return -1;
     }
 }
