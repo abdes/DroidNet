@@ -36,6 +36,7 @@ public sealed class MenuFlyout : FlyoutBase
 
     private MenuFlyoutPresenter? presenter;
     private MenuInteractionController? controller;
+    private bool overlayPassThroughApplied;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuFlyout"/> class.
@@ -43,6 +44,7 @@ public sealed class MenuFlyout : FlyoutBase
     public MenuFlyout()
     {
         this.Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft;
+        this.LightDismissOverlayMode = LightDismissOverlayMode.Off;
         this.Opening += this.OnFlyoutOpening;
         this.Opened += this.OnFlyoutOpened;
         this.Closing += this.OnFlyoutClosing;
@@ -122,6 +124,20 @@ public sealed class MenuFlyout : FlyoutBase
             return;
         }
 
+        if (this.OverlayInputPassThroughElement is null)
+        {
+            var passThroughCandidate = this.ResolveOverlayPassThroughElement();
+            if (passThroughCandidate is not null)
+            {
+                this.OverlayInputPassThroughElement = passThroughCandidate;
+                this.overlayPassThroughApplied = true;
+            }
+        }
+        else
+        {
+            this.overlayPassThroughApplied = false;
+        }
+
         this.presenter?.Reset();
         this.SuppressControllerDismissal = false;
 
@@ -150,6 +166,12 @@ public sealed class MenuFlyout : FlyoutBase
     {
         this.presenter?.Reset();
 
+        if (this.overlayPassThroughApplied)
+        {
+            this.OverlayInputPassThroughElement = null;
+            this.overlayPassThroughApplied = false;
+        }
+
         if (this.controller is null)
         {
             return;
@@ -169,5 +191,20 @@ public sealed class MenuFlyout : FlyoutBase
         }
 
         this.controller = null;
+    }
+
+    private UIElement? ResolveOverlayPassThroughElement()
+    {
+        if (this.RootSurface is UIElement rootSurfaceElement)
+        {
+            if (rootSurfaceElement.XamlRoot?.Content is UIElement surfaceRootContent)
+            {
+                return surfaceRootContent;
+            }
+
+            return rootSurfaceElement;
+        }
+
+        return this.XamlRoot?.Content as UIElement;
     }
 }
