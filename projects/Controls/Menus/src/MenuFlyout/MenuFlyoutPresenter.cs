@@ -200,15 +200,16 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
     /// <param name="menuSource">The menu source providing root items.</param>
     /// <param name="controller">The shared interaction controller.</param>
     /// <param name="columnHeight">The maximum height applied to each column.</param>
-    /// <param name="rootSurface">The root interaction surface coordinating the menu bar.</param>
-    internal void Initialize(IMenuSource menuSource, MenuInteractionController controller, double columnHeight, IMenuInteractionSurface rootSurface)
+    /// <param name="rootSurface">Optional root interaction surface coordinating a parent menu bar.</param>
+    internal void Initialize(IMenuSource menuSource, MenuInteractionController controller, double columnHeight, IMenuInteractionSurface? rootSurface)
     {
         this.menuSource = menuSource ?? throw new ArgumentNullException(nameof(menuSource));
         this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        this.rootSurface = rootSurface ?? throw new ArgumentNullException(nameof(rootSurface));
+        this.rootSurface = rootSurface;
         this.maxColumnHeight = columnHeight;
         this.mnemonicsVisible = false;
-        Debug.WriteLine($"[MenuFlyoutPresenter] Initialize called (columnHeight={columnHeight}, rootSurface={rootSurface.GetType().Name})");
+        var rootSurfaceName = rootSurface?.GetType().Name ?? "<null>";
+        Debug.WriteLine($"[MenuFlyoutPresenter] Initialize called (columnHeight={columnHeight}, rootSurface={rootSurfaceName})");
         this.ResetColumns();
     }
 
