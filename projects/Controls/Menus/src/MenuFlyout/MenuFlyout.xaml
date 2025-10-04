@@ -7,7 +7,7 @@
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuColumnPresenter/MenuColumnPresenter.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuColumnPresenter.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <Style TargetType="controls:MenuFlyoutPresenter">

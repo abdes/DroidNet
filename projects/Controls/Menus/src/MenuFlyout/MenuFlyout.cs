@@ -82,14 +82,36 @@ public sealed class MenuFlyout : FlyoutBase
     public MenuInteractionController? Controller { get; set; }
 
     /// <summary>
+    ///     Gets or sets the root interaction surface coordinating the menu bar associated with this flyout.
+    /// </summary>
+    internal IMenuInteractionSurface? RootSurface { get; set; }
+
+    /// <summary>
+    ///     Gets the active column interaction surface rendered by the flyout, when available.
+    /// </summary>
+    internal IMenuInteractionSurface? ColumnSurface => this.presenter;
+
+    /// <summary>
     ///     Gets or sets a value indicating whether controller dismissal should be suppressed when closing.
     /// </summary>
     internal bool SuppressControllerDismissal { get; set; }
 
+    /// <summary>
+    ///     Raises <see cref="ItemInvoked"/> with the supplied menu item data.
+    /// </summary>
+    /// <param name="item">The item that was invoked.</param>
+    internal void RaiseItemInvoked(MenuItemData item)
+    {
+        this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = item });
+    }
+
     /// <inheritdoc />
     protected override Control CreatePresenter()
     {
-        this.presenter = new MenuFlyoutPresenter();
+        this.presenter = new MenuFlyoutPresenter
+        {
+            Owner = this,
+        };
         return this.presenter;
     }
 
@@ -109,25 +131,23 @@ public sealed class MenuFlyout : FlyoutBase
             return;
         }
 
-        this.controller.ItemInvoked += this.OnControllerItemInvoked;
-        this.controller.SubmenuRequested += this.OnControllerSubmenuRequested;
-
-        switch (this.OwnerNavigationMode)
+        var rootSurface = this.RootSurface;
+        if (rootSurface is null)
         {
-            case MenuNavigationMode.KeyboardInput:
-                this.controller.NotifyKeyboardNavigation();
-                break;
-            default:
-                this.controller.NotifyPointerNavigation();
-                break;
+            return;
         }
 
-        this.presenter?.Initialize(this.MenuSource, this.controller, this.MaxColumnHeight);
+        var source = this.OwnerNavigationMode == MenuNavigationMode.KeyboardInput
+            ? MenuInteractionActivationSource.KeyboardInput
+            : MenuInteractionActivationSource.PointerInput;
+
+        this.controller.OnNavigationSourceChanged(source);
+        this.presenter?.Initialize(this.MenuSource, this.controller, this.MaxColumnHeight, rootSurface);
     }
 
     private void OnFlyoutOpened(object? sender, object e)
     {
-        this.presenter?.FocusFirstItemAsync();
+        this.presenter?.FocusFirstItem();
     }
 
     private void OnFlyoutClosing(object? sender, FlyoutBaseClosingEventArgs e)
@@ -139,23 +159,19 @@ public sealed class MenuFlyout : FlyoutBase
             return;
         }
 
-        this.controller.ItemInvoked -= this.OnControllerItemInvoked;
-        this.controller.SubmenuRequested -= this.OnControllerSubmenuRequested;
         var shouldDismiss = !this.SuppressControllerDismissal;
         this.SuppressControllerDismissal = false;
 
         if (shouldDismiss)
         {
-            this.controller.Dismiss();
+            // TODO: Differentiate dismiss kind based on FlyoutBase close reason when available.
+            if (this.presenter is not null && this.RootSurface is not null)
+            {
+                var context = MenuInteractionContext.ForColumn(0, this.presenter, this.RootSurface);
+                this.controller.OnDismissRequested(context, MenuDismissKind.Programmatic);
+            }
         }
 
         this.controller = null;
-    }
-
-    private void OnControllerSubmenuRequested(object? sender, MenuSubmenuRequestEventArgs e) => this.presenter?.ShowSubmenu(e);
-
-    private void OnControllerItemInvoked(object? sender, MenuItemInvokedEventArgs e)
-    {
-        this.ItemInvoked?.Invoke(this, e);
     }
 }

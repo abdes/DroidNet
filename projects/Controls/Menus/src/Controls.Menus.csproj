@@ -3,6 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 
         <RootNamespace>$(RootNamespace).Controls</RootNamespace>
         <AssemblyName>DroidNet.Controls.Menus</AssemblyName>
