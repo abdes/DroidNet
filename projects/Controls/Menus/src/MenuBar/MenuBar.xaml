@@ -7,10 +7,127 @@
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem/MenuItem.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <Thickness x:Key="MenuBarPadding">12,4</Thickness>
+    <Thickness x:Key="MenuBarPadding">4,0</Thickness>
     <CornerRadius x:Key="MenuBarCornerRadius">0</CornerRadius>
+
+    <Style
+        x:Key="MenuBarRootMenuItemStyle"
+        BasedOn="{StaticResource DefaultMenuItemStyle}"
+        TargetType="controls:MenuItem">
+        <Setter Property="Padding" Value="8,0,8,0" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="ShowSubmenuGlyph" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:MenuItem">
+                    <Grid
+                        x:Name="PartRootGrid"
+                        MinHeight="{TemplateBinding MinHeight}"
+                        Background="{TemplateBinding Background}">
+                        <Grid
+                            x:Name="PartContentGrid"
+                            Padding="{TemplateBinding Padding}"
+                            Visibility="Visible">
+                            <TextBlock
+                                x:Name="PartTextBlock"
+                                Foreground="{TemplateBinding Foreground}"
+                                Style="{StaticResource MenuItemTextStyle}"
+                                Text="{Binding ItemData.Text, RelativeSource={RelativeSource TemplatedParent}}" />
+                        </Grid>
+
+                        <Border
+                            x:Name="PartSeparatorBorder"
+                            Height="1"
+                            Margin="0"
+                            HorizontalAlignment="Stretch"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            Visibility="Collapsed" />
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorDisabledBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="NavigationStates">
+                                <VisualState x:Name="Inactive" />
+                                <VisualState x:Name="Active">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PartTextBlock.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="IconStates">
+                                <VisualState x:Name="HasIcon" />
+                                <VisualState x:Name="NoIcon" />
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="AcceleratorStates">
+                                <VisualState x:Name="HasAccelerator" />
+                                <VisualState x:Name="NoAccelerator" />
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="TypeStates">
+                                <VisualState x:Name="Item">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartContentGrid.Visibility" Value="Visible" />
+                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartRootGrid.MinHeight" Value="{TemplateBinding MinHeight}" />
+                                        <Setter Target="PartSeparatorBorder.Margin" Value="0" />
+                                        <Setter Target="PartRootGrid.IsHitTestVisible" Value="True" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Separator">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartContentGrid.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Visible" />
+                                        <Setter Target="PartRootGrid.MinHeight" Value="0" />
+                                        <Setter Target="PartSeparatorBorder.Margin" Value="0" />
+                                        <Setter Target="PartRootGrid.IsHitTestVisible" Value="False" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="DecorationStates">
+                                <VisualState x:Name="CheckedNoIcon" />
+                                <VisualState x:Name="CheckedWithIcon" />
+                                <VisualState x:Name="WithChildren" />
+                                <VisualState x:Name="NoDecoration" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <Style TargetType="controls:MenuBar">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
@@ -20,7 +137,7 @@
         <Setter Property="Padding" Value="{StaticResource MenuBarPadding}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Top" />
-        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="MinHeight" Value="26" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
@@ -35,11 +152,11 @@
                         CornerRadius="{StaticResource MenuBarCornerRadius}">
                         <ItemsRepeater x:Name="PART_RootItemsRepeater" HorizontalAlignment="Left">
                             <ItemsRepeater.Layout>
-                                <StackLayout Orientation="Horizontal" Spacing="4" />
+                                <StackLayout Orientation="Horizontal" Spacing="1" />
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate>
-                                    <controls:MenuItem ItemData="{Binding}" />
+                                    <controls:MenuItem ItemData="{Binding}" Style="{StaticResource MenuBarRootMenuItemStyle}" />
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>

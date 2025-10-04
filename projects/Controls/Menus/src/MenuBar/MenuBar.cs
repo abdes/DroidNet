@@ -50,6 +50,8 @@ public sealed class MenuBar : Control
     private ItemsRepeater? rootItemsRepeater;
     private MenuFlyout? activeFlyout;
     private MenuItem? activeRootItem;
+    private MenuItem? pendingRootItem;
+    private MenuInteractionController? controller;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -108,6 +110,8 @@ public sealed class MenuBar : Control
         this.rootItemsRepeater.ItemsSource = this.MenuSource?.Items;
         this.rootItemsRepeater.ElementPrepared += this.OnRootItemPrepared;
         this.rootItemsRepeater.ElementClearing += this.OnRootItemClearing;
+
+        this.AttachController(this.MenuSource?.Services.InteractionController);
     }
 
     private static void OnMenuSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -117,6 +121,9 @@ public sealed class MenuBar : Control
         {
             repeater.ItemsSource = ((IMenuSource?)e.NewValue)?.Items;
         }
+
+        var newSource = (IMenuSource?)e.NewValue;
+        control.AttachController(newSource?.Services.InteractionController);
 
         control.CloseActiveFlyout();
         control.OpenRootIndex = -1;
@@ -154,13 +161,20 @@ public sealed class MenuBar : Control
 
         if (ReferenceEquals(menuItem, this.activeRootItem))
         {
-            this.SetActiveRootMenuItem(null);
+            this.activeRootItem = null;
         }
     }
 
     private void OnRootRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
     {
-        this.MenuSource?.Services.HandleGroupSelection(e.MenuItem);
+        if (this.controller is not null)
+        {
+            this.controller.HandleRadioGroupSelection(e.MenuItem);
+        }
+        else
+        {
+            this.MenuSource?.Services.HandleGroupSelection(e.MenuItem);
+        }
     }
 
     private void OnRootMenuItemHoverEntered(object? sender, MenuItemHoverEventArgs e)
@@ -185,106 +199,115 @@ public sealed class MenuBar : Control
 
     private void HandleRootPointerActivation(MenuItem menuItem, MenuItemData menuItemData)
     {
-        if (!this.IsSubmenuOpen || !menuItemData.HasChildren)
+        if (this.controller is null || !menuItemData.HasChildren)
         {
             return;
         }
 
-        if (ReferenceEquals(menuItem, this.activeRootItem))
+        this.controller.NotifyPointerNavigation();
+
+        if (!this.IsSubmenuOpen)
         {
-            menuItemData.IsActive = this.IsSubmenuOpen;
             return;
         }
 
-        this.OpenSubmenuFor(menuItem, menuItemData, MenuNavigationMode.PointerInput);
-    }
-
-    private void SetActiveRootMenuItem(MenuItem? menuItem)
-    {
-        if (ReferenceEquals(this.activeRootItem, menuItem))
+        if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
         {
-            if (menuItem?.ItemData is { } existingData)
-            {
-                existingData.IsActive = this.IsSubmenuOpen && existingData.HasChildren;
-            }
-
             return;
         }
 
-        if (this.activeRootItem?.ItemData is { } previousData)
-        {
-            previousData.IsActive = false;
-        }
-
-        this.activeRootItem = menuItem;
-
-        if (this.activeRootItem?.ItemData is { } newData)
-        {
-            newData.IsActive = this.IsSubmenuOpen && newData.HasChildren;
-        }
+        this.pendingRootItem = menuItem;
+        this.controller.RequestSubmenu(menuItem, menuItemData, 0, MenuNavigationMode.PointerInput);
     }
 
     private void OnRootMenuItemSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
     {
-        if (sender is MenuItem menuItem)
+        if (this.controller is null || sender is not MenuItem menuItem)
         {
-            this.OpenSubmenuFor(menuItem, e.MenuItem, MenuNavigationMode.KeyboardInput);
+            return;
         }
+
+        this.controller.NotifyKeyboardNavigation();
+        if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+        {
+            return;
+        }
+
+        this.pendingRootItem = menuItem;
+        this.controller.RequestSubmenu(menuItem, e.MenuItem, 0, MenuNavigationMode.KeyboardInput);
     }
 
     private void OnRootMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
     {
-        if (sender is not MenuItem menuItem)
+        if (this.controller is null || sender is not MenuItem menuItem)
         {
             return;
         }
 
         if (e.MenuItem.HasChildren)
         {
-            this.OpenSubmenuFor(menuItem, e.MenuItem, this.IsSubmenuOpen ? MenuNavigationMode.PointerInput : MenuNavigationMode.KeyboardInput);
+            var mode = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
+                ? MenuNavigationMode.KeyboardInput
+                : MenuNavigationMode.PointerInput;
+
+            if (mode == MenuNavigationMode.PointerInput)
+            {
+                this.controller.NotifyPointerNavigation();
+            }
+
+            if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+            {
+                return;
+            }
+
+            this.pendingRootItem = menuItem;
+            this.controller.RequestSubmenu(menuItem, e.MenuItem, 0, mode);
             return;
         }
 
-        this.MenuSource?.Services.HandleGroupSelection(e.MenuItem);
-        this.CloseActiveFlyout();
-        this.ItemInvoked?.Invoke(this, e);
+        this.controller.HandleItemInvoked(e.MenuItem);
     }
 
-    private void OpenSubmenuFor(MenuItem origin, MenuItemData menuItemData, MenuNavigationMode navigationMode)
+    private void OpenRootSubmenu(MenuSubmenuRequestEventArgs request)
     {
-        if (!menuItemData.SubItems.Any() || this.MenuSource is null)
+        if (this.MenuSource is null)
         {
+            this.pendingRootItem = null;
             return;
         }
 
-        var index = this.MenuSource.Items.IndexOf(menuItemData);
-        if (index >= 0)
+        if (!request.MenuItem.SubItems.Any())
         {
-            this.OpenRootIndex = index;
+            this.pendingRootItem = null;
+            return;
         }
-
-        this.IsSubmenuOpen = true;
-        this.SetActiveRootMenuItem(origin);
 
         if (this.activeFlyout is not null)
         {
-            this.activeFlyout.ItemInvoked -= this.OnFlyoutItemInvoked;
+            this.activeFlyout.SuppressControllerDismissal = true;
             this.activeFlyout.Closed -= this.OnFlyoutClosed;
+            this.activeFlyout.OverlayInputPassThroughElement = null;
             this.activeFlyout.Hide();
+            this.activeFlyout = null;
         }
 
-        var submenuSource = new MenuSourceView(menuItemData.SubItems, this.MenuSource.Services);
+        var submenuSource = new MenuSourceView(request.MenuItem.SubItems, this.MenuSource.Services);
         var flyout = new MenuFlyout
         {
             MenuSource = submenuSource,
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+            OwnerNavigationMode = request.NavigationMode,
+            Controller = this.controller,
         };
 
         flyout.OverlayInputPassThroughElement = this;
-        flyout.OwnerNavigationMode = navigationMode;
-        flyout.ItemInvoked += this.OnFlyoutItemInvoked;
         flyout.Closed += this.OnFlyoutClosed;
 
+        var index = this.MenuSource.Items.IndexOf(request.MenuItem);
+        this.OpenRootIndex = index >= 0 ? index : -1;
+        this.IsSubmenuOpen = true;
+        this.activeRootItem = request.Origin as MenuItem;
+        this.pendingRootItem = null;
         this.activeFlyout = flyout;
 
         var options = new FlyoutShowOptions
@@ -292,12 +315,24 @@ public sealed class MenuBar : Control
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
         };
 
-        flyout.ShowAt(origin, options);
+        flyout.ShowAt(request.Origin, options);
     }
 
-    private void OnFlyoutItemInvoked(object? sender, MenuItemInvokedEventArgs e)
+    private void OnControllerSubmenuRequested(object? sender, MenuSubmenuRequestEventArgs e)
+    {
+        if (e.ColumnLevel == 0)
+        {
+            this.OpenRootSubmenu(e);
+        }
+    }
+
+    private void OnControllerItemInvoked(object? sender, MenuItemInvokedEventArgs e)
     {
         this.ItemInvoked?.Invoke(this, e);
+    }
+
+    private void OnControllerDismissRequested(object? sender, EventArgs e)
+    {
         this.CloseActiveFlyout();
     }
 
@@ -308,18 +343,43 @@ public sealed class MenuBar : Control
 
     private void CloseActiveFlyout()
     {
-        if (this.activeFlyout is null)
+        if (this.activeFlyout is not null)
+        {
+            this.activeFlyout.SuppressControllerDismissal = true;
+            this.activeFlyout.Closed -= this.OnFlyoutClosed;
+            this.activeFlyout.OverlayInputPassThroughElement = null;
+            this.activeFlyout.Hide();
+            this.activeFlyout = null;
+        }
+
+        this.IsSubmenuOpen = false;
+        this.OpenRootIndex = -1;
+        this.activeRootItem = null;
+        this.pendingRootItem = null;
+    }
+
+    private void AttachController(MenuInteractionController? newController)
+    {
+        if (ReferenceEquals(this.controller, newController))
         {
             return;
         }
 
-        this.activeFlyout.ItemInvoked -= this.OnFlyoutItemInvoked;
-        this.activeFlyout.Closed -= this.OnFlyoutClosed;
-        this.activeFlyout.OverlayInputPassThroughElement = null;
-        this.activeFlyout.Hide();
-        this.activeFlyout = null;
-        this.IsSubmenuOpen = false;
-        this.OpenRootIndex = -1;
-        this.SetActiveRootMenuItem(null);
+        if (this.controller is MenuInteractionController oldController)
+        {
+            oldController.SubmenuRequested -= this.OnControllerSubmenuRequested;
+            oldController.ItemInvoked -= this.OnControllerItemInvoked;
+            oldController.DismissRequested -= this.OnControllerDismissRequested;
+        }
+
+        this.pendingRootItem = null;
+        this.controller = newController;
+
+        if (newController is not null)
+        {
+            newController.SubmenuRequested += this.OnControllerSubmenuRequested;
+            newController.ItemInvoked += this.OnControllerItemInvoked;
+            newController.DismissRequested += this.OnControllerDismissRequested;
+        }
     }
 }

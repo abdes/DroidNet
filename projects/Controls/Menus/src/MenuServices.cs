@@ -14,6 +14,8 @@ public sealed class MenuServices
 {
     private readonly Func<IReadOnlyDictionary<string, MenuItemData>> lookupAccessor;
     private readonly Action<MenuItemData> groupSelectionHandler;
+    private readonly Lock controllerGate = new();
+    private MenuInteractionController? interactionController;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuServices"/> class.
@@ -29,6 +31,26 @@ public sealed class MenuServices
 
         this.lookupAccessor = lookupAccessor;
         this.groupSelectionHandler = groupSelectionHandler;
+    }
+
+    /// <summary>
+    /// Gets the shared <see cref="MenuInteractionController"/> coordinating menu interactions.
+    /// </summary>
+    public MenuInteractionController InteractionController
+    {
+        get
+        {
+            if (this.interactionController is { })
+            {
+                return this.interactionController;
+            }
+
+            lock (this.controllerGate)
+            {
+                this.interactionController ??= new MenuInteractionController(this);
+                return this.interactionController;
+            }
+        }
     }
 
     /// <summary>

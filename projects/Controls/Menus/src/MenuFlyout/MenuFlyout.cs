@@ -76,6 +76,16 @@ public sealed class MenuFlyout : FlyoutBase
     /// </summary>
     public MenuNavigationMode OwnerNavigationMode { get; set; } = MenuNavigationMode.PointerInput;
 
+    /// <summary>
+    ///     Gets or sets the interaction controller coordinating menu state.
+    /// </summary>
+    public MenuInteractionController? Controller { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether controller dismissal should be suppressed when closing.
+    /// </summary>
+    internal bool SuppressControllerDismissal { get; set; }
+
     /// <inheritdoc />
     protected override Control CreatePresenter()
     {
@@ -91,7 +101,14 @@ public sealed class MenuFlyout : FlyoutBase
         }
 
         this.presenter?.Reset();
-        this.controller = new MenuInteractionController(this.MenuSource.Services);
+        this.SuppressControllerDismissal = false;
+
+        this.controller = this.Controller ?? this.MenuSource.Services.InteractionController;
+        if (this.controller is null)
+        {
+            return;
+        }
+
         this.controller.ItemInvoked += this.OnControllerItemInvoked;
         this.controller.SubmenuRequested += this.OnControllerSubmenuRequested;
 
@@ -124,6 +141,14 @@ public sealed class MenuFlyout : FlyoutBase
 
         this.controller.ItemInvoked -= this.OnControllerItemInvoked;
         this.controller.SubmenuRequested -= this.OnControllerSubmenuRequested;
+        var shouldDismiss = !this.SuppressControllerDismissal;
+        this.SuppressControllerDismissal = false;
+
+        if (shouldDismiss)
+        {
+            this.controller.Dismiss();
+        }
+
         this.controller = null;
     }
 
@@ -132,6 +157,5 @@ public sealed class MenuFlyout : FlyoutBase
     private void OnControllerItemInvoked(object? sender, MenuItemInvokedEventArgs e)
     {
         this.ItemInvoked?.Invoke(this, e);
-        this.Hide();
     }
 }
