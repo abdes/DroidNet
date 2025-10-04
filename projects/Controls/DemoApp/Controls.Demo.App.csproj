@@ -23,6 +23,11 @@
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     </PropertyGroup>
 
+    <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
+    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True'">
+        <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
@@ -45,8 +50,8 @@
             <Private>True</Private>
         </ProjectReference>
 
-    <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
-    <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
 
         <!--
         For source generator (or analyzer) projects, you need to tweak the project reference element so it works as
@@ -56,8 +61,8 @@
          - ReferenceOutputAssembly="false" tells the project not to reference the source generator project's dll.
         -->
 
-    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be

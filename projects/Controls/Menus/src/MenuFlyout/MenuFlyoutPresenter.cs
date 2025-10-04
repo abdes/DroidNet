@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,7 +15,7 @@ namespace DroidNet.Controls;
 ///     Presenter used by <see cref="MenuFlyout"/> to render one or more cascading menu columns.
 /// </summary>
 [TemplatePart(Name = ContentScrollViewerPart, Type = typeof(ScrollViewer))]
-public sealed class MenuFlyoutPresenter : FlyoutPresenter
+public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurface
 {
     private const string ContentScrollViewerPart = "ContentScrollViewer";
 
@@ -22,7 +23,9 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
     private readonly StackPanel columnsHost;
     private MenuInteractionController? controller;
     private IMenuSource? menuSource;
+    private IMenuInteractionSurface? rootSurface;
     private double maxColumnHeight;
+    private bool mnemonicsVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuFlyoutPresenter"/> class.
@@ -39,6 +42,156 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
         };
 
         this.Content = this.columnsHost;
+        Debug.WriteLine("[MenuFlyoutPresenter] ctor initialized columns host");
+    }
+
+    /// <summary>
+    ///     Gets or sets the owning <see cref="MenuFlyout"/> hosting this presenter.
+    /// </summary>
+    internal MenuFlyout? Owner { get; set; }
+
+    /// <summary>
+    ///     Gets the root interaction surface coordinating the menu bar for this presenter.
+    /// </summary>
+    internal IMenuInteractionSurface? RootSurface => this.rootSurface;
+
+    /// <inheritdoc />
+    public void ShowMnemonics()
+    {
+        if (this.mnemonicsVisible)
+        {
+            return;
+        }
+
+        this.mnemonicsVisible = true;
+
+        foreach (var presenter in this.columnPresenters)
+        {
+            presenter.ShowMnemonics();
+        }
+    }
+
+    /// <inheritdoc />
+    public void HideMnemonics()
+    {
+        if (!this.mnemonicsVisible)
+        {
+            return;
+        }
+
+        this.mnemonicsVisible = false;
+
+        foreach (var presenter in this.columnPresenters)
+        {
+            presenter.HideMnemonics();
+        }
+    }
+
+    /// <inheritdoc />
+    public void FocusRoot(MenuItemData root, MenuNavigationMode navigationMode)
+    {
+        _ = root;
+        _ = navigationMode;
+        throw new NotSupportedException("Column presenters cannot focus root items.");
+    }
+
+    /// <inheritdoc />
+    public void OpenRootSubmenu(MenuItemData root, FrameworkElement origin, MenuNavigationMode navigationMode)
+    {
+        _ = root;
+        _ = origin;
+        _ = navigationMode;
+        throw new NotSupportedException("Column presenters cannot open root submenus.");
+    }
+
+    /// <inheritdoc />
+    public void CloseFromColumn(int columnLevel)
+    {
+        Debug.WriteLine($"[MenuFlyoutPresenter] CloseFromColumn requested at level {columnLevel}");
+        if (columnLevel < 0)
+        {
+            columnLevel = 0;
+        }
+
+        for (var i = this.columnPresenters.Count - 1; i >= columnLevel; i--)
+        {
+            Debug.WriteLine($"[MenuFlyoutPresenter] Removing column level {i}");
+            this.columnsHost.Children.RemoveAt(i);
+            this.columnPresenters.RemoveAt(i);
+        }
+
+        if (columnLevel == 0 && this.menuSource is not null && this.controller is not null)
+        {
+            Debug.WriteLine("[MenuFlyoutPresenter] Rebuilding root column after close");
+            var rootItems = this.menuSource.Items.ToList();
+            _ = this.AddColumn(rootItems, 0, this.controller.NavigationMode);
+        }
+
+        this.RestoreMnemonicsIfVisible();
+    }
+
+    /// <inheritdoc />
+    public void FocusColumnItem(MenuItemData item, int columnLevel, MenuNavigationMode navigationMode)
+    {
+        Debug.WriteLine($"[MenuFlyoutPresenter] FocusColumnItem level={columnLevel}, item={item.Id}, mode={navigationMode}");
+        var presenter = this.GetColumn(columnLevel);
+        presenter?.FocusItem(item, navigationMode);
+    }
+
+    /// <inheritdoc />
+    public void OpenChildColumn(MenuItemData parent, FrameworkElement origin, int columnLevel, MenuNavigationMode navigationMode)
+    {
+        _ = origin;
+        _ = navigationMode;
+
+        if (this.controller is null || this.menuSource is null)
+        {
+            Debug.WriteLine("[MenuFlyoutPresenter] OpenChildColumn aborted: controller or menuSource null");
+            return;
+        }
+
+        this.TrimColumns(columnLevel);
+
+        if (!parent.SubItems.Any())
+        {
+            Debug.WriteLine($"[MenuFlyoutPresenter] Parent {parent.Id} has no children, skipping column open");
+            return;
+        }
+
+        var nextLevel = columnLevel + 1;
+        var itemsView = new MenuSourceView(parent.SubItems, this.menuSource.Services);
+        var items = itemsView.Items.ToList();
+        Debug.WriteLine($"[MenuFlyoutPresenter] Opening child column level {nextLevel} for parent {parent.Id} with {items.Count} items (mode={navigationMode})");
+        _ = this.AddColumn(items, nextLevel, navigationMode);
+
+        var activationSource = navigationMode == MenuNavigationMode.KeyboardInput
+            ? MenuInteractionActivationSource.KeyboardInput
+            : MenuInteractionActivationSource.PointerInput;
+
+        this.RequestFocusForChildColumn(items, nextLevel, activationSource, parent.Id);
+
+        this.RestoreMnemonicsIfVisible();
+    }
+
+    /// <inheritdoc />
+    public void Invoke(MenuItemData item)
+    {
+        this.Owner?.RaiseItemInvoked(item);
+    }
+
+    /// <inheritdoc />
+    public void NavigateRoot(MenuInteractionHorizontalDirection direction, MenuNavigationMode navigationMode)
+    {
+        _ = direction;
+        _ = navigationMode;
+        throw new NotSupportedException("MenuFlyoutPresenter does not coordinate root-level navigation.");
+    }
+
+    /// <inheritdoc />
+    public void ReturnFocusToApp()
+    {
+        // The flyout host relinquishes focus automatically when it closes, so no additional
+        // action is required here.
     }
 
     /// <summary>
@@ -47,51 +200,52 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
     /// <param name="menuSource">The menu source providing root items.</param>
     /// <param name="controller">The shared interaction controller.</param>
     /// <param name="columnHeight">The maximum height applied to each column.</param>
-    internal void Initialize(IMenuSource menuSource, MenuInteractionController controller, double columnHeight)
+    /// <param name="rootSurface">The root interaction surface coordinating the menu bar.</param>
+    internal void Initialize(IMenuSource menuSource, MenuInteractionController controller, double columnHeight, IMenuInteractionSurface rootSurface)
     {
         this.menuSource = menuSource ?? throw new ArgumentNullException(nameof(menuSource));
         this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        this.rootSurface = rootSurface ?? throw new ArgumentNullException(nameof(rootSurface));
         this.maxColumnHeight = columnHeight;
-
+        this.mnemonicsVisible = false;
+        Debug.WriteLine($"[MenuFlyoutPresenter] Initialize called (columnHeight={columnHeight}, rootSurface={rootSurface.GetType().Name})");
         this.ResetColumns();
-        this.controller.SubmenuRequested -= this.OnControllerSubmenuRequested;
-        this.controller.SubmenuRequested += this.OnControllerSubmenuRequested;
     }
 
     /// <summary>
-    ///     Materializes or updates submenu columns based on the supplied request.
+    ///     Attempts to focus the first menu item once the presenter is displayed.
     /// </summary>
-    /// <param name="request">The submenu request raised by the interaction controller.</param>
-    internal void ShowSubmenu(MenuSubmenuRequestEventArgs request)
+    internal void FocusFirstItem()
     {
-        if (this.controller is null)
+        if (this.menuSource is null || this.controller is null)
         {
             return;
         }
 
-        this.TrimColumns(request.ColumnLevel);
-
-        if (!request.MenuItem.SubItems.Any())
+        var firstItem = this.menuSource.Items.FirstOrDefault();
+        if (firstItem is null)
         {
+            Debug.WriteLine("[MenuFlyoutPresenter] FocusFirstItem aborted: no root items");
             return;
         }
 
-        var columnLevel = request.ColumnLevel + 1;
-        var items = new MenuSourceView(request.MenuItem.SubItems, this.menuSource!.Services).Items;
-        this.AddColumn(items, columnLevel);
-    }
+        var navigationMode = this.Owner?.OwnerNavigationMode ?? this.controller.NavigationMode;
 
-    /// <summary>
-    ///     Attempts to focus the first menu item asynchronously once the presenter is displayed.
-    /// </summary>
-    internal void FocusFirstItemAsync()
-    {
         _ = this.DispatcherQueue.TryEnqueue(() =>
         {
-            if (this.columnsHost.Children.FirstOrDefault() is MenuColumnPresenter presenter)
+            if (this.controller is null)
             {
-                presenter.Focus(FocusState.Programmatic);
+                Debug.WriteLine("[MenuFlyoutPresenter] FocusFirstItem aborted: controller lost before dispatch");
+                return;
             }
+
+            var context = MenuInteractionContext.ForColumn(0, this, this.rootSurface);
+            var activationSource = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
+                ? MenuInteractionActivationSource.KeyboardInput
+                : MenuInteractionActivationSource.PointerInput;
+
+            Debug.WriteLine($"[MenuFlyoutPresenter] Requesting initial focus for root item {firstItem.Id} (source={activationSource})");
+            this.controller.OnFocusRequested(context, origin: null, firstItem, activationSource, openSubmenu: false);
         });
     }
 
@@ -100,14 +254,12 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
     /// </summary>
     internal void Reset()
     {
-        if (this.controller is not null)
-        {
-            this.controller.SubmenuRequested -= this.OnControllerSubmenuRequested;
-        }
-
-        this.ResetColumns();
+        Debug.WriteLine("[MenuFlyoutPresenter] Reset invoked");
+        this.ClearColumns();
+        this.mnemonicsVisible = false;
         this.menuSource = null;
         this.controller = null;
+        this.rootSurface = null;
     }
 
     /// <inheritdoc />
@@ -119,22 +271,30 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
 
     private void ResetColumns()
     {
-        this.columnsHost.Children.Clear();
-        this.columnPresenters.Clear();
+        this.ClearColumns();
 
         if (this.menuSource is null || this.controller is null)
         {
+            Debug.WriteLine("[MenuFlyoutPresenter] ResetColumns aborted: missing menuSource or controller");
             return;
         }
 
-        this.AddColumn(this.menuSource.Items, 0);
+        Debug.WriteLine("[MenuFlyoutPresenter] Building root column during reset");
+        var rootItems = this.menuSource.Items.ToList();
+        _ = this.AddColumn(rootItems, 0, this.controller.NavigationMode);
     }
 
-    private void AddColumn(IEnumerable<MenuItemData> items, int level)
+    private void ClearColumns()
+    {
+        this.columnsHost.Children.Clear();
+        this.columnPresenters.Clear();
+    }
+
+    private MenuColumnPresenter AddColumn(List<MenuItemData> items, int level, MenuNavigationMode navigationMode)
     {
         if (this.controller is null)
         {
-            return;
+            throw new InvalidOperationException("Controller must be set before adding columns.");
         }
 
         var effectiveHeight = double.IsNaN(this.maxColumnHeight) ? 480d : this.maxColumnHeight;
@@ -145,11 +305,88 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
             ItemsSource = items,
             ColumnLevel = level,
             MaxHeight = effectiveHeight,
+            OwnerPresenter = this,
         };
 
         column.Margin = level == 0 ? new Thickness(0) : new Thickness(4, 0, 0, 0);
         this.columnPresenters.Add(column);
         this.columnsHost.Children.Add(column);
+        Debug.WriteLine($"[MenuFlyoutPresenter] Added column level {level} with {items.Count} items (mode={navigationMode})");
+        column.FocusFirstItem(navigationMode);
+        return column;
+    }
+
+    private void RequestFocusForChildColumn(List<MenuItemData> items, int columnLevel, MenuInteractionActivationSource source, string parentId)
+    {
+        if (this.rootSurface is null)
+        {
+            Debug.WriteLine($"[MenuFlyoutPresenter] Cannot focus child column {columnLevel}: rootSurface is null (parent={parentId})");
+            return;
+        }
+
+        MenuItemData? firstItem = null;
+        MenuItemData? firstNonSeparator = null;
+        MenuItemData? target = null;
+
+        foreach (var item in items)
+        {
+            firstItem ??= item;
+
+            if (item.IsSeparator)
+            {
+                continue;
+            }
+
+            firstNonSeparator ??= item;
+
+            if (item.IsEnabled)
+            {
+                target = item;
+                break;
+            }
+        }
+
+        target ??= firstNonSeparator ?? firstItem;
+
+        if (target is null)
+        {
+            Debug.WriteLine($"[MenuFlyoutPresenter] No focusable child items for parent {parentId} at column {columnLevel}");
+            return;
+        }
+
+        var context = MenuInteractionContext.ForColumn(columnLevel, this, this.rootSurface);
+        Debug.WriteLine($"[MenuFlyoutPresenter] Scheduling focus for child item {target.Id} at column {columnLevel} (source={source})");
+
+        _ = this.DispatcherQueue.TryEnqueue(() =>
+        {
+            var currentController = this.controller;
+            if (currentController is null)
+            {
+                Debug.WriteLine("[MenuFlyoutPresenter] Controller lost before child focus dispatch");
+                return;
+            }
+
+            if (!ReferenceEquals(this.controller, currentController))
+            {
+                Debug.WriteLine($"[MenuFlyoutPresenter] Child focus dispatch skipped: controller changed before focus for {target.Id}");
+                return;
+            }
+
+            currentController.OnFocusRequested(context, origin: null, target, source, openSubmenu: false);
+        });
+    }
+
+    private void RestoreMnemonicsIfVisible()
+    {
+        if (!this.mnemonicsVisible)
+        {
+            return;
+        }
+
+        foreach (var presenter in this.columnPresenters)
+        {
+            presenter.ShowMnemonics();
+        }
     }
 
     private void TrimColumns(int columnLevel)
@@ -161,8 +398,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter
         }
     }
 
-    private void OnControllerSubmenuRequested(object? sender, MenuSubmenuRequestEventArgs e)
-    {
-        this.ShowSubmenu(e);
-    }
+    private MenuColumnPresenter? GetColumn(int columnLevel) =>
+        this.columnPresenters.FirstOrDefault(presenter => presenter.ColumnLevel == columnLevel);
 }

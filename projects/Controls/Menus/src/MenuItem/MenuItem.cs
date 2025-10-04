@@ -316,32 +316,40 @@ public partial class MenuItem : ContentControl
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (this.ItemData?.IsSeparator == true)
+        if (this.ItemData is not { IsSeparator: false } data)
         {
             base.OnKeyDown(e);
             return;
         }
 
+        if (!data.IsEnabled)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+
+        var handled = false;
+
         switch (e.Key)
         {
             case VirtualKey.Enter:
             case VirtualKey.Space:
-                if (this.ItemData?.IsEnabled == true)
-                {
-                    this.ExecuteCommand();
-                    e.Handled = true;
-                }
-
+                handled = data.HasChildren ? this.TryExpandFromKeyboard() : this.TryInvokeFromKeyboard();
                 break;
 
             case VirtualKey.Right:
-                if (this.ItemData?.HasChildren == true)
+                if (data.HasChildren)
                 {
-                    this.ExpandSubmenu();
-                    e.Handled = true;
+                    handled = this.TryExpandFromKeyboard();
                 }
 
                 break;
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+            return;
         }
 
         base.OnKeyDown(e);
@@ -624,5 +632,29 @@ public partial class MenuItem : ContentControl
         {
             this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs { MenuItem = this.ItemData });
         }
+    }
+
+    private bool TryExpandFromKeyboard()
+    {
+        if (this.ItemData?.HasChildren != true)
+        {
+            return false;
+        }
+
+        this.ExpandSubmenu();
+        return true;
+    }
+
+    private bool TryInvokeFromKeyboard()
+    {
+        if (this.ItemData is not { IsEnabled: true, HasChildren: false })
+        {
+            return false;
+        }
+
+        this.HandleSelectionState();
+        this.ExecuteCommand();
+        this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = this.ItemData });
+        return true;
     }
 }

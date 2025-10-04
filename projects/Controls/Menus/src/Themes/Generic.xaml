@@ -5,7 +5,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem/MenuItem.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuColumnPresenter/MenuColumnPresenter.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuColumnPresenter.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuBar/MenuBar.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuFlyout.xaml" />
     </ResourceDictionary.MergedDictionaries>

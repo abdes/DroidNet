@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Windows.System;
 
 namespace DroidNet.Controls;
 
@@ -16,7 +17,7 @@ namespace DroidNet.Controls;
 ///     materializes cascading submenus through the custom <see cref="MenuFlyout"/> presenter.
 /// </summary>
 [TemplatePart(Name = RootItemsRepeaterPart, Type = typeof(ItemsRepeater))]
-public sealed class MenuBar : Control
+public sealed partial class MenuBar : Control, IMenuInteractionSurface
 {
     /// <summary>
     ///     Identifies the <see cref="MenuSource"/> dependency property.
@@ -52,6 +53,7 @@ public sealed class MenuBar : Control
     private MenuItem? activeRootItem;
     private MenuItem? pendingRootItem;
     private MenuInteractionController? controller;
+    private bool mnemonicsVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -98,7 +100,7 @@ public sealed class MenuBar : Control
     {
         base.OnApplyTemplate();
 
-        if (this.rootItemsRepeater != null)
+        if (this.rootItemsRepeater is not null)
         {
             this.rootItemsRepeater.ElementPrepared -= this.OnRootItemPrepared;
             this.rootItemsRepeater.ElementClearing -= this.OnRootItemClearing;
@@ -111,23 +113,11 @@ public sealed class MenuBar : Control
         this.rootItemsRepeater.ElementPrepared += this.OnRootItemPrepared;
         this.rootItemsRepeater.ElementClearing += this.OnRootItemClearing;
 
+        // Ensure we are listening for keyboard events on the bar so we can forward navigation
+        this.KeyDown -= this.HandleBarKeyDown;
+        this.KeyDown += this.HandleBarKeyDown;
+
         this.AttachController(this.MenuSource?.Services.InteractionController);
-    }
-
-    private static void OnMenuSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var control = (MenuBar)d;
-        if (control.rootItemsRepeater is ItemsRepeater repeater)
-        {
-            repeater.ItemsSource = ((IMenuSource?)e.NewValue)?.Items;
-        }
-
-        var newSource = (IMenuSource?)e.NewValue;
-        control.AttachController(newSource?.Services.InteractionController);
-
-        control.CloseActiveFlyout();
-        control.OpenRootIndex = -1;
-        control.IsSubmenuOpen = false;
     }
 
     private void OnRootItemPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -142,6 +132,8 @@ public sealed class MenuBar : Control
         menuItem.HoverEntered += this.OnRootMenuItemHoverEntered;
         menuItem.RadioGroupSelectionRequested += this.OnRootRadioGroupSelectionRequested;
         menuItem.PointerEntered += this.OnRootMenuItemPointerEntered;
+        menuItem.GotFocus += this.OnRootMenuItemGotFocus;
+        menuItem.PreviewKeyDown += this.OnRootMenuItemPreviewKeyDown;
         menuItem.ShowSubmenuGlyph = false;
     }
 
@@ -157,6 +149,8 @@ public sealed class MenuBar : Control
         menuItem.HoverEntered -= this.OnRootMenuItemHoverEntered;
         menuItem.RadioGroupSelectionRequested -= this.OnRootRadioGroupSelectionRequested;
         menuItem.PointerEntered -= this.OnRootMenuItemPointerEntered;
+        menuItem.GotFocus -= this.OnRootMenuItemGotFocus;
+        menuItem.PreviewKeyDown -= this.OnRootMenuItemPreviewKeyDown;
         menuItem.ShowSubmenuGlyph = true;
 
         if (ReferenceEquals(menuItem, this.activeRootItem))
@@ -169,7 +163,7 @@ public sealed class MenuBar : Control
     {
         if (this.controller is not null)
         {
-            this.controller.HandleRadioGroupSelection(e.MenuItem);
+            this.controller.OnRadioGroupSelectionRequested(e.MenuItem);
         }
         else
         {
@@ -189,12 +183,233 @@ public sealed class MenuBar : Control
 
     private void OnRootMenuItemPointerEntered(object sender, PointerRoutedEventArgs e)
     {
+        _ = e;
+
         if (sender is not MenuItem menuItem || menuItem.ItemData is null)
         {
             return;
         }
 
         this.HandleRootPointerActivation(menuItem, menuItem.ItemData);
+    }
+
+    /// <summary>
+    ///     Handles key events when the menu bar has focus and routes keyboard navigation to the controller.
+    /// </summary>
+    /// <param name="e">Key event args.</param>
+    private void HandleBarKeyDown(object? sender, KeyRoutedEventArgs e)
+    {
+        if (this.controller is null)
+        {
+            return;
+        }
+
+        // Notify controller that keyboard is the current navigation source.
+        this.controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
+
+        switch (e.Key)
+        {
+            case VirtualKey.Menu: // Alt key toggles mnemonic mode
+                this.controller.OnMnemonicModeToggled(this.CreateRootContext());
+                e.Handled = true;
+                break;
+
+            case VirtualKey.Left:
+            case VirtualKey.Right:
+                e.Handled = this.HandleRootHorizontalNavigation(e.Key);
+                break;
+
+            case VirtualKey.Down:
+            case VirtualKey.Enter:
+            case VirtualKey.Space:
+                e.Handled = this.HandleRootActivationKey(e.Key);
+                break;
+        }
+
+        // no-op: handled routing is sufficient
+    }
+
+    private bool HandleRootHorizontalNavigation(VirtualKey key)
+    {
+        if (this.controller is null || this.MenuSource is null || this.MenuSource.Items.Count == 0)
+        {
+            return false;
+        }
+
+        var count = this.MenuSource.Items.Count;
+        var focusedRoot = this.GetFocusedRootMenuItem();
+        var focusedData = focusedRoot?.ItemData;
+        var current = focusedData is not null ? this.MenuSource.Items.IndexOf(focusedData) : this.OpenRootIndex;
+
+        if (current < 0)
+        {
+            current = 0;
+        }
+
+        var next = key == VirtualKey.Left
+            ? (current - 1 + count) % count
+            : (current + 1) % count;
+
+        var target = this.MenuSource.Items[next];
+        var container = this.ResolveRootContainer(target);
+
+        if (container is null)
+        {
+            return false;
+        }
+
+        // Request focus on the root; if a submenu is open we keep it open for the new root.
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsSubmenuOpen);
+        return true;
+    }
+
+    private bool HandleRootActivationKey(VirtualKey key)
+    {
+        if (this.controller is null || this.MenuSource is null || this.MenuSource.Items.Count == 0)
+        {
+            return false;
+        }
+
+        var activeRoot = this.GetFocusedRootMenuItem() ?? this.activeRootItem;
+
+        if (activeRoot is null)
+        {
+            var fallbackIndex = this.OpenRootIndex >= 0 ? this.OpenRootIndex : 0;
+
+            if (fallbackIndex < 0 || fallbackIndex >= this.MenuSource.Items.Count)
+            {
+                fallbackIndex = 0;
+            }
+
+            var fallbackData = this.MenuSource.Items[fallbackIndex];
+            activeRoot = this.ResolveRootContainer(fallbackData);
+        }
+
+        if (activeRoot?.ItemData is not MenuItemData activeData)
+        {
+            return false;
+        }
+
+        if (activeData.HasChildren)
+        {
+            this.controller.OnFocusRequested(
+                this.CreateRootContext(),
+                activeRoot,
+                activeData,
+                MenuInteractionActivationSource.KeyboardInput,
+                openSubmenu: true);
+            return true;
+        }
+
+        if (key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            this.controller.OnInvokeRequested(this.CreateRootContext(), activeData, MenuInteractionActivationSource.KeyboardInput);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void OnRootMenuItemGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (this.controller is null || sender is not MenuItem menuItem || menuItem.ItemData is null)
+        {
+            return;
+        }
+
+        if (menuItem.FocusState != FocusState.Keyboard)
+        {
+            return;
+        }
+
+        var openSubmenu = this.IsSubmenuOpen && menuItem.ItemData.HasChildren;
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu);
+    }
+
+    private void OnRootMenuItemPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (this.controller is null || sender is not MenuItem menuItem || menuItem.ItemData is null)
+        {
+            return;
+        }
+
+        this.controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
+
+        var handled = false;
+
+        switch (e.Key)
+        {
+            case VirtualKey.Left:
+                handled = this.FocusAdjacentRoot(menuItem.ItemData, -1);
+                break;
+
+            case VirtualKey.Right:
+                handled = this.FocusAdjacentRoot(menuItem.ItemData, 1);
+                break;
+
+            case VirtualKey.Down:
+            case VirtualKey.Enter:
+            case VirtualKey.Space:
+                handled = this.HandleRootActivationKey(e.Key);
+                break;
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private MenuItem? GetFocusedRootMenuItem()
+    {
+        if (this.MenuSource is null || this.MenuSource.Items.Count == 0)
+        {
+            return null;
+        }
+
+        if (FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem focused && focused.ItemData is MenuItemData data)
+        {
+            var index = this.MenuSource.Items.IndexOf(data);
+            if (index >= 0)
+            {
+                return focused;
+            }
+        }
+
+        return null;
+    }
+
+    private bool FocusAdjacentRoot(MenuItemData currentRoot, int direction)
+    {
+        if (this.controller is null || this.MenuSource is null || this.MenuSource.Items.Count == 0)
+        {
+            return false;
+        }
+
+        if (direction == 0)
+        {
+            return false;
+        }
+
+        var count = this.MenuSource.Items.Count;
+        var currentIndex = this.MenuSource.Items.IndexOf(currentRoot);
+
+        if (currentIndex < 0)
+        {
+            return false;
+        }
+
+        var nextIndex = (currentIndex + direction + count) % count;
+        var target = this.MenuSource.Items[nextIndex];
+        var container = this.ResolveRootContainer(target);
+
+        if (container is null)
+        {
+            return false;
+        }
+
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsSubmenuOpen);
+        return true;
     }
 
     private void HandleRootPointerActivation(MenuItem menuItem, MenuItemData menuItemData)
@@ -204,20 +419,13 @@ public sealed class MenuBar : Control
             return;
         }
 
-        this.controller.NotifyPointerNavigation();
-
-        if (!this.IsSubmenuOpen)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+        if (!this.IsSubmenuOpen || ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
         {
             return;
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.RequestSubmenu(menuItem, menuItemData, 0, MenuNavigationMode.PointerInput);
+        this.controller.OnPointerEntered(this.CreateRootContext(), menuItem, menuItemData, true);
     }
 
     private void OnRootMenuItemSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
@@ -227,14 +435,18 @@ public sealed class MenuBar : Control
             return;
         }
 
-        this.controller.NotifyKeyboardNavigation();
-        if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+        if (ReferenceEquals(menuItem, this.pendingRootItem))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsSubmenuOpen)
         {
             return;
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.RequestSubmenu(menuItem, e.MenuItem, 0, MenuNavigationMode.KeyboardInput);
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.MenuItem, MenuInteractionActivationSource.KeyboardInput, true);
     }
 
     private void OnRootMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
@@ -244,31 +456,31 @@ public sealed class MenuBar : Control
             return;
         }
 
+        var source = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
+            ? MenuInteractionActivationSource.KeyboardInput
+            : MenuInteractionActivationSource.PointerInput;
+
         if (e.MenuItem.HasChildren)
         {
-            var mode = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
-                ? MenuNavigationMode.KeyboardInput
-                : MenuNavigationMode.PointerInput;
-
-            if (mode == MenuNavigationMode.PointerInput)
+            if (ReferenceEquals(menuItem, this.pendingRootItem))
             {
-                this.controller.NotifyPointerNavigation();
+                return;
             }
 
-            if (ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+            if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsSubmenuOpen)
             {
                 return;
             }
 
             this.pendingRootItem = menuItem;
-            this.controller.RequestSubmenu(menuItem, e.MenuItem, 0, mode);
+            this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.MenuItem, source, true);
             return;
         }
 
-        this.controller.HandleItemInvoked(e.MenuItem);
+        this.controller.OnInvokeRequested(this.CreateRootContext(), e.MenuItem, source);
     }
 
-    private void OpenRootSubmenu(MenuSubmenuRequestEventArgs request)
+    private void OpenRootSubmenuCore(MenuItemData root, FrameworkElement origin, MenuNavigationMode navigationMode)
     {
         if (this.MenuSource is null)
         {
@@ -276,7 +488,7 @@ public sealed class MenuBar : Control
             return;
         }
 
-        if (!request.MenuItem.SubItems.Any())
+        if (!root.SubItems.Any())
         {
             this.pendingRootItem = null;
             return;
@@ -291,22 +503,23 @@ public sealed class MenuBar : Control
             this.activeFlyout = null;
         }
 
-        var submenuSource = new MenuSourceView(request.MenuItem.SubItems, this.MenuSource.Services);
+        var submenuSource = new MenuSourceView(root.SubItems, this.MenuSource.Services);
         var flyout = new MenuFlyout
         {
             MenuSource = submenuSource,
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
-            OwnerNavigationMode = request.NavigationMode,
+            OwnerNavigationMode = navigationMode,
             Controller = this.controller,
+            RootSurface = this,
         };
 
         flyout.OverlayInputPassThroughElement = this;
         flyout.Closed += this.OnFlyoutClosed;
 
-        var index = this.MenuSource.Items.IndexOf(request.MenuItem);
+        var index = this.MenuSource.Items.IndexOf(root);
         this.OpenRootIndex = index >= 0 ? index : -1;
         this.IsSubmenuOpen = true;
-        this.activeRootItem = request.Origin as MenuItem;
+        this.activeRootItem = origin as MenuItem;
         this.pendingRootItem = null;
         this.activeFlyout = flyout;
 
@@ -315,25 +528,7 @@ public sealed class MenuBar : Control
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
         };
 
-        flyout.ShowAt(request.Origin, options);
-    }
-
-    private void OnControllerSubmenuRequested(object? sender, MenuSubmenuRequestEventArgs e)
-    {
-        if (e.ColumnLevel == 0)
-        {
-            this.OpenRootSubmenu(e);
-        }
-    }
-
-    private void OnControllerItemInvoked(object? sender, MenuItemInvokedEventArgs e)
-    {
-        this.ItemInvoked?.Invoke(this, e);
-    }
-
-    private void OnControllerDismissRequested(object? sender, EventArgs e)
-    {
-        this.CloseActiveFlyout();
+        flyout.ShowAt(origin, options);
     }
 
     private void OnFlyoutClosed(object? sender, object e)
@@ -365,21 +560,30 @@ public sealed class MenuBar : Control
             return;
         }
 
-        if (this.controller is MenuInteractionController oldController)
-        {
-            oldController.SubmenuRequested -= this.OnControllerSubmenuRequested;
-            oldController.ItemInvoked -= this.OnControllerItemInvoked;
-            oldController.DismissRequested -= this.OnControllerDismissRequested;
-        }
-
         this.pendingRootItem = null;
         this.controller = newController;
+    }
 
-        if (newController is not null)
+    private MenuInteractionContext CreateRootContext(IMenuInteractionSurface? columnSurface = null)
+    {
+        var surface = columnSurface ?? this.activeFlyout?.ColumnSurface;
+        return MenuInteractionContext.ForRoot(this, surface);
+    }
+
+    private MenuItem? ResolveRootContainer(MenuItemData root)
+    {
+        if (this.rootItemsRepeater is null || this.MenuSource is null)
         {
-            newController.SubmenuRequested += this.OnControllerSubmenuRequested;
-            newController.ItemInvoked += this.OnControllerItemInvoked;
-            newController.DismissRequested += this.OnControllerDismissRequested;
+            return null;
         }
+
+        var index = this.MenuSource.Items.IndexOf(root);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var element = this.rootItemsRepeater.TryGetElement(index) ?? this.rootItemsRepeater.GetOrCreateElement(index);
+        return element as MenuItem;
     }
 }
