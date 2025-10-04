@@ -498,7 +498,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         {
             this.activeFlyout.SuppressControllerDismissal = true;
             this.activeFlyout.Closed -= this.OnFlyoutClosed;
-            this.activeFlyout.OverlayInputPassThroughElement = null;
             this.activeFlyout.Hide();
             this.activeFlyout = null;
         }
@@ -513,7 +512,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             RootSurface = this,
         };
 
-        flyout.OverlayInputPassThroughElement = this;
         flyout.Closed += this.OnFlyoutClosed;
 
         var index = this.MenuSource.Items.IndexOf(root);
@@ -542,7 +540,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         {
             this.activeFlyout.SuppressControllerDismissal = true;
             this.activeFlyout.Closed -= this.OnFlyoutClosed;
-            this.activeFlyout.OverlayInputPassThroughElement = null;
             this.activeFlyout.Hide();
             this.activeFlyout = null;
         }
