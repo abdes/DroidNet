@@ -132,10 +132,6 @@ public sealed class MenuFlyout : FlyoutBase
         }
 
         var rootSurface = this.RootSurface;
-        if (rootSurface is null)
-        {
-            return;
-        }
 
         var source = this.OwnerNavigationMode == MenuNavigationMode.KeyboardInput
             ? MenuInteractionActivationSource.KeyboardInput
