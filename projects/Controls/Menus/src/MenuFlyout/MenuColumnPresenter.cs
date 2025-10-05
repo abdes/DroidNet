@@ -2,12 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -21,7 +18,7 @@ namespace DroidNet.Controls;
 ///     logic agnostic of individual item wiring.
 /// </summary>
 [TemplatePart(Name = ItemsHostPart, Type = typeof(StackPanel))]
-public sealed class MenuColumnPresenter : Control
+public sealed partial class MenuColumnPresenter : Control
 {
     /// <summary>
     ///     Identifies the <see cref="Controller"/> dependency property.
@@ -30,7 +27,7 @@ public sealed class MenuColumnPresenter : Control
         nameof(Controller),
         typeof(MenuInteractionController),
         typeof(MenuColumnPresenter),
-        new PropertyMetadata(null, OnControllerChanged));
+        new PropertyMetadata(defaultValue: null, OnControllerChanged));
 
     /// <summary>
     ///     Identifies the <see cref="ItemsSource"/> dependency property.
@@ -39,7 +36,7 @@ public sealed class MenuColumnPresenter : Control
         nameof(ItemsSource),
         typeof(IEnumerable),
         typeof(MenuColumnPresenter),
-        new PropertyMetadata(null, OnItemsSourceChanged));
+        new PropertyMetadata(defaultValue: null, OnItemsSourceChanged));
 
     /// <summary>
     ///     Identifies the <see cref="ColumnLevel"/> dependency property.
@@ -100,42 +97,6 @@ public sealed class MenuColumnPresenter : Control
     {
         get => this.ownerPresenter;
         set => this.ownerPresenter = value;
-    }
-
-    /// <summary>
-    ///     Shows mnemonics for the realized menu items in the column.
-    /// </summary>
-    internal void ShowMnemonics()
-    {
-        if (this.itemsHost is null)
-        {
-            return;
-        }
-
-        foreach (var item in this.itemsHost.Children.OfType<MenuItem>())
-        {
-            _ = item;
-
-            // TODO: Apply mnemonic visual once implemented on MenuItem.
-        }
-    }
-
-    /// <summary>
-    ///     Hides mnemonics for the realized menu items in the column.
-    /// </summary>
-    internal void HideMnemonics()
-    {
-        if (this.itemsHost is null)
-        {
-            return;
-        }
-
-        foreach (var item in this.itemsHost.Children.OfType<MenuItem>())
-        {
-            _ = item;
-
-            // TODO: Apply mnemonic visual once implemented on MenuItem.
-        }
     }
 
     /// <summary>
@@ -250,8 +211,7 @@ public sealed class MenuColumnPresenter : Control
 
     private static void OnControllerChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        _ = d;
-        _ = e;
+        // TODO: confirm no-op and delete this method, or properly implement controller change handling
     }
 
     private static MenuInteractionActivationSource ToActivationSource(MenuNavigationMode navigationMode) =>
@@ -341,7 +301,7 @@ public sealed class MenuColumnPresenter : Control
         item.Invoked += this.OnMenuItemInvoked;
         item.SubmenuRequested += this.OnMenuItemSubmenuRequested;
         item.RadioGroupSelectionRequested += this.OnMenuItemRadioGroupSelectionRequested;
-        item.HoverEntered += this.OnMenuItemHoverEntered;
+        item.HoverStarted += this.OnMenuItemHoverStarted;
         item.GotFocus += this.OnMenuItemGotFocus;
     }
 
@@ -352,7 +312,7 @@ public sealed class MenuColumnPresenter : Control
         item.Invoked -= this.OnMenuItemInvoked;
         item.SubmenuRequested -= this.OnMenuItemSubmenuRequested;
         item.RadioGroupSelectionRequested -= this.OnMenuItemRadioGroupSelectionRequested;
-        item.HoverEntered -= this.OnMenuItemHoverEntered;
+        item.HoverStarted -= this.OnMenuItemHoverStarted;
         item.GotFocus -= this.OnMenuItemGotFocus;
     }
 
@@ -365,7 +325,7 @@ public sealed class MenuColumnPresenter : Control
         }
     }
 
-    private void OnMenuItemHoverEntered(object? sender, MenuItemHoverEventArgs e)
+    private void OnMenuItemHoverStarted(object? sender, MenuItemHoverEventArgs e)
     {
         if (sender is not FrameworkElement origin)
         {
@@ -379,7 +339,7 @@ public sealed class MenuColumnPresenter : Control
         }
 
         var context = this.CreateCurrentContext();
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HoverEntered {e.MenuItem.Id}");
+        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HoverEntered {e.ItemData.Id}");
         _ = origin.DispatcherQueue.TryEnqueue(() =>
         {
             if (!ReferenceEquals(this.Controller, controller))
@@ -388,13 +348,13 @@ public sealed class MenuColumnPresenter : Control
                 return;
             }
 
-            controller.OnPointerEntered(context, origin, e.MenuItem);
+            controller.OnPointerEntered(context, origin, e.ItemData);
         });
     }
 
     private void OnMenuItemRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
     {
-        this.Controller?.OnRadioGroupSelectionRequested(e.MenuItem);
+        this.Controller?.OnRadioGroupSelectionRequested(e.ItemData);
     }
 
     private void OnMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
@@ -404,8 +364,8 @@ public sealed class MenuColumnPresenter : Control
         var source = ToActivationSource(navigationMode);
 
         var context = this.CreateCurrentContext();
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Invoked {e.MenuItem.Id} source={source}");
-        controller?.OnInvokeRequested(context, e.MenuItem, source);
+        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Invoked {e.ItemData.Id} source={source}");
+        controller?.OnInvokeRequested(context, e.ItemData, source);
     }
 
     private void OnMenuItemSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
@@ -423,7 +383,7 @@ public sealed class MenuColumnPresenter : Control
 
         var source = ToActivationSource(controller.NavigationMode);
         var context = this.CreateCurrentContext();
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] SubmenuRequested {e.MenuItem.Id} source={source}");
+        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] SubmenuRequested {e.ItemData.Id} source={source}");
         _ = origin.DispatcherQueue.TryEnqueue(() =>
         {
             if (!ReferenceEquals(this.Controller, controller))
@@ -432,7 +392,7 @@ public sealed class MenuColumnPresenter : Control
                 return;
             }
 
-            controller.OnSubmenuRequested(context, origin, e.MenuItem, source);
+            controller.OnSubmenuRequested(context, origin, e.ItemData, source);
         });
     }
 
@@ -459,55 +419,18 @@ public sealed class MenuColumnPresenter : Control
         controller.OnFocusRequested(context, menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
     }
 
-    private bool TryActivateFocusedItem(VirtualKey key)
+    private bool OpenSubmenu(MenuItem menuItem)
     {
-        var focused = this.GetFocusedMenuItem();
-        if (focused?.ItemData is not MenuItemData data)
+        Debug.Assert(menuItem.ItemData is { }, "Expecting menu item with valid data in TryOpenSubmenu");
+        Debug.Assert(menuItem.ItemData.HasChildren, "Expecting menu item with children in TryOpenSubmenu");
+
+        if (menuItem.ItemData is not MenuItemData data || !data.HasChildren)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryActivateFocusedItem no focused item");
             return false;
         }
 
-        if (data.HasChildren)
-        {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryActivateFocusedItem opening child for {data.Id}");
-            return this.TryOpenSubmenuFor(focused, data);
-        }
+        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenu direct on {data.Id}");
 
-        if (key is not (VirtualKey.Enter or VirtualKey.Space))
-        {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryActivateFocusedItem ignored key {key} for {data.Id}");
-            return false;
-        }
-
-        var context = this.CreateContext(this.ColumnLevel);
-        this.Controller?.OnInvokeRequested(context, data, MenuInteractionActivationSource.KeyboardInput);
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Invoked {data.Id} via keyboard");
-        return true;
-    }
-
-    private bool TryOpenSubmenuForFocusedItem()
-    {
-        var focused = this.GetFocusedMenuItem();
-        var focusedId = focused?.ItemData?.Id ?? "null";
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenuForFocusedItem focused={focusedId}");
-        return focused?.ItemData is MenuItemData data && data.HasChildren && this.TryOpenSubmenuFor(focused, data);
-    }
-
-    private bool TryOpenSubmenu(MenuItem? menuItem)
-    {
-        if (menuItem?.ItemData is MenuItemData data && data.HasChildren)
-        {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenu direct on {data.Id}");
-            return this.TryOpenSubmenuFor(menuItem, data);
-        }
-
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenu fallback to focused item");
-        return this.TryOpenSubmenuForFocusedItem();
-    }
-
-    private bool TryOpenSubmenuFor(MenuItem menuItem, MenuItemData data)
-    {
         var controller = this.Controller;
         if (controller is null)
         {
@@ -713,8 +636,7 @@ public sealed class MenuColumnPresenter : Control
             VirtualKey.Up => this.TryMoveFocus(-1),
             VirtualKey.Down => this.TryMoveFocus(1),
             VirtualKey.Left => this.TryFocusParentColumn() || this.TryNavigateRootSibling(MenuInteractionHorizontalDirection.Previous) || this.TryReturnFocusToRoot(),
-            VirtualKey.Right => this.TryOpenSubmenu(origin) || this.TryNavigateRootSibling(MenuInteractionHorizontalDirection.Next),
-            VirtualKey.Enter or VirtualKey.Space => this.TryActivateFocusedItem(key),
+            VirtualKey.Right => origin?.ItemData?.HasChildren == true ? this.OpenSubmenu(origin) : this.TryNavigateRootSibling(MenuInteractionHorizontalDirection.Next),
             _ => false,
         };
     }

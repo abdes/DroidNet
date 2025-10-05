@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using Microsoft.UI.Xaml;
 using Windows.System;
 
@@ -13,32 +12,6 @@ namespace DroidNet.Controls;
 /// </summary>
 public sealed partial class MenuBar
 {
-    /// <inheritdoc />
-    void IMenuInteractionSurface.ShowMnemonics()
-    {
-        if (this.mnemonicsVisible)
-        {
-            return;
-        }
-
-        this.mnemonicsVisible = true;
-
-        // TODO: propagate mnemonic visibility to realized menu items.
-    }
-
-    /// <inheritdoc />
-    void IMenuInteractionSurface.HideMnemonics()
-    {
-        if (!this.mnemonicsVisible)
-        {
-            return;
-        }
-
-        this.mnemonicsVisible = false;
-
-        // TODO: propagate mnemonic visibility to realized menu items.
-    }
-
     /// <inheritdoc />
     void IMenuInteractionSurface.FocusRoot(MenuItemData root, MenuNavigationMode navigationMode)
     {
@@ -86,25 +59,17 @@ public sealed partial class MenuBar
 
     /// <inheritdoc />
     void IMenuInteractionSurface.FocusColumnItem(MenuItemData item, int columnLevel, MenuNavigationMode navigationMode)
-    {
-        throw new NotSupportedException("MenuBar handles only root-level focus operations.");
-    }
+        => throw new NotSupportedException("MenuBar handles only root-level focus operations.");
 
     /// <inheritdoc />
     void IMenuInteractionSurface.OpenChildColumn(MenuItemData parent, FrameworkElement origin, int columnLevel, MenuNavigationMode navigationMode)
-    {
-        throw new NotSupportedException("MenuBar handles only root-level submenu operations.");
-    }
+        => throw new NotSupportedException("MenuBar handles only root-level submenu operations.");
 
     /// <inheritdoc />
     void IMenuInteractionSurface.Invoke(MenuItemData item)
-    {
-        this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = item });
-    }
+        => this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = item });
 
     /// <inheritdoc />
     void IMenuInteractionSurface.ReturnFocusToApp()
-    {
-        this.DispatcherQueue.TryEnqueue(() => this.Focus(FocusState.Programmatic));
-    }
+        => this.DispatcherQueue.TryEnqueue(() => this.Focus(FocusState.Programmatic));
 }

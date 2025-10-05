@@ -1,11 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuBarDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:menus="using:DroidNet.Controls"
-    PreviewKeyDown="OnPreviewKeyDown"
-    PreviewKeyUp="OnPreviewKeyUp">
+    xmlns:menus="using:DroidNet.Controls">
 
     <Grid>
         <Grid.RowDefinitions>

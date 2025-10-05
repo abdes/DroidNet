@@ -2,10 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -25,7 +22,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
     private IMenuSource? menuSource;
     private IMenuInteractionSurface? rootSurface;
     private double maxColumnHeight;
-    private bool mnemonicsVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuFlyoutPresenter"/> class.
@@ -54,38 +50,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
     ///     Gets the root interaction surface coordinating the menu bar for this presenter.
     /// </summary>
     internal IMenuInteractionSurface? RootSurface => this.rootSurface;
-
-    /// <inheritdoc />
-    public void ShowMnemonics()
-    {
-        if (this.mnemonicsVisible)
-        {
-            return;
-        }
-
-        this.mnemonicsVisible = true;
-
-        foreach (var presenter in this.columnPresenters)
-        {
-            presenter.ShowMnemonics();
-        }
-    }
-
-    /// <inheritdoc />
-    public void HideMnemonics()
-    {
-        if (!this.mnemonicsVisible)
-        {
-            return;
-        }
-
-        this.mnemonicsVisible = false;
-
-        foreach (var presenter in this.columnPresenters)
-        {
-            presenter.HideMnemonics();
-        }
-    }
 
     /// <inheritdoc />
     public void FocusRoot(MenuItemData root, MenuNavigationMode navigationMode)
@@ -126,8 +90,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
             var rootItems = this.menuSource.Items.ToList();
             _ = this.AddColumn(rootItems, 0, this.controller.NavigationMode);
         }
-
-        this.RestoreMnemonicsIfVisible();
     }
 
     /// <inheritdoc />
@@ -169,8 +131,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
             : MenuInteractionActivationSource.PointerInput;
 
         this.RequestFocusForChildColumn(items, nextLevel, activationSource, parent.Id);
-
-        this.RestoreMnemonicsIfVisible();
     }
 
     /// <inheritdoc />
@@ -207,7 +167,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
         this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
         this.rootSurface = rootSurface;
         this.maxColumnHeight = columnHeight;
-        this.mnemonicsVisible = false;
         var rootSurfaceName = rootSurface?.GetType().Name ?? "<null>";
         Debug.WriteLine($"[MenuFlyoutPresenter] Initialize called (columnHeight={columnHeight}, rootSurface={rootSurfaceName})");
         this.ResetColumns();
@@ -257,7 +216,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
     {
         Debug.WriteLine("[MenuFlyoutPresenter] Reset invoked");
         this.ClearColumns();
-        this.mnemonicsVisible = false;
         this.menuSource = null;
         this.controller = null;
         this.rootSurface = null;
@@ -375,19 +333,6 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
 
             currentController.OnFocusRequested(context, origin: null, target, source, openSubmenu: false);
         });
-    }
-
-    private void RestoreMnemonicsIfVisible()
-    {
-        if (!this.mnemonicsVisible)
-        {
-            return;
-        }
-
-        foreach (var presenter in this.columnPresenters)
-        {
-            presenter.ShowMnemonics();
-        }
     }
 
     private void TrimColumns(int columnLevel)

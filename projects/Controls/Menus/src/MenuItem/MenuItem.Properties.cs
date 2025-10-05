@@ -3,18 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents an individual menu item control that renders a four-column layout with Icon, Text, Accelerator, and State.
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
 /// </summary>
-[SuppressMessage(
-    "ReSharper",
-    "ClassWithVirtualMembersNeverInherited.Global",
-    Justification = "class is designed to be extended when needed")]
 public partial class MenuItem
 {
     /// <summary>
@@ -35,7 +32,7 @@ public partial class MenuItem
         nameof(ShowSubmenuGlyph),
         typeof(bool),
         typeof(MenuItem),
-        new PropertyMetadata(true, OnShowSubmenuGlyphChanged));
+        new PropertyMetadata(defaultValue: true, OnShowSubmenuGlyphChanged));
 
     /// <summary>
     ///     Gets or sets the menu item data that provides the content and behavior for this control.
@@ -67,36 +64,36 @@ public partial class MenuItem
     }
 
     /// <summary>
-    ///     Handles changes to the <see cref="ItemData" /> property.
+    ///     Responds to changes of the <see cref="ItemData"/> dependency property.
     /// </summary>
-    /// <param name="oldData">The previous value of the <see cref="ItemData" /> property.</param>
-    /// <param name="newData">The new value of the <see cref="ItemData" /> property.</param>
+    /// <param name="oldData">The previously attached <see cref="MenuItemData"/>, or <see langword="null"/>.</param>
+    /// <param name="newData">The newly attached <see cref="MenuItemData"/>, or <see langword="null"/> if cleared.</param>
     /// <remarks>
-    ///     This method is called whenever the <see cref="ItemData" /> property changes. It
-    ///     un-registers property change handlers from the old data and registers handlers with the
-    ///     new data. It also updates all visual states to reflect the new data values.
+    ///     Rewires <see cref="INotifyPropertyChanged.PropertyChanged"/> from the old data to the new data and schedules
+    ///     a refresh of all visual states on the UI dispatcher. The method is <see langword="virtual"/>; when
+    ///     overriding, preserve the subscription semantics or call the base implementation.
     /// </remarks>
     protected virtual void OnItemDataChanged(MenuItemData? oldData, MenuItemData? newData)
     {
-        // Un-register event handlers from the old data if any
-        if (oldData is not null)
-        {
-            oldData.PropertyChanged -= this.ItemData_OnPropertyChanged;
-        }
+        // Safely rewire PropertyChanged from old to new data
+        oldData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
+        newData?.PropertyChanged += this.ItemData_OnPropertyChanged;
 
-        // Register event handlers with the new data and update visual states
-        if (newData is not null)
-        {
-            newData.PropertyChanged += this.ItemData_OnPropertyChanged;
+        // Update access key immediately so the control participates in AccessKeyManager.
+        this.AccessKey = newData?.Mnemonic?.ToString() ?? string.Empty;
 
-            // Update visual states on the UI thread
-            _ = this.DispatcherQueue.TryEnqueue(this.UpdateAllVisualStates);
-        }
-        else
+        // Update ALL visual states on the UI thread
+        _ = this.DispatcherQueue.TryEnqueue(() =>
         {
-            // Clear visual states when no data is present
-            _ = this.DispatcherQueue.TryEnqueue(this.UpdateAllVisualStates);
-        }
+            this.UpdateTypeVisualState();
+            this.UpdateInteractionVisualState();
+            this.UpdateActiveVisualState();
+            this.UpdateIconVisualState();
+            this.UpdateAcceleratorVisualState();
+            this.UpdateCheckmarkVisualState();
+
+            this.RefreshTextPresentation();
+        });
     }
 
     private static void OnShowSubmenuGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -109,10 +106,7 @@ public partial class MenuItem
 
     private void ItemData_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not MenuItemData data)
-        {
-            return;
-        }
+        Debug.Assert(sender is MenuItemData, "Expecting sender to be MenuItemData");
 
         // Update visual states based on which property changed
         _ = this.DispatcherQueue.TryEnqueue(() =>
@@ -136,6 +130,15 @@ public partial class MenuItem
                     this.UpdateAcceleratorVisualState();
                     break;
 
+                case nameof(MenuItemData.Mnemonic):
+                    this.AccessKey = this.ItemData?.Mnemonic?.ToString() ?? string.Empty;
+                    this.RefreshTextPresentation();
+                    break;
+
+                case nameof(MenuItemData.Text):
+                    this.RefreshTextPresentation();
+                    break;
+
                 case nameof(MenuItemData.IsSeparator):
                     this.UpdateTypeVisualState();
                     break;
@@ -148,8 +151,8 @@ public partial class MenuItem
                     break;
 
                 default:
-                    // For other properties (Text, Command, etc.), no visual state update needed
-                    // The binding will handle text updates automatically
+                    // For other properties (Command, etc.), no visual state update needed
+                    // The control simply responds to specific property changes above
                     break;
             }
         });

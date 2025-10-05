@@ -2,12 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Windows.System;
 
 namespace DroidNet.Controls.Demo.Menus;
 
@@ -17,8 +14,6 @@ namespace DroidNet.Controls.Demo.Menus;
 [ViewModel(typeof(MenuBarDemoViewModel))]
 public sealed partial class MenuBarDemoView : Page
 {
-    private bool isAltKeyPressed;
-    private bool mnemonicKeyInvoked;
     private MenuInteractionController? controller;
     private MenuInteractionContext menuContext;
     private bool hasMenuContext;
@@ -34,13 +29,7 @@ public sealed partial class MenuBarDemoView : Page
         this.Unloaded += this.OnUnloaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        _ = e;
-
-        this.InitializeMenuContext();
-    }
+    private void OnLoaded(object sender, RoutedEventArgs e) => this.InitializeMenuContext();
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -51,64 +40,6 @@ public sealed partial class MenuBarDemoView : Page
         this.menuContext = default;
         this.hasMenuContext = false;
         this.firstRootItem = null;
-        this.ResetMnemonicTracking();
-    }
-
-    private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        _ = sender;
-
-        if (MnemonicUtilities.IsMenuKey(e.Key))
-        {
-            if (this.EnsureMenuContext())
-            {
-                var mnemonicsVisible = this.controller!.OnMnemonicModeToggled(this.menuContext);
-
-                if (!mnemonicsVisible)
-                {
-                    this.ResetMnemonicTracking();
-                }
-                else
-                {
-                    this.isAltKeyPressed = true;
-                    this.mnemonicKeyInvoked = false;
-                }
-            }
-
-            e.Handled = true;
-            return;
-        }
-
-        if (!this.isAltKeyPressed)
-        {
-            return;
-        }
-
-        if (this.EnsureMenuContext())
-        {
-            this.controller!.OnMnemonicKey(this.menuContext, (char)e.Key);
-            this.mnemonicKeyInvoked = true;
-            e.Handled = true;
-        }
-    }
-
-    private void OnPreviewKeyUp(object sender, KeyRoutedEventArgs e)
-    {
-        _ = sender;
-
-        if (!MnemonicUtilities.IsMenuKey(e.Key))
-        {
-            return;
-        }
-
-        e.Handled = true;
-
-        if (this.isAltKeyPressed && !this.mnemonicKeyInvoked)
-        {
-            _ = this.FocusFirstRootItem();
-        }
-
-        this.ResetMnemonicTracking();
     }
 
     private bool FocusFirstRootItem()
@@ -122,16 +53,10 @@ public sealed partial class MenuBarDemoView : Page
             this.menuContext,
             origin: null,
             menuItem: this.firstRootItem!,
-            source: MenuInteractionActivationSource.Mnemonic,
+            source: MenuInteractionActivationSource.KeyboardInput,
             openSubmenu: false);
 
         return true;
-    }
-
-    private void ResetMnemonicTracking()
-    {
-        this.isAltKeyPressed = false;
-        this.mnemonicKeyInvoked = false;
     }
 
     private bool EnsureMenuContext()
@@ -160,11 +85,5 @@ public sealed partial class MenuBarDemoView : Page
         this.hasMenuContext = true;
         this.firstRootItem = menuSource.Items[0];
         return true;
-    }
-
-    private static class MnemonicUtilities
-    {
-        public static bool IsMenuKey(VirtualKey key)
-            => key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu;
     }
 }

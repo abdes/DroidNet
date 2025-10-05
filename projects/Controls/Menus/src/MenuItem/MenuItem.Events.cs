@@ -5,7 +5,7 @@
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents an individual menu item control that renders a four-column layout with Icon, Text, Accelerator, and State.
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
 /// </summary>
 public partial class MenuItem
 {
@@ -20,23 +20,22 @@ public partial class MenuItem
     public event EventHandler<MenuItemInvokedEventArgs>? Invoked;
 
     /// <summary>
-    ///     Occurs when the pointer enters the menu item area.
+    ///     Occurs when the pointer enters an active (not a separator, and not disabled) menu item area.
     /// </summary>
     /// <remarks>
-    ///     This event is used by menu container controls to implement hover navigation,
-    ///     such as automatically expanding submenus or highlighting menu paths.
-    ///     The event is only raised for enabled, non-separator items.
+    ///     This event is used by menu container controls to implement hover navigation, such as automatically expanding
+    ///     submenus or highlighting menu paths. The event is only raised for enabled, non-separator items.
     /// </remarks>
-    public event EventHandler<MenuItemHoverEventArgs>? HoverEntered;
+    public event EventHandler<MenuItemHoverEventArgs>? HoverStarted;
 
     /// <summary>
-    ///     Occurs when the pointer exits the menu item area.
+    ///     Occurs when the pointer exits the area of a hovered menu item.
     /// </summary>
     /// <remarks>
-    ///     This event allows menu container controls to handle hover exit scenarios,
-    ///     such as clearing highlights or starting collapse timers for submenus.
+    ///     This event allows menu container controls to handle hover navigation, such as clearing highlights or
+    ///     starting collapse timers for submenus.
     /// </remarks>
-    public event EventHandler<MenuItemHoverEventArgs>? HoverExited;
+    public event EventHandler<MenuItemHoverEventArgs>? HoverEnded;
 
     /// <summary>
     ///     Occurs when a submenu expansion is requested for this menu item.
@@ -58,6 +57,15 @@ public partial class MenuItem
     ///     in the same group.
     /// </remarks>
     public event EventHandler<MenuItemRadioGroupEventArgs>? RadioGroupSelectionRequested;
+
+    /// <summary>
+    ///     Occurs when executing the bound command for this menu item throws an exception.
+    /// </summary>
+    /// <remarks>
+    ///     This event is raised when <see cref="MenuItemData.Command"/> throws during execution.
+    ///     Containers can listen to this event to show error UI, log telemetry, or recover.
+    /// </remarks>
+    public event EventHandler<MenuItemCommandFailedEventArgs>? CommandExecutionFailed;
 }
 
 #pragma warning disable SA1402 // File may only contain a single type
@@ -70,7 +78,7 @@ public class MenuItemInvokedEventArgs : EventArgs
     /// <summary>
     ///     Gets the menu item that was invoked.
     /// </summary>
-    public required MenuItemData MenuItem { get; init; }
+    public required MenuItemData ItemData { get; init; }
 }
 
 /// <summary>
@@ -81,7 +89,7 @@ public class MenuItemHoverEventArgs : EventArgs
     /// <summary>
     ///     Gets the menu item that was hovered.
     /// </summary>
-    public required MenuItemData MenuItem { get; init; }
+    public required MenuItemData ItemData { get; init; }
 }
 
 /// <summary>
@@ -92,7 +100,7 @@ public class MenuItemSubmenuEventArgs : EventArgs
     /// <summary>
     ///     Gets the menu item requesting submenu expansion.
     /// </summary>
-    public required MenuItemData MenuItem { get; init; }
+    public required MenuItemData ItemData { get; init; }
 }
 
 /// <summary>
@@ -103,12 +111,28 @@ public class MenuItemRadioGroupEventArgs : EventArgs
     /// <summary>
     ///     Gets the menu item requesting selection in a radio group.
     /// </summary>
-    public required MenuItemData MenuItem { get; init; }
+    public required MenuItemData ItemData { get; init; }
 
     /// <summary>
     ///     Gets the radio group identifier for the selection.
     /// </summary>
     public required string GroupId { get; init; }
+}
+
+/// <summary>
+///     Provides data when a menu item's command execution fails with an exception.
+/// </summary>
+public class MenuItemCommandFailedEventArgs : EventArgs
+{
+    /// <summary>
+    ///     Gets the menu item whose command failed.
+    /// </summary>
+    public required MenuItemData ItemData { get; init; }
+
+    /// <summary>
+    ///     Gets the exception thrown by the command.
+    /// </summary>
+    public required Exception Exception { get; init; }
 }
 
 #pragma warning restore SA1402 // File may only contain a single type

@@ -18,9 +18,4 @@ public enum MenuInteractionActivationSource
     /// Interaction originated from the keyboard (arrow keys, Enter, Space).
     /// </summary>
     KeyboardInput,
-
-    /// <summary>
-    /// Interaction originated from mnemonic handling (Alt+Key sequences).
-    /// </summary>
-    Mnemonic,
 }

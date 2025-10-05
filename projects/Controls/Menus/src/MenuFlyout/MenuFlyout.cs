@@ -104,7 +104,7 @@ public sealed class MenuFlyout : FlyoutBase
     /// <param name="item">The item that was invoked.</param>
     internal void RaiseItemInvoked(MenuItemData item)
     {
-        this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = item });
+        this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = item });
     }
 
     /// <inheritdoc />

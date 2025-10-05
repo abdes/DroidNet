@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -53,7 +51,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     private MenuItem? activeRootItem;
     private MenuItem? pendingRootItem;
     private MenuInteractionController? controller;
-    private bool mnemonicsVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -61,6 +58,9 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     public MenuBar()
     {
         this.DefaultStyleKey = typeof(MenuBar);
+        this.IsTabStop = true;
+        this.AllowFocusOnInteraction = true;
+        this.UseSystemFocusVisuals = true;
     }
 
     /// <summary>
@@ -129,7 +129,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
 
         menuItem.Invoked += this.OnRootMenuItemInvoked;
         menuItem.SubmenuRequested += this.OnRootMenuItemSubmenuRequested;
-        menuItem.HoverEntered += this.OnRootMenuItemHoverEntered;
+        menuItem.HoverStarted += this.OnRootMenuItemHoverStarted;
         menuItem.RadioGroupSelectionRequested += this.OnRootRadioGroupSelectionRequested;
         menuItem.PointerEntered += this.OnRootMenuItemPointerEntered;
         menuItem.GotFocus += this.OnRootMenuItemGotFocus;
@@ -146,7 +146,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
 
         menuItem.Invoked -= this.OnRootMenuItemInvoked;
         menuItem.SubmenuRequested -= this.OnRootMenuItemSubmenuRequested;
-        menuItem.HoverEntered -= this.OnRootMenuItemHoverEntered;
+        menuItem.HoverStarted -= this.OnRootMenuItemHoverStarted;
         menuItem.RadioGroupSelectionRequested -= this.OnRootRadioGroupSelectionRequested;
         menuItem.PointerEntered -= this.OnRootMenuItemPointerEntered;
         menuItem.GotFocus -= this.OnRootMenuItemGotFocus;
@@ -163,22 +163,22 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     {
         if (this.controller is not null)
         {
-            this.controller.OnRadioGroupSelectionRequested(e.MenuItem);
+            this.controller.OnRadioGroupSelectionRequested(e.ItemData);
         }
         else
         {
-            this.MenuSource?.Services.HandleGroupSelection(e.MenuItem);
+            this.MenuSource?.Services.HandleGroupSelection(e.ItemData);
         }
     }
 
-    private void OnRootMenuItemHoverEntered(object? sender, MenuItemHoverEventArgs e)
+    private void OnRootMenuItemHoverStarted(object? sender, MenuItemHoverEventArgs e)
     {
         if (sender is not MenuItem menuItem)
         {
             return;
         }
 
-        this.HandleRootPointerActivation(menuItem, e.MenuItem);
+        this.HandleRootPointerActivation(menuItem, e.ItemData);
     }
 
     private void OnRootMenuItemPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -209,11 +209,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
 
         switch (e.Key)
         {
-            case VirtualKey.Menu: // Alt key toggles mnemonic mode
-                this.controller.OnMnemonicModeToggled(this.CreateRootContext());
-                e.Handled = true;
-                break;
-
             case VirtualKey.Left:
             case VirtualKey.Right:
                 e.Handled = this.HandleRootHorizontalNavigation(e.Key);
@@ -446,7 +441,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.MenuItem, MenuInteractionActivationSource.KeyboardInput, true);
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, MenuInteractionActivationSource.KeyboardInput, true);
     }
 
     private void OnRootMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
@@ -460,7 +455,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             ? MenuInteractionActivationSource.KeyboardInput
             : MenuInteractionActivationSource.PointerInput;
 
-        if (e.MenuItem.HasChildren)
+        if (e.ItemData.HasChildren)
         {
             if (ReferenceEquals(menuItem, this.pendingRootItem))
             {
@@ -473,11 +468,11 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             }
 
             this.pendingRootItem = menuItem;
-            this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.MenuItem, source, true);
+            this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, source, true);
             return;
         }
 
-        this.controller.OnInvokeRequested(this.CreateRootContext(), e.MenuItem, source);
+        this.controller.OnInvokeRequested(this.CreateRootContext(), e.ItemData, source);
     }
 
     private void OpenRootSubmenuCore(MenuItemData root, FrameworkElement origin, MenuNavigationMode navigationMode)

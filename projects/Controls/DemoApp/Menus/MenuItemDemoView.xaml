@@ -52,6 +52,7 @@
                             <controls:MenuItem
                                 x:Name="DemoMenuItem"
                                 Margin="2"
+                                IsTabStop="True"
                                 ItemData="{x:Bind ViewModel.MenuItemData, Mode=OneWay}" />
                         </Border>
 

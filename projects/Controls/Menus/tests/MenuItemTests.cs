@@ -481,7 +481,7 @@ public class MenuItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task RaisesInvokedEventWithoutCommand_Async() => EnqueueAsync(async () =>
+    public Task DoesNotRaiseInvokedEventIfNoCommand_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var invokedEventRaised = false;
@@ -499,7 +499,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         menuItem.InvokeTapped();
 
         // Assert
-        _ = invokedEventRaised.Should().BeTrue("Invoked event should be raised even when no command is present");
+        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised even when no command is present");
     });
 
     [TestMethod]
@@ -531,7 +531,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Arrange
         var commandExecuted = false;
         var invokedEventRaised = false;
-        var canExecute = false; // Control whether command can execute
+        const bool canExecute = false; // Control whether command can execute
         var command = new RelayCommand<MenuItemData>(
             _ => commandExecuted = true,
             _ => canExecute);
@@ -552,9 +552,66 @@ public class MenuItemTests : VisualUserInterfaceTests
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Checked state should still be handled even if command can't execute");
         _ = commandExecuted.Should().BeFalse("Disabled command should not execute");
-        _ = invokedEventRaised.Should().BeTrue("Invoked event should still be raised");
+        _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state is updated only if the command successfully executes");
+        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised");
+    });
+
+    [TestMethod]
+    public Task HandlesCanExecuteThrowing_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var commandExecuted = false;
+        var commandFailedRaised = false;
+
+        var command = new RelayCommand<MenuItemData>(
+            _ => commandExecuted = true,
+            _ => throw new InvalidOperationException("CanExecute failure"));
+
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Item with Bad CanExecute",
+            IsEnabled = true,
+            IsCheckable = true,
+            IsChecked = false,
+            Command = command,
+        }).ConfigureAwait(true);
+
+        menuItem.CommandExecutionFailed += (_, _) => commandFailedRaised = true;
+
+        // Act
+        menuItem.InvokeTapped();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - CanExecute threw so command should not execute and failure event should be raised
+        _ = commandExecuted.Should().BeFalse("Command should not execute when CanExecute throws");
+        _ = commandFailedRaised.Should().BeTrue("CommandExecutionFailed should be raised when CanExecute throws");
+        _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state should not change when command cannot execute");
+    });
+
+    [TestMethod]
+    public Task HandlesExecuteThrowing_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var commandFailedRaised = false;
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Item with Bad Execute",
+            IsEnabled = true,
+            IsCheckable = true,
+            IsChecked = false,
+            Command = new RelayCommand<MenuItemData>(_ => throw new InvalidOperationException("Execute failure"), _ => true),
+        }).ConfigureAwait(true);
+
+        menuItem.CommandExecutionFailed += (_, _) => commandFailedRaised = true;
+
+        // Act
+        menuItem.InvokeTapped();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - Execute threw, command failure should be reported and checked state should not be toggled
+        _ = commandFailedRaised.Should().BeTrue("CommandExecutionFailed should be raised when Execute throws");
+        _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state should not change when Execute throws");
     });
 
     [TestMethod]
@@ -581,14 +638,13 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Assert
         _ = radioGroupEventRaised.Should().BeTrue("Radio group selection should work without command");
-        _ = invokedEventRaised.Should().BeTrue("Invoked event should be raised");
+        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised");
     });
 
     [TestMethod]
     public Task DoesNotHandleSelectionStateForNonSelectableItems_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var invokedEventRaised = false;
         var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
         {
             Text = "Normal Item",
@@ -598,15 +654,12 @@ public class MenuItemTests : VisualUserInterfaceTests
             IsEnabled = true,
         }).ConfigureAwait(true);
 
-        menuItem.Invoked += (_, _) => invokedEventRaised = true;
-
         // Act
         menuItem.InvokeTapped();
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
         _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Non-checkable item should not change checked state");
-        _ = invokedEventRaised.Should().BeTrue("Invoked event should still be raised for non-selectable items");
     });
 
     [TestMethod]

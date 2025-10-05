@@ -2,17 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents an individual menu item control that renders a four-column layout with Icon, Text, Accelerator, and State.
-///     This is the foundation control used by all menu containers (MenuBar, MenuFlyout, ExpandableMenuBar).
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -83,7 +85,7 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = SeparatorBorderPart, Type = typeof(Border))]
 [TemplatePart(Name = SubmenuArrowPart, Type = typeof(TextBlock))]
 [TemplatePart(Name = CheckmarkPart, Type = typeof(TextBlock))]
-public partial class MenuItem : ContentControl
+public partial class MenuItem : Control
 {
     // Template Part Names
 
@@ -254,6 +256,7 @@ public partial class MenuItem : ContentControl
     private Border? separatorBorder;
     private TextBlock? submenuArrow;
     private TextBlock? checkmark;
+    private bool isMnemonicDisplayVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuItem" /> class.
@@ -262,8 +265,22 @@ public partial class MenuItem : ContentControl
     {
         this.DefaultStyleKey = typeof(MenuItem);
 
-        this.Loaded += this.OnLoaded;
-        this.Unloaded += this.OnUnloaded;
+        /*
+         * We only subscribe to events within the control itself; no need to
+         * over-engineer with Loaded/Unloaded and no need to unsubscribe
+         * explicitly as it will be done when the control is disposed.
+         */
+
+        this.PointerEntered += this.OnPointerEntered;
+        this.PointerExited += this.OnPointerExited;
+        this.PointerPressed += this.OnPointerPressed;
+        this.PointerReleased += this.OnPointerReleased;
+        this.Tapped += this.OnTapped;
+
+        this.AccessKeyDisplayRequested += this.OnAccessKeyDisplayRequested;
+        this.AccessKeyDisplayDismissed += this.OnAccessKeyDisplayDismissed;
+
+        this.Unloaded += (_, _) => this.ItemData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
     }
 
     private bool IsPressed =>
@@ -272,22 +289,74 @@ public partial class MenuItem : ContentControl
     private bool IsPointerOver { get; set; }
 
     /// <summary>
+    ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
+    ///     logic if not. Updates visual states accordingly.
+    /// </summary>
+    /// <returns>
+    ///     True if the submenu was expanded or the item was invoked; otherwise, false.
+    /// </returns>
+    internal bool TryExpandOrInvoke()
+    {
+        if (!this.IsInteractiveItem())
+        {
+            return false;
+        }
+
+        var handled = this.TryExpandSubmenu() || this.TryInvoke();
+
+        if (handled)
+        {
+            this.UpdateInteractionVisualState();
+            this.UpdateActiveVisualState();
+        }
+
+        return handled;
+    }
+
+    /// <summary>
+    /// Creates an automation peer for this control so automation tools and access keys
+    /// can interact with the MenuItem (for example invoking it via UI Automation).
+    /// </summary>
+    /// <returns>
+    /// A <see cref="MenuItemAutomationPeer"/> instance for this control.
+    /// </returns>
+    protected override AutomationPeer OnCreateAutomationPeer() => new MenuItemAutomationPeer(this);
+
+    /// <summary>
     ///     Called when the template is applied to the control.
     ///     Sets up template parts and initializes visual states.
     /// </summary>
     protected override void OnApplyTemplate()
     {
+        base.OnApplyTemplate();
+
         // Validate required parts exist
         this.rootGrid = this.GetTemplateChild(RootGridPart) as Grid ??
             throw new InvalidOperationException($"{nameof(MenuItem)} template is missing {RootGridPart}");
 
-        // Get template parts
-        this.SetupTemplateParts();
+        // Setup other template parts (optional)
+        this.contentGrid = this.GetTemplateChild(ContentGridPart) as Grid;
+        this.iconPresenter = this.GetTemplateChild(IconPresenterPart) as IconSourceElement;
+        this.textBlock = this.GetTemplateChild(TextBlockPart) as TextBlock;
+        this.acceleratorTextBlock = this.GetTemplateChild(AcceleratorTextBlockPart) as TextBlock;
+        this.stateTextBlock = this.GetTemplateChild(StateTextBlockPart) as TextBlock;
+        this.separatorBorder = this.GetTemplateChild(SeparatorBorderPart) as Border;
+        this.submenuArrow = this.GetTemplateChild(SubmenuArrowPart) as TextBlock;
+        this.checkmark = this.GetTemplateChild(CheckmarkPart) as TextBlock;
 
         // Initialize visual states based on current ItemData
-        this.UpdateAllVisualStates();
+        this.UpdateTypeVisualState();
+        this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
+        this.UpdateIconVisualState();
+        this.UpdateAcceleratorVisualState();
+        this.UpdateCheckmarkVisualState();
 
-        base.OnApplyTemplate();
+        this.RefreshTextPresentation();
+
+        // In the scenario where the template is reapplied, ensure we rewire PropertyChanged from ItemData
+        this.ItemData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
+        this.ItemData?.PropertyChanged += this.ItemData_OnPropertyChanged;
     }
 
     /// <summary>
@@ -316,48 +385,35 @@ public partial class MenuItem : ContentControl
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (this.ItemData is not { IsSeparator: false } data)
+        if (!this.IsInteractiveItem())
         {
             base.OnKeyDown(e);
             return;
         }
 
-        if (!data.IsEnabled)
+        var data = this.ItemData!; // already validated by IsInteractiveItem
+        var handled = e.Key switch
         {
-            base.OnKeyDown(e);
-            return;
-        }
-
-        var handled = false;
-
-        switch (e.Key)
-        {
-            case VirtualKey.Enter:
-            case VirtualKey.Space:
-                handled = data.HasChildren ? this.TryExpandFromKeyboard() : this.TryInvokeFromKeyboard();
-                break;
-
-            case VirtualKey.Right:
-                if (data.HasChildren)
-                {
-                    handled = this.TryExpandFromKeyboard();
-                }
-
-                break;
-        }
+            VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(),
+            VirtualKey.Right when data.HasChildren => this.TryExpandSubmenu(),
+            _ => false,
+        };
 
         if (handled)
         {
             e.Handled = true;
-            return;
+            this.UpdateInteractionVisualState();
+            this.UpdateActiveVisualState();
         }
-
-        base.OnKeyDown(e);
+        else
+        {
+            base.OnKeyDown(e);
+        }
     }
 
     /// <summary>
     ///     Handles pointer enter events from the visual tree and updates hover state.
-    ///     Raises <c>HoverEntered</c> (if applicable) and updates interaction visual state.
+    ///     Raises <c>HoverStarted</c> (if applicable) and updates interaction visual state.
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
@@ -366,20 +422,15 @@ public partial class MenuItem : ContentControl
         _ = sender; // unused
         _ = e; // unused
 
-        if (this.ItemData?.IsSeparator == true)
+        if (!this.IsInteractiveItem())
         {
             this.IsPointerOver = false;
-            this.UpdateInteractionVisualState();
-            this.UpdateActiveVisualState();
             return;
         }
 
         this.IsPointerOver = true;
 
-        if (this.ItemData?.IsSeparator != true && this.ItemData?.IsEnabled == true)
-        {
-            this.HoverEntered?.Invoke(this, new MenuItemHoverEventArgs { MenuItem = this.ItemData! });
-        }
+        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData! });
 
         this.UpdateInteractionVisualState();
         this.UpdateActiveVisualState();
@@ -387,7 +438,7 @@ public partial class MenuItem : ContentControl
 
     /// <summary>
     ///     Handles pointer exit events from the visual tree and clears hover state.
-    ///     Raises <c>HoverExited</c> (if applicable) and updates interaction visual state.
+    ///     Raises <c>HoverEnded</c> (if applicable) and updates interaction visual state.
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
@@ -398,10 +449,12 @@ public partial class MenuItem : ContentControl
 
         this.IsPointerOver = false;
 
-        if (this.ItemData?.IsSeparator != true)
+        if (!this.IsInteractiveItem())
         {
-            this.HoverExited?.Invoke(this, new MenuItemHoverEventArgs { MenuItem = this.ItemData! });
+            return;
         }
+
+        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData! });
 
         this.UpdateInteractionVisualState();
         this.UpdateActiveVisualState();
@@ -417,11 +470,13 @@ public partial class MenuItem : ContentControl
         _ = sender; // unused
         _ = e; // unused
 
-        if (this.ItemData?.IsEnabled == true && this.ItemData.IsSeparator != true)
+        if (!this.IsInteractiveItem())
         {
-            this.UpdateInteractionVisualState();
-            this.UpdateActiveVisualState();
+            return;
         }
+
+        this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
     }
 
     /// <summary>
@@ -434,6 +489,11 @@ public partial class MenuItem : ContentControl
         _ = sender; // unused
         _ = e; // unused
 
+        if (!this.IsInteractiveItem())
+        {
+            return;
+        }
+
         this.UpdateInteractionVisualState();
         this.UpdateActiveVisualState();
     }
@@ -445,109 +505,16 @@ public partial class MenuItem : ContentControl
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Tap event arguments (may be marked handled).</param>
-    protected void OnTapped(object sender, TappedRoutedEventArgs e)
-    {
-        if (this.ItemData?.IsEnabled == true && !this.ItemData.IsSeparator)
-        {
-            if (this.ItemData.HasChildren)
-            {
-                this.ExpandSubmenu();
-            }
-            else
-            {
-                // Handle selection state first (always, independent of commands)
-                this.HandleSelectionState();
+    protected void OnTapped(object sender, TappedRoutedEventArgs e) => e.Handled = this.TryExpandOrInvoke();
 
-                // Then execute command if present
-                this.ExecuteCommand();
-
-                // Always raise invoked event (even without command)
-                this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = this.ItemData });
-            }
-
-            e.Handled = true;
-        }
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        this.PointerEntered += this.OnPointerEntered;
-        this.PointerExited += this.OnPointerExited;
-        this.PointerPressed += this.OnPointerPressed;
-        this.PointerReleased += this.OnPointerReleased;
-        this.Tapped += this.OnTapped;
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        // Clean up event handlers to prevent memory leaks
-        this.Loaded -= this.OnLoaded;
-        this.Unloaded -= this.OnUnloaded;
-        this.PointerEntered -= this.OnPointerEntered;
-        this.PointerExited -= this.OnPointerExited;
-        this.PointerPressed -= this.OnPointerPressed;
-        this.PointerReleased -= this.OnPointerReleased;
-        this.Tapped -= this.OnTapped;
-    }
-
-    private void SetupTemplateParts()
-    {
-        this.contentGrid = this.GetTemplateChild(ContentGridPart) as Grid;
-        this.iconPresenter = this.GetTemplateChild(IconPresenterPart) as IconSourceElement;
-        this.textBlock = this.GetTemplateChild(TextBlockPart) as TextBlock;
-        this.acceleratorTextBlock = this.GetTemplateChild(AcceleratorTextBlockPart) as TextBlock;
-        this.stateTextBlock = this.GetTemplateChild(StateTextBlockPart) as TextBlock;
-        this.separatorBorder = this.GetTemplateChild(SeparatorBorderPart) as Border;
-        this.submenuArrow = this.GetTemplateChild(SubmenuArrowPart) as TextBlock;
-        this.checkmark = this.GetTemplateChild(CheckmarkPart) as TextBlock;
-    }
-
-    private void UpdateAllVisualStates()
-    {
-        this.UpdateTypeVisualState();
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
-        this.UpdateIconVisualState();
-        this.UpdateAcceleratorVisualState();
-        this.UpdateCheckmarkVisualState();
-    }
+    private bool IsInteractiveItem() =>
+        this.ItemData is { IsEnabled: true, IsSeparator: false };
 
     private void UpdateTypeVisualState()
         => VisualStateManager.GoToState(
             this,
             this.ItemData?.IsSeparator == true ? SeparatorVisualState : ItemVisualState,
             useTransitions: true);
-
-    private void UpdateInteractionVisualState()
-    {
-        if (this.ItemData?.IsSeparator == true)
-        {
-            this.IsPointerOver = false;
-            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
-            return;
-        }
-
-        if (this.ItemData?.IsEnabled != true)
-        {
-            _ = VisualStateManager.GoToState(this, DisabledVisualState, useTransitions: true);
-        }
-        else if (this.ItemData?.IsActive == true)
-        {
-            _ = VisualStateManager.GoToState(this, PointerOverVisualState, useTransitions: true);
-        }
-        else if (this.IsPressed)
-        {
-            _ = VisualStateManager.GoToState(this, PressedVisualState, useTransitions: true);
-        }
-        else if (this.IsPointerOver)
-        {
-            _ = VisualStateManager.GoToState(this, PointerOverVisualState, useTransitions: true);
-        }
-        else
-        {
-            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
-        }
-    }
 
     private void UpdateActiveVisualState()
         => VisualStateManager.GoToState(
@@ -567,94 +534,212 @@ public partial class MenuItem : ContentControl
             !string.IsNullOrEmpty(this.ItemData?.AcceleratorText) ? HasAcceleratorVisualState : NoAcceleratorVisualState,
             useTransitions: true);
 
-    private void UpdateCheckmarkVisualState()
+    private void UpdateInteractionVisualState()
     {
-        if (this.ItemData == null)
+        if (this.ItemData is not { } data)
         {
-            _ = VisualStateManager.GoToState(this, NoDecorationVisualState, useTransitions: true);
+            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
             return;
         }
 
-        // Priority order: Submenu Arrow > Selection State > Nothing
-        if (this.ItemData.HasChildren && this.ShowSubmenuGlyph)
+        if (data.IsSeparator)
         {
-            _ = VisualStateManager.GoToState(this, WithChildrenVisualState, useTransitions: true);
+            this.IsPointerOver = false;
+            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
+            return;
         }
-        else if (this.ItemData.HasSelectionState && this.ItemData.IsChecked)
-        {
-            // Show checkmark on right side if item has icon, left side if no icon
-            var stateName = this.ItemData.Icon != null ? CheckedWithIconVisualState : CheckedNoIconVisualState;
-            _ = VisualStateManager.GoToState(this, stateName, useTransitions: true);
-        }
-        else
-        {
-            _ = VisualStateManager.GoToState(this, NoDecorationVisualState, useTransitions: true);
-        }
+
+        var state = !data.IsEnabled ? DisabledVisualState
+                  : this.IsPressed ? PressedVisualState
+                  : data.IsActive || this.IsPointerOver ? PointerOverVisualState
+                  : NormalVisualState;
+
+        _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
-    private void ExecuteCommand()
+    private void UpdateCheckmarkVisualState()
     {
-        // Only execute command if present and can execute
-        if (this.ItemData?.Command?.CanExecute(this.ItemData) == true)
-        {
-            this.ItemData.Command.Execute(this.ItemData);
-        }
+        // Priority order: Submenu Arrow > Selection State > Nothing
+        // Show checkmark on right side if item has icon, left side if no icon
+        var state = this.ItemData is not { } data
+            ? NoDecorationVisualState
+            : (data.HasChildren && this.ShowSubmenuGlyph)
+                ? WithChildrenVisualState
+                : (data.HasSelectionState && data.IsChecked)
+                    ? (data.Icon != null ? CheckedWithIconVisualState : CheckedNoIconVisualState)
+                    : NoDecorationVisualState;
+
+        _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
     private void HandleSelectionState()
     {
-        if (this.ItemData == null)
-        {
-            return;
-        }
+        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
 
-        if (!string.IsNullOrEmpty(this.ItemData.RadioGroupId))
+        var data = this.ItemData!; // already validated by assert above
+        if (!string.IsNullOrEmpty(data.RadioGroupId))
         {
             // Handle radio group behavior - raise event to let container handle group logic
             this.RadioGroupSelectionRequested?.Invoke(
                 this,
                 new MenuItemRadioGroupEventArgs
                 {
-                    MenuItem = this.ItemData,
-                    GroupId = this.ItemData.RadioGroupId,
+                    ItemData = data,
+                    GroupId = data.RadioGroupId,
                 });
         }
-        else if (this.ItemData.IsCheckable)
+        else if (data.IsCheckable)
         {
             // Handle individual checkable item - just toggle
-            this.ItemData.IsChecked = !this.ItemData.IsChecked;
+            data.IsChecked = !data.IsChecked;
         }
     }
 
-    private void ExpandSubmenu()
+    /// <summary>
+    ///     Updates the visibility of the mnemonic underline programmatically.
+    /// </summary>
+    /// <param name="isVisible">True to show the mnemonic underline; false to hide it.</param>
+    private void SetMnemonicVisibility(bool isVisible)
     {
-        if (this.ItemData?.HasChildren == true)
+        if (this.isMnemonicDisplayVisible == isVisible)
         {
-            this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs { MenuItem = this.ItemData });
+            return;
+        }
+
+        this.isMnemonicDisplayVisible = isVisible;
+        this.RefreshTextPresentation();
+    }
+
+    private void OnAccessKeyDisplayRequested(UIElement sender, AccessKeyDisplayRequestedEventArgs args)
+        => this.SetMnemonicVisibility(true);
+
+    private void OnAccessKeyDisplayDismissed(UIElement sender, AccessKeyDisplayDismissedEventArgs args)
+        => this.SetMnemonicVisibility(false);
+
+    private void RefreshTextPresentation()
+    {
+        if (this.textBlock is null)
+        {
+            return;
+        }
+
+        if (this.DispatcherQueue is { } dispatcher && !dispatcher.HasThreadAccess)
+        {
+            _ = dispatcher.TryEnqueue(() => this.UpdateTextBlockContent(this.isMnemonicDisplayVisible));
+            return;
+        }
+
+        this.UpdateTextBlockContent(this.isMnemonicDisplayVisible);
+    }
+
+    private void UpdateTextBlockContent(bool showMnemonicUnderline)
+    {
+        if (this.textBlock is null)
+        {
+            return;
+        }
+
+        var text = this.ItemData?.Text ?? string.Empty;
+        var mnemonic = this.ItemData?.Mnemonic;
+
+        this.textBlock.Inlines.Clear();
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        if (!showMnemonicUnderline || mnemonic is null)
+        {
+            this.textBlock.Inlines.Add(new Run { Text = text });
+            return;
+        }
+
+        var matchIndex = text.IndexOf(mnemonic.Value.ToString(), System.StringComparison.CurrentCultureIgnoreCase);
+        if (matchIndex < 0)
+        {
+            this.textBlock.Inlines.Add(new Run { Text = text });
+            return;
+        }
+
+        if (matchIndex > 0)
+        {
+            this.textBlock.Inlines.Add(new Run { Text = text[..matchIndex] });
+        }
+
+        var underline = new Underline();
+        underline.Inlines.Add(new Run { Text = text.Substring(matchIndex, 1) });
+        this.textBlock.Inlines.Add(underline);
+
+        if (matchIndex + 1 < text.Length)
+        {
+            this.textBlock.Inlines.Add(new Run { Text = text[(matchIndex + 1)..] });
         }
     }
 
-    private bool TryExpandFromKeyboard()
+    /// <summary>
+    ///     Attempts to expand the submenu for this menu item if it has child items.
+    /// </summary>
+    /// <returns>
+    ///     True if the submenu was requested to expand; otherwise, false.
+    /// </returns>
+    private bool TryExpandSubmenu()
     {
-        if (this.ItemData?.HasChildren != true)
+        if (this.ItemData is { HasChildren: true } data)
+        {
+            this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs { ItemData = data });
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Attempts to invoke the menu item's command or selection logic if the item is enabled and does not have children.
+    /// </summary>
+    /// <returns>
+    ///     True if the item was invoked or selection state was handled; false if invocation was not possible.
+    /// </returns>
+    private bool TryInvoke()
+    {
+        if (this.ItemData is not { IsEnabled: true, HasChildren: false } data)
         {
             return false;
         }
 
-        this.ExpandSubmenu();
-        return true;
-    }
-
-    private bool TryInvokeFromKeyboard()
-    {
-        if (this.ItemData is not { IsEnabled: true, HasChildren: false })
+        if (data.Command is null)
         {
-            return false;
+            // A command is not required; just handle selection state
+            this.HandleSelectionState();
+            return true;
         }
 
-        this.HandleSelectionState();
-        this.ExecuteCommand();
-        this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs { MenuItem = this.ItemData });
+        try
+        {
+            // If the command cannot execute right now, indicate that no action occurred
+            if (!data.Command.CanExecute(data))
+            {
+                return false;
+            }
+
+            data.Command.Execute(data);
+            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = data });
+            this.HandleSelectionState();
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Command execution failed: {ex}");
+            this.CommandExecutionFailed?.Invoke(this, new MenuItemCommandFailedEventArgs
+            {
+                ItemData = data,
+                Exception = ex,
+            });
+        }
+#pragma warning restore CA1031
+
+        // A command is attached to the menu item, and it was invoked
+        // successfully or not.
         return true;
     }
 }

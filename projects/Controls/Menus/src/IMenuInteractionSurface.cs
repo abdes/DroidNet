@@ -13,12 +13,6 @@ namespace DroidNet.Controls;
 /// </summary>
 public interface IMenuInteractionSurface
 {
-    /// <summary>Displays mnemonic adorners for the menu surface.</summary>
-    public void ShowMnemonics();
-
-    /// <summary>Hides mnemonic adorners for the menu surface.</summary>
-    public void HideMnemonics();
-
     /// <summary>Focuses the provided root menu item within the surface.</summary>
     /// <param name="root">The root item to focus.</param>
     /// <param name="navigationMode">The navigation mode associated with the focus.</param>
