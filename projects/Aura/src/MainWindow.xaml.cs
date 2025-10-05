@@ -21,7 +21,7 @@ public sealed partial class MainWindow : IOutletContainer
     private readonly AppearanceSettingsService appearanceSettings;
 
     [ObservableProperty]
-    private object? contentViewModel;
+    public partial object? ContentViewModel { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.

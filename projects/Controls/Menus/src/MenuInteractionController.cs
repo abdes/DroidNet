@@ -2,10 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls;
@@ -21,7 +18,6 @@ public sealed class MenuInteractionController
     private readonly MenuServices services;
     private readonly Dictionary<int, MenuItemData> activeByColumn = new();
     private MenuItemData? activeRoot;
-    private bool mnemonicMode;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuInteractionController"/> class.
@@ -64,14 +60,8 @@ public sealed class MenuInteractionController
         {
             MenuInteractionActivationSource.PointerInput => MenuNavigationMode.PointerInput,
             MenuInteractionActivationSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
-            MenuInteractionActivationSource.Mnemonic => MenuNavigationMode.KeyboardInput,
             _ => this.NavigationMode,
         };
-
-        if (source == MenuInteractionActivationSource.Mnemonic)
-        {
-            this.mnemonicMode = true;
-        }
     }
 
     /// <summary>
@@ -200,65 +190,6 @@ public sealed class MenuInteractionController
     /// <param name="kind">The dismissal kind.</param>
     public void OnDismissRequested(MenuInteractionContext context, MenuDismissKind kind) => this.ExecuteDismiss(context, kind);
 
-    /// <summary>
-    ///     Toggles mnemonic mode, showing or hiding mnemonics and resetting state as required.
-    /// </summary>
-    /// <param name="context">The interaction context originating the toggle request.</param>
-    /// <returns>The new mnemonic mode state.</returns>
-    public bool OnMnemonicModeToggled(MenuInteractionContext context)
-    {
-        var rootSurface = context.RootSurface ?? throw new ArgumentNullException(nameof(context), "Root surface is required for mnemonic handling.");
-        var columnSurface = context.ColumnSurface;
-
-        if (!this.mnemonicMode)
-        {
-            this.mnemonicMode = true;
-            this.OnNavigationSourceChanged(MenuInteractionActivationSource.Mnemonic);
-            rootSurface.ShowMnemonics();
-            columnSurface?.ShowMnemonics();
-            return true;
-        }
-
-        this.ExecuteDismiss(context, MenuDismissKind.MnemonicExit);
-        return false;
-    }
-
-    /// <summary>
-    ///     Handles a mnemonic key pressed while mnemonic mode is active.
-    /// </summary>
-    /// <param name="context">The interaction context supplying the available surfaces.</param>
-    /// <param name="key">The mnemonic character.</param>
-    public void OnMnemonicKey(MenuInteractionContext context, char key)
-    {
-        var rootSurface = context.RootSurface ?? throw new ArgumentNullException(nameof(context), "Root surface is required for mnemonic handling.");
-
-        if (!this.mnemonicMode)
-        {
-            this.mnemonicMode = true;
-            this.OnNavigationSourceChanged(MenuInteractionActivationSource.Mnemonic);
-            rootSurface.ShowMnemonics();
-            context.ColumnSurface?.ShowMnemonics();
-        }
-
-        var lookup = this.services.GetLookup();
-        foreach (var item in lookup.Values)
-        {
-            if (item.Mnemonic is char mnemonic && char.ToUpperInvariant(mnemonic) == char.ToUpperInvariant(key))
-            {
-                if (item.HasChildren)
-                {
-                    this.ExecuteActivateItem(context, item, this.NavigationMode);
-                }
-                else
-                {
-                    this.ExecuteInvoke(context, item, MenuInteractionActivationSource.Mnemonic);
-                }
-
-                break;
-            }
-        }
-    }
-
 #if false // ALL THESE METHODS ARE FOR FUTURE USE IN PROGRAMMATIC MENU SYSTEM CONTROL ONLY
     /// <summary>
     ///     Requests a submenu for a specific menu item programmatically.
@@ -356,7 +287,6 @@ public sealed class MenuInteractionController
         {
             MenuInteractionActivationSource.PointerInput => MenuNavigationMode.PointerInput,
             MenuInteractionActivationSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
-            MenuInteractionActivationSource.Mnemonic => MenuNavigationMode.KeyboardInput,
             _ => this.NavigationMode,
         };
 
@@ -384,13 +314,6 @@ public sealed class MenuInteractionController
         {
             root.IsActive = false;
             this.activeRoot = null;
-        }
-
-        if (this.mnemonicMode)
-        {
-            this.mnemonicMode = false;
-            context.RootSurface?.HideMnemonics();
-            context.ColumnSurface?.HideMnemonics();
         }
 
         // Update navigation mode based on dismissal kind.

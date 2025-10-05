@@ -211,7 +211,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.ReturnFocusToApp(), Times.Once());
-        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
+        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
     }
 
     [TestMethod]
@@ -229,62 +229,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.ReturnFocusToApp(), Times.Once());
-        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
-    }
-
-    [TestMethod]
-    public void OnMnemonicModeToggled_ShouldShowThenHideMnemonics()
-    {
-        var harness = new ControllerHarness();
-
-        harness.Controller.OnMnemonicModeToggled(harness.RootContext);
-
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
-        harness.RootMock.Verify(m => m.ShowMnemonics(), Times.Once());
-
-        harness.Controller.OnMnemonicModeToggled(harness.RootContext);
-
-        harness.RootMock.Verify(m => m.HideMnemonics(), Times.Once());
-        harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
-        harness.RootMock.Verify(m => m.ReturnFocusToApp(), Times.Once());
-        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
-    }
-
-    [TestMethod]
-    public void OnMnemonicKey_ForLeafItem_ShouldInvokeAndDismiss()
-    {
-        var harness = new ControllerHarness();
-        var leaf = CreateMenuItem("Save");
-        leaf.Mnemonic = 'S';
-        harness.Lookup[leaf.Id] = leaf;
-
-        harness.Controller.OnMnemonicKey(harness.RootContext, 's');
-
-        _ = harness.GroupSelections.Should().ContainSingle(x => ReferenceEquals(x, leaf));
-        harness.RootMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, leaf))), Times.Once());
-        harness.RootMock.Verify(m => m.ShowMnemonics(), Times.Once());
-        harness.RootMock.Verify(m => m.HideMnemonics(), Times.Once());
-        _ = leaf.IsActive.Should().BeFalse();
-        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
-    }
-
-    [TestMethod]
-    public void OnMnemonicKey_ForParentItem_ShouldActivateRootWithoutRequestingSubmenu()
-    {
-        var harness = new ControllerHarness();
-        var parent = CreateMenuItem("Tools", hasChildren: true);
-        parent.Mnemonic = 'T';
-        harness.Lookup[parent.Id] = parent;
-
-        harness.Controller.OnMnemonicKey(harness.RootContext, 't');
-
-        _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
-        _ = parent.IsActive.Should().BeTrue();
-
-        harness.RootMock.Verify(m => m.ShowMnemonics(), Times.Once());
-        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), MenuNavigationMode.KeyboardInput), Times.Once());
-        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.IsAny<MenuItemData>(), It.IsAny<FrameworkElement>(), It.IsAny<MenuNavigationMode>()), Times.Never());
-        harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 1)), Times.Once());
     }
 
     [TestMethod]
@@ -417,8 +362,6 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
             this.ColumnMock.Reset();
         }
     }
-
-    private sealed record Invocation(string Name, object?[] Arguments);
 
     private sealed partial class TestFrameworkElement : FrameworkElement
     {

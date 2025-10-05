@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -106,7 +106,7 @@
                                 Margin="{StaticResource MenuItemTextMargin}"
                                 Foreground="{TemplateBinding Foreground}"
                                 Style="{StaticResource MenuItemTextStyle}"
-                                Text="{Binding ItemData.Text, RelativeSource={RelativeSource TemplatedParent}}" />
+                                Text="" />
 
                             <!--  Accelerator  -->
                             <TextBlock
