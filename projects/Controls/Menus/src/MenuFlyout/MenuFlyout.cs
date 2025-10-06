@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -36,7 +36,6 @@ public sealed class MenuFlyout : FlyoutBase
 
     private MenuFlyoutPresenter? presenter;
     private MenuInteractionController? controller;
-    private bool overlayPassThroughApplied;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuFlyout"/> class.
@@ -124,18 +123,10 @@ public sealed class MenuFlyout : FlyoutBase
             return;
         }
 
-        if (this.OverlayInputPassThroughElement is null)
+        Debug.Assert(this.OverlayInputPassThroughElement is null, "OverlayInputPassThroughElement was not properly reset");
+        if (this.RootSurface is UIElement passThrough)
         {
-            var passThroughCandidate = this.ResolveOverlayPassThroughElement();
-            if (passThroughCandidate is not null)
-            {
-                this.OverlayInputPassThroughElement = passThroughCandidate;
-                this.overlayPassThroughApplied = true;
-            }
-        }
-        else
-        {
-            this.overlayPassThroughApplied = false;
+            this.OverlayInputPassThroughElement = passThrough;
         }
 
         this.presenter?.Reset();
@@ -165,12 +156,7 @@ public sealed class MenuFlyout : FlyoutBase
     private void OnFlyoutClosing(object? sender, FlyoutBaseClosingEventArgs e)
     {
         this.presenter?.Reset();
-
-        if (this.overlayPassThroughApplied)
-        {
-            this.OverlayInputPassThroughElement = null;
-            this.overlayPassThroughApplied = false;
-        }
+        this.OverlayInputPassThroughElement = null;
 
         if (this.controller is null)
         {
@@ -191,20 +177,5 @@ public sealed class MenuFlyout : FlyoutBase
         }
 
         this.controller = null;
-    }
-
-    private UIElement? ResolveOverlayPassThroughElement()
-    {
-        if (this.RootSurface is UIElement rootSurfaceElement)
-        {
-            if (rootSurfaceElement.XamlRoot?.Content is UIElement surfaceRootContent)
-            {
-                return surfaceRootContent;
-            }
-
-            return rootSurfaceElement;
-        }
-
-        return this.XamlRoot?.Content as UIElement;
     }
 }
