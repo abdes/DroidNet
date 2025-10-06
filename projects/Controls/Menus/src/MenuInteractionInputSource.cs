@@ -7,7 +7,7 @@ namespace DroidNet.Controls;
 /// <summary>
 /// Describes the input origin for a menu interaction event routed into <see cref="MenuInteractionController"/>.
 /// </summary>
-public enum MenuInteractionActivationSource
+public enum MenuInteractionInputSource
 {
     /// <summary>
     /// Interaction originated from pointer (mouse, pen, touch).
@@ -18,4 +18,9 @@ public enum MenuInteractionActivationSource
     /// Interaction originated from the keyboard (arrow keys, Enter, Space).
     /// </summary>
     KeyboardInput,
+
+    /// <summary>
+    /// Interaction originated programmatically.
+    /// </summary>
+    Programmatic,
 }

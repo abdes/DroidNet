@@ -213,10 +213,10 @@ public sealed partial class MenuColumnPresenter : Control
         // TODO: confirm no-op and delete this method, or properly implement controller change handling
     }
 
-    private static MenuInteractionActivationSource ToActivationSource(MenuNavigationMode navigationMode) =>
+    private static MenuInteractionInputSource ToActivationSource(MenuNavigationMode navigationMode) =>
         navigationMode == MenuNavigationMode.KeyboardInput
-            ? MenuInteractionActivationSource.KeyboardInput
-            : MenuInteractionActivationSource.PointerInput;
+            ? MenuInteractionInputSource.KeyboardInput
+            : MenuInteractionInputSource.PointerInput;
 
     private void HandleItemsSourceChanged(IEnumerable? oldValue, IEnumerable? newValue)
     {
@@ -406,7 +406,7 @@ public sealed partial class MenuColumnPresenter : Control
         }
 
         var context = this.CreateCurrentContext();
-        controller.OnFocusRequested(context, menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
+        controller.OnFocusRequested(context, menuItem, menuItem.ItemData, MenuInteractionInputSource.KeyboardInput, openSubmenu: false);
     }
 
     private bool OpenSubmenu(MenuItem menuItem)
@@ -429,7 +429,7 @@ public sealed partial class MenuColumnPresenter : Control
 
         var context = this.CreateCurrentContext();
         Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenuFor requesting focus for {data.Id}");
-        controller.OnFocusRequested(context, menuItem, data, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
+        controller.OnFocusRequested(context, menuItem, data, MenuInteractionInputSource.KeyboardInput, openSubmenu: false);
 
         _ = menuItem.DispatcherQueue.TryEnqueue(() =>
         {
@@ -440,7 +440,7 @@ public sealed partial class MenuColumnPresenter : Control
             }
 
             Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenuFor dispatching submenu request for {data.Id}");
-            controller.OnSubmenuRequested(context, menuItem, data, MenuInteractionActivationSource.KeyboardInput);
+            controller.OnSubmenuRequested(context, menuItem, data, MenuInteractionInputSource.KeyboardInput);
         });
         return true;
     }
@@ -486,7 +486,7 @@ public sealed partial class MenuColumnPresenter : Control
             context,
             target,
             itemData,
-            MenuInteractionActivationSource.KeyboardInput,
+            MenuInteractionInputSource.KeyboardInput,
             openSubmenu: false);
         Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Focus moved to parent column {parentPresenter.ColumnLevel} item {itemData.Id}");
         return true;
@@ -514,7 +514,7 @@ public sealed partial class MenuColumnPresenter : Control
         }
 
         var context = MenuInteractionContext.ForRoot(rootSurface, owner);
-        controller.OnFocusRequested(context, origin: null, rootItem, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
+        controller.OnFocusRequested(context, origin: null, rootItem, MenuInteractionInputSource.KeyboardInput, openSubmenu: false);
         Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Returned focus to root item {rootItem.Id}");
         return true;
     }
@@ -601,7 +601,7 @@ public sealed partial class MenuColumnPresenter : Control
             return false;
         }
 
-        controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
+        controller.OnNavigationSourceChanged(MenuInteractionInputSource.KeyboardInput);
 
         return key switch
         {

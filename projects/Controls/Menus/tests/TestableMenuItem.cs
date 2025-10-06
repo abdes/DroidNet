@@ -23,6 +23,6 @@ public sealed partial class TestableMenuItem : MenuItem
     public void InvokeTapped()
     {
         var args = new TappedRoutedEventArgs();
-        _ = this.TryExpandOrInvoke();
+        _ = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
     }
 }

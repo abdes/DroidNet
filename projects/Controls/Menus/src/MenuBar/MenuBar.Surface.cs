@@ -66,8 +66,12 @@ public sealed partial class MenuBar
         => throw new NotSupportedException("MenuBar handles only root-level submenu operations.");
 
     /// <inheritdoc />
-    void IMenuInteractionSurface.Invoke(MenuItemData item)
-        => this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = item });
+    void IMenuInteractionSurface.Invoke(MenuItemData item, MenuInteractionInputSource inputSource)
+        => this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs
+        {
+            InputSource = inputSource,
+            ItemData = item,
+        });
 
     /// <inheritdoc />
     void IMenuInteractionSurface.ReturnFocusToApp()

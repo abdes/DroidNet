@@ -290,17 +290,18 @@ public partial class MenuItem : Control
     ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
     ///     logic if not. Updates visual states accordingly.
     /// </summary>
+    /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
     /// <returns>
     ///     True if the submenu was expanded or the item was invoked; otherwise, false.
     /// </returns>
-    internal bool TryExpandOrInvoke()
+    internal bool TryExpandOrInvoke(MenuInteractionInputSource inputSource)
     {
         if (!this.IsInteractiveItem)
         {
             return false;
         }
 
-        var handled = this.TryExpandSubmenu() || this.TryInvoke();
+        var handled = this.TryExpandSubmenu(inputSource) || this.TryInvoke(inputSource);
 
         if (handled)
         {
@@ -419,8 +420,8 @@ public partial class MenuItem : Control
 
         var handled = e.Key switch
         {
-            VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(),
-            VirtualKey.Right when data.HasChildren => this.TryExpandSubmenu(),
+            VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(MenuInteractionInputSource.KeyboardInput),
+            VirtualKey.Right when data.HasChildren => this.TryExpandSubmenu(MenuInteractionInputSource.KeyboardInput),
             _ => false,
         };
 
@@ -473,7 +474,11 @@ public partial class MenuItem : Control
         this.UpdateCommonVisualState();
 
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
-        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData });
+        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs
+        {
+            InputSource = MenuInteractionInputSource.PointerInput,
+            ItemData = this.ItemData,
+        });
     }
 
     /// <summary>
@@ -494,7 +499,11 @@ public partial class MenuItem : Control
         this.UpdateCommonVisualState();
 
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
-        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData });
+        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs
+        {
+            InputSource = MenuInteractionInputSource.PointerInput,
+            ItemData = this.ItemData,
+        });
     }
 
     /// <summary>
@@ -568,7 +577,7 @@ public partial class MenuItem : Control
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Tap event arguments (may be marked handled).</param>
     private void OnTapped(object sender, TappedRoutedEventArgs e)
-        => e.Handled = this.TryExpandOrInvoke();
+        => e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
 
     private void UpdateTypeVisualState()
     {
@@ -752,14 +761,19 @@ public partial class MenuItem : Control
     /// <summary>
     ///     Attempts to expand the submenu for this menu item if it has child items.
     /// </summary>
+    /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
     /// <returns>
     ///     True if the submenu was requested to expand; otherwise, false.
     /// </returns>
-    private bool TryExpandSubmenu()
+    private bool TryExpandSubmenu(MenuInteractionInputSource inputSource)
     {
         if (this.ItemData is { HasChildren: true } data)
         {
-            this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs { ItemData = data });
+            this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs
+            {
+                InputSource = inputSource,
+                ItemData = data,
+            });
             return true;
         }
 
@@ -769,10 +783,11 @@ public partial class MenuItem : Control
     /// <summary>
     ///     Attempts to invoke the menu item's command or selection logic if the item is enabled and does not have children.
     /// </summary>
+    /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
     /// <returns>
     ///     True if the item was invoked or selection state was handled; false if invocation was not possible.
     /// </returns>
-    private bool TryInvoke()
+    private bool TryInvoke(MenuInteractionInputSource inputSource)
     {
         if (this.ItemData is not { IsEnabled: true, HasChildren: false } data)
         {
@@ -795,7 +810,11 @@ public partial class MenuItem : Control
             }
 
             data.Command.Execute(data);
-            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = data });
+            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
+            {
+                InputSource = inputSource,
+                ItemData = data,
+            });
             this.HandleSelectionState();
         }
 #pragma warning disable CA1031 // Do not catch general exception types

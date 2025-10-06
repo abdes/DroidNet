@@ -127,17 +127,19 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
         _ = this.AddColumn(items, nextLevel, navigationMode);
 
         var activationSource = navigationMode == MenuNavigationMode.KeyboardInput
-            ? MenuInteractionActivationSource.KeyboardInput
-            : MenuInteractionActivationSource.PointerInput;
+            ? MenuInteractionInputSource.KeyboardInput
+            : MenuInteractionInputSource.PointerInput;
 
         this.RequestFocusForChildColumn(items, nextLevel, activationSource, parent.Id);
     }
 
     /// <inheritdoc />
-    public void Invoke(MenuItemData item)
-    {
-        this.Owner?.RaiseItemInvoked(item);
-    }
+    public void Invoke(MenuItemData item, MenuInteractionInputSource inputSource)
+        => this.Owner?.RaiseItemInvoked(new MenuItemInvokedEventArgs
+        {
+            InputSource = inputSource,
+            ItemData = item,
+        });
 
     /// <inheritdoc />
     public void NavigateRoot(MenuInteractionHorizontalDirection direction, MenuNavigationMode navigationMode)
@@ -201,8 +203,8 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
 
             var context = MenuInteractionContext.ForColumn(0, this, this.rootSurface);
             var activationSource = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
-                ? MenuInteractionActivationSource.KeyboardInput
-                : MenuInteractionActivationSource.PointerInput;
+                ? MenuInteractionInputSource.KeyboardInput
+                : MenuInteractionInputSource.PointerInput;
 
             Debug.WriteLine($"[MenuFlyoutPresenter] Requesting initial focus for root item {firstItem.Id} (source={activationSource})");
             this.controller.OnFocusRequested(context, origin: null, firstItem, activationSource, openSubmenu: false);
@@ -275,7 +277,7 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
         return column;
     }
 
-    private void RequestFocusForChildColumn(List<MenuItemData> items, int columnLevel, MenuInteractionActivationSource source, string parentId)
+    private void RequestFocusForChildColumn(List<MenuItemData> items, int columnLevel, MenuInteractionInputSource source, string parentId)
     {
         if (this.rootSurface is null)
         {

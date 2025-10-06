@@ -14,7 +14,7 @@ namespace DroidNet.Controls;
 ///     This implementation keeps interaction logic reusable across menu containers via
 ///     <see cref="MenuInteractionController"/>.
 /// </summary>
-public sealed class MenuFlyout : FlyoutBase
+public sealed partial class MenuFlyout : FlyoutBase
 {
     /// <summary>
     ///     Identifies the <see cref="MenuSource"/> dependency property.
@@ -23,7 +23,7 @@ public sealed class MenuFlyout : FlyoutBase
         nameof(MenuSource),
         typeof(IMenuSource),
         typeof(MenuFlyout),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     /// <summary>
     ///     Identifies the <see cref="MaxColumnHeight"/> dependency property.
@@ -100,11 +100,9 @@ public sealed class MenuFlyout : FlyoutBase
     /// <summary>
     ///     Raises <see cref="ItemInvoked"/> with the supplied menu item data.
     /// </summary>
-    /// <param name="item">The item that was invoked.</param>
-    internal void RaiseItemInvoked(MenuItemData item)
-    {
-        this.ItemInvoked?.Invoke(this, new MenuItemInvokedEventArgs { ItemData = item });
-    }
+    /// <param name="args">The event arguments containing information about the invoked menu item.</param>
+    internal void RaiseItemInvoked(MenuItemInvokedEventArgs args)
+        => this.ItemInvoked?.Invoke(this, args);
 
     /// <inheritdoc />
     protected override Control CreatePresenter()
@@ -141,17 +139,15 @@ public sealed class MenuFlyout : FlyoutBase
         var rootSurface = this.RootSurface;
 
         var source = this.OwnerNavigationMode == MenuNavigationMode.KeyboardInput
-            ? MenuInteractionActivationSource.KeyboardInput
-            : MenuInteractionActivationSource.PointerInput;
+            ? MenuInteractionInputSource.KeyboardInput
+            : MenuInteractionInputSource.PointerInput;
 
         this.controller.OnNavigationSourceChanged(source);
         this.presenter?.Initialize(this.MenuSource, this.controller, this.MaxColumnHeight, rootSurface);
     }
 
     private void OnFlyoutOpened(object? sender, object e)
-    {
-        this.presenter?.FocusFirstItem();
-    }
+        => this.presenter?.FocusFirstItem();
 
     private void OnFlyoutClosing(object? sender, FlyoutBaseClosingEventArgs e)
     {
