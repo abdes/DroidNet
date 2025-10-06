@@ -85,8 +85,7 @@ public partial class MenuItem
         _ = this.DispatcherQueue.TryEnqueue(() =>
         {
             this.UpdateTypeVisualState();
-            this.UpdateInteractionVisualState();
-            this.UpdateActiveVisualState();
+            this.UpdateCommonVisualState();
             this.UpdateIconVisualState();
             this.UpdateAcceleratorVisualState();
             this.UpdateCheckmarkVisualState();
@@ -97,7 +96,7 @@ public partial class MenuItem
 
     private static void OnShowSubmenuGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is MenuItem menuItem)
+        if (d is MenuItem { ItemData: { } } menuItem)
         {
             menuItem.UpdateCheckmarkVisualState();
         }
@@ -113,12 +112,8 @@ public partial class MenuItem
             switch (e.PropertyName)
             {
                 case nameof(MenuItemData.IsEnabled):
-                    this.UpdateInteractionVisualState();
-                    break;
-
-                case nameof(MenuItemData.IsActive):
-                    this.UpdateInteractionVisualState();
-                    this.UpdateActiveVisualState();
+                case nameof(MenuItemData.IsExpanded):
+                    this.UpdateCommonVisualState();
                     break;
 
                 case nameof(MenuItemData.Icon):

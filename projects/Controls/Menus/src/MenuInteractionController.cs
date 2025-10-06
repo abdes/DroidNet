@@ -236,13 +236,12 @@ public sealed class MenuInteractionController
         {
             if (!ReferenceEquals(this.activeByColumn[key], menuItem))
             {
-                this.activeByColumn[key].IsActive = false;
+                Debug.WriteLine($"[MenuInteractionController] Deactivating item {this.activeByColumn[key].Id} at column {key}");
+                this.activeByColumn[key].IsExpanded = false;
             }
 
             this.activeByColumn.Remove(key);
         }
-
-        menuItem.IsActive = true;
 
         if (context.Kind == MenuInteractionContextKind.Root)
         {
@@ -269,6 +268,8 @@ public sealed class MenuInteractionController
             return;
         }
 
+        Debug.WriteLine($"[MenuInteractionController] RequestSubmenu opening submenu for {menuItem.Id}");
+
         if (context.Kind == MenuInteractionContextKind.Root)
         {
             (context.RootSurface ?? throw new InvalidOperationException("Root surface is required for root submenu requests.")).OpenRootSubmenu(menuItem, origin, mode);
@@ -278,6 +279,8 @@ public sealed class MenuInteractionController
             var columnSurface = context.ColumnSurface ?? throw new InvalidOperationException("Column surface is required for column submenu requests.");
             columnSurface.OpenChildColumn(menuItem, origin, context.EffectiveColumnLevel, mode);
         }
+
+        menuItem.IsExpanded = true;
     }
 
     private void ExecuteInvoke(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionActivationSource source)
@@ -305,14 +308,16 @@ public sealed class MenuInteractionController
     {
         foreach (var item in this.activeByColumn.Values.Distinct())
         {
-            item.IsActive = false;
+            Debug.WriteLine($"[MenuInteractionController] Deactivating item {item.Id} at active column");
+            item.IsExpanded = false;
         }
 
         this.activeByColumn.Clear();
 
         if (this.activeRoot is { } root)
         {
-            root.IsActive = false;
+            Debug.WriteLine($"[MenuInteractionController] Deactivating active root {root.Id}");
+            root.IsExpanded = false;
             this.activeRoot = null;
         }
 

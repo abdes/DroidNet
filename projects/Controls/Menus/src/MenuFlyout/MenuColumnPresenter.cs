@@ -128,7 +128,7 @@ public sealed partial class MenuColumnPresenter : Control
             : FocusState.Programmatic;
 
         target.Focus(focusState);
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Focus applied to {menuItem.Id} (state={focusState})");
+        //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Focus applied to {menuItem.Id} (state={focusState})");
     }
 
     /// <summary>
@@ -160,7 +160,7 @@ public sealed partial class MenuColumnPresenter : Control
 
         var target = focusable[0];
         _ = this.DispatcherQueue.TryEnqueue(() => target.Focus(focusState));
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] FocusFirstItem scheduled on {target.ItemData?.Id} (state={focusState})");
+        //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] FocusFirstItem scheduled on {target.ItemData?.Id} (state={focusState})");
     }
 
     /// <summary>
@@ -169,7 +169,6 @@ public sealed partial class MenuColumnPresenter : Control
     /// <param name="e">Key event args.</param>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnKeyDown key={e.Key}");
         if (this.HandleNavigationKey(e.Key, this.GetFocusedMenuItem()))
         {
             e.Handled = true;
@@ -193,12 +192,12 @@ public sealed partial class MenuColumnPresenter : Control
         {
             var mode = this.pendingFocusMode.Value;
             this.pendingFocusMode = null;
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate applying deferred FocusFirstItem (mode={mode})");
+            //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate applying deferred FocusFirstItem (mode={mode})");
             this.FocusFirstItem(mode);
         }
         else if (this.Controller?.NavigationMode == MenuNavigationMode.KeyboardInput)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate auto FocusFirstItem for keyboard navigation");
+            //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate auto FocusFirstItem for keyboard navigation");
             this.FocusFirstItem(MenuNavigationMode.KeyboardInput);
         }
     }
@@ -257,7 +256,6 @@ public sealed partial class MenuColumnPresenter : Control
         Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] RebuildItems start");
         if (this.itemsHost is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] RebuildItems aborted: itemsHost null");
             return;
         }
 
@@ -265,7 +263,6 @@ public sealed partial class MenuColumnPresenter : Control
 
         if (this.ItemsSource is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] RebuildItems aborted: ItemsSource null");
             return;
         }
 
@@ -274,7 +271,6 @@ public sealed partial class MenuColumnPresenter : Control
             var menuItem = new MenuItem { ItemData = itemData };
             this.HookMenuItem(menuItem);
             this.itemsHost.Children.Add(menuItem);
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Realized item {itemData.Id}");
         }
     }
 
@@ -296,7 +292,6 @@ public sealed partial class MenuColumnPresenter : Control
 
     private void HookMenuItem(MenuItem item)
     {
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HookMenuItem {item.ItemData?.Id}");
         item.PreviewKeyDown += this.OnMenuItemPreviewKeyDown;
         item.Invoked += this.OnMenuItemInvoked;
         item.SubmenuRequested += this.OnMenuItemSubmenuRequested;
@@ -307,7 +302,6 @@ public sealed partial class MenuColumnPresenter : Control
 
     private void UnhookMenuItem(MenuItem item)
     {
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] UnhookMenuItem {item.ItemData?.Id}");
         item.PreviewKeyDown -= this.OnMenuItemPreviewKeyDown;
         item.Invoked -= this.OnMenuItemInvoked;
         item.SubmenuRequested -= this.OnMenuItemSubmenuRequested;
@@ -318,7 +312,6 @@ public sealed partial class MenuColumnPresenter : Control
 
     private void OnMenuItemPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] PreviewKeyDown from {(sender as MenuItem)?.ItemData?.Id ?? "unknown"} key={e.Key}");
         if (this.HandleNavigationKey(e.Key, sender as MenuItem))
         {
             e.Handled = true;
@@ -339,12 +332,10 @@ public sealed partial class MenuColumnPresenter : Control
         }
 
         var context = this.CreateCurrentContext();
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HoverEntered {e.ItemData.Id}");
         _ = origin.DispatcherQueue.TryEnqueue(() =>
         {
             if (!ReferenceEquals(this.Controller, controller))
             {
-                Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HoverEntered ignored: controller changed before dispatch");
                 return;
             }
 
@@ -415,7 +406,6 @@ public sealed partial class MenuColumnPresenter : Control
         }
 
         var context = this.CreateCurrentContext();
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnMenuItemGotFocus {menuItem.ItemData.Id}");
         controller.OnFocusRequested(context, menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
     }
 
@@ -434,7 +424,6 @@ public sealed partial class MenuColumnPresenter : Control
         var controller = this.Controller;
         if (controller is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryOpenSubmenuFor aborted: controller null");
             return false;
         }
 
@@ -460,7 +449,6 @@ public sealed partial class MenuColumnPresenter : Control
     {
         if (FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem focused && focused.ItemData is not null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] GetFocusedMenuItem via FocusManager => {focused.ItemData.Id}");
             return focused;
         }
 
@@ -471,27 +459,23 @@ public sealed partial class MenuColumnPresenter : Control
     {
         if (this.ColumnLevel <= 0 || this.Parent is not Panel panel)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryFocusParentColumn aborted: no parent");
             return false;
         }
 
         var index = panel.Children.IndexOf(this);
         if (index <= 0)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryFocusParentColumn aborted: index={index}");
             return false;
         }
 
         if (panel.Children[index - 1] is not MenuColumnPresenter parentPresenter)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryFocusParentColumn aborted: previous element not MenuColumnPresenter");
             return false;
         }
 
         var target = parentPresenter.GetActiveOrFirstFocusableItem();
         if (target?.ItemData is not MenuItemData itemData)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryFocusParentColumn aborted: parent target missing");
             return false;
         }
 
@@ -513,7 +497,6 @@ public sealed partial class MenuColumnPresenter : Control
         var controller = this.Controller;
         if (this.ColumnLevel != 0 || controller is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryReturnFocusToRoot aborted: level={this.ColumnLevel} controllerNull={controller is null}");
             return false;
         }
 
@@ -521,14 +504,12 @@ public sealed partial class MenuColumnPresenter : Control
         var rootSurface = owner.RootSurface;
         if (rootSurface is null)
         {
-            Debug.WriteLine("[MenuColumnPresenter] TryReturnFocusToRoot aborted: rootSurface null");
             return false;
         }
 
         var rootItem = controller.GetActiveItem(0);
         if (rootItem is null)
         {
-            Debug.WriteLine("[MenuColumnPresenter] TryReturnFocusToRoot aborted: active root item null");
             return false;
         }
 
@@ -543,14 +524,12 @@ public sealed partial class MenuColumnPresenter : Control
         var controller = this.Controller;
         if (controller is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryNavigateRootSibling aborted: controller null");
             return false;
         }
 
         var owner = this.OwnerPresenter ?? throw new InvalidOperationException("Owner presenter is not set for MenuColumnPresenter.");
         if (owner.RootSurface is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryNavigateRootSibling aborted: rootSurface null");
             return false;
         }
 
@@ -575,15 +554,13 @@ public sealed partial class MenuColumnPresenter : Control
             return null;
         }
 
-        var active = this.itemsHost.Children.OfType<MenuItem>().FirstOrDefault(item => item.ItemData?.IsActive == true);
+        var active = this.itemsHost.Children.OfType<MenuItem>().FirstOrDefault(item => item.ItemData?.IsExpanded == true);
         if (active is not null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] GetActiveOrFirstFocusableItem returning active {active.ItemData?.Id}");
             return active;
         }
 
         var fallback = this.itemsHost.Children.OfType<MenuItem>().FirstOrDefault(item => item.ItemData is { IsEnabled: true } data && !data.IsSeparator);
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] GetActiveOrFirstFocusableItem fallback {fallback?.ItemData?.Id ?? "null"}");
         return fallback;
     }
 
@@ -591,14 +568,12 @@ public sealed partial class MenuColumnPresenter : Control
     {
         if (direction == 0 || this.itemsHost is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryMoveFocus aborted: direction={direction} itemsHostNull={this.itemsHost is null}");
             return false;
         }
 
         var focusableItems = this.GetFocusableItems();
         if (focusableItems.Count == 0)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryMoveFocus aborted: no focusable items");
             return false;
         }
 
@@ -609,7 +584,6 @@ public sealed partial class MenuColumnPresenter : Control
         {
             var firstIndex = direction > 0 ? 0 : focusableItems.Count - 1;
             focusableItems[firstIndex].Focus(FocusState.Keyboard);
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryMoveFocus initial focus index {firstIndex}");
             return true;
         }
 
@@ -624,12 +598,10 @@ public sealed partial class MenuColumnPresenter : Control
         var controller = this.Controller;
         if (controller is null)
         {
-            Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HandleNavigationKey aborted: controller null");
             return false;
         }
 
         controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] HandleNavigationKey processing {key} origin={origin?.ItemData?.Id}");
 
         return key switch
         {
@@ -649,7 +621,6 @@ public sealed partial class MenuColumnPresenter : Control
             .ToList()
             ?? new List<MenuItem>();
 
-        Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] GetFocusableItems count={list.Count}");
         return list;
     }
 }

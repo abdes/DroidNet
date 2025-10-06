@@ -183,11 +183,6 @@
                                         <Setter Target="PartSubmenuArrow.Opacity" Value="0.5" />
                                     </VisualState.Setters>
                                 </VisualState>
-                            </VisualStateGroup>
-
-                            <!--  Navigation (Active) States  -->
-                            <VisualStateGroup x:Name="NavigationStates">
-                                <VisualState x:Name="Inactive" />
                                 <VisualState x:Name="Active">
                                     <VisualState.Setters>
                                         <Setter Target="PartRootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />

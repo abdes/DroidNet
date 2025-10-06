@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -65,12 +64,11 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = PointerOverVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = PressedVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = DisabledVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = ActiveVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = CheckedNoIconVisualState, GroupName = DecorationVisualStates)]
 [TemplateVisualState(Name = CheckedWithIconVisualState, GroupName = DecorationVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = DecorationVisualStates)]
 [TemplateVisualState(Name = NoDecorationVisualState, GroupName = DecorationVisualStates)]
-[TemplateVisualState(Name = ActiveVisualState, GroupName = NavigationVisualStates)]
-[TemplateVisualState(Name = InactiveVisualState, GroupName = NavigationVisualStates)]
 [TemplateVisualState(Name = HasIconVisualState, GroupName = IconVisualStates)]
 [TemplateVisualState(Name = NoIconVisualState, GroupName = IconVisualStates)]
 [TemplateVisualState(Name = HasAcceleratorVisualState, GroupName = AcceleratorVisualStates)]
@@ -163,6 +161,11 @@ public partial class MenuItem : Control
     public const string DisabledVisualState = "Disabled";
 
     /// <summary>
+    ///     Visual state representing a menu item that is focused or expanded (when it has children).
+    /// </summary>
+    public const string ActiveVisualState = "Active";
+
+    /// <summary>
     ///     Group name for decoration/checkmark visual states.
     /// </summary>
     public const string DecorationVisualStates = "DecorationStates";
@@ -191,16 +194,6 @@ public partial class MenuItem : Control
     ///     Group name for navigation (active/inactive) visual states.
     /// </summary>
     public const string NavigationVisualStates = "NavigationStates";
-
-    /// <summary>
-    ///     Visual state representing keyboard-activated (hot-tracked) item.
-    /// </summary>
-    public const string ActiveVisualState = "Active";
-
-    /// <summary>
-    ///     Visual state representing non-active keyboard navigation state.
-    /// </summary>
-    public const string InactiveVisualState = "Inactive";
 
     /// <summary>
     ///     Group name for icon presence visual states.
@@ -257,10 +250,11 @@ public partial class MenuItem : Control
     private Border? separatorBorder;
     private TextBlock? submenuArrow;
     private TextBlock? checkmark;
-    private bool isMnemonicDisplayVisible;
 
-    // Track pointer/keyboard pressed state explicitly for reliable Pressed visual state
+    private bool isFocused;
     private bool isPressed;
+    private bool isPointerOver;
+    private bool isMnemonicDisplayVisible;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuItem" /> class.
@@ -289,9 +283,8 @@ public partial class MenuItem : Control
         this.Unloaded += (_, _) => this.ItemData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
     }
 
-    private bool IsPressed => this.isPressed;
-
-    private bool IsPointerOver { get; set; }
+    private bool IsInteractiveItem =>
+        this.ItemData is { IsEnabled: true, IsSeparator: false };
 
     /// <summary>
     ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
@@ -302,7 +295,7 @@ public partial class MenuItem : Control
     /// </returns>
     internal bool TryExpandOrInvoke()
     {
-        if (!this.IsInteractiveItem())
+        if (!this.IsInteractiveItem)
         {
             return false;
         }
@@ -311,8 +304,7 @@ public partial class MenuItem : Control
 
         if (handled)
         {
-            this.UpdateInteractionVisualState();
-            this.UpdateActiveVisualState();
+            this.UpdateCommonVisualState();
         }
 
         return handled;
@@ -349,10 +341,14 @@ public partial class MenuItem : Control
         this.submenuArrow = this.GetTemplateChild(SubmenuArrowPart) as TextBlock;
         this.checkmark = this.GetTemplateChild(CheckmarkPart) as TextBlock;
 
+        if (this.ItemData is null)
+        {
+            return;
+        }
+
         // Initialize visual states based on current ItemData
         this.UpdateTypeVisualState();
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        this.UpdateCommonVisualState();
         this.UpdateIconVisualState();
         this.UpdateAcceleratorVisualState();
         this.UpdateCheckmarkVisualState();
@@ -370,7 +366,15 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnGotFocus(RoutedEventArgs e)
     {
-        this.UpdateInteractionVisualState();
+        Debug.Assert(this.IsInteractiveItem, "Non-interactive menu items should not participate in focus");
+
+        if (this.isFocused)
+        {
+            return;
+        }
+
+        this.isFocused = true;
+        this.UpdateCommonVisualState();
         base.OnGotFocus(e);
     }
 
@@ -380,7 +384,15 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnLostFocus(RoutedEventArgs e)
     {
-        this.UpdateInteractionVisualState();
+        Debug.Assert(this.IsInteractiveItem, "Non-interactive menu items should not participate in focus");
+
+        if (!this.isFocused)
+        {
+            return;
+        }
+
+        this.isFocused = false;
+        this.UpdateCommonVisualState();
         base.OnLostFocus(e);
     }
 
@@ -390,7 +402,7 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem())
+        if (!this.IsInteractiveItem)
         {
             base.OnKeyDown(e);
             return;
@@ -402,7 +414,7 @@ public partial class MenuItem : Control
         if (e.Key is VirtualKey.Enter or VirtualKey.Space)
         {
             this.isPressed = true;
-            this.UpdateInteractionVisualState();
+            this.UpdateCommonVisualState();
         }
 
         var handled = e.Key switch
@@ -415,8 +427,7 @@ public partial class MenuItem : Control
         if (handled)
         {
             e.Handled = true;
-            this.UpdateInteractionVisualState();
-            this.UpdateActiveVisualState();
+            this.UpdateCommonVisualState();
         }
         else
         {
@@ -430,10 +441,16 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyUp(KeyRoutedEventArgs e)
     {
+        if (!this.IsInteractiveItem)
+        {
+            base.OnKeyUp(e);
+            return;
+        }
+
         if (e.Key is VirtualKey.Enter or VirtualKey.Space)
         {
             this.isPressed = false;
-            this.UpdateInteractionVisualState();
+            this.UpdateCommonVisualState();
         }
 
         base.OnKeyUp(e);
@@ -445,20 +462,18 @@ public partial class MenuItem : Control
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
-    protected void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem())
+        if (!this.IsInteractiveItem)
         {
-            this.IsPointerOver = false;
             return;
         }
 
-        this.IsPointerOver = true;
+        this.isPointerOver = true;
+        this.UpdateCommonVisualState();
 
-        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData! });
-
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
+        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData });
     }
 
     /// <summary>
@@ -467,19 +482,19 @@ public partial class MenuItem : Control
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
-    protected void OnPointerExited(object sender, PointerRoutedEventArgs e)
+    private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        this.IsPointerOver = false;
+        this.isPointerOver = false; // ensure cleared
 
-        if (!this.IsInteractiveItem())
+        if (!this.IsInteractiveItem)
         {
             return;
         }
 
-        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData! });
+        this.UpdateCommonVisualState();
 
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
+        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs { ItemData = this.ItemData });
     }
 
     /// <summary>
@@ -487,9 +502,9 @@ public partial class MenuItem : Control
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
-    protected void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+    private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem())
+        if (!this.IsInteractiveItem)
         {
             return;
         }
@@ -499,8 +514,7 @@ public partial class MenuItem : Control
         _ = this.CapturePointer(e.Pointer);
         this.isPressed = true;
 
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        this.UpdateCommonVisualState();
     }
 
     /// <summary>
@@ -508,36 +522,42 @@ public partial class MenuItem : Control
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Pointer event arguments.</param>
-    protected void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem())
+        this.isPressed = false; // ensure cleared
+        this.ReleasePointerCaptures();
+
+        if (!this.IsInteractiveItem)
         {
             return;
         }
 
-        this.isPressed = false;
-        this.ReleasePointerCaptures();
-
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        this.UpdateCommonVisualState();
     }
 
     private void OnPointerCanceled(object sender, PointerRoutedEventArgs e)
     {
-        this.isPressed = false;
+        this.isPressed = false; // ensure cleared
         this.ReleasePointerCaptures();
 
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        if (!this.IsInteractiveItem)
+        {
+            return;
+        }
+
+        this.UpdateCommonVisualState();
     }
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        _ = sender;
-        _ = e;
-        this.isPressed = false;
-        this.UpdateInteractionVisualState();
-        this.UpdateActiveVisualState();
+        this.isPressed = false; // ensure cleared
+
+        if (!this.IsInteractiveItem)
+        {
+            return;
+        }
+
+        this.UpdateCommonVisualState();
     }
 
     /// <summary>
@@ -547,13 +567,12 @@ public partial class MenuItem : Control
     /// </summary>
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Tap event arguments (may be marked handled).</param>
-    protected void OnTapped(object sender, TappedRoutedEventArgs e) => e.Handled = this.TryExpandOrInvoke();
-
-    private bool IsInteractiveItem() =>
-        this.ItemData is { IsEnabled: true, IsSeparator: false };
+    private void OnTapped(object sender, TappedRoutedEventArgs e)
+        => e.Handled = this.TryExpandOrInvoke();
 
     private void UpdateTypeVisualState()
     {
+        Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
         var isSeparator = this.ItemData?.IsSeparator ?? false;
         this.IsTabStop = !isSeparator;
         AutomationProperties.SetAccessibilityView(this, isSeparator ? AccessibilityView.Raw : AccessibilityView.Control);
@@ -563,54 +582,53 @@ public partial class MenuItem : Control
                 useTransitions: true);
     }
 
-    private void UpdateActiveVisualState()
-        => VisualStateManager.GoToState(
-            this,
-            this.ItemData?.IsActive == true ? ActiveVisualState : InactiveVisualState,
-            useTransitions: true);
-
     private void UpdateIconVisualState()
-        => VisualStateManager.GoToState(
-            this,
-            this.ItemData?.Icon is not null ? HasIconVisualState : NoIconVisualState,
-            useTransitions: true);
+    {
+        Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
+        _ = VisualStateManager.GoToState(
+                this,
+                this.ItemData.Icon is { } ? HasIconVisualState : NoIconVisualState,
+                useTransitions: true);
+    }
 
     private void UpdateAcceleratorVisualState()
-        => VisualStateManager.GoToState(
-            this,
-            !string.IsNullOrEmpty(this.ItemData?.AcceleratorText) ? HasAcceleratorVisualState : NoAcceleratorVisualState,
-            useTransitions: true);
-
-    private void UpdateInteractionVisualState()
     {
-        if (this.ItemData is not { } data)
+        Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
+        _ = VisualStateManager.GoToState(
+                this,
+                !string.IsNullOrEmpty(this.ItemData.AcceleratorText) ? HasAcceleratorVisualState : NoAcceleratorVisualState,
+                useTransitions: true);
+    }
+
+    private void UpdateCommonVisualState()
+    {
+        Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
+
+        if (this.ItemData.IsSeparator)
         {
+            this.isPointerOver = false;
             _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
             return;
         }
 
-        if (data.IsSeparator)
-        {
-            this.IsPointerOver = false;
-            _ = VisualStateManager.GoToState(this, NormalVisualState, useTransitions: true);
-            return;
-        }
-
-        var state = !data.IsEnabled ? DisabledVisualState
-                  : this.IsPressed ? PressedVisualState
-                  : data.IsActive || this.IsPointerOver ? PointerOverVisualState
+        var state = !this.ItemData.IsEnabled ? DisabledVisualState
+                  : this.ItemData.IsExpanded || this.isFocused ? ActiveVisualState
+                  : this.isPressed ? PressedVisualState
+                  : this.isPointerOver ? PointerOverVisualState
                   : NormalVisualState;
 
+        Debug.WriteLine($"Transitioning {this.ItemData.Id} to common state: {state} (IsExpanded={this.ItemData.IsExpanded})");
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
     private void UpdateCheckmarkVisualState()
     {
+        Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
+
         // Priority order: Submenu Arrow > Selection State > Nothing
         // Show checkmark on right side if item has icon, left side if no icon
-        var state = this.ItemData is not { } data
-            ? NoDecorationVisualState
-            : (data.HasChildren && this.ShowSubmenuGlyph)
+        var data = this.ItemData;
+        var state = (data.HasChildren && this.ShowSubmenuGlyph)
                 ? WithChildrenVisualState
                 : (data.HasSelectionState && data.IsChecked)
                     ? (data.Icon != null ? CheckedWithIconVisualState : CheckedNoIconVisualState)
@@ -623,7 +641,7 @@ public partial class MenuItem : Control
     {
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
 
-        var data = this.ItemData!; // already validated by assert above
+        var data = this.ItemData; // already validated by assert above
         if (!string.IsNullOrEmpty(data.RadioGroupId))
         {
             // Handle radio group behavior - raise event to let container handle group logic
@@ -648,6 +666,11 @@ public partial class MenuItem : Control
     /// <param name="isVisible">True to show the mnemonic underline; false to hide it.</param>
     private void SetMnemonicVisibility(bool isVisible)
     {
+        if (!this.IsInteractiveItem)
+        {
+            return;
+        }
+
         if (this.isMnemonicDisplayVisible == isVisible)
         {
             return;
@@ -658,10 +681,10 @@ public partial class MenuItem : Control
     }
 
     private void OnAccessKeyDisplayRequested(UIElement sender, AccessKeyDisplayRequestedEventArgs args)
-        => this.SetMnemonicVisibility(true);
+        => this.SetMnemonicVisibility(isVisible: true);
 
     private void OnAccessKeyDisplayDismissed(UIElement sender, AccessKeyDisplayDismissedEventArgs args)
-        => this.SetMnemonicVisibility(false);
+        => this.SetMnemonicVisibility(isVisible: false);
 
     private void RefreshTextPresentation()
     {
@@ -681,13 +704,15 @@ public partial class MenuItem : Control
 
     private void UpdateTextBlockContent(bool showMnemonicUnderline)
     {
+        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
+
         if (this.textBlock is null)
         {
             return;
         }
 
-        var text = this.ItemData?.Text ?? string.Empty;
-        var mnemonic = this.ItemData?.Mnemonic;
+        var text = this.ItemData.Text ?? string.Empty;
+        var mnemonic = this.ItemData.Mnemonic;
 
         this.textBlock.Inlines.Clear();
 
