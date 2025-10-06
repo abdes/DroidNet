@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
@@ -419,9 +420,6 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     protected void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        _ = sender; // unused
-        _ = e; // unused
-
         if (!this.IsInteractiveItem())
         {
             this.IsPointerOver = false;
@@ -444,9 +442,6 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     protected void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        _ = sender; // unused
-        _ = e; // unused
-
         this.IsPointerOver = false;
 
         if (!this.IsInteractiveItem())
@@ -467,9 +462,6 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     protected void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        _ = sender; // unused
-        _ = e; // unused
-
         if (!this.IsInteractiveItem())
         {
             return;
@@ -511,10 +503,15 @@ public partial class MenuItem : Control
         this.ItemData is { IsEnabled: true, IsSeparator: false };
 
     private void UpdateTypeVisualState()
-        => VisualStateManager.GoToState(
-            this,
-            this.ItemData?.IsSeparator == true ? SeparatorVisualState : ItemVisualState,
-            useTransitions: true);
+    {
+        var isSeparator = this.ItemData?.IsSeparator ?? false;
+        this.IsTabStop = !isSeparator;
+        AutomationProperties.SetAccessibilityView(this, isSeparator ? AccessibilityView.Raw : AccessibilityView.Control);
+        _ = VisualStateManager.GoToState(
+                this,
+                isSeparator ? SeparatorVisualState : ItemVisualState,
+                useTransitions: true);
+    }
 
     private void UpdateActiveVisualState()
         => VisualStateManager.GoToState(
