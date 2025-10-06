@@ -58,9 +58,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     public MenuBar()
     {
         this.DefaultStyleKey = typeof(MenuBar);
-        this.IsTabStop = true;
-        this.AllowFocusOnInteraction = true;
-        this.UseSystemFocusVisuals = true;
     }
 
     /// <summary>

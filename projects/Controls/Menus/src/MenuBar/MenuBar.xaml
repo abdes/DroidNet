@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -21,6 +21,7 @@
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="ShowSubmenuGlyph" Value="False" />
+        <Setter Property="IsAccessKeyScope" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:MenuItem">
