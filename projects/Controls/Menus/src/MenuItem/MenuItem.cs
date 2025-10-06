@@ -259,6 +259,9 @@ public partial class MenuItem : Control
     private TextBlock? checkmark;
     private bool isMnemonicDisplayVisible;
 
+    // Track pointer/keyboard pressed state explicitly for reliable Pressed visual state
+    private bool isPressed;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuItem" /> class.
     /// </summary>
@@ -276,6 +279,8 @@ public partial class MenuItem : Control
         this.PointerExited += this.OnPointerExited;
         this.PointerPressed += this.OnPointerPressed;
         this.PointerReleased += this.OnPointerReleased;
+        this.PointerCanceled += this.OnPointerCanceled;
+        this.PointerCaptureLost += this.OnPointerCaptureLost;
         this.Tapped += this.OnTapped;
 
         this.AccessKeyDisplayRequested += this.OnAccessKeyDisplayRequested;
@@ -284,8 +289,7 @@ public partial class MenuItem : Control
         this.Unloaded += (_, _) => this.ItemData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
     }
 
-    private bool IsPressed =>
-        this.PointerCaptures?.Any(p => p.PointerDeviceType == PointerDeviceType.Mouse) == true;
+    private bool IsPressed => this.isPressed;
 
     private bool IsPointerOver { get; set; }
 
@@ -393,6 +397,14 @@ public partial class MenuItem : Control
         }
 
         var data = this.ItemData!; // already validated by IsInteractiveItem
+
+        // Show pressed visual state for keyboard activation keys
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            this.isPressed = true;
+            this.UpdateInteractionVisualState();
+        }
+
         var handled = e.Key switch
         {
             VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(),
@@ -410,6 +422,21 @@ public partial class MenuItem : Control
         {
             base.OnKeyDown(e);
         }
+    }
+
+    /// <summary>
+    ///     Called when a key is released while the control has focus.
+    /// </summary>
+    /// <param name="e">The event arguments.</param>
+    protected override void OnKeyUp(KeyRoutedEventArgs e)
+    {
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            this.isPressed = false;
+            this.UpdateInteractionVisualState();
+        }
+
+        base.OnKeyUp(e);
     }
 
     /// <summary>
@@ -467,6 +494,11 @@ public partial class MenuItem : Control
             return;
         }
 
+        // Capture pointer so we reliably see pointer release/cancel even if pointer moves off the control.
+        // Mark pressed even if capture fails, to ensure visual state is correct.
+        _ = this.CapturePointer(e.Pointer);
+        this.isPressed = true;
+
         this.UpdateInteractionVisualState();
         this.UpdateActiveVisualState();
     }
@@ -478,14 +510,32 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     protected void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        _ = sender; // unused
-        _ = e; // unused
-
         if (!this.IsInteractiveItem())
         {
             return;
         }
 
+        this.isPressed = false;
+        this.ReleasePointerCaptures();
+
+        this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
+    }
+
+    private void OnPointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        this.isPressed = false;
+        this.ReleasePointerCaptures();
+
+        this.UpdateInteractionVisualState();
+        this.UpdateActiveVisualState();
+    }
+
+    private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        this.isPressed = false;
         this.UpdateInteractionVisualState();
         this.UpdateActiveVisualState();
     }
