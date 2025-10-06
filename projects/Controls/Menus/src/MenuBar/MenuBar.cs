@@ -17,33 +17,6 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = RootItemsRepeaterPart, Type = typeof(ItemsRepeater))]
 public sealed partial class MenuBar : Control, IMenuInteractionSurface
 {
-    /// <summary>
-    ///     Identifies the <see cref="MenuSource"/> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty MenuSourceProperty = DependencyProperty.Register(
-        nameof(MenuSource),
-        typeof(IMenuSource),
-        typeof(MenuBar),
-        new PropertyMetadata(null, OnMenuSourceChanged));
-
-    /// <summary>
-    ///     Identifies the <see cref="IsSubmenuOpen"/> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty IsSubmenuOpenProperty = DependencyProperty.Register(
-        nameof(IsSubmenuOpen),
-        typeof(bool),
-        typeof(MenuBar),
-        new PropertyMetadata(false));
-
-    /// <summary>
-    ///     Identifies the <see cref="OpenRootIndex"/> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty OpenRootIndexProperty = DependencyProperty.Register(
-        nameof(OpenRootIndex),
-        typeof(int),
-        typeof(MenuBar),
-        new PropertyMetadata(-1));
-
     private const string RootItemsRepeaterPart = "PART_RootItemsRepeater";
 
     private ItemsRepeater? rootItemsRepeater;
@@ -61,36 +34,11 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     }
 
     /// <summary>
-    ///     Occurs when a leaf menu item is invoked through the bar.
+    ///     Gets the zero-based index of the root item whose submenu is open, or `-1` if no submenu is open.
     /// </summary>
-    public event EventHandler<MenuItemInvokedEventArgs>? ItemInvoked;
+    public int OpenRootIndex { get; private set; } = -1;
 
-    /// <summary>
-    ///     Gets or sets the menu source that provides items and shared services for the bar.
-    /// </summary>
-    public IMenuSource? MenuSource
-    {
-        get => (IMenuSource?)this.GetValue(MenuSourceProperty);
-        set => this.SetValue(MenuSourceProperty, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether a submenu is currently visible.
-    /// </summary>
-    public bool IsSubmenuOpen
-    {
-        get => (bool)this.GetValue(IsSubmenuOpenProperty);
-        set => this.SetValue(IsSubmenuOpenProperty, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets the zero-based index of the root item whose submenu is open.
-    /// </summary>
-    public int OpenRootIndex
-    {
-        get => (int)this.GetValue(OpenRootIndexProperty);
-        set => this.SetValue(OpenRootIndexProperty, value);
-    }
+    private bool IsFlyoutOpen => this.OpenRootIndex != -1;
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -251,7 +199,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         // Request focus on the root; if a submenu is open we keep it open for the new root.
-        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsSubmenuOpen);
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
         return true;
     }
 
@@ -314,7 +262,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return;
         }
 
-        var openSubmenu = this.IsSubmenuOpen && menuItem.ItemData.HasChildren;
+        var openSubmenu = this.IsFlyoutOpen && menuItem.ItemData.HasChildren;
         this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu);
     }
 
@@ -400,7 +348,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return false;
         }
 
-        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsSubmenuOpen);
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
         return true;
     }
 
@@ -411,7 +359,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return;
         }
 
-        if (!this.IsSubmenuOpen || ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
+        if (!this.IsFlyoutOpen || ReferenceEquals(menuItem, this.activeRootItem) || ReferenceEquals(menuItem, this.pendingRootItem))
         {
             return;
         }
@@ -432,7 +380,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return;
         }
 
-        if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsSubmenuOpen)
+        if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsFlyoutOpen)
         {
             return;
         }
@@ -459,7 +407,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
                 return;
             }
 
-            if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsSubmenuOpen)
+            if (ReferenceEquals(menuItem, this.activeRootItem) && this.IsFlyoutOpen)
             {
                 return;
             }
@@ -508,7 +456,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
 
         var index = this.MenuSource.Items.IndexOf(root);
         this.OpenRootIndex = index >= 0 ? index : -1;
-        this.IsSubmenuOpen = true;
         this.activeRootItem = origin as MenuItem;
         this.pendingRootItem = null;
         this.activeFlyout = flyout;
@@ -533,7 +480,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             this.activeFlyout = null;
         }
 
-        this.IsSubmenuOpen = false;
         this.OpenRootIndex = -1;
         this.activeRootItem = null;
         this.pendingRootItem = null;
