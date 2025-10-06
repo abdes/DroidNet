@@ -521,10 +521,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         flyout.ShowAt(origin, options);
     }
 
-    private void OnFlyoutClosed(object? sender, object e)
-    {
-        this.CloseActiveFlyout();
-    }
+    private void OnFlyoutClosed(object? sender, object e) => this.CloseActiveFlyout();
 
     private void CloseActiveFlyout()
     {
