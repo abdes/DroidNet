@@ -12,11 +12,11 @@ namespace DroidNet.Controls;
 ///     Presenter used by <see cref="MenuFlyout"/> to render one or more cascading menu columns.
 /// </summary>
 [TemplatePart(Name = ContentScrollViewerPart, Type = typeof(ScrollViewer))]
-public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurface
+public sealed partial class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurface
 {
     private const string ContentScrollViewerPart = "ContentScrollViewer";
 
-    private readonly List<MenuColumnPresenter> columnPresenters = new();
+    private readonly List<MenuColumnPresenter> columnPresenters = [];
     private readonly StackPanel columnsHost;
     private MenuInteractionController? controller;
     private IMenuSource? menuSource;
@@ -267,9 +267,8 @@ public sealed class MenuFlyoutPresenter : FlyoutPresenter, IMenuInteractionSurfa
             ColumnLevel = level,
             MaxHeight = effectiveHeight,
             OwnerPresenter = this,
+            Margin = level == 0 ? new Thickness(0) : new Thickness(4, 0, 0, 0),
         };
-
-        column.Margin = level == 0 ? new Thickness(0) : new Thickness(4, 0, 0, 0);
         this.columnPresenters.Add(column);
         this.columnsHost.Children.Add(column);
         Debug.WriteLine($"[MenuFlyoutPresenter] Added column level {level} with {items.Count} items (mode={navigationMode})");

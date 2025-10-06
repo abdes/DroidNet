@@ -353,7 +353,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.OnPointerEntered(this.CreateRootContext(), menuItem, menuItemData, true);
+        this.controller.OnPointerEntered(this.CreateRootContext(), menuItem, menuItemData, menuOpen: true);
     }
 
     private void OnRootMenuItemSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
@@ -374,7 +374,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, e.InputSource, true);
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, e.InputSource, openSubmenu: true);
     }
 
     private void OnRootMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
@@ -401,7 +401,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             }
 
             this.pendingRootItem = menuItem;
-            this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, source, true);
+            this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, source, openSubmenu: true);
             return;
         }
 

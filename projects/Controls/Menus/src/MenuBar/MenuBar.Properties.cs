@@ -20,7 +20,7 @@ public sealed partial class MenuBar
         nameof(MenuSource),
         typeof(IMenuSource),
         typeof(MenuBar),
-        new PropertyMetadata(null, OnMenuSourceChanged));
+        new PropertyMetadata(defaultValue: null, OnMenuSourceChanged));
 
     /// <summary>
     ///     Gets or sets the menu source that provides items and shared services for the bar.

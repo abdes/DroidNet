@@ -36,12 +36,9 @@ public sealed class MenuInteractionController(MenuServices services)
     public MenuItemData? GetActiveItem(int columnLevel)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(columnLevel);
-        if (columnLevel == 0 && this.activeRoot is not null)
-        {
-            return this.activeRoot;
-        }
-
-        return this.activeByColumn.TryGetValue(columnLevel, out var item) ? item : null;
+        return columnLevel == 0 && this.activeRoot is not null
+            ? this.activeRoot
+            : this.activeByColumn.TryGetValue(columnLevel, out var item) ? item : null;
     }
 
     /// <summary>
@@ -235,7 +232,7 @@ public sealed class MenuInteractionController(MenuServices services)
                 this.activeByColumn[key].IsExpanded = false;
             }
 
-            this.activeByColumn.Remove(key);
+            _ = this.activeByColumn.Remove(key);
         }
 
         if (context.Kind == MenuInteractionContextKind.Root)
@@ -279,7 +276,6 @@ public sealed class MenuInteractionController(MenuServices services)
 
     private void ExecuteInvoke(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionInputSource source)
     {
-        var columnLevel = context.EffectiveColumnLevel;
         var mode = source switch
         {
             MenuInteractionInputSource.PointerInput => MenuNavigationMode.PointerInput,
