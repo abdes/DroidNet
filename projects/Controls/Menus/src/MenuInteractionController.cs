@@ -13,20 +13,15 @@ namespace DroidNet.Controls;
 ///     logic through <see cref="MenuServices"/>, and raises higher-level events so menu
 ///     surfaces can materialize columns or dismiss open presenters consistently.
 /// </summary>
-public sealed class MenuInteractionController
+/// <remarks>
+///     Initializes a new instance of the <see cref="MenuInteractionController"/> class.
+/// </remarks>
+/// <param name="services">The shared services instance produced by <see cref="MenuBuilder"/>.</param>
+public sealed class MenuInteractionController(MenuServices services)
 {
-    private readonly MenuServices services;
-    private readonly Dictionary<int, MenuItemData> activeByColumn = new();
+    private readonly MenuServices services = services ?? throw new ArgumentNullException(nameof(services));
+    private readonly Dictionary<int, MenuItemData> activeByColumn = [];
     private MenuItemData? activeRoot;
-
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="MenuInteractionController"/> class.
-    /// </summary>
-    /// <param name="services">The shared services instance produced by <see cref="MenuBuilder"/>.</param>
-    public MenuInteractionController(MenuServices services)
-    {
-        this.services = services ?? throw new ArgumentNullException(nameof(services));
-    }
 
     /// <summary>
     ///     Gets the current navigation mode used to open the active menu path.
@@ -53,13 +48,13 @@ public sealed class MenuInteractionController
     ///     Signals that the most recent interaction originated from a specific input source.
     /// </summary>
     /// <param name="source">The activation source for the interaction.</param>
-    public void OnNavigationSourceChanged(MenuInteractionActivationSource source)
+    public void OnNavigationSourceChanged(MenuInteractionInputSource source)
     {
         Debug.WriteLine($"[MenuInteractionController] Navigation source changed to {source}");
         this.NavigationMode = source switch
         {
-            MenuInteractionActivationSource.PointerInput => MenuNavigationMode.PointerInput,
-            MenuInteractionActivationSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
+            MenuInteractionInputSource.PointerInput => MenuNavigationMode.PointerInput,
+            MenuInteractionInputSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
             _ => this.NavigationMode,
         };
     }
@@ -81,7 +76,7 @@ public sealed class MenuInteractionController
         {
             if (!menuOpen)
             {
-                this.OnNavigationSourceChanged(MenuInteractionActivationSource.PointerInput);
+                this.OnNavigationSourceChanged(MenuInteractionInputSource.PointerInput);
                 return;
             }
 
@@ -98,7 +93,7 @@ public sealed class MenuInteractionController
             ArgumentNullException.ThrowIfNull(origin);
         }
 
-        this.OnNavigationSourceChanged(MenuInteractionActivationSource.PointerInput);
+        this.OnNavigationSourceChanged(MenuInteractionInputSource.PointerInput);
         this.ExecuteActivateItem(context, menuItem, this.NavigationMode);
 
         if (menuItem.HasChildren)
@@ -116,7 +111,7 @@ public sealed class MenuInteractionController
     /// <param name="menuItem">The menu item to focus.</param>
     /// <param name="source">The activation source that triggered the focus.</param>
     /// <param name="openSubmenu">Whether the submenu should be opened as part of the focus request.</param>
-    public void OnFocusRequested(MenuInteractionContext context, FrameworkElement? origin, MenuItemData menuItem, MenuInteractionActivationSource source, bool openSubmenu)
+    public void OnFocusRequested(MenuInteractionContext context, FrameworkElement? origin, MenuItemData menuItem, MenuInteractionInputSource source, bool openSubmenu)
     {
         ArgumentNullException.ThrowIfNull(menuItem);
 
@@ -138,7 +133,7 @@ public sealed class MenuInteractionController
     /// <param name="origin">The visual element hosting the item.</param>
     /// <param name="menuItem">The menu item owning the requested submenu.</param>
     /// <param name="source">The activation source for the request.</param>
-    public void OnSubmenuRequested(MenuInteractionContext context, FrameworkElement origin, MenuItemData menuItem, MenuInteractionActivationSource source)
+    public void OnSubmenuRequested(MenuInteractionContext context, FrameworkElement origin, MenuItemData menuItem, MenuInteractionInputSource source)
     {
         ArgumentNullException.ThrowIfNull(origin);
         ArgumentNullException.ThrowIfNull(menuItem);
@@ -157,7 +152,7 @@ public sealed class MenuInteractionController
     {
         var rootSurface = context.RootSurface ?? throw new InvalidOperationException("Root surface is required for horizontal navigation requests.");
 
-        this.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
+        this.OnNavigationSourceChanged(MenuInteractionInputSource.KeyboardInput);
         rootSurface.NavigateRoot(direction, this.NavigationMode);
     }
 
@@ -167,7 +162,7 @@ public sealed class MenuInteractionController
     /// <param name="context">The interaction context (root or a specific column).</param>
     /// <param name="menuItem">The menu item that was invoked.</param>
     /// <param name="source">The activation source for the invocation.</param>
-    public void OnInvokeRequested(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionActivationSource source)
+    public void OnInvokeRequested(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionInputSource source)
     {
         ArgumentNullException.ThrowIfNull(menuItem);
         this.ExecuteInvoke(context, menuItem, source);
@@ -229,10 +224,10 @@ public sealed class MenuInteractionController
 
     private void ExecuteActivateItem(MenuInteractionContext context, MenuItemData menuItem, MenuNavigationMode mode)
     {
-        var columnLevel = context.EffectiveColumnLevel;
+        var effectiveColumnLevel = context.EffectiveColumnLevel;
         this.NavigationMode = mode;
 
-        foreach (var key in this.activeByColumn.Keys.Where(k => k >= columnLevel).ToList())
+        foreach (var key in this.activeByColumn.Keys.Where(k => k >= effectiveColumnLevel).ToList())
         {
             if (!ReferenceEquals(this.activeByColumn[key], menuItem))
             {
@@ -246,16 +241,15 @@ public sealed class MenuInteractionController
         if (context.Kind == MenuInteractionContextKind.Root)
         {
             this.activeRoot = menuItem;
-            this.activeByColumn[columnLevel] = menuItem;
-            context.ColumnSurface?.CloseFromColumn(1);
+            this.activeByColumn[effectiveColumnLevel] = menuItem;
             (context.RootSurface ?? throw new InvalidOperationException("Root surface is required for root context activation.")).FocusRoot(menuItem, mode);
         }
         else
         {
-            this.activeByColumn[columnLevel] = menuItem;
+            this.activeByColumn[effectiveColumnLevel] = menuItem;
             var columnSurface = context.ColumnSurface ?? throw new InvalidOperationException("Column surface is required for column context activation.");
-            columnSurface.CloseFromColumn(columnLevel + 1);
-            columnSurface.FocusColumnItem(menuItem, columnLevel, mode);
+            columnSurface.CloseFromColumn(context.ColumnLevel + 1);
+            columnSurface.FocusColumnItem(menuItem, context.ColumnLevel, mode);
         }
     }
 
@@ -283,13 +277,13 @@ public sealed class MenuInteractionController
         menuItem.IsExpanded = true;
     }
 
-    private void ExecuteInvoke(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionActivationSource source)
+    private void ExecuteInvoke(MenuInteractionContext context, MenuItemData menuItem, MenuInteractionInputSource source)
     {
         var columnLevel = context.EffectiveColumnLevel;
         var mode = source switch
         {
-            MenuInteractionActivationSource.PointerInput => MenuNavigationMode.PointerInput,
-            MenuInteractionActivationSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
+            MenuInteractionInputSource.PointerInput => MenuNavigationMode.PointerInput,
+            MenuInteractionInputSource.KeyboardInput => MenuNavigationMode.KeyboardInput,
             _ => this.NavigationMode,
         };
 
@@ -299,7 +293,7 @@ public sealed class MenuInteractionController
         var surface = context.Kind == MenuInteractionContextKind.Root
             ? context.RootSurface
             : context.ColumnSurface;
-        surface?.Invoke(menuItem);
+        surface?.Invoke(menuItem, source);
 
         this.ExecuteDismiss(context, MenuDismissKind.Programmatic);
     }

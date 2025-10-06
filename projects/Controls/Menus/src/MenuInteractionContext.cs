@@ -43,7 +43,7 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
     /// <summary>
     ///     Gets the effective column level for interaction coordination.
     /// </summary>
-    public int EffectiveColumnLevel => this.Kind == MenuInteractionContextKind.Root ? 0 : this.ColumnLevel;
+    public int EffectiveColumnLevel => this.Kind == MenuInteractionContextKind.Root ? 0 : this.ColumnLevel + 1;
 
     /// <summary>
     ///     Determines whether two contexts are equal.

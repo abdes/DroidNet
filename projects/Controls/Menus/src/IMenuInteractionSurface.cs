@@ -48,7 +48,8 @@ public interface IMenuInteractionSurface
 
     /// <summary>Invokes the supplied menu item.</summary>
     /// <param name="item">The item to invoke.</param>
-    public void Invoke(MenuItemData item);
+    /// <param name="inputSource">The input source behind this invocation.</param>
+    public void Invoke(MenuItemData item, MenuInteractionInputSource inputSource);
 
     /// <summary>Returns focus to the hosting application shell.</summary>
     public void ReturnFocusToApp();

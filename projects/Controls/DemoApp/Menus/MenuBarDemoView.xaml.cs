@@ -53,7 +53,7 @@ public sealed partial class MenuBarDemoView : Page
             this.menuContext,
             origin: null,
             menuItem: this.firstRootItem!,
-            source: MenuInteractionActivationSource.KeyboardInput,
+            source: MenuInteractionInputSource.KeyboardInput,
             openSubmenu: false);
 
         return true;

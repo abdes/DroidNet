@@ -22,7 +22,7 @@ public sealed partial class MenuItemAutomationPeer(MenuItem owner) : FrameworkEl
     /// <summary>
     ///     Invokes the MenuItem. This is the IInvokeProvider implementation.
     /// </summary>
-    public void Invoke() => _ = this.owner.DispatcherQueue.TryEnqueue(() => _ = this.owner.TryExpandOrInvoke());
+    public void Invoke() => _ = this.owner.DispatcherQueue.TryEnqueue(() => _ = this.owner.TryExpandOrInvoke(MenuInteractionInputSource.Programmatic));
 
     /// <inheritdoc/>
     protected override string GetClassNameCore() => nameof(MenuItem);

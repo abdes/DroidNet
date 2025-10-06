@@ -76,6 +76,11 @@ public partial class MenuItem
 public class MenuItemInvokedEventArgs : EventArgs
 {
     /// <summary>
+    ///     Gets the navigation mode used to invoke the menu item.
+    /// </summary>
+    public required MenuInteractionInputSource InputSource { get; init; }
+
+    /// <summary>
     ///     Gets the menu item that was invoked.
     /// </summary>
     public required MenuItemData ItemData { get; init; }
@@ -87,6 +92,11 @@ public class MenuItemInvokedEventArgs : EventArgs
 public class MenuItemHoverEventArgs : EventArgs
 {
     /// <summary>
+    ///     Gets the navigation mode used to invoke the menu item.
+    /// </summary>
+    public required MenuInteractionInputSource InputSource { get; init; }
+
+    /// <summary>
     ///     Gets the menu item that was hovered.
     /// </summary>
     public required MenuItemData ItemData { get; init; }
@@ -97,6 +107,11 @@ public class MenuItemHoverEventArgs : EventArgs
 /// </summary>
 public class MenuItemSubmenuEventArgs : EventArgs
 {
+    /// <summary>
+    ///     Gets the navigation mode used to invoke the menu item.
+    /// </summary>
+    public required MenuInteractionInputSource InputSource { get; init; }
+
     /// <summary>
     ///     Gets the menu item requesting submenu expansion.
     /// </summary>

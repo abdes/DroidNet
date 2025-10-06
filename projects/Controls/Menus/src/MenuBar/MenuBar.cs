@@ -31,6 +31,8 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
     public MenuBar()
     {
         this.DefaultStyleKey = typeof(MenuBar);
+
+        this.AttachController(this.MenuSource?.Services.InteractionController);
     }
 
     /// <summary>
@@ -57,12 +59,38 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         this.rootItemsRepeater.ItemsSource = this.MenuSource?.Items;
         this.rootItemsRepeater.ElementPrepared += this.OnRootItemPrepared;
         this.rootItemsRepeater.ElementClearing += this.OnRootItemClearing;
+    }
 
-        // Ensure we are listening for keyboard events on the bar so we can forward navigation
-        this.KeyDown -= this.HandleBarKeyDown;
-        this.KeyDown += this.HandleBarKeyDown;
+    /// <summary>
+    ///     Handles key events when the menu bar has focus and routes keyboard navigation to the controller.
+    /// </summary>
+    /// <param name="e">Key event args.</param>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (this.controller is null)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
 
-        this.AttachController(this.MenuSource?.Services.InteractionController);
+        // Notify controller that keyboard is the current navigation source.
+        this.controller.OnNavigationSourceChanged(MenuInteractionInputSource.KeyboardInput);
+
+        var handled = e.Key switch
+        {
+            VirtualKey.Left or VirtualKey.Right => this.HandleRootHorizontalNavigation(e.Key),
+            VirtualKey.Enter or VirtualKey.Space or VirtualKey.Down => this.HandleRootActivationKey(e.Key),
+            _ => false,
+        };
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
+        else
+        {
+            base.OnKeyDown(e);
+        }
     }
 
     private void OnRootItemPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -76,7 +104,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         menuItem.SubmenuRequested += this.OnRootMenuItemSubmenuRequested;
         menuItem.HoverStarted += this.OnRootMenuItemHoverStarted;
         menuItem.RadioGroupSelectionRequested += this.OnRootRadioGroupSelectionRequested;
-        menuItem.PointerEntered += this.OnRootMenuItemPointerEntered;
         menuItem.GotFocus += this.OnRootMenuItemGotFocus;
         menuItem.PreviewKeyDown += this.OnRootMenuItemPreviewKeyDown;
         menuItem.ShowSubmenuGlyph = false;
@@ -93,7 +120,6 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         menuItem.SubmenuRequested -= this.OnRootMenuItemSubmenuRequested;
         menuItem.HoverStarted -= this.OnRootMenuItemHoverStarted;
         menuItem.RadioGroupSelectionRequested -= this.OnRootRadioGroupSelectionRequested;
-        menuItem.PointerEntered -= this.OnRootMenuItemPointerEntered;
         menuItem.GotFocus -= this.OnRootMenuItemGotFocus;
         menuItem.PreviewKeyDown -= this.OnRootMenuItemPreviewKeyDown;
         menuItem.ShowSubmenuGlyph = true;
@@ -118,55 +144,17 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
 
     private void OnRootMenuItemHoverStarted(object? sender, MenuItemHoverEventArgs e)
     {
+        if (this.controller is not { NavigationMode: MenuNavigationMode.PointerInput })
+        {
+            return;
+        }
+
         if (sender is not MenuItem menuItem)
         {
             return;
         }
 
         this.HandleRootPointerActivation(menuItem, e.ItemData);
-    }
-
-    private void OnRootMenuItemPointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        _ = e;
-
-        if (sender is not MenuItem menuItem || menuItem.ItemData is null)
-        {
-            return;
-        }
-
-        this.HandleRootPointerActivation(menuItem, menuItem.ItemData);
-    }
-
-    /// <summary>
-    ///     Handles key events when the menu bar has focus and routes keyboard navigation to the controller.
-    /// </summary>
-    /// <param name="e">Key event args.</param>
-    private void HandleBarKeyDown(object? sender, KeyRoutedEventArgs e)
-    {
-        if (this.controller is null)
-        {
-            return;
-        }
-
-        // Notify controller that keyboard is the current navigation source.
-        this.controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
-
-        switch (e.Key)
-        {
-            case VirtualKey.Left:
-            case VirtualKey.Right:
-                e.Handled = this.HandleRootHorizontalNavigation(e.Key);
-                break;
-
-            case VirtualKey.Down:
-            case VirtualKey.Enter:
-            case VirtualKey.Space:
-                e.Handled = this.HandleRootActivationKey(e.Key);
-                break;
-        }
-
-        // no-op: handled routing is sufficient
     }
 
     private bool HandleRootHorizontalNavigation(VirtualKey key)
@@ -199,7 +187,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         // Request focus on the root; if a submenu is open we keep it open for the new root.
-        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionInputSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
         return true;
     }
 
@@ -236,14 +224,14 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
                 this.CreateRootContext(),
                 activeRoot,
                 activeData,
-                MenuInteractionActivationSource.KeyboardInput,
+                MenuInteractionInputSource.KeyboardInput,
                 openSubmenu: true);
             return true;
         }
 
         if (key is VirtualKey.Enter or VirtualKey.Space)
         {
-            this.controller.OnInvokeRequested(this.CreateRootContext(), activeData, MenuInteractionActivationSource.KeyboardInput);
+            this.controller.OnInvokeRequested(this.CreateRootContext(), activeData, MenuInteractionInputSource.KeyboardInput);
             return true;
         }
 
@@ -263,7 +251,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         var openSubmenu = this.IsFlyoutOpen && menuItem.ItemData.HasChildren;
-        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, menuItem.ItemData, MenuInteractionActivationSource.KeyboardInput, openSubmenu);
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, menuItem.ItemData, MenuInteractionInputSource.KeyboardInput, openSubmenu);
     }
 
     private void OnRootMenuItemPreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -273,7 +261,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return;
         }
 
-        this.controller.OnNavigationSourceChanged(MenuInteractionActivationSource.KeyboardInput);
+        this.controller.OnNavigationSourceChanged(MenuInteractionInputSource.KeyboardInput);
 
         var handled = false;
 
@@ -348,7 +336,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
             return false;
         }
 
-        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionActivationSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
+        this.controller.OnFocusRequested(this.CreateRootContext(), container, target, MenuInteractionInputSource.KeyboardInput, openSubmenu: this.IsFlyoutOpen);
         return true;
     }
 
@@ -386,7 +374,7 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         this.pendingRootItem = menuItem;
-        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, MenuInteractionActivationSource.KeyboardInput, true);
+        this.controller.OnFocusRequested(this.CreateRootContext(), menuItem, e.ItemData, e.InputSource, true);
     }
 
     private void OnRootMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
@@ -397,8 +385,8 @@ public sealed partial class MenuBar : Control, IMenuInteractionSurface
         }
 
         var source = this.controller.NavigationMode == MenuNavigationMode.KeyboardInput
-            ? MenuInteractionActivationSource.KeyboardInput
-            : MenuInteractionActivationSource.PointerInput;
+            ? MenuInteractionInputSource.KeyboardInput
+            : MenuInteractionInputSource.PointerInput;
 
         if (e.ItemData.HasChildren)
         {
