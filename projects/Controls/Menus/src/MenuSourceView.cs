@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Collections.ObjectModel;
-using System.Linq;
 
 namespace DroidNet.Controls;
 
@@ -24,7 +22,7 @@ internal sealed class MenuSourceView : IMenuSource
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(services);
 
-        this.Items = new ObservableCollection<MenuItemData>(items.ToList());
+        this.Items = new ObservableCollection<MenuItemData>([.. items]);
         this.Services = services;
     }
 

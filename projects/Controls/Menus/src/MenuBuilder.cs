@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows.Input;
 using Microsoft.UI.Xaml.Controls;
 
@@ -269,9 +270,7 @@ public class MenuBuilder
             }
 
             // Normalize text for ID generation
-            var normalized = text.Replace(" ", "_", StringComparison.Ordinal)
-                .Replace(".", "_", StringComparison.Ordinal)
-                .Replace("-", "_", StringComparison.Ordinal);
+            var normalized = text.Replace(' ', '_').Replace('.', '_').Replace('-', '_');
 
             // Keep only letters, numbers, underscores, and ampersands
             var result = new System.Text.StringBuilder();
@@ -299,7 +298,7 @@ public class MenuBuilder
             string uniqueId;
             do
             {
-                uniqueId = $"{baseId}_{counter}";
+                uniqueId = string.Create(CultureInfo.InvariantCulture, $"{baseId}_{counter}");
                 counter++;
             }
             while (existingSet.Contains(uniqueId));
@@ -333,7 +332,7 @@ public class MenuBuilder
         {
             ArgumentNullException.ThrowIfNull(menuItem);
 
-            var realized = menuItem.SubItems?.ToList() ?? new List<MenuItemData>();
+            var realized = menuItem.SubItems?.ToList() ?? [];
             menuItem.SubItems = realized;
 
             foreach (var subItem in realized)

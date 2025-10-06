@@ -127,8 +127,7 @@ public sealed partial class MenuColumnPresenter : Control
             ? FocusState.Keyboard
             : FocusState.Programmatic;
 
-        target.Focus(focusState);
-        //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] Focus applied to {menuItem.Id} (state={focusState})");
+        _ = target.Focus(focusState);
     }
 
     /// <summary>
@@ -160,7 +159,6 @@ public sealed partial class MenuColumnPresenter : Control
 
         var target = focusable[0];
         _ = this.DispatcherQueue.TryEnqueue(() => target.Focus(focusState));
-        //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] FocusFirstItem scheduled on {target.ItemData?.Id} (state={focusState})");
     }
 
     /// <summary>
@@ -192,12 +190,10 @@ public sealed partial class MenuColumnPresenter : Control
         {
             var mode = this.pendingFocusMode.Value;
             this.pendingFocusMode = null;
-            //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate applying deferred FocusFirstItem (mode={mode})");
             this.FocusFirstItem(mode);
         }
         else if (this.Controller?.NavigationMode == MenuNavigationMode.KeyboardInput)
         {
-            //Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] OnApplyTemplate auto FocusFirstItem for keyboard navigation");
             this.FocusFirstItem(MenuNavigationMode.KeyboardInput);
         }
     }
@@ -344,9 +340,7 @@ public sealed partial class MenuColumnPresenter : Control
     }
 
     private void OnMenuItemRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
-    {
-        this.Controller?.OnRadioGroupSelectionRequested(e.ItemData);
-    }
+        => this.Controller?.OnRadioGroupSelectionRequested(e.ItemData);
 
     private void OnMenuItemInvoked(object? sender, MenuItemInvokedEventArgs e)
     {
@@ -446,14 +440,9 @@ public sealed partial class MenuColumnPresenter : Control
     }
 
     private MenuItem? GetFocusedMenuItem()
-    {
-        if (FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem focused && focused.ItemData is not null)
-        {
-            return focused;
-        }
-
-        return this.itemsHost?.Children.OfType<MenuItem>().FirstOrDefault(item => item.FocusState == FocusState.Keyboard);
-    }
+        => FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem focused && focused.ItemData is not null
+            ? focused
+            : this.itemsHost?.Children.OfType<MenuItem>().FirstOrDefault(item => item.FocusState == FocusState.Keyboard);
 
     private bool TryFocusParentColumn()
     {
@@ -479,7 +468,7 @@ public sealed partial class MenuColumnPresenter : Control
             return false;
         }
 
-        target.Focus(FocusState.Keyboard);
+        _ = target.Focus(FocusState.Keyboard);
         var context = this.CreateContext(parentPresenter.ColumnLevel);
         var controller = this.Controller;
         controller?.OnFocusRequested(
@@ -583,12 +572,12 @@ public sealed partial class MenuColumnPresenter : Control
         if (currentIndex < 0)
         {
             var firstIndex = direction > 0 ? 0 : focusableItems.Count - 1;
-            focusableItems[firstIndex].Focus(FocusState.Keyboard);
+            _ = focusableItems[firstIndex].Focus(FocusState.Keyboard);
             return true;
         }
 
         var nextIndex = (currentIndex + direction + focusableItems.Count) % focusableItems.Count;
-        focusableItems[nextIndex].Focus(FocusState.Keyboard);
+        _ = focusableItems[nextIndex].Focus(FocusState.Keyboard);
         Debug.WriteLine($"[MenuColumnPresenter:{this.ColumnLevel}] TryMoveFocus moved from {currentIndex} to {nextIndex}");
         return true;
     }
@@ -619,7 +608,7 @@ public sealed partial class MenuColumnPresenter : Control
             .OfType<MenuItem>()
             .Where(item => item.ItemData is { IsEnabled: true } data && !data.IsSeparator)
             .ToList()
-            ?? new List<MenuItem>();
+            ?? [];
 
         return list;
     }
