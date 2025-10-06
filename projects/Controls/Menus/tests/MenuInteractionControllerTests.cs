@@ -26,12 +26,12 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ResetSurfaces();
         harness.Controller.OnPointerEntered(harness.RootContext, origin, root, menuOpen: true);
 
-        _ = root.IsActive.Should().BeTrue();
+        _ = root.IsExpanded.Should().BeTrue();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
 
-        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, root)), MenuNavigationMode.PointerInput), Times.Exactly(2));
+        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => ReferenceEquals(mi, root)), MenuNavigationMode.PointerInput), Times.Exactly(2));
 
-        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, root)), origin, MenuNavigationMode.PointerInput), Times.Once());
+        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => ReferenceEquals(mi, root)), origin, MenuNavigationMode.PointerInput), Times.Once());
 
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 1)), Times.Exactly(2));
     });
@@ -47,7 +47,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.Controller.OnPointerEntered(harness.RootContext, origin, root, menuOpen: false);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
-        _ = root.IsActive.Should().BeFalse();
+        _ = root.IsExpanded.Should().BeFalse();
         harness.RootMock.Verify(m => m.FocusRoot(It.IsAny<MenuItemData>(), It.IsAny<MenuNavigationMode>()), Times.Never());
         harness.RootMock.Verify(m => m.OpenRootSubmenu(It.IsAny<MenuItemData>(), It.IsAny<FrameworkElement>(), It.IsAny<MenuNavigationMode>()), Times.Never());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.IsAny<int>()), Times.Never());
@@ -65,7 +65,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         harness.Controller.OnPointerEntered(harness.RootContext, origin, root, menuOpen: true);
 
-        _ = root.IsActive.Should().BeTrue();
+        _ = root.IsExpanded.Should().BeTrue();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
         harness.RootMock.Verify(m => m.FocusRoot(It.IsAny<MenuItemData>(), It.IsAny<MenuNavigationMode>()), Times.Never());
         harness.RootMock.Verify(m => m.OpenRootSubmenu(It.IsAny<MenuItemData>(), It.IsAny<FrameworkElement>(), It.IsAny<MenuNavigationMode>()), Times.Never());
@@ -83,9 +83,9 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.Controller.OnFocusRequested(harness.RootContext, origin, root, MenuInteractionActivationSource.KeyboardInput, openSubmenu: true);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
-        _ = root.IsActive.Should().BeTrue();
+        _ = root.IsExpanded.Should().BeTrue();
 
-        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, root)), origin, MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => ReferenceEquals(mi, root)), origin, MenuNavigationMode.KeyboardInput), Times.Once());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 1)), Times.Exactly(2));
     });
 
@@ -100,9 +100,9 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.Controller.OnFocusRequested(harness.RootContext, origin, root, MenuInteractionActivationSource.KeyboardInput, openSubmenu: false);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
-        _ = root.IsActive.Should().BeTrue();
+        _ = root.IsExpanded.Should().BeFalse();
 
-        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, root)), MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => ReferenceEquals(mi, root)), MenuNavigationMode.KeyboardInput), Times.Once());
         harness.RootMock.Verify(m => m.OpenRootSubmenu(It.IsAny<MenuItemData>(), It.IsAny<FrameworkElement>(), It.IsAny<MenuNavigationMode>()), Times.Never());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 1)), Times.Once());
     });
@@ -117,11 +117,11 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ResetSurfaces();
         harness.Controller.OnSubmenuRequested(harness.ColumnContext(1), origin, parent, MenuInteractionActivationSource.PointerInput);
 
-        _ = parent.IsActive.Should().BeTrue();
+        _ = parent.IsExpanded.Should().BeTrue();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
 
-        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), 1, MenuNavigationMode.PointerInput), Times.Once());
-        harness.ColumnMock.Verify(m => m.OpenChildColumn(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), origin, 1, MenuNavigationMode.PointerInput), Times.Once());
+        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), 1, MenuNavigationMode.PointerInput), Times.Once());
+        harness.ColumnMock.Verify(m => m.OpenChildColumn(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), origin, 1, MenuNavigationMode.PointerInput), Times.Once());
     });
 
     [TestMethod]
@@ -148,9 +148,9 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         harness.Controller.OnSubmenuRequested(harness.ColumnContext(1), origin, parent, MenuInteractionActivationSource.KeyboardInput);
 
-        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), 1, MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), 1, MenuNavigationMode.KeyboardInput), Times.Once());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 2)), Times.Once());
-        harness.ColumnMock.Verify(m => m.OpenChildColumn(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), origin, 1, MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.ColumnMock.Verify(m => m.OpenChildColumn(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), origin, 1, MenuNavigationMode.KeyboardInput), Times.Once());
     });
 
     [TestMethod]
@@ -167,10 +167,10 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         harness.Controller.OnPointerEntered(harness.ColumnContext(1), origin, leaf);
 
-        _ = leaf.IsActive.Should().BeTrue();
+        _ = leaf.IsExpanded.Should().BeFalse();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
 
-        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, leaf)), 1, MenuNavigationMode.PointerInput), Times.Once());
+        harness.ColumnMock.Verify(m => m.FocusColumnItem(It.Is<MenuItemData>(mi => ReferenceEquals(mi, leaf)), 1, MenuNavigationMode.PointerInput), Times.Once());
         harness.ColumnMock.Verify(m => m.OpenChildColumn(It.IsAny<MenuItemData>(), It.IsAny<FrameworkElement>(), It.IsAny<int>(), It.IsAny<MenuNavigationMode>()), Times.Never());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 2)), Times.Once());
     });
@@ -186,9 +186,9 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         _ = harness.GroupSelections.Should().ContainSingle(x => ReferenceEquals(x, item));
 
-        harness.ColumnMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, item))), Times.Once());
+        harness.ColumnMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => ReferenceEquals(mi, item))), Times.Once());
 
-        _ = item.IsActive.Should().BeFalse();
+        _ = item.IsExpanded.Should().BeFalse();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
 
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
@@ -207,7 +207,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         _ = harness.GroupSelections.Should().ContainSingle(x => ReferenceEquals(x, item));
 
-        harness.ColumnMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, item))), Times.Once());
+        harness.ColumnMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => ReferenceEquals(mi, item))), Times.Once());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.ReturnFocusToApp(), Times.Once());
@@ -225,7 +225,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         _ = harness.GroupSelections.Should().ContainSingle(x => ReferenceEquals(x, item));
 
-        harness.RootMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, item))), Times.Once());
+        harness.RootMock.Verify(m => m.Invoke(It.Is<MenuItemData>(mi => ReferenceEquals(mi, item))), Times.Once());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.ReturnFocusToApp(), Times.Once());
@@ -242,10 +242,10 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.Controller.OnSubmenuRequested(harness.RootContext, origin, parent, MenuInteractionActivationSource.KeyboardInput);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
-        _ = parent.IsActive.Should().BeTrue();
+        _ = parent.IsExpanded.Should().BeTrue();
 
-        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), MenuNavigationMode.KeyboardInput), Times.Once());
-        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => object.ReferenceEquals(mi, parent)), origin, MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.RootMock.Verify(m => m.FocusRoot(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), MenuNavigationMode.KeyboardInput), Times.Once());
+        harness.RootMock.Verify(m => m.OpenRootSubmenu(It.Is<MenuItemData>(mi => ReferenceEquals(mi, parent)), origin, MenuNavigationMode.KeyboardInput), Times.Once());
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 1)), Times.Once());
     });
 
@@ -264,8 +264,8 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ResetSurfaces();
         harness.Controller.OnDismissRequested(harness.RootContext, MenuDismissKind.Programmatic);
 
-        _ = root.IsActive.Should().BeFalse();
-        _ = child.IsActive.Should().BeFalse();
+        _ = root.IsExpanded.Should().BeFalse();
+        _ = child.IsExpanded.Should().BeFalse();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
@@ -287,8 +287,8 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.ResetSurfaces();
         harness.Controller.OnDismissRequested(harness.RootContext, MenuDismissKind.PointerInput);
 
-        _ = root.IsActive.Should().BeFalse();
-        _ = child.IsActive.Should().BeFalse();
+        _ = root.IsExpanded.Should().BeFalse();
+        _ = child.IsExpanded.Should().BeFalse();
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
         harness.ColumnMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
         harness.RootMock.Verify(m => m.CloseFromColumn(It.Is<int>(i => i == 0)), Times.AtLeastOnce());
