@@ -711,7 +711,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         _ = leafItem.IsLeafItem.Should().BeTrue("Item without sub-items should be a leaf item");
     }
 
-    protected static async Task<(TestableMenuItem item, TestVisualStateManager vsm)>
+    internal static async Task<(TestableMenuItem item, TestVisualStateManager vsm)>
         SetupMenuItemWithData(MenuItemData itemData)
     {
         // Create the MenuItem control with the provided data and load it as

@@ -47,7 +47,7 @@ namespace DroidNet.Tests;
 /// }
 /// ]]>
 /// </example>
-public sealed partial class TestVisualStateManager : VisualStateManager
+internal sealed partial class TestVisualStateManager : VisualStateManager
 {
     private readonly Dictionary<FrameworkElement, List<string>> controlStates = [];
 
@@ -61,7 +61,8 @@ public sealed partial class TestVisualStateManager : VisualStateManager
     /// </summary>
     /// <param name="control">The control to get the current state for.</param>
     /// <returns>The name of the current state of the control.</returns>
-    public List<string>? GetCurrentStates(FrameworkElement? control) => control is null ? null : this.controlStates.TryGetValue(control, out var state) ? state : [];
+    public List<string>? GetCurrentStates(FrameworkElement? control)
+        => control is null ? null : this.controlStates.TryGetValue(control, out var state) ? state : [];
 
     /// <summary>
     /// Overrides the GoToStateCore method to intercept state changes and signal the stateChangedCompletionSource.
