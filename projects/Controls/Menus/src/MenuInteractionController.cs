@@ -32,7 +32,7 @@ public sealed class MenuInteractionController(MenuServices services)
     ///     Attempts to retrieve the currently active item for the specified column level.
     /// </summary>
     /// <param name="columnLevel">The zero-based column level.</param>
-    /// <returns>The active <see cref="MenuItemData"/> when available; otherwise <c>null</c>.</returns>
+    /// <returns>The active <see cref="MenuItemData"/> when available; otherwise <see langword="null"/>.</returns>
     public MenuItemData? GetActiveItem(int columnLevel)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(columnLevel);

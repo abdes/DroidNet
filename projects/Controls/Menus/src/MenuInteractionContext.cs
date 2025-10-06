@@ -50,7 +50,7 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
     /// </summary>
     /// <param name="left">The left operand.</param>
     /// <param name="right">The right operand.</param>
-    /// <returns><c>true</c> when the contexts are equal; otherwise <c>false</c>.</returns>
+    /// <returns><see langword="true"/> when the contexts are equal; otherwise <see langword="false"/>.</returns>
     public static bool operator ==(MenuInteractionContext left, MenuInteractionContext right) => left.Equals(right);
 
     /// <summary>
@@ -58,7 +58,7 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
     /// </summary>
     /// <param name="left">The left operand.</param>
     /// <param name="right">The right operand.</param>
-    /// <returns><c>true</c> when the contexts differ; otherwise <c>false</c>.</returns>
+    /// <returns><see langword="true"/> when the contexts differ; otherwise <see langword="false"/>.</returns>
     public static bool operator !=(MenuInteractionContext left, MenuInteractionContext right) => !left.Equals(right);
 
     /// <summary>
