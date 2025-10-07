@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Event arguments describing a submenu request routed through <see cref="MenuInteractionController"/>.

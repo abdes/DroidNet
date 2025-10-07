@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Controls;
+using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.Menus;

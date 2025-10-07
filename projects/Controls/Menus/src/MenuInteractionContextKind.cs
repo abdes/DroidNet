@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Enumerates the available menu interaction contexts.

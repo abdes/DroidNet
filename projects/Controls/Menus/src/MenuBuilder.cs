@@ -5,20 +5,23 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-/// Provides functionality to build and manage menu data for custom controls.
+///     Provides functionality to build and manage menu data for custom controls.
 /// </summary>
+/// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, a <see cref="NullLoggerFactory"/> will be used.</param>
 /// <remarks>
-/// The <see cref="MenuBuilder"/> class creates a hierarchical collection of <see cref="MenuItemData"/> items
-/// that can be consumed by custom menu containers. It maintains a lookup dictionary for quick access to menu
-/// items by their identifiers and exposes a reusable <see cref="IMenuSource"/> pairing the items with shared
-/// <see cref="MenuServices"/> helpers.
+///     The <see cref="MenuBuilder"/> class creates a hierarchical collection of <see cref="MenuItemData"/> items
+///     that can be consumed by custom menu containers. It maintains a lookup dictionary for quick access to menu
+///     items by their identifiers and exposes a reusable <see cref="IMenuSource"/> pairing the items with shared
+///     <see cref="MenuServices"/> helpers.
 /// </remarks>
-public class MenuBuilder
+public class MenuBuilder(ILoggerFactory? loggerFactory = default)
 {
     private readonly List<MenuItemData> menuItems = [];
     private Dictionary<string, MenuItemData> menuItemsLookup = [];
@@ -28,19 +31,12 @@ public class MenuBuilder
     private bool isLookupDirty = true;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MenuBuilder"/> class.
-    /// </summary>
-    public MenuBuilder()
-    {
-    }
-
-    /// <summary>
-    /// Gets the collection of root menu items for direct binding to custom controls.
+    ///     Gets the collection of root menu items for direct binding to custom controls.
     /// </summary>
     public IReadOnlyList<MenuItemData> MenuItems => this.menuItems.AsReadOnly();
 
     /// <summary>
-    /// Builds the menu definition and returns an <see cref="IMenuSource"/> for binding.
+    ///     Builds the menu definition and returns an <see cref="IMenuSource"/> for binding.
     /// </summary>
     /// <returns>A reusable <see cref="IMenuSource"/> containing the menu items and services.</returns>
     public IMenuSource Build()
@@ -49,13 +45,13 @@ public class MenuBuilder
         this.observableItems ??= new ObservableCollection<MenuItemData>(this.menuItems);
         this.EnsureLookup();
 
-        this.menuServices ??= new MenuServices(this.GetLookupSnapshot, this.HandleGroupSelection);
+        this.menuServices ??= new MenuServices(this.GetLookupSnapshot, this.HandleGroupSelection, loggerFactory);
         this.menuSource ??= new MenuSource(this.observableItems, this.menuServices);
         return this.menuSource;
     }
 
     /// <summary>
-    /// Adds a menu item to the builder.
+    ///     Adds a menu item to the builder.
     /// </summary>
     /// <param name="menuItem">The menu item to add.</param>
     /// <returns>The current <see cref="MenuBuilder"/> instance.</returns>
@@ -72,7 +68,7 @@ public class MenuBuilder
     }
 
     /// <summary>
-    /// Fluent API: Adds a menu item with text and command.
+    ///     Fluent API: Adds a menu item with text and command.
     /// </summary>
     /// <param name="text">The menu item text.</param>
     /// <param name="command">The command to execute when selected.</param>
@@ -92,7 +88,7 @@ public class MenuBuilder
     }
 
     /// <summary>
-    /// Fluent API: Adds a submenu with child items configured via action.
+    ///     Fluent API: Adds a submenu with child items configured via action.
     /// </summary>
     /// <param name="text">The submenu text.</param>
     /// <param name="configureSubmenu">Action to configure the submenu items.</param>
@@ -100,7 +96,7 @@ public class MenuBuilder
     /// <returns>The current <see cref="MenuBuilder"/> instance.</returns>
     public MenuBuilder AddSubmenu(string text, Action<MenuBuilder> configureSubmenu, IconSource? icon = null)
     {
-        var submenuBuilder = new MenuBuilder();
+        var submenuBuilder = new MenuBuilder(loggerFactory);
         configureSubmenu(submenuBuilder);
 
         var item = new MenuItemData
@@ -113,7 +109,7 @@ public class MenuBuilder
     }
 
     /// <summary>
-    /// Fluent API: Adds a checkable menu item.
+    ///     Fluent API: Adds a checkable menu item.
     /// </summary>
     /// <param name="text">The menu item text.</param>
     /// <param name="isChecked">Initial checked (toggle) state.</param>
@@ -134,7 +130,7 @@ public class MenuBuilder
     }
 
     /// <summary>
-    /// Fluent API: Adds a menu item to a radio group.
+    ///     Fluent API: Adds a menu item to a radio group.
     /// </summary>
     /// <param name="text">The menu item text.</param>
     /// <param name="radioGroupId">The radio group identifier.</param>
@@ -156,7 +152,7 @@ public class MenuBuilder
     }
 
     /// <summary>
-    /// Fluent API: Adds a separator.
+    ///     Fluent API: Adds a separator.
     /// </summary>
     /// <returns>The current <see cref="MenuBuilder"/> instance.</returns>
     public MenuBuilder AddSeparator()

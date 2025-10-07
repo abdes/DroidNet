@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
@@ -283,8 +283,26 @@ public partial class MenuItem : Control
         this.Unloaded += (_, _) => this.ItemData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
     }
 
-    private bool IsInteractiveItem =>
-        this.ItemData is { IsEnabled: true, IsSeparator: false };
+    /// <summary>
+    ///     Gets a value indicating whether the menu item participates in user interaction.
+    /// </summary>
+    /// <remarks>
+    ///     True when the backing <c>ItemData</c> is non-null, the item is enabled and it is not rendered
+    ///     as a separator. Non-interactive items are excluded from pointer/keyboard handling and visual
+    ///     state transitions for interactive behavior.
+    /// </remarks>
+    internal bool IsInteractive => this.ItemData?.IsInteractive == true;
+
+    /// <summary>
+    ///     Gets a value indicating whether the control can receive keyboard focus.
+    /// </summary>
+    /// <remarks>
+    ///     True when the item is interactive, marked as a tab stop and currently visible. This is used
+    ///     by the focus and keyboard handlers to decide whether focus-related events and visual state
+    ///     updates should be processed for this control.
+    /// </remarks>
+    internal bool IsFocusable =>
+        this is { IsInteractive: true, IsTabStop: true, Visibility: Visibility.Visible };
 
     /// <summary>
     ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
@@ -296,7 +314,7 @@ public partial class MenuItem : Control
     /// </returns>
     internal bool TryExpandOrInvoke(MenuInteractionInputSource inputSource)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return false;
         }
@@ -367,7 +385,7 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnGotFocus(RoutedEventArgs e)
     {
-        Debug.Assert(this.IsInteractiveItem, "Non-interactive menu items should not participate in focus");
+        Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
 
         if (this.isFocused)
         {
@@ -385,7 +403,7 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnLostFocus(RoutedEventArgs e)
     {
-        Debug.Assert(this.IsInteractiveItem, "Non-interactive menu items should not participate in focus");
+        Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
 
         if (!this.isFocused)
         {
@@ -393,6 +411,7 @@ public partial class MenuItem : Control
         }
 
         this.isFocused = false;
+        this.isPressed = false;
         this.UpdateCommonVisualState();
         base.OnLostFocus(e);
     }
@@ -403,13 +422,11 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             base.OnKeyDown(e);
             return;
         }
-
-        var data = this.ItemData!; // already validated by IsInteractiveItem
 
         // Show pressed visual state for keyboard activation keys
         if (e.Key is VirtualKey.Enter or VirtualKey.Space)
@@ -421,7 +438,6 @@ public partial class MenuItem : Control
         var handled = e.Key switch
         {
             VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(MenuInteractionInputSource.KeyboardInput),
-            VirtualKey.Right when data.HasChildren => this.TryExpandSubmenu(MenuInteractionInputSource.KeyboardInput),
             _ => false,
         };
 
@@ -442,7 +458,7 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnKeyUp(KeyRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             base.OnKeyUp(e);
             return;
@@ -465,7 +481,7 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -491,7 +507,7 @@ public partial class MenuItem : Control
     {
         this.isPointerOver = false; // ensure cleared
 
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -513,7 +529,7 @@ public partial class MenuItem : Control
     /// <param name="e">Pointer event arguments.</param>
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -536,7 +552,7 @@ public partial class MenuItem : Control
         this.isPressed = false; // ensure cleared
         this.ReleasePointerCaptures();
 
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -549,7 +565,7 @@ public partial class MenuItem : Control
         this.isPressed = false; // ensure cleared
         this.ReleasePointerCaptures();
 
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -561,7 +577,7 @@ public partial class MenuItem : Control
     {
         this.isPressed = false; // ensure cleared
 
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -577,7 +593,15 @@ public partial class MenuItem : Control
     /// <param name="sender">Event source (unused).</param>
     /// <param name="e">Tap event arguments (may be marked handled).</param>
     private void OnTapped(object sender, TappedRoutedEventArgs e)
-        => e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
+    {
+        if (!this.IsInteractive)
+        {
+            return;
+        }
+
+        _ = this.Focus(FocusState.Pointer);
+        e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
+    }
 
     private void UpdateTypeVisualState()
     {
@@ -621,12 +645,12 @@ public partial class MenuItem : Control
         }
 
         var state = !this.ItemData.IsEnabled ? DisabledVisualState
-                  : this.ItemData.IsExpanded || this.isFocused ? ActiveVisualState
+                  : this.ItemData.IsExpanded ? ActiveVisualState
                   : this.isPressed ? PressedVisualState
                   : this.isPointerOver ? PointerOverVisualState
                   : NormalVisualState;
 
-        Debug.WriteLine($"Transitioning {this.ItemData.Id} to common state: {state} (IsExpanded={this.ItemData.IsExpanded})");
+        this.LogVisualState(this.ItemData.Id, state, this.ItemData.IsExpanded);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
@@ -675,7 +699,7 @@ public partial class MenuItem : Control
     /// <param name="isVisible">True to show the mnemonic underline; false to hide it.</param>
     private void SetMnemonicVisibility(bool isVisible)
     {
-        if (!this.IsInteractiveItem)
+        if (!this.IsInteractive)
         {
             return;
         }
@@ -820,7 +844,7 @@ public partial class MenuItem : Control
 #pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
-            Debug.WriteLine($"Command execution failed: {ex}");
+            this.LogCommandExecutionFailed(ex);
             this.CommandExecutionFailed?.Invoke(this, new MenuItemCommandFailedEventArgs
             {
                 ItemData = data,

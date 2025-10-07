@@ -4,11 +4,10 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Controls;
+using DroidNet.Controls.Menus;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;

@@ -2,48 +2,63 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     Describes the context in which a menu interaction occurred.
+///     Describes the context in which a menu interaction is happening.
 /// </summary>
+/// <remarks>
+///     The context <see cref="Kind"/> determines whether the interaction is happening within the root surface
+///     (e.g. a menu bar) or within a specific cascading column surface. The surface property of the context for the specified
+///     kind must be set to a valid <see cref="IMenuInteractionSurface"/> object. Note however, that either kind may optionally
+///     also have a reference to the other surface kind, if applicable. For example, a root context may also have a reference
+///     to the column surface currently rendering flyout columns, if any. Similarly, a column context that is attached to a root
+///     surface may also specify that root surface, if known.
+/// </remarks>
 [StructLayout(LayoutKind.Auto)]
 public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContext>
 {
-    private MenuInteractionContext(MenuInteractionContextKind kind, int columnLevel, IMenuInteractionSurface? rootSurface, IMenuInteractionSurface? columnSurface)
+    private MenuInteractionContext(MenuInteractionContextKind kind, MenuLevel columnLevel, IRootMenuSurface? rootSurface, ICascadedMenuSurface? columnSurface)
     {
         this.Kind = kind;
-        this.ColumnLevel = kind == MenuInteractionContextKind.Root ? 0 : columnLevel;
+        this.ColumnLevel = columnLevel;
         this.RootSurface = rootSurface;
         this.ColumnSurface = columnSurface;
     }
 
     /// <summary>
-    ///     Gets the interaction context kind.
+    ///     Gets the interaction context kind. This is the only reliable and deterministic way to check
+    ///     if an interaction should be interpreted at the root level, or at the column level.
     /// </summary>
     public MenuInteractionContextKind Kind { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the context is for the root interaction surface.
+    /// </summary>
+    public bool IsRoot => this.Kind == MenuInteractionContextKind.Root;
+
+    /// <summary>
+    /// Gets a value indicating whether the context is for a column interaction surface.
+    /// </summary>
+    public bool IsColumn => this.Kind == MenuInteractionContextKind.Column;
+
+    /// <summary>
     ///     Gets the zero-based column level associated with the context.
     /// </summary>
-    public int ColumnLevel { get; }
+    public MenuLevel ColumnLevel { get; }
 
     /// <summary>
     ///     Gets the root interaction surface associated with the context, when available.
     /// </summary>
-    public IMenuInteractionSurface? RootSurface { get; }
+    public IRootMenuSurface? RootSurface { get; }
 
     /// <summary>
     ///     Gets the column interaction surface associated with the context, when available.
     /// </summary>
-    public IMenuInteractionSurface? ColumnSurface { get; }
-
-    /// <summary>
-    ///     Gets the effective column level for interaction coordination.
-    /// </summary>
-    public int EffectiveColumnLevel => this.Kind == MenuInteractionContextKind.Root ? 0 : this.ColumnLevel + 1;
+    public ICascadedMenuSurface? ColumnSurface { get; }
 
     /// <summary>
     ///     Determines whether two contexts are equal.
@@ -67,11 +82,8 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
     /// <param name="rootSurface">The root surface coordinating menu-bar interactions.</param>
     /// <param name="columnSurface">Optional column surface currently rendering flyout columns.</param>
     /// <returns>A root context instance.</returns>
-    public static MenuInteractionContext ForRoot(IMenuInteractionSurface rootSurface, IMenuInteractionSurface? columnSurface = null)
-    {
-        ArgumentNullException.ThrowIfNull(rootSurface);
-        return new MenuInteractionContext(MenuInteractionContextKind.Root, 0, rootSurface, columnSurface);
-    }
+    public static MenuInteractionContext ForRoot(IRootMenuSurface rootSurface, ICascadedMenuSurface? columnSurface = null)
+        => new(MenuInteractionContextKind.Root, MenuLevel.First, rootSurface, columnSurface);
 
     /// <summary>
     ///     Creates an interaction context for a specific column level.
@@ -80,12 +92,8 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
     /// <param name="columnSurface">The column surface coordinating cascading menu interactions.</param>
     /// <param name="rootSurface">Optional root surface associated with the column.</param>
     /// <returns>A column context instance.</returns>
-    public static MenuInteractionContext ForColumn(int columnLevel, IMenuInteractionSurface columnSurface, IMenuInteractionSurface? rootSurface = null)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(columnLevel);
-        ArgumentNullException.ThrowIfNull(columnSurface);
-        return new MenuInteractionContext(MenuInteractionContextKind.Column, columnLevel, rootSurface, columnSurface);
-    }
+    public static MenuInteractionContext ForColumn(MenuLevel columnLevel, ICascadedMenuSurface columnSurface, IRootMenuSurface? rootSurface = null)
+        => new(MenuInteractionContextKind.Column, columnLevel, rootSurface, columnSurface);
 
     /// <inheritdoc />
     public bool Equals(MenuInteractionContext other) => this.Kind == other.Kind && this.ColumnLevel == other.ColumnLevel;
@@ -95,4 +103,15 @@ public readonly struct MenuInteractionContext : IEquatable<MenuInteractionContex
 
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine((int)this.Kind, this.ColumnLevel);
+
+    /// <summary>
+    ///     Ensures the validity of the interaction context.
+    /// </summary>
+    [Conditional("DEBUG")]
+    internal void EnsureValid()
+    {
+        Debug.Assert(this.Kind != MenuInteractionContextKind.Root || this.RootSurface is not null, "Root context must have a valid root surface");
+        Debug.Assert(this.ColumnSurface is null || this.ColumnLevel >= 0, "If a column surface is specified, the column level must be positive");
+        Debug.Assert(this.Kind != MenuInteractionContextKind.Column || this.ColumnSurface is not null, "Column context must have a valid column surface");
+    }
 }

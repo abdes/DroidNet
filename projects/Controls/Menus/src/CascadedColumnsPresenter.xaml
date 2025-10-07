@@ -3,14 +3,13 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:DroidNet.Controls">
+    xmlns:cm="using:DroidNet.Controls.Menus">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuColumnPresenter.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/ColumnPresenter.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <Style TargetType="controls:MenuFlyoutPresenter">
+    <Style TargetType="cm:CascadedColumnsPresenter">
         <Setter Property="Background" Value="{ThemeResource FlyoutPresenterBackground}" />
         <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -21,7 +20,7 @@
         <Setter Property="IsAccessKeyScope" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="controls:MenuFlyoutPresenter">
+                <ControlTemplate TargetType="cm:CascadedColumnsPresenter">
                     <Border
                         x:Name="LayoutRoot"
                         Padding="{TemplateBinding Padding}"

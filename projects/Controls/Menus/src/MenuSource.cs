@@ -2,18 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Collections.ObjectModel;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-/// Default implementation of <see cref="IMenuSource"/> that pairs an items collection with shared menu services.
+///     Default implementation of <see cref="IMenuSource"/> that pairs an items collection with shared menu services.
 /// </summary>
 public sealed class MenuSource : IMenuSource
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MenuSource"/> class.
+    ///     Initializes a new instance of the <see cref="MenuSource"/> class.
     /// </summary>
     /// <param name="items">The observable collection of menu items.</param>
     /// <param name="services">The services instance coordinating lookups and selection.</param>

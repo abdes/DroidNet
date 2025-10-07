@@ -6,13 +6,22 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
 /// </summary>
 public partial class MenuItem
 {
+    /// <summary>
+    ///     Identifies the <see cref="MenuSource"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty MenuSourceProperty = DependencyProperty.Register(
+        nameof(MenuSource),
+        typeof(IMenuSource),
+        typeof(MenuFlyout),
+        new PropertyMetadata(defaultValue: null));
+
     /// <summary>
     ///     The backing <see cref="DependencyProperty" /> for the <see cref="ItemData" /> property.
     /// </summary>
@@ -32,6 +41,15 @@ public partial class MenuItem
         typeof(bool),
         typeof(MenuItem),
         new PropertyMetadata(defaultValue: true, OnShowSubmenuGlyphChanged));
+
+    /// <summary>
+    ///     Gets or sets the menu source that provides shared services for the menu system.
+    /// </summary>
+    public IMenuSource? MenuSource
+    {
+        get => (IMenuSource?)this.GetValue(MenuSourceProperty);
+        set => this.SetValue(MenuSourceProperty, value);
+    }
 
     /// <summary>
     ///     Gets or sets the menu item data that provides the content and behavior for this control.

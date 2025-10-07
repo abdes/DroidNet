@@ -20,9 +20,6 @@ public sealed partial class MainWindow : IOutletContainer
     private readonly IAppThemeModeService appThemeModeService;
     private readonly AppearanceSettingsService appearanceSettings;
 
-    [ObservableProperty]
-    public partial object? ContentViewModel { get; set; }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
     /// </summary>
@@ -60,6 +57,9 @@ public sealed partial class MainWindow : IOutletContainer
 
         this.Closed += (_, _) => _ = this.appearanceSettings.SaveSettings();
     }
+
+    [ObservableProperty]
+    public partial object? ContentViewModel { get; set; }
 
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)

@@ -3,7 +3,7 @@
 ## Key principles
 
 - **Single writer:** `MenuInteractionController` is the only component that mutates `MenuItemData.IsActive`. Surfaces publish input; the controller resolves the active path and clears it on dismissal.
-- **Surface indirection:** `MenuBar`, `MenuFlyout`, and `MenuFlyoutPresenter` implement `IMenuInteractionSurface`, letting the controller drive focus, submenu creation, invocation, and teardown without duplicating view logic.
+- **Surface indirection:** `MenuBar`, `MenuFlyout`, and `CascadedColumnsPresenter` implement `IMenuInteractionSurface`, letting the controller drive focus, submenu creation, invocation, and teardown without duplicating view logic.
 - **Context-first API:** Every controller call includes a `MenuInteractionContext`. Surfaces must supply themselves when creating the context—`MenuInteractionContext.ForRoot(rootSurface, columnSurface?)` and `MenuInteractionContext.ForColumn(level, columnSurface, rootSurface?)`—so the controller can orchestrate follow-up actions without additional attachment steps.
 - **Navigation mode awareness:** Surfaces call `OnNavigationSourceChanged` with `MenuInteractionActivationSource.PointerInput`, `KeyboardInput`, or `Mnemonic`. The resulting `NavigationMode` feeds all downstream focus decisions.
 
@@ -17,14 +17,14 @@
 | `MenuInteractionController` | Coordinator | Tracks navigation mode, activates items, requests submenus, invokes items, and dismisses the chain. |
 | `MenuBar` | Root surface | Hosts root items, materializes `MenuFlyout`, forwards root events, and respects controller commands. |
 | `MenuFlyout` | Flyout host | Shows cascading columns, attaches/detaches the controller, updates navigation mode, and reports closing. |
-| `MenuFlyoutPresenter` & `MenuColumnPresenter` | Column surfaces | Implement column-level portions of `IMenuInteractionSurface` and relay hover/invoke/submenu requests. |
+| `CascadedColumnsPresenter` & `MenuColumnPresenter` | Column surfaces | Implement column-level portions of `IMenuInteractionSurface` and relay hover/invoke/submenu requests. |
 
 ## Interaction contexts
 
 | Context | Source | Typical triggers | Controller scope |
 | --- | --- | --- | --- |
 | `MenuInteractionContext.ForRoot(rootSurface, columnSurface?)` | `MenuBar` | Pointer activation, keyboard navigation, mnemonic selection of roots | Column level `0`; controller closes flyout columns starting at `1` and focuses root containers. |
-| `MenuInteractionContext.ForColumn(level, columnSurface, rootSurface?)` | `MenuFlyoutPresenter` / `MenuColumnPresenter` | Hover, submenu expansion, invocation inside a flyout | Column level `level`; controller trims deeper columns (`> level`) and focuses the owning item. |
+| `MenuInteractionContext.ForColumn(level, columnSurface, rootSurface?)` | `CascadedColumnsPresenter` / `MenuColumnPresenter` | Hover, submenu expansion, invocation inside a flyout | Column level `level`; controller trims deeper columns (`> level`) and focuses the owning item. |
 
 ## Input channels
 
@@ -81,7 +81,7 @@ sequenceDiagram
   participant Bar as MenuBar
   participant Controller as MenuInteractionController
   participant Flyout as MenuFlyout
-  participant Presenter as MenuFlyoutPresenter
+  participant Presenter as CascadedColumnsPresenter
   participant Services as MenuServices
   participant Data as MenuItemData
   participant Item as MenuItem
@@ -118,7 +118,7 @@ sequenceDiagram
   participant Bar as MenuBar
   participant Controller as MenuInteractionController
   participant Flyout as MenuFlyout
-  participant Presenter as MenuFlyoutPresenter
+  participant Presenter as CascadedColumnsPresenter
   participant Services as MenuServices
   participant Data as MenuItemData
   participant Item as MenuItem
@@ -193,8 +193,8 @@ stateDiagram-v2
 ## Surface responsibilities
 
 - **`MenuBar`**: Attaches the shared controller, forwards root events, opens flyouts when instructed, and honors `CloseFromColumn(0)` / `ReturnFocusToApp()` callbacks.
-- **`MenuFlyout`**: Provides the controller to `MenuFlyoutPresenter`, updates navigation mode on open, and relays closing through `OnDismissRequested` (currently always `MenuDismissKind.Programmatic` pending richer WinUI close reasons).
-- **`MenuFlyoutPresenter`**: Hosts columns, delegates column-level events, and implements the `IMenuInteractionSurface` members relevant to nested items.
+- **`MenuFlyout`**: Provides the controller to `CascadedColumnsPresenter`, updates navigation mode on open, and relays closing through `OnDismissRequested` (currently always `MenuDismissKind.Programmatic` pending richer WinUI close reasons).
+- **`CascadedColumnsPresenter`**: Hosts columns, delegates column-level events, and implements the `IMenuInteractionSurface` members relevant to nested items.
 - **`MenuColumnPresenter`**: Wraps realized `MenuItem` controls, forwarding hover, submenu, radio selection, and invoke requests to the controller.
 - **`MenuServices`**: Supplies the shared controller, exposes lookup data for mnemonics, and applies radio-group coordination.
 
@@ -207,5 +207,5 @@ stateDiagram-v2
 
 ## Follow-up
 
-- [x] Propagate context-based controller APIs across `MenuBar`, `MenuFlyout`, and `MenuFlyoutPresenter`.
+- [x] Propagate context-based controller APIs across `MenuBar`, `MenuFlyout`, and `CascadedColumnsPresenter`.
 - [ ] Add scenario tests covering pointer navigation, keyboard traversal, mnemonic activation, and dismissal variants.

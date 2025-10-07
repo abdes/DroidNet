@@ -4,6 +4,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls.Menus;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -18,9 +20,9 @@ public partial class MenuBarDemoViewModel : ObservableObject
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuBarDemoViewModel"/> class.
     /// </summary>
-    public MenuBarDemoViewModel()
+    public MenuBarDemoViewModel(ILoggerFactory loggerFactory)
     {
-        this.MenuBarSource = this.BuildMenuBar();
+        this.MenuBarSource = this.BuildMenuBar(loggerFactory);
     }
 
     /// <summary>
@@ -52,9 +54,9 @@ public partial class MenuBarDemoViewModel : ObservableObject
     /// <summary>
     /// Builds a MenuBar demonstration showing proper UX patterns.
     /// </summary>
-    private IMenuSource BuildMenuBar()
+    private IMenuSource BuildMenuBar(ILoggerFactory loggerFactory)
     {
-        var menuBuilder = new MenuBuilder()
+        var menuBuilder = new MenuBuilder(loggerFactory)
             .AddMenuItem(this.CreateFileMenu())
             .AddMenuItem(this.CreateEditMenu())
             .AddMenuItem(this.CreateViewMenu())

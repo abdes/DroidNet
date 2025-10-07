@@ -1,9 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuFlyoutDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:menus="using:DroidNet.Controls">
+    xmlns:cm="using:DroidNet.Controls.Menus">
 
     <ScrollViewer>
         <StackPanel Margin="20" Spacing="30">
@@ -31,7 +31,7 @@
                     BorderThickness="1"
                     CornerRadius="6">
                     <Border.ContextFlyout>
-                        <menus:MenuFlyout MenuSource="{x:Bind ViewModel.ContextMenu, Mode=OneWay}" />
+                        <cm:MenuFlyout MenuSource="{x:Bind ViewModel.ContextMenu, Mode=OneWay}" />
                     </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
@@ -60,7 +60,7 @@
                     BorderThickness="1"
                     CornerRadius="6">
                     <Border.ContextFlyout>
-                        <menus:MenuFlyout MenuSource="{x:Bind ViewModel.SimpleMenu, Mode=OneWay}" />
+                        <cm:MenuFlyout MenuSource="{x:Bind ViewModel.SimpleMenu, Mode=OneWay}" />
                     </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
