@@ -3,7 +3,7 @@
     x:Class="DroidNet.Controls.Demo.Menus.MenuBarDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:menus="using:DroidNet.Controls">
+    xmlns:cm="using:DroidNet.Controls.Menus">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -12,7 +12,7 @@
         </Grid.RowDefinitions>
 
         <!--  MenuBar Demo  -->
-        <menus:MenuBar
+        <cm:MenuBar
             x:Name="DemoMenuBar"
             Grid.Row="0"
             MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />

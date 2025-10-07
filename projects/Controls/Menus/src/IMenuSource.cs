@@ -4,20 +4,20 @@
 
 using System.Collections.ObjectModel;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-/// Represents a data-first menu source that exposes the items and supporting services required by custom menu controls.
+///     Represents a data-first menu source that exposes the items and supporting services required by custom menu controls.
 /// </summary>
 public interface IMenuSource
 {
     /// <summary>
-    /// Gets the observable collection of top-level menu items.
+    ///     Gets the observable collection of top-level menu items.
     /// </summary>
     public ObservableCollection<MenuItemData> Items { get; }
 
     /// <summary>
-    /// Gets the menu services that provide lookup and coordination helpers for the menu system.
+    ///     Gets the menu services that provide lookup and coordination helpers for the menu system.
     /// </summary>
     public MenuServices Services { get; }
 }

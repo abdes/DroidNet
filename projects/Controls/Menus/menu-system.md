@@ -1184,8 +1184,8 @@ The following plan translates the high-level goals above into an incremental, be
 
 - **Class skeleton**: derive from `FlyoutBase`, declare dependency properties `MenuSource` (`IMenuSource`) and `MaxColumnHeight` (`double`, default `Double.PositiveInfinity`). Provide `.ShowAt(FrameworkElement target)` overloads that delegate to base after priming data.
 - **Presenter pipeline**:
-  - Implement a sealed `MenuFlyoutPresenter` (derives from `FlyoutPresenter`) with template exposing parts `PART_PresenterRoot`, `PART_ItemsRepeater`, `PART_SubmenuOverlay`, and `PART_ScrollViewer`. Presenters leverage the same `MenuColumnPresenter` as menubar cascades.
-  - Override `FlyoutBase.CreatePresenter` to return `MenuFlyoutPresenter` and feed it with `MenuInteractionController` instance scoped to each flyout opening.
+  - Implement a sealed `CascadedColumnsPresenter` (derives from `FlyoutPresenter`) with template exposing parts `PART_PresenterRoot`, `PART_ItemsRepeater`, `PART_SubmenuOverlay`, and `PART_ScrollViewer`. Presenters leverage the same `MenuColumnPresenter` as menubar cascades.
+  - Override `FlyoutBase.CreatePresenter` to return `CascadedColumnsPresenter` and feed it with `MenuInteractionController` instance scoped to each flyout opening.
 - **Opening/closing life-cycle**:
   - Override `OnOpening/OnOpened/OnClosing/OnClosed` to initialize controller state, attach to `MenuSource.Services`, reset selection, and release references to avoid leaks.
   - Ensure keyboard focus is moved to first enabled item, with `Esc` dismissal and `Enter/Space` invocation consistent with menubar.

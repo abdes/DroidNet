@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     AutomationPeer for <see cref="MenuItem"/>. Exposes the Invoke pattern and accelerator information so

@@ -3,13 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Windows.Input;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls.Tests;
+namespace DroidNet.Controls.Menus.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

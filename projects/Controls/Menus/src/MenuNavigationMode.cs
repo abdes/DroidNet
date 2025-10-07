@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Represents the active navigation mode that determined the current menu path.
@@ -12,7 +12,7 @@ public enum MenuNavigationMode
     /// <summary>
     ///     Unspecified navigation mode.
     /// </summary>
-    None = 0,
+    Programmatic = 0,
 
     /// <summary>
     ///     Menu navigation is using pointer (mouse, pen, touch) interactions.

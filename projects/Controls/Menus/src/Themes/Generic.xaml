@@ -3,11 +3,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem/MenuItem.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuColumnPresenter.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuBar/MenuBar.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuFlyout/MenuFlyout.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/ColumnPresenter.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuBar.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CascadedColumnsPresenter.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

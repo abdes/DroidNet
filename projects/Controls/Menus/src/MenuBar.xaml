@@ -3,11 +3,10 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:DroidNet.Controls">
+    xmlns:cm="using:DroidNet.Controls.Menus">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CommonResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem/MenuItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <Thickness x:Key="MenuBarPadding">4,0</Thickness>
@@ -16,15 +15,16 @@
     <Style
         x:Key="MenuBarRootMenuItemStyle"
         BasedOn="{StaticResource DefaultMenuItemStyle}"
-        TargetType="controls:MenuItem">
+        TargetType="cm:MenuItem">
         <Setter Property="Padding" Value="8,0,8,0" />
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="ShowSubmenuGlyph" Value="False" />
         <Setter Property="IsAccessKeyScope" Value="True" />
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="controls:MenuItem">
+                <ControlTemplate TargetType="cm:MenuItem">
                     <Grid
                         x:Name="PartRootGrid"
                         MinHeight="{TemplateBinding MinHeight}"
@@ -126,7 +126,7 @@
         </Setter>
     </Style>
 
-    <Style TargetType="controls:MenuBar">
+    <Style TargetType="cm:MenuBar">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -137,9 +137,11 @@
         <Setter Property="MinHeight" Value="26" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="TabFocusNavigation" Value="Cycle" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="controls:MenuBar">
+                <ControlTemplate TargetType="cm:MenuBar">
                     <Border
                         x:Name="RootBorder"
                         Padding="{TemplateBinding Padding}"
@@ -153,7 +155,7 @@
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate>
-                                    <controls:MenuItem ItemData="{Binding}" Style="{StaticResource MenuBarRootMenuItemStyle}" />
+                                    <cm:MenuItem ItemData="{Binding}" Style="{StaticResource MenuBarRootMenuItemStyle}" />
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>

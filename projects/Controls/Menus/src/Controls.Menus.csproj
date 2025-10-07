@@ -6,7 +6,7 @@
         <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 
-        <RootNamespace>$(RootNamespace).Controls</RootNamespace>
+        <RootNamespace>$(RootNamespace).Controls.Menus</RootNamespace>
         <AssemblyName>DroidNet.Controls.Menus</AssemblyName>
 
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -34,6 +34,7 @@
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
 

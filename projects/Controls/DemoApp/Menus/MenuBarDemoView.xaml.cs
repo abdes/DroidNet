@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Controls.Menus;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -40,23 +41,6 @@ public sealed partial class MenuBarDemoView : Page
         this.menuContext = default;
         this.hasMenuContext = false;
         this.firstRootItem = null;
-    }
-
-    private bool FocusFirstRootItem()
-    {
-        if (!this.EnsureMenuContext())
-        {
-            return false;
-        }
-
-        this.controller!.OnFocusRequested(
-            this.menuContext,
-            origin: null,
-            menuItem: this.firstRootItem!,
-            source: MenuInteractionInputSource.KeyboardInput,
-            openSubmenu: false);
-
-        return true;
     }
 
     private bool EnsureMenuContext()

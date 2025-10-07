@@ -5,11 +5,11 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Horizontal menu bar control that renders root <see cref="MenuItemData"/> instances and
-///     materializes cascading submenus through the custom <see cref="MenuFlyout"/> presenter.
+///     materializes cascading submenus through an <see cref="ICascadedMenuHost"/> implementation.
 /// </summary>
 public sealed partial class MenuBar
 {
@@ -34,15 +34,15 @@ public sealed partial class MenuBar
     private static void OnMenuSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (MenuBar)d;
+        var menuSource = (IMenuSource?)e.NewValue;
         if (control.rootItemsRepeater is ItemsRepeater repeater)
         {
-            repeater.ItemsSource = ((IMenuSource?)e.NewValue)?.Items;
+            repeater.ItemsSource = menuSource?.Items;
         }
 
-        var newSource = (IMenuSource?)e.NewValue;
-        control.AttachController(newSource?.Services.InteractionController);
-
-        control.CloseActiveFlyout();
-        control.OpenRootIndex = -1;
+        if (control.activeHost is { IsOpen: true } host)
+        {
+            host.Dismiss(MenuDismissKind.Programmatic);
+        }
     }
 }

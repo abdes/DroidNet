@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Input;
 
-namespace DroidNet.Controls.Tests;
+namespace DroidNet.Controls.Menus.Tests;
 
 /// <summary>
 ///     A testable subclass of <see cref="MenuItem" /> that exposes protected members for testing.

@@ -3,7 +3,7 @@
     x:Class="DroidNet.Controls.Demo.Menus.MenuItemDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:DroidNet.Controls">
+    xmlns:cm="using:DroidNet.Controls.Menus">
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -49,7 +49,7 @@
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                            <controls:MenuItem
+                            <cm:MenuItem
                                 x:Name="DemoMenuItem"
                                 Margin="2"
                                 IsTabStop="True"

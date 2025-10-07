@@ -2,25 +2,25 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-/// Describes the input origin for a menu interaction event routed into <see cref="MenuInteractionController"/>.
+///     Describes the input origin for a menu interaction event routed into <see cref="MenuInteractionController"/>.
 /// </summary>
 public enum MenuInteractionInputSource
 {
     /// <summary>
-    /// Interaction originated from pointer (mouse, pen, touch).
+    ///     Interaction originated from pointer (mouse, pen, touch).
     /// </summary>
     PointerInput,
 
     /// <summary>
-    /// Interaction originated from the keyboard (arrow keys, Enter, Space).
+    ///     Interaction originated from the keyboard (arrow keys, Enter, Space).
     /// </summary>
     KeyboardInput,
 
     /// <summary>
-    /// Interaction originated programmatically.
+    ///     Interaction originated programmatically.
     /// </summary>
     Programmatic,
 }

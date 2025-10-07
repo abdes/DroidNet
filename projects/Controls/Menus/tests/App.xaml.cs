@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
 
-namespace DroidNet.Controls.Tests;
+namespace DroidNet.Controls.Menus.Tests;
 
 /// <summary>
 /// Provides application-specific behavior to supplement the default Application

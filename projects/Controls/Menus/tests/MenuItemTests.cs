@@ -10,7 +10,7 @@ using FluentAssertions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls.Tests;
+namespace DroidNet.Controls.Menus.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

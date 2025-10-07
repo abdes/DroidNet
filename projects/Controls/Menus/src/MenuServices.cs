@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
-/// Provides lookup, grouping, and interaction helpers for menu controls built on top of <see cref="MenuItemData"/> collections.
+///     Provides lookup, grouping, and interaction helpers for menu controls built on top of <see cref="MenuItemData"/> collections.
 /// </summary>
 public sealed class MenuServices
 {
@@ -18,23 +19,27 @@ public sealed class MenuServices
     private MenuInteractionController? interactionController;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MenuServices"/> class.
+    ///     Initializes a new instance of the <see cref="MenuServices"/> class.
     /// </summary>
     /// <param name="lookupAccessor">A delegate that returns the latest lookup dictionary by menu item identifier.</param>
     /// <param name="groupSelectionHandler">A delegate that applies radio-group and toggle selection logic for a given item.</param>
+    /// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, a <see cref="NullLoggerFactory"/> will be used.</param>
     internal MenuServices(
         Func<IReadOnlyDictionary<string, MenuItemData>> lookupAccessor,
-        Action<MenuItemData> groupSelectionHandler)
+        Action<MenuItemData> groupSelectionHandler,
+        ILoggerFactory? loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(lookupAccessor);
         ArgumentNullException.ThrowIfNull(groupSelectionHandler);
 
         this.lookupAccessor = lookupAccessor;
         this.groupSelectionHandler = groupSelectionHandler;
+
+        this.InitializeLoggers(loggerFactory ?? NullLoggerFactory.Instance);
     }
 
     /// <summary>
-    /// Gets the shared <see cref="MenuInteractionController"/> coordinating menu interactions.
+    ///     Gets the shared <see cref="MenuInteractionController"/> coordinating menu interactions.
     /// </summary>
     public MenuInteractionController InteractionController
     {
@@ -54,11 +59,39 @@ public sealed class MenuServices
     }
 
     /// <summary>
-    /// Attempts to find a menu item by its hierarchical identifier.
+    ///     Gets the Logger for application-level messages.
+    /// </summary>
+    internal ILogger AppLogger { get; private set; }
+
+    /// <summary>
+    ///     Gets the Debug Logger for focus-related messages.
+    /// </summary>
+    internal ILogger FocusLogger { get; private set; }
+
+    /// <summary>
+    ///     Gets the Debug Logger for visual element interactions.
+    /// </summary>
+    internal ILogger VisualLogger { get; private set; }
+
+    /// <summary>
+    ///     Gets the Debug Logger for user interactions.
+    /// </summary>
+    internal ILogger InteractionLogger { get; private set; }
+
+    /// <summary>
+    ///     Gets the Debug Logger for miscellaneous messages.
+    /// </summary>
+    internal ILogger MiscLogger { get; private set; }
+
+    /// <summary>
+    ///     Attempts to find a menu item by its hierarchical identifier.
     /// </summary>
     /// <param name="id">The menu item identifier.</param>
     /// <param name="menuItem">The located menu item when the lookup succeeds, otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when a menu item with the supplied identifier exists; otherwise <see langword="false"/>.</returns>
+    /// <returns>
+    ///     <see langword="true"/> when a menu item with the supplied identifier exists;
+    ///     otherwise <see langword="false"/>.
+    /// </returns>
     public bool TryGetMenuItemById(string id, out MenuItemData? menuItem)
     {
         menuItem = null;
@@ -78,13 +111,15 @@ public sealed class MenuServices
     }
 
     /// <summary>
-    /// Provides direct access to the latest lookup dictionary for advanced scenarios.
+    ///     Provides direct access to the latest lookup dictionary for advanced scenarios.
     /// </summary>
-    /// <returns>The lookup dictionary keyed by hierarchical menu item identifiers.</returns>
+    /// <returns>
+    ///     The lookup dictionary keyed by hierarchical menu item identifiers.
+    /// </returns>
     public IReadOnlyDictionary<string, MenuItemData> GetLookup() => this.lookupAccessor();
 
     /// <summary>
-    /// Applies menu selection logic, including radio-group coordination, to the supplied menu item.
+    ///     Applies menu selection logic, including radio-group coordination, to the supplied menu item.
     /// </summary>
     /// <param name="menuItem">The menu item that was activated.</param>
     public void HandleGroupSelection(MenuItemData menuItem)
@@ -92,5 +127,20 @@ public sealed class MenuServices
         ArgumentNullException.ThrowIfNull(menuItem);
 
         this.groupSelectionHandler(menuItem);
+    }
+
+    [MemberNotNull(
+        nameof(AppLogger),
+        nameof(FocusLogger),
+        nameof(VisualLogger),
+        nameof(InteractionLogger),
+        nameof(MiscLogger))]
+    private void InitializeLoggers(ILoggerFactory loggerFactory)
+    {
+        this.AppLogger = loggerFactory.CreateLogger(LoggingCategories.App);
+        this.FocusLogger = loggerFactory.CreateLogger(LoggingCategories.Focus);
+        this.VisualLogger = loggerFactory.CreateLogger(LoggingCategories.Visual);
+        this.InteractionLogger = loggerFactory.CreateLogger(LoggingCategories.Interaction);
+        this.MiscLogger = loggerFactory.CreateLogger(LoggingCategories.Misc);
     }
 }

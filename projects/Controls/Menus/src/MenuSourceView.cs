@@ -4,7 +4,7 @@
 
 using System.Collections.ObjectModel;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Lightweight <see cref="IMenuSource"/> implementation that projects a subset of menu items while

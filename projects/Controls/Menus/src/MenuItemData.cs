@@ -2,11 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls;
+namespace DroidNet.Controls.Menus;
 
 /// <summary>
 ///     Represents a menu item that can be used in a menu flyout or menu bar.
@@ -58,6 +59,11 @@ public partial class MenuItemData : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool IsSeparator { get; set; }
+
+    /// <summary>
+    ///     Gets a value indicating whether this menu item is interactive (not a separator and enabled for interaction).
+    /// </summary>
+    public bool IsInteractive => !this.IsSeparator && this.IsEnabled;
 
     /// <summary>
     ///     Gets or sets the collection of sub-items for this menu item.

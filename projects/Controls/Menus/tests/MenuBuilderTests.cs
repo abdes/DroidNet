@@ -2,16 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Windows.Input;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls.Tests;
+namespace DroidNet.Controls.Menus.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -25,11 +22,8 @@ public partial class MenuBuilderTests : VisualUserInterfaceTests
     public void Setup() => this.builder = new MenuBuilder();
 
     [TestMethod]
-    public void Constructor_ShouldInitializeEmptyMenuItems()
-    {
-        // Act & Assert
+    public void Constructor_ShouldInitializeEmptyMenuItems() =>
         _ = this.builder.MenuItems.Should().BeEmpty();
-    }
 
     [TestMethod]
     public Task AddMenuItem_FluentAPI_ShouldCreateItemWithProperties_Async() => EnqueueAsync(() =>
