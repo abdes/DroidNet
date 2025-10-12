@@ -16,7 +16,7 @@ namespace DroidNet.Controls.Menus;
 ///     <see cref="ICascadedMenuHost"/> implementation backed by <see cref="Popup"/>.
 ///     Acts as its own <see cref="ICascadedMenuSurface"/>.
 /// </summary>
-internal sealed partial class PopupMenuHost : ICascadedMenuHost, ICascadedMenuSurface
+internal sealed partial class PopupMenuHost : ICascadedMenuHost
 {
     private const int OpenDebounceDelayMilliseconds = 35;
 
