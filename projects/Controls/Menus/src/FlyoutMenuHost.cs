@@ -12,7 +12,7 @@ namespace DroidNet.Controls.Menus;
 ///     A <see cref="ICascadedMenuHost"/> implementation backed by <see cref="MenuFlyout"/>.
 ///     Acts as its own <see cref="ICascadedMenuSurface"/>.
 /// </summary>
-internal sealed partial class FlyoutMenuHost : ICascadedMenuHost, ICascadedMenuSurface
+internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
 {
     private readonly MenuFlyout flyout;
     private MenuDismissKind pendingDismissKind = MenuDismissKind.Programmatic;
