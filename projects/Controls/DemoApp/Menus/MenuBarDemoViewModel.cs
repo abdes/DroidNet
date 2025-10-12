@@ -15,11 +15,13 @@ namespace DroidNet.Controls.Demo.Menus;
 /// Demonstrates the MenuBar presentation using MenuBuilder.
 /// Shows how to build a traditional WinUI MenuBar with proper UX patterns.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public partial class MenuBarDemoViewModel : ObservableObject
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuBarDemoViewModel"/> class.
     /// </summary>
+    /// <param name="loggerFactory">The factory used to create loggers for menu operations.</param>
     public MenuBarDemoViewModel(ILoggerFactory loggerFactory)
     {
         this.MenuBarSource = this.BuildMenuBar(loggerFactory);
@@ -97,20 +99,20 @@ public partial class MenuBarDemoViewModel : ObservableObject
                         this.CreateMenuCommand("Open Folder...", Symbol.Folder, 'L', "Ctrl+K, Ctrl+O", "Opened a folder"),
                         this.CreateMenuCommand("Open Workspace...", Symbol.Folder, 'W', "Ctrl+Shift+W", "Opened a workspace"),
                         new MenuItemData { IsSeparator = true },
-                        this.CreateMenuCommand("Recent Workspace: DroidNet", Symbol.Clock, 'R', null, "Reopened workspace 'DroidNet'"),
-                        this.CreateMenuCommand("Recent File: MenuBarDemoView.xaml", Symbol.Document, 'F', null, "Reopened recent file 'MenuBarDemoView.xaml'"),
+                        this.CreateMenuCommand("Recent Workspace: DroidNet", Symbol.Clock, 'R', accelerator: null, "Reopened workspace 'DroidNet'"),
+                        this.CreateMenuCommand("Recent File: MenuBarDemoView.xaml", Symbol.Document, 'F', accelerator: null, "Reopened recent file 'MenuBarDemoView.xaml'"),
                     ],
                 },
                 new MenuItemData { IsSeparator = true },
                 this.CreateMenuCommand("Save", Symbol.Save, 'S', "Ctrl+S", "Saved the active document"),
                 this.CreateMenuCommand("Save As...", Symbol.SaveLocal, 'A', "Ctrl+Shift+S", "Opened Save As dialog"),
                 this.CreateMenuCommand("Save All", Symbol.Save, 'L', "Ctrl+Alt+S", "Saved all open documents"),
-                this.CreateMenuCommand("Revert File", Symbol.Refresh, 'R', null, "Reverted changes in the current file"),
+                this.CreateMenuCommand("Revert File", Symbol.Refresh, 'R', accelerator: null, "Reverted changes in the current file"),
                 new MenuItemData { IsSeparator = true },
                 this.CreateToggleMenuItem("Auto Save", Symbol.Save, 'U', () => this.AutoSaveEnabled, value => this.AutoSaveEnabled = value),
                 new MenuItemData { IsSeparator = true },
                 this.CreateMenuCommand("Preferences...", Symbol.Setting, 'P', "Ctrl+,", "Opened preferences"),
-                this.CreateMenuCommand("Exit", Symbol.LeaveChat, 'E', null, "Exited the editor"),
+                this.CreateMenuCommand("Exit", Symbol.LeaveChat, 'E', accelerator: null, "Exited the editor"),
             ],
     };
 
@@ -234,7 +236,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
                 this.CreateMenuCommand("Step Over", Symbol.Forward, 'O', "F10", "Stepped over"),
                 this.CreateMenuCommand("Step Into", Symbol.Forward, 'I', "F11", "Stepped into"),
                 new MenuItemData { IsSeparator = true },
-                this.CreateMenuCommand("Open Run Configurations...", Symbol.Setting, 'C', null, "Opened run configurations"),
+                this.CreateMenuCommand("Open Run Configurations...", Symbol.Setting, 'C', accelerator: null, "Opened run configurations"),
             ],
     };
 
@@ -260,10 +262,10 @@ public partial class MenuBarDemoViewModel : ObservableObject
         SubItems =
             [
                 this.CreateMenuCommand("View Documentation", Symbol.Help, 'V', "F1", "Opened documentation"),
-                this.CreateMenuCommand("Release Notes", Symbol.Read, 'R', null, "Opened release notes"),
-                this.CreateMenuCommand("Report Issue...", Symbol.Flag, 'I', null, "Opened issue reporter"),
+                this.CreateMenuCommand("Release Notes", Symbol.Read, 'R', accelerator: null, "Opened release notes"),
+                this.CreateMenuCommand("Report Issue...", Symbol.Flag, 'I', accelerator: null, "Opened issue reporter"),
                 new MenuItemData { IsSeparator = true },
-                this.CreateMenuCommand("About DroidNet Editor", Symbol.Contact, 'A', null, "Opened About dialog"),
+                this.CreateMenuCommand("About DroidNet Editor", Symbol.Contact, 'A', accelerator: null, "Opened About dialog"),
             ],
     };
 
