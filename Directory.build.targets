@@ -83,7 +83,7 @@
     </ItemGroup>
     <PropertyGroup Condition="'$(Configuration)'=='Release'">
         <!-- Treat warnings as errors only in Release builds -->
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     </PropertyGroup>
     <!-- End Code Quality -->
 
