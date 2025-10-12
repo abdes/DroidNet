@@ -527,11 +527,13 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                     new ExpressionTemplate(
                         "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
                         new CultureInfo("en-US")));
-            if (container is not null)
-            {
-                loggerConfig
-                    .WriteTo.OutputLogView<RichTextBlockSink>(container, theme: OutputLogThemes.Literate);
-            }
+        }
+
+        // Always register OutputLogView sink if container is available (required by DemoBrowserViewModel)
+        if (container is not null)
+        {
+            loggerConfig
+                .WriteTo.OutputLogView<RichTextBlockSink>(container, theme: OutputLogThemes.Literate);
         }
 
         if (configuration is not null)
