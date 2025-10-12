@@ -7,9 +7,15 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.OutputConsole;
 
+/// <summary>
+///     Page that hosts the OutputConsole demo UI.
+/// </summary>
 [ViewModel(typeof(OutputConsoleDemoViewModel))]
 public sealed partial class OutputConsoleDemoView : Page
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="OutputConsoleDemoView"/> class.
+    /// </summary>
     public OutputConsoleDemoView()
     {
         this.InitializeComponent();
