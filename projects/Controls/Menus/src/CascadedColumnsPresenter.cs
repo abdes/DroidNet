@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls.Menus;
 
@@ -15,7 +17,6 @@ namespace DroidNet.Controls.Menus;
 public sealed partial class CascadedColumnsPresenter : ContentControl
 {
     private const string ContentScrollViewerPart = "ContentScrollViewer";
-
     private readonly List<ColumnPresenter> columnPresenters = [];
     private readonly StackPanel columnsHost;
     private (int columnLevel, int position, MenuNavigationMode navigationMode)? deferredFocusRequest;
@@ -56,10 +57,21 @@ public sealed partial class CascadedColumnsPresenter : ContentControl
             expanded!.IsExpanded = false;
         }
 
+        foreach (var column in this.columnPresenters)
+        {
+            column.ItemInvoked -= this.Column_ItemInvoked;
+        }
+
         // Clear columns and any deferred focus requests.
         this.columnsHost.Children.Clear();
         this.columnPresenters.Clear();
         this.deferredFocusRequest = null;
+
+        if (this.MenuSource is { Services.InteractionController: { } controller, Items: { } items })
+        {
+            var rootItems = items.ToList();
+            _ = this.AddColumn(rootItems, 0, controller.NavigationMode);
+        }
     }
 
     private ColumnPresenter AddColumn(List<MenuItemData> items, int level, MenuNavigationMode navigationMode)
@@ -83,6 +95,8 @@ public sealed partial class CascadedColumnsPresenter : ContentControl
             Margin = level == 0 ? new Thickness(0) : new Thickness(4, 0, 0, 0),
         };
 
+        column.ItemInvoked += this.Column_ItemInvoked;
+
         this.columnPresenters.Add(column);
         this.columnsHost.Children.Add(column);
         this.LogAddedColumn(level, items.Count, navigationMode);
@@ -98,6 +112,9 @@ public sealed partial class CascadedColumnsPresenter : ContentControl
 
         return column;
     }
+
+    private void Column_ItemInvoked(object? sender, MenuItemInvokedEventArgs e)
+        => this.ItemInvoked?.Invoke(this, e);
 
     private ColumnPresenter? GetColumn(MenuLevel level) =>
         this.columnPresenters.FirstOrDefault(presenter => presenter.ColumnLevel == level);

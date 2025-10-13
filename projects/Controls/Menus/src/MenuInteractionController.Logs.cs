@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Globalization;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
@@ -235,11 +238,57 @@ public partial class MenuInteractionController
     [LoggerMessage(
         EventId = 3422,
         Level = LogLevel.Information,
-        Message = "[MenuInteractionController] Captured focus owner for dismissal return")]
-    private static partial void LogCapturedFocusOwner(ILogger logger);
+        Message = "[MenuInteractionController] Captured focus owner for dismissal return: {Target}")]
+    private static partial void LogCapturedFocusOwner(ILogger logger, string target);
 
     private void LogCapturedFocusOwner()
-        => LogCapturedFocusOwner(services.FocusLogger);
+    {
+        // Compute a compact identifier for the captured focus element (if any).
+        // Format: Type('Name')#<shortHash> or <none>/<stale> when not available.
+        string ident;
+
+        if (this.focusReturnTarget is not { } weakRef)
+        {
+            ident = "<none>";
+        }
+        else if (!weakRef.TryGetTarget(out var element) || element is null)
+        {
+            ident = "<stale>";
+        }
+        else
+        {
+            var name = string.Empty;
+
+            try
+            {
+                // Try to read a friendly Name property if present (avoids hard dependency on specific UI types).
+                var nameProp = element.GetType().GetProperty("Name");
+                if (nameProp is not null)
+                {
+                    var val = nameProp.GetValue(element) as string;
+                    if (!string.IsNullOrEmpty(val))
+                    {
+                        name = val;
+                    }
+                }
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch (Exception)
+            {
+                _ = 0; // Ignore exceptions when accessing the Name property.
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+            var typeName = element.GetType().FullName ?? element.GetType().Name;
+            var shortId = RuntimeHelpers.GetHashCode(element).ToString("x", CultureInfo.InvariantCulture);
+
+            ident = string.IsNullOrEmpty(name)
+                ? $"{typeName}#{shortId}"
+                : $"{typeName}('{name}')#{shortId}";
+        }
+
+        LogCapturedFocusOwner(services.FocusLogger, ident);
+    }
 
     [LoggerMessage(
         EventId = 3423,

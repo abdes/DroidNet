@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cm="using:DroidNet.Controls.Menus">
+
+    <Style
+        x:Key="DefaultMenuButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="cm:MenuButton" />
+
+    <Style
+        x:Key="MenuButtonTransparentStyle"
+        BasedOn="{StaticResource DefaultMenuButtonStyle}"
+        TargetType="cm:MenuButton">
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="{ThemeResource ButtonPadding}" />
+    </Style>
+
+    <Style BasedOn="{StaticResource DefaultMenuButtonStyle}" TargetType="cm:MenuButton" />
+
+</ResourceDictionary>

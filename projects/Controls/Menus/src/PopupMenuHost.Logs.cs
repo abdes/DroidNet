@@ -34,7 +34,7 @@ internal sealed partial class PopupMenuHost
     private static partial void LogShowAt(ILogger logger, string AnchorId, MenuNavigationMode NavigationMode, Rect AnchorBounds);
 
     [Conditional("DEBUG")]
-    private void LogShowAt(MenuItem anchorItem, MenuNavigationMode navigationMode, Rect anchorBounds)
+    private void LogShowAt(FrameworkElement anchorItem, MenuNavigationMode navigationMode, Rect anchorBounds)
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
         {
@@ -186,7 +186,7 @@ internal sealed partial class PopupMenuHost
         Message = "[PopupMenuHost] ShowAt failed for anchor {AnchorId}: {ExceptionMessage}")]
     private static partial void LogShowAtFailed(ILogger logger, string AnchorId, string ExceptionMessage);
 
-    private void LogShowAtFailed(MenuItem anchor, Exception ex)
+    private void LogShowAtFailed(FrameworkElement anchor, Exception ex)
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
         {

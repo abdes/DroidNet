@@ -15,6 +15,21 @@ namespace DroidNet.Controls.Menus;
 public sealed partial class MenuBar : IRootMenuSurface
 {
     /// <inheritdoc />
+    public object? FocusElement => this.XamlRoot is { } xamlRoot
+        ? FocusManager.GetFocusedElement(xamlRoot)
+        : null;
+
+    /// <inheritdoc />
+    public void Show(MenuNavigationMode navigationMode)
+    {
+        // Menubar is already visible; for keyboard, set an initial focus anchor.
+        if (navigationMode == MenuNavigationMode.KeyboardInput)
+        {
+            _ = this.FocusFirstItem(navigationMode);
+        }
+    }
+
+    /// <inheritdoc />
     public void Dismiss(MenuDismissKind kind = MenuDismissKind.Programmatic)
     {
         this.LogDismiss();

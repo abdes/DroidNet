@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls.Menus;
@@ -21,12 +23,14 @@ internal sealed partial class PopupMenuHost
         Closing,
     }
 
-    private readonly struct PopupRequest(int token, MenuItem anchor, MenuNavigationMode navigationMode)
+    private readonly struct PopupRequest(int token, FrameworkElement anchor, MenuNavigationMode navigationMode, Windows.Foundation.Point? customPosition = null)
     {
         public int Token { get; } = token;
 
-        public MenuItem Anchor { get; } = anchor;
+        public FrameworkElement Anchor { get; } = anchor;
 
         public MenuNavigationMode NavigationMode { get; } = navigationMode;
+
+        public Windows.Foundation.Point? CustomPosition { get; } = customPosition;
     }
 }

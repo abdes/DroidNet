@@ -13,3 +13,4 @@ using System.Runtime.CompilerServices;
 */
 
 [assembly: InternalsVisibleTo("DroidNet.Controls.Menus.UI.Tests")]
+[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]

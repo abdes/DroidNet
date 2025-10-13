@@ -339,15 +339,7 @@ public sealed partial class ColumnPresenter : Control
     }
 
     private void MenuItem_OnInvoked(object? sender, MenuItemInvokedEventArgs e)
-    {
-        var controller = this.Controller;
-        var navMode = controller?.NavigationMode ?? MenuNavigationMode.PointerInput;
-        var inputSource = navMode.ToInputSource();
-
-        var context = this.CreateCurrentContext();
-        this.LogItemInvoked(e.ItemData.Id, inputSource);
-        controller?.OnItemInvoked(context, e.ItemData, inputSource);
-    }
+        => this.ItemInvoked?.Invoke(this, e);
 
     private void MenuItem_OnSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
     {

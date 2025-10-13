@@ -93,16 +93,10 @@ public sealed partial class CascadedColumnsPresenter
     private void OnMenuSourceChanged(IMenuSource? oldSource, IMenuSource? newSource)
     {
         _ = oldSource; // unused
+        _ = newSource; // unused
 
         this.LogMenuSourceChanged();
 
-        // Defensive: make change handling idempotent and cheap.
         this.Reset();
-
-        if (newSource is { Services.InteractionController: { } controller, Items: { } items })
-        {
-            var rootItems = items.ToList();
-            _ = this.AddColumn(rootItems, 0, controller.NavigationMode);
-        }
     }
 }

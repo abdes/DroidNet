@@ -272,6 +272,13 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         {
             private readonly IList<MenuItemData> items = items;
 
+            public object? FocusElement => null;
+
+            public void Show(MenuNavigationMode navigationMode)
+            {
+                // No-op for tests; assume menu becomes available.
+            }
+
             public void Dismiss(MenuDismissKind kind = MenuDismissKind.Programmatic)
             {
             }

@@ -4,22 +4,22 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls.Menus;
 
 #pragma warning disable SA1204 // Static elements should appear before instance elements
 
 /// <summary>
-///     Custom flyout surface that renders menu data using <see cref="ColumnPresenter"/> columns.
-///     This implementation keeps interaction logic reusable across menu containers via
-///     <see cref="MenuInteractionController"/>.
+///     A <see cref="ICascadedMenuHost"/> implementation backed by <see cref="FlyoutBase"/>.
+///     Acts as its own <see cref="ICascadedMenuSurface"/>.
 /// </summary>
-public partial class MenuFlyout
+internal partial class FlyoutMenuHost
 {
     [LoggerMessage(
         EventId = 3301,
         Level = LogLevel.Debug,
-        Message = "[MenuFlyout] flyout opening (MenuSource={HasMenuSource}, RootSurface={HasRootSurface})")]
+        Message = "[FlyoutMenuHost] flyout opening (MenuSource={HasMenuSource}, RootSurface={HasRootSurface})")]
     private static partial void LogOpening(ILogger logger, bool hasMenuSource, bool hasRootSurface);
 
     [Conditional("DEBUG")]
@@ -36,7 +36,7 @@ public partial class MenuFlyout
     [LoggerMessage(
         EventId = 3302,
         Level = LogLevel.Debug,
-        Message = "[MenuFlyout] flyout closing (Presenter={HasPresenter})")]
+        Message = "[FlyoutMenuHost] flyout closing (Presenter={HasPresenter})")]
     private static partial void LogClosing(ILogger logger, bool hasPresenter);
 
     [Conditional("DEBUG")]
@@ -52,7 +52,7 @@ public partial class MenuFlyout
     [LoggerMessage(
         EventId = 3303,
         Level = LogLevel.Warning,
-        Message = "[MenuFlyout] flyout opening aborted: MenuSource is null")]
+        Message = "[FlyoutMenuHost] flyout opening aborted: MenuSource is null")]
     private static partial void LogNoMenuSource(ILogger logger);
 
     private void LogNoMenuSource()
@@ -66,7 +66,7 @@ public partial class MenuFlyout
     [LoggerMessage(
         EventId = 3304,
         Level = LogLevel.Debug,
-        Message = "[MenuFlyout] Dismiss called (kind={Kind})")]
+        Message = "[FlyoutMenuHost] Dismiss called (kind={Kind})")]
     private static partial void LogDismiss(ILogger logger, MenuDismissKind kind);
 
     [Conditional("DEBUG")]
@@ -81,7 +81,7 @@ public partial class MenuFlyout
     [LoggerMessage(
         EventId = 3305,
         Level = LogLevel.Debug,
-        Message = "[MenuFlyout] CreatePresenter called")]
+        Message = "[FlyoutMenuHost] CreatePresenter called")]
     private static partial void LogCreatePresenter(ILogger logger);
 
     [Conditional("DEBUG")]

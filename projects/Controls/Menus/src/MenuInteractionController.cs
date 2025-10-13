@@ -246,6 +246,25 @@ public sealed partial class MenuInteractionController(MenuServices services)
     }
 
     /// <summary>
+    ///     Handles an initial menu request originating from a root surface (e.g., right-click context menu).
+    /// </summary>
+    /// <param name="context">The interaction context for the root surface.</param>
+    /// <param name="source">The input source that triggered the request.</param>
+    public void OnMenuRequested(MenuInteractionContext context, MenuInteractionInputSource source)
+    {
+        context.EnsureValid();
+        this.OnNavigationSourceChanged(source);
+
+        if (context.RootSurface is not { } root)
+        {
+            return;
+        }
+
+        this.CaptureFocusOwner(root);
+        root.Show(this.NavigationMode);
+    }
+
+    /// <summary>
     ///     Coordinates mutual exclusion for radio button menu items.
     /// </summary>
     /// <param name="menuItem">The radio menu item being selected.</param>
@@ -506,20 +525,14 @@ public sealed partial class MenuInteractionController(MenuServices services)
             return;
         }
 
-        if (rootSurface is not UIElement { XamlRoot: { } } rootElement)
+        if (rootSurface?.FocusElement is not UIElement { } focusElement)
         {
             this.LogUnableToCaptureNotFocusable();
             return;
         }
 
-        if (FocusManager.GetFocusedElement(rootElement.XamlRoot) is UIElement current && current is not MenuItem)
-        {
-            this.focusReturnTarget = new WeakReference<UIElement>(current);
-            this.LogCapturedFocusOwner();
-            return;
-        }
-
-        this.LogFocusCaptureSkippedMenuItem();
+        this.focusReturnTarget = new WeakReference<UIElement>(focusElement);
+        this.LogCapturedFocusOwner();
     }
 
     private void RestoreFocusAfterDismissal()

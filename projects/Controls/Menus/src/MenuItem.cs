@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -14,7 +15,7 @@ using Windows.System;
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or cascaded menu flyouts.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -305,6 +306,15 @@ public partial class MenuItem : Control
         this is { IsInteractive: true, IsTabStop: true, Visibility: Visibility.Visible };
 
     /// <summary>
+    ///     Gets a value indicating whether the control template has been applied.
+    /// </summary>
+    /// <remarks>
+    ///     When the template is applied, <see cref="rootGrid"/> is set to a non-null value.
+    ///     This property is used to avoid duplicate visual state updates during initialization.
+    /// </remarks>
+    private bool IsTemplateApplied => this.rootGrid is not null;
+
+    /// <summary>
     ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
     ///     logic if not. Updates visual states accordingly.
     /// </summary>
@@ -487,6 +497,9 @@ public partial class MenuItem : Control
         }
 
         this.isPointerOver = true;
+
+        // Use Hand cursor for interactive menu items on hover
+        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
         this.UpdateCommonVisualState();
 
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
@@ -512,6 +525,8 @@ public partial class MenuItem : Control
             return;
         }
 
+        // Revert to Arrow when no longer hovering the item
+        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.UpdateCommonVisualState();
 
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
@@ -557,6 +572,10 @@ public partial class MenuItem : Control
             return;
         }
 
+        // Ensure cursor is appropriate based on hover state after release
+        this.ProtectedCursor = this.isPointerOver
+            ? InputSystemCursor.Create(InputSystemCursorShape.Hand)
+            : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.UpdateCommonVisualState();
     }
 
@@ -570,6 +589,8 @@ public partial class MenuItem : Control
             return;
         }
 
+        // Reset to Arrow on cancel
+        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.UpdateCommonVisualState();
     }
 
@@ -582,6 +603,8 @@ public partial class MenuItem : Control
             return;
         }
 
+        // Reset to Arrow if capture is lost
+        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.UpdateCommonVisualState();
     }
 

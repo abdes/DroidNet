@@ -7,7 +7,7 @@ using System.Diagnostics;
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     Presenter used by <see cref="MenuFlyout"/> to render one or more cascading menu columns.
+///     Presenter used by cascaded menu flyouts to render one or more cascading menu columns.
 /// </summary>
 public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
 {
@@ -125,6 +125,9 @@ public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
         var initialCount = this.columnPresenters.Count;
         for (var i = this.columnPresenters.Count - 1; i > level; i--)
         {
+            var column = this.columnPresenters[i];
+            column.ItemInvoked -= this.Column_ItemInvoked;
+
             this.columnsHost.Children.RemoveAt(i);
             this.columnPresenters.RemoveAt(i);
         }

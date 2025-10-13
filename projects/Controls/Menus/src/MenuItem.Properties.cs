@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml;
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or cascaded menu flyouts.
 /// </summary>
 public partial class MenuItem
 {
@@ -19,7 +19,7 @@ public partial class MenuItem
     public static readonly DependencyProperty MenuSourceProperty = DependencyProperty.Register(
         nameof(MenuSource),
         typeof(IMenuSource),
-        typeof(MenuFlyout),
+        typeof(MenuItem),
         new PropertyMetadata(defaultValue: null));
 
     /// <summary>
@@ -80,6 +80,14 @@ public partial class MenuItem
         set => this.SetValue(ShowSubmenuGlyphProperty, value);
     }
 
+    private static void OnShowSubmenuGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MenuItem { ItemData: { } } menuItem)
+        {
+            menuItem.UpdateCheckmarkVisualState();
+        }
+    }
+
     /// <summary>
     ///     Responds to changes of the <see cref="ItemData"/> dependency property.
     /// </summary>
@@ -90,7 +98,7 @@ public partial class MenuItem
     ///     a refresh of all visual states on the UI dispatcher. The method is <see langword="virtual"/>; when
     ///     overriding, preserve the subscription semantics or call the base implementation.
     /// </remarks>
-    protected virtual void OnItemDataChanged(MenuItemData? oldData, MenuItemData? newData)
+    private void OnItemDataChanged(MenuItemData? oldData, MenuItemData? newData)
     {
         // Safely rewire PropertyChanged from old to new data
         oldData?.PropertyChanged -= this.ItemData_OnPropertyChanged;
@@ -99,24 +107,20 @@ public partial class MenuItem
         // Update access key immediately so the control participates in AccessKeyManager.
         this.AccessKey = newData?.Mnemonic?.ToString() ?? string.Empty;
 
-        // Update ALL visual states on the UI thread
-        _ = this.DispatcherQueue.TryEnqueue(() =>
+        // Only queue visual state updates if template is already applied.
+        // Otherwise, OnApplyTemplate will handle initialization to avoid duplicate updates.
+        if (this.IsTemplateApplied)
         {
-            this.UpdateTypeVisualState();
-            this.UpdateCommonVisualState();
-            this.UpdateIconVisualState();
-            this.UpdateAcceleratorVisualState();
-            this.UpdateCheckmarkVisualState();
+            _ = this.DispatcherQueue.TryEnqueue(() =>
+            {
+                this.UpdateTypeVisualState();
+                this.UpdateCommonVisualState();
+                this.UpdateIconVisualState();
+                this.UpdateAcceleratorVisualState();
+                this.UpdateCheckmarkVisualState();
 
-            this.RefreshTextPresentation();
-        });
-    }
-
-    private static void OnShowSubmenuGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is MenuItem { ItemData: { } } menuItem)
-        {
-            menuItem.UpdateCheckmarkVisualState();
+                this.RefreshTextPresentation();
+            });
         }
     }
 

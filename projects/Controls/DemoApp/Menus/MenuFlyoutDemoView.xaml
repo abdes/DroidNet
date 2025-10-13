@@ -10,29 +10,27 @@
 
             <!--  Title and Description  -->
             <StackPanel Spacing="8">
-                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuFlyout Demo" />
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuFlyout Integration Demo" />
                 <TextBlock
                     Style="{ThemeResource BodyTextBlockStyle}"
-                    Text="This demonstrates MenuFlyout (context menus) built using MenuBuilder. Right-click the areas below to see different context menu styles."
+                    Text="A single menu definition drives both a right-click context menu and a MenuButton. Icons are constrained to 16x16 to match Fluent guidance."
                     TextWrapping="Wrap" />
             </StackPanel>
 
-            <!--  Context Menu Areas  -->
+            <!--  Two Scenarios - Same Menu  -->
             <Grid ColumnDefinitions="*,*" ColumnSpacing="20">
 
-                <!--  Basic Context Menu  -->
+                <!--  Scenario 1: Context Menu (Right-Click)  -->
                 <Border
-                    x:Name="ContextTarget1"
+                    x:Name="ContextTarget"
                     Grid.Column="0"
-                    Height="150"
+                    Height="200"
                     Padding="20"
+                    cm:ContextMenu.MenuSource="{x:Bind ViewModel.SharedMenu, Mode=OneWay}"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="6">
-                    <Border.ContextFlyout>
-                        <cm:MenuFlyout MenuSource="{x:Bind ViewModel.ContextMenu, Mode=OneWay}" />
-                    </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
@@ -40,42 +38,86 @@
                         <SymbolIcon Opacity="0.6" Symbol="TouchPointer" />
                         <TextBlock
                             HorizontalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="Scenario 1: Context Menu" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
                             Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="Right-click here" />
+                            Text="Right-click anywhere inside this card" />
                         <TextBlock
                             HorizontalAlignment="Center"
                             Opacity="0.7"
                             Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="Context menu with submenus" />
+                            Text="Menu attached via ContextMenu" />
                     </StackPanel>
                 </Border>
 
-                <!--  Static Simple Menu  -->
+                <!--  Scenario 2: MenuButton (Click)  -->
                 <Border
                     Grid.Column="1"
-                    Height="150"
+                    Height="200"
                     Padding="20"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="6">
-                    <Border.ContextFlyout>
-                        <cm:MenuFlyout MenuSource="{x:Bind ViewModel.SimpleMenu, Mode=OneWay}" />
-                    </Border.ContextFlyout>
                     <StackPanel
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="8">
-                        <SymbolIcon Opacity="0.6" Symbol="TouchPointer" />
+                        Spacing="10">
+                        <SymbolIcon Opacity="0.6" Symbol="List" />
                         <TextBlock
                             HorizontalAlignment="Center"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="Right-click here" />
+                            FontWeight="SemiBold"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="Scenario 2: MenuButton" />
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="Default button visuals" />
+                                <cm:MenuButton
+                                    Padding="12,6"
+                                    HorizontalAlignment="Center"
+                                    MenuSource="{x:Bind ViewModel.SharedMenu, Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon
+                                            VerticalAlignment="Center"
+                                            FontFamily="Segoe Fluent Icons"
+                                            FontSize="16"
+                                            Glyph="&#xE712;" />
+                                        <TextBlock Text="Click to open menu" />
+                                    </StackPanel>
+                                </cm:MenuButton>
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="Transparent chrome variant" />
+                                <cm:MenuButton
+                                    Padding="6"
+                                    HorizontalAlignment="Center"
+                                    Chrome="Transparent"
+                                    CornerRadius="5"
+                                    MenuSource="{x:Bind ViewModel.SharedMenu, Mode=OneWay}">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontFamily="Segoe Fluent Icons"
+                                        FontSize="16"
+                                        Glyph="&#xE8D4;" />
+                                </cm:MenuButton>
+                            </StackPanel>
+                        </StackPanel>
                         <TextBlock
                             HorizontalAlignment="Center"
                             Opacity="0.7"
                             Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="Simple static menu" />
+                            Text="Menu displayed through MenuButton root surface"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
@@ -92,11 +134,11 @@
                     <TextBlock
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                         Style="{ThemeResource SubtitleTextBlockStyle}"
-                        Text="✨ MenuFlyout Features" />
-                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Context-sensitive commands that appear on right-click" />
-                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Cascading submenus for grouped functionality" />
-                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Same UX patterns as MenuBar - icons left, selection right" />
-                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Perfect for contextual actions on UI elements" />
+                        Text="✨ Two Scenarios, One Menu" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• One MenuBuilder definition feeds each surface" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Context menu uses cm:ContextMenu for right-click invocation" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• MenuButton acts as the root surface and shares services" />
+                    <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Both scenarios rely on MenuInteractionController for focus and dismissal" />
                 </StackPanel>
             </Border>
 
@@ -112,7 +154,10 @@
                         Margin="0,0,0,4"
                         Style="{ThemeResource CaptionTextBlockStyle}"
                         Text="Last Action:" />
-                    <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind ViewModel.LastActionMessage, Mode=OneWay}" />
+                    <TextBlock
+                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind ViewModel.LastActionMessage, Mode=OneWay}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

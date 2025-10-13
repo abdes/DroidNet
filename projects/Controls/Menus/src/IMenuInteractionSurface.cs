@@ -35,6 +35,33 @@ public interface IMenuInteractionSurface
 public interface IRootMenuSurface : IMenuInteractionSurface
 {
     /// <summary>
+    ///     Gets the UI element that owns or represents this root surface for focus management purposes.
+    /// </summary>
+    /// <remarks>
+    ///     This property provides access to the underlying UI element that should be used when capturing
+    ///     or restoring focus during menu interactions. For menu bars, this is typically the menu bar control
+    ///     itself. For context menus, this is the trigger element that invoked the menu.
+    /// </remarks>
+    /// <returns>
+    ///     A <see cref="object"/> representing the focus owner element, typically a <see cref="Microsoft.UI.Xaml.UIElement"/>;
+    ///     or <see langword="null"/> if no focus owner is available.
+    /// </returns>
+    public object? FocusElement { get; }
+
+    /// <summary>
+    ///     Materializes the initial root menu UI for this surface.
+    /// </summary>
+    /// <param name="navigationMode">
+    ///     The input modality that triggered the menu request (keyboard, pointer, or programmatic).
+    /// </param>
+    /// <remarks>
+    ///     Implementations should render or present the initial menu for interaction.
+    ///     For a menu bar this may be a no-op or set initial focus. For context/popup menus,
+    ///     this should display the flyout at the previously captured trigger location.
+    /// </remarks>
+    public void Show(MenuNavigationMode navigationMode);
+
+    /// <summary>
     ///     Retrieves the <em>neighboring item</em> in the root sequence relative to <paramref name="itemData"/>,
     ///     according to the navigation <paramref name="direction"/> on the root axis.
     /// </summary>

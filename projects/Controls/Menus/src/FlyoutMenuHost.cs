@@ -4,28 +4,32 @@
 
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     A <see cref="ICascadedMenuHost"/> implementation backed by <see cref="MenuFlyout"/>.
+///     A <see cref="ICascadedMenuHost"/> implementation backed by <see cref="FlyoutBase"/>.
 ///     Acts as its own <see cref="ICascadedMenuSurface"/>.
 /// </summary>
 internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
 {
-    private readonly MenuFlyout flyout;
+    private readonly FlyoutBase flyout;
+    private CascadedColumnsPresenter? presenter;
     private MenuDismissKind pendingDismissKind = MenuDismissKind.Programmatic;
     private bool isDisposed;
+    private double maxLevelHeight = 480d;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="FlyoutMenuHost"/> class.
     /// </summary>
     public FlyoutMenuHost()
     {
-        this.flyout = new MenuFlyout
+        this.flyout = new CustomFlyout(this)
         {
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+            LightDismissOverlayMode = LightDismissOverlayMode.Off,
         };
 
         this.flyout.Opening += this.OnFlyoutOpening;
@@ -53,24 +57,48 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     public ICascadedMenuSurface Surface => this;
 
     /// <inheritdoc />
+    public UIElement RootElement => this.presenter ?? throw new InvalidOperationException("Presenter not yet created");
+
+    /// <inheritdoc />
     public IRootMenuSurface? RootSurface
     {
-        get => this.flyout.RootSurface;
-        set => this.flyout.RootSurface = value;
+        get;
+        set
+        {
+            field = value;
+            if (this.presenter is { })
+            {
+                this.presenter.RootSurface = value;
+            }
+        }
     }
 
     /// <inheritdoc />
     public IMenuSource? MenuSource
     {
-        get => this.flyout.MenuSource;
-        set => this.flyout.MenuSource = value;
+        get;
+        set
+        {
+            field = value;
+            if (this.presenter is { })
+            {
+                this.presenter.MenuSource = value;
+            }
+        }
     }
 
     /// <inheritdoc />
     public double MaxLevelHeight
     {
-        get => this.flyout.MaxColumnHeight;
-        set => this.flyout.MaxColumnHeight = value;
+        get => this.maxLevelHeight;
+        set
+        {
+            this.maxLevelHeight = value;
+            if (this.presenter is { })
+            {
+                this.presenter.MaxColumnHeight = value;
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -79,50 +107,32 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     /// <inheritdoc />
     public void Dismiss(MenuDismissKind kind = MenuDismissKind.Programmatic)
     {
-        Debug.WriteLine("[FlyoutMenuHost] ICascadedMenuSurface.Dismiss()");
+        this.LogDismiss(kind);
         this.pendingDismissKind = kind;
-        this.flyout.Dismiss(kind);
+        this.presenter?.Dismiss(kind);
+        this.flyout.Hide();
     }
 
     /// <inheritdoc />
-    public MenuItemData GetAdjacentItem(MenuLevel level, MenuItemData itemData, MenuNavigationDirection direction, bool wrap = true)
-        => this.RequirePresenter().GetAdjacentItem(level, itemData, direction, wrap);
-
-    /// <inheritdoc />
-    public MenuItemData? GetExpandedItem(MenuLevel level)
-        => this.RequirePresenter().GetExpandedItem(level);
-
-    /// <inheritdoc />
-    public MenuItemData? GetFocusedItem(MenuLevel level)
-        => this.RequirePresenter().GetFocusedItem(level);
-
-    /// <inheritdoc />
-    public bool FocusItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.RequirePresenter().FocusItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public bool FocusFirstItem(MenuLevel level, MenuNavigationMode navigationMode)
-        => this.RequirePresenter().FocusFirstItem(level, navigationMode);
-
-    /// <inheritdoc />
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.RequirePresenter().ExpandItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public void CollapseItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.RequirePresenter().CollapseItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public void TrimTo(MenuLevel level)
-        => this.RequirePresenter().TrimTo(level);
-
-    /// <inheritdoc />
-    public void ShowAt(MenuItem anchor, MenuNavigationMode navigationMode)
+    public void ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode)
     {
-        Debug.WriteLine("[FlyoutMenuHost] ShowAt");
         _ = navigationMode;
         this.pendingDismissKind = MenuDismissKind.Programmatic;
         this.flyout.ShowAt(anchor);
+    }
+
+    /// <inheritdoc />
+    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
+    {
+        _ = navigationMode;
+        this.pendingDismissKind = MenuDismissKind.Programmatic;
+
+        var options = new FlyoutShowOptions
+        {
+            Position = position,
+            ShowMode = FlyoutShowMode.Standard,
+        };
+        this.flyout.ShowAt(anchor, options);
     }
 
     /// <inheritdoc />
@@ -140,20 +150,93 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
         this.flyout.Closing -= this.OnFlyoutClosing;
         this.flyout.Closed -= this.OnFlyoutClosed;
 
-        this.flyout.MenuSource = null;
-        this.flyout.RootSurface = null;
+        if (this.presenter is not null)
+        {
+            this.presenter.ItemInvoked -= this.OnPresenterItemInvoked;
+        }
+
+        this.MenuSource = null;
+        this.RootSurface = null;
+    }
+
+    /// <summary>
+    ///     Creates the presenter for the flyout.
+    /// </summary>
+    /// <returns>The created presenter control.</returns>
+    internal Control CreatePresenter()
+    {
+        this.LogCreatePresenter();
+
+        // Clean up existing presenter if it exists
+        if (this.presenter is not null)
+        {
+            this.presenter.ItemInvoked -= this.OnPresenterItemInvoked;
+        }
+
+        this.presenter = new CascadedColumnsPresenter
+        {
+            MaxColumnHeight = this.MaxLevelHeight,
+            MenuSource = this.MenuSource,
+            RootSurface = this.RootSurface,
+        };
+
+        // Subscribe to presenter events to relay to controller
+        this.presenter.ItemInvoked += this.OnPresenterItemInvoked;
+
+        return this.presenter;
+    }
+
+    private void OnPresenterItemInvoked(object? sender, MenuItemInvokedEventArgs e)
+    {
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
+
+        // Create the context - we're in a cascaded menu, so use the column surface
+        var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, this.RootSurface);
+        controller.OnItemInvoked(context, e.ItemData, e.InputSource);
     }
 
     private void OnFlyoutOpening(object? sender, object e)
-        => this.Opening?.Invoke(this, EventArgs.Empty);
+    {
+        Debug.Assert(this.presenter is { }, "Presenter should not be null");
+
+        this.LogOpening();
+
+        if (this.MenuSource is null)
+        {
+            this.LogNoMenuSource();
+            return;
+        }
+
+        // If the Flyout is used with a root surface (e.g., MenuBar), ensure the root surface
+        // is set as the pass-through element for input events.
+        if (this.RootSurface is UIElement passThrough)
+        {
+            this.flyout.OverlayInputPassThroughElement = passThrough;
+        }
+
+        // Raise the public Opening event
+        this.Opening?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnFlyoutOpened(object? sender, object e)
         => this.Opened?.Invoke(this, EventArgs.Empty);
 
     private void OnFlyoutClosing(object? sender, FlyoutBaseClosingEventArgs e)
     {
-        Debug.WriteLine("[FlyoutMenuHost] Closing");
+        this.LogClosing();
 
+        // Handle situations where the flyout is open and closed before the presenter is created.
+        if (this.presenter is not { })
+        {
+            return;
+        }
+
+        this.flyout.OverlayInputPassThroughElement = null;
+
+        // Raise the public Closing event
         var dismissalKind = this.ResolveDismissKind();
         var args = new MenuHostClosingEventArgs(dismissalKind);
         this.Closing?.Invoke(this, args);
@@ -163,6 +246,9 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
             return;
         }
 
+        // Reset the presenter after closing to prepare it for the next open
+        this.presenter.Reset();
+
         this.pendingDismissKind = MenuDismissKind.Programmatic;
     }
 
@@ -171,14 +257,11 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
         this.pendingDismissKind = MenuDismissKind.Programmatic;
         this.Closed?.Invoke(this, EventArgs.Empty);
 
-        Debug.WriteLine("[FlyoutMenuHost] Closed");
-
         var controller = this.MenuSource?.Services.InteractionController;
-        var rootSurface = this.RootSurface;
-        if (controller is not null && rootSurface is not null)
+        var surface = this.RootSurface;
+        if (controller is not null && surface is not null)
         {
-            var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, rootSurface);
-            Debug.WriteLine("[FlyoutMenuHost] Notifying controller.OnDismissed (column)");
+            var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, surface);
             controller.OnDismissed(context);
         }
     }
@@ -186,6 +269,17 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     private MenuDismissKind ResolveDismissKind() => this.pendingDismissKind;
 
     private CascadedColumnsPresenter RequirePresenter()
-        => this.flyout.Presenter
+        => this.presenter
             ?? throw new InvalidOperationException("Cascaded menu surface is not available before the host opens.");
+
+    /// <summary>
+    ///     Custom FlyoutBase implementation that delegates presenter creation to FlyoutMenuHost.
+    /// </summary>
+    private sealed partial class CustomFlyout(FlyoutMenuHost host) : FlyoutBase
+    {
+        private readonly FlyoutMenuHost host = host;
+
+        protected override Control CreatePresenter()
+            => this.host.CreatePresenter();
+    }
 }

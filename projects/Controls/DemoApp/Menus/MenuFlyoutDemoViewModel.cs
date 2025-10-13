@@ -5,37 +5,35 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls.Demo.Menus;
 
 /// <summary>
-/// Demonstrates the MenuFlyout presentation using MenuBuilder.
-/// Shows context menus with proper UX patterns.
+/// Demonstrates the MenuFlyout in two scenarios using a single menu specification.
+/// Shows the same menu activated via context menu (right-click) and MenuButton (click).
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModels must be public")]
 public partial class MenuFlyoutDemoViewModel : ObservableObject
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuFlyoutDemoViewModel"/> class.
     /// </summary>
-    public MenuFlyoutDemoViewModel()
+    /// <param name="loggerFactory">The factory used to create loggers for menu operations.</param>
+    public MenuFlyoutDemoViewModel(ILoggerFactory loggerFactory)
     {
-        this.ContextMenu = this.BuildContextMenu();
-        this.SimpleMenu = this.BuildSimpleMenu();
+        this.SharedMenu = this.BuildSharedMenu(loggerFactory);
     }
 
     /// <summary>
-    /// Gets the menu source leveraged by the dynamic context flyout demo.
+    /// Gets the shared menu source used by both the context menu and MenuButton scenarios.
     /// </summary>
-    public IMenuSource ContextMenu { get; }
-
-    /// <summary>
-    /// Gets the simple menu source that powers the static context flyout demo.
-    /// </summary>
-    public IMenuSource SimpleMenu { get; }
+    public IMenuSource SharedMenu { get; }
 
     [ObservableProperty]
-    public partial string LastActionMessage { get; set; } = "Right-click the areas below to see context menus.";
+    public partial string LastActionMessage { get; set; } = "Right-click the left area or click the button on the right.";
 
     [ObservableProperty]
     public partial bool WordWrapEnabled { get; set; } = false;
@@ -43,46 +41,36 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
     [ObservableProperty]
     public partial string TextAlignment { get; set; } = "Left";
 
-    private IMenuSource BuildContextMenu()
+    private IMenuSource BuildSharedMenu(ILoggerFactory loggerFactory)
     {
-        var menuBuilder = new MenuBuilder()
-            .AddMenuItem(this.CreateClipboardItem("Context Cut", Symbol.Cut, "Ctrl+X", "Text cut to clipboard"))
-            .AddMenuItem(this.CreateClipboardItem("Context Copy", Symbol.Copy, "Ctrl+C", "Text copied to clipboard"))
-            .AddMenuItem(this.CreateClipboardItem("Context Paste", Symbol.Paste, "Ctrl+V", "Text pasted from clipboard"))
+        var menuBuilder = new MenuBuilder(loggerFactory)
+            .AddMenuItem(this.CreateClipboardItem("Cut", Symbol.Cut, "Ctrl+X", "Text cut to clipboard"))
+            .AddMenuItem(this.CreateClipboardItem("Copy", Symbol.Copy, "Ctrl+C", "Text copied to clipboard"))
+            .AddMenuItem(this.CreateClipboardItem("Paste", Symbol.Paste, "Ctrl+V", "Text pasted from clipboard"))
             .AddSeparator()
             .AddMenuItem(this.CreateFormattingSubmenu());
 
         return menuBuilder.Build();
     }
 
-    private IMenuSource BuildSimpleMenu()
-    {
-        var menuBuilder = new MenuBuilder()
-            .AddMenuItem(new MenuItemData { Text = "📝 Edit", Command = this.CreateCommand("Edit action invoked") })
-            .AddMenuItem(new MenuItemData { Text = "📋 Copy", Command = this.CreateCommand("Copy action invoked") })
-            .AddMenuItem(new MenuItemData { Text = "🗑️ Delete", Command = this.CreateCommand("Delete action invoked") })
-            .AddSeparator()
-            .AddMenuItem(new MenuItemData { Text = "📋 Properties", Command = this.CreateCommand("Properties opened") });
-
-        return menuBuilder.Build();
-    }
-
     private MenuItemData CreateClipboardItem(string text, Symbol symbol, string accelerator, string message)
-    {
-        return new MenuItemData
+        => new()
         {
             Text = text,
-            Icon = new SymbolIconSource { Symbol = symbol },
+            Icon = new FontIconSource
+            {
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                Glyph = ((char)symbol).ToString(),
+                FontSize = 16,
+            },
             AcceleratorText = accelerator,
             Command = this.CreateCommand(message),
         };
-    }
 
     private MenuItemData CreateFormattingSubmenu()
-    {
-        return new MenuItemData
+        => new()
         {
-            Text = "Context Format",
+            Text = "Format",
             SubItems =
             [
                 this.CreateWordWrapItem(),
@@ -92,34 +80,29 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
                 this.CreateAlignmentItem("Right"),
             ],
         };
-    }
 
     private MenuItemData CreateWordWrapItem()
-    {
-        return new MenuItemData
+        => new()
         {
-            Text = "Context Word Wrap",
+            Text = "Word Wrap",
             IsCheckable = true,
             IsChecked = this.WordWrapEnabled,
             Command = new RelayCommand<MenuItemData?>(this.ToggleWordWrap),
         };
-    }
 
     private MenuItemData CreateAlignmentItem(string alignment)
-    {
-        return new MenuItemData
+        => new()
         {
             Text = alignment switch
             {
-                "Center" => "Context Align Center",
-                "Right" => "Context Align Right",
-                _ => "Context Align Left",
+                "Center" => "Align Center",
+                "Right" => "Align Right",
+                _ => "Align Left",
             },
             RadioGroupId = "Alignment",
             IsChecked = string.Equals(this.TextAlignment, alignment, StringComparison.Ordinal),
             Command = new RelayCommand<MenuItemData?>(this.SelectAlignment),
         };
-    }
 
     private void ToggleWordWrap(MenuItemData? menuItem)
     {
@@ -150,7 +133,5 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
     }
 
     private RelayCommand CreateCommand(string message)
-    {
-        return new RelayCommand(() => this.LastActionMessage = message);
-    }
+        => new(() => this.LastActionMessage = message);
 }

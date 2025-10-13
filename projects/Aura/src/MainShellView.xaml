@@ -67,12 +67,12 @@
                 Background="Transparent"
                 Orientation="Horizontal"
                 Visibility="Collapsed">
-                <Button x:Name="SettingsButton">
-                    <Button.Flyout>
-                        <cm:MenuFlyout MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}" />
-                    </Button.Flyout>
+                <cm:MenuButton
+                    Chrome="Transparent"
+                    CornerRadius="5"
+                    MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}">
                     <FontIcon FontSize="16" Glyph="&#xE713;" />
-                </Button>
+                </cm:MenuButton>
             </StackPanel>
         </Grid>
 
