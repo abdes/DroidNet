@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
-///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or <see cref="MenuFlyout"/>.
+///     Represents an individual menu item control, used within a <see cref="MenuBar"/> or cascaded menu flyouts.
 /// </summary>
 public partial class MenuItem
 {

@@ -15,6 +15,7 @@
         <cm:MenuBar
             x:Name="DemoMenuBar"
             Grid.Row="0"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
             MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
 
         <!--  Content Area  -->

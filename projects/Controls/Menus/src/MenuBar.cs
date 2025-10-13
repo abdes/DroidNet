@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,13 +17,17 @@ namespace DroidNet.Controls.Menus;
 ///     materializes cascading submenus through an <see cref="ICascadedMenuHost"/>.
 /// </summary>
 [TemplatePart(Name = RootItemsRepeaterPart, Type = typeof(ItemsRepeater))]
+[SuppressMessage(
+    "Microsoft.Design",
+    "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable",
+    Justification = "WinUI controls follow framework pattern of cleanup in Unloaded event and destructor, not IDisposable")]
 public sealed partial class MenuBar : Control
 {
     private const string RootItemsRepeaterPart = "PART_RootItemsRepeater";
 
     private ItemsRepeater? rootItemsRepeater;
     private ICascadedMenuHost? activeHost;
-    private Func<ICascadedMenuHost> hostFactory = static () => new PopupMenuHost();
+    private Func<ICascadedMenuHost> hostFactory = static () => new FlyoutMenuHost();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -40,6 +46,8 @@ public sealed partial class MenuBar : Control
             // Notify the interaction controller that a root item is losing focus.
             controller.OnGettingFocus(this.CreateRootContext(), args.OldFocusedElement);
         };
+
+        this.Unloaded += this.OnUnloaded;
     }
 
     /// <summary>
@@ -79,6 +87,12 @@ public sealed partial class MenuBar : Control
         this.rootItemsRepeater.ElementClearing += this.OnItemClearing;
     }
 
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        this.activeHost?.Dispose();
+        this.activeHost = null;
+    }
+
     private void OnItemPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
         if (args.Element is not MenuItem menuItem || menuItem.ItemData is null)
@@ -113,6 +127,7 @@ public sealed partial class MenuBar : Control
         menuItem.SubmenuRequested -= this.MenuItem_OnSubmenuRequested;
         menuItem.HoverStarted -= this.MenuItem_OnHoverStarted;
         menuItem.HoverEnded -= this.MenuItem_OnHoverEnded;
+        menuItem.GettingFocus -= this.MenuItem_OnGettingFocus;
         menuItem.GotFocus -= this.MenuItem_OnGotFocus;
         menuItem.LostFocus -= this.MenuItem_OnLostFocus;
         menuItem.PreviewKeyDown -= this.MenuItem_OnPreviewKeyDown;
@@ -258,7 +273,7 @@ public sealed partial class MenuBar : Control
             }
             else
             {
-                context = this.CreateRootContext();
+                context = MenuInteractionContext.ForRoot(this);
             }
 
             handled = controller.OnDismissRequested(context, MenuDismissKind.KeyboardInput);
@@ -303,7 +318,20 @@ public sealed partial class MenuBar : Control
     }
 
     private void OnHostClosed(object? sender, EventArgs e)
-        => this.LogHostClosed();
+    {
+        this.LogHostClosed();
+
+        if (this.MenuSource is not { Items: { } items })
+        {
+            return;
+        }
+
+        var expanded = items.FirstOrDefault(static item => item.IsExpanded);
+        if (expanded is { })
+        {
+            expanded.IsExpanded = false;
+        }
+    }
 
     private MenuInteractionContext CreateRootContext(ICascadedMenuSurface? columnSurface = null)
     {

@@ -6,6 +6,7 @@
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuItem.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/ColumnPresenter.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuBar.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuButton.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CascadedColumnsPresenter.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

@@ -39,6 +39,11 @@ internal interface ICascadedMenuHost : IDisposable, ICascadedMenuSurface
     public ICascadedMenuSurface Surface { get; }
 
     /// <summary>
+    ///     Gets the root UI element (presenter) that can receive input events like KeyDown.
+    /// </summary>
+    public UIElement RootElement { get; }
+
+    /// <summary>
     ///     Gets the element the host is currently anchored to, if any.
     /// </summary>
     public FrameworkElement? Anchor { get; }
@@ -68,7 +73,15 @@ internal interface ICascadedMenuHost : IDisposable, ICascadedMenuSurface
     /// </summary>
     /// <param name="anchor">The menu item used as the positional anchor.</param>
     /// <param name="navigationMode">The navigation mode that triggered the request.</param>
-    public void ShowAt(MenuItem anchor, MenuNavigationMode navigationMode);
+    public void ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode);
+
+    /// <summary>
+    ///     Displays the cascading menu at a specific position relative to the anchor element.
+    /// </summary>
+    /// <param name="anchor">The framework element used as the positional anchor.</param>
+    /// <param name="position">The position relative to the anchor element.</param>
+    /// <param name="navigationMode">The navigation mode that triggered the request.</param>
+    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode);
 }
 
 /// <summary>

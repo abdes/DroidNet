@@ -13,6 +13,7 @@ A sophisticated, high-performance menu system for WinUI 3 applications featuring
 - **🚀 Lightning-Fast Navigation** – Zero-delay hover switching with smart submenu expansion and single-branch policy
 - **📊 Cascading Column Architecture** – Hierarchical menu levels rendered via `CascadedColumnsPresenter` and `ColumnPresenter`
 - **🔌 Pluggable Hosting** – Abstract `ICascadedMenuHost` with `PopupMenuHost` and `FlyoutMenuHost` implementations
+- **🪟 Surface Switchers** – Built-in `MenuButton` root surface and `ContextMenu` attached surface share the same menu definition
 - **🎨 Consistent Visual Language** – Four-column layout (Icon | Text | Accelerator | State) via custom `MenuItem` control
 - **⌨️ Complete Keyboard Support** – Arrow navigation, mnemonics, accelerators, Enter/Space activation, Escape dismissal
 - **🔘 Radio Groups & Toggle Items** – Automatic coordination via `MenuServices` with single-selection semantics
@@ -189,22 +190,59 @@ Add a horizontal menu bar implementing `IRootMenuSurface`:
 </Page>
 ```
 
-### 3. Use as MenuFlyout (Cascaded Surface)
+### 3. Drive a MenuButton (Root Surface)
 
-Reuse the same menu definition as a context menu via `ICascadedMenuHost`:
+`MenuButton` shares the same interaction controller as `MenuBar` and can optionally switch visual chrome via the `Chrome` property:
+
+```xml
+<StackPanel Orientation="Horizontal" Spacing="12">
+    <!-- Standard button chrome -->
+    <menus:MenuButton
+        MenuSource="{x:Bind ViewModel.AppMenu}"
+        Content="Main Menu" />
+
+    <!-- Transparent chrome with rounded hover clipping -->
+    <menus:MenuButton
+        MenuSource="{x:Bind ViewModel.AppMenu}"
+        Chrome="Transparent"
+        CornerRadius="12">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE713;" />
+            <TextBlock Text="Quick Actions" />
+        </StackPanel>
+    </menus:MenuButton>
+</StackPanel>
+```
+
+### 4. Attach as a Right-Click Context Menu
+
+The `ContextMenu` attached property wires the same menu definition to any `FrameworkElement` without manual resource merges:
+
+```xml
+<Border
+    Height="180"
+    Padding="16"
+    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+    menus:ContextMenu.MenuSource="{x:Bind ViewModel.AppMenu}">
+    <TextBlock Text="Right-click anywhere inside this area" />
+</Border>
+```
+
+### 5. Use as MenuFlyout (Cascaded Surface)
+
+Need to host the menu inside an existing WinUI flyout pipeline? Reuse the `MenuFlyout` control, which internally uses the flyout host implementation:
 
 ```xml
 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
     <Border.ContextFlyout>
-        <!-- MenuFlyout uses FlyoutMenuHost internally -->
         <menus:MenuFlyout MenuSource="{x:Bind ViewModel.AppMenu}" />
     </Border.ContextFlyout>
 
-    <TextBlock Text="Right-click for context menu" />
+    <TextBlock Text="Right-click for menu flyout" />
 </Border>
 ```
 
-### 4. Handle Menu Events
+### 6. Handle Menu Events
 
 ```csharp
 private void OnMenuItemInvoked(object sender, MenuItemInvokedEventArgs args)
@@ -506,6 +544,15 @@ Horizontal menu bar control implementing `IRootMenuSurface`.
 
 Uses pluggable `ICascadedMenuHost` (default: `PopupMenuHost`) to render submenu cascades via `CascadedColumnsPresenter`.
 
+#### `MenuButton`
+
+Root-level button control that exposes `IRootMenuSurface` behavior while retaining the WinUI `Button` template. Instances opt into alternative visual chrome by setting the `Chrome` dependency property:
+
+- `Chrome="Default"` (default) inherits the system button styling.
+- `Chrome="Transparent"` removes fill/border while clipping hover/press states to the configured `CornerRadius`.
+
+`MenuButton` automatically loads its resource dictionary; consumers can switch chrome without merging XAML by setting the property at design time or runtime.
+
 #### `MenuFlyout`
 
 Custom flyout surface for context menus and dropdowns.
@@ -570,6 +617,10 @@ Single vertical column of menu items.
 - `IMenuSource? MenuSource` – Data and services
 - `MenuInteractionController? Controller` – Interaction coordinator
 - `CascadedColumnsPresenter? OwnerPresenter` – Parent presenter
+
+#### `ContextMenu`
+
+Attached behavior that binds a menu definition to any `FrameworkElement` through the `menus:ContextMenu.MenuSource` property. When the element raises a context request (right-click, Shift+F10), the control spins up the appropriate host (`PopupMenuHost` by default) and mirrors the same interaction model used by menu bars and menu buttons.
 
 ### Host Abstraction Layer
 
@@ -865,6 +916,11 @@ host.MenuSource = submenuView;
 - `PointerInput` – Mouse/touch
 - `KeyboardInput` – Keyboard
 - `Programmatic` – Code-driven
+
+#### `MenuButtonChrome`
+
+- `Default` – Standard WinUI button chrome loaded from `DefaultButtonStyle`.
+- `Transparent` – Borderless chrome that clips hover/press states to the button's `CornerRadius`.
 
 ## 🧪 Testing
 

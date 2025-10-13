@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -55,6 +54,9 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.presenterKeyDownHandler = this.HandleEscDismissal;
         this.presenter.AddHandler(UIElement.KeyDownEvent, this.presenterKeyDownHandler, handledEventsToo: true);
 
+        // Subscribe to presenter events to relay to controller
+        this.presenter.ItemInvoked += this.OnPresenterItemInvoked;
+
         this.rootPointerPressedHandler = this.OnRootPointerPressed;
         this.rootKeyDownHandler = this.HandleEscDismissal;
 
@@ -88,6 +90,9 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     public ICascadedMenuSurface Surface => this;
 
     /// <inheritdoc />
+    public UIElement RootElement => this.presenter;
+
+    /// <inheritdoc />
     public IRootMenuSurface? RootSurface
     {
         get => this.presenter.RootSurface;
@@ -116,49 +121,38 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     public bool IsOpen => this.popup.IsOpen;
 
     /// <inheritdoc />
-    public MenuItemData GetAdjacentItem(MenuLevel level, MenuItemData itemData, MenuNavigationDirection direction, bool wrap = true)
-        => this.presenter.GetAdjacentItem(level, itemData, direction, wrap);
-
-    /// <inheritdoc />
-    public MenuItemData? GetExpandedItem(MenuLevel level)
-        => this.presenter.GetExpandedItem(level);
-
-    /// <inheritdoc />
-    public MenuItemData? GetFocusedItem(MenuLevel level)
-        => this.presenter.GetFocusedItem(level);
-
-    /// <inheritdoc />
-    public bool FocusItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.presenter.FocusItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public bool FocusFirstItem(MenuLevel level, MenuNavigationMode navigationMode)
-        => this.presenter.FocusFirstItem(level, navigationMode);
-
-    /// <inheritdoc />
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.presenter.ExpandItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public void CollapseItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
-        => this.presenter.CollapseItem(level, itemData, navigationMode);
-
-    /// <inheritdoc />
-    public void TrimTo(MenuLevel level)
-        => this.presenter.TrimTo(level);
-
-    /// <inheritdoc />
-    public void ShowAt(MenuItem anchorItem, MenuNavigationMode navigationMode)
+    public void ShowAt(FrameworkElement anchorElement, MenuNavigationMode navigationMode)
     {
-        ArgumentNullException.ThrowIfNull(anchorItem);
+        ArgumentNullException.ThrowIfNull(anchorElement);
 
-        this.anchor = anchorItem;
+        this.anchor = anchorElement;
         this.pendingDismissKind = MenuDismissKind.Programmatic;
 
-        var request = new PopupRequest(++this.nextToken, anchorItem, navigationMode);
+        var request = new PopupRequest(++this.nextToken, anchorElement, navigationMode);
         this.pendingRequest = request;
 
-        this.EnsurePointerEventSubscription(anchorItem);
+        this.EnsurePointerEventSubscription(anchorElement);
+
+        var isReanchor = this.state != PopupLifecycleState.Idle || this.popup.IsOpen;
+        this.suppressProgrammaticDismissForPendingOpen = isReanchor;
+
+        this.Opening?.Invoke(this, EventArgs.Empty);
+
+        this.ScheduleOpen();
+    }
+
+    /// <inheritdoc />
+    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+
+        this.anchor = anchor;
+        this.pendingDismissKind = MenuDismissKind.Programmatic;
+
+        var request = new PopupRequest(++this.nextToken, anchor, navigationMode, customPosition: position);
+        this.pendingRequest = request;
+
+        this.EnsurePointerEventSubscription(anchor);
 
         var isReanchor = this.state != PopupLifecycleState.Idle || this.popup.IsOpen;
         this.suppressProgrammaticDismissForPendingOpen = isReanchor;
@@ -338,6 +332,18 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         }
     }
 
+    private void OnPresenterItemInvoked(object? sender, MenuItemInvokedEventArgs e)
+    {
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
+
+        // Create the context - we're in a cascaded menu, so use the column surface
+        var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, this.RootSurface);
+        controller.OnItemInvoked(context, e.ItemData, e.InputSource);
+    }
+
     private void CompleteClose(MenuDismissKind dismissalKind, bool resetSurface, bool hasPendingRequest)
     {
         this.LogPopupClosed(dismissalKind);
@@ -361,13 +367,11 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         {
             this.presenter?.Dismiss();
 
-            Debug.WriteLine("[PopupMenuHost] Resetting MenuSource after close");
             this.MenuSource = null;
 
             if (controller is not null && rootSurface is not null)
             {
                 var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, rootSurface);
-                Debug.WriteLine("[PopupMenuHost] Notifying controller.OnDismissed (column)");
                 controller.OnDismissed(context);
             }
         }
@@ -445,9 +449,12 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
 
         var popupWasOpen = this.popup.IsOpen;
         this.LogShowAt(anchorElement, request.NavigationMode, targetBounds);
-        this.popup.HorizontalOffset = targetBounds.Left;
-        this.popup.VerticalOffset = targetBounds.Bottom;
+
+        this.SetPopupPosition(request, targetBounds);
         this.popup.XamlRoot = anchorElement.XamlRoot;
+
+        // Align theme with the anchor to match Flyout behavior (Popup doesn't inherit theme automatically)
+        this.ApplyThemeFromAnchor(anchorElement);
 
         if (!popupWasOpen)
         {
@@ -465,20 +472,52 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         }
     }
 
-    private bool IsAnchorLayoutReady(MenuItem anchorElement) => this.popup is not null
+    // Mirror the anchor's ActualTheme so ThemeResource lookups in the presenter resolve
+    // consistently with FlyoutPresenter visuals.
+    private void ApplyThemeFromAnchor(FrameworkElement anchorElement) =>
+        this.presenter.RequestedTheme = anchorElement.ActualTheme;
+
+    private bool IsAnchorLayoutReady(FrameworkElement anchorElement) => this.popup is not null
         && anchorElement.IsLoaded
         && anchorElement.XamlRoot is not null
         && anchorElement.ActualWidth > 0
         && anchorElement.ActualHeight > 0;
+
+    private void SetPopupPosition(PopupRequest request, Rect targetBounds)
+    {
+        // For custom positions (e.g., context menus at pointer), use the exact position
+        // For anchor-based positioning (e.g., MenuItems), position below the anchor
+        if (request.CustomPosition.HasValue)
+        {
+            this.popup.HorizontalOffset = targetBounds.Left;
+            this.popup.VerticalOffset = targetBounds.Top;
+        }
+        else
+        {
+            this.popup.HorizontalOffset = targetBounds.Left;
+            this.popup.VerticalOffset = targetBounds.Bottom;
+        }
+    }
 
     private bool TryGetAnchorBounds(PopupRequest request, out Rect targetBounds)
     {
         try
         {
             var transform = request.Anchor.TransformToVisual(visual: null);
-            var topLeft = transform.TransformPoint(new Point(0, 0));
-            var bottomRight = transform.TransformPoint(new Point(request.Anchor.ActualWidth, request.Anchor.ActualHeight));
-            targetBounds = new Rect(topLeft, bottomRight);
+
+            // If custom position is provided, use it; otherwise use anchor's bottom-left
+            if (request.CustomPosition is { } customPos)
+            {
+                var topLeft = transform.TransformPoint(customPos);
+                targetBounds = new Rect(topLeft, new Windows.Foundation.Size(1, 1));
+            }
+            else
+            {
+                var topLeft = transform.TransformPoint(new Point(0, 0));
+                var bottomRight = transform.TransformPoint(new Point(request.Anchor.ActualWidth, request.Anchor.ActualHeight));
+                targetBounds = new Rect(topLeft, bottomRight);
+            }
+
             return true;
         }
         catch (InvalidOperationException ex)
@@ -508,9 +547,9 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.Closed?.Invoke(this, EventArgs.Empty);
     }
 
-    private void EnsurePointerEventSubscription(MenuItem anchorItem)
+    private void EnsurePointerEventSubscription(FrameworkElement anchorElement)
     {
-        if (anchorItem.XamlRoot?.Content is not UIElement rootContent)
+        if (anchorElement.XamlRoot?.Content is not UIElement rootContent)
         {
             return;
         }
@@ -634,9 +673,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         }
 
         var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, rootSurface);
-        Debug.WriteLine($"[PopupMenuHost] Requesting controller dismiss kind={kind} contextKind={context.Kind} column={context.ColumnLevel}");
         var handled = controller.OnDismissRequested(context, kind);
-        Debug.WriteLine($"[PopupMenuHost] Controller dismiss handled={handled}");
         return handled;
     }
 }

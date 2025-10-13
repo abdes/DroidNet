@@ -19,7 +19,7 @@ public sealed partial class ColumnPresenter
     public static readonly DependencyProperty MenuSourceProperty = DependencyProperty.Register(
         nameof(MenuSource),
         typeof(IMenuSource),
-        typeof(MenuFlyout),
+        typeof(ColumnPresenter),
         new PropertyMetadata(defaultValue: null));
 
     /// <summary>
