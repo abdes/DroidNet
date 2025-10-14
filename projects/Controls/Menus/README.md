@@ -14,6 +14,7 @@ A sophisticated, high-performance menu system for WinUI 3 applications featuring
 - **📊 Cascading Column Architecture** – Hierarchical menu levels rendered via `CascadedColumnsPresenter` and `ColumnPresenter`
 - **🔌 Pluggable Hosting** – Abstract `ICascadedMenuHost` with `PopupMenuHost` and `FlyoutMenuHost` implementations
 - **🪟 Surface Switchers** – Built-in `MenuButton` root surface and `ContextMenu` attached surface share the same menu definition
+- **🪟 Space-Swapping Expandable Bar** – `ExpandableMenuBar` toggles between a compact hamburger and full menu bar in place
 - **🎨 Consistent Visual Language** – Four-column layout (Icon | Text | Accelerator | State) via custom `MenuItem` control
 - **⌨️ Complete Keyboard Support** – Arrow navigation, mnemonics, accelerators, Enter/Space activation, Escape dismissal
 - **🔘 Radio Groups & Toggle Items** – Automatic coordination via `MenuServices` with single-selection semantics
@@ -51,7 +52,8 @@ The menu system is built on three foundational layers:
 #### 3. Presentation Layer – How to Render It
 
 - **`MenuItem`** – Templated control rendering the four-column item layout
-- **`MenuBar`** – Horizontal menu bar implementing `IRootMenuSurface`
+- **`ExpandableMenuBar`** – Space-swapping root surface that toggles between a hamburger affordance and a full menu bar in-place
+- **`MenuBar`** – Horizontal root surface implementing `IRootMenuSurface` (also embedded within `ExpandableMenuBar`)
 - **`MenuFlyout`** – Popup flyout surface using `FlyoutBase`
 - **`CascadedColumnsPresenter`** – Multi-column stack renderer for hierarchical menus
 - **`ColumnPresenter`** – Single vertical column of menu items
@@ -67,9 +69,11 @@ flowchart TD
 
     Input --> Controller["🎯 MenuInteractionController<br/>- Navigation mode switching<br/>- Focus capture/restoration<br/>- Single-branch submenu policy"]
 
-    Controller --> RootSurface["📊 IRootMenuSurface<br/>(MenuBar)"]
+    Controller --> ExpandableRoot["🪟 ExpandableMenuBar<br/>Hamburger ↔ MenuBar"]
+    Controller --> RootSurface["📊 MenuBar<br/>IRootMenuSurface"]
     Controller --> CascadedSurface["📋 ICascadedMenuSurface<br/>(via Host)"]
 
+    ExpandableRoot --> RootSurface
     CascadedSurface --> PopupHost["🪟 PopupMenuHost<br/>(Popup-backed)"]
     CascadedSurface --> FlyoutHost["🎈 FlyoutMenuHost<br/>(MenuFlyout-backed)"]
 
@@ -83,6 +87,7 @@ flowchart TD
 
     style Input fill:#f0f0f0,stroke:#333,stroke-width:2px,color:#000
     style Controller fill:#0078d4,stroke:#004578,stroke-width:3px,color:#fff
+    style ExpandableRoot fill:#ffaa44,stroke:#c26600,stroke-width:2px,color:#000
     style RootSurface fill:#ffb900,stroke:#c87000,stroke-width:2px,color:#000
     style CascadedSurface fill:#ff8c00,stroke:#c56000,stroke-width:2px,color:#000
     style PopupHost fill:#107c10,stroke:#0b5a0b,stroke-width:2px,color:#fff
@@ -160,9 +165,32 @@ public partial class ShellViewModel : ObservableObject
 }
 ```
 
-### 2. Use in MenuBar (Root Surface)
+### 2. Use the ExpandableMenuBar (Space-Swapping Root Surface)
 
-Add a horizontal menu bar implementing `IRootMenuSurface`:
+`ExpandableMenuBar` keeps the title bar uncluttered by default and swaps the hamburger (☰) for a full `MenuBar` without opening a popup. Bind `IsExpanded` two-way so view models can coordinate window chrome or keyboard shortcuts.
+
+```xml
+<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+    <menus:ExpandableMenuBar
+        MenuSource="{x:Bind ViewModel.AppMenu}"
+        IsExpanded="{x:Bind ViewModel.IsMenuExpanded, Mode=TwoWay}" />
+</StackPanel>
+```
+
+**Space-swapping flow:**
+
+- Default: the hamburger sits in-line with your app title and window controls.
+- Click the hamburger: the glyph disappears, the embedded `MenuBar` materializes in the same space, and the first interactive root item auto-expands.
+- Dismissal: invoking a command, pressing `Esc`, or clicking outside collapses back to the hamburger instantly—no light-dismiss overlays.
+
+**Lifecycle hooks:**
+
+- `Expanded` fires when the control finishes expanding. Use it to adjust layout or chrome while the bar is visible.
+- `Collapsed` fires after the control returns to the compact state, handing you a `MenuDismissedEventArgs` that explains whether the user used keyboard, pointer, mnemonics, or a programmatic dismissal.
+
+### 3. Use the MenuBar (Traditional Root Surface)
+
+Add a horizontal menu bar implementing `IRootMenuSurface`. The same `MenuBar` instance is embedded inside `ExpandableMenuBar`, so any customization you make here applies there as well.
 
 ```xml
 <Page
@@ -190,7 +218,7 @@ Add a horizontal menu bar implementing `IRootMenuSurface`:
 </Page>
 ```
 
-### 3. Drive a MenuButton (Root Surface)
+### 4. Drive a MenuButton (Alternative Root Surface)
 
 `MenuButton` shares the same interaction controller as `MenuBar` and can optionally switch visual chrome via the `Chrome` property:
 
@@ -214,7 +242,7 @@ Add a horizontal menu bar implementing `IRootMenuSurface`:
 </StackPanel>
 ```
 
-### 4. Attach as a Right-Click Context Menu
+### 5. Attach as a Right-Click Context Menu
 
 The `ContextMenu` attached property wires the same menu definition to any `FrameworkElement` without manual resource merges:
 
@@ -228,7 +256,7 @@ The `ContextMenu` attached property wires the same menu definition to any `Frame
 </Border>
 ```
 
-### 5. Use as MenuFlyout (Cascaded Surface)
+### 6. Use as MenuFlyout (Cascaded Surface)
 
 Need to host the menu inside an existing WinUI flyout pipeline? Reuse the `MenuFlyout` control, which internally uses the flyout host implementation:
 
@@ -242,7 +270,7 @@ Need to host the menu inside an existing WinUI flyout pipeline? Reuse the `MenuF
 </Border>
 ```
 
-### 6. Handle Menu Events
+### 7. Handle Menu Events
 
 ```csharp
 private void OnMenuItemInvoked(object sender, MenuItemInvokedEventArgs args)
@@ -522,6 +550,28 @@ Custom templated control rendering the four-column item layout for all menu type
 - `PART_SubmenuArrow` – Right arrow (→)
 - `PART_Checkmark` – Check indicator (✓)
 - `PART_SeparatorBorder` – Divider line
+
+#### `ExpandableMenuBar`
+
+Space-efficient root surface that keeps a hamburger affordance in compact mode and swaps it for a full `MenuBar` in-place when expanded. The control uses the same `MenuInteractionController` as `MenuBar`, so hover navigation, mnemonics, and focus management behave identically whether the bar is expanded manually or programmatically.
+
+**Behavior highlights:**
+
+- Default state keeps only the hamburger visible in layout—ideal for title bars.
+- Expanding hides the hamburger, reveals the embedded `MenuBar`, and automatically expands the first interactive root item for a “lightning start.”
+- Dismissing (Escape, outside click, command completion, or code) restores the hamburger instantly without relying on popups or light-dismiss chrome.
+
+**Lifecycle events:**
+
+- `Expanded` – Raised after the control transitions to the full menu bar.
+- `Collapsed` – Raised when the control returns to the hamburger state and provides the dismissal reason via `MenuDismissedEventArgs.Kind`.
+
+**Template parts:**
+
+- `PART_RootGrid` – Root container holding both states.
+- `PART_HamburgerButton` – The toggle button rendered in compact mode.
+- `PART_MenuBarContainer` – Layout slot that hosts the menu bar when expanded.
+- `PART_MenuBar` – The embedded `MenuBar` instance that projects the shared `IMenuSource`.
 
 #### `MenuBar`
 
@@ -885,6 +935,20 @@ host.MenuSource = submenuView;
 | `SubmenuRequested` | `MenuSubmenuRequestEventArgs` | Submenu should open |
 | `HoverStarted` | `MenuItemHoverChangedEventArgs` | Pointer entered |
 | `HoverEnded` | `MenuItemHoverChangedEventArgs` | Pointer left |
+
+### ExpandableMenuBar Members
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `MenuSource` | `IMenuSource?` | Shared menu definition rendered by both the hamburger and expanded bar |
+| `IsExpanded` | `bool` | Indicates whether the control is currently showing the full menu bar |
+
+### ExpandableMenuBar Events
+
+| Event | Args | Description |
+|-------|------|-------------|
+| `Expanded` | `EventArgs` | Raised after the control transitions to the expanded state |
+| `Collapsed` | `MenuDismissedEventArgs` | Raised after the control collapses; includes the dismissal reason |
 
 ### Enumerations
 
