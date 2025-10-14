@@ -12,8 +12,8 @@ using Microsoft.UI.Xaml.Media;
 namespace DroidNet.Controls.Demo.Menus;
 
 /// <summary>
-/// Demonstrates the MenuBar presentation using MenuBuilder.
-/// Shows how to build a traditional WinUI MenuBar with proper UX patterns.
+/// Demonstrates both the standard <see cref="DroidNet.Controls.Menus.MenuBar"/> and the <see cref="DroidNet.Controls.Menus.ExpandableMenuBar"/> surfaces built on the shared MenuBuilder data.
+/// Highlights traditional WinUI MenuBar UX patterns plus the space-swapping expandable variant.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public partial class MenuBarDemoViewModel : ObservableObject
@@ -33,7 +33,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
     public IMenuSource MenuBarSource { get; }
 
     [ObservableProperty]
-    public partial string LastActionMessage { get; set; } = "Welcome! Try the MenuBar items above.";
+    public partial string LastActionMessage { get; set; } = "Welcome! Try the menu bar surfaces above.";
 
     [ObservableProperty]
     public partial bool AutoSaveEnabled { get; set; } = true;

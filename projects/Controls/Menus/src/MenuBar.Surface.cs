@@ -38,7 +38,7 @@ public sealed partial class MenuBar : IRootMenuSurface
         {
             expandedItem.IsExpanded = false;
             this.LogDismissingHost();
-            host.Dismiss(MenuDismissKind.Programmatic);
+            host.Dismiss(kind);
             return;
         }
 
@@ -47,6 +47,8 @@ public sealed partial class MenuBar : IRootMenuSurface
             var context = MenuInteractionContext.ForRoot(this, this.activeHost?.Surface);
             controller.OnDismissed(context);
         }
+
+        this.RaiseDismissed(kind);
     }
 
     /// <inheritdoc />

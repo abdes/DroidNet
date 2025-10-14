@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuBarDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -8,26 +8,52 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--  MenuBar Demo  -->
-        <cm:MenuBar
-            x:Name="DemoMenuBar"
+        <!--  Standard MenuBar  -->
+        <Border
             Grid.Row="0"
+            Padding="12,8"
             Background="{ThemeResource LayerFillColorDefaultBrush}"
-            MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            CornerRadius="0">
+            <StackPanel Spacing="4">
+                <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Standard MenuBar" />
+                <cm:MenuBar
+                    x:Name="DemoMenuBar"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
+            </StackPanel>
+        </Border>
+
+        <!--  Expandable MenuBar  -->
+        <Border
+            Grid.Row="1"
+            Margin="0,8,0,0"
+            Padding="12,10"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="6">
+            <StackPanel Spacing="6">
+                <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Expandable MenuBar" />
+                <cm:ExpandableMenuBar x:Name="DemoExpandableMenuBar" MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
+            </StackPanel>
+        </Border>
 
         <!--  Content Area  -->
-        <ScrollViewer Grid.Row="1">
+        <ScrollViewer Grid.Row="2">
             <StackPanel Margin="20" Spacing="20">
 
                 <!--  Title and Description  -->
                 <StackPanel Spacing="8">
-                    <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuBar Demo" />
+                    <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="MenuBar &amp; ExpandableMenuBar Demo" />
                     <TextBlock
                         Style="{ThemeResource BodyTextBlockStyle}"
-                        Text="This demonstrates a traditional WinUI MenuBar built using MenuBuilder. The MenuBar appears at the top of the window and provides standard menu functionality with proper semantic icons and selection states."
+                        Text="This sample showcases two surface options powered by the same MenuBuilder data: a traditional MenuBar and the new ExpandableMenuBar that space-swaps between a hamburger button and the full bar."
                         TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -46,6 +72,29 @@
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Semantic icons appear on the LEFT (16×16px) to show what the command does" />
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Selection indicators appear SEPARATELY on the RIGHT (checkmarks, radio buttons)" />
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Both can appear together without conflict - the Auto Save item shows both!" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Expandable MenuBar Guidance  -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <StackPanel Spacing="12">
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="🟦 Space-Swapping Expandable Menu" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="Click the hamburger to swap the control into a full MenuBar, hover across items with zero delay, and click outside or press Escape to collapse." />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Shares the same MenuBuilder data and interaction controller as the standard bar" />
+                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Maintains focus and dismissal semantics when collapsing back to hamburger" />
+                        <ToggleSwitch
+                            Header="Try it programmatically"
+                            IsOn="{x:Bind DemoExpandableMenuBar.IsExpanded, Mode=TwoWay}"
+                            OffContent="Hamburger"
+                            OnContent="Expanded" />
                     </StackPanel>
                 </Border>
 
@@ -73,6 +122,7 @@
                     <TextBlock Text="• Radio button groups (Theme selection)" />
                     <TextBlock Text="• Keyboard mnemonics and accelerators" />
                     <TextBlock Text="• Proper separators" />
+                    <TextBlock Text="• Expandable MenuBar space-swapping between hamburger and full menu" />
                 </StackPanel>
 
             </StackPanel>

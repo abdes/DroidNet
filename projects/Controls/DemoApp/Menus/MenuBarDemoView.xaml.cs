@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace DroidNet.Controls.Demo.Menus;
 
 /// <summary>
-/// View for MenuBar demonstration.
+/// View for demonstrating both the standard <see cref="DroidNet.Controls.Menus.MenuBar"/> and the <see cref="DroidNet.Controls.Menus.ExpandableMenuBar"/>.
 /// </summary>
 [ViewModel(typeof(MenuBarDemoViewModel))]
 public sealed partial class MenuBarDemoView : Page
