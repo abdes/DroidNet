@@ -12,7 +12,7 @@ A sophisticated, high-performance menu system for WinUI 3 applications featuring
 - **🎯 Unified Interaction Model** – Single `MenuInteractionController` coordinates pointer and keyboard across all surfaces
 - **🚀 Lightning-Fast Navigation** – Zero-delay hover switching with smart submenu expansion and single-branch policy
 - **📊 Cascading Column Architecture** – Hierarchical menu levels rendered via `CascadedColumnsPresenter` and `ColumnPresenter`
-- **🔌 Pluggable Hosting** – Abstract `ICascadedMenuHost` with `PopupMenuHost` and `FlyoutMenuHost` implementations
+- **🔌 Pluggable Hosting** – Abstract `ICascadedMenuHost` with `PopupMenuHost` implementation
 - **🪟 Surface Switchers** – Built-in `MenuButton` root surface and `ContextMenu` attached surface share the same menu definition
 - **🪟 Space-Swapping Expandable Bar** – `ExpandableMenuBar` toggles between a compact hamburger and full menu bar in place
 - **🎨 Consistent Visual Language** – Four-column layout (Icon | Text | Accelerator | State) via custom `MenuItem` control
@@ -54,45 +54,50 @@ The menu system is built on three foundational layers:
 - **`MenuItem`** – Templated control rendering the four-column item layout
 - **`ExpandableMenuBar`** – Space-swapping root surface that toggles between a hamburger affordance and a full menu bar in-place
 - **`MenuBar`** – Horizontal root surface implementing `IRootMenuSurface` (also embedded within `ExpandableMenuBar`)
-- **`MenuFlyout`** – Popup flyout surface using `FlyoutBase`
-- **`CascadedColumnsPresenter`** – Multi-column stack renderer for hierarchical menus
-- **`ColumnPresenter`** – Single vertical column of menu items
-- **`ICascadedMenuHost`** – Abstraction for popup/flyout hosting strategies
-  - **`PopupMenuHost`** – `Popup`-backed host with lifecycle management
-  - **`FlyoutMenuHost`** – `MenuFlyout`-backed host for seamless integration
+- **`MenuButton`** – Button-based root surface for menu activation
+- **`ContextMenu`** – Attached property for right-click/contextual menus
+- **`PopupMenuHost`** – Popup-backed host for hierarchical/cascaded menus
 
-### The Interaction Flow
+### Class Diagram
 
 ```mermaid
 flowchart TD
     Input["👆 User Input<br/>(Pointer/Keyboard)"]
 
-    Input --> Controller["🎯 MenuInteractionController<br/>- Navigation mode switching<br/>- Focus capture/restoration<br/>- Single-branch submenu policy"]
+    Input --> Controller["🎯 MenuInteractionController"]
 
-    Controller --> ExpandableRoot["🪟 ExpandableMenuBar<br/>Hamburger ↔ MenuBar"]
-    Controller --> RootSurface["📊 MenuBar<br/>IRootMenuSurface"]
-    Controller --> CascadedSurface["📋 ICascadedMenuSurface<br/>(via Host)"]
+    Controller --> ExpandableMenuBar["🪟 ExpandableMenuBar"]
+    Controller --> MenuBar["📊 MenuBar"]
+    Controller --> MenuButton["🔘 MenuButton"]
+    Controller --> ContextMenu["🖱️ ContextMenu"]
 
-    ExpandableRoot --> RootSurface
-    CascadedSurface --> PopupHost["🪟 PopupMenuHost<br/>(Popup-backed)"]
-    CascadedSurface --> FlyoutHost["🎈 FlyoutMenuHost<br/>(MenuFlyout-backed)"]
+    ExpandableMenuBar --> MenuBar
 
-    RootSurface --> Presenter["📑 CascadedColumnsPresenter"]
-    PopupHost --> Presenter
-    FlyoutHost --> Presenter
+    MenuBar --> PopupMenuHost_MenuBar["🪟 PopupMenuHost (MenuBar)"]
+    MenuButton --> PopupMenuHost_MenuButton["🪟 PopupMenuHost (MenuButton)"]
+    ContextMenu --> PopupMenuHost_ContextMenu["🪟 PopupMenuHost (ContextMenu)"]
 
-    Presenter --> Columns["🗂️ Column Presenters<br/>Column[0] | Column[1] | Column[2] | ..."]
+    PopupMenuHost_MenuBar --> Presenter_MenuBar["📑 CascadedColumnsPresenter (MenuBar)"]
+    PopupMenuHost_MenuButton --> Presenter_MenuButton["📑 CascadedColumnsPresenter (MenuButton)"]
+    PopupMenuHost_ContextMenu --> Presenter_ContextMenu["📑 CascadedColumnsPresenter (ContextMenu)"]
 
-    Columns --> MenuItem["🎨 MenuItem<br/>(Custom Control)<br/>Icon | Text | Accelerator | State"]
+    Presenter_MenuBar --> Columns["🗂️ Column Presenters"]
+    Presenter_MenuButton --> Columns
+    Presenter_ContextMenu --> Columns
+    Columns --> MenuItem["🎨 MenuItem"]
 
     style Input fill:#f0f0f0,stroke:#333,stroke-width:2px,color:#000
     style Controller fill:#0078d4,stroke:#004578,stroke-width:3px,color:#fff
-    style ExpandableRoot fill:#ffaa44,stroke:#c26600,stroke-width:2px,color:#000
-    style RootSurface fill:#ffb900,stroke:#c87000,stroke-width:2px,color:#000
-    style CascadedSurface fill:#ff8c00,stroke:#c56000,stroke-width:2px,color:#000
-    style PopupHost fill:#107c10,stroke:#0b5a0b,stroke-width:2px,color:#fff
-    style FlyoutHost fill:#00b294,stroke:#008272,stroke-width:2px,color:#fff
-    style Presenter fill:#8764b8,stroke:#5c3d8a,stroke-width:2px,color:#fff
+    style ExpandableMenuBar fill:#ffaa44,stroke:#c26600,stroke-width:2px,color:#000
+    style MenuBar fill:#ffb900,stroke:#c87000,stroke-width:2px,color:#000
+    style MenuButton fill:#00b294,stroke:#008272,stroke-width:2px,color:#fff
+    style ContextMenu fill:#8764b8,stroke:#5c3d8a,stroke-width:2px,color:#fff
+    style PopupMenuHost_MenuBar fill:#107c10,stroke:#0b5a0b,stroke-width:2px,color:#fff
+    style PopupMenuHost_MenuButton fill:#107c10,stroke:#0b5a0b,stroke-width:2px,color:#fff
+    style PopupMenuHost_ContextMenu fill:#107c10,stroke:#0b5a0b,stroke-width:2px,color:#fff
+    style Presenter_MenuBar fill:#8764b8,stroke:#5c3d8a,stroke-width:2px,color:#fff
+    style Presenter_MenuButton fill:#8764b8,stroke:#5c3d8a,stroke-width:2px,color:#fff
+    style Presenter_ContextMenu fill:#8764b8,stroke:#5c3d8a,stroke-width:2px,color:#fff
     style Columns fill:#e3008c,stroke:#a10066,stroke-width:2px,color:#fff
     style MenuItem fill:#d13438,stroke:#942026,stroke-width:2px,color:#fff
 ```
@@ -721,22 +726,6 @@ internal interface ICascadedMenuHost : IDisposable, ICascadedMenuSurface
 - Custom `IsLightDismissEnabled = false` with manual handling
 - Root element input pass-through for menu bar integration
 
-#### `FlyoutMenuHost`
-
-`MenuFlyout`-backed host for seamless WinUI integration.
-
-**Features:**
-
-- Delegates to `MenuFlyout` control
-- Automatic presenter access via flyout lifecycle
-- Simpler lifecycle (no debouncing needed)
-- Native placement modes
-- Integrated light dismiss handling
-
-**Use Case:**
-
-Preferred when using `MenuFlyout` directly as `ContextFlyout` or programmatically shown flyouts where WinUI's native flyout behavior is desired.
-
 ## 🎯 Advanced Usage
 
 ### Radio Groups with Automatic Coordination
@@ -996,7 +985,7 @@ The menu system's surface abstraction enables comprehensive testing without UI d
 - Builder pattern and ID generation (`MenuBuilderTests`)
 - Radio group coordination (`MenuServicesTests`)
 - Interaction controller navigation (`MenuInteractionControllerTests`)
-- Host lifecycle management (`PopupMenuHostTests`, `FlyoutMenuHostTests`)
+- Host lifecycle management (`PopupMenuHostTests`)
 - Keyboard navigation and mnemonics
 - Focus management and restoration
 - Accessibility compliance
