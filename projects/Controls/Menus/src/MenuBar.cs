@@ -697,10 +697,7 @@ public sealed partial class MenuBar : Control
             this.DetachRootMenuItem(menuItem);
         }
 
-        if (this.rootItemsPanel is not null)
-        {
-            this.rootItemsPanel.Children.Clear();
-        }
+        this.rootItemsPanel?.Children.Clear();
     }
 
     private Style? TryResolveRootMenuItemStyle()

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.UI.Xaml.Input;
-
 namespace DroidNet.Controls.Menus.Tests;
 
 /// <summary>
@@ -20,9 +18,5 @@ public sealed partial class TestableMenuItem : MenuItem
      *      TargetType="local:TestableMenuItem" />
      */
 
-    public void InvokeTapped()
-    {
-        var args = new TappedRoutedEventArgs();
-        this.TryInvoke(MenuInteractionInputSource.PointerInput);
-    }
+    public void InvokeTapped() => this.TryInvoke(MenuInteractionInputSource.PointerInput);
 }

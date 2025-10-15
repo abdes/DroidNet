@@ -20,7 +20,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var harness = new ControllerHarness();
         var rootItem = CreateMenuItem("File", hasChildren: true);
 
-        harness.Controller.OnItemHoverStarted(harness.RootContext, rootItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, rootItem);
 
         _ = rootItem.IsExpanded.Should().BeFalse("root items don't auto-expand on hover without an already-expanded sibling");
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
@@ -39,7 +39,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.SetupRootExpandedItem(fileItem);
 
         // Act: Hover over Edit
-        harness.Controller.OnItemHoverStarted(harness.RootContext, editItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, editItem);
 
         // Assert
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
@@ -53,10 +53,10 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var fileItem = CreateMenuItem("File", hasChildren: true);
 
         harness.SetupRootExpandedItem(fileItem);
-        harness.Controller.OnItemHoverStarted(harness.RootContext, fileItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, fileItem);
 
         harness.ResetMocks();
-        harness.Controller.OnItemHoverStarted(harness.RootContext, fileItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, fileItem);
 
         harness.RootMock.Verify(m => m.ExpandItem(It.IsAny<MenuItemData>(), It.IsAny<MenuNavigationMode>()), Times.Never);
     });
@@ -68,7 +68,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var parentItem = CreateMenuItem("Parent", hasChildren: true);
         var level = new MenuLevel(0);
 
-        harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), parentItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), parentItem);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
         harness.ColumnMock.Verify(m => m.ExpandItem(level, parentItem, MenuNavigationMode.PointerInput), Times.Once);
@@ -88,7 +88,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         harness.SetupColumnExpandedItem(level, parentItem);
 
         // Act: hover over leaf
-        harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), leafItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), leafItem);
 
         // Assert
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
@@ -134,7 +134,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var harness = new ControllerHarness();
         var rootItem = CreateMenuItem("Help", hasChildren: true);
 
-        harness.Controller.OnExpandRequested(harness.RootContext, rootItem, MenuInteractionInputSource.KeyboardInput);
+        _ = harness.Controller.OnExpandRequested(harness.RootContext, rootItem, MenuInteractionInputSource.KeyboardInput);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.KeyboardInput);
         harness.RootMock.Verify(m => m.ExpandItem(rootItem, MenuNavigationMode.KeyboardInput), Times.Once);
@@ -149,7 +149,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var parentLevel = new MenuLevel(1);
         var childLevel = new MenuLevel(parentLevel + 1);
 
-        harness.Controller.OnExpandRequested(harness.ColumnContext(parentLevel), parentItem, MenuInteractionInputSource.PointerInput);
+        _ = harness.Controller.OnExpandRequested(harness.ColumnContext(parentLevel), parentItem, MenuInteractionInputSource.PointerInput);
 
         _ = harness.Controller.NavigationMode.Should().Be(MenuNavigationMode.PointerInput);
         harness.ColumnMock.Verify(m => m.ExpandItem(parentLevel, parentItem, MenuNavigationMode.PointerInput), Times.Once);
@@ -163,7 +163,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var item = CreateMenuItem("Item", hasChildren: true);
         item.IsExpanded = true;
 
-        harness.Controller.OnExpandRequested(harness.RootContext, item, MenuInteractionInputSource.KeyboardInput);
+        _ = harness.Controller.OnExpandRequested(harness.RootContext, item, MenuInteractionInputSource.KeyboardInput);
 
         harness.RootMock.Verify(m => m.ExpandItem(It.IsAny<MenuItemData>(), It.IsAny<MenuNavigationMode>()), Times.Never);
     });
@@ -327,7 +327,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var harness = new ControllerHarness();
         var leafItem = CreateMenuItem("Leaf", hasChildren: false);
 
-        harness.Controller.OnExpandRequested(harness.RootContext, leafItem, MenuInteractionInputSource.KeyboardInput);
+        _ = harness.Controller.OnExpandRequested(harness.RootContext, leafItem, MenuInteractionInputSource.KeyboardInput);
 
         harness.RootMock.Verify(m => m.ExpandItem(It.IsAny<MenuItemData>(), It.IsAny<MenuNavigationMode>()), Times.Never);
     });
@@ -412,7 +412,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         menuItem.IsExpanded = true;
 
         // Step 1: Capture focus owner (simulated by first interaction)
-        harness.Controller.OnItemHoverStarted(harness.RootContext, menuItem);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, menuItem);
 
         // Step 2: Menu expanded
         harness.SetupRootExpandedItem(menuItem);
@@ -599,7 +599,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var item = CreateMenuItem("File", hasChildren: true);
 
         // First hover should trigger focus capture
-        harness.Controller.OnItemHoverStarted(harness.RootContext, item);
+        _ = harness.Controller.OnItemHoverStarted(harness.RootContext, item);
 
         // Can't directly verify focus capture without real UI elements,
         // but we can verify the method completes successfully
@@ -626,7 +626,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var item = CreateMenuItem("View", hasChildren: true);
 
         // Expand request should trigger focus capture
-        harness.Controller.OnExpandRequested(harness.RootContext, item, MenuInteractionInputSource.KeyboardInput);
+        _ = harness.Controller.OnExpandRequested(harness.RootContext, item, MenuInteractionInputSource.KeyboardInput);
 
         // Verify method completes successfully
         harness.RootMock.Verify(m => m.ExpandItem(item, MenuNavigationMode.KeyboardInput), Times.Once);
@@ -663,7 +663,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         // Now hover over item2 - since menu has focus, it should transfer focus
         harness.ResetMocks();
         harness.SetupColumnExpandedItem(level, item1);
-        harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), item2);
+        _ = harness.Controller.OnItemHoverStarted(harness.ColumnContext(level), item2);
 
         // Should both collapse/expand AND transfer focus
         harness.ColumnMock.Verify(m => m.CollapseItem(level, item1, MenuNavigationMode.PointerInput), Times.Once);

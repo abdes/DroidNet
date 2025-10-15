@@ -4,9 +4,7 @@
 
 using System.Collections.Specialized;
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls.Menus;
 
@@ -33,7 +31,7 @@ public sealed partial class ExpandableMenuBar
     {
         Debug.Assert(this.innerMenuBar is not null, "expecting a valid innerMenuBar");
 
-        if (this.MenuSource is not { Items: { Count: > 0 } })
+        if (this.MenuSource is not { Items.Count: > 0 })
         {
             if (!initial)
             {
@@ -47,8 +45,7 @@ public sealed partial class ExpandableMenuBar
 
         this.UpdateVisualState(useTransitions: !initial);
 
-        var navMode = source.ToNavigationMode();
-        this.ActivateMenuBarAfterExpansion(source, navMode);
+        this.ActivateMenuBarAfterExpansion(source);
     }
 
     private void ApplyCollapse(MenuDismissKind kind, bool initial = false)
@@ -65,7 +62,7 @@ public sealed partial class ExpandableMenuBar
                 if (this.MenuSource is { Services.InteractionController: { } controller })
                 {
                     var context = MenuInteractionContext.ForRoot(this.innerMenuBar);
-                    controller.OnDismissRequested(context, kind);
+                    _ = controller.OnDismissRequested(context, kind);
                 }
                 else
                 {
@@ -223,12 +220,12 @@ public sealed partial class ExpandableMenuBar
         });
     }
 
-    private void ActivateMenuBarAfterExpansion(MenuInteractionInputSource source, MenuNavigationMode navMode)
+    private void ActivateMenuBarAfterExpansion(MenuInteractionInputSource source)
     {
         Debug.Assert(this.innerMenuBar is not null, "ActivateMenuBarAfterExpansion requires a valid innerMenuBar.");
         Debug.Assert(this.IsExpanded, "ActivateMenuBarAfterExpansion requires IsExpanded to be true.");
 
-        if (this.MenuSource is not { Services: { InteractionController: { } controller }, Items: { Count: > 0 } items })
+        if (this.MenuSource is not { Services.InteractionController: { } controller, Items: { Count: > 0 } items })
         {
             return;
         }
@@ -244,7 +241,7 @@ public sealed partial class ExpandableMenuBar
         var firstInteractive = items.FirstOrDefault(static i => i.IsInteractive);
         if (firstInteractive is { HasChildren: true })
         {
-            controller.OnExpandRequested(context, firstInteractive, source);
+            _ = controller.OnExpandRequested(context, firstInteractive, source);
         }
     }
 }

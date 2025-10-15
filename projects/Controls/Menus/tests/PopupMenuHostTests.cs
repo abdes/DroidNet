@@ -15,10 +15,12 @@ namespace DroidNet.Controls.Menus.Tests;
 [ExcludeFromCodeCoverage]
 [TestCategory("PopupMenuHostTests")]
 [TestCategory("UITest")]
-public sealed class PopupMenuHostTests : VisualUserInterfaceTests
+public sealed partial class PopupMenuHostTests : VisualUserInterfaceTests
 {
     private static readonly TimeSpan EventTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DebounceAllowance = TimeSpan.FromMilliseconds(30);
+
+    public TestContext TestContext { get; set; }
 
     [TestMethod]
     public Task OpensPopupAfterDebounce_Async() => EnqueueAsync(async () =>
@@ -32,7 +34,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Opening += (_, _) => openingCount++;
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
 
             await WaitForEventAsync(openedTcs.Task, "Popup should open after debounce").ConfigureAwait(true);
             _ = openingCount.Should().Be(1);
@@ -58,7 +60,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Closed += (_, _) => closedTcs.TrySetResult(true);
             context.Host.Opened += (_, _) => opened = true;
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             context.Host.Dismiss(MenuDismissKind.PointerInput);
 
             await WaitForEventAsync(closingTcs.Task, "Closing should fire when canceling pending open").ConfigureAwait(true);
@@ -84,7 +86,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
             context.Host.Closed += (_, _) => closedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
 
             await WaitForEventAsync(openedTcs.Task, "Popup should open before dismissal").ConfigureAwait(true);
             _ = context.Host.IsOpen.Should().BeTrue();
@@ -110,7 +112,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             var openedTcs = CreateSignal();
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             await WaitForEventAsync(openedTcs.Task, "Popup should open for first anchor").ConfigureAwait(true);
 
             var closed = false;
@@ -118,8 +120,8 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Closed += (_, _) => closed = true;
             context.Host.Opening += (_, _) => openingCount++;
 
-            context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
-            await Task.Delay(DebounceAllowance).ConfigureAwait(true);
+            _ = context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
+            await Task.Delay(DebounceAllowance, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             _ = closed.Should().BeFalse("Popup should remain open when reanchoring");
             _ = openingCount.Should().Be(1, "Opening should be raised for the reanchor request");
@@ -145,13 +147,13 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Opening += (_, _) => openingAnchors.Add(context.Host.Anchor as MenuItemControl);
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
-            context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
 
             await WaitForEventAsync(openedTcs.Task, "Popup should open using the latest pending anchor").ConfigureAwait(true);
 
             _ = openingAnchors.Should().NotBeEmpty();
-            _ = openingAnchors.Last().Should().Be(context.Anchors[1]);
+            _ = openingAnchors[^1].Should().Be(context.Anchors[1]);
             _ = context.Host.Anchor.Should().Be(context.Anchors[1]);
         }
         finally
@@ -179,11 +181,11 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             };
             context.Host.Closed += (_, _) => closed = true;
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             await WaitForEventAsync(openedTcs.Task, "Popup should open before cancellation test").ConfigureAwait(true);
 
             context.Host.Dismiss(MenuDismissKind.PointerInput);
-            await Task.Delay(DebounceAllowance).ConfigureAwait(true);
+            await Task.Delay(DebounceAllowance, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             _ = closingCount.Should().Be(1, "Canceling dismissal should still raise Closing once");
             _ = context.Host.IsOpen.Should().BeTrue("Canceled dismissal should leave popup open");
@@ -212,10 +214,10 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Closed += (_, _) =>
             {
                 closedCount++;
-                closedTcs.TrySetResult(true);
+                _ = closedTcs.TrySetResult(true);
             };
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             await WaitForEventAsync(openedTcs.Task, "Popup should open before redundant dismiss test").ConfigureAwait(true);
 
             context.Host.Dismiss(MenuDismissKind.PointerInput);
@@ -250,7 +252,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             context.Host.Closing += (_, _) => closingCount++;
             context.Host.Closed += (_, _) => closedCount++;
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             await WaitForEventAsync(openedTcs.Task, "Popup should open before hover cycling").ConfigureAwait(true);
 
             var lastAnchorIndex = 0;
@@ -258,8 +260,8 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             {
                 lastAnchorIndex = (i % (context.Anchors.Count - 1)) + 1;
                 var anchor = context.Anchors[lastAnchorIndex];
-                context.Host.ShowAt(anchor, MenuNavigationMode.PointerInput);
-                await Task.Delay(DebounceAllowance).ConfigureAwait(true);
+                _ = context.Host.ShowAt(anchor, MenuNavigationMode.PointerInput);
+                await Task.Delay(DebounceAllowance, this.TestContext.CancellationToken).ConfigureAwait(true);
             }
 
             _ = context.Host.IsOpen.Should().BeTrue("Popup should stay open during rapid hover cycling");
@@ -283,16 +285,16 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
         {
             var firstOpenedTcs = CreateSignal();
             context.Host.Opened += (_, _) => firstOpenedTcs.TrySetResult(true);
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
             await WaitForEventAsync(firstOpenedTcs.Task, "Initial open should succeed").ConfigureAwait(true);
 
             var closedCount = 0;
             context.Host.Closed += (_, _) => closedCount++;
 
-            context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
+            _ = context.Host.ShowAt(context.Anchors[1], MenuNavigationMode.PointerInput);
             context.Host.Dismiss(MenuDismissKind.PointerInput);
 
-            await Task.Delay(DebounceAllowance + DebounceAllowance).ConfigureAwait(true);
+            await Task.Delay(DebounceAllowance + DebounceAllowance, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             _ = closedCount.Should().Be(0, "Popup should stay open while a newer request is pending");
             _ = context.Host.IsOpen.Should().BeTrue();
@@ -321,7 +323,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             var openedTcs = CreateSignal();
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.KeyboardInput);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.KeyboardInput);
             await WaitForEventAsync(openedTcs.Task, "Popup should open before keyboard dismissal").ConfigureAwait(true);
 
             var closedTcs = CreateSignal();
@@ -355,7 +357,7 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             var openedTcs = CreateSignal();
             context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
 
-            context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.Programmatic);
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.Programmatic);
             await WaitForEventAsync(openedTcs.Task, "Popup should open before focus cycling").ConfigureAwait(true);
 
             var closedCount = 0;
@@ -365,11 +367,11 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
 
             for (var i = 1; i < anchorCount; i++)
             {
-                context.Host.ShowAt(context.Anchors[i], MenuNavigationMode.Programmatic);
-                await Task.Delay(cycleDelay).ConfigureAwait(true);
+                _ = context.Host.ShowAt(context.Anchors[i], MenuNavigationMode.Programmatic);
+                await Task.Delay(cycleDelay, this.TestContext.CancellationToken).ConfigureAwait(true);
             }
 
-            await Task.Delay(DebounceAllowance + DebounceAllowance).ConfigureAwait(true);
+            await Task.Delay(DebounceAllowance + DebounceAllowance, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             _ = closedCount.Should().Be(0, "Popup should not close while cycling programmatically between root items");
             _ = context.Host.IsOpen.Should().BeTrue("Popup should remain visible after cycling focus programmatically");
@@ -393,14 +395,12 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
     }
 
     private static async Task WaitForRenderCompletionAsync()
-    {
-        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-    }
+        => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
     private static TaskCompletionSource<bool> CreateSignal() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private sealed class PopupMenuHostTestContext : IDisposable
+    private sealed partial class PopupMenuHostTestContext : IDisposable
     {
         private PopupMenuHostTestContext(PopupMenuHost host, IReadOnlyList<MenuItemControl> anchors)
         {
@@ -451,7 +451,10 @@ public sealed class PopupMenuHostTests : VisualUserInterfaceTests
             var builder = new MenuBuilder();
             for (var i = 0; i < anchorCount; i++)
             {
-                builder.AddMenuItem(new MenuItemData { Text = $"Item {i + 1}" });
+                _ = builder.AddMenuItem(new MenuItemData
+                {
+                    Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "Item {0}", i + 1),
+                });
             }
 
             return builder.Build();

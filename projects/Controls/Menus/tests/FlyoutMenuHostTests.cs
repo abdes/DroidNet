@@ -33,7 +33,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         harness.Host.Opened += (_, _) => openedSignal.TrySetResult(true);
 
         ConfigureHostForRoot(harness, 0);
-        harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
 
         await WaitForEventAsync(openedSignal.Task, "Flyout should open").ConfigureAwait(true);
         await WaitForRenderCompletionAsync().ConfigureAwait(true);
@@ -54,7 +54,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         var openedSignal = CreateSignal();
         harness.Host.Opened += (_, _) => openedSignal.TrySetResult(true);
 
-        harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
         await WaitForEventAsync(openedSignal.Task, "Flyout should open").ConfigureAwait(true);
 
         var closingSignal = new TaskCompletionSource<MenuDismissKind>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -81,7 +81,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         var openedSignal = CreateSignal();
         harness.Host.Opened += (_, _) => openedSignal.TrySetResult(true);
 
-        harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
         await WaitForEventAsync(openedSignal.Task, "Flyout should open").ConfigureAwait(true);
 
         var closingCount = 0;
@@ -113,14 +113,14 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         var firstOpened = CreateSignal();
         harness.Host.Opened += (_, _) => firstOpened.TrySetResult(true);
 
-        harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
         await WaitForEventAsync(firstOpened.Task, "Initial open should complete").ConfigureAwait(true);
 
         var reopenedSignal = CreateSignal();
         harness.Host.Opened += (_, _) => reopenedSignal.TrySetResult(true);
 
         ConfigureHostForRoot(harness, 1);
-        harness.Host.ShowAt(harness.Anchors[1], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[1], MenuNavigationMode.PointerInput);
 
         // Wait for the reanchoring to complete (ShowAt on an open flyout closes then reopens asynchronously)
         await WaitForEventAsync(reopenedSignal.Task, "Flyout should reopen after reanchoring").ConfigureAwait(true);
@@ -139,7 +139,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         var openedSignal = CreateSignal();
         harness.Host.Opened += (_, _) => openedSignal.TrySetResult(true);
 
-        harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
+        _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
         await WaitForEventAsync(openedSignal.Task, "Initial open should succeed").ConfigureAwait(true);
 
         var openingAnchors = new List<MenuItemControl>();
@@ -156,7 +156,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
 
             // Create a new signal for each ShowAt to track when it completes
             lastOpenedSignal = CreateSignal();
-            harness.Host.ShowAt(harness.Anchors[lastAnchorIndex], MenuNavigationMode.PointerInput);
+            _ = harness.Host.ShowAt(harness.Anchors[lastAnchorIndex], MenuNavigationMode.PointerInput);
             await Task.Delay(HoverCycleDelay, this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
