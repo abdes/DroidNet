@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Controls.Menus;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.UI;
@@ -36,13 +34,13 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var content = CreateContent(120d, 80d);
         var viewport = new Rect(0, 0, CanvasWidth, CanvasHeight);
 
-        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, viewport, null);
+        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, viewport, customPosition: null);
         var success = helper.TryPlace(request, out var result);
 
-        success.Should().BeTrue();
-        result.Offset.X.Should().BeApproximately(result.AnchorBounds.Left, 0.5);
-        result.Offset.Y.Should().BeApproximately(result.AnchorBounds.Bottom, 0.5);
-        result.ContentSize.Should().BeEquivalentTo(new Size(120d, 80d));
+        _ = success.Should().BeTrue();
+        _ = result.Offset.X.Should().BeApproximately(result.AnchorBounds.Left, 0.5);
+        _ = result.Offset.Y.Should().BeApproximately(result.AnchorBounds.Bottom, 0.5);
+        _ = result.ContentSize.Should().BeEquivalentTo(new Size(120d, 80d));
     });
 
     [TestMethod]
@@ -55,12 +53,13 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var content = CreateContent(120d, 80d);
         var constrainedViewport = new Rect(0, 0, 300d, CanvasHeight);
 
-        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, constrainedViewport, null);
+        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, constrainedViewport, customPosition: null);
         _ = helper.TryPlace(request, out var result).Should().BeTrue();
 
         var expectedRightEdge = constrainedViewport.Width - WindowEdgePadding;
-        (result.Offset.X + result.ContentSize.Width).Should().BeApproximately(expectedRightEdge, 0.5);
-        result.Offset.X.Should().BeLessThan(result.AnchorBounds.Left,
+        _ = (result.Offset.X + result.ContentSize.Width).Should().BeApproximately(expectedRightEdge, 0.5);
+        _ = result.Offset.X.Should().BeLessThan(
+            result.AnchorBounds.Left,
             "clamping near the window edge should shift the popup left of the anchor");
     });
 
@@ -75,15 +74,15 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var constrainedViewport = new Rect(0, 0, 300d, CanvasHeight);
         var relaxedViewport = new Rect(0, 0, CanvasWidth, CanvasHeight);
 
-        var constrainedRequest = new PopupPlacementHelper.PlacementRequest(1, anchor, content, constrainedViewport, null);
+        var constrainedRequest = new PopupPlacementHelper.PlacementRequest(1, anchor, content, constrainedViewport, customPosition: null);
         _ = helper.TryPlace(constrainedRequest, out var constrainedResult).Should().BeTrue();
 
-        var relaxedRequest = new PopupPlacementHelper.PlacementRequest(1, anchor, content, relaxedViewport, null);
+        var relaxedRequest = new PopupPlacementHelper.PlacementRequest(1, anchor, content, relaxedViewport, customPosition: null);
         _ = helper.TryPlace(relaxedRequest, out var relaxedResult).Should().BeTrue();
 
         var expectedTrailing = relaxedResult.AnchorBounds.Right - relaxedResult.ContentSize.Width;
-        relaxedResult.Offset.X.Should().BeApproximately(expectedTrailing, 0.5);
-        relaxedResult.Offset.X.Should().BeGreaterThan(constrainedResult.Offset.X);
+        _ = relaxedResult.Offset.X.Should().BeApproximately(expectedTrailing, 0.5);
+        _ = relaxedResult.Offset.X.Should().BeGreaterThan(constrainedResult.Offset.X);
     });
 
     [TestMethod]
@@ -97,18 +96,18 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var content = CreateContent(120d, 80d);
         var viewport = new Rect(0, 0, CanvasWidth, CanvasHeight);
 
-        var initialRequest = new PopupPlacementHelper.PlacementRequest(1, rightAnchor, content, viewport, null);
+        var initialRequest = new PopupPlacementHelper.PlacementRequest(1, rightAnchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(initialRequest, out var initialResult).Should().BeTrue();
 
         var pointer = new Point(initialResult.Offset.X + (initialResult.ContentSize.Width / 2), initialResult.Offset.Y + 10d);
         helper.UpdatePointer(pointer);
 
-        var followRequest = new PopupPlacementHelper.PlacementRequest(1, leftAnchor, content, viewport, null);
+        var followRequest = new PopupPlacementHelper.PlacementRequest(1, leftAnchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(followRequest, out var followResult).Should().BeTrue();
 
         var popupBounds = new Rect(followResult.Offset, followResult.ContentSize);
-        popupBounds.Contains(pointer).Should().BeTrue("pointer should remain within the popup bounds after repositioning");
-        followResult.Offset.X.Should().BeGreaterThan(followResult.AnchorBounds.Left, "pointer safety should override anchor-leading alignment when necessary");
+        _ = popupBounds.Contains(pointer).Should().BeTrue("pointer should remain within the popup bounds after repositioning");
+        _ = followResult.Offset.X.Should().BeGreaterThan(followResult.AnchorBounds.Left, "pointer safety should override anchor-leading alignment when necessary");
     });
 
     [TestMethod]
@@ -125,16 +124,16 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, viewport, customPoint);
         _ = helper.TryPlace(request, out var result).Should().BeTrue();
 
-        result.Offset.X.Should().BeApproximately(result.AnchorBounds.Left, 0.5);
-        result.Offset.Y.Should().BeApproximately(result.AnchorBounds.Top, 0.5);
-        result.AnchorBounds.Width.Should().Be(1d);
-        result.AnchorBounds.Height.Should().Be(1d);
+        _ = result.Offset.X.Should().BeApproximately(result.AnchorBounds.Left, 0.5);
+        _ = result.Offset.Y.Should().BeApproximately(result.AnchorBounds.Top, 0.5);
+        _ = result.AnchorBounds.Width.Should().Be(1d);
+        _ = result.AnchorBounds.Height.Should().Be(1d);
     });
 
     [TestMethod]
     public Task ClampsVerticallyNearWindowEdges_Async() => EnqueueAsync(async () =>
     {
-        var bottomAnchorTop = CanvasHeight - DefaultAnchorHeight - 8d;
+        const double bottomAnchorTop = CanvasHeight - DefaultAnchorHeight - 8d;
         var (_, anchors) = await CreateAnchorsAsync((120d, bottomAnchorTop)).ConfigureAwait(true);
         var anchor = anchors[0];
 
@@ -142,12 +141,13 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var content = CreateContent(100d, 140d);
         var viewport = new Rect(0, 0, CanvasWidth, CanvasHeight);
 
-        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, viewport, null);
+        var request = new PopupPlacementHelper.PlacementRequest(1, anchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(request, out var result).Should().BeTrue();
 
         var expectedBottom = viewport.Height - WindowEdgePadding;
-        (result.Offset.Y + result.ContentSize.Height).Should().BeApproximately(expectedBottom, 0.5);
-        result.Offset.Y.Should().BeLessThan(result.AnchorBounds.Bottom,
+        _ = (result.Offset.Y + result.ContentSize.Height).Should().BeApproximately(expectedBottom, 0.5);
+        _ = result.Offset.Y.Should().BeLessThan(
+            result.AnchorBounds.Bottom,
             "clamping near the window bottom should shift the popup upward relative to the anchor");
     });
 
@@ -162,22 +162,24 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         var content = CreateContent(120d, 80d);
         var viewport = new Rect(0, 0, CanvasWidth, CanvasHeight);
 
-        var initialRequest = new PopupPlacementHelper.PlacementRequest(1, rightAnchor, content, viewport, null);
+        var initialRequest = new PopupPlacementHelper.PlacementRequest(1, rightAnchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(initialRequest, out var initialResult).Should().BeTrue();
 
         var pointer = new Point(initialResult.Offset.X + (initialResult.ContentSize.Width / 2), initialResult.Offset.Y + 5d);
         helper.UpdatePointer(pointer);
 
-        var pointerSafeRequest = new PopupPlacementHelper.PlacementRequest(1, leftAnchor, content, viewport, null);
+        var pointerSafeRequest = new PopupPlacementHelper.PlacementRequest(1, leftAnchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(pointerSafeRequest, out var pointerSafeResult).Should().BeTrue();
-        pointerSafeResult.Offset.X.Should().BeGreaterThan(pointerSafeResult.AnchorBounds.Left);
+        _ = pointerSafeResult.Offset.X.Should().BeGreaterThan(pointerSafeResult.AnchorBounds.Left);
 
-        var resetRequest = new PopupPlacementHelper.PlacementRequest(2, leftAnchor, content, viewport, null);
+        var resetRequest = new PopupPlacementHelper.PlacementRequest(2, leftAnchor, content, viewport, customPosition: null);
         _ = helper.TryPlace(resetRequest, out var resetResult).Should().BeTrue();
 
-        resetResult.Offset.X.Should().BeApproximately(resetResult.AnchorBounds.Left, 0.5,
+        _ = resetResult.Offset.X.Should().BeApproximately(
+            resetResult.AnchorBounds.Left,
+            0.5,
             "changing the token should clear pointer-driven state and allow anchor-leading alignment");
-        resetResult.Offset.X.Should().BeLessThan(pointerSafeResult.Offset.X);
+        _ = resetResult.Offset.X.Should().BeLessThan(pointerSafeResult.Offset.X);
     });
 
     private static Border CreateContent(double width, double height) => new()
@@ -187,7 +189,7 @@ public sealed class PopupPlacementHelperTests : VisualUserInterfaceTests
         Background = new SolidColorBrush(Colors.SlateGray),
     };
 
-    private static async Task<(Canvas Root, IReadOnlyList<Border> Anchors)> CreateAnchorsAsync(params (double Left, double Top)[] positions)
+    private static async Task<(Canvas root, IReadOnlyList<Border> anchors)> CreateAnchorsAsync(params (double left, double top)[] positions)
     {
         var canvas = new Canvas
         {

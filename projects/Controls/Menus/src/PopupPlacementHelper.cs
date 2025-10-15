@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace DroidNet.Controls.Menus;
@@ -227,30 +225,19 @@ internal sealed class PopupPlacementHelper
     }
 
     private static VerticalAttachment VerticalPlacementForCustom(Rect anchorBounds, double vertical, double rangeMin, double rangeMax)
-    {
-        if (AreClose(vertical, anchorBounds.Top))
+        => vertical switch
         {
-            return VerticalAttachment.CustomOrigin;
-        }
-
-        if (AreClose(vertical, rangeMin))
-        {
-            return VerticalAttachment.AnchorTop;
-        }
-
-        if (AreClose(vertical, rangeMax))
-        {
-            return VerticalAttachment.AnchorBottom;
-        }
-
-        return VerticalAttachment.CustomOrigin;
-    }
+            var v when AreClose(v, anchorBounds.Top) => VerticalAttachment.CustomOrigin,
+            var v when AreClose(v, rangeMin) => VerticalAttachment.AnchorTop,
+            var v when AreClose(v, rangeMax) => VerticalAttachment.AnchorBottom,
+            _ => VerticalAttachment.CustomOrigin,
+        };
 
     private static bool TryGetAnchorBounds(FrameworkElement anchor, Point? customPosition, out Rect targetBounds)
     {
         try
         {
-            var transform = anchor.TransformToVisual(null);
+            var transform = anchor.TransformToVisual(visual: null);
             if (customPosition is { } custom)
             {
                 var topLeft = transform.TransformPoint(custom);
@@ -323,7 +310,6 @@ internal sealed class PopupPlacementHelper
 
     private static bool TryResolveAnchorAndSize(PlacementRequest request, out Rect anchorBounds, out Size contentSize)
     {
-        anchorBounds = default;
         contentSize = default;
 
         if (!TryGetAnchorBounds(request.Anchor, request.CustomPosition, out anchorBounds))
@@ -531,85 +517,69 @@ internal sealed class PopupPlacementHelper
     /// <summary>
     ///     Describes the data required to calculate popup placement for a specific anchor and content pair.
     /// </summary>
+    /// <remarks>
+    ///     Initializes a new instance of the <see cref="PlacementRequest"/> struct.
+    /// </remarks>
+    /// <param name="token">Monotonic token identifying the logical placement session.</param>
+    /// <param name="anchor">Visual that provides the placement anchor.</param>
+    /// <param name="content">Popup content element to position.</param>
+    /// <param name="viewport">Visible viewport available for placement.</param>
+    /// <param name="customPosition">Optional custom anchor offset relative to the anchor.</param>
     [StructLayout(LayoutKind.Auto)]
-    internal readonly struct PlacementRequest
+    internal readonly struct PlacementRequest(int token, FrameworkElement anchor, UIElement content, Rect viewport, Point? customPosition)
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="PlacementRequest"/> struct.
-        /// </summary>
-        /// <param name="token">Monotonic token identifying the logical placement session.</param>
-        /// <param name="anchor">Visual that provides the placement anchor.</param>
-        /// <param name="content">Popup content element to position.</param>
-        /// <param name="viewport">Visible viewport available for placement.</param>
-        /// <param name="customPosition">Optional custom anchor offset relative to the anchor.</param>
-        public PlacementRequest(int token, FrameworkElement anchor, UIElement content, Rect viewport, Point? customPosition)
-        {
-            this.Token = token;
-            this.Anchor = anchor;
-            this.Content = content;
-            this.Viewport = viewport;
-            this.CustomPosition = customPosition;
-        }
-
         /// <summary>
         ///     Gets the placement session token.
         /// </summary>
-        public int Token { get; }
+        public int Token { get; } = token;
 
         /// <summary>
         ///     Gets the anchor element driving placement.
         /// </summary>
-        public FrameworkElement Anchor { get; }
+        public FrameworkElement Anchor { get; } = anchor;
 
         /// <summary>
         ///     Gets the popup content being positioned.
         /// </summary>
-        public UIElement Content { get; }
+        public UIElement Content { get; } = content;
 
         /// <summary>
         ///     Gets the viewport constraints available for placement.
         /// </summary>
-        public Rect Viewport { get; }
+        public Rect Viewport { get; } = viewport;
 
         /// <summary>
         ///     Gets the optional custom position relative to the anchor.
         /// </summary>
-        public Point? CustomPosition { get; }
+        public Point? CustomPosition { get; } = customPosition;
     }
 
     /// <summary>
     ///     Represents the resolved placement information for a popup.
     /// </summary>
+    /// <remarks>
+    ///     Initializes a new instance of the <see cref="PlacementResult"/> struct.
+    /// </remarks>
+    /// <param name="offset">Final window offset for the popup.</param>
+    /// <param name="size">Resolved content size used for placement.</param>
+    /// <param name="anchorBounds">Computed anchor bounds in window coordinates.</param>
     [StructLayout(LayoutKind.Auto)]
-    internal readonly struct PlacementResult
+    internal readonly struct PlacementResult(Point offset, Size size, Rect anchorBounds)
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="PlacementResult"/> struct.
-        /// </summary>
-        /// <param name="offset">Final window offset for the popup.</param>
-        /// <param name="size">Resolved content size used for placement.</param>
-        /// <param name="anchorBounds">Computed anchor bounds in window coordinates.</param>
-        public PlacementResult(Point offset, Size size, Rect anchorBounds)
-        {
-            this.Offset = offset;
-            this.ContentSize = size;
-            this.AnchorBounds = anchorBounds;
-        }
-
         /// <summary>
         ///     Gets the placement offset in window coordinates.
         /// </summary>
-        public Point Offset { get; }
+        public Point Offset { get; } = offset;
 
         /// <summary>
         ///     Gets the size used when positioning the content.
         /// </summary>
-        public Size ContentSize { get; }
+        public Size ContentSize { get; } = size;
 
         /// <summary>
         ///     Gets the anchor bounds used to derive placement.
         /// </summary>
-        public Rect AnchorBounds { get; }
+        public Rect AnchorBounds { get; } = anchorBounds;
     }
 
     /// <summary>
@@ -723,123 +693,98 @@ internal sealed class PopupPlacementHelper
         /// </summary>
         /// <param name="value">Candidate horizontal offset.</param>
         /// <returns>Offset constrained to the horizontal range.</returns>
-        public double ClampHorizontal(double value) => SafeClamp(value, this.HorizontalMin, this.HorizontalMax);
+        public readonly double ClampHorizontal(double value) => SafeClamp(value, this.HorizontalMin, this.HorizontalMax);
 
         /// <summary>
         ///     Clamps the vertical offset within the allowed range.
         /// </summary>
         /// <param name="value">Candidate vertical offset.</param>
         /// <returns>Offset constrained to the vertical range.</returns>
-        public double ClampVertical(double value) => SafeClamp(value, this.VerticalMin, this.VerticalMax);
+        public readonly double ClampVertical(double value) => SafeClamp(value, this.VerticalMin, this.VerticalMax);
     }
 
     /// <summary>
     ///     Captures viewport-derived constraints applied during placement.
     /// </summary>
+    /// <remarks>
+    ///     Initializes a new instance of the <see cref="ViewportConstraints"/> struct.
+    /// </remarks>
+    /// <param name="horizontalApplied">Indicates whether horizontal constraints were applied.</param>
+    /// <param name="horizontalMin">Window horizontal minimum offset.</param>
+    /// <param name="horizontalMax">Window horizontal maximum offset.</param>
+    /// <param name="verticalApplied">Indicates whether vertical constraints were applied.</param>
+    /// <param name="verticalMin">Window vertical minimum offset.</param>
+    /// <param name="verticalMax">Window vertical maximum offset.</param>
     [StructLayout(LayoutKind.Auto)]
-    private readonly struct ViewportConstraints
+    private readonly struct ViewportConstraints(bool horizontalApplied, double horizontalMin, double horizontalMax, bool verticalApplied, double verticalMin, double verticalMax)
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="ViewportConstraints"/> struct.
-        /// </summary>
-        /// <param name="horizontalApplied">Indicates whether horizontal constraints were applied.</param>
-        /// <param name="horizontalMin">Window horizontal minimum offset.</param>
-        /// <param name="horizontalMax">Window horizontal maximum offset.</param>
-        /// <param name="verticalApplied">Indicates whether vertical constraints were applied.</param>
-        /// <param name="verticalMin">Window vertical minimum offset.</param>
-        /// <param name="verticalMax">Window vertical maximum offset.</param>
-        public ViewportConstraints(bool horizontalApplied, double horizontalMin, double horizontalMax, bool verticalApplied, double verticalMin, double verticalMax)
-        {
-            this.HorizontalApplied = horizontalApplied;
-            this.HorizontalMin = horizontalMin;
-            this.HorizontalMax = horizontalMax;
-            this.VerticalApplied = verticalApplied;
-            this.VerticalMin = verticalMin;
-            this.VerticalMax = verticalMax;
-        }
-
         /// <summary>
         ///     Gets a value indicating whether horizontal constraints were applied.
         /// </summary>
-        public bool HorizontalApplied { get; }
+        public bool HorizontalApplied { get; } = horizontalApplied;
 
         /// <summary>
         ///     Gets the window-aligned horizontal minimum offset.
         /// </summary>
-        public double HorizontalMin { get; }
+        public double HorizontalMin { get; } = horizontalMin;
 
         /// <summary>
         ///     Gets the window-aligned horizontal maximum offset.
         /// </summary>
-        public double HorizontalMax { get; }
+        public double HorizontalMax { get; } = horizontalMax;
 
         /// <summary>
         ///     Gets a value indicating whether vertical constraints were applied.
         /// </summary>
-        public bool VerticalApplied { get; }
+        public bool VerticalApplied { get; } = verticalApplied;
 
         /// <summary>
         ///     Gets the window-aligned vertical minimum offset.
         /// </summary>
-        public double VerticalMin { get; }
+        public double VerticalMin { get; } = verticalMin;
 
         /// <summary>
         ///     Gets the window-aligned vertical maximum offset.
         /// </summary>
-        public double VerticalMax { get; }
+        public double VerticalMax { get; } = verticalMax;
     }
 
     /// <summary>
     ///     Encapsulates the attachment modes resolved for a placement.
     /// </summary>
+    /// <remarks>
+    ///     Initializes a new instance of the <see cref="AttachmentResult"/> struct.
+    /// </remarks>
+    /// <param name="horizontal">Horizontal attachment resolved for the placement.</param>
+    /// <param name="vertical">Vertical attachment resolved for the placement.</param>
     [StructLayout(LayoutKind.Auto)]
-    private readonly struct AttachmentResult
+    private readonly struct AttachmentResult(PopupPlacementHelper.HorizontalAttachment horizontal, PopupPlacementHelper.VerticalAttachment vertical)
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="AttachmentResult"/> struct.
-        /// </summary>
-        /// <param name="horizontal">Horizontal attachment resolved for the placement.</param>
-        /// <param name="vertical">Vertical attachment resolved for the placement.</param>
-        public AttachmentResult(HorizontalAttachment horizontal, VerticalAttachment vertical)
-        {
-            this.Horizontal = horizontal;
-            this.Vertical = vertical;
-        }
-
         /// <summary>
         ///     Gets the horizontal placement attachment.
         /// </summary>
-        public HorizontalAttachment Horizontal { get; }
+        public HorizontalAttachment Horizontal { get; } = horizontal;
 
         /// <summary>
         ///     Gets the vertical placement attachment.
         /// </summary>
-        public VerticalAttachment Vertical { get; }
+        public VerticalAttachment Vertical { get; } = vertical;
     }
 
     /// <summary>
     ///     Tracks placement affinity across subsequent layout passes.
     /// </summary>
+    /// <remarks>
+    ///     Initializes a new instance of the <see cref="PlacementState"/> struct.
+    /// </remarks>
+    /// <param name="token">Token identifying the placement session.</param>
+    /// <param name="offset">Last resolved offset.</param>
+    /// <param name="size">Last resolved content size.</param>
+    /// <param name="horizontalAttachment">Horizontal affinity maintained across updates.</param>
+    /// <param name="verticalAttachment">Vertical affinity maintained across updates.</param>
     [StructLayout(LayoutKind.Auto)]
-    private readonly struct PlacementState
+    private readonly struct PlacementState(int token, Point offset, Size size, PopupPlacementHelper.HorizontalAttachment horizontalAttachment, PopupPlacementHelper.VerticalAttachment verticalAttachment)
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="PlacementState"/> struct.
-        /// </summary>
-        /// <param name="token">Token identifying the placement session.</param>
-        /// <param name="offset">Last resolved offset.</param>
-        /// <param name="size">Last resolved content size.</param>
-        /// <param name="horizontalAttachment">Horizontal affinity maintained across updates.</param>
-        /// <param name="verticalAttachment">Vertical affinity maintained across updates.</param>
-        public PlacementState(int token, Point offset, Size size, HorizontalAttachment horizontalAttachment, VerticalAttachment verticalAttachment)
-        {
-            this.Token = token;
-            this.Offset = offset;
-            this.ContentSize = size;
-            this.HorizontalAttachment = horizontalAttachment;
-            this.VerticalAttachment = verticalAttachment;
-        }
-
         /// <summary>
         ///     Gets an empty placement state instance.
         /// </summary>
@@ -848,27 +793,27 @@ internal sealed class PopupPlacementHelper
         /// <summary>
         ///     Gets the session token associated with the state.
         /// </summary>
-        public int Token { get; }
+        public int Token { get; } = token;
 
         /// <summary>
         ///     Gets the previously resolved offset.
         /// </summary>
-        public Point Offset { get; }
+        public Point Offset { get; } = offset;
 
         /// <summary>
         ///     Gets the previously resolved content size.
         /// </summary>
-        public Size ContentSize { get; }
+        public Size ContentSize { get; } = size;
 
         /// <summary>
         ///     Gets the horizontal attachment affinity.
         /// </summary>
-        public HorizontalAttachment HorizontalAttachment { get; }
+        public HorizontalAttachment HorizontalAttachment { get; } = horizontalAttachment;
 
         /// <summary>
         ///     Gets the vertical attachment affinity.
         /// </summary>
-        public VerticalAttachment VerticalAttachment { get; }
+        public VerticalAttachment VerticalAttachment { get; } = verticalAttachment;
 
         /// <summary>
         ///     Gets a value indicating whether the state carries valid placement data.
