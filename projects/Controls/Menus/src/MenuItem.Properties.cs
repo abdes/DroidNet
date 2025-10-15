@@ -135,6 +135,7 @@ public partial class MenuItem
             {
                 case nameof(MenuItemData.IsEnabled):
                 case nameof(MenuItemData.IsExpanded):
+                case nameof(MenuItemData.IsInteractive):
                     this.UpdateCommonVisualState();
                     break;
 

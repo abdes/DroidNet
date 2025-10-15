@@ -328,19 +328,22 @@ public partial class MenuItem : Control
 
         if (data.Command is null)
         {
-            // A command is not required; just handle selection state
+            // A command is not required; handle selection state and still raise
+            // the Invoked event so containers (menu/flyout) can dismiss the menu.
             this.HandleSelectionState();
+
+            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
+            {
+                InputSource = inputSource,
+                ItemData = data,
+            });
+
+            this.LogInvokedEvent(inputSource);
             return;
         }
 
         try
         {
-            // If the command cannot execute right now, indicate that no action occurred
-            if (!data.Command.CanExecute(data))
-            {
-                return;
-            }
-
             data.Command.Execute(data);
             this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
             {
@@ -515,8 +518,7 @@ public partial class MenuItem : Control
 
         this.isPointerOver = true;
 
-        // Use Hand cursor for interactive menu items on hover
-        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+        // UpdateCommonVisualState will handle cursor updates
         this.UpdateCommonVisualState();
     }
 
@@ -584,10 +586,7 @@ public partial class MenuItem : Control
 
         this.LogPointerEvent("Release");
 
-        // Ensure cursor is appropriate based on hover state after release
-        this.ProtectedCursor = this.isPointerOver
-            ? InputSystemCursor.Create(InputSystemCursorShape.Hand)
-            : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        // UpdateCommonVisualState will handle cursor updates based on hover state
         this.UpdateCommonVisualState();
 
         // The sender is the item over which the pointer was released, not the
@@ -621,8 +620,7 @@ public partial class MenuItem : Control
 
         this.LogPointerEvent("Cancel");
 
-        // Reset to Arrow on cancel
-        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        // UpdateCommonVisualState will handle cursor reset
         this.UpdateCommonVisualState();
     }
 
@@ -637,8 +635,7 @@ public partial class MenuItem : Control
 
         this.LogPointerEvent("Capture Lost");
 
-        // Reset to Arrow if capture is lost
-        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        // UpdateCommonVisualState will handle cursor reset
         this.UpdateCommonVisualState();
     }
 
@@ -703,7 +700,29 @@ public partial class MenuItem : Control
             return;
         }
 
-        var state = !this.ItemData.IsEnabled ? DisabledVisualState
+        // Update IsTabStop based on whether the item is interactive
+        // Non-interactive items should not receive keyboard focus
+        this.IsTabStop = this.ItemData.IsInteractive;
+
+        // Update cursor based on interactive state and pointer position
+        // Centralized cursor management - single source of truth
+        if (!this.ItemData.IsInteractive)
+        {
+            // Non-interactive items always show arrow cursor
+            this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        }
+        else if (this.isPointerOver)
+        {
+            // Interactive items with pointer over show hand cursor
+            this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+        }
+        else
+        {
+            // Interactive items without pointer over show arrow cursor
+            this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        }
+
+        var state = !this.ItemData.IsInteractive ? DisabledVisualState
                   : this.ItemData.IsExpanded ? ActiveVisualState
                   : this.isPressed ? PressedVisualState
                   : this.isPointerOver ? PointerOverVisualState

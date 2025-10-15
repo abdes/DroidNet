@@ -18,6 +18,14 @@ namespace DroidNet.Controls.Demo.Menus;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public partial class MenuBarDemoViewModel : ObservableObject
 {
+    // Map of MenuItemData -> handler to call when IsChecked changes. We register
+    // handlers for checkable and radio items created by this demo so the ViewModel
+    // can update its own state when the MenuItem control applies selection state.
+    private readonly Dictionary<MenuItemData, Action<bool>> selectionHandlers = new();
+
+    // Track commands that depend on ReadOnlyMode so we can notify them when it changes
+    private readonly List<RelayCommand> conditionalCommands = [];
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuBarDemoViewModel"/> class.
     /// </summary>
@@ -25,6 +33,23 @@ public partial class MenuBarDemoViewModel : ObservableObject
     public MenuBarDemoViewModel(ILoggerFactory loggerFactory)
     {
         this.MenuBarSource = this.BuildMenuBar(loggerFactory);
+
+        // After the menu source is created, attach handlers so the ViewModel can
+        // react to selection state changes applied by the MenuItem control.
+        this.AttachSelectionHandlers(this.MenuBarSource.Items);
+
+        // Wire up property change notifications to trigger CanExecuteChanged on commands
+        this.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(this.ReadOnlyMode), StringComparison.Ordinal))
+            {
+                // Notify all conditional commands that CanExecute may have changed
+                foreach (var command in this.conditionalCommands)
+                {
+                    command.NotifyCanExecuteChanged();
+                }
+            }
+        };
     }
 
     /// <summary>
@@ -52,6 +77,9 @@ public partial class MenuBarDemoViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string SelectedTheme { get; set; } = "Light";
+
+    [ObservableProperty]
+    public partial bool ReadOnlyMode { get; set; } = false;
 
     /// <summary>
     /// Builds a MenuBar demonstration showing proper UX patterns.
@@ -122,13 +150,13 @@ public partial class MenuBarDemoViewModel : ObservableObject
         Mnemonic = 'E',
         SubItems =
             [
-                this.CreateMenuCommand("Undo", Symbol.Undo, 'U', "Ctrl+Z", "Undo performed"),
-                this.CreateMenuCommand("Redo", Symbol.Redo, 'R', "Ctrl+Y", "Redo performed"),
+                this.CreateConditionalCommand("Undo", Symbol.Undo, 'U', "Ctrl+Z", "Undo performed"),
+                this.CreateConditionalCommand("Redo", Symbol.Redo, 'R', "Ctrl+Y", "Redo performed"),
                 new MenuItemData { IsSeparator = true },
-                this.CreateMenuCommand("Cut", Symbol.Cut, 'C', "Ctrl+X", "Cut selection"),
-                this.CreateMenuCommand("Copy", Symbol.Copy, 'O', "Ctrl+C", "Copied selection"),
-                this.CreateMenuCommand("Paste", Symbol.Paste, 'P', "Ctrl+V", "Pasted clipboard contents"),
-                this.CreateMenuCommand("Delete", Symbol.Delete, 'D', "Del", "Deleted selection"),
+                this.CreateConditionalCommand("Cut", Symbol.Cut, 'C', "Ctrl+X", "Cut selection"),
+                this.CreateMenuCommand("Copy", Symbol.Copy, 'O', "Ctrl+C", "Copied selection"), // Copy works in read-only mode
+                this.CreateConditionalCommand("Paste", Symbol.Paste, 'P', "Ctrl+V", "Pasted clipboard contents"),
+                this.CreateConditionalCommand("Delete", Symbol.Delete, 'D', "Del", "Deleted selection"),
                 this.CreateMenuCommand("Select All", Symbol.SelectAll, 'A', "Ctrl+A", "Selected all content"),
                 new MenuItemData { IsSeparator = true },
                 new MenuItemData
@@ -139,7 +167,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
                     SubItems =
                     [
                         this.CreateMenuCommand("Find...", Symbol.Find, 'F', "Ctrl+F", "Opened find dialog"),
-                        this.CreateMenuCommand("Replace...", Symbol.Find, 'R', "Ctrl+H", "Opened replace dialog"),
+                        this.CreateConditionalCommand("Replace...", Symbol.Find, 'R', "Ctrl+H", "Opened replace dialog"),
                         this.CreateMenuCommand("Find in Files...", Symbol.Find, 'I', "Ctrl+Shift+F", "Opened find in files"),
                     ],
                 },
@@ -189,6 +217,12 @@ public partial class MenuBarDemoViewModel : ObservableObject
                         this.CreateMenuCommand("Reset Zoom", Symbol.Zoom, 'R', "Ctrl+0", "Reset zoom level"),
                     ],
                 },
+                new MenuItemData { IsSeparator = true },
+                this.CreateToggleMenuItem("Read-Only Mode", Symbol.ProtectedDocument, 'R', () => this.ReadOnlyMode, value =>
+                {
+                    this.ReadOnlyMode = value;
+                    this.LastActionMessage = $"Read-Only Mode: {(value ? "ON - Edit commands disabled" : "OFF - Edit commands enabled")}";
+                }),
                 new MenuItemData { IsSeparator = true },
                 new MenuItemData
                 {
@@ -290,13 +324,14 @@ public partial class MenuBarDemoViewModel : ObservableObject
             IsChecked = getState(),
         };
 
-        item.Command = new RelayCommand(() =>
+        // Do NOT provide a command for checkable items. MenuItem is expected to
+        // handle toggling selection state. Instead register a handler so the
+        // ViewModel updates when IsChecked changes.
+        this.selectionHandlers[item] = checkedValue =>
         {
-            var newValue = !getState();
-            setState(newValue);
-            item.IsChecked = newValue;
-            this.LastActionMessage = $"{text}: {(newValue ? "ON" : "OFF")}";
-        });
+            setState(checkedValue);
+            this.LastActionMessage = $"{text}: {(checkedValue ? "ON" : "OFF")}";
+        };
 
         return item;
     }
@@ -310,15 +345,80 @@ public partial class MenuBarDemoViewModel : ObservableObject
         Command = this.CreateCommand(message),
     };
 
-    private MenuItemData CreateThemeMenuItem(string text, string theme, Symbol icon, char mnemonic) => new()
+    /// <summary>
+    /// Creates a menu command that is disabled when ReadOnlyMode is enabled.
+    /// </summary>
+    private MenuItemData CreateConditionalCommand(string text, Symbol icon, char mnemonic, string? accelerator, string message)
     {
-        Text = text,
-        Icon = IconHelper.Create(icon),
-        Mnemonic = mnemonic,
-        RadioGroupId = "Theme",
-        IsChecked = string.Equals(this.SelectedTheme, theme, StringComparison.Ordinal),
-        Command = new RelayCommand(() => this.SelectTheme(theme)),
-    };
+        var command = new RelayCommand(
+            () => this.LastActionMessage = message,
+            () => !this.ReadOnlyMode);
+
+        // Track this command so we can notify it when ReadOnlyMode changes
+        this.conditionalCommands.Add(command);
+
+        return new MenuItemData
+        {
+            Text = text,
+            Icon = IconHelper.Create(icon),
+            Mnemonic = mnemonic,
+            AcceleratorText = accelerator,
+            Command = command,
+        };
+    }
+
+    private MenuItemData CreateThemeMenuItem(string text, string theme, Symbol icon, char mnemonic)
+    {
+        var item = new MenuItemData
+        {
+            Text = text,
+            Icon = IconHelper.Create(icon),
+            Mnemonic = mnemonic,
+            RadioGroupId = "Theme",
+            IsChecked = string.Equals(this.SelectedTheme, theme, StringComparison.Ordinal),
+        };
+
+        return this.RegisterThemeHandler(item, theme);
+    }
+
+    private void AttachSelectionHandlers(IEnumerable<MenuItemData> items)
+    {
+        foreach (var item in items)
+        {
+            // If we have a registered handler for this item, subscribe to property changes
+            if (this.selectionHandlers.TryGetValue(item, out var handler))
+            {
+                item.PropertyChanged += (_, e) =>
+                {
+                    if (string.Equals(e.PropertyName, nameof(MenuItemData.IsChecked), StringComparison.Ordinal))
+                    {
+                        handler(item.IsChecked);
+                    }
+                };
+            }
+
+            // Recurse into children
+            if (item.SubItems is { })
+            {
+                this.AttachSelectionHandlers(item.SubItems);
+            }
+        }
+    }
+
+    // Register selection handler for theme radio items so we can react when
+    // MenuItem toggles the IsChecked state (MenuServices will manage mutual exclusion).
+    private MenuItemData RegisterThemeHandler(MenuItemData item, string theme)
+    {
+        this.selectionHandlers[item] = checkedValue =>
+        {
+            if (checkedValue)
+            {
+                this.SelectTheme(theme);
+            }
+        };
+
+        return item;
+    }
 
     private RelayCommand CreateCommand(string message) => new(() => this.LastActionMessage = message);
 

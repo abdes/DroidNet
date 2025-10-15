@@ -52,6 +52,7 @@
                             <cm:MenuItem
                                 x:Name="DemoMenuItem"
                                 Margin="2"
+                                Invoked="DemoMenuItem_OnInvoked"
                                 IsTabStop="True"
                                 ItemData="{x:Bind ViewModel.MenuItemData, Mode=OneWay}"
                                 MenuSource="{x:Bind ViewModel.MenuSource, Mode=OneWay}" />
@@ -97,6 +98,10 @@
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Text Column: Clear, concise menu item text" />
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Accelerator Column: Keyboard shortcuts (e.g., 'Ctrl+S')" />
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• State Column: Checkmarks for selections, arrows for submenus" />
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="• Command Executability: Item appears disabled when command CanExecute returns false" />
                     </StackPanel>
                 </Border>
 
@@ -160,6 +165,48 @@
                 <StackPanel Spacing="4">
                     <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="State Options" />
                     <ToggleSwitch Header="Is Enabled" IsOn="{x:Bind ViewModel.MenuItemData.IsEnabled, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!--  Command Options  -->
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="Command Options" />
+
+                    <ToggleSwitch
+                        Header="Use Command"
+                        IsOn="{x:Bind ViewModel.UseCommand, Mode=TwoWay}"
+                        OffContent="No command attached"
+                        OnContent="Command attached" />
+
+                    <ToggleSwitch
+                        Header="Command Can Execute"
+                        IsEnabled="{x:Bind ViewModel.UseCommand, Mode=OneWay}"
+                        IsOn="{x:Bind ViewModel.CommandCanExecute, Mode=TwoWay}"
+                        OffContent="Command disabled"
+                        OnContent="Command enabled" />
+
+                    <Border
+                        Padding="12,8"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Visibility="{x:Bind ViewModel.UseCommand, Mode=OneWay}">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.CommandExecutabilityStatus, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                    </Border>
+
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="When 'Command Can Execute' is OFF, the MenuItem will appear disabled (grayed out) even if 'Is Enabled' is ON. This demonstrates the IsInteractive property."
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.UseCommand, Mode=OneWay}" />
                 </StackPanel>
 
                 <!--  Checkable State  -->

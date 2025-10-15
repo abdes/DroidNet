@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
@@ -145,6 +143,50 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.DisabledVisualState]);
+    });
+
+    [TestMethod]
+    public Task ShowsDisabledVisualStateWhenCommandCannotExecute_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - Start with command that CAN execute, then we'll disable it to trigger state change
+        var canExecute = true;
+        var command = new RelayCommand<MenuItemData>(
+            _ => { },
+            _ => canExecute);
+
+        var (menuItem, vsm) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Item with Command",
+            IsEnabled = true,
+            Command = command,
+        }).ConfigureAwait(true);
+
+        // Act - Disable the command to trigger visual state change
+        canExecute = false;
+        command.NotifyCanExecuteChanged();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - should be disabled because command cannot execute
+        _ = menuItem.ItemData!.IsInteractive.Should().BeFalse("Item should not be interactive when command cannot execute");
+        _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.DisabledVisualState], "Visual state should be Disabled when command cannot execute");
+
+        // Act - Enable the command
+        canExecute = true;
+        command.NotifyCanExecuteChanged();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - should now be in normal state
+        _ = menuItem.ItemData!.IsInteractive.Should().BeTrue("Item should be interactive when command can execute");
+        _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NormalVisualState], "Visual state should be Normal when command can execute");
+
+        // Act - Disable the command again
+        canExecute = false;
+        command.NotifyCanExecuteChanged();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - should return to disabled state
+        _ = menuItem.ItemData!.IsInteractive.Should().BeFalse("Item should not be interactive when command is disabled again");
+        _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.DisabledVisualState], "Visual state should be Disabled when command is disabled again");
     });
 
     [TestMethod]
@@ -343,31 +385,6 @@ public class MenuItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task HandlesRadioGroupSelection_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var invokedEventRaised = false;
-        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
-        {
-            Text = "Radio Item",
-            RadioGroupId = "TestGroup",
-            IsChecked = false,
-            IsEnabled = true,
-
-            // No command needed - selection should work independently
-        }).ConfigureAwait(true);
-
-        menuItem.Invoked += (_, _) => invokedEventRaised = true; // Should not raise without a command
-
-        // Act
-        menuItem.InvokeTapped();
-
-        // Assert
-        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised without a command");
-        _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Radio group item should set IsChecked=true on invoke (container manages unchecking others)");
-    });
-
-    [TestMethod]
     public Task RaisesInvokedEventOnActivation_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -484,7 +501,7 @@ public class MenuItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task DoesNotRaiseInvokedEventIfNoCommand_Async() => EnqueueAsync(async () =>
+    public Task RaisesInvokedEventIfNoCommand_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var invokedEventRaised = false;
@@ -502,7 +519,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         menuItem.InvokeTapped();
 
         // Assert
-        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised even when no command is present");
+        _ = invokedEventRaised.Should().BeTrue("Invoked event should be raised when no command is present");
     });
 
     [TestMethod]
@@ -593,11 +610,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Assert - CanExecute threw so command should not execute; Invoked should be raised with failure details
         _ = commandExecuted.Should().BeFalse("Command should not execute when CanExecute throws");
-        _ = invokedRaised.Should().BeTrue("Invoked should be raised even when the command fails");
-        _ = invokedArgs.Should().NotBeNull();
-        _ = invokedArgs!.IsFailed.Should().BeTrue();
-        _ = invokedArgs.Exception.Should().BeOfType<CommandFailedException>();
-        _ = invokedArgs.Exception!.InnerException.Should().BeOfType<InvalidOperationException>();
+        _ = invokedRaised.Should().BeFalse("Invoked should not be raised because item is not interactive");
         _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state should not change when command cannot execute");
     });
 
@@ -656,7 +669,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Assert
         _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Radio group item should set IsChecked=true on invoke");
-        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised when no command is present");
+        _ = invokedEventRaised.Should().BeTrue("Invoked event should be raised when no command is present");
     });
 
     [TestMethod]
