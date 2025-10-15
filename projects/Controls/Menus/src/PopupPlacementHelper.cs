@@ -16,9 +16,11 @@ namespace DroidNet.Controls.Menus;
 /// <remarks>
 ///     From the viewer's perspective the popup prefers to stay anchored to its parent. When there is enough room,
 ///     the content sits beside the anchor while staying inside the window bounds. If the available space shrinks,
-///     the popup hugs the edges that keep it visible, and once space returns it realigns with the anchor without a
-///     noticeable jump. Throughout these adjustments the item that was under the pointer before the move stays under
-///     the pointer after the move so hover feedback does not flicker.
+///     the content lines up with the anchor side that sits closest to the window edge, so menus near the left edge
+///     open flush left while those near the right edge open flush right. If the available space shrinks, the popup
+///     hugs the edges that keep it visible, and once space returns it realigns with the anchor without a noticeable
+///     jump. Throughout these adjustments the item that was under the pointer before the move stays under the pointer
+///     after the move so hover feedback does not flicker.
 /// </remarks>
 internal sealed class PopupPlacementHelper
 {
@@ -93,8 +95,10 @@ internal sealed class PopupPlacementHelper
 
         this.EnsureStateForToken(request.Token);
 
-        var anchorHorizontalMin = anchorBounds.Right - contentSize.Width;
-        var anchorHorizontalMax = request.CustomPosition.HasValue ? anchorBounds.Left : anchorBounds.Right;
+        var anchorLeadingOffset = anchorBounds.Left;
+        var anchorTrailingOffset = anchorBounds.Right - contentSize.Width;
+        var anchorHorizontalMin = Math.Min(anchorLeadingOffset, anchorTrailingOffset);
+        var anchorHorizontalMax = Math.Max(anchorLeadingOffset, anchorTrailingOffset);
         var anchorVerticalMin = anchorBounds.Bottom - contentSize.Height;
         var anchorVerticalMax = request.CustomPosition.HasValue ? anchorBounds.Top : anchorBounds.Bottom;
 
@@ -102,7 +106,7 @@ internal sealed class PopupPlacementHelper
         var ranges = InitializePlacementRanges(anchorHorizontalMin, anchorHorizontalMax, anchorVerticalMin, anchorVerticalMax);
         var constraints = ApplyViewportConstraints(request.Viewport, contentSize, ref ranges);
 
-        var offset = GetPreferredOffset(anchorBounds, request.CustomPosition, ranges);
+        var offset = this.GetPreferredOffset(request.Viewport, anchorBounds, request.CustomPosition, contentSize, ranges);
 
         offset = this.ApplyStateAffinity(
             anchorBounds,
@@ -272,19 +276,19 @@ internal sealed class PopupPlacementHelper
         return false;
     }
 
-    private static Size MeasureContent(UIElement content, Rect anchorBounds)
+    private static Size MeasureContent(UIElement content)
     {
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var desired = content.DesiredSize;
         var actualWidth = content is FrameworkElement fe ? fe.ActualWidth : double.NaN;
         var actualHeight = content is FrameworkElement feElement ? feElement.ActualHeight : double.NaN;
 
-        var width = ResolveDimension(desired.Width, actualWidth, anchorBounds.Width);
-        var height = ResolveDimension(desired.Height, actualHeight, anchorBounds.Height);
+        var width = ResolveDimension(desired.Width, actualWidth);
+        var height = ResolveDimension(desired.Height, actualHeight);
         return new Size(width, height);
     }
 
-    private static double ResolveDimension(double desired, double actual, double fallback)
+    private static double ResolveDimension(double desired, double actual)
     {
         if (double.IsNaN(desired) || double.IsInfinity(desired) || desired <= 0)
         {
@@ -293,7 +297,7 @@ internal sealed class PopupPlacementHelper
 
         if (double.IsNaN(desired) || double.IsInfinity(desired) || desired <= 0)
         {
-            desired = fallback;
+            desired = 1d;
         }
 
         return desired > 0 ? desired : 1d;
@@ -317,17 +321,6 @@ internal sealed class PopupPlacementHelper
         return Math.Clamp(value, min, max);
     }
 
-    private static Point GetPreferredOffset(Rect anchorBounds, Point? customPosition, PlacementRanges ranges)
-    {
-        var preferredHorizontal = anchorBounds.Left;
-        var preferredVertical = customPosition.HasValue ? anchorBounds.Top : anchorBounds.Bottom;
-
-        var horizontal = ranges.ClampHorizontal(preferredHorizontal);
-        var vertical = ranges.ClampVertical(preferredVertical);
-
-        return new Point(horizontal, vertical);
-    }
-
     private static bool TryResolveAnchorAndSize(PlacementRequest request, out Rect anchorBounds, out Size contentSize)
     {
         anchorBounds = default;
@@ -338,7 +331,7 @@ internal sealed class PopupPlacementHelper
             return false;
         }
 
-        contentSize = MeasureContent(request.Content, anchorBounds);
+        contentSize = MeasureContent(request.Content);
         if (contentSize.Width <= 0 || contentSize.Height <= 0)
         {
             contentSize = new Size(Math.Max(1d, contentSize.Width), Math.Max(1d, contentSize.Height));
@@ -482,6 +475,49 @@ internal sealed class PopupPlacementHelper
         }
 
         return ranges.ClampHorizontal(horizontal);
+    }
+
+    private Point GetPreferredOffset(Rect viewport, Rect anchorBounds, Point? customPosition, Size contentSize, PlacementRanges ranges)
+    {
+        var preferredHorizontal = customPosition.HasValue
+            ? anchorBounds.Left
+            : this.ShouldAlignTrailing(viewport, anchorBounds)
+                ? anchorBounds.Right - contentSize.Width
+                : anchorBounds.Left;
+
+        var preferredVertical = customPosition.HasValue ? anchorBounds.Top : anchorBounds.Bottom;
+
+        var horizontal = ranges.ClampHorizontal(preferredHorizontal);
+        var vertical = ranges.ClampVertical(preferredVertical);
+
+        return new Point(horizontal, vertical);
+    }
+
+    private bool ShouldAlignTrailing(Rect viewport, Rect anchorBounds)
+    {
+        switch (this.state.HorizontalAttachment)
+        {
+            case HorizontalAttachment.WindowLeading:
+            case HorizontalAttachment.AnchorLeading:
+            case HorizontalAttachment.CustomOrigin:
+                return false;
+            case HorizontalAttachment.WindowTrailing:
+            case HorizontalAttachment.AnchorTrailing:
+                return true;
+        }
+
+        if (!IsPositiveFinite(viewport.Width))
+        {
+            return false;
+        }
+
+        var viewportLeadingEdge = viewport.X;
+        var viewportTrailingEdge = viewport.X + viewport.Width;
+
+        var distanceToLeadingEdge = Math.Max(0, anchorBounds.Left - viewportLeadingEdge);
+        var distanceToTrailingEdge = Math.Max(0, viewportTrailingEdge - anchorBounds.Right);
+
+        return distanceToTrailingEdge < distanceToLeadingEdge;
     }
 
     private void EnsureStateForToken(int token)

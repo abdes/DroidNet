@@ -457,6 +457,8 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
 
         this.EnsurePointerEventSubscription(anchorElement);
 
+        this.popup.XamlRoot = anchorElement.XamlRoot;
+
         var popupWasOpen = this.popup.IsOpen;
         var viewport = GetViewportRect(anchorElement.XamlRoot);
         if (!this.TrySetPopupPosition(request, anchorElement, viewport))
@@ -464,8 +466,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
             this.HandleOpenFailure(new InvalidOperationException("Unable to calculate popup placement."), request);
             return;
         }
-
-        this.popup.XamlRoot = anchorElement.XamlRoot;
 
         // Align theme with the anchor to match Flyout behavior (Popup doesn't inherit theme automatically)
         this.ApplyThemeFromAnchor(anchorElement);
