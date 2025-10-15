@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:cm="using:DroidNet.Controls.Menus">
 
-    <Thickness x:Key="ColumnPresenterPadding">12,8</Thickness>
+    <Thickness x:Key="ColumnPresenterPadding">5,5</Thickness>
 
     <Style TargetType="cm:ColumnPresenter">
         <Setter Property="Background" Value="{ThemeResource FlyoutPresenterBackground}" />
