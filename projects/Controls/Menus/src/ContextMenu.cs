@@ -308,8 +308,11 @@ public static class ContextMenu
                 host.MenuSource = this.pendingSource;
             }
 
+            // Adjust position to avoid the stupid resize pointer cursor
+            var adjustedPosition = new Windows.Foundation.Point(this.lastPosition.Value.X + 1, this.lastPosition.Value.Y + 1);
+
             host.RootSurface = this;
-            return host.ShowAt(this.lastAnchor!, this.lastPosition!.Value, navigationMode);
+            return host.ShowAt(this.lastAnchor!, adjustedPosition, navigationMode);
         }
 
         /// <inheritdoc/>
