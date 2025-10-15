@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.UI.Xaml;
+
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
@@ -61,5 +63,22 @@ public static class EnumExtensions
             MenuDismissKind.Programmatic => MenuInteractionInputSource.Programmatic,
             MenuDismissKind.MnemonicExit => MenuInteractionInputSource.KeyboardInput,
             _ => MenuInteractionInputSource.Programmatic,
+        };
+
+    /// <summary>
+    ///     Converts a <see cref="MenuNavigationMode"/> to a corresponding <see cref="FocusState"/>.
+    /// </summary>
+    /// <param name="navigationMode">The navigation mode to convert.</param>
+    /// <returns>
+    ///     The corresponding <see cref="FocusState"/>. If an unrecognized value is supplied,
+    ///     <see cref="FocusState.Programmatic"/> is returned as a safe fallback.
+    /// </returns>
+    public static FocusState ToFocusState(this MenuNavigationMode navigationMode)
+        => navigationMode switch
+        {
+            MenuNavigationMode.PointerInput => FocusState.Pointer,
+            MenuNavigationMode.KeyboardInput => FocusState.Keyboard,
+            MenuNavigationMode.Programmatic => FocusState.Programmatic,
+            _ => FocusState.Programmatic,
         };
 }

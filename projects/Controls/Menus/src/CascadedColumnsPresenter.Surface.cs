@@ -64,7 +64,7 @@ public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
     }
 
     /// <inheritdoc />
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
+    public bool ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
     {
         this.LogExpandItem(level, itemData.Id, navigationMode);
 
@@ -79,7 +79,7 @@ public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
         if (!itemData.HasChildren)
         {
             this.LogParentHasNoChildren(itemData.Id);
-            return;
+            return false;
         }
 
         var services = this.MenuSource?.Services;
@@ -92,6 +92,8 @@ public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
         this.LogOpeningChildColumn(nextLevel, itemData.Id, items.Count, navigationMode);
         _ = this.AddColumn(items, nextLevel, navigationMode);
         itemData.IsExpanded = true;
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -133,5 +135,20 @@ public sealed partial class CascadedColumnsPresenter : ICascadedMenuSurface
         }
 
         this.LogTrimColumns(level, initialCount);
+    }
+
+    /// <inheritdoc />
+    public bool FocusColumn(MenuLevel level, MenuNavigationMode navigationMode)
+    {
+        if (level < 0 || level >= this.columnPresenters.Count)
+        {
+            this.LogInvalidColumnLevel(level);
+
+            // Match interface Contract: Throw when level is negative or exceeds number of open columns.
+            throw new ArgumentOutOfRangeException(nameof(level), level, "The specified menu level does not correspond to an open column on this surface.");
+        }
+
+        var column = this.GetColumn(level);
+        return column?.Focus(navigationMode.ToFocusState()) ?? false;
     }
 }

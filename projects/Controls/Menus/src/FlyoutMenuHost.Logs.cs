@@ -92,4 +92,32 @@ internal partial class FlyoutMenuHost
             LogCreatePresenter(logger);
         }
     }
+
+    [LoggerMessage(
+        EventId = 3306,
+        Level = LogLevel.Debug,
+        Message = "[FlyoutMenuHost] flyout opened")]
+    private static partial void LogOpened(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 3307,
+        Level = LogLevel.Debug,
+        Message = "[FlyoutMenuHost] flyout opened (Anchor={AnchorId}, IsExpanded={IsExpanded})")]
+    private static partial void LogOpened(ILogger logger, string anchorId, bool isExpanded);
+
+    [Conditional("DEBUG")]
+    private void LogOpened()
+    {
+        if (this.MenuSource?.Services.MiscLogger is ILogger logger)
+        {
+            if (this.Anchor is MenuItem { ItemData: { } anchor })
+            {
+                LogOpened(logger, anchor.Id, anchor.IsExpanded);
+            }
+            else
+            {
+                LogOpened(logger);
+            }
+        }
+    }
 }

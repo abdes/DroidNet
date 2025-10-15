@@ -53,7 +53,8 @@
                                 x:Name="DemoMenuItem"
                                 Margin="2"
                                 IsTabStop="True"
-                                ItemData="{x:Bind ViewModel.MenuItemData, Mode=OneWay}" />
+                                ItemData="{x:Bind ViewModel.MenuItemData, Mode=OneWay}"
+                                MenuSource="{x:Bind ViewModel.MenuSource, Mode=OneWay}" />
                         </Border>
 
                         <TextBlock

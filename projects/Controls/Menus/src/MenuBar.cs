@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -16,18 +18,22 @@ namespace DroidNet.Controls.Menus;
 ///     Horizontal menu bar control that renders root <see cref="MenuItemData"/> instances and
 ///     materializes cascading submenus through an <see cref="ICascadedMenuHost"/>.
 /// </summary>
-[TemplatePart(Name = RootItemsRepeaterPart, Type = typeof(ItemsRepeater))]
+[TemplatePart(Name = RootItemsPanelPart, Type = typeof(StackPanel))]
 [SuppressMessage(
     "Microsoft.Design",
     "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable",
     Justification = "WinUI controls follow framework pattern of cleanup in Unloaded event and destructor, not IDisposable")]
 public sealed partial class MenuBar : Control
 {
-    private const string RootItemsRepeaterPart = "PART_RootItemsRepeater";
+    private const string RootItemsPanelPart = "PART_RootItemsPanel";
 
-    private ItemsRepeater? rootItemsRepeater;
+    private readonly Dictionary<MenuItemData, MenuItem> rootItemMap = new();
+    private StackPanel? rootItemsPanel;
+    private ObservableCollection<MenuItemData>? rootItemsCollection;
+    private Style? rootMenuItemStyle;
     private ICascadedMenuHost? activeHost;
-    private Func<ICascadedMenuHost> hostFactory = static () => new FlyoutMenuHost();
+    private Func<ICascadedMenuHost> hostFactory = static () => new PopupMenuHost();
+    private CaptureInfo? capture;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -35,6 +41,8 @@ public sealed partial class MenuBar : Control
     public MenuBar()
     {
         this.DefaultStyleKey = typeof(MenuBar);
+
+        this.Loaded += this.OnLoaded;
 
         this.GettingFocus += (sender, args) =>
         {
@@ -72,107 +80,86 @@ public sealed partial class MenuBar : Control
     {
         base.OnApplyTemplate();
 
-        if (this.rootItemsRepeater is not null)
+        if (this.rootItemsPanel is not null)
         {
-            this.rootItemsRepeater.ElementPrepared -= this.OnItemPrepared;
-            this.rootItemsRepeater.ElementClearing -= this.OnItemClearing;
+            this.DetachAllRootMenuItems();
         }
 
-        this.rootItemsRepeater = this.GetTemplateChild(RootItemsRepeaterPart) as ItemsRepeater
-            ?? throw new InvalidOperationException($"{nameof(MenuBar)} template must declare an ItemsRepeater named '{RootItemsRepeaterPart}'.");
+        this.rootItemsPanel = this.GetTemplateChild(RootItemsPanelPart) as StackPanel
+            ?? throw new InvalidOperationException($"{nameof(MenuBar)} template must declare a StackPanel named '{RootItemsPanelPart}'.");
 
-        this.rootItemsRepeater.ItemsSource = this.MenuSource?.Items;
-
-        this.rootItemsRepeater.ElementPrepared += this.OnItemPrepared;
-        this.rootItemsRepeater.ElementClearing += this.OnItemClearing;
+        _ = this.TryResolveRootMenuItemStyle();
+        this.RebuildRootItems();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        this.ActualThemeChanged -= this.OnActualThemeChanged;
         this.activeHost?.Dispose();
         this.activeHost = null;
     }
 
-    private void OnItemPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (args.Element is not MenuItem menuItem || menuItem.ItemData is null)
+        this.ActualThemeChanged -= this.OnActualThemeChanged;
+        this.ActualThemeChanged += this.OnActualThemeChanged;
+        this.ApplyThemeToActiveHost();
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        _ = args;
+        this.ApplyThemeToActiveHost();
+    }
+
+    private void MenuItem_OnPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        // We only care about root items that have children and are interactive.
+        if (sender is not MenuItem { ItemData: { HasChildren: true, IsInteractive: true } itemData } item)
         {
             return;
         }
 
-        menuItem.ShowSubmenuGlyph = false;
-
-        menuItem.Invoked += this.MenuItem_OnInvoked;
-        menuItem.SubmenuRequested += this.MenuItem_OnSubmenuRequested;
-        menuItem.HoverStarted += this.MenuItem_OnHoverStarted;
-        menuItem.HoverEnded += this.MenuItem_OnHoverEnded;
-        menuItem.GettingFocus += this.MenuItem_OnGettingFocus;
-        menuItem.GotFocus += this.MenuItem_OnGotFocus;
-        menuItem.LostFocus += this.MenuItem_OnLostFocus;
-
-        // Implement PreviewKeyDown to handle Left/Right arrow navigation between root items and submenu opening.
-        menuItem.PreviewKeyDown += this.MenuItem_OnPreviewKeyDown;
-    }
-
-    private void OnItemClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
-    {
-        if (args.Element is not MenuItem menuItem)
+        // We need a valid menu source with an interaction controller to proceed.
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
         {
             return;
         }
 
-        menuItem.ShowSubmenuGlyph = true;
+        Debug.Assert(this.Items.Contains(itemData), "Expecting itemData to be part of the root items.");
 
-        menuItem.Invoked -= this.MenuItem_OnInvoked;
-        menuItem.SubmenuRequested -= this.MenuItem_OnSubmenuRequested;
-        menuItem.HoverStarted -= this.MenuItem_OnHoverStarted;
-        menuItem.HoverEnded -= this.MenuItem_OnHoverEnded;
-        menuItem.GettingFocus -= this.MenuItem_OnGettingFocus;
-        menuItem.GotFocus -= this.MenuItem_OnGotFocus;
-        menuItem.LostFocus -= this.MenuItem_OnLostFocus;
-        menuItem.PreviewKeyDown -= this.MenuItem_OnPreviewKeyDown;
-    }
+        // Then we expand the item menu as usual...
+        const MenuInteractionInputSource source = MenuInteractionInputSource.PointerInput;
+        var result = controller.OnExpandRequested(this.CreateRootContext(), itemData, source);
+        this.LogSubmenuRequested(itemData.Id, source, result);
 
-    private void MenuItem_OnRootRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
-    {
-        if (this.MenuSource is { Services.InteractionController: { } controller })
+        if (!result)
         {
-            controller.OnRadioGroupSelectionRequested(e.ItemData);
             return;
         }
 
-        this.MenuSource?.Services.HandleGroupSelection(e.ItemData);
+        this.CapturePointer(item, e.Pointer);
+        e.Handled = true; // TODO: verify does not conflict with MenuItem pointer handling.
     }
 
-    private void MenuItem_OnInvoked(object? sender, MenuItemInvokedEventArgs e)
+    private void MenuItem_OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         if (this.MenuSource is not { Services.InteractionController: { } controller })
         {
             return;
         }
 
-        this.LogItemInvoked(e.ItemData.Id, e.InputSource);
-        controller.OnItemInvoked(this.CreateRootContext(), e.ItemData, e.InputSource);
-    }
-
-    private void MenuItem_OnHoverStarted(object? sender, MenuItemHoverEventArgs e)
-    {
-        if (this.MenuSource is not { Services.InteractionController: { } controller })
-        {
-            return;
-        }
-
-        if (sender is not MenuItem { ItemData: { } itemData })
+        if (sender is not MenuItem { ItemData: { } itemData } item)
         {
             this.LogEventAborted();
             return;
         }
 
-        this.LogHoverStarted(itemData.Id);
-        controller.OnItemHoverStarted(this.CreateRootContext(), itemData);
+        var willExpand = controller.OnItemHoverStarted(this.CreateRootContext(), itemData);
+        this.LogHoverStarted(itemData.Id, willExpand);
     }
 
-    private void MenuItem_OnHoverEnded(object? sender, MenuItemHoverEventArgs e)
+    private void MenuItem_OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (this.MenuSource is not { Services.InteractionController: { } controller })
         {
@@ -187,6 +174,60 @@ public sealed partial class MenuBar : Control
 
         this.LogHoverEnded(itemData.Id);
         controller.OnItemHoverEnded(this.CreateRootContext(), itemData);
+    }
+
+    private void MenuItem_OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not MenuItem { ItemData: { } itemData })
+        {
+            return;
+        }
+
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
+
+        var handled = false;
+
+        // Handle expansion via activation keys (Enter/Space).
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space && itemData.HasChildren && !itemData.IsExpanded)
+        {
+            var context = this.CreateRootContext();
+            handled = controller.OnExpandRequested(context, itemData, MenuInteractionInputSource.KeyboardInput);
+        }
+
+        // Handle directional navigation (Up/Down/Left/Right). TODO: Home/End
+        MenuNavigationDirection? direction = e.Key switch
+        {
+            VirtualKey.Left => MenuNavigationDirection.Left,
+            VirtualKey.Right => MenuNavigationDirection.Right,
+            VirtualKey.Up => MenuNavigationDirection.Up,
+            VirtualKey.Down => MenuNavigationDirection.Down,
+            _ => null,
+        };
+
+        if (direction is not null)
+        {
+            var context = this.CreateRootContext();
+            handled = controller.OnDirectionalNavigation(context, itemData, direction.Value, MenuInteractionInputSource.KeyboardInput);
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void MenuItem_OnInvoked(object? sender, MenuItemInvokedEventArgs e)
+    {
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
+
+        this.LogItemInvoked(e.ItemData.Id, e.InputSource);
+        controller.OnItemInvoked(this.CreateRootContext(), e.ItemData, e.InputSource);
     }
 
     private void MenuItem_OnGettingFocus(UIElement sender, GettingFocusEventArgs args)
@@ -213,15 +254,20 @@ public sealed partial class MenuBar : Control
             return;
         }
 
-        if (sender is not MenuItem { ItemData: { } itemData })
+        if (FocusManager.GetFocusedElement() is not FrameworkElement fe || !ReferenceEquals(fe, sender))
+        {
+            // Focus was lost/stolen before the GotFocus event could be processed.
+            return;
+        }
+
+        if (sender is not MenuItem { ItemData: { } itemData } item)
         {
             this.LogEventAborted();
             return;
         }
 
-        var uie = e.OriginalSource as UIElement;
-        var fc = uie?.FocusState;
-
+        var fc = item.FocusState;
+        Debug.Assert(fc != FocusState.Unfocused, "Expecting FocusState to not be Unfocused in GotFocus handler.");
         var inputSource = fc switch
         {
             FocusState.Keyboard => MenuInteractionInputSource.KeyboardInput,
@@ -229,7 +275,9 @@ public sealed partial class MenuBar : Control
             FocusState.Programmatic => MenuInteractionInputSource.Programmatic,
             _ => MenuInteractionInputSource.Programmatic,
         };
+
         this.LogGotFocus(itemData.Id, inputSource);
+
         controller.OnItemGotFocus(this.CreateRootContext(), itemData, inputSource);
     }
 
@@ -306,15 +354,14 @@ public sealed partial class MenuBar : Control
         }
     }
 
-    private void MenuItem_OnSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
+    private void OnHostOpening(object? sender, EventArgs e)
     {
-        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        if (sender is ICascadedMenuHost { Anchor: MenuItem { ItemData: { } itemData } } host)
         {
-            return;
+            itemData.IsExpanded = true;
+            this.LogHostOpening(itemData.Id);
+            this.ApplyThemeToHost(host);
         }
-
-        this.LogSubmenuRequested(e.ItemData.Id, e.InputSource);
-        controller.OnExpandRequested(this.CreateRootContext(), e.ItemData, e.InputSource);
     }
 
     private void OnHostClosed(object? sender, EventArgs e)
@@ -331,6 +378,26 @@ public sealed partial class MenuBar : Control
         {
             expanded.IsExpanded = false;
         }
+
+        // Reset any existing pointer capture (defensive, in case Closed is called without Opened).
+        this.ReleasePointer();
+    }
+
+    private void Host_OnOpened(object? sender, EventArgs e)
+    {
+        if (this.MenuSource is not { Services.InteractionController: { } })
+        {
+            return;
+        }
+
+        // Reset any existing pointer capture, we don't need it anymore.
+        this.ReleasePointer();
+
+        this.ApplyThemeToActiveHost();
+
+        var expanded = this.GetExpandedItem();
+        Debug.Assert(expanded is not null, "Expecting an expanded item if the host is open.");
+        this.LogHostOpened(expanded);
     }
 
     private MenuInteractionContext CreateRootContext(ICascadedMenuSurface? columnSurface = null)
@@ -351,6 +418,7 @@ public sealed partial class MenuBar : Control
             var host = this.hostFactory();
             host.Closed += this.OnHostClosed;
             host.Opening += this.OnHostOpening;
+            host.Opened += this.Host_OnOpened;
             this.activeHost = host;
         }
 
@@ -358,29 +426,375 @@ public sealed partial class MenuBar : Control
         return this.activeHost;
     }
 
-    private void OnHostOpening(object? sender, EventArgs e)
+    private void ApplyThemeToActiveHost()
     {
-        if (sender is ICascadedMenuHost { Anchor: MenuItem { ItemData: { } itemData } })
+        if (this.activeHost is null)
         {
-            this.LogHostOpening(itemData.Id);
-            itemData.IsExpanded = true;
+            return;
         }
+
+        this.ApplyThemeToHost(this.activeHost);
+    }
+
+    private void ApplyThemeToHost(ICascadedMenuHost host)
+    {
+        try
+        {
+            if (host.RootElement is FrameworkElement element)
+            {
+                element.RequestedTheme = this.ActualTheme;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Host presenter may not be created yet; ignore until it is available.
+        }
+    }
+
+    private void SetRootItemsCollection(ObservableCollection<MenuItemData>? newCollection)
+    {
+        if (ReferenceEquals(this.rootItemsCollection, newCollection))
+        {
+            return;
+        }
+
+        if (this.rootItemsCollection is not null)
+        {
+            this.rootItemsCollection.CollectionChanged -= this.OnRootItemsCollectionChanged;
+        }
+
+        this.rootItemsCollection = newCollection;
+
+        if (this.rootItemsCollection is not null)
+        {
+            this.rootItemsCollection.CollectionChanged += this.OnRootItemsCollectionChanged;
+        }
+    }
+
+    private void OnRootItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                this.InsertMenuItems(e.NewStartingIndex, e.NewItems);
+                break;
+
+            case NotifyCollectionChangedAction.Remove:
+                this.RemoveMenuItems(e.OldItems);
+                break;
+
+            case NotifyCollectionChangedAction.Replace:
+                this.RemoveMenuItems(e.OldItems);
+                this.InsertMenuItems(e.NewStartingIndex, e.NewItems);
+                break;
+
+            case NotifyCollectionChangedAction.Move:
+                this.MoveMenuItems(e.NewStartingIndex, e.NewItems);
+                break;
+
+            case NotifyCollectionChangedAction.Reset:
+                this.RebuildRootItems();
+                break;
+        }
+    }
+
+    private void RebuildRootItems()
+    {
+        this.DetachAllRootMenuItems();
+
+        if (this.rootItemsPanel is null)
+        {
+            return;
+        }
+
+        this.rootItemsPanel.Children.Clear();
+
+        if (this.MenuSource is not { Items: { } items })
+        {
+            return;
+        }
+
+        foreach (var data in items)
+        {
+            var menuItem = this.CreateRootMenuItem(data);
+            this.rootItemsPanel.Children.Add(menuItem);
+        }
+    }
+
+    private MenuItem CreateRootMenuItem(MenuItemData data)
+    {
+        var menuItem = new MenuItem
+        {
+            ItemData = data,
+        };
+
+        if (this.TryResolveRootMenuItemStyle() is Style style)
+        {
+            menuItem.Style = style;
+        }
+
+        this.AttachRootMenuItem(menuItem);
+        return menuItem;
+    }
+
+    private void InsertMenuItems(int index, IList? items)
+    {
+        if (this.rootItemsPanel is null || items is null || items.Count == 0)
+        {
+            return;
+        }
+
+        var insertionIndex = index >= 0 ? index : this.rootItemsPanel.Children.Count;
+
+        foreach (var item in items)
+        {
+            if (item is not MenuItemData data)
+            {
+                continue;
+            }
+
+            var menuItem = this.CreateRootMenuItem(data);
+
+            if (insertionIndex < 0 || insertionIndex > this.rootItemsPanel.Children.Count)
+            {
+                this.rootItemsPanel.Children.Add(menuItem);
+            }
+            else
+            {
+                this.rootItemsPanel.Children.Insert(insertionIndex, menuItem);
+                insertionIndex++;
+            }
+        }
+    }
+
+    private void RemoveMenuItems(IList? items)
+    {
+        if (items is null || items.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            if (item is not MenuItemData data)
+            {
+                continue;
+            }
+
+            if (this.rootItemMap.TryGetValue(data, out var menuItem))
+            {
+                this.rootItemsPanel?.Children.Remove(menuItem);
+                this.DetachRootMenuItem(menuItem);
+            }
+        }
+    }
+
+    private void MoveMenuItems(int newIndex, IList? items)
+    {
+        if (this.rootItemsPanel is null || items is null || items.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            if (item is not MenuItemData data)
+            {
+                continue;
+            }
+
+            if (!this.rootItemMap.TryGetValue(data, out var menuItem))
+            {
+                continue;
+            }
+
+            var currentIndex = this.rootItemsPanel.Children.IndexOf(menuItem);
+            if (currentIndex < 0)
+            {
+                continue;
+            }
+
+            this.rootItemsPanel.Children.RemoveAt(currentIndex);
+
+            var insertIndex = newIndex;
+            if (currentIndex < insertIndex)
+            {
+                insertIndex--;
+            }
+
+            if (insertIndex < 0)
+            {
+                insertIndex = 0;
+            }
+
+            if (insertIndex > this.rootItemsPanel.Children.Count)
+            {
+                insertIndex = this.rootItemsPanel.Children.Count;
+            }
+
+            this.rootItemsPanel.Children.Insert(insertIndex, menuItem);
+        }
+    }
+
+    private void AttachRootMenuItem(MenuItem menuItem)
+    {
+        if (menuItem.ItemData is null)
+        {
+            return;
+        }
+
+        menuItem.MenuSource = this.MenuSource;
+        menuItem.ShowSubmenuGlyph = false;
+
+        this.rootItemMap[menuItem.ItemData] = menuItem;
+
+        menuItem.Invoked += this.MenuItem_OnInvoked;
+        menuItem.KeyDown += this.MenuItem_OnKeyDown;
+        menuItem.PointerEntered += this.MenuItem_OnPointerEntered;
+        menuItem.PointerExited += this.MenuItem_OnPointerExited;
+        menuItem.PointerPressed += this.MenuItem_OnPointerPressed;
+        menuItem.GettingFocus += this.MenuItem_OnGettingFocus;
+        menuItem.GotFocus += this.MenuItem_OnGotFocus;
+        menuItem.LostFocus += this.MenuItem_OnLostFocus;
+        menuItem.PreviewKeyDown += this.MenuItem_OnPreviewKeyDown;
+    }
+
+    private void DetachRootMenuItem(MenuItem menuItem)
+    {
+        if (this.capture?.TryGetCaptor(out var captor) == true && ReferenceEquals(captor, menuItem))
+        {
+            this.ReleasePointer();
+        }
+
+        menuItem.Invoked -= this.MenuItem_OnInvoked;
+        menuItem.KeyDown -= this.MenuItem_OnKeyDown;
+        menuItem.PointerEntered -= this.MenuItem_OnPointerEntered;
+        menuItem.PointerExited -= this.MenuItem_OnPointerExited;
+        menuItem.PointerPressed -= this.MenuItem_OnPointerPressed;
+        menuItem.GettingFocus -= this.MenuItem_OnGettingFocus;
+        menuItem.GotFocus -= this.MenuItem_OnGotFocus;
+        menuItem.LostFocus -= this.MenuItem_OnLostFocus;
+        menuItem.PreviewKeyDown -= this.MenuItem_OnPreviewKeyDown;
+
+        if (menuItem.ItemData is { } data && this.rootItemMap.TryGetValue(data, out var existing) && ReferenceEquals(existing, menuItem))
+        {
+            this.rootItemMap.Remove(data);
+        }
+
+        menuItem.ShowSubmenuGlyph = true;
+        menuItem.MenuSource = null;
+    }
+
+    private void DetachAllRootMenuItems()
+    {
+        if (this.rootItemMap.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var menuItem in this.rootItemMap.Values.ToList())
+        {
+            this.DetachRootMenuItem(menuItem);
+        }
+
+        if (this.rootItemsPanel is not null)
+        {
+            this.rootItemsPanel.Children.Clear();
+        }
+    }
+
+    private Style? TryResolveRootMenuItemStyle()
+    {
+        if (this.rootMenuItemStyle is not null)
+        {
+            return this.rootMenuItemStyle;
+        }
+
+        if (this.Resources.TryGetValue("MenuBarRootMenuItemStyle", out var styleResource) && styleResource is Style localStyle)
+        {
+            this.rootMenuItemStyle = localStyle;
+            return localStyle;
+        }
+
+        if (Application.Current?.Resources.TryGetValue("MenuBarRootMenuItemStyle", out var appStyleResource) == true
+            && appStyleResource is Style appStyle)
+        {
+            this.rootMenuItemStyle = appStyle;
+            return appStyle;
+        }
+
+        return null;
     }
 
     private MenuItem? ResolveToItem(MenuItemData root)
     {
-        if (this.rootItemsRepeater is null || this.MenuSource is null)
+        if (this.rootItemMap.TryGetValue(root, out var menuItem))
+        {
+            return menuItem;
+        }
+
+        if (this.rootItemsPanel is null)
         {
             return null;
         }
 
-        var index = this.MenuSource.Items.IndexOf(root);
-        if (index < 0)
+        foreach (var child in this.rootItemsPanel.Children)
         {
-            return null;
+            if (child is MenuItem item && ReferenceEquals(item.ItemData, root))
+            {
+                this.rootItemMap[root] = item;
+                return item;
+            }
         }
 
-        var element = this.rootItemsRepeater.TryGetElement(index) ?? this.rootItemsRepeater.GetOrCreateElement(index);
-        return element as MenuItem;
+        return null;
+    }
+
+    // We capture the pointer and keep it until the flyout if opened, to avoid
+    // hover events on other root items, WinUI playing with our pointer, etc.
+    private void CapturePointer(MenuItem captor, Pointer pointer)
+    {
+        if (this.capture is not null)
+        {
+            return;
+        }
+
+        if (captor.CapturePointer(pointer))
+        {
+            this.capture = new CaptureInfo(captor, pointer.PointerId);
+            this.LogCaptureSuccess();
+        }
+        else
+        {
+            this.LogCaptureFailed();
+        }
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "cannot do anything about the exceptions")]
+    private void ReleasePointer()
+    {
+        if (this.capture?.TryGetCaptor(out var captor) == true)
+        {
+            _ = this.DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    captor?.ReleasePointerCaptures();
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        this.capture = null;
+    }
+
+    private readonly struct CaptureInfo(MenuItem captor, uint pointerId)
+    {
+        public readonly WeakReference<MenuItem> CaptorRef = new(captor);
+        public readonly uint PointerId = pointerId;
+
+        public bool TryGetCaptor(out MenuItem? captor) => this.CaptorRef.TryGetTarget(out captor);
     }
 }

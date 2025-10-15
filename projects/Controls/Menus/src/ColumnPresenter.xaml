@@ -13,6 +13,7 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="{StaticResource ColumnPresenterPadding}" />
         <Setter Property="MinWidth" Value="200" />
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="cm:ColumnPresenter">

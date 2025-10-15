@@ -20,13 +20,16 @@ public sealed partial class MenuBar : IRootMenuSurface
         : null;
 
     /// <inheritdoc />
-    public void Show(MenuNavigationMode navigationMode)
+    public bool Show(MenuNavigationMode navigationMode)
     {
-        // Menubar is already visible; for keyboard, set an initial focus anchor.
+        // Menubar is always visible; for keyboard, set an initial focus anchor.
         if (navigationMode == MenuNavigationMode.KeyboardInput)
         {
+            // Focus failure is not critical here; we just tried our best.
             _ = this.FocusFirstItem(navigationMode);
         }
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -117,27 +120,34 @@ public sealed partial class MenuBar : IRootMenuSurface
     public bool FocusItem(MenuItemData itemData, MenuNavigationMode navigationMode)
     {
         this.EnsureItemIsRoot(itemData);
-
-        if (!itemData.IsInteractive)
+        if (this.ResolveToItem(itemData) is not { } menuItem)
         {
             return false;
         }
 
-        if (this.ResolveToItem(itemData) is not { } menuItem)
+        if (FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem fe && ReferenceEquals(fe, menuItem))
         {
-            return false;
+            return true; // Already focused
+        }
+
+        if (!itemData.IsInteractive)
+        {
+            return false; // Cannot focus non-interactive items
         }
 
         var focusState = navigationMode switch
         {
             MenuNavigationMode.KeyboardInput => FocusState.Keyboard,
             MenuNavigationMode.PointerInput => FocusState.Pointer,
+            MenuNavigationMode.Programmatic => FocusState.Programmatic,
             _ => FocusState.Programmatic,
         };
 
-        var result = menuItem.Focus(focusState);
-        this.LogFocusItem(itemData.Id, navigationMode, result);
-        return result;
+        return this.DispatcherQueue.TryEnqueue(() =>
+        {
+            var result = menuItem.Focus(focusState);
+            this.LogFocusItem(itemData.Id, navigationMode, result);
+        });
     }
 
     /// <inheritdoc />
@@ -155,33 +165,35 @@ public sealed partial class MenuBar : IRootMenuSurface
     }
 
     /// <inheritdoc />
-    public void ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
+    public bool ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
     {
         Debug.Assert(this.MenuSource is { }, "OpenRootSubmenu requires a valid MenuSource");
         this.EnsureItemIsRoot(itemData);
 
         if (!itemData.HasChildren)
         {
-            return;
+            return true;
+        }
+
+        var currentExpanded = this.GetExpandedItem();
+        if (ReferenceEquals(currentExpanded, itemData))
+        {
+            return true; // Already expanded
         }
 
         this.LogExpandItem(itemData.Id, navigationMode);
 
+        _ = currentExpanded?.IsExpanded = false;
+
         var host = this.EnsureHost();
-        var currentExpanded = this.GetExpandedItem();
-        if (currentExpanded is not null && !ReferenceEquals(currentExpanded, itemData))
-        {
-            currentExpanded.IsExpanded = false;
-        }
-
-        itemData.IsExpanded = true;
-
         this.LogSettingMenuSourceOnHost();
         host.MenuSource = new MenuSourceView(itemData.SubItems, this.MenuSource.Services);
         var item = this.ResolveToItem(itemData);
         Debug.Assert(item is not null, "Expecting itemData to resolve to a valid MenuItem.");
+
         this.LogShowingHost();
-        host.ShowAt(item, navigationMode);
+
+        return this.DispatcherQueue.TryEnqueue(() => host.ShowAt(item, navigationMode));
     }
 
     /// <inheritdoc />

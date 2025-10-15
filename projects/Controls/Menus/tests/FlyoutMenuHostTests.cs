@@ -274,10 +274,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
 
             public object? FocusElement => null;
 
-            public void Show(MenuNavigationMode navigationMode)
-            {
-                // No-op for tests; assume menu becomes available.
-            }
+            public bool Show(MenuNavigationMode navigationMode) => true;
 
             public void Dismiss(MenuDismissKind kind = MenuDismissKind.Programmatic)
             {
@@ -306,12 +303,14 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
 
             public bool FocusFirstItem(MenuNavigationMode navigationMode) => this.items.Any();
 
-            public void ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
+            public bool ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
             {
                 foreach (var item in this.items)
                 {
                     item.IsExpanded = ReferenceEquals(item, itemData);
                 }
+
+                return true;
             }
 
             public void CollapseItem(MenuItemData itemData, MenuNavigationMode navigationMode) => itemData.IsExpanded = false;

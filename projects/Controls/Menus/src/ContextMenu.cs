@@ -64,7 +64,7 @@ public static class ContextMenu
     /// <param name="rootSurface">The optional root surface for focus management.</param>
     /// <returns>A new <see cref="ICascadedMenuHost"/> instance.</returns>
     internal static ICascadedMenuHost CreateDefaultMenuHost(IRootMenuSurface? rootSurface)
-        => new FlyoutMenuHost { RootSurface = rootSurface };
+        => new PopupMenuHost { RootSurface = rootSurface };
 
     private static ICascadedMenuHost? GetMenuHost(UIElement element)
         => (ICascadedMenuHost?)element.GetValue(MenuHostProperty);
@@ -288,26 +288,28 @@ public static class ContextMenu
         }
 
         /// <inheritdoc/>
-        public void Show(MenuNavigationMode navigationMode)
+        public bool Show(MenuNavigationMode navigationMode)
         {
             if (this.lastAnchor is null || this.lastPosition is null)
             {
                 // Nothing to show without a position; no-op.
-                return;
+                return false;
             }
 
             // We need a host to display; since ContextMenu creates a cascaded menu host as attached property
             // the host is responsible for showing. Here we try to locate it via attached property storage.
-            if (GetMenuHost(this.TriggerElement) is ICascadedMenuHost host)
+            if (GetMenuHost(this.TriggerElement) is not ICascadedMenuHost host)
             {
-                if (this.pendingSource is not null)
-                {
-                    host.MenuSource = this.pendingSource;
-                }
-
-                host.RootSurface = this;
-                host.ShowAt(this.lastAnchor!, this.lastPosition!.Value, navigationMode);
+                return false;
             }
+
+            if (this.pendingSource is not null)
+            {
+                host.MenuSource = this.pendingSource;
+            }
+
+            host.RootSurface = this;
+            return host.ShowAt(this.lastAnchor!, this.lastPosition!.Value, navigationMode);
         }
 
         /// <inheritdoc/>
@@ -353,7 +355,7 @@ public static class ContextMenu
         /// <exception cref="NotSupportedException">
         ///     Context menus don't support expanding root items.
         /// </exception>
-        public void ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
+        public bool ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
             => throw new NotSupportedException("Context menus don't support root-level expansion.");
 
         /// <inheritdoc/>

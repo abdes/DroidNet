@@ -65,8 +65,8 @@ public sealed partial class ExpandableMenuBar : Control
         this.innerMenuBar = this.GetTemplateChild(MenuBarPart) as MenuBar
             ?? throw new InvalidOperationException($"{nameof(ExpandableMenuBar)} template must declare a {nameof(MenuBar)} named '{MenuBarPart}'.");
 
-    this.hamburgerButton.Click += this.OnHamburgerButtonClick;
-    this.innerMenuBar.Dismissed += this.OnInnerMenuBarDismissed;
+        this.hamburgerButton.Click += this.OnHamburgerButtonClick;
+        this.innerMenuBar.Dismissed += this.OnInnerMenuBarDismissed;
 
         this.SyncHostFactory();
 
@@ -75,10 +75,10 @@ public sealed partial class ExpandableMenuBar : Control
             this.innerMenuBar.MenuSource = this.MenuSource;
         }
 
-    this.templateApplied = true;
-    this.UpdateVisualState(useTransitions: false);
-    this.ReinitializeRootObservers();
-    this.ApplyInitialState();
+        this.templateApplied = true;
+        this.UpdateVisualState(useTransitions: false);
+        this.ReinitializeRootObservers();
+        this.ApplyInitialState();
     }
 
     private void DetachTemplateParts()

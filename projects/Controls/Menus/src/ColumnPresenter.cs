@@ -199,13 +199,7 @@ public sealed partial class ColumnPresenter : Control
             return false;
         }
 
-        var focusState = navMode switch
-        {
-            MenuNavigationMode.KeyboardInput => FocusState.Keyboard,
-            MenuNavigationMode.PointerInput => FocusState.Pointer,
-            MenuNavigationMode.Programmatic => FocusState.Programmatic,
-            _ => FocusState.Programmatic,
-        };
+        var focusState = navMode.ToFocusState();
 
         var target = this.MenuItems[position];
         Debug.Assert(target.ItemData is not null, "Expecting MenuItem with valid ItemData in FocusItemAt");
@@ -243,6 +237,9 @@ public sealed partial class ColumnPresenter : Control
 
         this.itemsHost.Loaded -= this.ItemsHost_OnLoaded;
         this.itemsHost.Loaded += this.ItemsHost_OnLoaded;
+
+        // Setup keyboard navigation handler for initiial navigation (when no item is focused yet).
+        this.KeyDown += this.HandleInitialNavigation;
     }
 
     private void ItemsHost_OnLoaded(object sender, RoutedEventArgs e)
@@ -281,15 +278,10 @@ public sealed partial class ColumnPresenter : Control
         void HookMenuItem(MenuItem item)
         {
             item.Invoked += this.MenuItem_OnInvoked;
-            item.SubmenuRequested += this.MenuItem_OnSubmenuRequested;
-            item.RadioGroupSelectionRequested += this.MenuItem_OnRadioGroupSelectionRequested;
-            item.HoverStarted += this.MenuItem_OnHoverStarted;
+            item.KeyDown += this.MenuItem_OnKeyDown;
+            item.PointerEntered += this.MenuItem_OnPointerEntered;
             item.GettingFocus += this.MenuItem_OnGettingFocus;
             item.GotFocus += this.MenuItem_OnGotFocus;
-
-            // Implement PreviewKeyDown to handle Up/Down arrow navigation between root items, and
-            // transition to root menu via Left/Right.
-            item.PreviewKeyDown += this.MenuItem_OnPreviewKeyDown;
         }
     }
 
@@ -312,63 +304,125 @@ public sealed partial class ColumnPresenter : Control
         void UnhookMenuItem(MenuItem item)
         {
             item.Invoked -= this.MenuItem_OnInvoked;
-            item.SubmenuRequested -= this.MenuItem_OnSubmenuRequested;
-            item.RadioGroupSelectionRequested -= this.MenuItem_OnRadioGroupSelectionRequested;
-            item.HoverStarted -= this.MenuItem_OnHoverStarted;
+            item.KeyDown -= this.MenuItem_OnKeyDown;
+            item.PointerEntered -= this.MenuItem_OnPointerEntered;
+            item.GettingFocus -= this.MenuItem_OnGettingFocus;
             item.GotFocus -= this.MenuItem_OnGotFocus;
         }
     }
 
-    private void MenuItem_OnHoverStarted(object? sender, MenuItemHoverEventArgs e)
+    /// <summary>
+    ///     Handles the key down event to catch the first navigation (Up/Down/Right/Left) action after opening.
+    /// </summary>
+    private void HandleInitialNavigation(object sender, KeyRoutedEventArgs e)
     {
-        this.LogHoverStarted(e.ItemData.Id);
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
 
+        var handled = false;
+
+        if (e.Key is Windows.System.VirtualKey.Tab or Windows.System.VirtualKey.Down)
+        {
+            this.FocusFirstItem(MenuNavigationMode.KeyboardInput);
+            handled = true;
+        }
+        else if (e.Key is Windows.System.VirtualKey.Up)
+        {
+            // TODO: this.FocusLastItem(MenuLevel.First, MenuNavigationMode.KeyboardInput);
+            handled = true;
+        }
+        else if (e.Key is Windows.System.VirtualKey.Right or Windows.System.VirtualKey.Left)
+        {
+            var context = this.CreateCurrentContext();
+            if (context.RootSurface is null)
+            {
+                this.FocusFirstItem(MenuNavigationMode.KeyboardInput);
+                handled = true;
+            }
+            else
+            {
+                var direction = e.Key is Windows.System.VirtualKey.Right
+                    ? MenuNavigationDirection.Right
+                    : MenuNavigationDirection.Left;
+                var expanded = context.RootSurface.GetExpandedItem();
+                if (expanded is { })
+                {
+                    controller.OnDirectionalNavigation(context, expanded, direction, MenuInteractionInputSource.KeyboardInput);
+                    handled = true;
+                }
+            }
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+            this.KeyDown -= this.HandleInitialNavigation; // Only handle the first navigation key.
+        }
+    }
+
+    private void MenuItem_OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not MenuItem { ItemData: { } itemData })
+        {
+            return;
+        }
+
+        if (this.MenuSource is not { Services.InteractionController: { } controller })
+        {
+            return;
+        }
+
+        var handled = false;
+
+        // Handle expansion via activation keys (Enter/Space).
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space && itemData.HasChildren && !itemData.IsExpanded)
+        {
+            var context = this.CreateCurrentContext();
+            handled = controller.OnExpandRequested(context, itemData, MenuInteractionInputSource.KeyboardInput);
+        }
+
+        // Handle directional navigation (Up/Down/Left/Right). TODO: Home/End
+        MenuNavigationDirection? direction = e.Key switch
+        {
+            VirtualKey.Left => MenuNavigationDirection.Left,
+            VirtualKey.Right => MenuNavigationDirection.Right,
+            VirtualKey.Up => MenuNavigationDirection.Up,
+            VirtualKey.Down => MenuNavigationDirection.Down,
+            _ => null,
+        };
+
+        if (direction is not null)
+        {
+            var context = this.CreateCurrentContext();
+            handled = controller.OnDirectionalNavigation(context, itemData, direction.Value, MenuInteractionInputSource.KeyboardInput);
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void MenuItem_OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
         if (this.Controller is not { } controller)
         {
             return;
         }
 
-        var context = this.CreateCurrentContext();
-        controller.OnItemHoverStarted(context, e.ItemData);
-    }
+        if (sender is not MenuItem { ItemData: { } itemData })
+        {
+            return;
+        }
 
-    private void MenuItem_OnRadioGroupSelectionRequested(object? sender, MenuItemRadioGroupEventArgs e)
-    {
-        this.LogRadioGroupSelectionRequested(e.ItemData.Id);
-        this.Controller?.OnRadioGroupSelectionRequested(e.ItemData);
+        var context = this.CreateCurrentContext();
+        _ = controller.OnItemHoverStarted(context, itemData);
     }
 
     private void MenuItem_OnInvoked(object? sender, MenuItemInvokedEventArgs e)
         => this.ItemInvoked?.Invoke(this, e);
-
-    private void MenuItem_OnSubmenuRequested(object? sender, MenuItemSubmenuEventArgs e)
-    {
-        if (sender is not FrameworkElement item)
-        {
-            return;
-        }
-
-        var controller = this.Controller;
-        if (controller is null)
-        {
-            return;
-        }
-
-        var inputSource = controller.NavigationMode.ToInputSource();
-        var context = this.CreateCurrentContext();
-        this.LogSubmenuRequested(e.ItemData.Id, inputSource);
-        _ = item.DispatcherQueue.TryEnqueue(() =>
-        {
-            // Ensure controller did not change between the event and the dispatcher callback.
-            if (!ReferenceEquals(this.Controller, controller))
-            {
-                this.LogSubmenuRequestIgnoredControllerChanged();
-                return;
-            }
-
-            controller.OnExpandRequested(context, e.ItemData, inputSource);
-        });
-    }
 
     private void MenuItem_OnGettingFocus(UIElement sender, GettingFocusEventArgs args)
     {
@@ -407,40 +461,6 @@ public sealed partial class ColumnPresenter : Control
 
         var context = this.CreateCurrentContext();
         controller.OnItemGotFocus(context, item.ItemData, MenuInteractionInputSource.KeyboardInput);
-    }
-
-    private void MenuItem_OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (sender is not MenuItem { ItemData: { } itemData })
-        {
-            return;
-        }
-
-        if (this.MenuSource is not { Services.InteractionController: { } controller })
-        {
-            return;
-        }
-
-        var handled = false;
-        MenuNavigationDirection? direction = e.Key switch
-        {
-            VirtualKey.Left => MenuNavigationDirection.Left,
-            VirtualKey.Right => MenuNavigationDirection.Right,
-            VirtualKey.Up => MenuNavigationDirection.Up,
-            VirtualKey.Down => MenuNavigationDirection.Down,
-            _ => null,
-        };
-
-        if (direction is not null)
-        {
-            var context = this.CreateCurrentContext();
-            handled = controller.OnDirectionalNavigation(context, itemData, direction.Value, MenuInteractionInputSource.KeyboardInput);
-        }
-
-        if (handled)
-        {
-            e.Handled = true;
-        }
     }
 
     private MenuItem? GetFocusedMenuItem()

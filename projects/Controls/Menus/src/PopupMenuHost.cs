@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -18,6 +19,9 @@ namespace DroidNet.Controls.Menus;
 internal sealed partial class PopupMenuHost : ICascadedMenuHost
 {
     private const int OpenDebounceDelayMilliseconds = 35;
+    private const double WindowEdgePadding = 4d;
+    private const double PointerEdgePadding = 1.5d;
+    private const double PointerSafetyMargin = 20d;
 
     private readonly Popup popup;
     private readonly CascadedColumnsPresenter presenter;
@@ -33,11 +37,18 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     private FrameworkElement? anchor;
     private UIElement? rootPassThroughElement;
     private UIElement? rootInputEventSource;
+    private XamlRoot? trackedXamlRoot;
     private int nextToken;
     private PopupRequest? pendingRequest;
     private PopupRequest? activeRequest;
     private PopupRequest? closingRequest;
     private bool suppressProgrammaticDismissForPendingOpen;
+    private Point? lastPopupOffset;
+    private Size lastPopupSize = Size.Empty;
+    private HorizontalPlacement lastHorizontalPlacement = HorizontalPlacement.None;
+    private VerticalPlacement lastVerticalPlacement = VerticalPlacement.None;
+    private int lastPlacementToken;
+    private Point? lastPointerWindowPosition;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="PopupMenuHost"/> class.
@@ -56,6 +67,9 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
 
         // Subscribe to presenter events to relay to controller
         this.presenter.ItemInvoked += this.OnPresenterItemInvoked;
+        this.presenter.SizeChanged += this.OnPresenterSizeChanged;
+    this.presenter.PointerMoved += this.OnPresenterPointerMoved;
+    this.presenter.PointerExited += this.OnPresenterPointerExited;
 
         this.rootPointerPressedHandler = this.OnRootPointerPressed;
         this.rootKeyDownHandler = this.HandleEscDismissal;
@@ -121,7 +135,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     public bool IsOpen => this.popup.IsOpen;
 
     /// <inheritdoc />
-    public void ShowAt(FrameworkElement anchorElement, MenuNavigationMode navigationMode)
+    public bool ShowAt(FrameworkElement anchorElement, MenuNavigationMode navigationMode)
     {
         ArgumentNullException.ThrowIfNull(anchorElement);
 
@@ -139,10 +153,11 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.Opening?.Invoke(this, EventArgs.Empty);
 
         this.ScheduleOpen();
+        return true;
     }
 
     /// <inheritdoc />
-    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
+    public bool ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
     {
         ArgumentNullException.ThrowIfNull(anchor);
 
@@ -160,6 +175,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.Opening?.Invoke(this, EventArgs.Empty);
 
         this.ScheduleOpen();
+        return true;
     }
 
     /// <inheritdoc />
@@ -199,7 +215,13 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         }
 
         this.presenter.RemoveHandler(UIElement.KeyDownEvent, this.presenterKeyDownHandler);
+        this.presenter.SizeChanged -= this.OnPresenterSizeChanged;
+        this.presenter.PointerMoved -= this.OnPresenterPointerMoved;
+        this.presenter.PointerExited -= this.OnPresenterPointerExited;
         this.DetachPointerEventSubscription();
+        this.DetachWindowChangeSubscription();
+        this.ResetPlacementTracking();
+        this.lastPointerWindowPosition = null;
     }
 
     private bool TryCancelPendingOpen(MenuDismissKind kind)
@@ -246,6 +268,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.state = PopupLifecycleState.Idle;
         this.pendingDismissKind = MenuDismissKind.Programmatic;
         this.suppressProgrammaticDismissForPendingOpen = false;
+        this.ResetPlacementTracking();
         this.DetachPointerEventSubscription();
         this.LogPendingOpenCancelled(kind, pending.Anchor);
         this.Closed?.Invoke(this, EventArgs.Empty);
@@ -358,6 +381,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.closingRequest = null;
         this.state = hasPendingRequest ? PopupLifecycleState.PendingOpen : PopupLifecycleState.Idle;
         this.suppressProgrammaticDismissForPendingOpen = false;
+        this.ResetPlacementTracking();
         if (!hasPendingRequest)
         {
             this.DetachPointerEventSubscription();
@@ -485,18 +509,22 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
 
     private void SetPopupPosition(PopupRequest request, Rect targetBounds)
     {
-        // For custom positions (e.g., context menus at pointer), use the exact position
-        // For anchor-based positioning (e.g., MenuItems), position below the anchor
-        if (request.CustomPosition.HasValue)
+        if (this.lastPlacementToken != request.Token)
         {
-            this.popup.HorizontalOffset = targetBounds.Left;
-            this.popup.VerticalOffset = targetBounds.Top;
+            this.ResetPlacementTracking();
+            this.lastPlacementToken = request.Token;
         }
-        else
-        {
-            this.popup.HorizontalOffset = targetBounds.Left;
-            this.popup.VerticalOffset = targetBounds.Bottom;
-        }
+
+        var presenterSize = this.GetPresenterDesiredSize(targetBounds);
+        var offsets = this.CalculatePopupOffsets(request, targetBounds, presenterSize, out var horizontalPlacement, out var verticalPlacement);
+
+        this.popup.HorizontalOffset = offsets.X;
+        this.popup.VerticalOffset = offsets.Y;
+
+        this.lastPopupOffset = offsets;
+        this.lastPopupSize = presenterSize;
+        this.lastHorizontalPlacement = horizontalPlacement;
+        this.lastVerticalPlacement = verticalPlacement;
     }
 
     private bool TryGetAnchorBounds(PopupRequest request, out Rect targetBounds)
@@ -543,6 +571,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.pendingDismissKind = MenuDismissKind.Programmatic;
         this.state = PopupLifecycleState.Idle;
         this.suppressProgrammaticDismissForPendingOpen = false;
+        this.ResetPlacementTracking();
         this.DetachPointerEventSubscription();
         this.Closed?.Invoke(this, EventArgs.Empty);
     }
@@ -563,6 +592,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         rootContent.AddHandler(UIElement.PointerPressedEvent, this.rootPointerPressedHandler, handledEventsToo: true);
         rootContent.AddHandler(UIElement.KeyDownEvent, this.rootKeyDownHandler, handledEventsToo: false);
         this.rootInputEventSource = rootContent;
+        this.EnsureWindowChangeSubscription(anchorElement);
     }
 
     private void DetachPointerEventSubscription()
@@ -575,6 +605,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         source.RemoveHandler(UIElement.PointerPressedEvent, this.rootPointerPressedHandler);
         source.RemoveHandler(UIElement.KeyDownEvent, this.rootKeyDownHandler);
         this.rootInputEventSource = null;
+        this.DetachWindowChangeSubscription();
     }
 
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -660,6 +691,377 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         e.Handled = true;
     }
 
+    private void OnPresenterPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!this.popup.IsOpen)
+        {
+            return;
+        }
+
+        var position = e.GetCurrentPoint(relativeTo: null).Position;
+        this.lastPointerWindowPosition = position;
+    }
+
+    private void OnPresenterPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (!this.popup.IsOpen)
+        {
+            return;
+        }
+
+        var position = e.GetCurrentPoint(relativeTo: null).Position;
+        this.lastPointerWindowPosition = position;
+    }
+
+    private void OnPresenterSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!this.popup.IsOpen || this.activeRequest is not { } request)
+        {
+            return;
+        }
+
+        if (!this.TryGetAnchorBounds(request, out var targetBounds))
+        {
+            return;
+        }
+
+        this.SetPopupPosition(request, targetBounds);
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        if (!this.popup.IsOpen || this.activeRequest is not { } request)
+        {
+            return;
+        }
+
+        if (!this.TryGetAnchorBounds(request, out var targetBounds))
+        {
+            return;
+        }
+
+        this.SetPopupPosition(request, targetBounds);
+    }
+
+    private void EnsureWindowChangeSubscription(FrameworkElement anchorElement)
+    {
+        if (anchorElement.XamlRoot is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(this.trackedXamlRoot, anchorElement.XamlRoot))
+        {
+            return;
+        }
+
+        this.DetachWindowChangeSubscription();
+        this.trackedXamlRoot = anchorElement.XamlRoot;
+        this.trackedXamlRoot.Changed += this.OnXamlRootChanged;
+    }
+
+    private void DetachWindowChangeSubscription()
+    {
+        if (this.trackedXamlRoot is null)
+        {
+            return;
+        }
+
+        this.trackedXamlRoot.Changed -= this.OnXamlRootChanged;
+        this.trackedXamlRoot = null;
+    }
+
+    private Size GetPresenterDesiredSize(Rect anchorBounds)
+    {
+        this.presenter.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var desired = this.presenter.DesiredSize;
+
+        var width = this.ResolveDimension(desired.Width, this.presenter.ActualWidth, anchorBounds.Width);
+        var height = this.ResolveDimension(desired.Height, this.presenter.ActualHeight, anchorBounds.Height);
+
+        return new Size(width, height);
+    }
+
+    private double ResolveDimension(double desired, double actual, double fallback)
+    {
+        if (double.IsNaN(desired) || double.IsInfinity(desired) || desired <= 0)
+        {
+            desired = actual;
+        }
+
+        if (double.IsNaN(desired) || double.IsInfinity(desired) || desired <= 0)
+        {
+            desired = fallback;
+        }
+
+        return desired > 0 ? desired : 1d;
+    }
+
+    private Point CalculatePopupOffsets(
+        PopupRequest request,
+        Rect anchorBounds,
+        Size popupSize,
+        out HorizontalPlacement horizontalPlacement,
+        out VerticalPlacement verticalPlacement)
+    {
+        horizontalPlacement = HorizontalPlacement.None;
+        verticalPlacement = VerticalPlacement.None;
+
+        var width = popupSize.Width;
+        var height = popupSize.Height;
+
+        var preferredHorizontal = anchorBounds.Left;
+        var preferredVertical = request.CustomPosition.HasValue ? anchorBounds.Top : anchorBounds.Bottom;
+
+        var anchorHorizontalMin = anchorBounds.Right - width;
+        var anchorHorizontalMax = request.CustomPosition.HasValue ? anchorBounds.Left : anchorBounds.Right;
+        var anchorVerticalMin = anchorBounds.Bottom - height;
+        var anchorVerticalMax = request.CustomPosition.HasValue ? anchorBounds.Top : anchorBounds.Bottom;
+
+        EnsureOrdered(ref anchorHorizontalMin, ref anchorHorizontalMax);
+        EnsureOrdered(ref anchorVerticalMin, ref anchorVerticalMax);
+
+        double allowedHorizontalMin = anchorHorizontalMin;
+        double allowedHorizontalMax = anchorHorizontalMax;
+        double allowedVerticalMin = anchorVerticalMin;
+        double allowedVerticalMax = anchorVerticalMax;
+
+        var horizontal = SafeClamp(preferredHorizontal, allowedHorizontalMin, allowedHorizontalMax);
+        var vertical = SafeClamp(preferredVertical, allowedVerticalMin, allowedVerticalMax);
+
+        var xamlRoot = request.Anchor.XamlRoot;
+        double windowWidth = double.NaN;
+        double windowHeight = double.NaN;
+        var windowConstraintHorizontalApplied = false;
+        var windowConstraintVerticalApplied = false;
+
+        if (xamlRoot is { } root)
+        {
+            windowWidth = root.Size.Width;
+            windowHeight = root.Size.Height;
+
+            if (IsPositiveFinite(windowWidth))
+            {
+                var availableWidth = Math.Max(0d, windowWidth - (2 * WindowEdgePadding));
+                if (width <= availableWidth)
+                {
+                    windowConstraintHorizontalApplied = true;
+                    var windowMin = WindowEdgePadding;
+                    var windowMax = windowWidth - WindowEdgePadding - width;
+
+                    var intersectionMin = Math.Max(allowedHorizontalMin, windowMin);
+                    var intersectionMax = Math.Min(allowedHorizontalMax, windowMax);
+
+                    if (intersectionMin <= intersectionMax)
+                    {
+                        allowedHorizontalMin = intersectionMin;
+                        allowedHorizontalMax = intersectionMax;
+                    }
+                    else
+                    {
+                        allowedHorizontalMin = windowMin;
+                        allowedHorizontalMax = windowMax;
+                    }
+
+                    horizontal = SafeClamp(horizontal, allowedHorizontalMin, allowedHorizontalMax);
+                }
+            }
+
+            if (IsPositiveFinite(windowHeight))
+            {
+                var availableHeight = Math.Max(0d, windowHeight - (2 * WindowEdgePadding));
+                if (height <= availableHeight)
+                {
+                    windowConstraintVerticalApplied = true;
+                    var windowMin = WindowEdgePadding;
+                    var windowMax = windowHeight - WindowEdgePadding - height;
+
+                    var intersectionMin = Math.Max(allowedVerticalMin, windowMin);
+                    var intersectionMax = Math.Min(allowedVerticalMax, windowMax);
+
+                    if (intersectionMin <= intersectionMax)
+                    {
+                        allowedVerticalMin = intersectionMin;
+                        allowedVerticalMax = intersectionMax;
+                    }
+                    else
+                    {
+                        allowedVerticalMin = windowMin;
+                        allowedVerticalMax = windowMax;
+                    }
+
+                    vertical = SafeClamp(vertical, allowedVerticalMin, allowedVerticalMax);
+                }
+            }
+        }
+
+        if (!windowConstraintHorizontalApplied)
+        {
+            horizontal = SafeClamp(horizontal, allowedHorizontalMin, allowedHorizontalMax);
+        }
+
+        if (!windowConstraintVerticalApplied)
+        {
+            vertical = SafeClamp(vertical, allowedVerticalMin, allowedVerticalMax);
+        }
+
+        if (this.lastPointerWindowPosition is { } pointer
+            && this.lastPopupOffset is { } previousOffset
+            && this.lastPlacementToken == request.Token)
+        {
+            var priorWidth = this.lastPopupSize.Width;
+            var priorHeight = this.lastPopupSize.Height;
+            var pointerWithinPopup = priorWidth > 0
+                && priorHeight > 0
+                && pointer.X >= previousOffset.X
+                && pointer.X <= previousOffset.X + priorWidth
+                && pointer.Y >= previousOffset.Y
+                && pointer.Y <= previousOffset.Y + priorHeight;
+
+            if (pointerWithinPopup)
+            {
+                var pointerMargin = PointerSafetyMargin;
+                var pointerRangeMin = pointer.X + pointerMargin - width;
+                var pointerRangeMax = pointer.X - pointerMargin;
+
+                if (pointerRangeMin <= pointerRangeMax)
+                {
+                    var pointerIntersectionMin = Math.Max(allowedHorizontalMin, pointerRangeMin);
+                    var pointerIntersectionMax = Math.Min(allowedHorizontalMax, pointerRangeMax);
+
+                    if (pointerIntersectionMin <= pointerIntersectionMax)
+                    {
+                        horizontal = SafeClamp(horizontal, pointerIntersectionMin, pointerIntersectionMax);
+                        allowedHorizontalMin = pointerIntersectionMin;
+                        allowedHorizontalMax = pointerIntersectionMax;
+                    }
+                    else
+                    {
+                        var fallbackMin = Math.Max(allowedHorizontalMin, pointer.X - width + PointerEdgePadding);
+                        var fallbackMax = Math.Min(allowedHorizontalMax, pointer.X - PointerEdgePadding);
+                        if (fallbackMin <= fallbackMax)
+                        {
+                            horizontal = SafeClamp(horizontal, fallbackMin, fallbackMax);
+                            allowedHorizontalMin = fallbackMin;
+                            allowedHorizontalMax = fallbackMax;
+                        }
+                    }
+                }
+                else
+                {
+                    var fallbackMin = Math.Max(allowedHorizontalMin, pointer.X - width + PointerEdgePadding);
+                    var fallbackMax = Math.Min(allowedHorizontalMax, pointer.X - PointerEdgePadding);
+                    if (fallbackMin <= fallbackMax)
+                    {
+                        horizontal = SafeClamp(horizontal, fallbackMin, fallbackMax);
+                        allowedHorizontalMin = fallbackMin;
+                        allowedHorizontalMax = fallbackMax;
+                    }
+                }
+            }
+        }
+
+        if (windowConstraintHorizontalApplied && IsPositiveFinite(windowWidth))
+        {
+            var leftEdge = WindowEdgePadding;
+            var rightEdge = windowWidth - WindowEdgePadding;
+            if (AreClose(horizontal, leftEdge))
+            {
+                horizontalPlacement = HorizontalPlacement.WindowLeading;
+            }
+            else if (AreClose(horizontal + width, rightEdge))
+            {
+                horizontalPlacement = HorizontalPlacement.WindowTrailing;
+            }
+        }
+
+        if (windowConstraintVerticalApplied && IsPositiveFinite(windowHeight))
+        {
+            var topEdge = WindowEdgePadding;
+            var bottomEdge = windowHeight - WindowEdgePadding;
+            if (AreClose(vertical, topEdge))
+            {
+                verticalPlacement = VerticalPlacement.WindowTop;
+            }
+            else if (AreClose(vertical + height, bottomEdge))
+            {
+                verticalPlacement = VerticalPlacement.WindowBottom;
+            }
+        }
+
+        if (horizontalPlacement == HorizontalPlacement.None)
+        {
+            if (request.CustomPosition.HasValue)
+            {
+                horizontalPlacement = HorizontalPlacement.CustomOrigin;
+            }
+            else if (AreClose(horizontal, anchorBounds.Left))
+            {
+                horizontalPlacement = HorizontalPlacement.AnchorLeading;
+            }
+            else if (AreClose(horizontal + width, anchorBounds.Right))
+            {
+                horizontalPlacement = HorizontalPlacement.AnchorTrailing;
+            }
+        }
+
+        if (verticalPlacement == VerticalPlacement.None)
+        {
+            if (request.CustomPosition.HasValue)
+            {
+                verticalPlacement = VerticalPlacement.CustomOrigin;
+            }
+            else if (AreClose(vertical, anchorVerticalMin))
+            {
+                verticalPlacement = VerticalPlacement.AnchorTop;
+            }
+            else if (AreClose(vertical, anchorVerticalMax))
+            {
+                verticalPlacement = VerticalPlacement.AnchorBottom;
+            }
+        }
+
+        return new Point(horizontal, vertical);
+    }
+
+    private void ResetPlacementTracking()
+    {
+        this.lastPopupOffset = null;
+        this.lastPopupSize = Size.Empty;
+        this.lastHorizontalPlacement = HorizontalPlacement.None;
+        this.lastVerticalPlacement = VerticalPlacement.None;
+        this.lastPlacementToken = 0;
+        this.lastPointerWindowPosition = null;
+    }
+
+    private static bool IsPositiveFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value) && value > 0;
+
+    private static bool AreClose(double first, double second)
+    {
+        const double tolerance = 0.5;
+        return Math.Abs(first - second) <= tolerance;
+    }
+
+    private static void EnsureOrdered(ref double min, ref double max)
+    {
+        if (min <= max)
+        {
+            return;
+        }
+
+        (min, max) = (max, min);
+    }
+
+    private static double SafeClamp(double value, double min, double max)
+    {
+        if (min > max)
+        {
+            (min, max) = (max, min);
+        }
+
+        return Math.Clamp(value, min, max);
+    }
+
     private bool TryRequestControllerDismiss(MenuDismissKind kind)
     {
         if (this.MenuSource?.Services.InteractionController is not { } controller)
@@ -675,5 +1077,25 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         var context = MenuInteractionContext.ForColumn(MenuLevel.First, this, rootSurface);
         var handled = controller.OnDismissRequested(context, kind);
         return handled;
+    }
+
+    private enum HorizontalPlacement
+    {
+        None,
+        AnchorLeading,
+        AnchorTrailing,
+        WindowLeading,
+        WindowTrailing,
+        CustomOrigin,
+    }
+
+    private enum VerticalPlacement
+    {
+        None,
+        AnchorTop,
+        AnchorBottom,
+        WindowTop,
+        WindowBottom,
+        CustomOrigin,
     }
 }

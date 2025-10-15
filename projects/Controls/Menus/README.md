@@ -579,7 +579,7 @@ Horizontal menu bar control implementing `IRootMenuSurface`.
 
 **Features:**
 
-- Horizontal `ItemsRepeater` for root items
+- Horizontal stack panel host for root items
 - `ICascadedMenuHost` for submenu materialization
 - Automatic focus management via `MenuInteractionController`
 - Left/Right arrow navigation between roots
@@ -588,7 +588,7 @@ Horizontal menu bar control implementing `IRootMenuSurface`.
 
 **Template Parts:**
 
-- `PART_RootItemsRepeater` – Horizontal item layout
+- `PART_RootItemsPanel` – Horizontal item layout
 
 **Host Strategy:**
 

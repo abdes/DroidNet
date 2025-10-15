@@ -255,7 +255,8 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
                     this.Events.IsOpen = true;
                     this.Events.Anchor = anchor;
                     this.Events.LastNavigationMode = mode;
-                });
+                })
+                .Returns(true);
 
             this.HostMock.Setup(host => host.ShowAt(It.IsAny<FrameworkElement>(), It.IsAny<Windows.Foundation.Point>(), It.IsAny<MenuNavigationMode>()))
                 .Callback<FrameworkElement, Windows.Foundation.Point, MenuNavigationMode>((anchor, point, mode) =>
@@ -265,7 +266,8 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
                     this.Events.LastNavigationMode = mode;
                     this.Events.LastPosition = point;
                     this.Events.ShowAtCalls++;
-                });
+                })
+                .Returns(true);
 
             this.HostMock.Setup(host => host.Dismiss(It.IsAny<MenuDismissKind>()))
                 .Callback(() => this.Events.IsOpen = false);

@@ -33,7 +33,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuSurface
         => this.presenter.FocusFirstItem(level, navigationMode);
 
     /// <inheritdoc />
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
+    public bool ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
         => this.presenter.ExpandItem(level, itemData, navigationMode);
 
     /// <inheritdoc />
@@ -43,4 +43,8 @@ internal sealed partial class PopupMenuHost : ICascadedMenuSurface
     /// <inheritdoc />
     public void TrimTo(MenuLevel level)
         => this.presenter.TrimTo(level);
+
+    /// <inheritdoc />
+    public bool FocusColumn(MenuLevel level, MenuNavigationMode navigationMode)
+        => this.presenter.FocusColumn(level, navigationMode);
 }

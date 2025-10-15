@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
 using Windows.System;
 
 namespace DroidNet.Controls.Menus;
@@ -26,7 +27,8 @@ namespace DroidNet.Controls.Menus;
 ///     <para>
 ///         The control supports all menu item types including commands, separators, checkable items, and grouped
 ///         (radio-style) selections. Visual states provide appropriate feedback for user interactions, hover states,
-///         selection states, and disabled conditions.
+///         selection states, and disabled conditions. It handles the logic for command invocation and selection
+///         (single item and radio group), but expansion decision and logic is left to the item containers.
 ///     </para>
 ///     <para>
 ///         <strong>Column Layout</strong>
@@ -252,7 +254,6 @@ public partial class MenuItem : Control
     private TextBlock? submenuArrow;
     private TextBlock? checkmark;
 
-    private bool isFocused;
     private bool isPressed;
     private bool isPointerOver;
     private bool isMnemonicDisplayVisible;
@@ -315,28 +316,52 @@ public partial class MenuItem : Control
     private bool IsTemplateApplied => this.rootGrid is not null;
 
     /// <summary>
-    ///     Attempts to expand the submenu if the item has children, or invokes the item's command or selection
-    ///     logic if not. Updates visual states accordingly.
+    ///     Attempts to invoke the menu item's command or selection logic if the item is enabled and does not have children.
     /// </summary>
     /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
-    /// <returns>
-    ///     True if the submenu was expanded or the item was invoked; otherwise, false.
-    /// </returns>
-    internal bool TryExpandOrInvoke(MenuInteractionInputSource inputSource)
+    internal void TryInvoke(MenuInteractionInputSource inputSource)
     {
-        if (!this.IsInteractive)
+        if (this.ItemData is not { IsInteractive: true, HasChildren: false } data)
         {
-            return false;
+            return;
         }
 
-        var handled = this.TryExpandSubmenu(inputSource) || this.TryInvoke(inputSource);
-
-        if (handled)
+        if (data.Command is null)
         {
-            this.UpdateCommonVisualState();
+            // A command is not required; just handle selection state
+            this.HandleSelectionState();
+            return;
         }
 
-        return handled;
+        try
+        {
+            // If the command cannot execute right now, indicate that no action occurred
+            if (!data.Command.CanExecute(data))
+            {
+                return;
+            }
+
+            data.Command.Execute(data);
+            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
+            {
+                InputSource = inputSource,
+                ItemData = data,
+            });
+            this.LogInvokedEvent(inputSource);
+            this.HandleSelectionState();
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            this.LogCommandExecutionFailed(ex);
+            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
+            {
+                InputSource = inputSource,
+                ItemData = data,
+                Exception = new("Command failed with an error", ex),
+            });
+        }
+#pragma warning restore CA1031
     }
 
     /// <summary>
@@ -397,14 +422,16 @@ public partial class MenuItem : Control
     {
         Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
 
-        if (this.isFocused)
+        if (FocusManager.GetFocusedElement() is not FrameworkElement fe || !ReferenceEquals(fe, this))
         {
+            // Focus was lost/stolen before the GotFocus event could be processed.
             return;
         }
 
-        this.isFocused = true;
         this.UpdateCommonVisualState();
+
         base.OnGotFocus(e);
+        this.LogFocusState();
     }
 
     /// <summary>
@@ -415,15 +442,11 @@ public partial class MenuItem : Control
     {
         Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
 
-        if (!this.isFocused)
-        {
-            return;
-        }
-
-        this.isFocused = false;
-        this.isPressed = false;
+        this.isPressed = false; // When the release occurs outside the control
         this.UpdateCommonVisualState();
+
         base.OnLostFocus(e);
+        this.LogFocusState();
     }
 
     /// <summary>
@@ -438,28 +461,19 @@ public partial class MenuItem : Control
             return;
         }
 
-        // Show pressed visual state for keyboard activation keys
         if (e.Key is VirtualKey.Enter or VirtualKey.Space)
         {
+            this.LogKeyEvent(e.Key, "Down");
             this.isPressed = true;
             this.UpdateCommonVisualState();
+
+            // We only handle invocation of the item here; expansion is handled by the container
+            this.TryInvoke(MenuInteractionInputSource.KeyboardInput);
         }
 
-        var handled = e.Key switch
-        {
-            VirtualKey.Enter or VirtualKey.Space => this.TryExpandOrInvoke(MenuInteractionInputSource.KeyboardInput),
-            _ => false,
-        };
-
-        if (handled)
-        {
-            e.Handled = true;
-            this.UpdateCommonVisualState();
-        }
-        else
-        {
-            base.OnKeyDown(e);
-        }
+        // Always invoke the base and let the event bubble up to allow menu containers
+        // to handle navigation keys (arrows, Home/End, etc) and expansion.
+        base.OnKeyDown(e);
     }
 
     /// <summary>
@@ -476,6 +490,7 @@ public partial class MenuItem : Control
 
         if (e.Key is VirtualKey.Enter or VirtualKey.Space)
         {
+            this.LogKeyEvent(e.Key, "Up");
             this.isPressed = false;
             this.UpdateCommonVisualState();
         }
@@ -496,18 +511,13 @@ public partial class MenuItem : Control
             return;
         }
 
+        this.LogPointerEvent("Enter");
+
         this.isPointerOver = true;
 
         // Use Hand cursor for interactive menu items on hover
         this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
         this.UpdateCommonVisualState();
-
-        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
-        this.HoverStarted?.Invoke(this, new MenuItemHoverEventArgs
-        {
-            InputSource = MenuInteractionInputSource.PointerInput,
-            ItemData = this.ItemData,
-        });
     }
 
     /// <summary>
@@ -525,16 +535,11 @@ public partial class MenuItem : Control
             return;
         }
 
-        // Revert to Arrow when no longer hovering the item
-        this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        this.LogPointerEvent("Exit");
+
         this.UpdateCommonVisualState();
 
         Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
-        this.HoverEnded?.Invoke(this, new MenuItemHoverEventArgs
-        {
-            InputSource = MenuInteractionInputSource.PointerInput,
-            ItemData = this.ItemData,
-        });
     }
 
     /// <summary>
@@ -549,12 +554,17 @@ public partial class MenuItem : Control
             return;
         }
 
+        this.LogPointerEvent("Press");
+
         // Capture pointer so we reliably see pointer release/cancel even if pointer moves off the control.
         // Mark pressed even if capture fails, to ensure visual state is correct.
         _ = this.CapturePointer(e.Pointer);
         this.isPressed = true;
+        _ = this.Focus(FocusState.Pointer);
 
         this.UpdateCommonVisualState();
+
+    // _ = this.TryExpandSubmenu(MenuInteractionInputSource.PointerInput);
     }
 
     /// <summary>
@@ -572,11 +582,31 @@ public partial class MenuItem : Control
             return;
         }
 
+        this.LogPointerEvent("Release");
+
         // Ensure cursor is appropriate based on hover state after release
         this.ProtectedCursor = this.isPointerOver
             ? InputSystemCursor.Create(InputSystemCursorShape.Hand)
             : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.UpdateCommonVisualState();
+
+        // The sender is the item over which the pointer was released, not the
+        // one that captured it, and it should be `this` item.
+        // Invoke it but only if it does not have Children, and the pointer is
+        // still over it.
+        if (this.ItemData is not { HasChildren: false })
+        {
+            return;
+        }
+
+        var position = e.GetCurrentPoint(this).Position;
+        var bounds = new Rect(0, 0, this.ActualWidth, this.ActualHeight);
+        if (!bounds.Contains(position))
+        {
+            return;
+        }
+
+        this.TryInvoke(MenuInteractionInputSource.PointerInput);
     }
 
     private void OnPointerCanceled(object sender, PointerRoutedEventArgs e)
@@ -588,6 +618,8 @@ public partial class MenuItem : Control
         {
             return;
         }
+
+        this.LogPointerEvent("Cancel");
 
         // Reset to Arrow on cancel
         this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
@@ -602,6 +634,8 @@ public partial class MenuItem : Control
         {
             return;
         }
+
+        this.LogPointerEvent("Capture Lost");
 
         // Reset to Arrow if capture is lost
         this.ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
@@ -622,13 +656,15 @@ public partial class MenuItem : Control
             return;
         }
 
-        _ = this.Focus(FocusState.Pointer);
-        e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
+        this.LogTapped();
+
+    // e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
     }
 
     private void UpdateTypeVisualState()
     {
         Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
+
         var isSeparator = this.ItemData?.IsSeparator ?? false;
         this.IsTabStop = !isSeparator;
         AutomationProperties.SetAccessibilityView(this, isSeparator ? AccessibilityView.Raw : AccessibilityView.Control);
@@ -641,19 +677,19 @@ public partial class MenuItem : Control
     private void UpdateIconVisualState()
     {
         Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
-        _ = VisualStateManager.GoToState(
-                this,
-                this.ItemData.Icon is { } ? HasIconVisualState : NoIconVisualState,
-                useTransitions: true);
+
+        var state = this.ItemData.Icon is { } ? HasIconVisualState : NoIconVisualState;
+        this.LogVisualState(state);
+        _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
     private void UpdateAcceleratorVisualState()
     {
         Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
-        _ = VisualStateManager.GoToState(
-                this,
-                !string.IsNullOrEmpty(this.ItemData.AcceleratorText) ? HasAcceleratorVisualState : NoAcceleratorVisualState,
-                useTransitions: true);
+
+        var state = string.IsNullOrEmpty(this.ItemData.AcceleratorText) ? NoAcceleratorVisualState : HasAcceleratorVisualState;
+        this.LogVisualState(state);
+        _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
     private void UpdateCommonVisualState()
@@ -673,7 +709,7 @@ public partial class MenuItem : Control
                   : this.isPointerOver ? PointerOverVisualState
                   : NormalVisualState;
 
-        this.LogVisualState(this.ItemData.Id, state, this.ItemData.IsExpanded);
+        this.LogVisualState(state);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }
 
@@ -689,31 +725,8 @@ public partial class MenuItem : Control
                 : (data.HasSelectionState && data.IsChecked)
                     ? (data.Icon != null ? CheckedWithIconVisualState : CheckedNoIconVisualState)
                     : NoDecorationVisualState;
-
+        this.LogVisualState(state);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
-    }
-
-    private void HandleSelectionState()
-    {
-        Debug.Assert(this.ItemData is { }, "ItemData should be non-null");
-
-        var data = this.ItemData; // already validated by assert above
-        if (!string.IsNullOrEmpty(data.RadioGroupId))
-        {
-            // Handle radio group behavior - raise event to let container handle group logic
-            this.RadioGroupSelectionRequested?.Invoke(
-                this,
-                new MenuItemRadioGroupEventArgs
-                {
-                    ItemData = data,
-                    GroupId = data.RadioGroupId,
-                });
-        }
-        else if (data.IsCheckable)
-        {
-            // Handle individual checkable item - just toggle
-            data.IsChecked = !data.IsChecked;
-        }
     }
 
     /// <summary>
@@ -731,6 +744,8 @@ public partial class MenuItem : Control
         {
             return;
         }
+
+        this.LogMnemonicVisibility(this.isMnemonicDisplayVisible);
 
         this.isMnemonicDisplayVisible = isVisible;
         this.RefreshTextPresentation();
@@ -805,79 +820,33 @@ public partial class MenuItem : Control
         }
     }
 
-    /// <summary>
-    ///     Attempts to expand the submenu for this menu item if it has child items.
-    /// </summary>
-    /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
-    /// <returns>
-    ///     True if the submenu was requested to expand; otherwise, false.
-    /// </returns>
-    private bool TryExpandSubmenu(MenuInteractionInputSource inputSource)
+    private void HandleSelectionState()
     {
-        if (this.ItemData is { HasChildren: true } data)
+        Debug.Assert(this.ItemData is not null, "Item must have data, and should be checkable");
+
+        var data = this.ItemData;
+
+        // Only proceed for items that participate in selection state
+        if (!data.HasSelectionState)
         {
-            this.SubmenuRequested?.Invoke(this, new MenuItemSubmenuEventArgs
+            return;
+        }
+
+        // Radio group items delegate to MenuServices to ensure mutual exclusion.
+        if (!string.IsNullOrEmpty(data.RadioGroupId))
+        {
+            if (this.MenuSource is { Services: { } services })
             {
-                InputSource = inputSource,
-                ItemData = data,
-            });
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    ///     Attempts to invoke the menu item's command or selection logic if the item is enabled and does not have children.
-    /// </summary>
-    /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
-    /// <returns>
-    ///     True if the item was invoked or selection state was handled; false if invocation was not possible.
-    /// </returns>
-    private bool TryInvoke(MenuInteractionInputSource inputSource)
-    {
-        if (this.ItemData is not { IsEnabled: true, HasChildren: false } data)
-        {
-            return false;
-        }
-
-        if (data.Command is null)
-        {
-            // A command is not required; just handle selection state
-            this.HandleSelectionState();
-            return true;
-        }
-
-        try
-        {
-            // If the command cannot execute right now, indicate that no action occurred
-            if (!data.Command.CanExecute(data))
-            {
-                return false;
+                services.HandleGroupSelection(data);
             }
 
-            data.Command.Execute(data);
-            this.Invoked?.Invoke(this, new MenuItemInvokedEventArgs
-            {
-                InputSource = inputSource,
-                ItemData = data,
-            });
-            this.HandleSelectionState();
+            // Without services, do not change selection locally; containers own group selection.
+            this.LogRadioGroupSelection();
+            return;
         }
-#pragma warning disable CA1031 // Do not catch general exception types
-        catch (Exception ex)
-        {
-            this.LogCommandExecutionFailed(ex);
-            this.CommandExecutionFailed?.Invoke(this, new MenuItemCommandFailedEventArgs
-            {
-                ItemData = data,
-                Exception = ex,
-            });
-        }
-#pragma warning restore CA1031
 
-        // A command is attached to the menu item, and it was invoked
-        // successfully or not.
-        return true;
+        // Plain checkable items toggle their state locally
+        data.IsChecked = !data.IsChecked;
+        this.LogChecked();
     }
 }
