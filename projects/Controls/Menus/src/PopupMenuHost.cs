@@ -41,8 +41,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     private PopupRequest? activeRequest;
     private PopupRequest? closingRequest;
     private bool suppressProgrammaticDismissForPendingOpen;
-    private IntPtr? previousCursorHandle;
-    private bool cursorOverrideApplied;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="PopupMenuHost"/> class.
@@ -62,8 +60,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         // Subscribe to presenter events to relay to controller
         this.presenter.ItemInvoked += this.OnPresenterItemInvoked;
         this.presenter.SizeChanged += this.OnPresenterSizeChanged;
-        this.presenter.PointerMoved += this.OnPresenterPointerMoved;
-        this.presenter.PointerExited += this.OnPresenterPointerExited;
 
         this.rootPointerPressedHandler = this.OnRootPointerPressed;
         this.rootKeyDownHandler = this.HandleEscDismissal;
@@ -210,12 +206,9 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
 
         this.presenter.RemoveHandler(UIElement.KeyDownEvent, this.presenterKeyDownHandler);
         this.presenter.SizeChanged -= this.OnPresenterSizeChanged;
-        this.presenter.PointerMoved -= this.OnPresenterPointerMoved;
-        this.presenter.PointerExited -= this.OnPresenterPointerExited;
         this.DetachPointerEventSubscription();
         this.DetachWindowChangeSubscription();
         this.placementHelper.Reset();
-        this.RestorePointerCursorOverride();
     }
 
     private static Rect GetViewportRect(XamlRoot? xamlRoot)
@@ -276,7 +269,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.placementHelper.Reset();
         this.DetachPointerEventSubscription();
         this.LogPendingOpenCancelled(kind, pending.Anchor);
-        this.RestorePointerCursorOverride();
         this.Closed?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -322,7 +314,8 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
             this.state = PopupLifecycleState.Open;
         }
 
-        this.ApplyPointerCursorOverride();
+        // Clear any wait cursor
+        CursorInterop.SetArrowCursor();
 
         this.Opened?.Invoke(this, EventArgs.Empty);
     }
@@ -412,8 +405,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         {
             _ = anchorElement.Focus(FocusState.Keyboard);
         }
-
-        this.RestorePointerCursorOverride();
 
         this.Closed?.Invoke(this, EventArgs.Empty);
     }
@@ -549,41 +540,7 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.suppressProgrammaticDismissForPendingOpen = false;
         this.placementHelper.Reset();
         this.DetachPointerEventSubscription();
-        this.RestorePointerCursorOverride();
         this.Closed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void ApplyPointerCursorOverride()
-    {
-        if (this.cursorOverrideApplied)
-        {
-            return;
-        }
-
-        // Reset the pointer immediately so the OS wait cursor shown during ContextRequested is cleared.
-        this.previousCursorHandle = CursorInterop.GetCurrentCursor();
-        CursorInterop.SetArrowCursor();
-        this.cursorOverrideApplied = true;
-    }
-
-    private void RestorePointerCursorOverride()
-    {
-        if (!this.cursorOverrideApplied)
-        {
-            return;
-        }
-
-        if (this.previousCursorHandle is { } handle && handle != IntPtr.Zero)
-        {
-            CursorInterop.SetCursorHandle(handle);
-        }
-        else
-        {
-            CursorInterop.SetArrowCursor();
-        }
-
-        this.previousCursorHandle = null;
-        this.cursorOverrideApplied = false;
     }
 
     private void EnsurePointerEventSubscription(FrameworkElement anchorElement)
@@ -812,39 +769,22 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
     {
         private const int IDCARROW = 32512;
 
-        private static readonly IntPtr ArrowCursorHandle = LoadCursorInternal(IntPtr.Zero, new IntPtr(IDCARROW));
-
-        public static IntPtr GetCurrentCursor() => GetCursorInternal();
+        private static readonly IntPtr ArrowCursorHandle = LoadCursor(IntPtr.Zero, new IntPtr(IDCARROW));
 
         public static void SetArrowCursor()
         {
             if (ArrowCursorHandle != IntPtr.Zero)
             {
-                _ = SetCursorInternal(ArrowCursorHandle);
+                _ = SetCursor(ArrowCursorHandle);
             }
-        }
-
-        public static void SetCursorHandle(IntPtr handle)
-        {
-            if (handle == IntPtr.Zero)
-            {
-                SetArrowCursor();
-                return;
-            }
-
-            _ = SetCursorInternal(handle);
         }
 
         [LibraryImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = false)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static partial IntPtr LoadCursorInternal(IntPtr hInstance, IntPtr lpCursorName);
+        private static partial IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
 
         [LibraryImport("user32.dll", EntryPoint = "SetCursor", SetLastError = false)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static partial IntPtr SetCursorInternal(IntPtr hCursor);
-
-        [LibraryImport("user32.dll", EntryPoint = "GetCursor", SetLastError = false)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static partial IntPtr GetCursorInternal();
+        private static partial IntPtr SetCursor(IntPtr hCursor);
     }
 }

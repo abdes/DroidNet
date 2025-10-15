@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
@@ -28,6 +27,7 @@ public partial class MenuItemData : ObservableObject
     ///     Gets or sets the command to be executed when the menu item is selected.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInteractive))]
     public partial ICommand? Command { get; set; }
 
     /// <summary>
@@ -52,18 +52,20 @@ public partial class MenuItemData : ObservableObject
     ///     Gets or sets a value indicating whether this menu item is enabled.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInteractive))]
     public partial bool IsEnabled { get; set; } = true;
 
     /// <summary>
     ///     Gets or sets a value indicating whether this menu item is a separator.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInteractive))]
     public partial bool IsSeparator { get; set; }
 
     /// <summary>
     ///     Gets a value indicating whether this menu item is interactive (not a separator and enabled for interaction).
     /// </summary>
-    public bool IsInteractive => !this.IsSeparator && this.IsEnabled;
+    public bool IsInteractive => !this.IsSeparator && this.IsEnabled && (this.Command is null || this.SafeCommandCanExecute());
 
     /// <summary>
     ///     Gets or sets the collection of sub-items for this menu item.
@@ -128,4 +130,30 @@ public partial class MenuItemData : ObservableObject
     ///     or <see cref="RadioGroupId"/> is set.
     /// </summary>
     public bool HasSelectionState => this.IsCheckable || !string.IsNullOrEmpty(this.RadioGroupId);
+
+    partial void OnCommandChanged(ICommand? oldValue, ICommand? newValue)
+    {
+        if (oldValue != null)
+            oldValue.CanExecuteChanged -= Command_CanExecuteChanged;
+        if (newValue != null)
+            newValue.CanExecuteChanged += Command_CanExecuteChanged;
+
+        OnPropertyChanged(nameof(IsInteractive));
+    }
+
+    private void Command_CanExecuteChanged(object? sender, EventArgs e)
+     => this.OnPropertyChanged(nameof(this.IsInteractive));
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "we only care about returning true or false")]
+    private bool SafeCommandCanExecute()
+    {
+        try
+        {
+            return this.Command?.CanExecute(this) == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

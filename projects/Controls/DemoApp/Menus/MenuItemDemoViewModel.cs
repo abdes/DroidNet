@@ -52,6 +52,8 @@ public partial class MenuItemDemoViewModel : ObservableObject
         { "Error", "\uE783" },
     };
 
+    private RelayCommand? menuItemCommand;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuItemDemoViewModel"/> class.
     /// </summary>
@@ -60,10 +62,13 @@ public partial class MenuItemDemoViewModel : ObservableObject
     {
         this.AvailableIcons = new ObservableCollection<KeyValuePair<string, string>>(this.iconMapping);
 
+        // Create a command with dynamic CanExecute that we can control
+        this.menuItemCommand = new RelayCommand(this.OnMenuItemExecuted, () => this.CommandCanExecute);
+
         this.MenuItemData = new MenuItemData
         {
             Text = "Sample Menu Item",
-            Command = new RelayCommand(this.OnMenuItemExecuted),
+            Command = this.menuItemCommand,
             IsEnabled = true,
             AcceleratorText = "Ctrl+S",
             Icon = new FontIconSource { Glyph = this.iconMapping["Save"], FontSize = 16 },
@@ -75,6 +80,8 @@ public partial class MenuItemDemoViewModel : ObservableObject
 
         this.SelectedIconName = "Save";
         this.MnemonicText = "S";
+        this.CommandCanExecute = true;
+        this.UseCommand = true;
 
         // Subscribe to property changes to update dependent properties
         this.PropertyChanged += this.OnPropertyChanged;
@@ -98,9 +105,66 @@ public partial class MenuItemDemoViewModel : ObservableObject
     public partial string MnemonicText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the command can execute.
+    /// This demonstrates how MenuItem visual state updates when CanExecute changes.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CommandExecutabilityStatus))]
+    public partial bool CommandCanExecute { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a command should be attached to the MenuItem.
+    /// When false, the MenuItem operates without a command.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool UseCommand { get; set; } = true;
+
+    /// <summary>
+    /// Gets a user-friendly status message about the command's executability.
+    /// </summary>
+    public string CommandExecutabilityStatus => this.CommandCanExecute
+        ? "✅ Command can execute - Item is interactive"
+        : "🚫 Command cannot execute - Item appears disabled";
+
+    /// <summary>
     ///     Gets the available icons for the MenuItem.
     /// </summary>
     public ObservableCollection<KeyValuePair<string, string>> AvailableIcons { get; }
+
+    /// <summary>
+    ///     Handles the MenuItem Invoked event.
+    ///     This is called when the MenuItem is invoked, regardless of whether a command is attached.
+    /// </summary>
+    /// <param name="e">The event arguments containing invocation details.</param>
+    public void OnMenuItemInvoked(MenuItemInvokedEventArgs e)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (e.IsFailed)
+        {
+            this.LastActionMessage = $"[{timestamp}] ❌ MenuItem '{e.ItemData.Text}' invocation FAILED: {e.Exception?.Message}";
+            return;
+        }
+
+        // If there's a command, the command handler already updated the message
+        // Only update if there's no command (command handler won't run)
+        if (e.ItemData.Command == null)
+        {
+            if (e.ItemData.IsSeparator)
+            {
+                this.LastActionMessage = $"[{timestamp}] Separator invoked via Invoked event (no command).";
+            }
+            else if (e.ItemData.IsCheckable || !string.IsNullOrEmpty(e.ItemData.RadioGroupId))
+            {
+                var state = e.ItemData.IsChecked ? "checked" : "unchecked";
+                this.LastActionMessage = $"[{timestamp}] ✅ MenuItem '{e.ItemData.Text}' invoked via Invoked event (no command) - now {state}.";
+            }
+            else
+            {
+                this.LastActionMessage = $"[{timestamp}] ✅ MenuItem '{e.ItemData.Text}' invoked via Invoked event (no command attached).";
+            }
+        }
+    }
 
     /// <summary>
     ///     Command to reset the MenuItem to default values.
@@ -119,6 +183,8 @@ public partial class MenuItemDemoViewModel : ObservableObject
 
         this.SelectedIconName = "Save";
         this.MnemonicText = "S";
+        this.UseCommand = true;
+        this.CommandCanExecute = true;
 
         this.LastActionMessage = "MenuItem properties reset to default values.";
     }
@@ -165,6 +231,13 @@ public partial class MenuItemDemoViewModel : ObservableObject
             case nameof(this.MnemonicText):
                 this.UpdateMnemonic();
                 break;
+            case nameof(this.CommandCanExecute):
+                // Notify the command that CanExecute has changed
+                this.menuItemCommand?.NotifyCanExecuteChanged();
+                break;
+            case nameof(this.UseCommand):
+                this.UpdateCommandAttachment();
+                break;
         }
     }
 
@@ -197,6 +270,24 @@ public partial class MenuItemDemoViewModel : ObservableObject
         else
         {
             this.MenuItemData.Mnemonic = char.ToUpper(this.MnemonicText[0], System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    ///     Updates whether a command is attached to the MenuItem.
+    /// </summary>
+    private void UpdateCommandAttachment()
+    {
+        if (this.UseCommand)
+        {
+            this.menuItemCommand ??= new RelayCommand(this.OnMenuItemExecuted, () => this.CommandCanExecute);
+            this.MenuItemData.Command = this.menuItemCommand;
+            this.LastActionMessage = "Command attached - MenuItem executability is controlled by command's CanExecute.";
+        }
+        else
+        {
+            this.MenuItemData.Command = null;
+            this.LastActionMessage = "Command removed - MenuItem operates without a command.";
         }
     }
 }

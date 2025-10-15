@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Controls.Menus;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
@@ -19,5 +20,11 @@ public sealed partial class MenuItemDemoView : Page
     public MenuItemDemoView()
     {
         this.InitializeComponent();
+    }
+
+    private void DemoMenuItem_OnInvoked(object sender, MenuItemInvokedEventArgs e)
+    {
+        // Delegate to ViewModel to handle the invoked event
+        this.ViewModel!.OnMenuItemInvoked(e);
     }
 }
