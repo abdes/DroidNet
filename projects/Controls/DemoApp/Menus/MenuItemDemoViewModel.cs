@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.Menus;
@@ -54,7 +55,8 @@ public partial class MenuItemDemoViewModel : ObservableObject
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuItemDemoViewModel"/> class.
     /// </summary>
-    public MenuItemDemoViewModel()
+    /// <param name="loggerFactory">The factory used to create loggers for menu operations.</param>
+    public MenuItemDemoViewModel(ILoggerFactory loggerFactory)
     {
         this.AvailableIcons = new ObservableCollection<KeyValuePair<string, string>>(this.iconMapping);
 
@@ -68,12 +70,20 @@ public partial class MenuItemDemoViewModel : ObservableObject
             Mnemonic = 'S',
         };
 
+        this.MenuSource = new MenuBuilder(loggerFactory)
+            .AddMenuItem(this.MenuItemData).Build();
+
         this.SelectedIconName = "Save";
         this.MnemonicText = "S";
 
         // Subscribe to property changes to update dependent properties
         this.PropertyChanged += this.OnPropertyChanged;
     }
+
+    /// <summary>
+    /// Gets the menu source containing the editable MenuItemData.
+    /// </summary>
+    public IMenuSource MenuSource { get; }
 
     [ObservableProperty]
     public partial string LastActionMessage { get; set; } = "Ready - Click the MenuItem to see command execution feedback.";

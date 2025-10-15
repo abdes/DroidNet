@@ -335,4 +335,13 @@ public partial class MenuInteractionController
 
     private void LogFocusRestoreFailed()
         => LogFocusRestoreFailed(services.FocusLogger);
+
+    [LoggerMessage(
+        EventId = 3428,
+        Level = LogLevel.Error,
+        Message = "[MenuInteractionController] Expansion of item `{ItemId}` failed, {@Context}")]
+    private static partial void LogExpansionError(ILogger logger, MenuInteractionContext context, string itemId, Exception exception);
+
+    private void LogExpansionError(MenuInteractionContext context, MenuItemData menuItemData, Exception exception)
+        => LogExpansionError(services.FocusLogger, context, menuItemData.Id, exception);
 }

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Menus;
 
@@ -35,10 +34,9 @@ public sealed partial class MenuBar
     {
         var control = (MenuBar)d;
         var menuSource = (IMenuSource?)e.NewValue;
-        if (control.rootItemsRepeater is ItemsRepeater repeater)
-        {
-            repeater.ItemsSource = menuSource?.Items;
-        }
+
+        control.SetRootItemsCollection(menuSource?.Items);
+        control.RebuildRootItems();
 
         if (control.activeHost is { IsOpen: true } host)
         {

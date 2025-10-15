@@ -274,7 +274,6 @@ public partial class CascadedColumnsPresenter
         Message = "[CascadedColumnsPresenter] OpenChildColumn aborted: menu source is {MenuSourceState}, controller is {ControllerState}")]
     private static partial void LogOpenChildColumnAborted(ILogger logger, string menuSourceState, string controllerState);
 
-    [Conditional("DEBUG")]
     private void LogOpenChildColumnAborted()
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
@@ -411,7 +410,6 @@ public partial class CascadedColumnsPresenter
         Message = "[CascadedColumnsPresenter] AddColumn failed: controller not set")]
     private static partial void LogAddColumnControllerNotSet(ILogger logger);
 
-    [Conditional("DEBUG")]
     private void LogAddColumnControllerNotSet()
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
@@ -426,7 +424,6 @@ public partial class CascadedColumnsPresenter
         Message = "[CascadedColumnsPresenter] Invalid column level {Level} requested (total columns={ColumnCount})")]
     private static partial void LogInvalidColumnLevel(ILogger logger, int level, int columnCount);
 
-    [Conditional("DEBUG")]
     private void LogInvalidColumnLevel(int level)
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)

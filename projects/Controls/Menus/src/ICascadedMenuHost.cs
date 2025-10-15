@@ -73,7 +73,8 @@ internal interface ICascadedMenuHost : IDisposable, ICascadedMenuSurface
     /// </summary>
     /// <param name="anchor">The menu item used as the positional anchor.</param>
     /// <param name="navigationMode">The navigation mode that triggered the request.</param>
-    public void ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode);
+    /// <returns><see langword="true"/> if the menu was shown; otherwise, <see langword="false"/>.</returns>
+    public bool ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode);
 
     /// <summary>
     ///     Displays the cascading menu at a specific position relative to the anchor element.
@@ -81,7 +82,8 @@ internal interface ICascadedMenuHost : IDisposable, ICascadedMenuSurface
     /// <param name="anchor">The framework element used as the positional anchor.</param>
     /// <param name="position">The position relative to the anchor element.</param>
     /// <param name="navigationMode">The navigation mode that triggered the request.</param>
-    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode);
+    /// <returns><see langword="true"/> if the menu was shown; otherwise, <see langword="false"/>.</returns>
+    public bool ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode);
 }
 
 /// <summary>

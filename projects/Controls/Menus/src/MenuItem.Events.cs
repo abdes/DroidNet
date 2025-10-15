@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+#pragma warning disable SA1402 // File may only contain a single type
+
 namespace DroidNet.Controls.Menus;
 
 /// <summary>
@@ -19,6 +21,7 @@ public partial class MenuItem
     /// </remarks>
     public event EventHandler<MenuItemInvokedEventArgs>? Invoked;
 
+#if false
     /// <summary>
     ///     Occurs when the pointer enters an active (not a separator, and not disabled) menu item area.
     /// </summary>
@@ -57,18 +60,8 @@ public partial class MenuItem
     ///     in the same group.
     /// </remarks>
     public event EventHandler<MenuItemRadioGroupEventArgs>? RadioGroupSelectionRequested;
-
-    /// <summary>
-    ///     Occurs when executing the bound command for this menu item throws an exception.
-    /// </summary>
-    /// <remarks>
-    ///     This event is raised when <see cref="MenuItemData.Command"/> throws during execution.
-    ///     Containers can listen to this event to show error UI, log telemetry, or recover.
-    /// </remarks>
-    public event EventHandler<MenuItemCommandFailedEventArgs>? CommandExecutionFailed;
+#endif
 }
-
-#pragma warning disable SA1402 // File may only contain a single type
 
 /// <summary>
 ///     Provides data for menu item invocation events.
@@ -84,8 +77,20 @@ public class MenuItemInvokedEventArgs : EventArgs
     ///     Gets the menu item that was invoked.
     /// </summary>
     public required MenuItemData ItemData { get; init; }
+
+    /// <summary>
+    ///     Gets the exception thrown by the command (<see langword="null"/> unless the command failed).
+    /// </summary>
+    public CommandFailedException? Exception { get; init; }
+
+    /// <summary>
+    ///     Gets a value indicating whether the command execution failed. When <see langword="true"/>,
+    ///     the <see cref="Exception"/> property contains the details of the failure.
+    /// </summary>
+    public bool IsFailed => this.Exception is not null;
 }
 
+#if false
 /// <summary>
 ///     Provides data for menu item hover events.
 /// </summary>
@@ -133,21 +138,4 @@ public class MenuItemRadioGroupEventArgs : EventArgs
     /// </summary>
     public required string GroupId { get; init; }
 }
-
-/// <summary>
-///     Provides data when a menu item's command execution fails with an exception.
-/// </summary>
-public class MenuItemCommandFailedEventArgs : EventArgs
-{
-    /// <summary>
-    ///     Gets the menu item whose command failed.
-    /// </summary>
-    public required MenuItemData ItemData { get; init; }
-
-    /// <summary>
-    ///     Gets the exception thrown by the command.
-    /// </summary>
-    public required Exception Exception { get; init; }
-}
-
-#pragma warning restore SA1402 // File may only contain a single type
+#endif

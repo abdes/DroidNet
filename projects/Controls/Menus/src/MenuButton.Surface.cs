@@ -47,7 +47,7 @@ public sealed partial class MenuButton
         this.FocusItem(this.ButtonItemData, navigationMode); // Since there's only one item (the button), focus it
 
     /// <inheritdoc />
-    public void ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
+    public bool ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode)
         => this.Show(navigationMode);
 
     /// <inheritdoc />

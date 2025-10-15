@@ -54,12 +54,13 @@ public interface IRootMenuSurface : IMenuInteractionSurface
     /// <param name="navigationMode">
     ///     The input modality that triggered the menu request (keyboard, pointer, or programmatic).
     /// </param>
+    /// <returns><see langword="true"/> if the menu was shown; otherwise, <see langword="false"/>.</returns>
     /// <remarks>
     ///     Implementations should render or present the initial menu for interaction.
     ///     For a menu bar this may be a no-op or set initial focus. For context/popup menus,
     ///     this should display the flyout at the previously captured trigger location.
     /// </remarks>
-    public void Show(MenuNavigationMode navigationMode);
+    public bool Show(MenuNavigationMode navigationMode);
 
     /// <summary>
     ///     Retrieves the <em>neighboring item</em> in the root sequence relative to <paramref name="itemData"/>,
@@ -153,10 +154,13 @@ public interface IRootMenuSurface : IMenuInteractionSurface
     ///     The input modality that triggered expansion (for example, keyboard, pointer, or programmatic), which may
     ///     influence focus transfer into the subordinate surface and announcement behavior.
     /// </param>
+    /// <returns>
+    ///     <see langword="true"/> if the item was successfully expanded; otherwise <see langword="false"/>.
+    /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown when <paramref name="itemData"/> is not part of this root surface’s item sequence.
     /// </exception>
-    public void ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode);
+    public bool ExpandItem(MenuItemData itemData, MenuNavigationMode navigationMode);
 
     /// <summary>
     ///     Collapses the specified root item, dismissing any subordinate surface that the item materialized while
@@ -286,13 +290,16 @@ public interface ICascadedMenuSurface : IMenuInteractionSurface
     ///     The input modality used to trigger expansion (for example, keyboard, pointer, or programmatic), which may
     ///     influence focus transfer and announcement behavior.
     /// </param>
+    /// <returns>
+    ///     <see langword="true"/> if the item was successfully expanded; otherwise <see langword="false"/>.
+    /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown when <paramref name="itemData"/> is not part of the specified column’s item sequence.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     ///     Thrown when <paramref name="level"/> does not correspond to an open column on this surface.
     /// </exception>
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode);
+    public bool ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode);
 
     /// <summary>
     ///     Collapses the specified item in the given column level, dismissing its subordinate surface and trimming the
@@ -319,4 +326,25 @@ public interface ICascadedMenuSurface : IMenuInteractionSurface
     ///     Thrown when <paramref name="level"/> is negative or exceeds the number of open columns on this surface.
     /// </exception>
     public void TrimTo(MenuLevel level);
+
+    /// <summary>
+    ///     Attempts to move focus to the specified column <paramref name="level"/> and establish it as the current
+    ///     focus anchor for subsequent menu keyboard navigation within that column. Focus transfer should not result
+    ///     in expansion of any item.
+    /// </summary>
+    /// <param name="level">
+    ///     The zero-based column level to receive focus. Must correspond to an open column on this surface.
+    /// </param>
+    /// <param name="navigationMode">
+    ///     The input modality used to perform the focus transfer (for example, keyboard, pointer, or programmatic),
+    ///     which may influence visual cues and announcement semantics.
+    /// </param>
+    /// <returns>
+    ///     <see langword="true"/> if focus was successfully set on the specified column; otherwise
+    ///     <see langword="false"/> (for example, when the column is not focusable).
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown when <paramref name="level"/> does not correspond to an open column on this surface.
+    /// </exception>
+    public bool FocusColumn(MenuLevel level, MenuNavigationMode navigationMode);
 }

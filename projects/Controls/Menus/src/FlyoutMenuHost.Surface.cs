@@ -33,7 +33,7 @@ internal sealed partial class FlyoutMenuHost
         => this.RequirePresenter().FocusFirstItem(level, navigationMode);
 
     /// <inheritdoc />
-    public void ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
+    public bool ExpandItem(MenuLevel level, MenuItemData itemData, MenuNavigationMode navigationMode)
         => this.RequirePresenter().ExpandItem(level, itemData, navigationMode);
 
     /// <inheritdoc />
@@ -43,4 +43,8 @@ internal sealed partial class FlyoutMenuHost
     /// <inheritdoc />
     public void TrimTo(MenuLevel level)
         => this.RequirePresenter().TrimTo(level);
+
+    /// <inheritdoc />
+    public bool FocusColumn(MenuLevel level, MenuNavigationMode navigationMode)
+        => this.RequirePresenter().FocusColumn(level, navigationMode);
 }

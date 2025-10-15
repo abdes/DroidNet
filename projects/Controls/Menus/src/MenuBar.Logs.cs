@@ -182,15 +182,15 @@ public partial class MenuBar
     [LoggerMessage(
         EventId = 3212,
         Level = LogLevel.Debug,
-        Message = "[MenuBar] HoverStarted {ItemId}")]
-    private static partial void LogHoverStarted(ILogger logger, string itemId);
+        Message = "[MenuBar] HoverStarted {ItemId}, {WillExpand}")]
+    private static partial void LogHoverStarted(ILogger logger, string itemId, string willExpand);
 
     [Conditional("DEBUG")]
-    private void LogHoverStarted(string itemId)
+    private void LogHoverStarted(string itemId, bool willExpand)
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
         {
-            LogHoverStarted(logger, itemId);
+            LogHoverStarted(logger, itemId, willExpand ? "will expand" : "will not expand");
         }
     }
 
@@ -242,15 +242,15 @@ public partial class MenuBar
     [LoggerMessage(
         EventId = 3216,
         Level = LogLevel.Debug,
-        Message = "[MenuBar] SubmenuRequested {ItemId}, inputSource={InputSource}")]
-    private static partial void LogSubmenuRequested(ILogger logger, string itemId, MenuInteractionInputSource inputSource);
+        Message = "[MenuBar] SubmenuRequested {ItemId}, inputSource={InputSource}, result={Result}")]
+    private static partial void LogSubmenuRequested(ILogger logger, string itemId, MenuInteractionInputSource inputSource, bool result);
 
     [Conditional("DEBUG")]
-    private void LogSubmenuRequested(string itemId, MenuInteractionInputSource inputSource)
+    private void LogSubmenuRequested(string itemId, MenuInteractionInputSource inputSource, bool result)
     {
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
         {
-            LogSubmenuRequested(logger, itemId, inputSource);
+            LogSubmenuRequested(logger, itemId, inputSource, result);
         }
     }
 
@@ -296,6 +296,54 @@ public partial class MenuBar
         if (this.MenuSource?.Services.MiscLogger is ILogger logger)
         {
             LogGetAdjacentItem(logger, itemId, direction, wrap);
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 3220,
+        Level = LogLevel.Debug,
+        Message = "[MenuBar] Cascaded menu host opened (item={ItemId})")]
+    private static partial void LogHostOpened(ILogger logger, string itemId);
+
+    [Conditional("DEBUG")]
+    private void LogHostOpened(MenuItemData expanded)
+    {
+        if (this.MenuSource?.Services.InteractionLogger is ILogger logger)
+        {
+            LogHostOpened(logger, expanded.Id);
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 3221,
+        Level = LogLevel.Debug,
+        Message = "[MenuBar] Pointer Captured (Captor=`{ItemId}`, Pointer=`{PointerId}`")]
+    private static partial void LogCaptureSuccess(ILogger logger, string itemId, uint pointerId);
+
+    [Conditional("DEBUG")]
+    private void LogCaptureSuccess()
+    {
+        if (this.MenuSource?.Services.MiscLogger is ILogger logger && this.capture is not null)
+        {
+            var cv = this.capture.Value;
+            if (cv.TryGetCaptor(out var item) && item is MenuItem { ItemData: { } itemData })
+            {
+                LogCaptureSuccess(logger, itemData.Id, cv.PointerId);
+            }
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 3222,
+        Level = LogLevel.Warning,
+        Message = "[MenuBar] Pointer Capture failed")]
+    private static partial void LogCaptureFailed(ILogger logger);
+
+    private void LogCaptureFailed()
+    {
+        if (this.MenuSource?.Services.MiscLogger is ILogger logger)
+        {
+            LogCaptureFailed(logger);
         }
     }
 }

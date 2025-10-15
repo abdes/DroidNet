@@ -114,15 +114,27 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     }
 
     /// <inheritdoc />
-    public void ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode)
+    public bool ShowAt(FrameworkElement anchor, MenuNavigationMode navigationMode)
     {
         _ = navigationMode;
+
+        if (anchor is MenuItem { ItemData: { IsExpanded: false } itemData })
+        {
+            itemData.IsExpanded = true;
+        }
+
         this.pendingDismissKind = MenuDismissKind.Programmatic;
-        this.flyout.ShowAt(anchor);
+        var options = new FlyoutShowOptions
+        {
+            Position = new Windows.Foundation.Point(0, anchor.ActualHeight),
+            ShowMode = FlyoutShowMode.Standard,
+        };
+        this.flyout.ShowAt(anchor, options);
+        return true;
     }
 
     /// <inheritdoc />
-    public void ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
+    public bool ShowAt(FrameworkElement anchor, Windows.Foundation.Point position, MenuNavigationMode navigationMode)
     {
         _ = navigationMode;
         this.pendingDismissKind = MenuDismissKind.Programmatic;
@@ -133,6 +145,7 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
             ShowMode = FlyoutShowMode.Standard,
         };
         this.flyout.ShowAt(anchor, options);
+        return true;
     }
 
     /// <inheritdoc />
@@ -210,6 +223,10 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
             return;
         }
 
+        // We take out the presenter from the focus chain, so that FlyoutMenu does not automatically
+        // focus the first item. We'll manage focus ourselves once opened, using `ColumnPresenter`.
+        this.presenter.IsTabStop = false;
+
         // If the Flyout is used with a root surface (e.g., MenuBar), ensure the root surface
         // is set as the pass-through element for input events.
         if (this.RootSurface is UIElement passThrough)
@@ -222,7 +239,11 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     }
 
     private void OnFlyoutOpened(object? sender, object e)
-        => this.Opened?.Invoke(this, EventArgs.Empty);
+    {
+        this.LogOpened();
+        //this.FocusColumn(MenuLevel.First, MenuNavigationMode.Programmatic);
+        this.Opened?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnFlyoutClosing(object? sender, FlyoutBaseClosingEventArgs e)
     {

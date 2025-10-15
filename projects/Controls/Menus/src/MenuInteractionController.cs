@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls.Menus;
 
@@ -28,8 +27,8 @@ namespace DroidNet.Controls.Menus;
 public sealed partial class MenuInteractionController(MenuServices services)
 {
     private WeakReference<UIElement>? focusReturnTarget;
-    private bool hasMenuFocus;
     private PendingDismissal? pendingDismissal;
+    private bool hasMenuFocus;
 
     /// <summary>
     ///     Gets the active navigation method being used for menu interactions.
@@ -45,6 +44,10 @@ public sealed partial class MenuInteractionController(MenuServices services)
     /// </summary>
     /// <param name="context">The menu surface context where the hover event occurred.</param>
     /// <param name="menuItemData">The menu item being hovered.</param>
+    /// <returns>
+    ///     <see langword="true"/> if the item will be expanding; otherwise <see langword="false"/>.
+    ///     This should not be interpreted as the item expansion completion.
+    /// </returns>
     /// <remarks>
     ///     Expansion behavior differs between root and submenu contexts. In root menus, items are only auto-expanded
     ///     when switching between already-expanded siblings. In submenus, items with children will auto-expand on hover
@@ -52,51 +55,77 @@ public sealed partial class MenuInteractionController(MenuServices services)
     ///     collapsed before expanding the hovered item. If focus is currently within the menu system, focus will
     ///     transfer to the hovered item.
     /// </remarks>
-    public void OnItemHoverStarted(MenuInteractionContext context, MenuItemData menuItemData)
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "using return status")]
+    public bool OnItemHoverStarted(MenuInteractionContext context, MenuItemData menuItemData)
     {
         this.OnNavigationSourceChanged(MenuInteractionInputSource.PointerInput);
-        this.CaptureFocusOwner(context.RootSurface);
 
-        var expandedItem = GetExpandedItemForContext(context);
-        if (expandedItem is { } && ReferenceEquals(expandedItem, menuItemData))
+        // TODO: CHECK REMOVED - this.CaptureFocusOwner(context.RootSurface);
+
+        // Column context behavior:
+        // - If hovering an item with children, expand it.
+        // - If another sibling is expanded, collapse the sibling first.
+        // - If the menu currently has focus, transfer focus to the hovered item.
+        if (context is { Kind: MenuInteractionContextKind.Column, ColumnSurface: { } columnSurface })
         {
-            return;
-        }
+            this.LogHoverStarted(menuItemData, menuIsExpanded: true, context);
 
-        this.LogHoverStarted(menuItemData, expandedItem is not null, context);
-
-        // Handle item entry logic - shared between hover and focus events
-        if (expandedItem is { } current)
-        {
-            if (!menuItemData.HasChildren)
+            var level = context.ColumnLevel;
+            var expandedSibling = columnSurface.GetExpandedItem(level);
+            if (expandedSibling is { } && !ReferenceEquals(expandedSibling, menuItemData))
             {
-                this.TryCollapseItem(context, current);
-            }
-            else if (!this.TrySwitchRootExpansion(context, menuItemData))
-            {
-                this.TryCollapseItem(context, current);
-                this.TryExpandItem(context, menuItemData, this.NavigationMode);
+                columnSurface.CollapseItem(level, expandedSibling, this.NavigationMode);
             }
 
-            // If the focus was inside the menu system, give focus to the new item.
+            var expanded = false;
+            if (menuItemData.HasChildren)
+            {
+                expanded = this.TryExpandItem(context, menuItemData, this.NavigationMode);
+            }
+
             if (this.hasMenuFocus)
             {
-                switch (context)
-                {
-                    case { Kind: MenuInteractionContextKind.Root, RootSurface: { } rootSurface }:
-                        _ = rootSurface.FocusItem(menuItemData, MenuNavigationMode.Programmatic);
-                        break;
-                    case { Kind: MenuInteractionContextKind.Column, ColumnSurface: { } columnSurface }:
-                        _ = columnSurface.FocusItem(context.ColumnLevel, menuItemData, MenuNavigationMode.Programmatic);
-                        break;
-                }
+                _ = columnSurface.FocusItem(level, menuItemData, MenuNavigationMode.Programmatic);
             }
+
+            return expanded;
         }
-        else
+
+        Debug.Assert(context.RootSurface is not null, "Root interaction must have a root surface");
+
+        // For root context, only expand if the menu is already in expanded state.
+        if (GetExpandedItemForContext(context) is not { } expandedItem)
         {
-            if (context.Kind != MenuInteractionContextKind.Root)
+            return false;
+        }
+
+        this.LogHoverStarted(menuItemData, menuIsExpanded: true, context);
+
+        if (ReferenceEquals(expandedItem, menuItemData))
+        {
+            return false;
+        }
+
+        if (!menuItemData.HasChildren)
+        {
+            this.TryCollapseItem(context, expandedItem);
+            _ = context.RootSurface.FocusItem(menuItemData, MenuNavigationMode.Programmatic);
+            return false;
+        }
+
+        return TryExpandWithLogging();
+
+        bool TryExpandWithLogging()
+        {
+            this.LogHoverStarted(menuItemData, menuIsExpanded: true, context);
+            try
             {
-                this.TryExpandItem(context, menuItemData, this.NavigationMode);
+                return this.TryExpandItem(context, menuItemData, this.NavigationMode);
+            }
+            catch (Exception ex)
+            {
+                this.LogExpansionError(context, menuItemData, ex);
+                return false;
             }
         }
     }
@@ -127,6 +156,8 @@ public sealed partial class MenuInteractionController(MenuServices services)
             this.focusReturnTarget = new(oldElement);
             this.LogCapturedFocusOwner();
         }
+
+        this.hasMenuFocus = true;
     }
 
     /// <summary>
@@ -146,8 +177,8 @@ public sealed partial class MenuInteractionController(MenuServices services)
         this.LogItemGotFocus(menuItemData, source, context);
 
         this.OnNavigationSourceChanged(source);
-        this.CaptureFocusOwner(context.RootSurface);
         this.hasMenuFocus = true;
+        this.CaptureFocusOwner(context.RootSurface);
 
         var expandedItem = GetExpandedItemForContext(context);
         if (expandedItem is { } && ReferenceEquals(expandedItem, menuItemData))
@@ -186,7 +217,9 @@ public sealed partial class MenuInteractionController(MenuServices services)
     public void OnItemLostFocus(MenuInteractionContext context, MenuItemData menuItemData)
     {
         this.LogItemLostFocus(menuItemData, context);
-        this.hasMenuFocus = false;
+
+        // Conservative: keep hasMenuFocus true unless we explicitly restore focus upon dismissal.
+        // A single item losing focus during internal navigation shouldn't clear menu focus.
     }
 
     /// <summary>
@@ -195,19 +228,22 @@ public sealed partial class MenuInteractionController(MenuServices services)
     /// <param name="context">The menu surface context where the expansion was requested.</param>
     /// <param name="menuItemData">The menu item to expand.</param>
     /// <param name="source">The input method that triggered the expansion.</param>
+    /// <returns>
+    ///     <see langword="true"/> if the request has been accepted and is under processing; otherwise <see langword="false"/>.
+    ///     This should not be interpreted as the request completion.
+    /// </returns>
     /// <remarks>
-    ///     Expansion requests are typically triggered by pressing the right arrow key on a parent menu item or clicking
-    ///     an expansion indicator. Upon successful expansion, focus will move to either the expanded item itself (in
-    ///     root menus) or the first child (in submenus). Items without children or already expanded items are ignored.
+    ///     Expansion requests are typically triggered by a pointer press, hovering or gaining focus, and depends on
+    ///     whether the context is a root or a column one. Upon successful expansion, focus will be set appropriately.
+    ///     Items without children or already expanded items are ignored.
     /// </remarks>
-    public void OnExpandRequested(MenuInteractionContext context, MenuItemData menuItemData, MenuInteractionInputSource source)
+    public bool OnExpandRequested(MenuInteractionContext context, MenuItemData menuItemData, MenuInteractionInputSource source)
     {
         this.OnNavigationSourceChanged(source);
         this.CaptureFocusOwner(context.RootSurface);
-
         this.LogItemExpandRequested(menuItemData, source, context);
 
-        this.TryExpandItem(context, menuItemData, this.NavigationMode);
+        return this.TryExpandItem(context, menuItemData, this.NavigationMode);
     }
 
     /// <summary>
@@ -476,11 +512,11 @@ public sealed partial class MenuInteractionController(MenuServices services)
         return context.RootSurface?.GetExpandedItem();
     }
 
-    private void TryExpandItem(MenuInteractionContext context, MenuItemData menuItem, MenuNavigationMode mode)
+    private bool TryExpandItem(MenuInteractionContext context, MenuItemData menuItem, MenuNavigationMode mode)
     {
         if (!menuItem.HasChildren || menuItem.IsExpanded)
         {
-            return;
+            return false;
         }
 
         this.LogExecuteRequestSubmenuOpening(menuItem);
@@ -488,17 +524,18 @@ public sealed partial class MenuInteractionController(MenuServices services)
         switch (context)
         {
             case { Kind: MenuInteractionContextKind.Root, RootSurface: { } surface }:
-                surface.ExpandItem(menuItem, mode);
+                var expandedRoot = surface.ExpandItem(menuItem, mode);
                 _ = surface.FocusItem(menuItem, mode);
-                break;
+                return expandedRoot;
             case { Kind: MenuInteractionContextKind.Column, ColumnSurface: { } columnSurface }:
-                columnSurface.ExpandItem(context.ColumnLevel, menuItem, mode);
+                var expanded = columnSurface.ExpandItem(context.ColumnLevel, menuItem, mode);
+
+                // Always attempt to move focus into the newly opened submenu.
+                // If focusing fails, it shouldn't invalidate the expansion outcome.
                 _ = columnSurface.FocusFirstItem(new MenuLevel(context.ColumnLevel + 1), mode);
-                break;
-            case { Kind: MenuInteractionContextKind.Root }:
-                throw new InvalidOperationException("Root surface is required for root submenu requests.");
+                return expanded;
             default:
-                throw new InvalidOperationException("Column surface is required for column submenu requests.");
+                throw new InvalidOperationException("Context surfaces are not properly setup");
         }
     }
 
@@ -548,6 +585,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
         }
 
         this.ClearFocusReturnElement();
+        this.hasMenuFocus = false;
     }
 
     private bool TrySwitchRootExpansion(MenuInteractionContext context, MenuItemData targetItem)
@@ -636,7 +674,19 @@ public sealed partial class MenuInteractionController(MenuServices services)
 
             this.LogNavigateToAdjacentItem(direction, adjacent.Id, context);
 
-            _ = rootSurface.FocusItem(adjacent, navMode);
+            // Menubar convention:
+            // - If no submenu is currently expanded, horizontal arrows move focus across root items without expanding.
+            // - If a submenu is open, horizontal arrows switch the expanded root to the adjacent item.
+            var currentlyExpanded = rootSurface.GetExpandedItem();
+            if (currentlyExpanded is null)
+            {
+                _ = rootSurface.FocusItem(adjacent, navMode);
+            }
+            else
+            {
+                rootSurface.ExpandItem(adjacent, navMode);
+            }
+
             return true;
         }
 

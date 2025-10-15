@@ -2,7 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
@@ -343,7 +346,7 @@ public class MenuItemTests : VisualUserInterfaceTests
     public Task HandlesRadioGroupSelection_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var radioGroupEventRaised = false;
+        var invokedEventRaised = false;
         var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
         {
             Text = "Radio Item",
@@ -354,13 +357,14 @@ public class MenuItemTests : VisualUserInterfaceTests
             // No command needed - selection should work independently
         }).ConfigureAwait(true);
 
-        menuItem.RadioGroupSelectionRequested += (_, _) => radioGroupEventRaised = true;
+        menuItem.Invoked += (_, _) => invokedEventRaised = true; // Should not raise without a command
 
         // Act
         menuItem.InvokeTapped();
 
         // Assert
-        _ = radioGroupEventRaised.Should().BeTrue("Radio group selection event should be raised for radio group items even without a command");
+        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised without a command");
+        _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Radio group item should set IsChecked=true on invoke (container manages unchecking others)");
     });
 
     [TestMethod]
@@ -413,15 +417,12 @@ public class MenuItemTests : VisualUserInterfaceTests
     public Task HandlesSubmenuItems_Async() => EnqueueAsync(async () =>
     {
         // Arrange - Start without subitems
-        var submenuRequestRaised = false;
         var (menuItem, vsm) = await SetupMenuItemWithData(new MenuItemData
         {
             Text = "Parent Item",
             SubItems = [],
             IsEnabled = true,
         }).ConfigureAwait(true);
-
-        menuItem.SubmenuRequested += (_, _) => submenuRequestRaised = true;
 
         // Act - Add subitems to trigger state change
         var subItems = new List<MenuItemData>
@@ -435,9 +436,11 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Check visual state
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.WithChildrenVisualState]);
 
-        // Test submenu invocation
+        // Invoking an item with children should not raise Invoked without a command
+        var invokedRaised = false;
+        menuItem.Invoked += (_, _) => invokedRaised = true;
         menuItem.InvokeTapped();
-        _ = submenuRequestRaised.Should().BeTrue("Submenu request event should be raised for items with children");
+        _ = invokedRaised.Should().BeFalse("Invoked should not be raised for items with children when no command is present");
     });
 
     [TestMethod]
@@ -562,7 +565,8 @@ public class MenuItemTests : VisualUserInterfaceTests
     {
         // Arrange
         var commandExecuted = false;
-        var commandFailedRaised = false;
+        var invokedRaised = false;
+        MenuItemInvokedEventArgs? invokedArgs = null;
 
         var command = new RelayCommand<MenuItemData>(
             _ => commandExecuted = true,
@@ -577,15 +581,23 @@ public class MenuItemTests : VisualUserInterfaceTests
             Command = command,
         }).ConfigureAwait(true);
 
-        menuItem.CommandExecutionFailed += (_, _) => commandFailedRaised = true;
+        menuItem.Invoked += (_, e) =>
+        {
+            invokedRaised = true;
+            invokedArgs = e;
+        };
 
         // Act
         menuItem.InvokeTapped();
         await WaitForRenderCompletion().ConfigureAwait(true);
 
-        // Assert - CanExecute threw so command should not execute and failure event should be raised
+        // Assert - CanExecute threw so command should not execute; Invoked should be raised with failure details
         _ = commandExecuted.Should().BeFalse("Command should not execute when CanExecute throws");
-        _ = commandFailedRaised.Should().BeTrue("CommandExecutionFailed should be raised when CanExecute throws");
+        _ = invokedRaised.Should().BeTrue("Invoked should be raised even when the command fails");
+        _ = invokedArgs.Should().NotBeNull();
+        _ = invokedArgs!.IsFailed.Should().BeTrue();
+        _ = invokedArgs.Exception.Should().BeOfType<CommandFailedException>();
+        _ = invokedArgs.Exception!.InnerException.Should().BeOfType<InvalidOperationException>();
         _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state should not change when command cannot execute");
     });
 
@@ -593,7 +605,8 @@ public class MenuItemTests : VisualUserInterfaceTests
     public Task HandlesExecuteThrowing_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var commandFailedRaised = false;
+        var invokedRaised = false;
+        MenuItemInvokedEventArgs? invokedArgs = null;
         var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
         {
             Text = "Item with Bad Execute",
@@ -603,14 +616,22 @@ public class MenuItemTests : VisualUserInterfaceTests
             Command = new RelayCommand<MenuItemData>(_ => throw new InvalidOperationException("Execute failure"), _ => true),
         }).ConfigureAwait(true);
 
-        menuItem.CommandExecutionFailed += (_, _) => commandFailedRaised = true;
+        menuItem.Invoked += (_, e) =>
+        {
+            invokedRaised = true;
+            invokedArgs = e;
+        };
 
         // Act
         menuItem.InvokeTapped();
         await WaitForRenderCompletion().ConfigureAwait(true);
 
-        // Assert - Execute threw, command failure should be reported and checked state should not be toggled
-        _ = commandFailedRaised.Should().BeTrue("CommandExecutionFailed should be raised when Execute throws");
+        // Assert - Execute threw, failure should be reported via Invoked args and checked state should not be toggled
+        _ = invokedRaised.Should().BeTrue("Invoked should be raised even when the command fails");
+        _ = invokedArgs.Should().NotBeNull();
+        _ = invokedArgs!.IsFailed.Should().BeTrue();
+        _ = invokedArgs.Exception.Should().BeOfType<CommandFailedException>();
+        _ = invokedArgs.Exception!.InnerException.Should().BeOfType<InvalidOperationException>();
         _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Checked state should not change when Execute throws");
     });
 
@@ -618,7 +639,6 @@ public class MenuItemTests : VisualUserInterfaceTests
     public Task HandlesRadioGroupWithoutCommand_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var radioGroupEventRaised = false;
         var invokedEventRaised = false;
         var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
         {
@@ -629,16 +649,14 @@ public class MenuItemTests : VisualUserInterfaceTests
 
             // No command - should still handle radio group selection
         }).ConfigureAwait(true);
-
-        menuItem.RadioGroupSelectionRequested += (_, _) => radioGroupEventRaised = true;
         menuItem.Invoked += (_, _) => invokedEventRaised = true;
 
         // Act
         menuItem.InvokeTapped();
 
         // Assert
-        _ = radioGroupEventRaised.Should().BeTrue("Radio group selection should work without command");
-        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised");
+        _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Radio group item should set IsChecked=true on invoke");
+        _ = invokedEventRaised.Should().BeFalse("Invoked event should not be raised when no command is present");
     });
 
     [TestMethod]
@@ -717,6 +735,34 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Create the MenuItem control with the provided data and load it as
         // the manin cointent for the test window.
         var menuItem = new TestableMenuItem { ItemData = itemData };
+
+        // Provide a minimal MenuSource with MenuServices so group selection
+        // is handled exclusively via services (no local fallback).
+        var items = new ObservableCollection<MenuItemData> { itemData };
+        IReadOnlyDictionary<string, MenuItemData> LookupAccessor() => new Dictionary<string, MenuItemData>(StringComparer.Ordinal);
+
+        void GroupSelectionHandler(MenuItemData selected)
+        {
+            if (string.IsNullOrEmpty(selected.RadioGroupId))
+            {
+                if (selected.IsCheckable)
+                {
+                    selected.IsChecked = !selected.IsChecked;
+                }
+
+                return;
+            }
+
+            var groupId = selected.RadioGroupId;
+            foreach (var i in items.Where(i => string.Equals(i.RadioGroupId, groupId, StringComparison.Ordinal)))
+            {
+                i.IsChecked = ReferenceEquals(i, selected);
+            }
+        }
+
+        var services = new MenuServices(LookupAccessor, GroupSelectionHandler, loggerFactory: null);
+        var menuSource = new MenuSourceView(items, services);
+        menuItem.MenuSource = menuSource;
         await LoadTestContentAsync(menuItem).ConfigureAwait(true);
 
         // We can only install the custom VSM after loading the template, and

@@ -232,21 +232,6 @@ public partial class ColumnPresenter
     }
 
     [LoggerMessage(
-        EventId = 3118,
-        Level = LogLevel.Debug,
-        Message = "[MenuColumnPresenter:{ColumnLevel}] HoverStarted {ItemId}")]
-    private static partial void LogHoverStarted(ILogger logger, int columnLevel, string itemId);
-
-    [Conditional("DEBUG")]
-    private void LogHoverStarted(string itemId)
-    {
-        if (this.MenuSource?.Services.MiscLogger is ILogger logger)
-        {
-            LogHoverStarted(logger, this.ColumnLevel, itemId);
-        }
-    }
-
-    [LoggerMessage(
         EventId = 3119,
         Level = LogLevel.Debug,
         Message = "[MenuColumnPresenter:{ColumnLevel}] RadioGroupSelectionRequested {ItemId}")]

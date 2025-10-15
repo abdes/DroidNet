@@ -20,7 +20,7 @@ namespace DroidNet.Controls.Menus;
     Justification = "WinUI controls follow framework pattern of cleanup in Unloaded event and destructor, not IDisposable")]
 public sealed partial class MenuButton : Button, IRootMenuSurface
 {
-    private FlyoutMenuHost? menuHost;
+    private PopupMenuHost? menuHost;
     private MenuItemData? buttonItemData;
     private bool isMenuOpen;
 
@@ -100,22 +100,22 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
     }
 
     /// <inheritdoc />
-    public void Show(MenuNavigationMode navigationMode)
+    public bool Show(MenuNavigationMode navigationMode)
     {
-        if (this.IsMenuOpen)
-        {
-            return;
-        }
-
         if (this.MenuSource is null)
         {
-            return;
+            return false;
+        }
+
+        if (this.IsMenuOpen)
+        {
+            return true;
         }
 
         // Create host if needed
         if (this.menuHost is null)
         {
-            this.menuHost = new FlyoutMenuHost
+            this.menuHost = new PopupMenuHost
             {
                 MenuSource = this.MenuSource,
                 RootSurface = this,
@@ -136,6 +136,8 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
 
         // Show the menu below the button
         this.menuHost.ShowAt(this, navigationMode);
+
+        return true;
     }
 
     private MenuInteractionContext CreateRootContext(ICascadedMenuSurface? columnSurface = null)
