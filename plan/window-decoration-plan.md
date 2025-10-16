@@ -95,61 +95,61 @@ This implementation plan defines the complete development roadmap for the Aura W
 
 ## 2. Implementation Steps
 
-### Phase 1: Core Data Structures and Enumerations
+### Phase 1: Core Data Structures and Enumerations ✅
 
 - GOAL-001: Establish immutable record types and enumerations for window decoration configuration
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-001 | Create `BackdropKind` enum in `projects/Aura/src/Decoration/BackdropKind.cs` with values: None, Mica, MicaAlt, Acrylic |
-| | TASK-002 | Create `DragRegionBehavior` enum in `projects/Aura/src/Decoration/DragRegionBehavior.cs` with values: Default, Extended, Custom, None |
-| | TASK-003 | Create `ButtonPlacement` enum in `projects/Aura/src/Decoration/ButtonPlacement.cs` with values: Left, Right, Auto |
-| | TASK-004 | Create `TitleBarOptions` record in `projects/Aura/src/Decoration/TitleBarOptions.cs` with properties: Height (32.0), Padding (8.0), ShowTitle (true), ShowIcon (true), DragBehavior (Default) |
-| | TASK-005 | Create `WindowButtonsOptions` record in `projects/Aura/src/Decoration/WindowButtonsOptions.cs` with properties: ShowMinimize (true), ShowMaximize (true), ShowClose (true), Placement (Right) |
-| | TASK-006 | Create `MenuOptions` record in `projects/Aura/src/Decoration/MenuOptions.cs` with properties: MenuProviderId (required string), IsCompact (false) and [JsonConverter(typeof(MenuOptionsJsonConverter))] attribute |
-| | TASK-007 | Add XML documentation comments to all enums and records following CON-006 |
-| | TASK-008 | Add static `Default` property to TitleBarOptions and WindowButtonsOptions for easy reuse |
+| ✅ | TASK-001 | Create `BackdropKind` enum in `projects/Aura/src/Decoration/BackdropKind.cs` with values: None, Mica, MicaAlt, Acrylic |
+| ✅ | TASK-002 | Create `DragRegionBehavior` enum in `projects/Aura/src/Decoration/DragRegionBehavior.cs` with values: Default, Extended, Custom, None |
+| ✅ | TASK-003 | Create `ButtonPlacement` enum in `projects/Aura/src/Decoration/ButtonPlacement.cs` with values: Left, Right, Auto |
+| ✅ | TASK-004 | Create `TitleBarOptions` record in `projects/Aura/src/Decoration/TitleBarOptions.cs` with properties: Height (32.0), Padding (8.0), ShowTitle (true), ShowIcon (true), DragBehavior (Default) |
+| ✅ | TASK-005 | Create `WindowButtonsOptions` record in `projects/Aura/src/Decoration/WindowButtonsOptions.cs` with properties: ShowMinimize (true), ShowMaximize (true), ShowClose (true), Placement (Right) |
+| ✅ | TASK-006 | Create `MenuOptions` record in `projects/Aura/src/Decoration/MenuOptions.cs` with properties: MenuProviderId (required string), IsCompact (false) - Note: JsonConverter attribute will be added in Phase 5 |
+| ✅ | TASK-007 | Add XML documentation comments to all enums and records following CON-006 |
+| ✅ | TASK-008 | Add static `Default` property to TitleBarOptions and WindowButtonsOptions for easy reuse |
 
-### Phase 2: WindowDecorationOptions and Validation
+### Phase 2: WindowDecorationOptions and Validation ✅
 
 - GOAL-002: Implement the core WindowDecorationOptions record with comprehensive validation logic
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-009 | Create `WindowDecorationOptions` record in `projects/Aura/src/Decoration/WindowDecorationOptions.cs` with properties: Category (required), ChromeEnabled (true), TitleBar (Default), Buttons (Default), Menu (nullable), Backdrop (None), EnableSystemTitleBarOverlay (false) |
-| | TASK-010 | Implement `Validate()` method to check: ChromeEnabled=false excludes Menu (REQ-011), Primary category requires ShowClose=true (CON-010), TitleBar.Height > 0, TitleBar.Padding >= 0 |
-| | TASK-011 | Add validation for invalid combinations and throw ArgumentException with clear messages (SEC-004) |
-| | TASK-012 | Add XML documentation to all properties and methods |
-| | TASK-013 | Write unit tests in `projects/Aura/tests/Decoration/WindowDecorationOptionsTests.cs` covering: valid options pass validation, ChromeEnabled=false with Menu throws, Primary without Close throws, negative height/padding throws |
+| ✅ | TASK-009 | Create `WindowDecorationOptions` record in `projects/Aura/src/Decoration/WindowDecorationOptions.cs` with properties: Category (required), ChromeEnabled (true), TitleBar (Default), Buttons (Default), Menu (nullable), Backdrop (None), EnableSystemTitleBarOverlay (false) |
+| ✅ | TASK-010 | Implement `Validate()` method to check: ChromeEnabled=false excludes Menu (REQ-011), Primary category requires ShowClose=true (CON-010), TitleBar.Height > 0, TitleBar.Padding >= 0 |
+| ✅ | TASK-011 | Add validation for invalid combinations and throw ValidationException with clear messages (SEC-004) |
+| ✅ | TASK-012 | Add XML documentation to all properties and methods |
+| ✅ | TASK-013 | Write unit tests in `projects/Aura/tests/Decoration/WindowDecorationOptionsTests.cs` covering: valid options pass validation, ChromeEnabled=false with Menu throws, Primary without Close throws, negative height/padding throws |
 
-### Phase 3: Menu Provider Abstraction
+### Phase 3: Menu Provider Abstraction ✅
 
 - GOAL-003: Implement IMenuProvider abstraction for thread-safe, per-window menu source creation
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-014 | Create `IMenuProvider` interface in `projects/Aura/src/Decoration/IMenuProvider.cs` with properties: ProviderId (string), and method: CreateMenuSource() returning IMenuSource |
-| | TASK-015 | Create `MenuProvider` class in `projects/Aura/src/Decoration/MenuProvider.cs` implementing IMenuProvider with constructor: MenuProvider(string providerId, `Func<MenuBuilder>` builderFactory) |
-| | TASK-016 | Implement thread-safe CreateMenuSource() in MenuProvider using lock on builderFactory invocation (REQ-019) |
-| | TASK-017 | Create `ScopedMenuProvider` class in `projects/Aura/src/Decoration/ScopedMenuProvider.cs` implementing IMenuProvider with constructor: ScopedMenuProvider(string providerId, IServiceProvider serviceProvider, Action<MenuBuilder, IServiceProvider> configureMenu) |
-| | TASK-018 | Implement CreateMenuSource() in ScopedMenuProvider to resolve MenuBuilder from DI, invoke configureMenu action, and build menu source |
-| | TASK-019 | Add XML documentation to IMenuProvider, MenuProvider, and ScopedMenuProvider |
-| | TASK-020 | Write unit tests in `projects/Aura/tests/Decoration/MenuProviderTests.cs` covering: MenuProvider thread safety with concurrent CreateMenuSource calls, ScopedMenuProvider DI resolution, provider ID validation |
+| ✅ | TASK-014 | Create `IMenuProvider` interface in `projects/Aura/src/Decoration/IMenuProvider.cs` with properties: ProviderId (string), and method: CreateMenuSource() returning IMenuSource |
+| ✅ | TASK-015 | Create `MenuProvider` class in `projects/Aura/src/Decoration/MenuProvider.cs` implementing IMenuProvider with constructor: MenuProvider(string providerId, `Func<MenuBuilder>` builderFactory) |
+| ✅ | TASK-016 | Implement thread-safe CreateMenuSource() in MenuProvider using lock on builderFactory invocation (REQ-019) |
+| ✅ | TASK-017 | Create `ScopedMenuProvider` class in `projects/Aura/src/Decoration/ScopedMenuProvider.cs` implementing IMenuProvider with constructor: ScopedMenuProvider(string providerId, IServiceProvider serviceProvider, Action<MenuBuilder, IServiceProvider> configureMenu) |
+| ✅ | TASK-018 | Implement CreateMenuSource() in ScopedMenuProvider to resolve MenuBuilder from DI, invoke configureMenu action, and build menu source |
+| ✅ | TASK-019 | Add XML documentation to IMenuProvider, MenuProvider, and ScopedMenuProvider |
+| ✅ | TASK-020 | Write unit tests in `projects/Aura/tests/Decoration/MenuProviderTests.cs` covering: MenuProvider thread safety with concurrent CreateMenuSource calls, ScopedMenuProvider DI resolution, provider ID validation |
 
-### Phase 4: Fluent Builder API
+### Phase 4: Fluent Builder API ✅
 
 - GOAL-004: Implement WindowDecorationBuilder with preset factory methods and fluent customization
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-021 | Create `WindowDecorationBuilder` class in `projects/Aura/src/Decoration/WindowDecorationBuilder.cs` with private fields for all WindowDecorationOptions properties |
-| | TASK-022 | Implement static preset factory methods: ForPrimaryWindow() (MicaAlt backdrop, all buttons, 40px title bar), ForDocumentWindow() (Mica backdrop, all buttons, standard title bar), ForToolWindow() (no backdrop, no maximize, 32px title bar), ForSecondaryWindow() (no backdrop, all buttons), WithSystemChromeOnly() (ChromeEnabled=false) |
-| | TASK-023 | Add fluent methods: WithCategory(string), WithChrome(bool), WithTitleBar(TitleBarOptions), WithButtons(WindowButtonsOptions), WithMenu(MenuOptions), WithBackdrop(BackdropKind), WithSystemTitleBarOverlay(bool) - all returning `this` |
-| | TASK-024 | Add shorthand fluent methods: WithMenu(string providerId, bool isCompact = false), WithTitleBarHeight(double height), NoMaximize(), NoMinimize(), NoBackdrop() |
-| | TASK-025 | Implement Build() method that constructs WindowDecorationOptions, calls Validate(), and returns immutable instance |
-| | TASK-026 | Add MenuProviderIds static class with constants: "App.MainMenu", "App.ContextMenu", "App.ToolMenu" |
-| | TASK-027 | Add XML documentation to all builder methods with usage examples |
-| | TASK-028 | Write unit tests in `projects/Aura/tests/Decoration/WindowDecorationBuilderTests.cs` covering: all presets build valid options, fluent customization preserves preset defaults, Build() validates and throws on invalid state, method chaining works correctly |
+| ✅ | TASK-021 | Create `WindowDecorationBuilder` class in `projects/Aura/src/Decoration/WindowDecorationBuilder.cs` with private fields for all WindowDecorationOptions properties |
+| ✅ | TASK-022 | Implement static preset factory methods: ForPrimaryWindow() (MicaAlt backdrop, all buttons, 40px title bar), ForDocumentWindow() (Mica backdrop, all buttons, standard title bar), ForToolWindow() (no backdrop, no maximize, 32px title bar), ForSecondaryWindow() (no backdrop, all buttons), WithSystemChromeOnly() (ChromeEnabled=false) |
+| ✅ | TASK-023 | Add fluent methods: WithCategory(string), WithChrome(bool), WithTitleBar(TitleBarOptions), WithButtons(WindowButtonsOptions), WithMenu(MenuOptions), WithBackdrop(BackdropKind), WithSystemTitleBarOverlay(bool) - all returning `this` |
+| ✅ | TASK-024 | Add shorthand fluent methods: WithMenu(string providerId, bool isCompact = false), WithTitleBarHeight(double height), NoMaximize(), NoMinimize(), NoBackdrop() |
+| ✅ | TASK-025 | Implement Build() method that constructs WindowDecorationOptions, calls Validate(), and returns immutable instance |
+| ✅ | TASK-026 | Add MenuProviderIds static class with constants: "App.MainMenu", "App.ContextMenu", "App.ToolMenu" |
+| ✅ | TASK-027 | Add XML documentation to all builder methods with usage examples |
+| ✅ | TASK-028 | Write unit tests in `projects/Aura/tests/Decoration/WindowDecorationBuilderTests.cs` covering: all presets build valid options, fluent customization preserves preset defaults, Build() validates and throws on invalid state, method chaining works correctly |
 
 ### Phase 5: JSON Serialization Support
 
@@ -157,13 +157,13 @@ This implementation plan defines the complete development roadmap for the Aura W
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-029 | Create `MenuOptionsJsonConverter` class in `projects/Aura/src/Decoration/Serialization/MenuOptionsJsonConverter.cs` inheriting from `JsonConverter<MenuOptions>` |
-| | TASK-030 | Implement Read() method to deserialize JSON object with "menuProviderId" and "isCompact" properties into MenuOptions record |
-| | TASK-031 | Implement Write() method to serialize MenuOptions as JSON object with only providerId and isCompact (REQ-010) |
-| | TASK-032 | Create `WindowDecorationJsonContext` partial class in `projects/Aura/src/Decoration/Serialization/WindowDecorationJsonContext.cs` with [JsonSourceGenerationOptions] attributes and [JsonSerializable] for all decoration types |
-| | TASK-033 | Configure JsonSerializerOptions: WriteIndented=true, PropertyNamingPolicy=CamelCase, DefaultIgnoreCondition=WhenWritingNull |
-| | TASK-034 | Add XML documentation to converter classes |
-| | TASK-035 | Write unit tests in `projects/Aura/tests/Decoration/SerializationTests.cs` covering: round-trip serialization of WindowDecorationOptions, MenuOptions serializes only providerId, enums serialize as strings, null properties are omitted |
+| ✅ | TASK-029 | Create `MenuOptionsJsonConverter` class in `projects/Aura/src/Decoration/Serialization/MenuOptionsJsonConverter.cs` inheriting from `JsonConverter<MenuOptions>` |
+| ✅ | TASK-030 | Implement Read() method to deserialize JSON object with "menuProviderId" and "isCompact" properties into MenuOptions record |
+| ✅ | TASK-031 | Implement Write() method to serialize MenuOptions as JSON object with only providerId and isCompact (REQ-010) |
+| ✅ | TASK-032 | Create `WindowDecorationJsonContext` partial class in `projects/Aura/src/Decoration/Serialization/WindowDecorationJsonContext.cs` with [JsonSourceGenerationOptions] attributes and [JsonSerializable] for all decoration types |
+| ✅ | TASK-033 | Configure JsonSerializerOptions: WriteIndented=true, PropertyNamingPolicy=CamelCase, DefaultIgnoreCondition=WhenWritingNull |
+| ✅ | TASK-034 | Add XML documentation to converter classes |
+| ✅ | TASK-035 | Write unit tests in `projects/Aura/tests/Decoration/SerializationTests.cs` covering: round-trip serialization of WindowDecorationOptions, MenuOptions serializes only providerId, enums serialize as strings, null properties are omitted |
 
 ### Phase 6: WindowDecorationSettings and Persistence
 
@@ -171,14 +171,14 @@ This implementation plan defines the complete development roadmap for the Aura W
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-036 | Create `WindowDecorationSettings` class in `projects/Aura/src/Decoration/WindowDecorationSettings.cs` with properties: DefaultsByCategory (Dictionary<string, WindowDecorationOptions>), OverridesByType (Dictionary<string, WindowDecorationOptions>) |
-| | TASK-037 | Add [JsonSourceGenerationOptions(WriteIndented = true)] attribute to WindowDecorationSettings |
-| | TASK-038 | Implement default constructor that initializes empty dictionaries |
-| | TASK-039 | Create `WindowDecorationSettingsService` class in `projects/Aura/src/Decoration/WindowDecorationSettingsService.cs` wrapping `ISettingsService<WindowDecorationSettings>` |
-| | TASK-040 | Add methods: GetDefaultForCategory(string category), GetOverrideForType(string windowType), SetDefaultForCategory(string category, WindowDecorationOptions options), SetOverrideForType(string windowType, WindowDecorationOptions options), SaveAsync(), LoadAsync() |
-| | TASK-041 | Implement lazy loading pattern: settings loaded on first access, cached thereafter (PER-004) |
-| | TASK-042 | Add XML documentation to WindowDecorationSettings and WindowDecorationSettingsService |
-| | TASK-043 | Write unit tests in `projects/Aura/tests/Decoration/WindowDecorationSettingsTests.cs` covering: save and load round-trip, default category lookup, override by type lookup, lazy loading behavior |
+| ✅ | TASK-036 | Created `WindowDecorationSettings` in `projects/Aura/src/Decoration/WindowDecorationSettings.cs` with defaults/overrides dictionaries using appropriate string comparers and config constants |
+| ➖ | TASK-037 | Superseded: source generation handled by `[JsonSerializable(typeof(WindowDecorationSettings))]` entry in `WindowDecorationJsonContext`, so no attribute required on the class |
+| ✅ | TASK-038 | Parameterless construction initializes empty dictionaries via property initializers |
+| ✅ | TASK-039 | Added `WindowDecorationSettingsService` in `projects/Aura/src/Decoration/WindowDecorationSettingsService.cs` deriving from `SettingsService<WindowDecorationSettings>` |
+| ✅ | TASK-040 | Service exposes get/set/remove helpers plus `SaveAsync()` backed by `SettingsService.SaveSettings()` and consumes `IOptionsMonitor` for current values |
+| ✅ | TASK-041 | Lazy-load concern addressed by leveraging `IOptionsMonitor` to hydrate once and react to change notifications, satisfying PER-004 without extra caching |
+| ✅ | TASK-042 | XML documentation provided for settings class and service |
+| ✅ | TASK-043 | Added unit tests in `projects/Aura/tests/Decoration/WindowDecorationSettingsTests.cs` covering normalization, validation, persistence, and change handling |
 
 ### Phase 7: WindowBackdropService
 

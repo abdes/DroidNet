@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -47,6 +48,7 @@ namespace DroidNet.Tests;
 /// }
 /// ]]>
 /// </example>
+[SuppressMessage("Usage", "CA1812:Avoid uninstantiated internal classes", Justification = "Used by tests / XAML reflection")]
 internal sealed partial class TestVisualStateManager : VisualStateManager
 {
     private readonly Dictionary<FrameworkElement, List<string>> controlStates = [];
