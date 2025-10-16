@@ -19,17 +19,17 @@ public interface IWindowManagerService : IDisposable
     /// <summary>
     /// Gets an observable stream of window lifecycle events (Created, Closed, Activated).
     /// </summary>
-    IObservable<WindowLifecycleEvent> WindowEvents { get; }
+    public IObservable<WindowLifecycleEvent> WindowEvents { get; }
 
     /// <summary>
     /// Gets the currently active window context, if any.
     /// </summary>
-    WindowContext? ActiveWindow { get; }
+    public WindowContext? ActiveWindow { get; }
 
     /// <summary>
     /// Gets all currently open windows.
     /// </summary>
-    IReadOnlyCollection<WindowContext> OpenWindows { get; }
+    public IReadOnlyCollection<WindowContext> OpenWindows { get; }
 
     /// <summary>
     /// Creates and displays a new window using the specified factory.
@@ -41,7 +41,7 @@ public interface IWindowManagerService : IDisposable
     /// <param name="activateWindow">Whether to activate the window after creation. Default is true.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when window creation fails.</exception>
-    Task<WindowContext> CreateWindowAsync<TWindow>(
+    public Task<WindowContext> CreateWindowAsync<TWindow>(
         string windowType = "Main",
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
@@ -57,7 +57,7 @@ public interface IWindowManagerService : IDisposable
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <param name="activateWindow">Whether to activate the window after creation.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
-    Task<WindowContext> CreateWindowAsync(
+    public Task<WindowContext> CreateWindowAsync(
         string windowTypeName,
         string windowType = "Main",
         string? title = null,
@@ -69,44 +69,44 @@ public interface IWindowManagerService : IDisposable
     /// </summary>
     /// <param name="context">The window context to close.</param>
     /// <returns>True if the window was successfully closed; otherwise, false.</returns>
-    Task<bool> CloseWindowAsync(WindowContext context);
+    public Task<bool> CloseWindowAsync(WindowContext context);
 
     /// <summary>
     /// Closes a window by its unique identifier.
     /// </summary>
     /// <param name="windowId">The unique identifier of the window to close.</param>
     /// <returns>True if the window was found and closed; otherwise, false.</returns>
-    Task<bool> CloseWindowAsync(Guid windowId);
+    public Task<bool> CloseWindowAsync(Guid windowId);
 
     /// <summary>
     /// Activates a specific window, bringing it to the foreground.
     /// </summary>
     /// <param name="context">The window context to activate.</param>
-    void ActivateWindow(WindowContext context);
+    public void ActivateWindow(WindowContext context);
 
     /// <summary>
     /// Activates a window by its unique identifier.
     /// </summary>
     /// <param name="windowId">The unique identifier of the window to activate.</param>
-    void ActivateWindow(Guid windowId);
+    public void ActivateWindow(Guid windowId);
 
     /// <summary>
     /// Gets a window context by its unique identifier.
     /// </summary>
     /// <param name="windowId">The unique identifier of the window.</param>
     /// <returns>The <see cref="WindowContext"/> if found; otherwise, null.</returns>
-    WindowContext? GetWindow(Guid windowId);
+    public WindowContext? GetWindow(Guid windowId);
 
     /// <summary>
     /// Gets all windows of a specific semantic type.
     /// </summary>
     /// <param name="windowType">The semantic window type to filter by.</param>
     /// <returns>A collection of matching window contexts.</returns>
-    IReadOnlyCollection<WindowContext> GetWindowsByType(string windowType);
+    public IReadOnlyCollection<WindowContext> GetWindowsByType(string windowType);
 
     /// <summary>
     /// Closes all open windows.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task CloseAllWindowsAsync();
+    public Task CloseAllWindowsAsync();
 }

@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.WindowManagement;
@@ -12,7 +13,7 @@ namespace DroidNet.Aura.WindowManagement;
 /// Default implementation of <see cref="IWindowFactory"/> that uses a service provider
 /// to resolve window instances with dependency injection.
 /// </summary>
-public sealed class DefaultWindowFactory : IWindowFactory
+public sealed partial class DefaultWindowFactory : IWindowFactory
 {
     private readonly IServiceProvider serviceProvider;
     private readonly ILogger<DefaultWindowFactory> logger;
@@ -21,14 +22,13 @@ public sealed class DefaultWindowFactory : IWindowFactory
     /// Initializes a new instance of the <see cref="DefaultWindowFactory"/> class.
     /// </summary>
     /// <param name="serviceProvider">The service provider for resolving window instances.</param>
-    /// <param name="logger">Logger for diagnostic output.</param>
-    public DefaultWindowFactory(IServiceProvider serviceProvider, ILogger<DefaultWindowFactory> logger)
+    /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
+    public DefaultWindowFactory(IServiceProvider serviceProvider, ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(serviceProvider);
-        ArgumentNullException.ThrowIfNull(logger);
 
         this.serviceProvider = serviceProvider;
-        this.logger = logger;
+        this.logger = loggerFactory?.CreateLogger<DefaultWindowFactory>() ?? NullLogger<DefaultWindowFactory>.Instance;
     }
 
     /// <inheritdoc/>
@@ -37,17 +37,17 @@ public sealed class DefaultWindowFactory : IWindowFactory
     {
         try
         {
-            this.logger.LogDebug("Resolving window of type {WindowType}", typeof(TWindow).Name);
+            this.LogResolvingWindow(typeof(TWindow).Name);
 
             var window = this.serviceProvider.GetRequiredService<TWindow>();
 
-            this.logger.LogDebug("Successfully created window of type {WindowType}", typeof(TWindow).Name);
+            this.LogResolvedWindow(typeof(TWindow).Name);
 
             return window;
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to create window of type {WindowType}", typeof(TWindow).Name);
+            this.LogCreateWindowFailed(ex, typeof(TWindow).Name);
             throw new InvalidOperationException($"Failed to create window of type {typeof(TWindow).Name}", ex);
         }
     }
@@ -59,7 +59,7 @@ public sealed class DefaultWindowFactory : IWindowFactory
 
         try
         {
-            this.logger.LogDebug("Resolving window type by name: {TypeName}", windowTypeName);
+            this.LogResolvingWindowByName(windowTypeName);
 
             var windowType = Type.GetType(windowTypeName)
                 ?? throw new ArgumentException($"Type '{windowTypeName}' not found", nameof(windowTypeName));
@@ -74,18 +74,19 @@ public sealed class DefaultWindowFactory : IWindowFactory
             var window = this.serviceProvider.GetRequiredService(windowType) as Window
                 ?? throw new InvalidOperationException($"Failed to create window of type {windowTypeName}");
 
-            this.logger.LogDebug("Successfully created window of type {TypeName}", windowTypeName);
+            this.LogResolvedWindowByName(windowTypeName);
 
             return window;
         }
         catch (Exception ex) when (ex is not ArgumentException)
         {
-            this.logger.LogError(ex, "Failed to create window of type {TypeName}", windowTypeName);
+            this.LogCreateWindowByNameFailed(ex, windowTypeName);
             throw new InvalidOperationException($"Failed to create window of type {windowTypeName}", ex);
         }
     }
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Window creation failures are logged and reported via false return value")]
     public bool TryCreateWindow<TWindow>(out TWindow? window)
         where TWindow : Window
     {
@@ -98,7 +99,7 @@ public sealed class DefaultWindowFactory : IWindowFactory
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning(ex, "Failed to create window of type {WindowType}", typeof(TWindow).Name);
+            this.LogTryCreateWindowFailed(ex, typeof(TWindow).Name);
             return false;
         }
     }

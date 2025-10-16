@@ -4,11 +4,11 @@
 
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -24,10 +24,10 @@ namespace DroidNet.Aura.WindowManagement;
 /// </remarks>
 public sealed partial class WindowManagerService : IWindowManagerService
 {
+    private readonly ILogger<WindowManagerService> logger;
     private readonly IWindowFactory windowFactory;
     private readonly IAppThemeModeService? themeModeService;
     private readonly AppearanceSettingsService? appearanceSettings;
-    private readonly ILogger<WindowManagerService> logger;
     private readonly DispatcherQueue dispatcherQueue;
 
     private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
@@ -41,24 +41,23 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// </summary>
     /// <param name="windowFactory">Factory for creating window instances.</param>
     /// <param name="hostingContext">The hosting context containing the UI dispatcher queue.</param>
-    /// <param name="logger">Logger for diagnostic output.</param>
+    /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
     /// <param name="appearanceSettings">Optional appearance settings for theme synchronization.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
         HostingContext hostingContext,
-        ILogger<WindowManagerService> logger,
+        ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
         AppearanceSettingsService? appearanceSettings = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
-        ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
 
+        this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
         this.windowFactory = windowFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
-        this.logger = logger;
         this.themeModeService = themeModeService;
         this.appearanceSettings = appearanceSettings;
 
@@ -67,7 +66,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             this.appearanceSettings.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
         }
 
-        this.logger.LogInformation("WindowManagerService initialized");
+        this.LogServiceInitialized();
     }
 
     /// <inheritdoc/>
@@ -90,13 +89,14 @@ public sealed partial class WindowManagerService : IWindowManagerService
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
         WindowContext? context = null;
+        var requestedWindowType = typeof(TWindow).Name;
 
         // Create window on UI thread
         await this.dispatcherQueue.EnqueueAsync(() =>
         {
             try
             {
-                this.logger.LogDebug("Creating window of type {WindowType}", typeof(TWindow).Name);
+                this.LogCreatingWindow(requestedWindowType);
 
                 var window = this.windowFactory.CreateWindow<TWindow>();
                 context = WindowContext.Create(window, windowType, title, metadata);
@@ -113,11 +113,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
                 }
 
-                this.logger.LogInformation(
-                    "Window created: ID={WindowId}, Type={WindowType}, Title={Title}",
-                    context.Id,
-                    windowType,
-                    context.Title);
+                this.LogWindowCreated(context.Id, windowType, context.Title);
 
                 // Publish event
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
@@ -132,10 +128,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to create window of type {WindowType}", typeof(TWindow).Name);
-                throw new InvalidOperationException($"Failed to create window of type {typeof(TWindow).Name}", ex);
+                this.LogWindowCreateFailed(ex, requestedWindowType);
+                throw new InvalidOperationException($"Failed to create window of type {requestedWindowType}", ex);
             }
-        });
+        }).ConfigureAwait(true);
 
         return context ?? throw new InvalidOperationException("Window creation failed");
     }
@@ -157,7 +153,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         {
             try
             {
-                this.logger.LogDebug("Creating window of type {WindowTypeName}", windowTypeName);
+                this.LogCreatingWindow(windowTypeName);
 
                 var window = this.windowFactory.CreateWindow(windowTypeName);
                 context = WindowContext.Create(window, windowType, title, metadata);
@@ -171,11 +167,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
                 }
 
-                this.logger.LogInformation(
-                    "Window created: ID={WindowId}, Type={WindowType}, Title={Title}",
-                    context.Id,
-                    windowType,
-                    context.Title);
+                this.LogWindowCreated(context.Id, windowType, context.Title);
 
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
 
@@ -188,10 +180,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to create window of type {WindowTypeName}", windowTypeName);
+                this.LogWindowCreateFailed(ex, windowTypeName);
                 throw new InvalidOperationException($"Failed to create window of type {windowTypeName}", ex);
             }
-        });
+        }).ConfigureAwait(true);
 
         return context ?? throw new InvalidOperationException("Window creation failed");
     }
@@ -202,7 +194,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         ArgumentNullException.ThrowIfNull(context);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        return await this.CloseWindowAsync(context.Id);
+        return await this.CloseWindowAsync(context.Id).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -212,25 +204,27 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         if (!this.windows.TryGetValue(windowId, out var context))
         {
-            this.logger.LogWarning("Attempted to close non-existent window: {WindowId}", windowId);
+            this.LogCloseMissingWindow(windowId);
             return false;
         }
 
         var result = false;
 
+#pragma warning disable CA1031 // Window closing should not propagate to callers
         await this.dispatcherQueue.EnqueueAsync(() =>
         {
             try
             {
-                this.logger.LogDebug("Closing window: {WindowId}", windowId);
+                this.LogClosingWindow(windowId);
                 context.Window.Close();
                 result = true;
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Error closing window: {WindowId}", windowId);
+                this.LogCloseWindowFailed(ex, windowId);
             }
-        });
+        }).ConfigureAwait(true);
+#pragma warning restore CA1031 // Window closing should not propagate to callers
 
         return result;
     }
@@ -251,17 +245,18 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         if (!this.windows.ContainsKey(windowId))
         {
-            this.logger.LogWarning("Attempted to activate non-existent window: {WindowId}", windowId);
+            this.LogActivateMissingWindow(windowId);
             return;
         }
 
+#pragma warning disable CA1031 // Window activation errors should be logged, not thrown
         _ = this.dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
                 if (!this.windows.TryGetValue(windowId, out var targetContext))
                 {
-                    this.logger.LogWarning("Attempted to activate non-existent window: {WindowId}", windowId);
+                    this.LogActivateMissingWindow(windowId);
                     return;
                 }
 
@@ -269,9 +264,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Error activating window: {WindowId}", windowId);
+                this.LogActivateWindowFailed(ex, windowId);
             }
         });
+#pragma warning restore CA1031 // Window activation errors should be logged, not thrown
     }
 
     /// <inheritdoc/>
@@ -298,10 +294,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        this.logger.LogInformation("Closing all windows ({Count} total)", this.windows.Count);
+        this.LogClosingAllWindows(this.windows.Count);
 
         var closeTasks = this.windows.Values.Select(context => this.CloseWindowAsync(context.Id));
-        _ = await Task.WhenAll(closeTasks);
+        _ = await Task.WhenAll(closeTasks).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -312,7 +308,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        this.logger.LogInformation("Disposing WindowManagerService");
+        this.LogServiceDisposing();
 
         this.windowEventsSubject.OnCompleted();
         this.windowEventsSubject.Dispose();
@@ -392,7 +388,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        this.logger.LogInformation("Window closed: ID={WindowId}, Title={Title}", context.Id, context.Title);
+        this.LogWindowClosed(context.Id, context.Title ?? string.Empty);
 
         if (this.activeWindow?.Id == windowId)
         {
@@ -446,14 +442,16 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         void ApplyThemeCore()
         {
+#pragma warning disable CA1031 // Theme application failures should be logged, not thrown
             try
             {
                 this.themeModeService.ApplyThemeMode(context.Window, currentTheme);
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to apply theme to window {WindowId}", context.Id);
+                this.LogThemeApplyFailed(ex, context.Id);
             }
+#pragma warning restore CA1031 // Theme application failures should be logged, not thrown
         }
 
         if (this.dispatcherQueue.HasThreadAccess)
@@ -464,7 +462,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         if (!this.dispatcherQueue.TryEnqueue(ApplyThemeCore))
         {
-            this.logger.LogWarning("Failed to enqueue theme application for window {WindowId}", context.Id);
+            this.LogThemeApplyEnqueueFailed(context.Id);
         }
     }
 
@@ -472,8 +470,5 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// Returns a snapshot of the current window contexts.
     /// </summary>
     /// <returns>An immutable list of tracked window contexts.</returns>
-    private WindowContext[] GetWindowSnapshot()
-    {
-        return this.windows.Values.ToArray();
-    }
+    private WindowContext[] GetWindowSnapshot() => [.. this.windows.Values];
 }
