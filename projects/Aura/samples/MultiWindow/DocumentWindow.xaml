@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Window
+    x:Class="DroidNet.Samples.Aura.MultiWindow.DocumentWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Document Toolbar  -->
+        <Border
+            Grid.Row="0"
+            Padding="12"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <AppBarButton Icon="Save" Label="Save" />
+                <AppBarButton Icon="Undo" Label="Undo" />
+                <AppBarButton Icon="Redo" Label="Redo" />
+                <AppBarSeparator />
+                <AppBarButton Icon="Bold" Label="Bold" />
+                <AppBarButton Icon="Italic" Label="Italic" />
+                <AppBarButton Icon="Underline" Label="Underline" />
+            </StackPanel>
+        </Border>
+
+        <!--  Document Content  -->
+        <Grid Grid.Row="1" Padding="20">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="16">
+                <FontIcon
+                    FontSize="64"
+                    Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                    Glyph="&#xE8A5;" />
+                <TextBlock
+                    FontSize="24"
+                    FontWeight="Bold"
+                    Text="Document Window"
+                    TextAlignment="Center" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="A content editing window with toolbar"
+                    TextAlignment="Center" />
+                <RichEditBox
+                    Width="600"
+                    Height="400"
+                    PlaceholderText="Start typing your document..." />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

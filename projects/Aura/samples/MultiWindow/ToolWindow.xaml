@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<Window
+    x:Class="DroidNet.Samples.Aura.MultiWindow.ToolWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="20" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <StackPanel
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="16">
+            <FontIcon
+                FontSize="64"
+                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                Glyph="&#xE90F;" />
+            <TextBlock
+                FontSize="24"
+                FontWeight="Bold"
+                Text="Tool Window"
+                TextAlignment="Center" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="A lightweight utility window"
+                TextAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</Window>
