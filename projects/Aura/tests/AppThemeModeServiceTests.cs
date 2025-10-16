@@ -12,6 +12,9 @@ using Moq;
 
 namespace DroidNet.Aura.Tests;
 
+/// <summary>
+/// Unit tests for the <see cref="AppThemeModeService"/> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 public class AppThemeModeServiceTests : VisualUserInterfaceTests

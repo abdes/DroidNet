@@ -12,12 +12,15 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
     </ItemGroup>
 
     <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
 
     <ItemGroup>
         <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 
 </Project>
