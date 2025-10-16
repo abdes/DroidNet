@@ -18,6 +18,11 @@
         <Product>Aura Single Window Sample</Product>
     </PropertyGroup>
 
+    <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
+    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True'">
+        <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
