@@ -96,24 +96,6 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     public partial string? ActiveWindowInfo { get; set; }
 
     /// <summary>
-    /// Command to create a new main window.
-    /// </summary>
-    [RelayCommand]
-    private async Task CreateMainWindowAsync()
-    {
-        try
-        {
-            _ = await this.windowManager.CreateWindowAsync<MainWindow>(
-                windowType: "Main",
-                title: $"Main Window {this.WindowCount + 1}");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Failed to create main window: {ex.Message}");
-        }
-    }
-
-    /// <summary>
     /// Command to create a new tool window.
     /// </summary>
     [RelayCommand]

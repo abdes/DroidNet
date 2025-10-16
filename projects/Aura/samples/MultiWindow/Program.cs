@@ -123,8 +123,7 @@ public static partial class Program
         // Add Aura window management
         _ = serviceCollection.AddAuraWindowManagement();
 
-        // Register window types as transient
-        _ = serviceCollection.AddWindow<MainWindow>();
+        // Register secondary window types as transient (Main window is singleton)
         _ = serviceCollection.AddWindow<ToolWindow>();
         _ = serviceCollection.AddWindow<DocumentWindow>();
 
@@ -133,12 +132,12 @@ public static partial class Program
 
         /*
          * Configure the Application's Windows.
-         * For routing compatibility, we still register a main window with the Target.Main key.
-         * The WindowManagerService can create additional windows dynamically.
+         * The Main Window is THE single main window of the application - registered as singleton.
+         * WindowManagerService can create additional Tool and Document windows dynamically.
          */
 
-        // The Main Window is registered for routing compatibility with Target.Main
-        container.Register<Window, MainWindow>(Reuse.Transient, serviceKey: Target.Main);
+        // The Main Window is a singleton registered for the special Target.Main
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
         // UI Services
         container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);

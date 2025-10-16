@@ -52,13 +52,18 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 
 ### Implementation Phase 3
 
-- GOAL-003: Resolve dispatcher completion and mass-close ordering issues and eliminate window leaks.
+- GOAL-003: Resolve mass-close ordering issues and eliminate window lifecycle leaks.
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-007 | Update `src/WindowManagement/DispatcherQueueExtensions.cs` to instantiate `TaskCompletionSource` with `TaskCreationOptions.RunContinuationsAsynchronously` and add overload accepting `CancellationToken` for both `Action` and `Func<T>` signatures. |  |  |
-| TASK-008 | Modify `src/WindowManagement/WindowManagerService.cs` `CloseAllWindowsAsync` to capture a snapshot of window IDs before issuing close requests, ensuring deterministic closure even as collection mutates. |  |  |
-| TASK-009 | Update `src/MainWindow.xaml.cs` and `samples/MultiWindow/MainWindow.xaml.cs` to unsubscribe from `AppearanceSettingsService.PropertyChanged` within `OnClosed` overrides prior to disposing managed resources. |  |  |
+| TASK-007 | Modify `src/WindowManagement/WindowManagerService.cs` `CloseAllWindowsAsync` to capture an immutable snapshot of window IDs before issuing close requests, ensuring deterministic closure even as the collection mutates during concurrent window removal. | ✅ | 2025-10-16 |
+| TASK-008 | Update `src/MainWindow.xaml.cs` to unsubscribe from `AppearanceSettingsService.PropertyChanged` within the existing `OnWindowClosed` handler prior to disposing managed resources and saving settings. | ✅ | 2025-10-16 |
+| TASK-009 | Update `samples/MultiWindow/MainWindow.xaml.cs` to add `OnClosed` override that unsubscribes from `AppearanceSettingsService.PropertyChanged` prior to base window closure to prevent memory leaks. | ✅ | 2025-10-16 |
+| TASK-010 | Remove `CreateMainWindowAsync` command from `WindowManagerShellViewModel` - applications have ONE main window. | ✅ | 2025-10-16 |
+| TASK-011 | Remove "New Main Window" button from `WindowManagerShellView.xaml`. | ✅ | 2025-10-16 |
+| TASK-012 | Delete `samples/MultiWindow/MainWindow.xaml` and `MainWindow.xaml.cs` - use Aura's `MainWindow` instead (architectural fix). | ✅ | 2025-10-16 |
+| TASK-013 | Update `samples/MultiWindow/Program.cs` to register Aura's `MainWindow` as singleton with `Target.Main`, only register Tool and Document windows as transient. | ✅ | 2025-10-16 |
+| TASK-014 | Update `MULTI_WINDOW_IMPLEMENTATION.md` to clarify the fundamental principle: ONE main window (singleton), multiple secondary windows (transient). | ✅ | 2025-10-16 |
 
 ### Implementation Phase 4
 
@@ -74,7 +79,7 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 ## 3. Alternatives
 
 - **ALT-001**: Introduce a dedicated theme broadcaster service. Rejected because existing window manager already has required context and communication paths, and adding another service increases complexity.
-- **ALT-002**: Replace Rx-based dispatcher utilities with `DispatcherQueueScheduler`. Rejected to avoid additional package dependencies and maintain current helper signature usage.
+- **ALT-002**: Create custom `DispatcherQueueExtensions` with `TaskCreationOptions.RunContinuationsAsynchronously`. Rejected because CommunityToolkit.WinUI already provides robust dispatcher extensions with proper async handling, and duplicating this functionality violates DRY principle and adds maintenance burden.
 - **ALT-003**: Keep decoration configuration as loose metadata (`IDictionary<string, object>`) attached to `WindowContext`. Rejected because it is error-prone, lacks discoverability, and cannot guarantee schema validation across window categories.
 - **ALT-004 (Selected)**: Define `IWindowDecorationOptions` plus preset factory helpers and optional `IWindowDecorationRegistry` for lookup by window type. Chosen to provide strong typing, predictable defaults, and an intuitive opt-in/out workflow aligned with DI patterns.
 
@@ -87,19 +92,18 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 
 - **FILE-001**: `src/WindowManagement/WindowManagerService.cs`
 - **FILE-002**: `src/WindowManagement/WindowContext.cs`
-- **FILE-003**: `src/WindowManagement/DispatcherQueueExtensions.cs`
-- **FILE-004**: `src/MainWindow.xaml.cs`
-- **FILE-005**: `samples/MultiWindow/MainWindow.xaml.cs`
-- **FILE-006**: `samples/MultiWindow/ToolWindow.xaml.cs`
-- **FILE-007**: `samples/MultiWindow/DocumentWindow.xaml.cs`
-- **FILE-008**: `src/WindowManagement/IWindowDecorationOptions.cs` (new file)
-- **FILE-009**: `src/WindowManagement/WindowDecorationPresets.cs` (new file)
-- **FILE-010**: `src/WindowManagement/IWindowDecorationRegistry.cs` (new file)
-- **FILE-011**: `tests/Aura.WindowManagement/WindowManagerServiceTests.cs` (new test file)
-- **FILE-012**: `projects/Aura/README.md`
-- **FILE-013**: `projects/Aura/MULTI_WINDOW_IMPLEMENTATION.md`
-- **FILE-014**: `tests/AppearanceSettingsServiceTests.cs` (created, currently in AppThemeModeServiceTests.cs, needs split)
-- **FILE-015**: `tests/Aura.UI.Tests.csproj` (updated dependencies)
+- **FILE-003**: `src/MainWindow.xaml.cs`
+- **FILE-004**: `samples/MultiWindow/MainWindow.xaml.cs`
+- **FILE-005**: `samples/MultiWindow/ToolWindow.xaml.cs`
+- **FILE-006**: `samples/MultiWindow/DocumentWindow.xaml.cs`
+- **FILE-007**: `src/WindowManagement/IWindowDecorationOptions.cs` (new file)
+- **FILE-008**: `src/WindowManagement/WindowDecorationPresets.cs` (new file)
+- **FILE-009**: `src/WindowManagement/IWindowDecorationRegistry.cs` (new file)
+- **FILE-010**: `tests/Aura.WindowManagement/WindowManagerServiceTests.cs` (new test file)
+- **FILE-011**: `projects/Aura/README.md`
+- **FILE-012**: `projects/Aura/MULTI_WINDOW_IMPLEMENTATION.md`
+- **FILE-013**: `tests/AppearanceSettingsServiceTests.cs` (created, currently in AppThemeModeServiceTests.cs, needs split)
+- **FILE-014**: `tests/Aura.UI.Tests.csproj` (updated dependencies)
 
 ## 6. Testing
 
@@ -124,8 +128,10 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 - **RISK-001**: Dispatcher queue saturation could delay theme propagation beyond 100ms target; mitigation: throttle updates and log warning when delay exceeds threshold.
 - **RISK-002**: Immutable `WindowContext` may require wider refactors if other components rely on mutable state; assumption is those consumers use provided APIs only.
 - **RISK-003**: `AppearanceSettingsServiceTests` currently resides in `AppThemeModeServiceTests.cs`, violating single-type-per-file rule; mitigation: extract to separate file in follow-up cleanup task.
+- **RISK-004**: Concurrent window closure during `CloseAllWindowsAsync` may result in tasks attempting to close already-removed windows; mitigation: snapshot window IDs before initiating closure sequence and handle missing windows gracefully in `CloseWindowAsync`.
 - **ASSUMPTION-001**: Tests project `tests/Aura.WindowManagement` either exists or can be created without impacting CI pipeline configuration.
 - **ASSUMPTION-002**: Testably.Abstractions package provides full API compatibility with System.IO.Abstractions and is actively maintained.
+- **ASSUMPTION-003**: CommunityToolkit.WinUI `EnqueueAsync` extension methods already implement proper async patterns with continuation scheduling, eliminating need for custom dispatcher extensions.
 
 ## 8. Related Specifications / Further Reading
 

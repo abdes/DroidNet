@@ -62,7 +62,8 @@ public partial class App
                 $"Window Event: {evt.EventType} - {evt.Context.Title} ({evt.Context.Id})");
         });
 
-        // Navigate to the demo view - this will create the main window via routing
+        // Navigate to root - this creates the main window and loads MainShellViewModel,
+        // then navigates to /demo which loads WindowManagerShellViewModel into the content outlet
         try
         {
             await this.router.NavigateAsync(
