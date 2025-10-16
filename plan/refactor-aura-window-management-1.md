@@ -38,6 +38,7 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 | TASK-001 | Update `src/WindowManagement/WindowManagerService.cs` to subscribe to `AppearanceSettingsService.PropertyChanged` once at construction, call new private `ApplyTheme(WindowContext context)` helper that reuses `IAppThemeModeService` on dispatcher, and reapply theme on change for every tracked window. | ✅ | 2025-10-16 |
 | TASK-002 | Modify `src/WindowManagement/WindowManagerService.cs` to expose internal iteration-safe snapshot method for theme updates without holding live dictionary enumerator during dispatcher work. | ✅ | 2025-10-16 |
 | TASK-003 | Extend `samples/MultiWindow/ToolWindow.xaml.cs` and `samples/MultiWindow/DocumentWindow.xaml.cs` to subscribe to the manager-driven theme updates via injected `IAppThemeModeService` by registering through DI using `AddWindow<T>` and removing direct property change listeners. | ✅ | 2025-10-16 |
+| TASK-003A | Create comprehensive unit tests for `AppearanceSettingsService` following MSTest best practices, covering constructor initialization, property setters, INotifyPropertyChanged events, settings monitoring, save/load operations, disposal, and integration scenarios (25 test methods total). Update project dependencies to use `Testably.Abstractions` instead of abandoned `System.IO.Abstractions`. | ✅ | 2025-10-16 |
 
 ### Implementation Phase 2
 
@@ -97,9 +98,21 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 - **FILE-011**: `tests/Aura.WindowManagement/WindowManagerServiceTests.cs` (new test file)
 - **FILE-012**: `projects/Aura/README.md`
 - **FILE-013**: `projects/Aura/MULTI_WINDOW_IMPLEMENTATION.md`
+- **FILE-014**: `tests/AppearanceSettingsServiceTests.cs` (created, currently in AppThemeModeServiceTests.cs, needs split)
+- **FILE-015**: `tests/Aura.UI.Tests.csproj` (updated dependencies)
 
 ## 6. Testing
 
+- **TEST-000**: Completed comprehensive unit tests for `AppearanceSettingsService` covering:
+  - Constructor initialization and property setup (3 tests)
+  - AppThemeMode property behavior with change notifications and data-driven validation (5 tests)
+  - AppThemeBackgroundColor property with hex color validation (4 tests)
+  - AppThemeFontFamily property with font name validation (3 tests)
+  - Settings monitoring and configuration reload (2 tests)
+  - Save/load operations with error handling (4 tests)
+  - Disposal behavior with dirty state warnings (2 tests)
+  - Integration scenarios for state management (2 tests)
+  - All tests follow MSTest best practices with no regions, proper string comparisons, and C#13 pattern matching
 - **TEST-001**: Add unit tests verifying theme reapplication across all registered windows after simulated `AppThemeMode` change using mocked `IAppThemeModeService` (`tests/Aura.WindowManagement/WindowManagerServiceTests.cs`).
 - **TEST-002**: Add integration test in `samples/MultiWindow` automated UI harness (if available) or manual test script validating that closing all windows with concurrent creation completes without exceptions and leaves no open windows.
 - **TEST-003**: Add memory leak detection step using `WinUITestRunner` or equivalent to ensure windows unsubscribe from appearance events upon closure.
@@ -110,7 +123,9 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 
 - **RISK-001**: Dispatcher queue saturation could delay theme propagation beyond 100ms target; mitigation: throttle updates and log warning when delay exceeds threshold.
 - **RISK-002**: Immutable `WindowContext` may require wider refactors if other components rely on mutable state; assumption is those consumers use provided APIs only.
+- **RISK-003**: `AppearanceSettingsServiceTests` currently resides in `AppThemeModeServiceTests.cs`, violating single-type-per-file rule; mitigation: extract to separate file in follow-up cleanup task.
 - **ASSUMPTION-001**: Tests project `tests/Aura.WindowManagement` either exists or can be created without impacting CI pipeline configuration.
+- **ASSUMPTION-002**: Testably.Abstractions package provides full API compatibility with System.IO.Abstractions and is actively maintained.
 
 ## 8. Related Specifications / Further Reading
 
