@@ -109,4 +109,23 @@ public interface IWindowManagerService : IDisposable
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     public Task CloseAllWindowsAsync();
+
+    /// <summary>
+    /// Registers an already-created window with the window manager.
+    /// </summary>
+    /// <param name="window">The window instance to register.</param>
+    /// <param name="windowType">Semantic type identifier (e.g., "Main", "Tool", "Document").</param>
+    /// <param name="title">Optional window title. If null, uses the window's current title.</param>
+    /// <param name="metadata">Optional metadata to associate with the window.</param>
+    /// <returns>The created <see cref="WindowContext"/> for the registered window.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the window is already registered.</exception>
+    /// <remarks>
+    /// This method is primarily used for integrating windows created outside the window manager,
+    /// such as windows created by the routing system. The window must not already be tracked.
+    /// </remarks>
+    public Task<WindowContext> RegisterWindowAsync(
+        Window window,
+        string windowType = "Main",
+        string? title = null,
+        IReadOnlyDictionary<string, object>? metadata = null);
 }
