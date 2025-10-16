@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using CommunityToolkit.WinUI;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
