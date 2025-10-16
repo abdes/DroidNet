@@ -65,3 +65,4 @@ Your goal is to help me write effective unit tests with MSTest, covering both st
 - Use test categories with `[TestCategory("Category")]`
 - Use test priorities with `[Priority(1)]` for critical tests
 - Use `[Owner("DeveloperName")]` to indicate ownership
+- Do not use regions.
