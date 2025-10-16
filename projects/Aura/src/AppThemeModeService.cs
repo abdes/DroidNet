@@ -6,15 +6,17 @@ using System.Diagnostics;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI;
 
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Provides an implementation of the <see cref="IAppThemeModeService"/> interface to manage and apply theme modes to application windows.
+///     Provides an implementation of the <see cref="IAppThemeModeService"/> interface to manage and apply theme modes to application windows.
 /// </summary>
 /// <remarks>
-/// This service is responsible for applying the specified theme mode to the content of a window and its title bar. It listens for changes in appearance settings and updates the theme accordingly.
+///     This service is responsible for applying the specified theme mode to the content of a window and its title bar. It listens
+///     for changes in appearance settings and updates the theme accordingly.
 /// </remarks>
 public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposable
 {
@@ -22,7 +24,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AppThemeModeService"/> class.
+    ///     Initializes a new instance of the <see cref="AppThemeModeService"/> class.
     /// </summary>
     /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
     public AppThemeModeService(AppearanceSettingsService appearanceSettings)
@@ -48,8 +50,28 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
 
         try
         {
+            // Enable smooth theme transitions if not already enabled
+            EnsureThemeTransitions(contentElement);
+
             // Apply theme to window content
             contentElement.RequestedTheme = requestedThemeMode;
+
+            // Apply theme at application level for proper resource resolution and system integration
+            // This ensures new windows inherit the correct theme and theme resources work properly
+            var appTheme = requestedThemeMode == ElementTheme.Light
+                ? ApplicationTheme.Light
+                : ApplicationTheme.Dark;
+
+            // Note: Application.RequestedTheme is read-only after app starts, but we set it on content
+            // to ensure theme resources resolve correctly throughout the visual tree
+            if (Application.Current.Resources.TryGetValue("AppTheme", out var existingTheme))
+            {
+                Application.Current.Resources["AppTheme"] = requestedThemeMode;
+            }
+            else
+            {
+                Application.Current.Resources.Add("AppTheme", requestedThemeMode);
+            }
 
             // Apply theme to TitleBar buttons
             var titleBar = window.AppWindow.TitleBar;
@@ -87,7 +109,36 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
     }
 
     /// <summary>
-    /// Applies the dark theme to the title bar of the specified window.
+    ///     Ensures that theme transitions are enabled on the specified element for smooth visual changes.
+    /// </summary>
+    /// <param name="element">The framework element to enable transitions on.</param>
+    private static void EnsureThemeTransitions(FrameworkElement element)
+    {
+        // Check if transitions already exist to avoid duplicates
+        if (element.Transitions?.Count > 0)
+        {
+            // Check if we already have a theme transition
+            foreach (var transition in element.Transitions)
+            {
+                if (transition is EntranceThemeTransition)
+                {
+                    return; // Transitions already configured
+                }
+            }
+        }
+
+        // Add smooth theme transitions
+        element.Transitions ??= [];
+
+        // EntranceThemeTransition provides smooth fade-in effect when theme changes
+        element.Transitions.Add(new EntranceThemeTransition
+        {
+            IsStaggeringEnabled = false,
+        });
+    }
+
+    /// <summary>
+    ///     Applies the dark theme to the title bar of the specified window.
     /// </summary>
     /// <param name="titleBar">The title bar to which the dark theme will be applied.</param>
     private static void ApplyDarkThemeToTitleBar(AppWindowTitleBar titleBar)
@@ -109,7 +160,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
     }
 
     /// <summary>
-    /// Applies the light theme to the title bar of the specified window.
+    ///     Applies the light theme to the title bar of the specified window.
     /// </summary>
     /// <param name="titleBar">The title bar to which the light theme will be applied.</param>
     private static void ApplyLightThemeToTitleBar(AppWindowTitleBar titleBar)
@@ -131,7 +182,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
     }
 
     /// <summary>
-    /// Handles changes to the <see cref="IAppearanceSettings.AppThemeMode"/> property to update the theme mode when the setting changes.
+    ///     Handles changes to the <see cref="IAppearanceSettings.AppThemeMode"/> property to update the theme mode when the setting changes.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
