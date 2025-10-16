@@ -100,6 +100,7 @@ public static partial class Program
         // UI Services
         container.Register<IAppThemeModeService, AppThemeModeService>();
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
 
         // Views and ViewModels
         container.Register<MainShellView>(Reuse.Singleton);
