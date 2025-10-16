@@ -7,6 +7,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura;
@@ -19,6 +20,7 @@ public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IAppThemeModeService appThemeModeService;
     private readonly AppearanceSettingsService appearanceSettings;
+    private readonly DispatcherQueueTimer autoSaveTimer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
@@ -53,9 +55,15 @@ public sealed partial class MainWindow : IOutletContainer
         */
 
         this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode);
+
+        // Setup auto-save timer with 5-second debounce
+        this.autoSaveTimer = this.DispatcherQueue.CreateTimer();
+        this.autoSaveTimer.Interval = TimeSpan.FromSeconds(5);
+        this.autoSaveTimer.Tick += this.OnAutoSaveTick;
+
         appearanceSettings.PropertyChanged += this.AppearanceSettingsOnPropertyChanged;
 
-        this.Closed += (_, _) => _ = this.appearanceSettings.SaveSettings();
+        this.Closed += this.OnWindowClosed;
     }
 
     [ObservableProperty]
@@ -82,6 +90,52 @@ public sealed partial class MainWindow : IOutletContainer
             Debug.WriteLine($"Applying theme `{this.appearanceSettings.AppThemeMode}` to {nameof(MainWindow)}");
             _ = this.DispatcherQueue.TryEnqueue(
                 () => this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode));
+        }
+
+        // Restart auto-save timer on any settings change
+        this.RestartAutoSaveTimer();
+    }
+
+    /// <summary>
+    /// Restarts the auto-save timer to debounce multiple rapid setting changes.
+    /// </summary>
+    private void RestartAutoSaveTimer()
+    {
+        this.autoSaveTimer.Stop();
+        this.autoSaveTimer.Start();
+    }
+
+    /// <summary>
+    /// Handles the auto-save timer tick event to save settings after a debounce period.
+    /// </summary>
+    /// <param name="sender">The timer that triggered the event.</param>
+    /// <param name="e">The event arguments.</param>
+    private void OnAutoSaveTick(DispatcherQueueTimer sender, object e)
+    {
+        this.autoSaveTimer.Stop();
+
+        if (this.appearanceSettings.IsDirty)
+        {
+            var saved = this.appearanceSettings.SaveSettings();
+            Debug.WriteLine($"Auto-save settings: {(saved ? "succeeded" : "failed")}");
+        }
+    }
+
+    /// <summary>
+    /// Handles the window closed event to ensure settings are saved before the window closes.
+    /// </summary>
+    private void OnWindowClosed(object sender, object args)
+    {
+        _ = sender;
+        _ = args;
+
+        // Stop the auto-save timer
+        this.autoSaveTimer.Stop();
+
+        // Save any pending changes
+        if (this.appearanceSettings.IsDirty)
+        {
+            _ = this.appearanceSettings.SaveSettings();
         }
     }
 }
