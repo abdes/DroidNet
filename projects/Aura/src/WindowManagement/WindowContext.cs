@@ -15,24 +15,18 @@ namespace DroidNet.Aura.WindowManagement;
 /// <param name="Title">The window title.</param>
 /// <param name="CreatedAt">Timestamp when the window was created.</param>
 /// <param name="Metadata">Optional metadata for custom window properties.</param>
+/// <param name="IsActive">Indicates whether the window is currently active.</param>
+/// <param name="LastActivatedAt">The timestamp of the most recent activation.</param>
 public sealed record WindowContext(
     Guid Id,
     Window Window,
     string WindowType,
     string Title,
     DateTimeOffset CreatedAt,
-    IReadOnlyDictionary<string, object>? Metadata = null)
+    IReadOnlyDictionary<string, object>? Metadata = null,
+    bool IsActive = false,
+    DateTimeOffset? LastActivatedAt = null)
 {
-    /// <summary>
-    /// Gets or sets a value indicating whether the window is currently active.
-    /// </summary>
-    public bool IsActive { get; set; }
-
-    /// <summary>
-    /// Gets or sets the last activation time of the window.
-    /// </summary>
-    public DateTimeOffset? LastActivatedAt { get; set; }
-
     /// <summary>
     /// Creates a new <see cref="WindowContext"/> for a given window.
     /// </summary>
@@ -65,9 +59,12 @@ public sealed record WindowContext(
     /// <param name="isActive">Whether the window is active.</param>
     /// <returns>A new <see cref="WindowContext"/> with updated state.</returns>
     public WindowContext WithActivationState(bool isActive)
-        => this with
+    {
+        var activationTimestamp = isActive ? DateTimeOffset.UtcNow : this.LastActivatedAt;
+        return this with
         {
             IsActive = isActive,
-            LastActivatedAt = isActive ? DateTimeOffset.UtcNow : LastActivatedAt,
+            LastActivatedAt = activationTimestamp,
         };
+    }
 }

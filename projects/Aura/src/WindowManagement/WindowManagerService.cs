@@ -249,7 +249,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        if (!this.windows.TryGetValue(windowId, out var context))
+        if (!this.windows.ContainsKey(windowId))
         {
             this.logger.LogWarning("Attempted to activate non-existent window: {WindowId}", windowId);
             return;
@@ -259,23 +259,13 @@ public sealed partial class WindowManagerService : IWindowManagerService
         {
             try
             {
-                context.Window.Activate();
-
-                // Update active window tracking
-                if (this.activeWindow is not null)
+                if (!this.windows.TryGetValue(windowId, out var targetContext))
                 {
-                    var previousActive = this.activeWindow.WithActivationState(false);
-                    _ = this.windows.TryUpdate(previousActive.Id, previousActive, this.activeWindow);
-                    this.PublishEvent(WindowLifecycleEventType.Deactivated, previousActive);
+                    this.logger.LogWarning("Attempted to activate non-existent window: {WindowId}", windowId);
+                    return;
                 }
 
-                var updatedContext = context.WithActivationState(true);
-                _ = this.windows.TryUpdate(windowId, updatedContext, context);
-                this.activeWindow = updatedContext;
-
-                this.PublishEvent(WindowLifecycleEventType.Activated, updatedContext);
-
-                this.logger.LogDebug("Window activated: {WindowId}", windowId);
+                targetContext.Window.Activate();
             }
             catch (Exception ex)
             {
@@ -343,56 +333,73 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private void RegisterWindowEvents(WindowContext context)
     {
         var window = context.Window;
+        var windowId = context.Id;
 
-        window.Activated += (_, _) => this.OnWindowActivated(context);
-        window.Closed += (_, _) => this.OnWindowClosed(context);
+        window.Activated += (_, _) => this.OnWindowActivated(windowId);
+        window.Closed += (_, _) => this.OnWindowClosed(windowId);
     }
 
     /// <summary>
     /// Handles window activation.
     /// </summary>
-    /// <param name="context">The activated window context.</param>
-    private void OnWindowActivated(WindowContext context)
+    /// <param name="windowId">The identifier of the activated window.</param>
+    private void OnWindowActivated(Guid windowId)
     {
-        if (this.activeWindow?.Id == context.Id)
+        while (true)
         {
-            // Already active
+            if (!this.windows.TryGetValue(windowId, out var currentContext))
+            {
+                return;
+            }
+
+            if (this.activeWindow?.Id == windowId)
+            {
+                return;
+            }
+
+            var updatedContext = currentContext.WithActivationState(true);
+
+            if (!this.windows.TryUpdate(windowId, updatedContext, currentContext))
+            {
+                // Retry if another thread modified the context concurrently.
+                continue;
+            }
+
+            // Deactivate previously active window if it differs from the current one.
+            if (this.activeWindow is { } previousActive && previousActive.Id != windowId)
+            {
+                var deactivatedContext = previousActive.WithActivationState(false);
+                if (this.windows.TryUpdate(deactivatedContext.Id, deactivatedContext, previousActive))
+                {
+                    this.PublishEvent(WindowLifecycleEventType.Deactivated, deactivatedContext);
+                }
+            }
+
+            this.activeWindow = updatedContext;
+            this.PublishEvent(WindowLifecycleEventType.Activated, updatedContext);
             return;
         }
-
-        // Deactivate previous window
-        if (this.activeWindow is not null)
-        {
-            var previousActive = this.activeWindow.WithActivationState(false);
-            _ = this.windows.TryUpdate(previousActive.Id, previousActive, this.activeWindow);
-            this.PublishEvent(WindowLifecycleEventType.Deactivated, previousActive);
-        }
-
-        // Activate current window
-        var updatedContext = context.WithActivationState(true);
-        _ = this.windows.TryUpdate(context.Id, updatedContext, context);
-        this.activeWindow = updatedContext;
-
-        this.PublishEvent(WindowLifecycleEventType.Activated, updatedContext);
     }
 
     /// <summary>
     /// Handles window closure.
     /// </summary>
-    /// <param name="context">The closed window context.</param>
-    private void OnWindowClosed(WindowContext context)
+    /// <param name="windowId">The identifier of the closed window.</param>
+    private void OnWindowClosed(Guid windowId)
     {
-        if (this.windows.TryRemove(context.Id, out _))
+        if (!this.windows.TryRemove(windowId, out var context))
         {
-            this.logger.LogInformation("Window closed: ID={WindowId}, Title={Title}", context.Id, context.Title);
-
-            if (this.activeWindow?.Id == context.Id)
-            {
-                this.activeWindow = null;
-            }
-
-            this.PublishEvent(WindowLifecycleEventType.Closed, context);
+            return;
         }
+
+        this.logger.LogInformation("Window closed: ID={WindowId}, Title={Title}", context.Id, context.Title);
+
+        if (this.activeWindow?.Id == windowId)
+        {
+            this.activeWindow = null;
+        }
+
+        this.PublishEvent(WindowLifecycleEventType.Closed, context);
     }
 
     /// <summary>
