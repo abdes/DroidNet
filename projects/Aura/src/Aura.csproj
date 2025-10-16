@@ -36,6 +36,7 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
