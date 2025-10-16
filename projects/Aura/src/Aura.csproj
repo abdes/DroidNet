@@ -7,6 +7,7 @@
         <RootNamespace>$(RootNamespace).Aura</RootNamespace>
         <AssemblyName>DroidNet.Aura</AssemblyName>
         <UseWinUI>true</UseWinUI>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <Title>DroidNet.Aura</Title>
         <Description>Aura provides things around the core business of the Apps such as the window, the shells, OS notification, taskbar integration, etc....</Description>
