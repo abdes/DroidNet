@@ -49,7 +49,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
         try
         {
             // Apply theme to window content
-            contentElement.RequestedTheme = this.appearanceSettings.AppThemeMode;
+            contentElement.RequestedTheme = requestedThemeMode;
 
             // Apply theme to TitleBar buttons
             var titleBar = window.AppWindow.TitleBar;
