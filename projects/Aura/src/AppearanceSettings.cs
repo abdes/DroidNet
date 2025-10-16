@@ -27,7 +27,11 @@ public class AppearanceSettings : IAppearanceSettings
     /// <value>
     /// The app theme mode, which determines the overall theme (light, dark, or default) of the application.
     /// </value>
-    public ElementTheme AppThemeMode { get; set; } = ElementTheme.Default;
+    public ElementTheme AppThemeMode
+    {
+        get => field;
+        set => field = Enum.IsDefined(value) ? value : ElementTheme.Default;
+    }
 
     /// <summary>
     /// Gets or sets a value for the app theme background color.
