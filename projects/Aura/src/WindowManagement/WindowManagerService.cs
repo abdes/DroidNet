@@ -9,6 +9,8 @@ using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -35,6 +37,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
     private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
     private readonly Subject<WindowLifecycleEvent> windowEventsSubject = new();
+    private readonly IDisposable? routerContextCreatedSubscription;
+    private readonly IDisposable? routerContextDestroyedSubscription;
 
     private WindowContext? activeWindow;
     private bool isDisposed;
@@ -48,13 +52,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
     /// <param name="appearanceSettings">Optional appearance settings for accessing theme properties.</param>
     /// <param name="appearanceSettingsService">Optional settings service for PropertyChanged notifications.</param>
+    /// <param name="router">Optional router for integrating with routing-based window creation.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
         IAppearanceSettings? appearanceSettings = null,
-        ISettingsService<IAppearanceSettings>? appearanceSettingsService = null)
+        ISettingsService<IAppearanceSettings>? appearanceSettingsService = null,
+        IRouter? router = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
@@ -70,6 +76,24 @@ public sealed partial class WindowManagerService : IWindowManagerService
         if (this.themeModeService is not null && this.appearanceSettingsService is not null)
         {
             this.appearanceSettingsService.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
+        }
+
+        // Integrate with router if available to track router-created windows
+        if (router is not null)
+        {
+            this.routerContextCreatedSubscription = router.Events
+                .OfType<ContextCreated>()
+                .Subscribe(this.OnRouterContextCreated);
+
+            this.routerContextDestroyedSubscription = router.Events
+                .OfType<ContextDestroyed>()
+                .Subscribe(this.OnRouterContextDestroyed);
+
+            this.LogRouterIntegrationEnabled();
+        }
+        else
+        {
+            this.LogRouterNotAvailable();
         }
 
         this.LogServiceInitialized();
@@ -301,8 +325,62 @@ public sealed partial class WindowManagerService : IWindowManagerService
         // Capture immutable snapshot of window IDs to ensure deterministic closure
         // even as the collection mutates during concurrent window removal
         var windowIds = this.windows.Keys.ToArray();
-        var closeTasks = windowIds.Select(id => this.CloseWindowAsync(id));
+        var closeTasks = windowIds.Select(this.CloseWindowAsync);
         _ = await Task.WhenAll(closeTasks).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc/>
+    public async Task<WindowContext> RegisterWindowAsync(
+        Window window,
+        string windowType = "Main",
+        string? title = null,
+        IReadOnlyDictionary<string, object>? metadata = null)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentException.ThrowIfNullOrWhiteSpace(windowType);
+        ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+        // Check if window is already registered
+        if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
+        {
+            throw new InvalidOperationException("Window is already registered with the window manager");
+        }
+
+        WindowContext? context = null;
+
+        await this.dispatcherQueue.EnqueueAsync(() =>
+        {
+            try
+            {
+                this.LogRegisteringWindow(window.GetType().Name);
+
+                context = WindowContext.Create(window, windowType, title, metadata);
+
+                // Apply theme if services are available
+                this.ApplyTheme(context);
+
+                // Register window events
+                this.RegisterWindowEvents(context);
+
+                // Add to collection
+                if (!this.windows.TryAdd(context.Id, context))
+                {
+                    throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
+                }
+
+                this.LogWindowRegistered(context.Id, windowType, context.Title);
+
+                // Publish event
+                this.PublishEvent(WindowLifecycleEventType.Created, context);
+            }
+            catch (Exception ex)
+            {
+                this.LogRegisterWindowFailed(ex, window.GetType().Name);
+                throw new InvalidOperationException($"Failed to register window of type {window.GetType().Name}", ex);
+            }
+        }).ConfigureAwait(true);
+
+        return context ?? throw new InvalidOperationException("Window registration failed");
     }
 
     /// <inheritdoc/>
@@ -324,7 +402,68 @@ public sealed partial class WindowManagerService : IWindowManagerService
             this.appearanceSettingsService.PropertyChanged -= this.AppearanceSettings_OnPropertyChanged;
         }
 
+        this.routerContextCreatedSubscription?.Dispose();
+        this.routerContextDestroyedSubscription?.Dispose();
+
         this.isDisposed = true;
+    }
+
+    /// <summary>
+    /// Handles router context creation events to track router-created windows.
+    /// </summary>
+    /// <param name="evt">The context created event.</param>
+    private void OnRouterContextCreated(ContextCreated evt)
+    {
+        // Only handle window-based navigation contexts
+        if (evt.Context?.NavigationTarget is not Window window)
+        {
+            return;
+        }
+
+        // Check if already tracked
+        if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
+        {
+            this.LogRouterWindowAlreadyTracked(evt.Context.NavigationTargetKey.Name);
+            return;
+        }
+
+        var targetName = evt.Context.NavigationTargetKey.Name;
+        var windowType = evt.Context.NavigationTargetKey.IsMain ? "Main" : "Secondary";
+
+        this.LogTrackingRouterWindow(targetName);
+
+        // Register the window - RegisterWindowAsync will handle UI thread marshalling
+        var metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["RoutingTarget"] = targetName,
+            ["CreatedByRouter"] = true,
+        };
+
+#pragma warning disable CA1031 // Router window tracking failures should be logged, not thrown
+        _ = this.RegisterWindowAsync(window, windowType, title: null, metadata)
+            .ContinueWith(
+                task =>
+                {
+                    if (task.Exception is not null)
+                    {
+                        this.LogRouterWindowTrackingFailed(task.Exception.InnerException ?? task.Exception, targetName);
+                    }
+                },
+                TaskScheduler.Default);
+#pragma warning restore CA1031
+    }
+
+    /// <summary>
+    /// Handles router context destruction events.
+    /// </summary>
+    /// <param name="evt">The context destroyed event.</param>
+    private void OnRouterContextDestroyed(ContextDestroyed evt)
+    {
+        // The window.Closed event handler will have already removed it from tracking
+        if (evt.Context?.NavigationTarget is Window)
+        {
+            this.LogRouterWindowDestroyed(evt.Context.NavigationTargetKey.Name);
+        }
     }
 
     /// <summary>
