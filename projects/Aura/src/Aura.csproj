@@ -2,7 +2,7 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>$(RootNamespace).Aura</RootNamespace>
         <AssemblyName>DroidNet.Aura</AssemblyName>
@@ -28,7 +28,8 @@
     </ItemGroup>
 
     <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
-    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True'">
+    <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
+    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
         <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
     </ItemGroup>
 
