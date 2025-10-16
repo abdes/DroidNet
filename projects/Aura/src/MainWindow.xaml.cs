@@ -5,7 +5,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.UI.Windowing;
@@ -15,12 +14,12 @@ namespace DroidNet.Aura;
 /// <summary>
 /// Represents the main window of the user interface.
 /// </summary>
-[ObservableObject]
-public sealed partial class MainWindow : IOutletContainer
+public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChanged
 {
     private readonly IAppThemeModeService appThemeModeService;
     private readonly AppearanceSettingsService appearanceSettings;
     private readonly IDisposable autoSaveSubscription;
+    private object? contentViewModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
@@ -70,8 +69,26 @@ public sealed partial class MainWindow : IOutletContainer
         this.Closed += this.OnWindowClosed;
     }
 
-    [ObservableProperty]
-    public partial object? ContentViewModel { get; set; }
+    /// <summary>
+    /// Event raised when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Gets or sets the content view model.
+    /// </summary>
+    public object? ContentViewModel
+    {
+        get => this.contentViewModel;
+        set
+        {
+            if (!Equals(this.contentViewModel, value))
+            {
+                this.contentViewModel = value;
+                this.OnPropertyChanged(nameof(this.ContentViewModel));
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)
@@ -123,4 +140,11 @@ public sealed partial class MainWindow : IOutletContainer
         // Save any pending changes
         this.SaveSettingsIfDirty();
     }
+
+    /// <summary>
+    /// Raises the PropertyChanged event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that changed.</param>
+    private void OnPropertyChanged(string propertyName)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
