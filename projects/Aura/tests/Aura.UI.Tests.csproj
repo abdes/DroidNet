@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>$(RootNamespace).Aura.Tests</RootNamespace>
+        <AssemblyName>DroidNet.Aura.UI.Tests</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
+    </ItemGroup>
+
+    <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+
+</Project>
