@@ -45,9 +45,9 @@ Refactor the Aura window management stack to harden theme synchronization, enfor
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-004 | Refactor `src/WindowManagement/WindowContext.cs` to replace settable properties with `init` accessors, migrate activation timestamps into primary record parameters, and update `WithActivationState` to return a new instance using primary constructor arguments. |  |  |
-| TASK-005 | Adjust `src/WindowManagement/WindowManagerService.cs` activation/deactivation logic to rely on immutable contexts, eliminating direct property mutation and ensuring `TryUpdate` compares previous immutable instances. |  |  |
-| TASK-006 | Add unit test in `src/WindowManagement/WindowManagerServiceTests.cs` (create if missing) verifying that calling `ActivateWindow` twice yields distinct context instances with updated `LastActivatedAt`. |  |  |
+| TASK-004 | Refactor `src/WindowManagement/WindowContext.cs` to replace settable properties with `init` accessors, migrate activation timestamps into primary record parameters, and update `WithActivationState` to return a new instance using primary constructor arguments. | ✅ | 2025-10-16 |
+| TASK-005 | Adjust `src/WindowManagement/WindowManagerService.cs` activation/deactivation logic to rely on immutable contexts, eliminating direct property mutation and ensuring `TryUpdate` compares previous immutable instances. | ✅ | 2025-10-16 |
+| TASK-006 | Add unit test in `tests/Aura.WindowManagement/WindowManagerServiceTests.cs` verifying that calling `ActivateWindow` twice yields distinct context instances with updated `LastActivatedAt`. |  |  |
 
 ### Implementation Phase 3
 
