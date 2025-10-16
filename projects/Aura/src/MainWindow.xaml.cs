@@ -4,10 +4,10 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura;
@@ -20,7 +20,7 @@ public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IAppThemeModeService appThemeModeService;
     private readonly AppearanceSettingsService appearanceSettings;
-    private readonly DispatcherQueueTimer autoSaveTimer;
+    private readonly IDisposable autoSaveSubscription;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
@@ -56,10 +56,14 @@ public sealed partial class MainWindow : IOutletContainer
 
         this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode);
 
-        // Setup auto-save timer with 5-second debounce
-        this.autoSaveTimer = this.DispatcherQueue.CreateTimer();
-        this.autoSaveTimer.Interval = TimeSpan.FromSeconds(5);
-        this.autoSaveTimer.Tick += this.OnAutoSaveTick;
+        // Setup auto-save with Rx debouncing
+        // Convert PropertyChanged events to observable and debounce for 5 seconds
+        this.autoSaveSubscription = Observable
+            .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                handler => this.appearanceSettings.PropertyChanged += handler,
+                handler => this.appearanceSettings.PropertyChanged -= handler)
+            .Throttle(TimeSpan.FromSeconds(5))
+            .Subscribe(_ => this.SaveSettingsIfDirty());
 
         appearanceSettings.PropertyChanged += this.AppearanceSettingsOnPropertyChanged;
 
@@ -91,29 +95,13 @@ public sealed partial class MainWindow : IOutletContainer
             _ = this.DispatcherQueue.TryEnqueue(
                 () => this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode));
         }
-
-        // Restart auto-save timer on any settings change
-        this.RestartAutoSaveTimer();
     }
 
     /// <summary>
-    /// Restarts the auto-save timer to debounce multiple rapid setting changes.
+    /// Saves the appearance settings if they have been modified.
     /// </summary>
-    private void RestartAutoSaveTimer()
+    private void SaveSettingsIfDirty()
     {
-        this.autoSaveTimer.Stop();
-        this.autoSaveTimer.Start();
-    }
-
-    /// <summary>
-    /// Handles the auto-save timer tick event to save settings after a debounce period.
-    /// </summary>
-    /// <param name="sender">The timer that triggered the event.</param>
-    /// <param name="e">The event arguments.</param>
-    private void OnAutoSaveTick(DispatcherQueueTimer sender, object e)
-    {
-        this.autoSaveTimer.Stop();
-
         if (this.appearanceSettings.IsDirty)
         {
             var saved = this.appearanceSettings.SaveSettings();
@@ -129,13 +117,10 @@ public sealed partial class MainWindow : IOutletContainer
         _ = sender;
         _ = args;
 
-        // Stop the auto-save timer
-        this.autoSaveTimer.Stop();
+        // Dispose the auto-save subscription
+        this.autoSaveSubscription.Dispose();
 
         // Save any pending changes
-        if (this.appearanceSettings.IsDirty)
-        {
-            _ = this.appearanceSettings.SaveSettings();
-        }
+        this.SaveSettingsIfDirty();
     }
 }
