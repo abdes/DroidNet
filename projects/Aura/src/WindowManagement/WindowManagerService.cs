@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Hosting.WinUI;
@@ -60,6 +62,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.themeModeService = themeModeService;
         this.appearanceSettings = appearanceSettings;
 
+        if (this.themeModeService is not null && this.appearanceSettings is not null)
+        {
+            this.appearanceSettings.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
+        }
+
         this.logger.LogInformation("WindowManagerService initialized");
     }
 
@@ -95,10 +102,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 context = WindowContext.Create(window, windowType, title, metadata);
 
                 // Apply theme if services are available
-                if (this.themeModeService is not null && this.appearanceSettings is not null)
-                {
-                    this.themeModeService.ApplyThemeMode(window, this.appearanceSettings.AppThemeMode);
-                }
+                this.ApplyTheme(context);
 
                 // Register window events
                 this.RegisterWindowEvents(context);
@@ -158,10 +162,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 var window = this.windowFactory.CreateWindow(windowTypeName);
                 context = WindowContext.Create(window, windowType, title, metadata);
 
-                if (this.themeModeService is not null && this.appearanceSettings is not null)
-                {
-                    this.themeModeService.ApplyThemeMode(window, this.appearanceSettings.AppThemeMode);
-                }
+                this.ApplyTheme(context);
 
                 this.RegisterWindowEvents(context);
 
@@ -327,6 +328,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.windowEventsSubject.Dispose();
         this.windows.Clear();
 
+        if (this.appearanceSettings is not null)
+        {
+            this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_OnPropertyChanged;
+        }
+
         this.isDisposed = true;
     }
 
@@ -398,5 +404,69 @@ public sealed partial class WindowManagerService : IWindowManagerService
     {
         var lifecycleEvent = WindowLifecycleEvent.Create(eventType, context);
         this.windowEventsSubject.OnNext(lifecycleEvent);
+    }
+
+    /// <summary>
+    /// Handles appearance settings changes related to theme updates.
+    /// </summary>
+    /// <param name="sender">The event sender.</param>
+    /// <param name="args">Event arguments.</param>
+    private void AppearanceSettings_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (!string.Equals(args.PropertyName, nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        foreach (var context in this.GetWindowSnapshot())
+        {
+            this.ApplyTheme(context);
+        }
+    }
+
+    /// <summary>
+    /// Applies the active appearance theme to the specified window context.
+    /// </summary>
+    /// <param name="context">The window context that should receive the theme.</param>
+    private void ApplyTheme(WindowContext? context)
+    {
+        if (context is null || this.themeModeService is null || this.appearanceSettings is null)
+        {
+            return;
+        }
+
+        var currentTheme = this.appearanceSettings.AppThemeMode;
+
+        void ApplyThemeCore()
+        {
+            try
+            {
+                this.themeModeService.ApplyThemeMode(context.Window, currentTheme);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to apply theme to window {WindowId}", context.Id);
+            }
+        }
+
+        if (this.dispatcherQueue.HasThreadAccess)
+        {
+            ApplyThemeCore();
+            return;
+        }
+
+        if (!this.dispatcherQueue.TryEnqueue(ApplyThemeCore))
+        {
+            this.logger.LogWarning("Failed to enqueue theme application for window {WindowId}", context.Id);
+        }
+    }
+
+    /// <summary>
+    /// Returns a snapshot of the current window contexts.
+    /// </summary>
+    /// <returns>An immutable list of tracked window contexts.</returns>
+    private WindowContext[] GetWindowSnapshot()
+    {
+        return this.windows.Values.ToArray();
     }
 }
