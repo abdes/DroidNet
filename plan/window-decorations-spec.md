@@ -80,7 +80,7 @@ The Window Decoration System provides application developers with:
 - **REQ-005**: The builder API SHALL support starting from a preset and customizing specific properties
 - **REQ-006**: The system SHALL integrate with the Menus module via an IMenuProvider abstraction
 - **REQ-007**: IMenuProvider SHALL create new IMenuSource instances per window to avoid shared mutable state
-- **REQ-008**: The system SHALL persist decoration preferences via WindowDecorationSettings and `ISettingsService<T>`
+- **REQ-008**: The system SHALL persist decoration preferences via WindowDecorationSettings using the Config module's `SettingsService<T>` infrastructure with `IOptionsMonitor<WindowDecorationSettings>` change tracking
 - **REQ-009**: The system SHALL use System.Text.Json for serialization with custom converters for non-serializable properties
 - **REQ-010**: Menu providers SHALL NOT be persisted; only provider IDs SHALL be stored via MenuOptionsJsonConverter
 - **REQ-011**: The system SHALL validate decoration options and throw clear ArgumentException for invalid combinations
@@ -390,17 +390,40 @@ public sealed class WindowDecorationBuilder
 ```csharp
 /// <summary>
 /// Persistent settings for window decoration preferences.
-/// System.Text.Json serializes this directly - no DTOs needed.
+/// Dictionaries use string comparers that match lookup semantics.
 /// </summary>
-[JsonSourceGenerationOptions(WriteIndented = true)]
 public sealed class WindowDecorationSettings
 {
-    /// <summary>Default decoration by category.</summary>
-    public Dictionary<string, WindowDecorationOptions> DefaultsByCategory { get; set; } = new();
+    /// <summary>Default decoration by semantic category (case-insensitive).</summary>
+    public IDictionary<string, WindowDecorationOptions> DefaultsByCategory { get; }
+        = new Dictionary<string, WindowDecorationOptions>(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Per-window-type overrides.</summary>
-    public Dictionary<string, WindowDecorationOptions> OverridesByType { get; set; } = new();
+    /// <summary>Per-window-type overrides (case-sensitive).</summary>
+    public IDictionary<string, WindowDecorationOptions> OverridesByType { get; }
+        = new Dictionary<string, WindowDecorationOptions>(StringComparer.Ordinal);
 }
+
+/// <summary>
+/// Domain contract exposed by the decoration settings service.
+/// </summary>
+public interface IWindowDecorationSettings
+{
+    IReadOnlyDictionary<string, WindowDecorationOptions> DefaultsByCategory { get; }
+    IReadOnlyDictionary<string, WindowDecorationOptions> OverridesByType { get; }
+
+    WindowDecorationOptions? GetDefaultForCategory(string category);
+    WindowDecorationOptions? GetOverrideForType(string windowType);
+    void SetDefaultForCategory(string category, WindowDecorationOptions options);
+    bool RemoveDefaultForCategory(string category);
+    void SetOverrideForType(string windowType, WindowDecorationOptions options);
+    bool RemoveOverrideForType(string windowType);
+    ValueTask<bool> SaveAsync(CancellationToken cancellationToken = default);
+}
+
+> **Service configuration**
+> - Configuration file name: `Aura.json`
+> - Configuration section name: `WindowDecorationSettings`
+> - Service implemented via the Config module's `SettingsService<WindowDecorationSettings>` infrastructure backed by `IOptionsMonitor<WindowDecorationSettings>`
 ```
 
 ### JSON Serialization Support
@@ -519,29 +542,17 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Adds window decoration services to the service collection.
     /// </summary>
-    /// <param name="services">The service collection to configure.</param>
-    /// <returns>The service collection for chaining.</returns>
-    /// <remarks>
-    /// This extension registers the following services:
-    /// <list type="bullet">
-    /// <item><description><see cref="IWindowDecorationService"/> as <see cref="WindowDecorationService"/> (singleton)</description></item>
-    /// <item><description><see cref="IWindowBackdropService"/> as <see cref="WindowBackdropService"/> (singleton)</description></item>
-    /// <item><description><see cref="ISettingsService{WindowDecorationSettings}"/> (if not already registered)</description></item>
-    /// </list>
-    /// </remarks>
-    public static IServiceCollection AddWindowDecoration(this IServiceCollection services)
+    public static IServiceCollection AddWindowDecorationServices(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        _ = services.AddSingleton<IWindowDecorationService, WindowDecorationService>();
-        _ = services.AddSingleton<IWindowBackdropService, WindowBackdropService>();
+        _ = services.AddSingleton<WindowDecorationSettingsService>();
+        _ = services.AddSingleton<IWindowDecorationSettings>(
+            sp => sp.GetRequiredService<WindowDecorationSettingsService>());
+        _ = services.AddSingleton<ISettingsService<WindowDecorationSettings>>(
+            sp => sp.GetRequiredService<WindowDecorationSettingsService>());
 
-        // Register settings service if not already registered
-        if (!services.Any(d => d.ServiceType == typeof(ISettingsService<WindowDecorationSettings>)))
-        {
-            _ = services.AddSingleton<ISettingsService<WindowDecorationSettings>>(
-                sp => new JsonSettingsService<WindowDecorationSettings>("window-decoration.json"));
-        }
+        _ = services.AddSingleton<WindowBackdropService>();
 
         return services;
     }
@@ -598,6 +609,8 @@ public static class ServiceCollectionExtensions
     }
 }
 ```
+
+> **Integration tip:** When composing the host (for example in `Program.cs`), ensure the decoration configuration file is included alongside existing entries: add `finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName)` to the configuration file list and call `services.Configure<WindowDecorationSettings>(configuration.GetSection(WindowDecorationSettings.ConfigSectionName))` before invoking `AddWindowDecorationServices()`.
 
 ## 5. Acceptance Criteria
 
@@ -674,14 +687,14 @@ public static class ServiceCollectionExtensions
 
 - **MSTest**: Primary testing framework for .NET
 - **FluentAssertions**: For readable assertion syntax
-- **Moq**: For mocking dependencies (IMenuProvider, ISettingsService, ILogger)
+- **Moq**: For mocking dependencies (IMenuProvider, IWindowDecorationSettings, ILogger)
 
 ### Test Data Management
 
 - Use builder pattern to create test decoration options programmatically
 - Use AutoFixture for generating test DTOs
 - Create test menu providers with predictable provider IDs
-- Mock ISettingsService to avoid file I/O in unit tests
+- Mock IWindowDecorationSettings (or underlying file system) to avoid file I/O in unit tests
 - Use in-memory collections for testing DI resolution
 
 ## 7. Rationale & Context
@@ -757,9 +770,10 @@ Research shows 90% of window decoration use cases fall into five categories: Pri
 The system uses direct serialization of `WindowDecorationOptions` records without intermediate DTOs:
 
 ```csharp
-// Direct serialization - no conversion needed
-settingsService.Settings.OverridesByType["ToolWindow"] = userPreference;
-// System.Text.Json handles it automatically
+var settings = serviceProvider.GetRequiredService<IWindowDecorationSettings>();
+settings.SetOverrideForType("ToolWindow", userPreference);
+await settings.SaveAsync();
+// SettingsService<T> serializes the snapshot directly via System.Text.Json
 ```
 
 **Implementation approach:**
@@ -767,7 +781,8 @@ settingsService.Settings.OverridesByType["ToolWindow"] = userPreference;
 1. **Records serialize natively** - System.Text.Json has excellent support for C# records with init-only properties
 2. **Custom JsonConverter for MenuOptions** - The `MenuOptionsJsonConverter` handles the special case where we only want to persist the `MenuProviderId` string, not the entire menu structure
 3. **JsonSourceGenerationOptions** - AOT-friendly source generation for performance and trimming
-4. **Validation after deserialization** - Call `.Validate()` on loaded options to ensure consistency
+4. **IOptionsMonitor integration** - `SettingsService<T>` hydrates from configuration and reacts to reload notifications
+5. **Validation after deserialization** - Setter helpers validate through `WindowDecorationOptions.Validate()` before persistence
 
 **Benefits of direct serialization:**
 
@@ -863,7 +878,7 @@ This unified approach reduces cognitive load and makes the API more intuitive fo
 
 ### Data Dependencies
 
-- **DAT-001**: `ISettingsService<WindowDecorationSettings>` - Provides JSON persistence of decoration preferences
+- **DAT-001**: `SettingsService<WindowDecorationSettings>` / `IWindowDecorationSettings` - Provides JSON persistence and domain access to decoration preferences via `IOptionsMonitor`
 - **DAT-002**: IMenuSource (from Menus module) - Provides menu item data structures
 - **DAT-003**: IAppThemeModeService (from Appearance module) - Provides current theme mode for backdrop coordination
 
@@ -958,22 +973,20 @@ var context = await windowManager.CreateWindowAsync<CustomWindow>(decoration: op
 
 ```csharp
 // Save user's preferred decoration for ToolWindow type
-var settingsService = serviceProvider.GetRequiredService<ISettingsService<WindowDecorationSettings>>();
+var decorationSettings = serviceProvider.GetRequiredService<IWindowDecorationSettings>();
 
 var userPreference = WindowDecorationBuilder
     .ForToolWindow()
     .WithBackdrop(BackdropKind.Mica)  // User prefers Mica for tools
     .Build();
 
-// Direct serialization - no DTO conversion needed
-settingsService.Settings.OverridesByType["ToolWindow"] = userPreference;
-settingsService.Save();
+decorationSettings.SetOverrideForType("ToolWindow", userPreference);
+await decorationSettings.SaveAsync();
 
-// Later: load user preferences
-if (settingsService.Settings.OverridesByType.TryGetValue("ToolWindow", out var options))
+// Later: retrieve user preferences
+var options = decorationSettings.GetOverrideForType("ToolWindow");
+if (options is not null)
 {
-    // Validate after deserialization
-    options.Validate();
     var context = await windowManager.CreateWindowAsync<ToolWindow>(decoration: options);
 }
 ```
