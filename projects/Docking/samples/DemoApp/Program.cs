@@ -135,6 +135,7 @@ public static partial class Program
 
         container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
 
         container.Register<DockPanelViewModel>(Reuse.Transient);
         container.Register<DockPanel>(Reuse.Transient);

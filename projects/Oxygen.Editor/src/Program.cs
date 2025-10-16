@@ -201,6 +201,7 @@ public static partial class Program
 
         // Domain-specific services
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
 
         container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
         container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);

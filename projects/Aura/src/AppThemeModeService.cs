@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Config;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -20,14 +21,14 @@ namespace DroidNet.Aura;
 /// </remarks>
 public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposable
 {
-    private readonly AppearanceSettingsService appearanceSettings;
+    private readonly ISettingsService<AppearanceSettings> appearanceSettings;
     private bool isDisposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AppThemeModeService"/> class.
     /// </summary>
     /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
-    public AppThemeModeService(AppearanceSettingsService appearanceSettings)
+    public AppThemeModeService(ISettingsService<AppearanceSettings> appearanceSettings)
     {
         this.appearanceSettings = appearanceSettings;
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;

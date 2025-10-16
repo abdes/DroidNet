@@ -114,6 +114,7 @@ public static partial class Program
     {
         // Register core services
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
 
         // Register multi-window management services
         // Note: We use Microsoft.Extensions.DependencyInjection extensions for registration
