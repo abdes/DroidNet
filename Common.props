@@ -25,8 +25,14 @@
         <ProjectsRoot>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))projects</ProjectsRoot>
     </PropertyGroup>
 
+    <!-- Set default platform to x64 if not explicitly set -->
+    <PropertyGroup>
+        <Platform Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'">x64</Platform>
+    </PropertyGroup>
+
     <!-- Read-only source tree (builds to top-level bin/obj folders) -->
     <PropertyGroup>
+        <!-- Don't include platform in base paths - the SDK will add it automatically to the final output path -->
         <BaseIntermediateOutputPath>$(MyTopLevelDirectory)obj\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseIntermediateOutputPath>
         <BaseOutputPath Condition=" '$(BaseOutputPath)' == '' ">$(MyTopLevelDirectory)bin\$(MSBuildProjectName)\</BaseOutputPath>
     </PropertyGroup>
@@ -213,7 +219,8 @@
                 <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
                 <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
                 <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
-                <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+                <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+                <PublishProfile>$(RuntimeIdentifier).pubxml</PublishProfile>
                 <EnableMsixTooling>true</EnableMsixTooling>
             </PropertyGroup>
             <ItemGroup>
