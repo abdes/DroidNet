@@ -124,13 +124,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 // Publish event
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
 
-                // Show and optionally activate window
-                window.Activate();
-
-                if (activateWindow)
-                {
-                    this.ActivateWindow(context);
-                }
+                // Show window with proper activation control
+                // Use AppWindow.Show(bool) instead of Window.Activate() to respect activateWindow parameter
+                window.AppWindow.Show(activateWindow);
             }
             catch (Exception ex)
             {
