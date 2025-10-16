@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
+using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,7 +29,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private readonly ILogger<WindowManagerService> logger;
     private readonly IWindowFactory windowFactory;
     private readonly IAppThemeModeService? themeModeService;
-    private readonly AppearanceSettingsService? appearanceSettings;
+    private readonly IAppearanceSettings? appearanceSettings;
+    private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
     private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
@@ -44,13 +46,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="hostingContext">The hosting context containing the UI dispatcher queue.</param>
     /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
-    /// <param name="appearanceSettings">Optional appearance settings for theme synchronization.</param>
+    /// <param name="appearanceSettings">Optional appearance settings for accessing theme properties.</param>
+    /// <param name="appearanceSettingsService">Optional settings service for PropertyChanged notifications.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
-        AppearanceSettingsService? appearanceSettings = null)
+        IAppearanceSettings? appearanceSettings = null,
+        ISettingsService<IAppearanceSettings>? appearanceSettingsService = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
@@ -61,10 +65,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.themeModeService = themeModeService;
         this.appearanceSettings = appearanceSettings;
+        this.appearanceSettingsService = appearanceSettingsService;
 
-        if (this.themeModeService is not null && this.appearanceSettings is not null)
+        if (this.themeModeService is not null && this.appearanceSettingsService is not null)
         {
-            this.appearanceSettings.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
+            this.appearanceSettingsService.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
         }
 
         this.LogServiceInitialized();
@@ -297,7 +302,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         this.LogClosingAllWindows(this.windows.Count);
 
-        var closeTasks = this.windows.Values.Select(context => this.CloseWindowAsync(context.Id));
+        // Capture immutable snapshot of window IDs to ensure deterministic closure
+        // even as the collection mutates during concurrent window removal
+        var windowIds = this.windows.Keys.ToArray();
+        var closeTasks = windowIds.Select(id => this.CloseWindowAsync(id));
         _ = await Task.WhenAll(closeTasks).ConfigureAwait(true);
     }
 
@@ -315,9 +323,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.windowEventsSubject.Dispose();
         this.windows.Clear();
 
-        if (this.appearanceSettings is not null)
+        if (this.appearanceSettingsService is not null)
         {
-            this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_OnPropertyChanged;
+            this.appearanceSettingsService.PropertyChanged -= this.AppearanceSettings_OnPropertyChanged;
         }
 
         this.isDisposed = true;

@@ -134,6 +134,9 @@ public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChange
         _ = sender;
         _ = args;
 
+        // Unsubscribe from appearance settings to prevent memory leaks
+        this.appearanceSettings.PropertyChanged -= this.AppearanceSettingsOnPropertyChanged;
+
         // Dispose the auto-save subscription
         this.autoSaveSubscription.Dispose();
 

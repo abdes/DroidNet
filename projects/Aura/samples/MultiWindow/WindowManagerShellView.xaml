@@ -77,12 +77,6 @@
             Margin="0,0,0,16"
             Orientation="Horizontal"
             Spacing="12">
-            <Button Command="{x:Bind ViewModel.CreateMainWindowCommand}" Content="New Main Window">
-                <Button.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="N" Modifiers="Control,Shift" />
-                </Button.KeyboardAccelerators>
-            </Button>
-
             <Button Command="{x:Bind ViewModel.CreateToolWindowCommand}" Content="New Tool Window">
                 <Button.KeyboardAccelerators>
                     <KeyboardAccelerator Key="T" Modifiers="Control,Shift" />
