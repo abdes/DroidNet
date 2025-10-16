@@ -27,6 +27,13 @@ namespace DroidNet.Aura;
 /// </remarks>
 public partial class MainShellViewModel : AbstractOutletContainer
 {
+    private static readonly Dictionary<string, ElementTheme> ThemeMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Dark"] = ElementTheme.Dark,
+        ["Light"] = ElementTheme.Light,
+        ["System Default"] = ElementTheme.Default
+    };
+
     private readonly DispatcherQueue dispatcherQueue;
     private readonly AppearanceSettingsService appearanceSettings;
     private MenuItemData? themesMenuItem;
@@ -252,31 +259,18 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// <param name="themeName">The name of the selected theme.</param>
     private void ApplyTheme(string themeName)
     {
-        if (string.Equals(
-                this.appearanceSettings.AppThemeMode.ToString(),
-                themeName,
-                StringComparison.OrdinalIgnoreCase))
+        if (!ThemeMap.TryGetValue(themeName, out var theme))
+        {
+            Debug.Fail($"Unknown theme name: {themeName}");
+            return;
+        }
+
+        if (this.appearanceSettings.AppThemeMode == theme)
         {
             // Already the current theme
             return;
         }
 
-        if (themeName.Contains("Dark", StringComparison.OrdinalIgnoreCase))
-        {
-            this.appearanceSettings.AppThemeMode = ElementTheme.Dark;
-        }
-        else if (themeName.Contains("Light", StringComparison.OrdinalIgnoreCase))
-        {
-            this.appearanceSettings.AppThemeMode = ElementTheme.Light;
-        }
-        else if (themeName.Contains("Default", StringComparison.OrdinalIgnoreCase))
-        {
-            this.appearanceSettings.AppThemeMode = ElementTheme.Default;
-        }
-        else
-        {
-            // Maintain existing theme if no match
-            this.appearanceSettings.AppThemeMode = this.appearanceSettings.AppThemeMode;
-        }
+        this.appearanceSettings.AppThemeMode = theme;
     }
 }
