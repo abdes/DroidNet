@@ -127,7 +127,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
         titleBar.ButtonHoverForegroundColor = Colors.Black;
         titleBar.ButtonHoverBackgroundColor = Color.FromArgb(51, 0, 0, 0);
         titleBar.ButtonPressedForegroundColor = Colors.Black;
-        titleBar.ButtonPressedBackgroundColor = Colors.White;
+        titleBar.ButtonPressedBackgroundColor = Color.FromArgb(40, 0, 0, 0);
     }
 
     /// <summary>
