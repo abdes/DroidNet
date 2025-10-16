@@ -31,7 +31,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     {
         ["Dark"] = ElementTheme.Dark,
         ["Light"] = ElementTheme.Light,
-        ["System Default"] = ElementTheme.Default
+        ["System Default"] = ElementTheme.Default,
     };
 
     private readonly DispatcherQueue dispatcherQueue;
