@@ -658,28 +658,6 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         e.Handled = true;
     }
 
-    private void OnPresenterPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (!this.popup.IsOpen)
-        {
-            return;
-        }
-
-        var position = e.GetCurrentPoint(relativeTo: null).Position;
-        this.placementHelper.UpdatePointer(position);
-    }
-
-    private void OnPresenterPointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        if (!this.popup.IsOpen)
-        {
-            return;
-        }
-
-        var position = e.GetCurrentPoint(relativeTo: null).Position;
-        this.placementHelper.UpdatePointer(position);
-    }
-
     private void OnPresenterSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (!this.popup.IsOpen || this.activeRequest is not { } request)
