@@ -30,6 +30,215 @@ experience.
 dotnet add package DroidNet.Config
 ```
 
+## Architecture
+
+### Settings Pattern Overview
+
+DroidNet.Config implements a layered architecture for managing application settings, combining the .NET Options Pattern with additional capabilities for change tracking and persistence. The pattern consists of four key components:
+
+#### 1. Settings POCO (Plain Old CLR Object)
+
+The settings POCO is a simple data class used exclusively for binding configuration data from JSON files through the Microsoft.Extensions.Configuration framework.
+
+**Characteristics:**
+
+- Plain class with auto-properties
+- No business logic or validation
+- Directly deserializable from JSON
+- Used internally by `IOptionsMonitor<T>`
+
+**Example:**
+
+```csharp
+public class ThemeSettings
+{
+    public string Theme { get; set; } = "Light";
+    public string AccentColor { get; set; } = "#0078D4";
+}
+```
+
+#### 2. Settings Data Interface
+
+The data interface provides a read-only contract for accessing settings values. This interface is what application code depends on.
+
+**Characteristics:**
+
+- Defines the data contract for settings access
+- Contains only properties (no methods)
+- Properties may be read-only (`{ get; }`) or read-write (`{ get; set; }`) depending on complexity
+- Implemented by the settings service
+
+**Simple Settings Example (Read-Write Properties):**
+
+```csharp
+public interface IAppearanceSettings
+{
+    ElementTheme AppThemeMode { get; set; }
+    string AppThemeBackgroundColor { get; set; }
+    string AppThemeFontFamily { get; set; }
+}
+```
+
+**Complex Settings Example (Read-Only Properties):**
+
+```csharp
+public interface IWindowDecorationSettings
+{
+    IReadOnlyDictionary<string, WindowDecorationOptions> CategoryOverrides { get; }
+}
+```
+
+#### 3. Settings Service Interface
+
+The service interface extends `ISettingsService<TSettings>` and adds domain-specific operations for settings management.
+
+**Characteristics:**
+
+- Extends `ISettingsService<TSettings>` from DroidNet.Config
+- Adds domain-specific methods for complex settings manipulation
+- Provides validation and business logic
+- Makes the service mockable for testing
+
+**Example:**
+
+```csharp
+public interface IWindowDecorationSettingsService : ISettingsService<WindowDecorationSettings>
+{
+    IReadOnlyDictionary<string, WindowDecorationOptions> CategoryOverrides { get; }
+
+    WindowDecorationOptions GetEffectiveDecoration(string category);
+    void SetCategoryOverride(string category, WindowDecorationOptions options);
+    void RemoveCategoryOverride(string category);
+    Task SaveAsync();
+}
+```
+
+#### 4. Settings Service Implementation
+
+The service implementation extends `SettingsService<TSettings>` base class and implements both the data interface and service interface.
+
+**Characteristics:**
+
+- Extends `SettingsService<TSettings>` base class
+- Implements the settings data interface
+- Implements the settings service interface
+- Receives `IOptionsMonitor<TSettings>` via dependency injection
+- Provides `INotifyPropertyChanged` support from base class
+- Tracks changes via `IsDirty` property
+- Persists changes to JSON files
+
+**Example:**
+
+```csharp
+public class WindowDecorationSettingsService : SettingsService<WindowDecorationSettings>,
+    IWindowDecorationSettings,
+    IWindowDecorationSettingsService
+{
+    private static readonly Dictionary<string, WindowDecorationOptions> Defaults = new()
+    {
+        ["Main"] = WindowDecorationBuilder.Main(),
+        ["Secondary"] = WindowDecorationBuilder.Secondary()
+    };
+
+    private Dictionary<string, WindowDecorationOptions> categoryOverrides;
+
+    public WindowDecorationSettingsService(
+        IOptionsMonitor<WindowDecorationSettings> settingsMonitor,
+        IPathFinder pathFinder,
+        IFileSystem fileSystem,
+        ILoggerFactory? loggerFactory = null)
+        : base(settingsMonitor, fileSystem, loggerFactory)
+    {
+        // Initialize from monitored settings
+    }
+
+    public IReadOnlyDictionary<string, WindowDecorationOptions> CategoryOverrides
+        => this.categoryOverrides;
+
+    public WindowDecorationOptions GetEffectiveDecoration(string category)
+    {
+        // Implementation with fallback logic
+    }
+}
+```
+
+### Two Patterns Based on Complexity
+
+DroidNet.Config supports two different patterns depending on settings complexity:
+
+#### Simple Settings: Direct Modification Pattern
+
+For settings with simple scalar properties (strings, enums, primitives), the data interface can expose read-write properties.
+
+**When to Use:**
+
+- Properties are simple types (string, int, enum, bool)
+- No validation or normalization required beyond type safety
+- Change tracking handled automatically by the framework
+
+**Benefits:**
+
+- Straightforward direct modification: `settings.AppThemeMode = ElementTheme.Dark;`
+- `IOptionsMonitor<T>` automatically handles change notifications
+- No custom change tracking logic needed
+
+**Example:**
+
+```csharp
+public interface IAppearanceSettings
+{
+    ElementTheme AppThemeMode { get; set; }  // Direct modification allowed
+}
+```
+
+#### Complex Settings: Service-Mediated Pattern
+
+For settings with collections or complex types requiring validation, the data interface exposes read-only properties and modifications go through service methods.
+
+**When to Use:**
+
+- Properties are collections (Dictionary, List)
+- Business rules govern modifications (validation, normalization)
+- Need granular change tracking (which specific item changed)
+- Want to prevent invalid states
+
+**Benefits:**
+
+- Enforces validation and normalization
+- Provides granular change tracking
+- Prevents direct manipulation of complex state
+- Maintains consistency through controlled service methods
+
+**Example:**
+
+```csharp
+public interface IWindowDecorationSettings
+{
+    IReadOnlyDictionary<string, WindowDecorationOptions> CategoryOverrides { get; }  // Read-only
+}
+
+public interface IWindowDecorationSettingsService
+{
+    void SetCategoryOverride(string category, WindowDecorationOptions options);  // Validated modification
+}
+```
+
+### Integration with .NET Options Pattern
+
+DroidNet.Config leverages the standard .NET Options Pattern while adding persistence and precise change notifications:
+
+1. **Configuration Binding**: `IOptionsMonitor<TSettings>` binds JSON configuration to the settings POCO
+2. **Change Monitoring**: The service subscribes to `IOptionsMonitor.OnChange` to detect external changes
+3. **Property Notifications**: Base class implements `INotifyPropertyChanged` for UI data binding
+4. **Persistence**: `SaveSettings()` method serializes changes back to JSON files
+
+This architecture provides:
+
+- **Separation of Concerns**: Data binding (POCO) vs. data access (interface) vs. business logic (service)
+- **Testability**: Mockable interfaces for unit testing
+- **Flexibility**: Support for both simple and complex settings patterns
+- **Framework Integration**: Works seamlessly with ASP.NET Core and .NET Generic Host
+
 ## Typical Usage
 
 Here is a typical example of how it can be used in the Main entryp point of an
