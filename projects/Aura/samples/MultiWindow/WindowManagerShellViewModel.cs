@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -95,6 +96,23 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     [ObservableProperty]
     public partial string? ActiveWindowInfo { get; set; }
 
+    /// <summary>
+    /// Gets or sets the selected backdrop for new windows.
+    /// </summary>
+    [ObservableProperty]
+    public partial BackdropKind SelectedBackdrop { get; set; } = BackdropKind.Mica;
+
+    /// <summary>
+    /// Gets the available backdrop options.
+    /// </summary>
+    public IReadOnlyList<BackdropKind> AvailableBackdrops { get; } =
+    [
+        BackdropKind.None,
+        BackdropKind.Mica,
+        BackdropKind.MicaAlt,
+        BackdropKind.Acrylic,
+    ];
+
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
@@ -113,17 +131,20 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to create a new tool window.
+    /// Command to create a new tool window with the selected backdrop.
     /// </summary>
     [RelayCommand]
     private async Task CreateToolWindowAsync()
     {
         try
         {
-            _ = await this.windowManager.CreateWindowAsync<ToolWindow>(
+            var context = await this.windowManager.CreateWindowAsync<ToolWindow>(
                 category: WindowCategory.Tool,
                 title: string.Create(CultureInfo.InvariantCulture, $"Tool Window {this.WindowCount + 1}"))
                 .ConfigureAwait(true);
+
+            // Manually apply the selected backdrop to demonstrate WindowBackdropService
+            this.ApplyBackdropToWindow(context);
         }
         catch (Exception ex)
         {
@@ -132,21 +153,53 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to create a new document window.
+    /// Command to create a new document window with the selected backdrop.
     /// </summary>
     [RelayCommand]
     private async Task CreateDocumentWindowAsync()
     {
         try
         {
-            _ = await this.windowManager.CreateWindowAsync<DocumentWindow>(
+            var context = await this.windowManager.CreateWindowAsync<DocumentWindow>(
                 category: WindowCategory.Document,
                 title: string.Create(CultureInfo.InvariantCulture, $"Document {this.WindowCount + 1}"))
                 .ConfigureAwait(true);
+
+            // Manually apply the selected backdrop to demonstrate WindowBackdropService
+            this.ApplyBackdropToWindow(context);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to create document window: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the selected backdrop to a window.
+    /// </summary>
+    /// <param name="context">The window context.</param>
+    private void ApplyBackdropToWindow(WindowContext context)
+    {
+        try
+        {
+            // Create a decoration with the selected backdrop
+            var decoration = new WindowDecorationOptions
+            {
+                Category = context.Category,
+                Backdrop = this.SelectedBackdrop,
+            };
+
+            // Create a new context with decoration
+            var decoratedContext = context with { Decoration = decoration };
+
+            // Apply backdrop using the backdrop service directly
+            var backdropService = new WindowBackdropService(this.windowManager);
+            backdropService.ApplyBackdrop(decoratedContext);
+            backdropService.Dispose();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to apply backdrop: {ex.Message}");
         }
     }
 
@@ -238,6 +291,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 Category = context.Category,
                 IsActive = context.IsActive,
                 CreatedAt = context.CreatedAt.ToLocalTime(),
+                Backdrop = context.Decoration?.Backdrop ?? BackdropKind.None,
             });
         }
 

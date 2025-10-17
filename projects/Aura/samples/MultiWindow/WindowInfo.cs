@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Aura;
+using DroidNet.Aura.Decoration;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
@@ -41,4 +42,10 @@ public sealed partial class WindowInfo : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the backdrop kind for this window.
+    /// </summary>
+    [ObservableProperty]
+    public partial BackdropKind Backdrop { get; set; }
 }

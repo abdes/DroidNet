@@ -1,6 +1,6 @@
 # Aura Multi-Window Sample
 
-This sample demonstrates Aura's comprehensive multi-window management capabilities for WinUI 3 applications.
+This sample demonstrates Aura's comprehensive multi-window management capabilities for WinUI 3 applications, including the new WindowBackdropService for visual effects.
 
 ## Features Demonstrated
 
@@ -12,9 +12,18 @@ This sample demonstrates Aura's comprehensive multi-window management capabiliti
 
 ### 🎨 Theme Synchronization
 
-- **Automatic Theme Application** - New windows inherit current theme
-- **Cross-Window Theme Updates** - Theme changes propagate to all open windows
-- **Theme Service Integration** - Seamless integration with Aura's theme system
+- **Centralized Theme Coordination** - WindowManagerService manages all theme changes
+- **Automatic Theme Application** - New windows receive current theme on creation
+- **Cross-Window Theme Updates** - Theme changes propagate instantly to all open windows
+- **Zero-Configuration Windows** - Individual windows don't need theme-handling code
+- **Thread-Safe Updates** - Theme changes marshaled to UI thread automatically
+
+### 🌈 Window Backdrop Effects (NEW)
+
+- **WindowBackdropService** - Automatic backdrop application via event subscription
+- **Multiple Backdrop Types** - None, Mica, MicaAlt, and Acrylic materials
+- **Per-Window Configuration** - Select different backdrops for each window
+- **Visual Material System** - Leverage WinUI 3's SystemBackdrop APIs
 
 ### 📑 Different Window Types
 
@@ -84,10 +93,31 @@ var serviceCollection = new ServiceCollection();
 // Add window management services
 serviceCollection.AddAuraWindowManagement();
 
+// Add backdrop service for automatic backdrop application
+serviceCollection.AddSingleton<WindowBackdropService>();
+
 // Register window types
 serviceCollection.AddWindow<MainWindow>();
 serviceCollection.AddWindow<ToolWindow>();
 serviceCollection.AddWindow<DocumentWindow>();
+```
+
+### Backdrop Service Usage
+
+The WindowBackdropService automatically observes window lifecycle events and applies backdrops based on window decoration settings:
+
+```csharp
+// Create a decoration with a specific backdrop
+var decoration = new WindowDecorationOptions
+{
+    Category = WindowCategory.Tool,
+    Backdrop = BackdropKind.Mica,
+};
+
+// Apply backdrop to window context
+var backdropService = serviceProvider.GetRequiredService<WindowBackdropService>();
+var decoratedContext = context with { Decoration = decoration };
+backdropService.ApplyBackdrop(decoratedContext);
 ```
 
 ### Creating Windows
@@ -158,8 +188,29 @@ windowManager.WindowEvents
 
 This sample integrates with several Aura components:
 
-- **AppThemeModeService** - Applies themes to windows
-- **AppearanceSettingsService** - Persists theme preferences
+### Centralized Theme Management
+
+**Important Architecture Note:** Theme synchronization is handled entirely by the `WindowManagerService`. Individual windows do NOT need to subscribe to theme changes or handle theme application themselves.
+
+- **WindowManagerService** - Automatically applies themes to all windows:
+  - Subscribes to `AppearanceSettings.PropertyChanged`
+  - Applies theme to new windows on creation
+  - Propagates theme changes to all open windows instantly
+  - Thread-safe with automatic UI thread marshaling
+
+- **AppThemeModeService** - Low-level theme application API (called by WindowManagerService)
+
+- **AppearanceSettingsService** - Persists theme preferences and fires PropertyChanged events
+
+**Best Practice:** Window implementations should remain simple and focused on their specific UI. Don't add theme subscription code to individual windows - let WindowManagerService handle it centrally. This ensures:
+
+- Single source of truth for theme coordination
+- No duplicate subscriptions or race conditions
+- Easier testing and maintenance
+- Better performance (one subscription vs. N subscriptions)
+
+### Other Aura Components
+
 - **MainShellViewModel** - Can be used in any window
 - **MainShellView** - Provides custom title bar and branding
 

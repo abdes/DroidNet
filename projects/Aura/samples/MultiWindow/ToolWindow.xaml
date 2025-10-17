@@ -8,7 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="20" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid Padding="20">
+        <Grid.Background>
+            <SolidColorBrush Opacity="0.3" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+        </Grid.Background>
         <StackPanel
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
@@ -26,6 +29,17 @@
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="A lightweight utility window"
                 TextAlignment="Center" />
+            <Border
+                Margin="0,16,0,0"
+                Padding="12,8"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                CornerRadius="4">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="💡 The backdrop effect is visible through the semi-transparent background" />
+            </Border>
         </StackPanel>
     </Grid>
 </Window>

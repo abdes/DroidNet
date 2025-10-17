@@ -4,8 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
+using System.Reactive.Linq;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
@@ -112,9 +114,9 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register core services
-        container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        // Register core services in DryIoc
+        container.Register<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
 
         // Register multi-window management services
         // Note: We use Microsoft.Extensions.DependencyInjection extensions for registration
@@ -122,6 +124,9 @@ public static partial class Program
 
         // Add Aura window management
         _ = serviceCollection.AddAuraWindowManagement();
+
+        // Add backdrop service for automatic backdrop application
+        _ = serviceCollection.AddSingleton<WindowBackdropService>();
 
         // Register secondary window types as transient (Main window is singleton)
         _ = serviceCollection.AddWindow<ToolWindow>();
@@ -138,9 +143,6 @@ public static partial class Program
 
         // The Main Window is a singleton registered for the special Target.Main
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // UI Services
-        container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
 
         // Views and ViewModels
         container.Register<MainShellView>(Reuse.Singleton);
