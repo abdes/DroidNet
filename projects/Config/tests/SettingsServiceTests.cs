@@ -17,23 +17,23 @@ namespace DroidNet.Config.Tests;
 public class SettingsServiceTests
 {
     private readonly Mock<IFileSystem> mockFileSystem;
-    private readonly Mock<IOptionsMonitor<TestSettings>> mockSettingsMonitor;
+    private readonly Mock<IOptionsMonitor<ITestSettings>> mockSettingsMonitor;
     private readonly Mock<ILoggerFactory> mockLoggerFactory;
-    private readonly Mock<ILogger<SettingsService<TestSettings>>> mockLogger;
+    private readonly Mock<ILogger<SettingsService<ITestSettings>>> mockLogger;
 
     public SettingsServiceTests()
     {
         this.mockFileSystem = new Mock<IFileSystem>();
-        this.mockSettingsMonitor = new Mock<IOptionsMonitor<TestSettings>>();
+        this.mockSettingsMonitor = new Mock<IOptionsMonitor<ITestSettings>>();
         this.mockLoggerFactory = new Mock<ILoggerFactory>();
-        this.mockLogger = new Mock<ILogger<SettingsService<TestSettings>>>();
+        this.mockLogger = new Mock<ILogger<SettingsService<ITestSettings>>>();
         _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Create an instance of the logger manually without using the extension method
         _ = this.mockLoggerFactory.Setup(lf => lf.CreateLogger(It.IsAny<string>())).Returns(this.mockLogger.Object);
 
-        // Setup the settings monitor to return default settings
-        _ = this.mockSettingsMonitor.Setup(sm => sm.CurrentValue).Returns(new TestSettings());
+        // Setup the settings monitor to return default settings - we don't need to return anything specific
+        // as the service implementation handles the initial values
     }
 
     [TestMethod]
@@ -180,18 +180,14 @@ public class SettingsServiceTests
     public void ShouldCallUpdatePropertiesWhenMonitoredOptionsChange()
     {
         // Arrange
-        var newSettings = new TestSettings
-        {
-            FooString = "NewFoo",
-            BarNumber = 99,
-        };
+        var newSettings = Mock.Of<ITestSettings>(s => s.FooString == "NewFoo" && s.BarNumber == 99);
         var settingsMonitor = this.mockSettingsMonitor.Object;
 
-        Action<TestSettings, string?>? onChangeCallback = null;
+        Action<ITestSettings, string?>? onChangeCallback = null;
 
         // Setup the OnChange method to capture the callback
-        _ = this.mockSettingsMonitor.Setup(sm => sm.OnChange(It.IsAny<Action<TestSettings, string?>>()))
-            .Callback<Action<TestSettings, string?>>((callback) => onChangeCallback = callback)
+        _ = this.mockSettingsMonitor.Setup(sm => sm.OnChange(It.IsAny<Action<ITestSettings, string?>>()))
+            .Callback<Action<ITestSettings, string?>>((callback) => onChangeCallback = callback)
             .Returns(Mock.Of<IDisposable>());
         using var service = new TestSettingsService(
             settingsMonitor,
@@ -205,5 +201,222 @@ public class SettingsServiceTests
         // Assert
         _ = service.FooString.Should().Be("NewFoo");
         _ = service.BarNumber.Should().Be(99);
+    }
+
+    [TestMethod]
+    public void SettingsPropertyShouldReturnServiceInstance()
+    {
+        // Arrange & Act
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+
+        // Assert
+        // The Settings property returns the service instance cast to ITestSettings
+        // Since TestSettingsService implements ITestSettings, this should work
+        _ = service.Settings.Should().BeSameAs(service);
+        _ = service.Settings.Should().BeAssignableTo<ITestSettings>();
+    }
+
+    [TestMethod]
+    public void PropertyChangedShouldFireWhenPropertyIsModified()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+        var propertyChangedEvents = new List<string>();
+        service.PropertyChanged += (_, args) => propertyChangedEvents.Add(args.PropertyName ?? string.Empty);
+
+        // Act
+        service.FooString = "ChangedValue";
+        service.BarNumber = 42;
+
+        // Assert
+        _ = propertyChangedEvents.Should().Contain("FooString");
+        _ = propertyChangedEvents.Should().Contain("BarNumber");
+    }
+
+    [TestMethod]
+    public void PropertyChangedShouldNotFireWhenPropertySetToSameValue()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+        var initialValue = service.FooString;
+        var propertyChangedFired = false;
+        service.PropertyChanged += (_, _) => propertyChangedFired = true;
+
+        // Act
+        service.FooString = initialValue;
+
+        // Assert
+        _ = propertyChangedFired.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void IsDirtyShouldBeTrueAfterPropertyChange()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+
+        // Act
+        service.FooString = "Modified";
+
+        // Assert
+        _ = service.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsDirtyShouldBeFalseAfterSuccessfulSave()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+        service.FooString = "Modified";
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
+
+        // Act
+        var result = service.SaveSettings();
+
+        // Assert
+        _ = result.Should().BeTrue();
+        _ = service.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void IsDirtyShouldRemainTrueAfterFailedSave()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object);
+        service.FooString = "Modified";
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()))
+            .Throws(new IOException("Test Exception"));
+
+        // Act
+        var result = service.SaveSettings();
+
+        // Assert
+        _ = result.Should().BeFalse();
+        _ = service.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void AutoSaveShouldSaveSettingsAfterDelay()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object,
+            autoSaveDelay: TimeSpan.FromMilliseconds(100));
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
+
+        // Act
+        service.FooString = "AutoSaveTest";
+        Thread.Sleep(200); // Wait for auto-save to trigger
+
+        // Assert
+        this.mockFileSystem.Verify(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+    }
+
+    [TestMethod]
+    public void AutoSaveShouldNotSaveWhenDisabled()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object,
+            autoSaveDelay: TimeSpan.Zero);
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
+
+        // Act
+        service.FooString = "NoAutoSave";
+        Thread.Sleep(200); // Wait to ensure no auto-save happens
+
+        // Assert
+        this.mockFileSystem.Verify(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [TestMethod]
+    public void DisposeShouldSaveDirtySettingsWhenAutoSaveIsEnabled()
+    {
+        // Arrange
+        var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object,
+            autoSaveDelay: TimeSpan.FromSeconds(10))
+        {
+            FooString = "ModifiedValue",
+        };
+
+        // Long delay to prevent auto-save during test
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
+
+        // Act
+        service.Dispose();
+
+        // Assert
+        this.mockFileSystem.Verify(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        this.mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public void ShouldSaveSettingsWithoutSectionName()
+    {
+        // Arrange
+        using var service = new TestSettingsService(
+            this.mockSettingsMonitor.Object,
+            this.mockFileSystem.Object,
+            this.mockLoggerFactory.Object,
+            useSectionName: false);
+        service.FooString = "UpdatedFoo";
+        service.BarNumber = 999;
+        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
+        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
+        var savedContent = string.Empty;
+        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()))
+            .Callback<string, string>((_, content) => savedContent = content);
+
+        // Act
+        var result = service.SaveSettings();
+
+        // Assert
+        _ = result.Should().BeTrue();
+        this.mockFileSystem.Verify(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        _ = savedContent.Should().NotContain("TestSettings"); // Should not have section wrapper
+        _ = savedContent.Should().Contain("UpdatedFoo");
+        _ = savedContent.Should().Contain("999");
     }
 }
