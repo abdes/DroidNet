@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
     /// This extension registers the following services:
     /// <list type="bullet">
     /// <item><description><see cref="IWindowFactory"/> as <see cref="DefaultWindowFactory"/> (singleton)</description></item>
+    /// <item><description><see cref="IWindowContextFactory"/> as <see cref="WindowContextFactory"/> (singleton)</description></item>
     /// <item><description><see cref="IWindowManagerService"/> as <see cref="WindowManagerService"/> (singleton)</description></item>
     /// </list>
     /// </remarks>
@@ -29,6 +30,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         _ = services.AddSingleton<IWindowFactory, DefaultWindowFactory>();
+        _ = services.AddSingleton<IWindowContextFactory, WindowContextFactory>();
         _ = services.AddSingleton<IWindowManagerService, WindowManagerService>();
 
         return services;
@@ -46,6 +48,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         _ = services.AddSingleton<IWindowFactory, TFactory>();
+        _ = services.AddSingleton<IWindowContextFactory, WindowContextFactory>();
         _ = services.AddSingleton<IWindowManagerService, WindowManagerService>();
 
         return services;

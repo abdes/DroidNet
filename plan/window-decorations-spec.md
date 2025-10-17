@@ -67,6 +67,7 @@ The Window Decoration System provides application developers with:
 | **System Title Bar Overlay** | WinUI feature allowing content to extend into the title bar region |
 | **Window Category** | A readonly record struct with static predefined constants (Main, Secondary, Document, Tool, Transient, Modal, System) and case-insensitive string value equality |
 | **Immutable Options** | WindowDecorationOptions instances that cannot be modified after creation |
+| **WindowContext** | A class with required init properties and mutable activation state (IsActive, LastActivatedAt). Not fully immutable - activation state is mutated in-place |
 | **Fluent Builder** | A builder pattern API using method chaining for readability |
 
 ## 3. Requirements, Constraints & Guidelines
@@ -133,7 +134,6 @@ The Window Decoration System provides application developers with:
 - **GUD-006**: Log decoration resolution at Information level for debugging window creation issues
 - **GUD-007**: Use null for MenuOptions to indicate no menu should be displayed
 - **GUD-008**: Use BackdropKind.None to explicitly disable backdrop effects
-- **GUD-009**: Dispose WindowContext instances to release menu sources
 - **GUD-010**: Resolve menu providers using `IEnumerable<IMenuProvider>` from DI, not service locator pattern
 
 ### Patterns
@@ -493,25 +493,39 @@ internal partial class WindowDecorationJsonContext : JsonSerializerContext
 ### WindowContext Integration
 
 ```csharp
-public sealed record WindowContext(
-    Guid Id,
-    Window Window,
-    string WindowType,
-    string Title,
-    DateTimeOffset CreatedAt,
-    WindowDecorationOptions? Decoration = null,
-    IReadOnlyDictionary<string, object>? Metadata = null,
-    bool IsActive = false,
-    DateTimeOffset? LastActivatedAt = null) : IDisposable
+/// <summary>
+/// Encapsulates metadata and state information for a managed window.
+/// </summary>
+/// <remarks>
+/// WindowContext is a class (not a record) with required properties and mutable activation state.
+/// The IsActive and LastActivatedAt properties are mutated in-place when windows are activated/deactivated.
+/// Menu sources are created once per window by IWindowContextFactory and stored for the window's lifetime.
+/// </remarks>
+public sealed class WindowContext
 {
-    public static WindowContext Create(
-        Window window,
-        string windowType = "Main",
-        string? title = null,
-        WindowDecorationOptions? decoration = null,
-        IReadOnlyDictionary<string, object>? metadata = null);
+    public required Guid Id { get; init; }
+    public required Window Window { get; init; }
+    public required WindowCategory Category { get; init; }
+    public required string Title { get; init; }
+    public required DateTimeOffset CreatedAt { get; init; }
 
-    public void Dispose();  // Disposes menu source if present
+    public WindowDecorationOptions? Decoration { get; init; }
+    public IReadOnlyDictionary<string, object>? Metadata { get; init; }
+    public IMenuSource? MenuSource { get; }
+
+    // Mutable activation state
+    public bool IsActive { get; private set; }
+    public DateTimeOffset? LastActivatedAt { get; private set; }
+
+    /// <summary>
+    /// Updates the activation state of this window context (mutates in-place).
+    /// </summary>
+    public WindowContext WithActivationState(bool isActive);
+
+    /// <summary>
+    /// Sets the menu source for this window context (called by IWindowContextFactory).
+    /// </summary>
+    internal void SetMenuSource(IMenuSource menuSource);
 }
 ```
 

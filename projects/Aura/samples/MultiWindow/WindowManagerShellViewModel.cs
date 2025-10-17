@@ -182,19 +182,15 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            // Create a decoration with the selected backdrop
-            var decoration = new WindowDecorationOptions
-            {
-                Category = context.Category,
-                Backdrop = this.SelectedBackdrop,
-            };
-
-            // Create a new context with decoration
-            var decoratedContext = context with { Decoration = decoration };
+            // Note: Since WindowContext and WindowDecorationOptions are immutable,
+            // we can't dynamically change the decoration. The backdrop should be set
+            // during window creation. This method demonstrates the backdrop service API
+            // but in practice, decorations should be configured when creating windows.
 
             // Apply backdrop using the backdrop service directly
+            // The service will use the decoration's backdrop if available
             var backdropService = new WindowBackdropService(this.windowManager);
-            backdropService.ApplyBackdrop(decoratedContext);
+            backdropService.ApplyBackdrop(context);
             backdropService.Dispose();
         }
         catch (Exception ex)

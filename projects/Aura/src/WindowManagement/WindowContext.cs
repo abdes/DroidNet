@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Controls.Menus;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.WindowManagement;
@@ -9,66 +11,99 @@ namespace DroidNet.Aura.WindowManagement;
 /// <summary>
 /// Encapsulates metadata and state information for a managed window.
 /// </summary>
-/// <param name="Id">Unique identifier for the window.</param>
-/// <param name="Window">The WinUI Window instance.</param>
-/// <param name="Category">The category of the window. Use constants from <see cref="WindowCategory"/>.</param>
-/// <param name="Title">The window title.</param>
-/// <param name="CreatedAt">Timestamp when the window was created.</param>
-/// <param name="Decoration">Optional decoration options for the window. Null means no decoration was specified.</param>
-/// <param name="Metadata">Optional metadata for custom window properties.</param>
-/// <param name="IsActive">Indicates whether the window is currently active.</param>
-/// <param name="LastActivatedAt">The timestamp of the most recent activation.</param>
-public sealed record WindowContext(
-    Guid Id,
-    Window Window,
-    WindowCategory Category,
-    string Title,
-    DateTimeOffset CreatedAt,
-    Decoration.WindowDecorationOptions? Decoration = null,
-    IReadOnlyDictionary<string, object>? Metadata = null,
-    bool IsActive = false,
-    DateTimeOffset? LastActivatedAt = null)
+/// <remarks>
+/// <para>
+/// When decoration specifies a menu via <see cref="Decoration.WindowDecorationOptions.Menu"/>,
+/// the WindowContext will resolve the menu provider from the service provider during creation
+/// and store the resulting <see cref="IMenuSource"/> for the lifetime of the window.
+/// </para>
+/// <para>
+/// Menu sources are lightweight data structures that do not require explicit disposal.
+/// They will be garbage collected when the WindowContext is no longer referenced.
+/// </para>
+/// </remarks>
+public sealed class WindowContext
 {
-    /// <summary>
-    /// Creates a new <see cref="WindowContext"/> for a given window.
-    /// </summary>
-    /// <param name="window">The window to wrap.</param>
-    /// <param name="category">The category of the window. Use constants from <see cref="WindowCategory"/>.</param>
-    /// <param name="title">The window title.</param>
-    /// <param name="decoration">Optional decoration options for the window.</param>
-    /// <param name="metadata">Optional metadata.</param>
-    /// <returns>A new <see cref="WindowContext"/> instance.</returns>
-    public static WindowContext Create(
-        Window window,
-        WindowCategory category,
-        string? title = null,
-        Decoration.WindowDecorationOptions? decoration = null,
-        IReadOnlyDictionary<string, object>? metadata = null)
-    {
-        ArgumentNullException.ThrowIfNull(window);
+    private IMenuSource? menuSource;
 
-        return new WindowContext(
-            Id: Guid.NewGuid(),
-            Window: window,
-            Category: category,
-            Title: title ?? window.Title ?? $"Untitled {category} Window",
-            CreatedAt: DateTimeOffset.UtcNow,
-            Decoration: decoration,
-            Metadata: metadata);
+    /// <summary>
+    /// Gets the unique identifier for the window.
+    /// </summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>
+    /// Gets the WinUI Window instance.
+    /// </summary>
+    public required Window Window { get; init; }
+
+    /// <summary>
+    /// Gets the category of the window.
+    /// </summary>
+    public required WindowCategory Category { get; init; }
+
+    /// <summary>
+    /// Gets the window title.
+    /// </summary>
+    public required string Title { get; init; }
+
+    /// <summary>
+    /// Gets the timestamp when the window was created.
+    /// </summary>
+    public required DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>
+    /// Gets the optional decoration options for the window.
+    /// </summary>
+    public Decoration.WindowDecorationOptions? Decoration { get; init; }
+
+    /// <summary>
+    /// Gets the optional metadata for custom window properties.
+    /// </summary>
+    public IReadOnlyDictionary<string, object>? Metadata { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the window is currently active.
+    /// </summary>
+    public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Gets the timestamp of the most recent activation.
+    /// </summary>
+    public DateTimeOffset? LastActivatedAt { get; private set; }
+
+    /// <summary>
+    /// Gets the menu source for this window, if one was created from a menu provider.
+    /// </summary>
+    /// <remarks>
+    /// This property returns the menu source that was created during window initialization
+    /// based on the decoration's menu options. Returns null if no menu was specified or
+    /// if the menu provider could not be found.
+    /// </remarks>
+    public IMenuSource? MenuSource => this.menuSource;
+
+    /// <summary>
+    /// Updates the activation state of this window context.
+    /// </summary>
+    /// <param name="isActive">Whether the window is active.</param>
+    /// <returns>A new <see cref="WindowContext"/> with updated activation state.</returns>
+    public WindowContext WithActivationState(bool isActive)
+    {
+        this.IsActive = isActive;
+        this.LastActivatedAt = isActive ? DateTimeOffset.UtcNow : this.LastActivatedAt;
+        return this;
     }
 
     /// <summary>
-    /// Creates a copy of this context with updated activation state.
+    /// Sets the menu source for this window context.
     /// </summary>
-    /// <param name="isActive">Whether the window is active.</param>
-    /// <returns>A new <see cref="WindowContext"/> with updated state.</returns>
-    public WindowContext WithActivationState(bool isActive)
+    /// <param name="menuSource">The menu source to set.</param>
+    /// <remarks>
+    /// This method is intended to be called by <see cref="IWindowContextFactory"/> implementations
+    /// during context initialization.
+    /// </remarks>
+    internal void SetMenuSource(IMenuSource menuSource)
     {
-        var activationTimestamp = isActive ? DateTimeOffset.UtcNow : this.LastActivatedAt;
-        return this with
-        {
-            IsActive = isActive,
-            LastActivatedAt = activationTimestamp,
-        };
+        ArgumentNullException.ThrowIfNull(menuSource);
+        this.menuSource = menuSource;
     }
 }
