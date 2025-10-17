@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <Window
     x:Class="DroidNet.Samples.Aura.MultiWindow.DocumentWindow"
@@ -8,7 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid>
+        <Grid.Background>
+            <SolidColorBrush Opacity="0.7" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+        </Grid.Background>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -18,9 +21,11 @@
         <Border
             Grid.Row="0"
             Padding="12"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1">
+            <Border.Background>
+                <SolidColorBrush Opacity="0.8" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            </Border.Background>
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <AppBarButton Icon="Save" Label="Save" />
                 <AppBarButton Icon="Undo" Label="Undo" />
@@ -51,6 +56,17 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="A content editing window with toolbar"
                     TextAlignment="Center" />
+                <Border
+                    Margin="0,16,0,16"
+                    Padding="12,8"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                    CornerRadius="4">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        FontSize="12"
+                        Foreground="White"
+                        Text="💡 The backdrop effect is visible through the semi-transparent background" />
+                </Border>
                 <RichEditBox
                     Width="600"
                     Height="400"

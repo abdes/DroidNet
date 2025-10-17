@@ -1,10 +1,11 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
     x:Class="DroidNet.Samples.Aura.MultiWindow.WindowManagerShellView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:decoration="using:DroidNet.Aura.Decoration"
     xmlns:local="using:DroidNet.Samples.Aura.MultiWindow"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     x:Name="RootPage"
@@ -71,33 +72,63 @@
             </Grid>
         </Border>
 
-        <!--  Window Creation Controls  -->
-        <StackPanel
-            Grid.Row="2"
-            Margin="0,0,0,16"
-            Orientation="Horizontal"
-            Spacing="12">
-            <Button Command="{x:Bind ViewModel.CreateToolWindowCommand}" Content="New Tool Window">
-                <Button.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="T" Modifiers="Control,Shift" />
-                </Button.KeyboardAccelerators>
-            </Button>
+        <!--  Backdrop Selection and Window Creation Controls  -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <Button Command="{x:Bind ViewModel.CreateDocumentWindowCommand}" Content="New Document">
-                <Button.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="D" Modifiers="Control,Shift" />
-                </Button.KeyboardAccelerators>
-            </Button>
+            <!--  Backdrop Selection  -->
+            <StackPanel
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                Orientation="Horizontal"
+                Spacing="12">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontWeight="SemiBold"
+                    Text="Backdrop:" />
+                <ComboBox
+                    MinWidth="150"
+                    VerticalAlignment="Center"
+                    ItemsSource="{x:Bind ViewModel.AvailableBackdrops, Mode=OneTime}"
+                    SelectedItem="{x:Bind ViewModel.SelectedBackdrop, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="decoration:BackdropKind">
+                            <TextBlock Text="{x:Bind}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
 
-            <Button
-                Command="{x:Bind ViewModel.CloseAllWindowsCommand}"
-                Content="Close All"
-                Style="{StaticResource AccentButtonStyle}">
-                <Button.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="W" Modifiers="Control,Shift" />
-                </Button.KeyboardAccelerators>
-            </Button>
-        </StackPanel>
+            <!--  Window Creation Buttons  -->
+            <StackPanel
+                Grid.Column="1"
+                Orientation="Horizontal"
+                Spacing="12">
+                <Button Command="{x:Bind ViewModel.CreateToolWindowCommand}" Content="New Tool Window">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="T" Modifiers="Control,Shift" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+
+                <Button Command="{x:Bind ViewModel.CreateDocumentWindowCommand}" Content="New Document">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="D" Modifiers="Control,Shift" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+
+                <Button
+                    Command="{x:Bind ViewModel.CloseAllWindowsCommand}"
+                    Content="Close All"
+                    Style="{StaticResource AccentButtonStyle}">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="W" Modifiers="Control,Shift" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+            </StackPanel>
+        </Grid>
 
         <!--  Window List  -->
         <Border
@@ -149,6 +180,9 @@
                                         TextTrimming="CharacterEllipsis" />
                                     <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}">
                                         <Run Text="{x:Bind Category, Mode=OneWay}" />
+                                        <Run Text="•" />
+                                        <Run Text="Backdrop:" />
+                                        <Run FontWeight="SemiBold" Text="{x:Bind Backdrop, Mode=OneWay}" />
                                         <Run Text="•" />
                                         <Run Text="{x:Bind CreatedAt, Mode=OneWay}" />
                                     </TextBlock>

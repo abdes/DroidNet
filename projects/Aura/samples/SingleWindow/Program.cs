@@ -111,7 +111,7 @@ public static partial class Program
 
         // Register domain specific services, which serve data required by the views
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        container.Register<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the
