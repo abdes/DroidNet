@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Reactive.Concurrency;
+using System.Globalization;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -16,6 +17,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
+
+#pragma warning disable CA1031 // Do not catch general exception types
 
 /// <summary>
 /// View model for the window manager demonstration shell.
@@ -58,10 +61,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         // Subscribe to window lifecycle events to update the window list
         this.windowEventsSubscription = this.windowManager.WindowEvents
             .Subscribe(evt =>
-            {
-                // Dispatch to UI thread
-                _ = this.dispatcherQueue.TryEnqueue(() => this.OnWindowLifecycleEvent(evt));
-            });
+                _ = this.dispatcherQueue.TryEnqueue(() => this.OnWindowLifecycleEvent(evt)));
 
         // Initialize the window list
         this.UpdateWindowList();
@@ -95,6 +95,23 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     [ObservableProperty]
     public partial string? ActiveWindowInfo { get; set; }
 
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.windowEventsSubscription.Dispose();
+        }
+
+        this.isDisposed = true;
+        base.Dispose(disposing);
+    }
+
     /// <summary>
     /// Command to create a new tool window.
     /// </summary>
@@ -104,8 +121,9 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         try
         {
             _ = await this.windowManager.CreateWindowAsync<ToolWindow>(
-                windowType: "Tool",
-                title: $"Tool Window {this.WindowCount + 1}");
+                category: WindowCategory.Tool,
+                title: string.Create(CultureInfo.InvariantCulture, $"Tool Window {this.WindowCount + 1}"))
+                .ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -122,8 +140,9 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         try
         {
             _ = await this.windowManager.CreateWindowAsync<DocumentWindow>(
-                windowType: "Document",
-                title: $"Document {this.WindowCount + 1}");
+                category: WindowCategory.Document,
+                title: string.Create(CultureInfo.InvariantCulture, $"Document {this.WindowCount + 1}"))
+                .ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -145,7 +164,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
 
         try
         {
-            _ = await this.windowManager.CloseWindowAsync(windowInfo.Id);
+            _ = await this.windowManager.CloseWindowAsync(windowInfo.Id).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -183,29 +202,12 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            await this.windowManager.CloseAllWindowsAsync();
+            await this.windowManager.CloseAllWindowsAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to close all windows: {ex.Message}");
         }
-    }
-
-    /// <inheritdoc/>
-    protected override void Dispose(bool disposing)
-    {
-        if (this.isDisposed)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            this.windowEventsSubscription.Dispose();
-        }
-
-        this.isDisposed = true;
-        base.Dispose(disposing);
     }
 
     /// <summary>
@@ -214,6 +216,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     /// <param name="evt">The window lifecycle event.</param>
     private void OnWindowLifecycleEvent(WindowLifecycleEvent evt)
     {
+        _ = evt; // unused
+
         this.UpdateWindowList();
         this.UpdateActiveWindowInfo();
     }
@@ -231,7 +235,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             {
                 Id = context.Id,
                 Title = context.Title,
-                WindowType = context.WindowType,
+                Category = context.Category,
                 IsActive = context.IsActive,
                 CreatedAt = context.CreatedAt.ToLocalTime(),
             });
@@ -247,43 +251,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         var activeWindow = this.windowManager.ActiveWindow;
         this.ActiveWindowInfo = activeWindow is not null
-            ? $"{activeWindow.Title} ({activeWindow.WindowType})"
+            ? string.Create(CultureInfo.InvariantCulture, $"{activeWindow.Title} ({activeWindow.Category})")
             : "None";
     }
-}
-
-/// <summary>
-/// Display model for window information.
-/// </summary>
-public sealed partial class WindowInfo : ObservableObject
-{
-    /// <summary>
-    /// Gets or sets the window unique identifier.
-    /// </summary>
-    [ObservableProperty]
-    public partial Guid Id { get; set; }
-
-    /// <summary>
-    /// Gets or sets the window title.
-    /// </summary>
-    [ObservableProperty]
-    public partial string Title { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the window type.
-    /// </summary>
-    [ObservableProperty]
-    public partial string WindowType { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the window is active.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool IsActive { get; set; }
-
-    /// <summary>
-    /// Gets or sets the creation timestamp.
-    /// </summary>
-    [ObservableProperty]
-    public partial DateTimeOffset CreatedAt { get; set; }
 }

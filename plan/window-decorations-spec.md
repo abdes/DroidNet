@@ -21,7 +21,7 @@ The Window Decoration System provides application developers with:
 **In Scope:**
 
 - WindowDecorationOptions record structure and nested option types
-- Five built-in presets (Primary, Document, Tool, Secondary, SystemChrome)
+- Built-in presets (Main, Document, Tool, Secondary, System, Transient, Modal)
 - Fluent builder API for custom decorations
 - IMenuProvider abstraction for menu integration
 - Persistence DTOs and ISettingsService integration
@@ -50,8 +50,8 @@ The Window Decoration System provides application developers with:
 - The Aura module's WindowManagerService and WindowContext are already implemented
 - The Menus module provides IMenuSource with ObservableCollection-based menu items
 - The Config module provides `ISettingsService<T>` for JSON-based settings persistence
-- The AppearanceSettingsService manages application theme modes
-- WinUI 3 is the target UI framework
+- IAppearanceSettings manages application theme modes and will be extended to include application-wide backdrop
+- WinUI 3 is the target UI framework with MicaBackdrop, DesktopAcrylicBackdrop APIs available
 - .NET 8.0 or later is the target runtime
 
 ## 2. Definitions
@@ -65,7 +65,7 @@ The Window Decoration System provides application developers with:
 | **Menu Provider** | A factory service (IMenuProvider) that creates IMenuSource instances per window |
 | **Drag Region** | The area of the title bar that allows window dragging |
 | **System Title Bar Overlay** | WinUI feature allowing content to extend into the title bar region |
-| **Window Category** | A semantic grouping identifier (e.g., "Primary", "Tool", "Document") |
+| **Window Category** | A readonly record struct with static predefined constants (Main, Secondary, Document, Tool, Transient, Modal, System) and case-insensitive string value equality |
 | **Immutable Options** | WindowDecorationOptions instances that cannot be modified after creation |
 | **Fluent Builder** | A builder pattern API using method chaining for readability |
 
@@ -74,7 +74,7 @@ The Window Decoration System provides application developers with:
 ### Functional Requirements
 
 - **REQ-001**: The system SHALL provide a WindowDecorationOptions immutable record with properties for Category, ChromeEnabled, TitleBar, Buttons, Menu, Backdrop, and EnableSystemTitleBarOverlay
-- **REQ-002**: The system SHALL provide five built-in presets: Primary, Document, Tool, Secondary, and SystemChrome
+- **REQ-002**: The system SHALL provide built-in presets: Main, Document, Tool, Secondary, and System, Transient, Modal
 - **REQ-003**: Each preset SHALL have sensible defaults suitable for 90% of use cases in that category
 - **REQ-004**: The system SHALL provide a fluent WindowDecorationBuilder API for creating custom decorations
 - **REQ-005**: The builder API SHALL support starting from a preset and customizing specific properties
@@ -86,13 +86,14 @@ The Window Decoration System provides application developers with:
 - **REQ-011**: The system SHALL validate decoration options and throw clear ArgumentException for invalid combinations
 - **REQ-012**: WindowContext SHALL include a nullable Decoration property
 - **REQ-013**: WindowManagerService SHALL resolve decorations via explicit parameter, registry lookup, or type inference
-- **REQ-014**: The system SHALL provide WindowBackdropService to coordinate backdrop application with theme settings
+- **REQ-014**: The system SHALL provide WindowBackdropService that subscribes to window lifecycle events and automatically applies backdrops when windows are created based on WindowDecorationOptions.Backdrop
 - **REQ-015**: The system SHALL support graceful degradation when menu providers are not found
 - **REQ-016**: The system SHALL allow opting out of Aura chrome via ChromeEnabled=false
 - **REQ-017**: WindowDecorationOptions SHALL be immutable after creation (record with init-only properties)
 - **REQ-018**: The system SHALL provide extension methods for DI registration of decoration services and menu providers
 - **REQ-019**: Menu provider creation SHALL be thread-safe for concurrent window activation
 - **REQ-020**: The system SHALL log warnings for missing menu providers without throwing exceptions
+- **REQ-021**: WindowCategory SHALL be implemented as a readonly record struct with static predefined constants and case-insensitive string value equality
 
 ### Security Requirements
 
@@ -119,8 +120,8 @@ The Window Decoration System provides application developers with:
 - **CON-006**: All public APIs MUST have XML documentation comments
 - **CON-007**: Decorations are bound once per window lifetime; runtime mutation is not supported
 - **CON-008**: The system MUST integrate with existing Config module's `ISettingsService<T>` pattern
-- **CON-009**: Backdrop application MUST respect AppearanceSettingsService theme mode
-- **CON-010**: Primary windows MUST have a Close button to ensure proper application shutdown
+- **CON-009**: Backdrop is a non-nullable BackdropKind enum with default value BackdropKind.None. WindowBackdropService applies backdrops based on WindowDecorationOptions.Backdrop value, skipping application when value is None or null decoration
+- **CON-010**: Main window MUST have a Close button to ensure proper application shutdown
 
 ### Guidelines
 
@@ -158,8 +159,8 @@ The Window Decoration System provides application developers with:
 /// </summary>
 public sealed record WindowDecorationOptions
 {
-    /// <summary>Window category for semantic grouping (e.g., "Primary", "Tool").</summary>
-    public required string Category { get; init; }
+    /// <summary>Window category for semantic grouping.</summary>
+    public required WindowCategory Category { get; init; }
 
     /// <summary>Enable Aura custom chrome. If false, system title bar is used.</summary>
     public bool ChromeEnabled { get; init; } = true;
@@ -173,8 +174,11 @@ public sealed record WindowDecorationOptions
     /// <summary>Menu configuration. Null means no menu.</summary>
     public MenuOptions? Menu { get; init; }
 
-    /// <summary>Backdrop effect for the window.</summary>
-    public BackdropKind Backdrop { get; init; } = BackdropKind.Mica;
+    /// <summary>
+    /// Backdrop effect for this window. Default is BackdropKind.None.
+    /// Set to explicit value to apply backdrop effect.
+    /// </summary>
+    public BackdropKind Backdrop { get; init; } = BackdropKind.None;
 
     /// <summary>Enable extending content into title bar (system overlay).</summary>
     public bool EnableSystemTitleBarOverlay { get; init; } = false;
@@ -340,9 +344,9 @@ public sealed class WindowDecorationBuilder
     // Preset factory methods
 
     /// <summary>
-    /// Creates builder for Primary/Main window: full chrome, menu, all buttons, MicaAlt.
+    /// Creates builder for Main window: full chrome, menu, all buttons, MicaAlt.
     /// </summary>
-    public static WindowDecorationBuilder ForPrimaryWindow(string? menuProviderId = PrimaryMenuProvider);
+    public static WindowDecorationBuilder ForMainWindow(string? menuProviderId = PrimaryMenuProvider);
 
     /// <summary>
     /// Creates builder for Document window: full chrome, optional menu, Mica backdrop.
@@ -511,23 +515,65 @@ public sealed record WindowContext(
 }
 ```
 
+### IAppearanceSettings Extension
+
+```csharp
+/// <summary>
+/// Represents the appearance settings for an application.
+/// </summary>
+public interface IAppearanceSettings
+{
+    /// <summary>Gets or sets the app theme mode (Light, Dark, or Default).</summary>
+    ElementTheme AppThemeMode { get; set; }
+
+    /// <summary>Gets or sets the app theme background color as hexadecimal string.</summary>
+    string AppThemeBackgroundColor { get; set; }
+
+    /// <summary>Gets or sets the app theme font family.</summary>
+    string AppThemeFontFamily { get; set; }
+
+    /// <summary>
+    /// Gets or sets the application-wide default backdrop effect.
+    /// This backdrop is applied to all windows that do not have an explicit
+    /// backdrop override in their WindowDecorationOptions.
+    /// </summary>
+    BackdropKind AppBackdrop { get; set; }
+}
+```
+
 ### WindowBackdropService
 
 ```csharp
 /// <summary>
-/// Service that coordinates backdrop application with theme settings.
+/// Service that manages backdrop application for windows based on their decoration settings.
+/// Observes window lifecycle events and automatically applies backdrops when windows are created.
 /// </summary>
-public sealed class WindowBackdropService
+public sealed class WindowBackdropService : IDisposable
 {
     public WindowBackdropService(
-        IAppThemeModeService themeModeService,
-        ILogger<WindowBackdropService> logger);
+        IWindowManagerService windowManager,
+        ILoggerFactory? loggerFactory = null);
 
     /// <summary>
-    /// Applies backdrop to window, coordinating with theme settings.
+    /// Applies backdrop to a single window context based on WindowDecorationOptions.Backdrop.
+    /// Uses WinUI 3 SystemBackdrop APIs (MicaBackdrop, DesktopAcrylicBackdrop).
     /// Logs warnings on failure; does not throw.
     /// </summary>
-    public void ApplyBackdrop(Window window, BackdropKind requested, WindowContext context);
+    /// <param name="context">The window context to apply backdrop to.</param>
+    public void ApplyBackdrop(WindowContext context);
+
+    /// <summary>
+    /// Applies backdrops to all open windows.
+    /// </summary>
+    public void ApplyBackdrop();
+
+    /// <summary>
+    /// Applies backdrops to windows matching a predicate.
+    /// </summary>
+    /// <param name="predicate">Predicate to filter which windows should have backdrops applied.</param>
+    public void ApplyBackdrop(Func<WindowContext, bool> predicate);
+
+    public void Dispose();
 }
 ```
 
@@ -617,7 +663,7 @@ public static class ServiceCollectionExtensions
 ### Preset Usage
 
 - **AC-001**: Given a developer creates a tool window, When using `WindowDecorationBuilder.ForToolWindow().Build()`, Then the window shall have a 32px title bar, no maximize button, and no backdrop
-- **AC-002**: Given a developer creates a primary window, When using `WindowDecorationBuilder.ForPrimaryWindow().Build()`, Then the window shall have MicaAlt backdrop, all buttons visible, and default title bar height
+- **AC-002**: Given a developer creates a primary window, When using `WindowDecorationBuilder.ForMainWindow().Build()`, Then the window shall have MicaAlt backdrop, all buttons visible, and default title bar height
 - **AC-003**: Given a developer uses `WindowDecorationBuilder.WithSystemChromeOnly().Build()`, When the window is created, Then ChromeEnabled shall be false and system title bar shall be used
 
 ### Builder API
@@ -641,24 +687,26 @@ public static class ServiceCollectionExtensions
 ### Validation
 
 - **AC-013**: Given ChromeEnabled is false, When Menu is non-null, Then Validate() shall throw ArgumentException
-- **AC-014**: Given a Primary category window, When ShowClose is false, Then Validate() shall throw ArgumentException
+- **AC-014**: Given a Main category window, When ShowClose is false, Then Validate() shall throw ArgumentException
 - **AC-015**: Given title bar height is negative, When Validate() is called, Then ArgumentOutOfRangeException shall be thrown
 
-### Theme Coordination
+### Backdrop Coordination
 
-- **AC-016**: Given BackdropKind.None is specified, When WindowBackdropService applies backdrop, Then no backdrop shall be applied regardless of theme settings
-- **AC-017**: Given BackdropKind.Mica is requested, When the system does not support Mica, Then WindowBackdropService shall log a warning and fall back gracefully
-- **AC-018**: Given a backdrop fails to apply, When WindowBackdropService handles the error, Then the window shall remain functional with no backdrop
+- **AC-016**: Given a window has WindowDecorationOptions.Backdrop set to a specific value (Mica, MicaAlt, Acrylic), When WindowBackdropService applies backdrop, Then the appropriate WinUI SystemBackdrop shall be set on the window
+- **AC-017**: Given a window has WindowDecorationOptions with default Backdrop value (None), When WindowBackdropService applies backdrop, Then no backdrop shall be applied (Window.SystemBackdrop remains null)
+- **AC-018**: Given BackdropKind.None is set explicitly, When WindowBackdropService applies backdrop, Then Window.SystemBackdrop shall be set to null
+- **AC-019**: Given a WindowLifecycleEvent.Created is published, When WindowBackdropService observes the event, Then backdrop shall be automatically applied based on WindowContext.Decoration.Backdrop
+- **AC-020**: Given a backdrop fails to apply due to exception, When WindowBackdropService handles the error, Then a warning shall be logged and the window shall remain functional with no backdrop
 
 ### WindowContext Integration
 
-- **AC-019**: Given no explicit decoration is provided, When creating a window with windowType "Tool", Then the system shall infer WindowDecorationBuilder.ForToolWindow()
-- **AC-020**: Given WindowContext is disposed, When menu source was created, Then the menu source shall be disposed to release resources
+- **AC-021**: Given no explicit decoration is provided, When creating a window with windowType "Tool", Then the system shall infer WindowDecorationBuilder.ForToolWindow()
+- **AC-022**: Given WindowContext is disposed, When menu source was created, Then the menu source shall be disposed to release resources
 
 ### Thread Safety
 
-- **AC-021**: Given multiple windows are created concurrently, When resolving menu providers, Then no race conditions shall occur
-- **AC-022**: Given MenuProvider.CreateMenuSource() is called concurrently, When using a thread-unsafe MenuBuilder, Then the provider shall use locking to ensure thread safety
+- **AC-023**: Given multiple windows are created concurrently, When resolving menu providers, Then no race conditions shall occur
+- **AC-024**: Given MenuProvider.CreateMenuSource() is called concurrently, When using a thread-unsafe MenuBuilder, Then the provider shall use locking to ensure thread safety
 
 ## 6. Test Automation Strategy
 
@@ -675,7 +723,8 @@ public static class ServiceCollectionExtensions
    - DI registration and resolution
    - WindowManagerService decoration resolution
    - Settings persistence and loading
-   - WindowBackdropService theme coordination
+   - WindowBackdropService automatic backdrop application on window creation events
+   - WindowBackdropService predicate-based filtering and bulk application
 
 3. **UI Tests**: Test visual and behavioral aspects
    - Title bar rendering with different heights and padding
@@ -763,7 +812,7 @@ If window-scoped DI becomes necessary, the architecture could evolve to:
 
 ### Why Preset-Based Design?
 
-Research shows 90% of window decoration use cases fall into five categories: Primary, Document, Tool, Secondary, and SystemChrome. Presets eliminate boilerplate for common scenarios while fluent builders handle the remaining 10% of advanced cases.
+Research shows 90% of window decoration use cases fall into five categories: Main, Transient, Modal, Document, Tool, Secondary, and System. Presets eliminate boilerplate for common scenarios while fluent builders handle the remaining 10% of advanced cases.
 
 ### Why Direct Serialization with System.Text.Json?
 
@@ -807,13 +856,37 @@ Phase 4 intentionally scopes decorations to window creation time. Future phases 
 
 ### Why WindowBackdropService?
 
-Backdrop application involves coordination with:
+The `WindowBackdropService` provides automatic backdrop application by subscribing to window lifecycle events from `IWindowManagerService`. This centralizes backdrop coordination logic and ensures consistent behavior across the application.
 
-- AppearanceSettingsService (theme mode)
-- System capabilities (Mica support)
-- Error handling (fallback strategies)
+**Event-Driven Architecture:**
 
-A dedicated service centralizes this logic, logs decisions for debugging, and provides a single extension point for future policies (e.g., power-saving mode disables expensive backdrops).
+- Service subscribes to `IWindowManagerService.WindowEvents` observable stream
+- When `WindowLifecycleEvent.Created` is observed, applies backdrop automatically
+- Eliminates need for explicit backdrop calls in window creation code
+- Service lifecycle managed through IDisposable pattern
+
+**Backdrop Application Strategy:**
+
+1. **Read from WindowContext.Decoration.Backdrop**: Uses the BackdropKind value specified in window decoration options
+2. **Default value is BackdropKind.None**: Windows without explicit backdrop specification have no backdrop applied
+3. **Null decoration handled gracefully**: If WindowContext.Decoration is null, no backdrop is applied
+
+**Bulk Application Support:**
+
+- `ApplyBackdrop()` - Applies to all open windows
+- `ApplyBackdrop(predicate)` - Applies to filtered windows (e.g., by category)
+- Useful for theme changes or administrative window management
+
+**Implementation Details:**
+
+The service uses WinUI 3's `Window.SystemBackdrop` property with:
+
+- `Microsoft.UI.Xaml.Media.MicaBackdrop` for `BackdropKind.Mica`
+- `Microsoft.UI.Xaml.Media.MicaBackdrop` with `MicaKind.BaseAlt` for `BackdropKind.MicaAlt`
+- `Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop` for `BackdropKind.Acrylic`
+- `null` for `BackdropKind.None`
+
+All three backdrop types are always available in WinUI 3, so no fallback logic is needed. Error handling wraps the application in try-catch to gracefully handle edge cases, logging warnings without throwing exceptions.
 
 ### Why Builder Pattern?
 
@@ -880,7 +953,7 @@ This unified approach reduces cognitive load and makes the API more intuitive fo
 
 - **DAT-001**: `SettingsService<WindowDecorationSettings>` / `IWindowDecorationSettings` - Provides JSON persistence and domain access to decoration preferences via `IOptionsMonitor`
 - **DAT-002**: IMenuSource (from Menus module) - Provides menu item data structures
-- **DAT-003**: IAppThemeModeService (from Appearance module) - Provides current theme mode for backdrop coordination
+- **DAT-003**: IAppearanceSettings (from Aura module) - Provides current theme mode and application-wide backdrop setting for backdrop coordination
 
 ### Technology Platform Dependencies
 
@@ -1035,15 +1108,15 @@ var options = WindowDecorationBuilder
 // Throws: ArgumentException("Menu cannot be specified when ChromeEnabled is false...")
 ```
 
-### Edge Case 3: Primary Window Without Close Button
+### Edge Case 3: Main Window Without Close Button
 
 ```csharp
-// Invalid: Primary category must have Close button
+// Invalid: Main category must have Close button
 var options = WindowDecorationBuilder
-    .ForPrimaryWindow()
+    .ForMainWindow()
     .WithButtons(b => b.HideClose())
     .Build();
-// Throws: ArgumentException("Primary window must have a Close button...")
+// Throws: ArgumentException("Main window must have a Close button...")
 ```
 
 ### Edge Case 4: Concurrent Window Creation
@@ -1063,7 +1136,7 @@ await Task.WhenAll(tasks);
 
 ```csharp
 var options = WindowDecorationBuilder
-    .ForPrimaryWindow()
+    .ForMainWindow()
     .WithBackdrop(BackdropKind.Acrylic)
     .Build();
 
@@ -1091,12 +1164,12 @@ var context = await windowManager.CreateWindowAsync<MainWindow>(decoration: opti
 - **VAL-008**: Validate() must throw ArgumentException if Menu is non-null and MenuProviderId is empty
 - **VAL-009**: Validate() must throw ArgumentOutOfRangeException if TitleBar.Height is ≤ 0
 - **VAL-010**: Validate() must throw ArgumentOutOfRangeException if TitleBar padding is negative
-- **VAL-011**: Validate() must throw ArgumentException if Primary category and ShowClose=false
+- **VAL-011**: Validate() must throw ArgumentException if Main category and ShowClose=false
 - **VAL-012**: WindowDecorationBuilder.Build() must call Validate() before returning
 
 ### Functional Validation
 
-- **VAL-013**: Preset factory methods (ForPrimaryWindow, ForToolWindow, etc.) must produce valid options without requiring Validate() calls
+- **VAL-013**: Preset factory methods (ForMainWindow, ForToolWindow, etc.) must produce valid options without requiring Validate() calls
 - **VAL-014**: Builder fluent methods must return the same builder instance for chaining
 - **VAL-015**: Builder preset factory methods must initialize all properties to valid defaults
 - **VAL-016**: WindowDecorationOptions must serialize to JSON and deserialize correctly using System.Text.Json

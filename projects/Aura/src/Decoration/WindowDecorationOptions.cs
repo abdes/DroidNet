@@ -29,7 +29,7 @@ namespace DroidNet.Aura.Decoration;
 /// <example>
 /// <code>
 /// // Using a preset
-/// var primaryOptions = WindowDecorationBuilder.ForPrimaryWindow().Build();
+/// var primaryOptions = WindowDecorationBuilder.ForMainWindow().Build();
 ///
 /// // Customizing a preset
 /// var customOptions = WindowDecorationBuilder.ForToolWindow()
@@ -58,7 +58,7 @@ public sealed record WindowDecorationOptions
     /// <item>Enforcing category-specific validation rules (e.g., Primary windows require Close button)</item>
     /// </list>
     /// </remarks>
-    public required string Category { get; init; }
+    public required WindowCategory Category { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether Aura-provided window chrome is enabled.
@@ -123,19 +123,14 @@ public sealed record WindowDecorationOptions
     public MenuOptions? Menu { get; init; }
 
     /// <summary>
-    /// Gets the backdrop material effect to apply to the window background.
+    /// Gets the backdrop material effect override for this specific window.
     /// </summary>
     /// <value>
-    /// A <see cref="BackdropKind"/> value. Default is <see cref="BackdropKind.None"/>.
+    /// A <see cref="BackdropKind"/> value to use for this window. Default is <see cref="BackdropKind.None"/>.
     /// </value>
     /// <remarks>
     /// <para>
-    /// Backdrop effects provide visual depth and integrate with the system theme. The actual appearance
-    /// is coordinated with the AppearanceSettingsService to respect the current theme mode.
-    /// </para>
-    /// <para>
-    /// If the requested backdrop is not supported by the platform, the system gracefully falls back
-    /// to a simpler backdrop or none, with appropriate logging.
+    /// To explicitly disable backdrop for a specific window set this property to <see cref="BackdropKind.None"/>.
     /// </para>
     /// </remarks>
     public BackdropKind Backdrop { get; init; } = BackdropKind.None;
@@ -204,13 +199,6 @@ public sealed record WindowDecorationOptions
     /// </example>
     public void Validate()
     {
-        // Validate Category
-        if (string.IsNullOrWhiteSpace(this.Category))
-        {
-            throw new ValidationException(
-                "Window decoration category cannot be empty or whitespace.");
-        }
-
         // Validate ChromeEnabled + Menu combination
         if (!this.ChromeEnabled && this.Menu is not null)
         {
@@ -220,7 +208,7 @@ public sealed record WindowDecorationOptions
         }
 
         // Validate Primary category requires Close button
-        if (this.Category.Equals("Primary", StringComparison.OrdinalIgnoreCase) && !this.Buttons.ShowClose)
+        if (this.Category.Equals(WindowCategory.Main) && !this.Buttons.ShowClose)
         {
             throw new ValidationException(
                 "Primary windows must have the Close button enabled to ensure proper application shutdown. " +

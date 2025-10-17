@@ -110,7 +110,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
     /// <inheritdoc/>
     public async Task<WindowContext> CreateWindowAsync<TWindow>(
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true)
@@ -129,7 +129,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(requestedWindowType);
 
                 var window = this.windowFactory.CreateWindow<TWindow>();
-                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
+                context = WindowContext.Create(window, category, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -143,7 +143,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
                 }
 
-                this.LogWindowCreated(context.Id, windowType, context.Title);
+                this.LogWindowCreated(context.Id, category.ToString(), context.Title);
 
                 // Publish event
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
@@ -165,7 +165,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <inheritdoc/>
     public async Task<WindowContext> CreateWindowAsync(
         string windowTypeName,
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true)
@@ -182,7 +182,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(windowTypeName);
 
                 var window = this.windowFactory.CreateWindow(windowTypeName);
-                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
+                context = WindowContext.Create(window, category, title, decoration: null, metadata);
 
                 this.ApplyTheme(context);
 
@@ -193,7 +193,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
                 }
 
-                this.LogWindowCreated(context.Id, windowType, context.Title);
+                this.LogWindowCreated(context.Id, category.ToString(), context.Title);
 
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
 
@@ -304,13 +304,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <inheritdoc/>
-    public IReadOnlyCollection<WindowContext> GetWindowsByType(string windowType)
+    public IReadOnlyCollection<WindowContext> GetWindowsByCategory(WindowCategory category)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
-        ArgumentException.ThrowIfNullOrWhiteSpace(windowType);
 
         return this.windows.Values
-            .Where(w => string.Equals(w.Category, windowType, StringComparison.OrdinalIgnoreCase))
+            .Where(w => w.Category.Equals(category))
             .ToList()
             .AsReadOnly();
     }
@@ -332,12 +331,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <inheritdoc/>
     public async Task<WindowContext> RegisterWindowAsync(
         Window window,
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(window);
-        ArgumentException.ThrowIfNullOrWhiteSpace(windowType);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
         // Check if window is already registered
@@ -354,7 +352,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             {
                 this.LogRegisteringWindow(window.GetType().Name);
 
-                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
+                context = WindowContext.Create(window, category, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -368,7 +366,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
                 }
 
-                this.LogWindowRegistered(context.Id, windowType, context.Title);
+                this.LogWindowRegistered(context.Id, category.ToString(), context.Title);
 
                 // Publish event
                 this.PublishEvent(WindowLifecycleEventType.Created, context);

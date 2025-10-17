@@ -78,12 +78,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         {
             // Act
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 title: "Test Window").ConfigureAwait(true);
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.WindowType.Should().Be("Test");
+            _ = context.Category.Should().Be(new WindowCategory("Test"));
             _ = context.Title.Should().Be("Test Window");
             _ = context.Window.Should().Be(testWindow);
             _ = sut.OpenWindows.Should().ContainSingle();
@@ -108,7 +108,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
 
             // Assert - Theme service should be called
             this.mockThemeService.Verify(
@@ -136,7 +136,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow event to propagate
 
             // Assert - Should have Created event as first event
@@ -164,7 +164,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         {
             // Act
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 activateWindow: true).ConfigureAwait(true);
 
             // Assert
@@ -191,7 +191,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         {
             // Act
             _ = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 activateWindow: false).ConfigureAwait(true);
 
             await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow any async operations
@@ -225,7 +225,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         {
             // Act
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 metadata: metadata).ConfigureAwait(true);
 
             // Assert
@@ -253,7 +253,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act & Assert
-            var act = async () => await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(true);
         }
         finally
@@ -270,7 +270,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         sut.Dispose();
 
         // Act & Assert
-        var act = async () => await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+        var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
         _ = await act.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(true);
     });
 
@@ -285,7 +285,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
 
             // Act
             var result = await sut.CloseWindowAsync(context.Id).ConfigureAwait(true);
@@ -310,7 +310,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             _ = sut.OpenWindows.Should().ContainSingle();
 
             // Act
@@ -339,7 +339,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             events.Clear(); // Clear the Created event
 
             // Act
@@ -392,9 +392,9 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test1").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test2").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test3").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test3")).ConfigureAwait(true);
 
             _ = sut.OpenWindows.Should().HaveCount(3);
 
@@ -428,7 +428,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             // Create multiple windows
             for (var i = 0; i < windows.Count; i++)
             {
-                _ = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+                _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             }
 
             _ = sut.OpenWindows.Should().HaveCount(5);
@@ -458,7 +458,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 activateWindow: false).ConfigureAwait(true);
 
             // Act
@@ -490,7 +490,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 activateWindow: false).ConfigureAwait(true);
 
             await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Wait for initial window.Activate() event
@@ -528,10 +528,10 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context1 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test1",
+                category: new("Test1"),
                 activateWindow: true).ConfigureAwait(true);
             var context2 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test2",
+                category: new("Test2"),
                 activateWindow: false).ConfigureAwait(true);
 
             events.Clear();
@@ -572,13 +572,13 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context1 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test1",
+                category: new("Test1"),
                 activateWindow: true).ConfigureAwait(true);
 
             await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow activation to complete
 
             var context2 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test2",
+                category: new("Test2"),
                 activateWindow: false).ConfigureAwait(true);
 
             await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Ensure measurable time difference
@@ -646,8 +646,8 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test1").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test2").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
 
             this.mockThemeService.Invocations.Clear();
 
@@ -683,7 +683,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             this.mockThemeService.Invocations.Clear();
 
             // Act - Change a different property
@@ -723,7 +723,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act & Assert - Should not throw
-            var act = async () => await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             _ = await act.Should().NotThrowAsync().ConfigureAwait(true);
         }
         finally
@@ -747,7 +747,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             // Assert
@@ -775,7 +775,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context = await sut.CreateWindowAsync<Window>(
-                windowType: "Test",
+                category: new("Test"),
                 activateWindow: false).ConfigureAwait(true);
 
             events.Clear(); // Clear the Created event
@@ -812,10 +812,10 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             var context1 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test1",
+                category: new("Test1"),
                 activateWindow: true).ConfigureAwait(true);
             var context2 = await sut.CreateWindowAsync<Window>(
-                windowType: "Test2",
+                category: new("Test2"),
                 activateWindow: false).ConfigureAwait(true);
             events.Clear();
 
@@ -849,7 +849,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             events.Clear();
 
             // Act
@@ -876,7 +876,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
 
             // Act
             var result = sut.GetWindow(context.Id);
@@ -931,16 +931,16 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Tool").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Document").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Tool").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Tool).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Document).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Tool).ConfigureAwait(true);
 
             // Act
-            var toolWindows = sut.GetWindowsByType("Tool");
+            var toolWindows = sut.GetWindowsByCategory(WindowCategory.Tool);
 
             // Assert
             _ = toolWindows.Should().HaveCount(2);
-            _ = toolWindows.Should().AllSatisfy(w => w.WindowType.Should().Be("Tool"));
+            _ = toolWindows.Should().AllSatisfy(w => w.Category.Should().Be(WindowCategory.Tool));
         }
         finally
         {
@@ -966,8 +966,8 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test1").ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test2").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
 
             // Act
             var allWindows = sut.OpenWindows;
@@ -1034,7 +1034,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(windowType: "Test").ConfigureAwait(true);
+            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
             _ = sut.OpenWindows.Should().ContainSingle();
 
             // Act

@@ -24,50 +24,50 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void Constructor_LoadsInitialSettingsFromMonitor()
     {
-        var defaults = WindowDecorationBuilder.ForPrimaryWindow().Build();
+        var categoryOverride = WindowDecorationBuilder.ForMainWindow().Build();
         var initial = new WindowDecorationSettings();
-        initial.DefaultsByCategory[defaults.Category] = defaults;
+        initial.CategoryOverrides[categoryOverride.Category] = categoryOverride;
 
         using var harness = CreateHarness(initial);
 
-        _ = harness.Service.GetDefaultForCategory("Primary").Should().Be(defaults);
+        _ = harness.Service.CategoryOverrides.Should().ContainKey(WindowCategory.Main);
+        _ = harness.Service.CategoryOverrides[WindowCategory.Main].Should().Be(categoryOverride);
     }
 
     [TestMethod]
-    public void SetDefaultForCategory_NormalizesCategoryAndMarksDirty()
+    public void SetCategoryOverride_NormalizesCategoryAndMarksDirty()
     {
         using var harness = CreateHarness();
-        var options = WindowDecorationBuilder.ForPrimaryWindow().Build();
+        var options = WindowDecorationBuilder.ForMainWindow().Build();
 
-        harness.Service.SetDefaultForCategory(" primary  ", options with { Category = "Other" });
+        harness.Service.SetCategoryOverride(new(" primary  "), options with { Category = new("Other") });
 
-        var stored = harness.Service.GetDefaultForCategory("Primary");
-        _ = stored.Should().NotBeNull();
-        _ = stored!.Category.Should().Be("primary");
+        _ = harness.Service.CategoryOverrides.Should().ContainKey(new("primary"));
+        _ = harness.Service.CategoryOverrides[new("primary")].Category.Should().Be(new WindowCategory("primary"));
         _ = harness.Service.IsDirty.Should().BeTrue();
     }
 
     [TestMethod]
-    public void RemoveDefaultForCategory_ReturnsFalseWhenMissing()
+    public void RemoveCategoryOverride_ReturnsFalseWhenMissing()
     {
         using var harness = CreateHarness();
 
-        var removed = harness.Service.RemoveDefaultForCategory("Unknown");
+        var removed = harness.Service.RemoveCategoryOverride(new("CustomCategory"));
 
         _ = removed.Should().BeFalse();
     }
 
     [TestMethod]
-    public void SetOverrideForType_ValidatesOptions()
+    public void SetCategoryOverride_ValidatesOptions()
     {
         using var harness = CreateHarness();
-        var invalid = WindowDecorationBuilder.ForPrimaryWindow().Build()
+        var invalid = WindowDecorationBuilder.ForMainWindow().Build()
             with
         {
             Buttons = WindowButtonsOptions.Default with { ShowClose = false },
         };
 
-        var act = () => harness.Service.SetOverrideForType("MyApp.Windows.MainWindow", invalid);
+        var act = () => harness.Service.SetCategoryOverride(new("Main"), invalid);
 
         _ = act.Should().Throw<ValidationException>();
     }
@@ -76,7 +76,7 @@ public sealed partial class WindowDecorationSettingsTests
     public async Task SaveAsync_PersistsSettingsToFile()
     {
         using var harness = CreateHarness();
-        harness.Service.SetDefaultForCategory("Primary", WindowDecorationBuilder.ForPrimaryWindow().Build());
+        harness.Service.SetCategoryOverride(new("Main"), WindowDecorationBuilder.ForMainWindow().Build());
 
         var result = await harness.Service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -88,14 +88,74 @@ public sealed partial class WindowDecorationSettingsTests
     public void OnChange_ReplacesStoredSettings()
     {
         using var harness = CreateHarness();
-        var newDefaults = WindowDecorationBuilder.ForSecondaryWindow().Build();
+        var newOverride = WindowDecorationBuilder.ForSecondaryWindow().Build();
         var updated = new WindowDecorationSettings();
-        updated.DefaultsByCategory[newDefaults.Category] = newDefaults;
+        updated.CategoryOverrides[newOverride.Category] = newOverride;
 
         harness.TriggerChange(updated);
         Thread.Sleep(600);
 
-        _ = harness.Service.GetDefaultForCategory("Secondary").Should().Be(newDefaults);
+        _ = harness.Service.CategoryOverrides.Should().ContainKey(new("Secondary"));
+        _ = harness.Service.CategoryOverrides[new("Secondary")].Should().Be(newOverride);
+    }
+
+    [TestMethod]
+    public void GetEffectiveDecoration_ReturnsCodeDefinedDefaultWhenNoOverride()
+    {
+        using var harness = CreateHarness();
+
+        var effective = harness.Service.GetEffectiveDecoration(WindowCategory.Main);
+
+        _ = effective.Should().NotBeNull();
+        _ = effective.Category.Should().Be(WindowCategory.Main);
+        _ = effective.ChromeEnabled.Should().BeTrue();
+        _ = effective.TitleBar.Height.Should().Be(40.0);
+        _ = effective.Backdrop.Should().Be(BackdropKind.MicaAlt);
+    }
+
+    [TestMethod]
+    public void GetEffectiveDecoration_ReturnsOverrideWhenPresent()
+    {
+        using var harness = CreateHarness();
+        var customOptions = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Main,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default with { Height = 50.0 },
+            Buttons = WindowButtonsOptions.Default,
+            Backdrop = BackdropKind.Acrylic,
+        };
+        harness.Service.SetCategoryOverride(WindowCategory.Main, customOptions);
+
+        var effective = harness.Service.GetEffectiveDecoration(WindowCategory.Main);
+
+        _ = effective.Should().Be(customOptions);
+        _ = effective.TitleBar.Height.Should().Be(50.0);
+        _ = effective.Backdrop.Should().Be(BackdropKind.Acrylic);
+    }
+
+    [TestMethod]
+    public void GetEffectiveDecoration_FallbacksToSystemForUnrecognizedCategory()
+    {
+        using var harness = CreateHarness();
+
+        var effective = harness.Service.GetEffectiveDecoration(new("NonExistentCategory"));
+
+        _ = effective.Should().NotBeNull();
+        _ = effective.Category.Should().Be(WindowCategory.System);
+    }
+
+    [TestMethod]
+    public void GetEffectiveDecoration_IsCaseInsensitive()
+    {
+        using var harness = CreateHarness();
+
+        var effective1 = harness.Service.GetEffectiveDecoration(new("main"));
+        var effective2 = harness.Service.GetEffectiveDecoration(new("MAIN"));
+        var effective3 = harness.Service.GetEffectiveDecoration(new("Main"));
+
+        _ = effective1.Should().Be(effective2);
+        _ = effective2.Should().Be(effective3);
     }
 
     private static ServiceHarness CreateHarness(WindowDecorationSettings? initial = null)

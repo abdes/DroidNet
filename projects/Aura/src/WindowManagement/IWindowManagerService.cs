@@ -35,14 +35,14 @@ public interface IWindowManagerService : IDisposable
     /// Creates and displays a new window using the specified factory.
     /// </summary>
     /// <typeparam name="TWindow">The type of window to create.</typeparam>
-    /// <param name="windowType">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
+    /// <param name="category">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
     /// <param name="title">Optional window title. If null, uses the window's default title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <param name="activateWindow">Whether to activate the window after creation. Default is true.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when window creation fails.</exception>
     public Task<WindowContext> CreateWindowAsync<TWindow>(
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true)
@@ -52,14 +52,14 @@ public interface IWindowManagerService : IDisposable
     /// Creates and displays a new window by type name.
     /// </summary>
     /// <param name="windowTypeName">The fully qualified type name of the window.</param>
-    /// <param name="windowType">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
+    /// <param name="category">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
     /// <param name="title">Optional window title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <param name="activateWindow">Whether to activate the window after creation.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
     public Task<WindowContext> CreateWindowAsync(
         string windowTypeName,
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true);
@@ -100,9 +100,9 @@ public interface IWindowManagerService : IDisposable
     /// <summary>
     /// Gets all windows of a specific category.
     /// </summary>
-    /// <param name="windowType">The window category to filter by. Use constants from <see cref="WindowCategory"/>.</param>
+    /// <param name="category">The window category to filter by. Use constants from <see cref="WindowCategory"/>.</param>
     /// <returns>A collection of matching window contexts.</returns>
-    public IReadOnlyCollection<WindowContext> GetWindowsByType(string windowType);
+    public IReadOnlyCollection<WindowContext> GetWindowsByCategory(WindowCategory category);
 
     /// <summary>
     /// Closes all open windows.
@@ -114,7 +114,7 @@ public interface IWindowManagerService : IDisposable
     /// Registers an already-created window with the window manager.
     /// </summary>
     /// <param name="window">The window instance to register.</param>
-    /// <param name="windowType">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
+    /// <param name="category">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
     /// <param name="title">Optional window title. If null, uses the window's current title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <returns>The created <see cref="WindowContext"/> for the registered window.</returns>
@@ -125,7 +125,7 @@ public interface IWindowManagerService : IDisposable
     /// </remarks>
     public Task<WindowContext> RegisterWindowAsync(
         Window window,
-        string windowType = WindowCategory.Main,
+        WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null);
 }

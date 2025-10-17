@@ -24,7 +24,7 @@ namespace DroidNet.Aura.Decoration;
 /// <example>
 /// <code>
 /// // Use a preset with default settings
-/// var primaryDecoration = WindowDecorationBuilder.ForPrimaryWindow().Build();
+/// var primaryDecoration = WindowDecorationBuilder.ForMainWindow().Build();
 ///
 /// // Customize a preset
 /// var customTool = WindowDecorationBuilder.ForToolWindow()
@@ -43,7 +43,30 @@ namespace DroidNet.Aura.Decoration;
 /// </example>
 public sealed class WindowDecorationBuilder
 {
-    private string category = "Default";
+    /// <summary>
+    /// Default backdrop per window category.
+    /// </summary>
+    private static readonly Dictionary<WindowCategory, BackdropKind> DefaultBackdrops = new()
+    {
+        // Use Mica for primary surfaces
+        [WindowCategory.Main] = BackdropKind.Mica,
+
+        // Use MicaAlt for contrast (secondary/utility)
+        [WindowCategory.Secondary] = BackdropKind.MicaAlt,
+        [WindowCategory.Tool] = BackdropKind.MicaAlt,
+
+        // Use Acrylic for transient/layered UI (e.g., floating inspectors)
+        [WindowCategory.Transient] = BackdropKind.Acrylic,
+
+        // Use Acrylic for modal dialogs, dense content
+        [WindowCategory.Modal] = BackdropKind.Acrylic,
+        [WindowCategory.Document] = BackdropKind.Mica,
+
+        // Fallback -> None
+        [WindowCategory.System] = BackdropKind.None,
+    };
+
+    private WindowCategory category = WindowCategory.System;
     private bool chromeEnabled = true;
     private TitleBarOptions titleBar = TitleBarOptions.Default;
     private WindowButtonsOptions buttons = WindowButtonsOptions.Default;
@@ -69,20 +92,20 @@ public sealed class WindowDecorationBuilder
     /// </remarks>
     /// <example>
     /// <code>
-    /// var decoration = WindowDecorationBuilder.ForPrimaryWindow()
+    /// var decoration = WindowDecorationBuilder.ForMainWindow()
     ///     .WithMenu("App.MainMenu")
     ///     .Build();
     /// </code>
     /// </example>
-    public static WindowDecorationBuilder ForPrimaryWindow()
+    public static WindowDecorationBuilder ForMainWindow()
     {
         return new WindowDecorationBuilder
         {
-            category = "Primary",
+            category = WindowCategory.Main,
             chromeEnabled = true,
             titleBar = TitleBarOptions.Default with { Height = 40.0 },
             buttons = WindowButtonsOptions.Default,
-            backdrop = BackdropKind.MicaAlt,
+            backdrop = DefaultBackdrops[WindowCategory.Main],
         };
     }
 
@@ -113,11 +136,11 @@ public sealed class WindowDecorationBuilder
     {
         return new WindowDecorationBuilder
         {
-            category = "Document",
+            category = WindowCategory.Document,
             chromeEnabled = true,
             titleBar = TitleBarOptions.Default,
             buttons = WindowButtonsOptions.Default,
-            backdrop = BackdropKind.Mica,
+            backdrop = DefaultBackdrops[WindowCategory.Document],
         };
     }
 
@@ -134,7 +157,7 @@ public sealed class WindowDecorationBuilder
     /// <item><description>Chrome: Enabled</description></item>
     /// <item><description>Title bar height: 32px</description></item>
     /// <item><description>Maximize button: Hidden (tools typically don't maximize)</description></item>
-    /// <item><description>Backdrop: None (minimal visual distraction)</description></item>
+    /// <item><description>Backdrop: null (uses application-wide default)</description></item>
     /// </list>
     /// </remarks>
     /// <example>
@@ -148,11 +171,11 @@ public sealed class WindowDecorationBuilder
     {
         return new WindowDecorationBuilder
         {
-            category = "Tool",
+            category = WindowCategory.Tool,
             chromeEnabled = true,
             titleBar = TitleBarOptions.Default,
             buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
-            backdrop = BackdropKind.None,
+            backdrop = DefaultBackdrops[WindowCategory.Tool],
         };
     }
 
@@ -169,7 +192,7 @@ public sealed class WindowDecorationBuilder
     /// <item><description>Chrome: Enabled</description></item>
     /// <item><description>Title bar: Standard height</description></item>
     /// <item><description>All buttons: Visible</description></item>
-    /// <item><description>Backdrop: None</description></item>
+    /// <item><description>Backdrop: null (uses application-wide default)</description></item>
     /// </list>
     /// </remarks>
     /// <example>
@@ -183,38 +206,51 @@ public sealed class WindowDecorationBuilder
     {
         return new WindowDecorationBuilder
         {
-            category = "Secondary",
+            category = WindowCategory.Secondary,
             chromeEnabled = true,
             titleBar = TitleBarOptions.Default,
             buttons = WindowButtonsOptions.Default,
-            backdrop = BackdropKind.None,
+            backdrop = DefaultBackdrops[WindowCategory.Secondary],
         };
     }
 
     /// <summary>
-    /// Creates a builder configured to use system chrome only (no Aura chrome).
+    /// Creates a builder for a transient window.
     /// </summary>
-    /// <returns>A builder with chrome disabled.</returns>
+    /// <returns>A builder configured with transient window defaults.</returns>
     /// <remarks>
-    /// <para>
-    /// This preset disables Aura's custom chrome and uses the operating system's
-    /// native window decoration. Useful for windows that need standard OS appearance
-    /// or when custom chrome is not appropriate.
-    /// </para>
+    /// Transient windows are short-lived floating UI such as inspectors or popups and are
+    /// configured to use a lightweight backdrop and standard titlebar.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var decoration = WindowDecorationBuilder.WithSystemChromeOnly()
-    ///     .WithCategory("System")
-    ///     .Build();
-    /// </code>
-    /// </example>
-    public static WindowDecorationBuilder WithSystemChromeOnly()
+    public static WindowDecorationBuilder ForTransientWindow()
     {
         return new WindowDecorationBuilder
         {
-            category = "System",
-            chromeEnabled = false,
+            category = WindowCategory.Transient,
+            chromeEnabled = true,
+            titleBar = TitleBarOptions.Default,
+            buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
+            backdrop = DefaultBackdrops[WindowCategory.Transient],
+        };
+    }
+
+    /// <summary>
+    /// Creates a builder for a modal window.
+    /// </summary>
+    /// <returns>A builder configured with modal window defaults.</returns>
+    /// <remarks>
+    /// Modal windows block interaction with other windows; they typically use acrylic
+    /// to emphasize focus and may hide maximize controls.
+    /// </remarks>
+    public static WindowDecorationBuilder ForModalWindow()
+    {
+        return new WindowDecorationBuilder
+        {
+            category = WindowCategory.Modal,
+            chromeEnabled = true,
+            titleBar = TitleBarOptions.Default,
+            buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
+            backdrop = DefaultBackdrops[WindowCategory.Modal],
         };
     }
 
@@ -224,13 +260,8 @@ public sealed class WindowDecorationBuilder
     /// <param name="category">The category identifier (e.g., "Primary", "Tool", "Document").</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <exception cref="ArgumentException">Thrown if category is null or empty.</exception>
-    public WindowDecorationBuilder WithCategory(string category)
+    public WindowDecorationBuilder WithCategory(WindowCategory category)
     {
-        if (string.IsNullOrWhiteSpace(category))
-        {
-            throw new ArgumentException("Category must be a non-empty string.", nameof(category));
-        }
-
         this.category = category;
         return this;
     }
@@ -300,9 +331,9 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the backdrop kind.
+    /// Sets the backdrop kind as a window-specific override.
     /// </summary>
-    /// <param name="backdrop">The backdrop material to apply.</param>
+    /// <param name="backdrop">The backdrop material to apply to this window, overriding the window category default.</param>
     /// <returns>This builder instance for method chaining.</returns>
     public WindowDecorationBuilder WithBackdrop(BackdropKind backdrop)
     {
@@ -359,7 +390,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Disables the backdrop effect.
+    /// Explicitly disables the backdrop effect for this window.
     /// </summary>
     /// <returns>This builder instance for method chaining.</returns>
     public WindowDecorationBuilder NoBackdrop()

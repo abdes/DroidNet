@@ -21,7 +21,7 @@ namespace DroidNet.Aura.WindowManagement;
 public sealed record WindowContext(
     Guid Id,
     Window Window,
-    string Category,
+    WindowCategory Category,
     string Title,
     DateTimeOffset CreatedAt,
     Decoration.WindowDecorationOptions? Decoration = null,
@@ -40,13 +40,12 @@ public sealed record WindowContext(
     /// <returns>A new <see cref="WindowContext"/> instance.</returns>
     public static WindowContext Create(
         Window window,
-        string category,
+        WindowCategory category,
         string? title = null,
         Decoration.WindowDecorationOptions? decoration = null,
         IReadOnlyDictionary<string, object>? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(window);
-        ArgumentException.ThrowIfNullOrWhiteSpace(category);
 
         return new WindowContext(
             Id: Guid.NewGuid(),

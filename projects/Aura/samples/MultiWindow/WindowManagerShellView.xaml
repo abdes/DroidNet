@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
     x:Class="DroidNet.Samples.Aura.MultiWindow.WindowManagerShellView"
@@ -148,7 +148,7 @@
                                         Text="{x:Bind Title, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis" />
                                     <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}">
-                                        <Run Text="{x:Bind WindowType, Mode=OneWay}" />
+                                        <Run Text="{x:Bind Category, Mode=OneWay}" />
                                         <Run Text="•" />
                                         <Run Text="{x:Bind CreatedAt, Mode=OneWay}" />
                                     </TextBlock>
