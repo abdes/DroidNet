@@ -110,7 +110,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
     /// <inheritdoc/>
     public async Task<WindowContext> CreateWindowAsync<TWindow>(
-        string windowType = "Main",
+        string windowType = WindowCategory.Main,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true)
@@ -129,7 +129,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(requestedWindowType);
 
                 var window = this.windowFactory.CreateWindow<TWindow>();
-                context = WindowContext.Create(window, windowType, title, metadata);
+                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -165,7 +165,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <inheritdoc/>
     public async Task<WindowContext> CreateWindowAsync(
         string windowTypeName,
-        string windowType = "Main",
+        string windowType = WindowCategory.Main,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
         bool activateWindow = true)
@@ -182,7 +182,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(windowTypeName);
 
                 var window = this.windowFactory.CreateWindow(windowTypeName);
-                context = WindowContext.Create(window, windowType, title, metadata);
+                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
 
                 this.ApplyTheme(context);
 
@@ -310,7 +310,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         ArgumentException.ThrowIfNullOrWhiteSpace(windowType);
 
         return this.windows.Values
-            .Where(w => string.Equals(w.WindowType, windowType, StringComparison.OrdinalIgnoreCase))
+            .Where(w => string.Equals(w.Category, windowType, StringComparison.OrdinalIgnoreCase))
             .ToList()
             .AsReadOnly();
     }
@@ -332,7 +332,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <inheritdoc/>
     public async Task<WindowContext> RegisterWindowAsync(
         Window window,
-        string windowType = "Main",
+        string windowType = WindowCategory.Main,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null)
     {
@@ -354,7 +354,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             {
                 this.LogRegisteringWindow(window.GetType().Name);
 
-                context = WindowContext.Create(window, windowType, title, metadata);
+                context = WindowContext.Create(window, windowType, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -428,7 +428,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
         }
 
         var targetName = evt.Context.NavigationTargetKey.Name;
-        var windowType = evt.Context.NavigationTargetKey.IsMain ? "Main" : "Secondary";
+
+        // TODO: revise the router target type to ensure consistency with window management
+        var windowType = evt.Context.NavigationTargetKey.IsMain ? WindowCategory.Main : WindowCategory.Secondary;
 
         this.LogTrackingRouterWindow(targetName);
 

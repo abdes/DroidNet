@@ -30,7 +30,7 @@ public interface IWindowFactory
     /// <summary>
     /// Creates a new window instance by type name.
     /// </summary>
-    /// <param name="windowTypeName">The fully qualified type name of the window to create.</param>
+    /// <param name="category">The fully qualified type name of the window to create.</param>
     /// <returns>A new window instance.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when the type name is invalid or doesn't inherit from <see cref="Window"/>.
@@ -38,7 +38,7 @@ public interface IWindowFactory
     /// <exception cref="InvalidOperationException">
     /// Thrown when the window type cannot be resolved or created.
     /// </exception>
-    public Window CreateWindow(string windowTypeName);
+    public Window CreateWindow(string category);
 
     /// <summary>
     /// Attempts to create a window instance of the specified type.
