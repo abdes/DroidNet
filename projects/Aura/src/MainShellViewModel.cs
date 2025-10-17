@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Config;
 using DroidNet.Controls.Menus;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -35,7 +36,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     };
 
     private readonly DispatcherQueue dispatcherQueue;
-    private readonly AppearanceSettingsService appearanceSettings;
+    private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
@@ -45,18 +46,18 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// </summary>
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher and application information.</param>
-    /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
-    public MainShellViewModel(IRouter router, HostingContext hostingContext, AppearanceSettingsService appearanceSettings)
+    /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
+    public MainShellViewModel(IRouter router, HostingContext hostingContext, ISettingsService<IAppearanceSettings> appearanceSettingsService)
     {
         Debug.Assert(
             hostingContext.Dispatcher is not null,
             "DispatcherQueue in hosting context is not null when UI thread has been started");
         this.dispatcherQueue = hostingContext.Dispatcher;
 
-        this.appearanceSettings = appearanceSettings;
-        appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
+        this.appearanceSettingsService = appearanceSettingsService;
+        appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
-        this.InitializeSettingsMenu(); // Do this after we set this.appearanceSettings
+        this.InitializeSettingsMenu(); // Do this after we set this.appearanceSettingsService
         this.SettingsMenu = this.MenuBuilder.Build();
         this.SynchronizeThemeSelection();
 
@@ -71,6 +72,11 @@ public partial class MainShellViewModel : AbstractOutletContainer
                     this.SetupWindowTitleBar();
                 });
     }
+
+    /// <summary>
+    /// Gets the appearance settings (the service implements IAppearanceSettings).
+    /// </summary>
+    private IAppearanceSettings AppearanceSettings => this.appearanceSettingsService.Settings;
 
     /// <summary>
     /// Gets the menu builder for creating the settings menu.
@@ -105,7 +111,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
         if (disposing)
         {
-            this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
+            this.appearanceSettingsService.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
         }
 
         this.isDisposed = true;
@@ -160,21 +166,21 @@ public partial class MainShellViewModel : AbstractOutletContainer
                 {
                     Text = "Dark",
                     RadioGroupId = "THEME_MODE",
-                    IsChecked = this.appearanceSettings.AppThemeMode == ElementTheme.Dark,
+                    IsChecked = this.AppearanceSettings.AppThemeMode == ElementTheme.Dark,
                     Command = this.ThemeSelectedCommand,
                 },
                 new MenuItemData
                 {
                     Text = "Light",
                     RadioGroupId = "THEME_MODE",
-                    IsChecked = this.appearanceSettings.AppThemeMode == ElementTheme.Light,
+                    IsChecked = this.AppearanceSettings.AppThemeMode == ElementTheme.Light,
                     Command = this.ThemeSelectedCommand,
                 },
                 new MenuItemData
                 {
                     Text = "System Default",
                     RadioGroupId = "THEME_MODE",
-                    IsChecked = this.appearanceSettings.AppThemeMode == ElementTheme.Default,
+                    IsChecked = this.AppearanceSettings.AppThemeMode == ElementTheme.Default,
                     Command = this.ThemeSelectedCommand,
                 },
             ],
@@ -198,7 +204,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
             return;
         }
 
-        var activeItem = this.appearanceSettings.AppThemeMode switch
+        var activeItem = this.AppearanceSettings.AppThemeMode switch
         {
             ElementTheme.Dark => this.themesMenuItem.SubItems.FirstOrDefault(item => string.Equals(item.Text, "Dark", StringComparison.OrdinalIgnoreCase)),
             ElementTheme.Light => this.themesMenuItem.SubItems.FirstOrDefault(item => string.Equals(item.Text, "Light", StringComparison.OrdinalIgnoreCase)),
@@ -231,7 +237,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         => this.dispatcherQueue.TryEnqueue(
             () =>
             {
-                this.IsLightModeActive = this.appearanceSettings.AppThemeMode == ElementTheme.Light;
+                this.IsLightModeActive = this.AppearanceSettings.AppThemeMode == ElementTheme.Light;
                 this.SynchronizeThemeSelection();
             });
 
@@ -265,12 +271,12 @@ public partial class MainShellViewModel : AbstractOutletContainer
             return;
         }
 
-        if (this.appearanceSettings.AppThemeMode == theme)
+        if (this.AppearanceSettings.AppThemeMode == theme)
         {
             // Already the current theme
             return;
         }
 
-        this.appearanceSettings.AppThemeMode = theme;
+        this.AppearanceSettings.AppThemeMode = theme;
     }
 }
