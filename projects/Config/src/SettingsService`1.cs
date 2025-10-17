@@ -63,6 +63,7 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
     private readonly ILogger logger;
     private readonly IDisposable settingsChangedSubscription;
+    private readonly IDisposable? autoSaveSubscription;
     private bool isDisposed;
 
     /// <summary>
@@ -74,14 +75,22 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
+    /// <param name="autoSaveDelay">
+    ///     The delay before auto-saving settings after a change. If <see langword="null"/>, auto-save is disabled.
+    ///     Default is 5 seconds.
+    /// </param>
     protected SettingsService(
         IOptionsMonitor<TSettings> settingsMonitor,
         IFileSystem fs,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        TimeSpan? autoSaveDelay = null)
     {
         this.logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ??
                       NullLoggerFactory.Instance.CreateLogger<SettingsService<TSettings>>();
         this.fs = fs;
+
+        // Default auto-save delay is 5 seconds if not explicitly disabled
+        autoSaveDelay ??= TimeSpan.FromSeconds(5);
 
         // Throttle because the implementation of Microsoft.Extensions.Configuration fires multiple
         // times for the same change
@@ -99,6 +108,18 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
          * extension methods. We are also doing a conversion of the arguments to a tuple, because Rx
          * cannot handle multiple arguments.
          */
+
+        // Setup auto-save with configurable throttle delay
+        if (autoSaveDelay > TimeSpan.Zero)
+        {
+            this.autoSaveSubscription = Observable
+                .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                    handler => this.PropertyChanged += handler,
+                    handler => this.PropertyChanged -= handler)
+                .Throttle(autoSaveDelay.Value)
+                .Subscribe(
+                    _ => this.TrySaveSettings());
+        }
     }
 
     /// <inheritdoc />
@@ -106,6 +127,9 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
     /// <inheritdoc />
     public bool IsDirty { get; private set; }
+
+    /// <inheritdoc />
+    public TSettings Settings => (TSettings)(object)this;
 
     /// <inheritdoc />
     public void Dispose()
@@ -190,9 +214,14 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
         if (disposing)
         {
+            // Dispose auto-save subscription first to prevent saves during disposal
+            this.autoSaveSubscription?.Dispose();
+
+            // Save any pending changes before disposing
             if (this.IsDirty)
             {
                 this.LogDisposedWhileDirty(typeof(TSettings).Name);
+                _ = this.SaveSettings();
             }
 
             this.settingsChangedSubscription.Dispose();
@@ -257,6 +286,14 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
     /// </summary>
     /// <returns>A snapshot of the settings.</returns>
     protected abstract TSettings GetSettingsSnapshot();
+
+    private void TrySaveSettings()
+    {
+        if (this.IsDirty)
+        {
+            _ = this.SaveSettings();
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,

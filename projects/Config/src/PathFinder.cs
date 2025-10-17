@@ -51,9 +51,9 @@ public class PathFinder : IPathFinder
         this.UserHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         this.UserDocuments = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
         this.UserDownloads =
-            KnownFolderPathHelpers.GetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"));
+            KnownFolderPathHelpers.GetKnownFolderPath(new Guid(0x374DE290, 0x123F, 0x4565, 0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B) /* 374DE290-123F-4565-9164-39C4925E467B */);
         this.UserOneDrive =
-            KnownFolderPathHelpers.GetKnownFolderPath(new Guid("A52BBA46-E9E1-435f-B3D9-28DAA648C0F6"));
+            KnownFolderPathHelpers.GetKnownFolderPath(new Guid(0xa52bba46, 0xe9e1, 0x435f, 0xb3, 0xd9, 0x28, 0xda, 0xa6, 0x48, 0xc0, 0xf6) /* A52BBA46-E9E1-435f-B3D9-28DAA648C0F6 */);
 
         this.ProgramData = AppContext.BaseDirectory;
 

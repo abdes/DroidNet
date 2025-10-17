@@ -11,11 +11,13 @@ namespace DroidNet.Config.Tests;
 
 [ExcludeFromCodeCoverage]
 public sealed partial class TestSettingsService(
-    IOptionsMonitor<TestSettings> settingsMonitor,
+    IOptionsMonitor<ITestSettings> settingsMonitor,
     IFileSystem fs,
-    ILoggerFactory? loggerFactory = null)
-    : SettingsService<TestSettings>(settingsMonitor, fs, loggerFactory)
+    ILoggerFactory? loggerFactory = null,
+    TimeSpan? autoSaveDelay = null,
+    bool useSectionName = true) : SettingsService<ITestSettings>(settingsMonitor, fs, loggerFactory, autoSaveDelay), ITestSettings
 {
+    private readonly bool useSectionName = useSectionName;
     private string fooString = "InitialFoo";
     private int barNumber = 1;
 
@@ -32,7 +34,7 @@ public sealed partial class TestSettingsService(
     }
 
     /// <inheritdoc/>
-    protected override void UpdateProperties(TestSettings newSettings)
+    protected override void UpdateProperties(ITestSettings newSettings)
     {
         this.FooString = newSettings.FooString;
         this.BarNumber = newSettings.BarNumber;
@@ -42,13 +44,8 @@ public sealed partial class TestSettingsService(
     protected override string GetConfigFilePath() => "testConfig.json";
 
     /// <inheritdoc/>
-    protected override string GetConfigSectionName() => "TestSettings";
+    protected override string GetConfigSectionName() => this.useSectionName ? "TestSettings" : string.Empty;
 
     /// <inheritdoc/>
-    protected override TestSettings GetSettingsSnapshot() =>
-        new()
-        {
-            FooString = this.FooString,
-            BarNumber = this.BarNumber,
-        };
+    protected override ITestSettings GetSettingsSnapshot() => this;
 }
