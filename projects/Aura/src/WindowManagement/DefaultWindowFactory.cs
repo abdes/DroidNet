@@ -53,35 +53,35 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
     }
 
     /// <inheritdoc/>
-    public Window CreateWindow(string windowTypeName)
+    public Window CreateWindow(string category)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(windowTypeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(category);
 
         try
         {
-            this.LogResolvingWindowByName(windowTypeName);
+            this.LogResolvingWindowByName(category);
 
-            var windowType = Type.GetType(windowTypeName)
-                ?? throw new ArgumentException($"Type '{windowTypeName}' not found", nameof(windowTypeName));
+            var windowType = Type.GetType(category)
+                ?? throw new ArgumentException($"Type '{category}' not found", nameof(category));
 
             if (!typeof(Window).IsAssignableFrom(windowType))
             {
                 throw new ArgumentException(
-                    $"Type '{windowTypeName}' does not inherit from {nameof(Window)}",
-                    nameof(windowTypeName));
+                    $"Type '{category}' does not inherit from {nameof(Window)}",
+                    nameof(category));
             }
 
             var window = this.serviceProvider.GetRequiredService(windowType) as Window
-                ?? throw new InvalidOperationException($"Failed to create window of type {windowTypeName}");
+                ?? throw new InvalidOperationException($"Failed to create window of type {category}");
 
-            this.LogResolvedWindowByName(windowTypeName);
+            this.LogResolvedWindowByName(category);
 
             return window;
         }
         catch (Exception ex) when (ex is not ArgumentException)
         {
-            this.LogCreateWindowByNameFailed(ex, windowTypeName);
-            throw new InvalidOperationException($"Failed to create window of type {windowTypeName}", ex);
+            this.LogCreateWindowByNameFailed(ex, category);
+            throw new InvalidOperationException($"Failed to create window of type {category}", ex);
         }
     }
 
