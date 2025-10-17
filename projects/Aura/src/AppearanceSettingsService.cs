@@ -16,7 +16,7 @@ namespace DroidNet.Aura;
 /// Specialized <see cref="ISettingsService{TSettings}" /> for the <see cref="AppearanceSettings" />
 /// configuration. Provides intuitive access to the settings through properties with change notifications.
 /// </summary>
-public sealed partial class AppearanceSettingsService : SettingsService<AppearanceSettings>, IAppearanceSettings
+public sealed partial class AppearanceSettingsService : SettingsService<IAppearanceSettings>, IAppearanceSettings
 {
     private readonly string configFilePath;
 
@@ -104,7 +104,7 @@ public sealed partial class AppearanceSettingsService : SettingsService<Appearan
     /// property change notifications if the new value is different from the current one..
     /// </summary>
     /// <param name="newSettings">The new settings to apply.</param>
-    protected override void UpdateProperties(AppearanceSettings newSettings)
+    protected override void UpdateProperties(IAppearanceSettings newSettings)
     {
         this.AppThemeMode = newSettings.AppThemeMode;
         this.AppThemeBackgroundColor = newSettings.AppThemeBackgroundColor;

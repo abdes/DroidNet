@@ -23,7 +23,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_SetsLightTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -52,7 +52,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_SetsDarkTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -81,7 +81,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_DefaultTheme_ResolvesToSystemTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -114,7 +114,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_ThrowsException_WhenContentIsNotFrameworkElement_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -142,7 +142,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_UpdatesApplicationResources_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -170,7 +170,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task Dispose_UnsubscribesFromPropertyChanged_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<AppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
 
         // Act

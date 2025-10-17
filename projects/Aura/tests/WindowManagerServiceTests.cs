@@ -59,6 +59,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         // Default appearance settings
         _ = this.mockAppearanceSettings.Setup(s => s.AppThemeMode).Returns(ElementTheme.Dark);
+        _ = this.mockSettingsService.Setup(s => s.Settings).Returns(this.mockAppearanceSettings.Object);
 
         // Logger factory returns null logger
         _ = this.mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
@@ -717,8 +718,8 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             this.hostingContext,
             this.mockLoggerFactory.Object,
             themeModeService: null, // No theme service
-            this.mockAppearanceSettings.Object,
-            this.mockSettingsService.Object);
+            this.mockSettingsService.Object,
+            router: null);
 
         try
         {
@@ -1068,6 +1069,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             this.hostingContext,
             this.mockLoggerFactory.Object,
             this.mockThemeService.Object,
-            this.mockAppearanceSettings.Object,
-            this.mockSettingsService.Object);
+            this.mockSettingsService.Object,
+            router: null);
 }

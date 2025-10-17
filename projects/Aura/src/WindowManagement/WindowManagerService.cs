@@ -31,7 +31,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private readonly ILogger<WindowManagerService> logger;
     private readonly IWindowFactory windowFactory;
     private readonly IAppThemeModeService? themeModeService;
-    private readonly IAppearanceSettings? appearanceSettings;
     private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
@@ -50,15 +49,13 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="hostingContext">The hosting context containing the UI dispatcher queue.</param>
     /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
-    /// <param name="appearanceSettings">Optional appearance settings for accessing theme properties.</param>
-    /// <param name="appearanceSettingsService">Optional settings service for PropertyChanged notifications.</param>
+    /// <param name="appearanceSettingsService">Optional appearance settings service for theme properties and change notifications.</param>
     /// <param name="router">Optional router for integrating with routing-based window creation.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
-        IAppearanceSettings? appearanceSettings = null,
         ISettingsService<IAppearanceSettings>? appearanceSettingsService = null,
         IRouter? router = null)
     {
@@ -70,7 +67,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.windowFactory = windowFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.themeModeService = themeModeService;
-        this.appearanceSettings = appearanceSettings;
         this.appearanceSettingsService = appearanceSettingsService;
 
         if (this.themeModeService is not null && this.appearanceSettingsService is not null)
@@ -565,9 +561,51 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        foreach (var context in this.GetWindowSnapshot())
+        this.logger.LogInformation("Theme change detected via PropertyChanged - applying immediately to all windows");
+
+        // Apply theme to all windows in a single dispatcher operation for immediate synchronization
+        this.ApplyThemeToAllWindows();
+    }
+
+    /// <summary>
+    /// Applies the current theme to all tracked windows.
+    /// </summary>
+    private void ApplyThemeToAllWindows()
+    {
+        if (this.themeModeService is null || this.appearanceSettingsService is null)
         {
-            this.ApplyTheme(context);
+            return;
+        }
+
+        var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
+        var windowSnapshot = this.GetWindowSnapshot();
+
+        void ApplyThemeToAllCore()
+        {
+#pragma warning disable CA1031 // Theme application failures should be logged, not thrown
+            foreach (var context in windowSnapshot)
+            {
+                try
+                {
+                    this.themeModeService.ApplyThemeMode(context.Window, currentTheme);
+                }
+                catch (Exception ex)
+                {
+                    this.LogThemeApplyFailed(ex, context.Id);
+                }
+            }
+#pragma warning restore CA1031 // Theme application failures should be logged, not thrown
+        }
+
+        if (this.dispatcherQueue.HasThreadAccess)
+        {
+            ApplyThemeToAllCore();
+            return;
+        }
+
+        if (!this.dispatcherQueue.TryEnqueue(ApplyThemeToAllCore))
+        {
+            this.LogThemeApplyEnqueueFailed(Guid.Empty);
         }
     }
 
@@ -577,12 +615,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="context">The window context that should receive the theme.</param>
     private void ApplyTheme(WindowContext? context)
     {
-        if (context is null || this.themeModeService is null || this.appearanceSettings is null)
+        if (context is null || this.themeModeService is null || this.appearanceSettingsService is null)
         {
             return;
         }
 
-        var currentTheme = this.appearanceSettings.AppThemeMode;
+        var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
 
         void ApplyThemeCore()
         {

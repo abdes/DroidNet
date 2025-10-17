@@ -21,14 +21,14 @@ namespace DroidNet.Aura;
 /// </remarks>
 public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposable
 {
-    private readonly ISettingsService<AppearanceSettings> appearanceSettings;
+    private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
     private bool isDisposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AppThemeModeService"/> class.
     /// </summary>
     /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
-    public AppThemeModeService(ISettingsService<AppearanceSettings> appearanceSettings)
+    public AppThemeModeService(ISettingsService<IAppearanceSettings> appearanceSettings)
     {
         this.appearanceSettings = appearanceSettings;
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;

@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics;
-using System.Reactive.Linq;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.UI.Windowing;
@@ -16,9 +14,6 @@ namespace DroidNet.Aura;
 /// </summary>
 public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChanged
 {
-    private readonly IAppThemeModeService appThemeModeService;
-    private readonly AppearanceSettingsService appearanceSettings;
-    private readonly IDisposable autoSaveSubscription;
     private object? contentViewModel;
 
     /// <summary>
@@ -33,18 +28,10 @@ public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChange
     /// inside the window handles loading the appropriate content based on the active route or state
     /// of the application.
     /// </remarks>
-    /// <param name="appThemeModeService">
-    /// TODO: decide if we keep the window in charge of requesting to apply the theme to its content.
-    /// </param>
-    /// <param name="appearanceSettings">
-    /// The settings service, which will provide settings to customize the window's appearance.
-    /// </param>
-    public MainWindow(IAppThemeModeService appThemeModeService, AppearanceSettingsService appearanceSettings)
+    public MainWindow()
     {
         this.InitializeComponent();
 
-        this.appearanceSettings = appearanceSettings;
-        this.appThemeModeService = appThemeModeService;
         var workArea = DisplayArea.Primary.WorkArea;
 
         /*
@@ -52,21 +39,6 @@ public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChange
             new RectInt32((workArea.Width - width) / 2, (workArea.Height - height) / 2, width, height),
             DisplayArea.Primary);
         */
-
-        this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode);
-
-        // Setup auto-save with Rx debouncing
-        // Convert PropertyChanged events to observable and debounce for 5 seconds
-        this.autoSaveSubscription = Observable
-            .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
-                handler => this.appearanceSettings.PropertyChanged += handler,
-                handler => this.appearanceSettings.PropertyChanged -= handler)
-            .Throttle(TimeSpan.FromSeconds(5))
-            .Subscribe(_ => this.SaveSettingsIfDirty());
-
-        appearanceSettings.PropertyChanged += this.AppearanceSettingsOnPropertyChanged;
-
-        this.Closed += this.OnWindowClosed;
     }
 
     /// <summary>
@@ -102,46 +74,6 @@ public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChange
 
             this.ContentViewModel = viewModel;
         }
-    }
-
-    private void AppearanceSettingsOnPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (args.PropertyName?.Equals(nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal) == true)
-        {
-            Debug.WriteLine($"Applying theme `{this.appearanceSettings.AppThemeMode}` to {nameof(MainWindow)}");
-            _ = this.DispatcherQueue.TryEnqueue(
-                () => this.appThemeModeService.ApplyThemeMode(this, this.appearanceSettings.AppThemeMode));
-        }
-    }
-
-    /// <summary>
-    /// Saves the appearance settings if they have been modified.
-    /// </summary>
-    private void SaveSettingsIfDirty()
-    {
-        if (this.appearanceSettings.IsDirty)
-        {
-            var saved = this.appearanceSettings.SaveSettings();
-            Debug.WriteLine($"Auto-save settings: {(saved ? "succeeded" : "failed")}");
-        }
-    }
-
-    /// <summary>
-    /// Handles the window closed event to ensure settings are saved before the window closes.
-    /// </summary>
-    private void OnWindowClosed(object sender, object args)
-    {
-        _ = sender;
-        _ = args;
-
-        // Unsubscribe from appearance settings to prevent memory leaks
-        this.appearanceSettings.PropertyChanged -= this.AppearanceSettingsOnPropertyChanged;
-
-        // Dispose the auto-save subscription
-        this.autoSaveSubscription.Dispose();
-
-        // Save any pending changes
-        this.SaveSettingsIfDirty();
     }
 
     /// <summary>
