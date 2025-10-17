@@ -24,11 +24,12 @@ namespace DroidNet.Aura.Tests.Decoration;
 /// </remarks>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class WindowBackdropServiceTests : VisualUserInterfaceTests
+public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
 {
     private Mock<IWindowManagerService> mockWindowManager = null!;
     private Subject<WindowLifecycleEvent> windowEventsSubject = null!;
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
+    private bool disposed;
 
     [TestInitialize]
     public Task InitializeAsync() => EnqueueAsync(async () =>
@@ -68,7 +69,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.None,
         };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -97,7 +98,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.Mica,
         };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -127,7 +128,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.MicaAlt,
         };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -159,7 +160,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.Acrylic,
         };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -184,7 +185,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var window = MakeSmallWindow("Test Window");
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: null);
+        var context = CreateWindowContext(window, decoration: null);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -214,7 +215,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         {
             Category = new WindowCategory("Test"),
         };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -247,9 +248,9 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         // Window 3 with default backdrop (None)
         var decoration3 = new WindowDecorationOptions { Category = new WindowCategory("Test") };
 
-        var context1 = WindowContext.Create(window1, new WindowCategory("Test"), decoration: decoration1);
-        var context2 = WindowContext.Create(window2, new WindowCategory("Test"), decoration: decoration2);
-        var context3 = WindowContext.Create(window3, new WindowCategory("Test"), decoration: decoration3);
+        var context1 = CreateWindowContext(window1, decoration1);
+        var context2 = CreateWindowContext(window2, decoration2);
+        var context3 = CreateWindowContext(window3, decoration3);
 
         var openWindows = new List<WindowContext> { context1, context2, context3 };
         _ = this.mockWindowManager.Setup(m => m.OpenWindows).Returns(openWindows.AsReadOnly());
@@ -287,8 +288,24 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         var decoration1 = new WindowDecorationOptions { Category = WindowCategory.Main, Backdrop = BackdropKind.Mica };
         var decoration2 = new WindowDecorationOptions { Category = WindowCategory.Tool, Backdrop = BackdropKind.Acrylic };
 
-        var context1 = WindowContext.Create(window1, WindowCategory.Main, decoration: decoration1);
-        var context2 = WindowContext.Create(window2, WindowCategory.Tool, decoration: decoration2);
+        var context1 = new WindowContext
+        {
+            Id = Guid.NewGuid(),
+            Window = window1,
+            Category = WindowCategory.Main,
+            Title = "Window 1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Decoration = decoration1,
+        };
+        var context2 = new WindowContext
+        {
+            Id = Guid.NewGuid(),
+            Window = window2,
+            Category = WindowCategory.Tool,
+            Title = "Window 2",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Decoration = decoration2,
+        };
 
         var openWindows = new List<WindowContext> { context1, context2 };
         _ = this.mockWindowManager.Setup(m => m.OpenWindows).Returns(openWindows.AsReadOnly());
@@ -318,7 +335,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -346,7 +363,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -374,7 +391,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = WindowContext.Create(window, new WindowCategory("Test"), decoration: decoration);
+        var context = CreateWindowContext(window, decoration);
 
         var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -419,6 +436,17 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
+    private static WindowContext CreateWindowContext(Window window, WindowDecorationOptions? decoration)
+        => new()
+        {
+            Id = Guid.NewGuid(),
+            Window = window,
+            Category = new WindowCategory("Test"),
+            Title = window.Title ?? "Test Window",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Decoration = decoration,
+        };
+
     private static Window MakeSmallWindow(string? title = null)
     {
         var window = string.IsNullOrEmpty(title) ? new Window() : new Window { Title = title };
@@ -430,5 +458,33 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests
         window.AppWindow.Move(new Windows.Graphics.PointInt32 { X = 50, Y = 50 });
 
         return window;
+    }
+
+    /// <summary>
+    /// Disposes managed resources.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes managed resources.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.windowEventsSubject?.Dispose();
+        }
+
+        this.disposed = true;
     }
 }

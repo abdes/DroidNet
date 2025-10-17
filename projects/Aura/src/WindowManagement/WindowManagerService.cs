@@ -30,6 +30,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 {
     private readonly ILogger<WindowManagerService> logger;
     private readonly IWindowFactory windowFactory;
+    private readonly IWindowContextFactory windowContextFactory;
     private readonly IAppThemeModeService? themeModeService;
     private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
@@ -46,6 +47,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// Initializes a new instance of the <see cref="WindowManagerService"/> class.
     /// </summary>
     /// <param name="windowFactory">Factory for creating window instances.</param>
+    /// <param name="windowContextFactory">Factory for creating window contexts with proper dependency injection.</param>
     /// <param name="hostingContext">The hosting context containing the UI dispatcher queue.</param>
     /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
@@ -53,6 +55,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="router">Optional router for integrating with routing-based window creation.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
+        IWindowContextFactory windowContextFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
@@ -60,11 +63,13 @@ public sealed partial class WindowManagerService : IWindowManagerService
         IRouter? router = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
+        ArgumentNullException.ThrowIfNull(windowContextFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
 
         this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
         this.windowFactory = windowFactory;
+        this.windowContextFactory = windowContextFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.themeModeService = themeModeService;
         this.appearanceSettingsService = appearanceSettingsService;
@@ -125,7 +130,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(requestedWindowType);
 
                 var window = this.windowFactory.CreateWindow<TWindow>();
-                context = WindowContext.Create(window, category, title, decoration: null, metadata);
+                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -178,7 +183,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(windowTypeName);
 
                 var window = this.windowFactory.CreateWindow(windowTypeName);
-                context = WindowContext.Create(window, category, title, decoration: null, metadata);
+                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
 
                 this.ApplyTheme(context);
 
@@ -348,7 +353,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             {
                 this.LogRegisteringWindow(window.GetType().Name);
 
-                context = WindowContext.Create(window, category, title, decoration: null, metadata);
+                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -560,8 +565,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         {
             return;
         }
-
-        this.logger.LogInformation("Theme change detected via PropertyChanged - applying immediately to all windows");
 
         // Apply theme to all windows in a single dispatcher operation for immediate synchronization
         this.ApplyThemeToAllWindows();

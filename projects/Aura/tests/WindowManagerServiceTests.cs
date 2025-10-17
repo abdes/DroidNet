@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
@@ -29,6 +30,7 @@ namespace DroidNet.Aura.Tests;
 public class WindowManagerServiceTests : VisualUserInterfaceTests
 {
     private Mock<IWindowFactory> mockFactory = null!;
+    private Mock<IWindowContextFactory> mockWindowContextFactory = null!;
     private Mock<IAppThemeModeService> mockThemeService = null!;
     private Mock<IAppearanceSettings> mockAppearanceSettings = null!;
     private Mock<ISettingsService<IAppearanceSettings>> mockSettingsService = null!;
@@ -52,6 +54,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         // Setup mocks
         this.mockFactory = new Mock<IWindowFactory>();
+        this.mockWindowContextFactory = new Mock<IWindowContextFactory>();
         this.mockThemeService = new Mock<IAppThemeModeService>();
         this.mockAppearanceSettings = new Mock<IAppearanceSettings>();
         this.mockSettingsService = new Mock<ISettingsService<IAppearanceSettings>>();
@@ -64,6 +67,26 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         // Logger factory returns null logger
         _ = this.mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(Mock.Of<ILogger>());
+
+        // Setup window context factory to create contexts
+        _ = this.mockWindowContextFactory
+            .Setup(f => f.Create(
+                It.IsAny<Window>(),
+                It.IsAny<WindowCategory>(),
+                It.IsAny<string>(),
+                It.IsAny<WindowDecorationOptions>(),
+                It.IsAny<IReadOnlyDictionary<string, object>>()))
+            .Returns<Window, WindowCategory, string?, WindowDecorationOptions?, IReadOnlyDictionary<string, object>?>(
+                (window, category, title, decoration, metadata) => new WindowContext
+                {
+                    Id = Guid.NewGuid(),
+                    Window = window,
+                    Category = category,
+                    Title = title ?? window.Title ?? $"Untitled {category} Window",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    Decoration = decoration,
+                    Metadata = metadata,
+                });
     });
 
     [TestMethod]
@@ -588,21 +611,21 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             sut.ActivateWindow(context2.Id);
             await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-            // Assert - TASK-006: Verify immutability - different windows should yield distinct contexts
+            // Assert - Verify that different windows maintain distinct state
             var updatedContext1 = sut.GetWindow(context1.Id);
             var updatedContext2 = sut.GetWindow(context2.Id);
 
             _ = updatedContext1.Should().NotBeNull();
             _ = updatedContext2.Should().NotBeNull();
 
-            // Window 1 should be deactivated
+            // Window 1 should be deactivated (state mutated in-place)
             _ = updatedContext1!.IsActive.Should().BeFalse();
-            _ = updatedContext1.Should().NotBeSameAs(context1); // New context due to deactivation
+            _ = updatedContext1.Should().BeSameAs(context1); // Same instance, state mutated
 
-            // Window 2 should be activated with timestamp
+            // Window 2 should be activated with timestamp (state mutated in-place)
             _ = updatedContext2!.IsActive.Should().BeTrue();
             _ = updatedContext2.LastActivatedAt.Should().NotBeNull();
-            _ = updatedContext2.Should().NotBeSameAs(context2); // New context due to activation
+            _ = updatedContext2.Should().BeSameAs(context2); // Same instance, state mutated
         }
         finally
         {
@@ -715,6 +738,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         var sut = new WindowManagerService(
             this.mockFactory.Object,
+            this.mockWindowContextFactory.Object,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             themeModeService: null, // No theme service
@@ -1066,6 +1090,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     private WindowManagerService CreateService()
         => new(
             this.mockFactory.Object,
+            this.mockWindowContextFactory.Object,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             this.mockThemeService.Object,
