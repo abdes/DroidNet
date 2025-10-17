@@ -2,23 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
-/// Persistent window decoration configuration including category defaults and per-type overrides.
+/// Persistent window decoration configuration containing category-based overrides.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="WindowDecorationSettings"/> stores presets for window categories and optional overrides for
-/// specific window types. The settings are serialized directly using <see cref="System.Text.Json"/>.
+/// <see cref="WindowDecorationSettings"/> stores user/application-specific customizations that override
+/// the code-defined defaults for window categories. The settings are serialized using <see cref="System.Text.Json"/>.
 /// </para>
 /// <para>
-/// Dictionaries use case-insensitive keys for categories and case-sensitive keys for fully qualified window
-/// type names. Stored <see cref="WindowDecorationOptions"/> instances are immutable records and should be
-/// validated by callers before persisting.
+/// The dictionary uses case-insensitive keys for category names to match the behavior of
+/// <see cref="WindowManagement.WindowCategory"/> constants. Stored <see cref="WindowDecorationOptions"/>
+/// instances are immutable records and should be validated before persisting.
+/// </para>
+/// <para>
+/// Code-defined defaults for standard categories (Main, Secondary, Tool, Document, Unknown) are maintained
+/// separately in <see cref="WindowDecorationSettingsService"/> and are not persisted.
 /// </para>
 /// </remarks>
 public sealed class WindowDecorationSettings
@@ -34,20 +35,12 @@ public sealed class WindowDecorationSettings
     public const string ConfigSectionName = nameof(WindowDecorationSettings);
 
     /// <summary>
-    /// Gets the default decoration options indexed by semantic window category (e.g., "Primary").
+    /// Gets the category-based decoration overrides that supersede code-defined defaults.
     /// </summary>
     /// <value>
-    /// A dictionary keyed by category name using <see cref="StringComparer.OrdinalIgnoreCase"/>.
+    /// A dictionary keyed by category name (case-insensitive) containing user/application-specific
+    /// customizations that override the built-in defaults.
     /// </value>
-    public IDictionary<string, WindowDecorationOptions> DefaultsByCategory { get; }
-        = new Dictionary<string, WindowDecorationOptions>(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Gets explicit decoration overrides indexed by window type name.
-    /// </summary>
-    /// <value>
-    /// A dictionary keyed by fully qualified window type name using <see cref="StringComparer.Ordinal"/>.
-    /// </value>
-    public IDictionary<string, WindowDecorationOptions> OverridesByType { get; }
-        = new Dictionary<string, WindowDecorationOptions>(StringComparer.Ordinal);
+    public IDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides { get; }
+        = new Dictionary<WindowCategory, WindowDecorationOptions>();
 }

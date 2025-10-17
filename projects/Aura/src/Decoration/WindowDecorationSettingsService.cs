@@ -11,13 +11,65 @@ using Microsoft.Extensions.Options;
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
-/// Settings service responsible for persisting <see cref="WindowDecorationSettings"/>.
+/// Settings service responsible for persisting <see cref="WindowDecorationSettings"/> and resolving
+/// effective window decorations from code-defined defaults and persisted category overrides.
 /// </summary>
-public sealed partial class WindowDecorationSettingsService : SettingsService<WindowDecorationSettings>, IWindowDecorationSettings
+public sealed partial class WindowDecorationSettingsService : SettingsService<WindowDecorationSettings>, IWindowDecorationSettingsService
 {
+    /// <summary>
+    /// Code-defined default window decoration options for standard window categories.
+    /// </summary>
+    /// <remarks>
+    /// These defaults are hard-coded in the application and are used as fallbacks when no persisted
+    /// category override exists. They are based on the preset configurations from
+    /// <see cref="WindowDecorationBuilder"/>.
+    /// </remarks>
+    private static readonly Dictionary<WindowCategory, WindowDecorationOptions> Defaults = new()
+    {
+        [WindowCategory.Main] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Main,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default with { Height = 40.0 },
+            Buttons = WindowButtonsOptions.Default,
+            Backdrop = BackdropKind.MicaAlt,
+        },
+        [WindowCategory.Secondary] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Secondary,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default,
+            Buttons = WindowButtonsOptions.Default,
+            Backdrop = BackdropKind.None,
+        },
+        [WindowCategory.Tool] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Tool,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default,
+            Buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
+            Backdrop = BackdropKind.None,
+        },
+        [WindowCategory.Document] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Document,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default,
+            Buttons = WindowButtonsOptions.Default,
+            Backdrop = BackdropKind.Mica,
+        },
+        [WindowCategory.System] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.System,
+            ChromeEnabled = true,
+            TitleBar = TitleBarOptions.Default,
+            Buttons = WindowButtonsOptions.Default,
+            Backdrop = BackdropKind.None,
+        },
+    };
+
     private readonly string configFilePath;
-    private Dictionary<string, WindowDecorationOptions> defaultsByCategory;
-    private Dictionary<string, WindowDecorationOptions> overridesByType;
+    private Dictionary<WindowCategory, WindowDecorationOptions> categoryOverrides;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WindowDecorationSettingsService"/> class.
@@ -36,105 +88,71 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
         ArgumentNullException.ThrowIfNull(finder);
 
         var current = settingsMonitor.CurrentValue ?? new WindowDecorationSettings();
-        this.defaultsByCategory = CloneDefaults(current.DefaultsByCategory);
-        this.overridesByType = CloneOverrides(current.OverridesByType);
+        this.categoryOverrides = CloneCategoryOverrides(current.CategoryOverrides);
         this.configFilePath = finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName);
     }
 
-    /// <inheritdoc/>
-    public IReadOnlyDictionary<string, WindowDecorationOptions> DefaultsByCategory => this.defaultsByCategory;
+    /// <summary>
+    /// Gets the current read-only dictionary of category-specific window decoration overrides.
+    /// </summary>
+    public IReadOnlyDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides => this.categoryOverrides;
 
     /// <inheritdoc/>
-    public IReadOnlyDictionary<string, WindowDecorationOptions> OverridesByType => this.overridesByType;
-
-    /// <inheritdoc/>
-    public WindowDecorationOptions? GetDefaultForCategory(string category)
+    public WindowDecorationOptions GetEffectiveDecoration(WindowCategory category)
     {
-        var key = NormalizeCategoryKey(category);
-        return this.defaultsByCategory.TryGetValue(key, out var options) ? options : null;
+        // First, check for a persisted category override
+        if (this.categoryOverrides.TryGetValue(category, out var overrideOptions))
+        {
+            return overrideOptions;
+        }
+
+        // Fall back to code-defined default for the category
+        if (Defaults.TryGetValue(category, out var defaultOptions))
+        {
+            return defaultOptions;
+        }
+
+        // Final fallback: return the "Unknown" category default
+        return Defaults[WindowCategory.System];
     }
 
     /// <inheritdoc/>
-    public WindowDecorationOptions? GetOverrideForType(string windowType)
+    public void SetCategoryOverride(WindowCategory category, WindowDecorationOptions options)
     {
-        var key = NormalizeWindowTypeKey(windowType);
-        return this.overridesByType.TryGetValue(key, out var options) ? options : null;
-    }
-
-    /// <inheritdoc/>
-    public void SetDefaultForCategory(string category, WindowDecorationOptions options)
-    {
-        var key = NormalizeCategoryKey(category);
         ArgumentNullException.ThrowIfNull(options);
 
-        var normalized = EnsureCategory(options, key);
+        var normalized = EnsureCategory(options, category);
         normalized.Validate();
 
-        var updated = new Dictionary<string, WindowDecorationOptions>(this.defaultsByCategory, this.defaultsByCategory.Comparer)
+        var updated = new Dictionary<WindowCategory, WindowDecorationOptions>(
+            this.categoryOverrides,
+            this.categoryOverrides.Comparer)
         {
-            [key] = normalized,
+            [category] = normalized,
         };
 
-        _ = this.SetField(ref this.defaultsByCategory, updated, nameof(this.DefaultsByCategory));
+        _ = this.SetField(ref this.categoryOverrides, updated, nameof(this.CategoryOverrides));
     }
 
     /// <inheritdoc/>
-    public bool RemoveDefaultForCategory(string category)
+    public bool RemoveCategoryOverride(WindowCategory category)
     {
-        var key = NormalizeCategoryKey(category);
-
-        if (!this.defaultsByCategory.ContainsKey(key))
+        if (!this.categoryOverrides.ContainsKey(category))
         {
             return false;
         }
 
-        var updated = new Dictionary<string, WindowDecorationOptions>(this.defaultsByCategory, this.defaultsByCategory.Comparer);
-        var removed = updated.Remove(key);
+        var updated = new Dictionary<WindowCategory, WindowDecorationOptions>(
+            this.categoryOverrides,
+            this.categoryOverrides.Comparer);
+        var removed = updated.Remove(category);
 
         if (!removed)
         {
             return false;
         }
 
-        _ = this.SetField(ref this.defaultsByCategory, updated, nameof(this.DefaultsByCategory));
-        return true;
-    }
-
-    /// <inheritdoc/>
-    public void SetOverrideForType(string windowType, WindowDecorationOptions options)
-    {
-        var key = NormalizeWindowTypeKey(windowType);
-        ArgumentNullException.ThrowIfNull(options);
-
-        options.Validate();
-
-        var updated = new Dictionary<string, WindowDecorationOptions>(this.overridesByType, this.overridesByType.Comparer)
-        {
-            [key] = options,
-        };
-
-        _ = this.SetField(ref this.overridesByType, updated, nameof(this.OverridesByType));
-    }
-
-    /// <inheritdoc/>
-    public bool RemoveOverrideForType(string windowType)
-    {
-        var key = NormalizeWindowTypeKey(windowType);
-
-        if (!this.overridesByType.ContainsKey(key))
-        {
-            return false;
-        }
-
-        var updated = new Dictionary<string, WindowDecorationOptions>(this.overridesByType, this.overridesByType.Comparer);
-        var removed = updated.Remove(key);
-
-        if (!removed)
-        {
-            return false;
-        }
-
-        _ = this.SetField(ref this.overridesByType, updated, nameof(this.OverridesByType));
+        _ = this.SetField(ref this.categoryOverrides, updated, nameof(this.CategoryOverrides));
         return true;
     }
 
@@ -154,14 +172,9 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
     {
         var snapshot = new WindowDecorationSettings();
 
-        foreach (var pair in this.defaultsByCategory)
+        foreach (var pair in this.categoryOverrides)
         {
-            snapshot.DefaultsByCategory[pair.Key] = pair.Value;
-        }
-
-        foreach (var pair in this.overridesByType)
-        {
-            snapshot.OverridesByType[pair.Key] = pair.Value;
+            snapshot.CategoryOverrides[pair.Key] = pair.Value;
         }
 
         return snapshot;
@@ -172,11 +185,9 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
     {
         ArgumentNullException.ThrowIfNull(newSettings);
 
-        var defaults = CloneDefaults(newSettings.DefaultsByCategory);
-        var overrides = CloneOverrides(newSettings.OverridesByType);
+        var overrides = CloneCategoryOverrides(newSettings.CategoryOverrides);
 
-        _ = this.SetField(ref this.defaultsByCategory, defaults, nameof(this.DefaultsByCategory));
-        _ = this.SetField(ref this.overridesByType, overrides, nameof(this.OverridesByType));
+        _ = this.SetField(ref this.categoryOverrides, overrides, nameof(this.CategoryOverrides));
     }
 
     /// <inheritdoc/>
@@ -185,10 +196,10 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
     /// <inheritdoc/>
     protected override string GetConfigSectionName() => WindowDecorationSettings.ConfigSectionName;
 
-    private static Dictionary<string, WindowDecorationOptions> CloneDefaults(
-        IDictionary<string, WindowDecorationOptions>? source)
+    private static Dictionary<WindowCategory, WindowDecorationOptions> CloneCategoryOverrides(
+        IDictionary<WindowCategory, WindowDecorationOptions>? source)
     {
-        var clone = new Dictionary<string, WindowDecorationOptions>(StringComparer.OrdinalIgnoreCase);
+        var clone = new Dictionary<WindowCategory, WindowDecorationOptions>();
 
         if (source is null)
         {
@@ -197,56 +208,20 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
 
         foreach (var pair in source)
         {
-            var key = NormalizeCategoryKey(pair.Key);
             var options = pair.Value ?? throw new ValidationException(
-                $"Default window decoration for category '{pair.Key}' cannot be null.");
+                $"Category override for '{pair.Key}' cannot be null.");
 
-            var normalized = EnsureCategory(options, key);
+            var normalized = EnsureCategory(options, pair.Key);
             normalized.Validate();
 
-            clone[key] = normalized;
+            clone[pair.Key] = normalized;
         }
 
         return clone;
     }
 
-    private static Dictionary<string, WindowDecorationOptions> CloneOverrides(
-        IDictionary<string, WindowDecorationOptions>? source)
-    {
-        var clone = new Dictionary<string, WindowDecorationOptions>(StringComparer.Ordinal);
-
-        if (source is null)
-        {
-            return clone;
-        }
-
-        foreach (var pair in source)
-        {
-            var key = NormalizeWindowTypeKey(pair.Key);
-            var options = pair.Value ?? throw new ValidationException(
-                $"Window decoration override for '{pair.Key}' cannot be null.");
-
-            options.Validate();
-            clone[key] = options;
-        }
-
-        return clone;
-    }
-
-    private static string NormalizeCategoryKey(string category)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(category);
-        return category.Trim();
-    }
-
-    private static string NormalizeWindowTypeKey(string windowType)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(windowType);
-        return windowType.Trim();
-    }
-
-    private static WindowDecorationOptions EnsureCategory(WindowDecorationOptions options, string category)
-        => string.Equals(options.Category, category, StringComparison.OrdinalIgnoreCase)
+    private static WindowDecorationOptions EnsureCategory(WindowDecorationOptions options, WindowCategory category)
+        => options.Category.Equals(category)
             ? options
             : options with { Category = category };
 }

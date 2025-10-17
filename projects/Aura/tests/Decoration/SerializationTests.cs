@@ -26,7 +26,7 @@ public class SerializationTests
         // Arrange
         var original = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             TitleBar = new TitleBarOptions { Height = 40.0, ShowTitle = true },
             Buttons = new WindowButtonsOptions { ShowMaximize = false },
@@ -173,7 +173,7 @@ public class SerializationTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Test",
+            Category = new("Test"),
             Backdrop = BackdropKind.MicaAlt,
         };
 
@@ -226,7 +226,7 @@ public class SerializationTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Test",
+            Category = new("Test"),
             Menu = null,
         };
 
@@ -244,7 +244,7 @@ public class SerializationTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Test",
+            Category = new("Test"),
         };
 
         // Act
@@ -261,7 +261,7 @@ public class SerializationTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Test",
+            Category = new("Test"),
             ChromeEnabled = true,
         };
 
@@ -329,20 +329,20 @@ public class SerializationTests
     public void Dictionary_OfDecorationOptions_CanBeSerialized()
     {
         // Arrange
-        var dictionary = new Dictionary<string, WindowDecorationOptions>(StringComparer.Ordinal)
+        var dictionary = new Dictionary<WindowCategory, WindowDecorationOptions>()
         {
-            ["Primary"] = WindowDecorationBuilder.ForPrimaryWindow().Build(),
-            ["Tool"] = WindowDecorationBuilder.ForToolWindow().Build(),
+            [WindowCategory.Main] = WindowDecorationBuilder.ForMainWindow().Build(),
+            [WindowCategory.Tool] = WindowDecorationBuilder.ForToolWindow().Build(),
         };
 
         // Act
         var json = JsonSerializer.Serialize(dictionary, this.jsonOptions);
-        var deserialized = JsonSerializer.Deserialize<Dictionary<string, WindowDecorationOptions>>(json, this.jsonOptions);
+        var deserialized = JsonSerializer.Deserialize<Dictionary<WindowCategory, WindowDecorationOptions>>(json, this.jsonOptions);
 
         // Assert
         _ = deserialized.Should().NotBeNull();
         _ = deserialized!.Should().HaveCount(2);
-        _ = deserialized["Primary"].Category.Should().Be("Primary");
-        _ = deserialized["Tool"].Category.Should().Be("Tool");
+        _ = deserialized[WindowCategory.Main].Category.Should().Be(WindowCategory.Main);
+        _ = deserialized[WindowCategory.Tool].Category.Should().Be(WindowCategory.Tool);
     }
 }

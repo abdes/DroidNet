@@ -19,16 +19,16 @@ public class WindowDecorationBuilderTests
     public void ForPrimaryWindow_BuildsValidOptions()
     {
         // Act
-        var options = WindowDecorationBuilder.ForPrimaryWindow().Build();
+        var options = WindowDecorationBuilder.ForMainWindow().Build();
 
         // Assert
-        _ = options.Category.Should().Be("Primary");
+        _ = options.Category.Should().Be(WindowCategory.Main);
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.TitleBar.Height.Should().Be(40.0);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
         _ = options.Buttons.ShowClose.Should().BeTrue();
-        _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
+        _ = options.Backdrop.Should().Be(BackdropKind.Mica);
         _ = options.Menu.Should().BeNull();
     }
 
@@ -40,7 +40,7 @@ public class WindowDecorationBuilderTests
         var options = WindowDecorationBuilder.ForDocumentWindow().Build();
 
         // Assert
-        _ = options.Category.Should().Be("Document");
+        _ = options.Category.Should().Be(WindowCategory.Document);
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.TitleBar.Height.Should().Be(32.0);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
@@ -57,13 +57,13 @@ public class WindowDecorationBuilderTests
         var options = WindowDecorationBuilder.ForToolWindow().Build();
 
         // Assert
-        _ = options.Category.Should().Be("Tool");
+        _ = options.Category.Should().Be(WindowCategory.Tool);
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.TitleBar.Height.Should().Be(32.0);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeFalse();
         _ = options.Buttons.ShowClose.Should().BeTrue();
-        _ = options.Backdrop.Should().Be(BackdropKind.None);
+        _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 
     [TestMethod]
@@ -74,24 +74,59 @@ public class WindowDecorationBuilderTests
         var options = WindowDecorationBuilder.ForSecondaryWindow().Build();
 
         // Assert
-        _ = options.Category.Should().Be("Secondary");
+        _ = options.Category.Should().Be(WindowCategory.Secondary);
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
         _ = options.Buttons.ShowClose.Should().BeTrue();
-        _ = options.Backdrop.Should().Be(BackdropKind.None);
+        _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 
     [TestMethod]
     [TestCategory("Presets")]
-    public void WithSystemChromeOnly_BuildsValidOptions()
+    public void ForTransientWindow_BuildsValidOptions()
     {
         // Act
-        var options = WindowDecorationBuilder.WithSystemChromeOnly().Build();
+        var options = WindowDecorationBuilder.ForTransientWindow().Build();
 
         // Assert
-        _ = options.Category.Should().Be("System");
-        _ = options.ChromeEnabled.Should().BeFalse();
+        _ = options.Category.Should().Be(WindowCategory.Transient);
+        _ = options.ChromeEnabled.Should().BeTrue();
+        _ = options.Buttons.ShowMaximize.Should().BeFalse();
+        _ = options.Backdrop.Should().Be(BackdropKind.Acrylic);
+    }
+
+    [TestMethod]
+    [TestCategory("Presets")]
+    public void ForModalWindow_BuildsValidOptions()
+    {
+        // Act
+        var options = WindowDecorationBuilder.ForModalWindow().Build();
+
+        // Assert
+        _ = options.Category.Should().Be(WindowCategory.Modal);
+        _ = options.ChromeEnabled.Should().BeTrue();
+        _ = options.Buttons.ShowMaximize.Should().BeFalse();
+        _ = options.Backdrop.Should().Be(BackdropKind.Acrylic);
+    }
+
+    [TestMethod]
+    [TestCategory("Presets")]
+    public void Build_WithNoCustomization_UsesDefaults()
+    {
+        // Arrange
+        var builder = new WindowDecorationBuilder();
+
+        // Act
+        var options = builder.Build();
+
+        // Assert - defaults from a freshly constructed builder
+        _ = options.Category.Should().Be(WindowCategory.System);
+        _ = options.ChromeEnabled.Should().BeTrue();
+        _ = options.TitleBar.Height.Should().Be(TitleBarOptions.Default.Height);
+        _ = options.Buttons.Should().Be(WindowButtonsOptions.Default);
+        _ = options.Menu.Should().BeNull();
+        _ = options.Backdrop.Should().Be(BackdropKind.None);
     }
 
     [TestMethod]
@@ -102,42 +137,10 @@ public class WindowDecorationBuilderTests
         var builder = new WindowDecorationBuilder();
 
         // Act
-        var options = builder.WithCategory("Custom").Build();
+        var options = builder.WithCategory(new("Custom")).Build();
 
         // Assert
-        _ = options.Category.Should().Be("Custom");
-    }
-
-    [TestMethod]
-    [TestCategory("Fluent API")]
-    [TestCategory("Validation")]
-    public void WithCategory_ThrowsOnNullCategory()
-    {
-        // Arrange
-        var builder = new WindowDecorationBuilder();
-
-        // Act
-        var act = () => builder.WithCategory(null!);
-
-        // Assert
-        _ = act.Should().Throw<ArgumentException>()
-            .WithParameterName("category");
-    }
-
-    [TestMethod]
-    [TestCategory("Fluent API")]
-    [TestCategory("Validation")]
-    public void WithCategory_ThrowsOnEmptyCategory()
-    {
-        // Arrange
-        var builder = new WindowDecorationBuilder();
-
-        // Act
-        var act = () => builder.WithCategory(string.Empty);
-
-        // Assert
-        _ = act.Should().Throw<ArgumentException>()
-            .WithParameterName("category");
+        _ = options.Category.Should().Be(new WindowCategory("Custom"));
     }
 
     [TestMethod]
@@ -238,7 +241,7 @@ public class WindowDecorationBuilderTests
     public void WithMenu_AcceptsNull()
     {
         // Arrange
-        var builder = WindowDecorationBuilder.ForPrimaryWindow();
+        var builder = WindowDecorationBuilder.ForMainWindow();
 
         // Act
         var options = builder.WithMenu((MenuOptions?)null).Build();
@@ -386,7 +389,7 @@ public class WindowDecorationBuilderTests
     public void NoBackdrop_DisablesBackdrop()
     {
         // Arrange
-        var builder = WindowDecorationBuilder.ForPrimaryWindow();
+        var builder = WindowDecorationBuilder.ForMainWindow();
 
         // Act
         var options = builder.NoBackdrop().Build();
@@ -403,7 +406,7 @@ public class WindowDecorationBuilderTests
         var builder = new WindowDecorationBuilder();
 
         // Act & Assert
-        _ = builder.WithCategory("Test").Should().BeSameAs(builder);
+        _ = builder.WithCategory(new("Test")).Should().BeSameAs(builder);
         _ = builder.WithChrome(true).Should().BeSameAs(builder);
         _ = builder.WithBackdrop(BackdropKind.Mica).Should().BeSameAs(builder);
         _ = builder.NoMaximize().Should().BeSameAs(builder);
@@ -416,7 +419,7 @@ public class WindowDecorationBuilderTests
     public void PresetCustomization_PreservesNonCustomizedProperties()
     {
         // Arrange & Act
-        var options = WindowDecorationBuilder.ForPrimaryWindow()
+        var options = WindowDecorationBuilder.ForMainWindow()
             .WithTitleBarHeight(50.0)
             .Build();
 
@@ -424,8 +427,8 @@ public class WindowDecorationBuilderTests
         _ = options.TitleBar.Height.Should().Be(50.0);
 
         // Assert - preserved preset properties
-        _ = options.Category.Should().Be("Primary");
-        _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
+        _ = options.Category.Should().Be(WindowCategory.Main);
+        _ = options.Backdrop.Should().Be(BackdropKind.Mica);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
         _ = options.Buttons.ShowClose.Should().BeTrue();
@@ -444,7 +447,7 @@ public class WindowDecorationBuilderTests
             .Build();
 
         // Assert
-        _ = options.Category.Should().Be("Tool");
+        _ = options.Category.Should().Be(WindowCategory.Tool);
         _ = options.Menu.Should().NotBeNull();
         _ = options.Menu!.MenuProviderId.Should().Be("App.ToolMenu");
         _ = options.Menu.IsCompact.Should().BeTrue();
@@ -476,7 +479,7 @@ public class WindowDecorationBuilderTests
     public void Build_ThrowsOnPrimaryWindowWithoutCloseButton()
     {
         // Arrange
-        var builder = WindowDecorationBuilder.ForPrimaryWindow()
+        var builder = WindowDecorationBuilder.ForMainWindow()
             .WithButtons(new WindowButtonsOptions { ShowClose = false });
 
         // Act

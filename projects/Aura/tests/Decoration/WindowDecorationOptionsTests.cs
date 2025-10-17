@@ -22,7 +22,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             TitleBar = TitleBarOptions.Default,
             Buttons = WindowButtonsOptions.Default,
@@ -32,43 +32,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().NotThrow();
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
-    public void Validate_WithEmptyCategory_ShouldThrow()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = string.Empty,
-        };
-
-        // Act
-        var act = () => options.Validate();
-
-        // Assert
-        act.Should().Throw<ValidationException>()
-            .WithMessage("*category cannot be empty*");
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
-    public void Validate_WithWhitespaceCategory_ShouldThrow()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = "   ",
-        };
-
-        // Act
-        var act = () => options.Validate();
-
-        // Assert
-        act.Should().Throw<ValidationException>()
-            .WithMessage("*category cannot be empty*");
+        _ = act.Should().NotThrow();
     }
 
     [TestMethod]
@@ -78,7 +42,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             ChromeEnabled = false,
             Menu = new MenuOptions { MenuProviderId = "App.MainMenu" },
         };
@@ -87,7 +51,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Menu cannot be specified when ChromeEnabled is false*");
     }
 
@@ -98,7 +62,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             Buttons = WindowButtonsOptions.Default with { ShowClose = false },
         };
@@ -107,7 +71,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Primary windows must have the Close button enabled*");
     }
 
@@ -118,7 +82,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             TitleBar = TitleBarOptions.Default with { Height = 0.0 },
         };
 
@@ -126,7 +90,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Title bar height must be greater than zero*");
     }
 
@@ -137,7 +101,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             TitleBar = TitleBarOptions.Default with { Height = -10.0 },
         };
 
@@ -145,7 +109,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Title bar height must be greater than zero*");
     }
 
@@ -156,7 +120,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             TitleBar = TitleBarOptions.Default with { Padding = -5.0 },
         };
 
@@ -164,7 +128,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Title bar padding cannot be negative*");
     }
 
@@ -175,7 +139,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             Menu = new MenuOptions { MenuProviderId = string.Empty },
         };
@@ -184,7 +148,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Menu provider ID cannot be empty*");
     }
 
@@ -195,7 +159,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             Menu = new MenuOptions { MenuProviderId = "   " },
         };
@@ -204,7 +168,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().Throw<ValidationException>()
+        _ = act.Should().Throw<ValidationException>()
             .WithMessage("*Menu provider ID cannot be empty*");
     }
 
@@ -215,7 +179,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             ChromeEnabled = true,
             Buttons = WindowButtonsOptions.Default with { ShowClose = false },
         };
@@ -224,7 +188,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().NotThrow("Tool windows can omit the Close button");
+        _ = act.Should().NotThrow("Tool windows can omit the Close button");
     }
 
     [TestMethod]
@@ -234,7 +198,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Secondary",
+            Category = WindowCategory.Secondary,
             ChromeEnabled = false,
             Menu = null,
         };
@@ -243,7 +207,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().NotThrow("System chrome without menu is valid");
+        _ = act.Should().NotThrow("System chrome without menu is valid");
     }
 
     [TestMethod]
@@ -253,7 +217,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var options = new WindowDecorationOptions
         {
-            Category = "Primary",
+            Category = WindowCategory.Main,
             ChromeEnabled = true,
             Menu = new MenuOptions { MenuProviderId = "App.MainMenu" },
         };
@@ -262,27 +226,7 @@ public class WindowDecorationOptionsTests
         var act = () => options.Validate();
 
         // Assert
-        act.Should().NotThrow();
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
-    public void Validate_PrimaryCaseInsensitive_ShouldEnforceCloseButton()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = "primary",
-            ChromeEnabled = true,
-            Buttons = WindowButtonsOptions.Default with { ShowClose = false },
-        };
-
-        // Act
-        var act = () => options.Validate();
-
-        // Assert
-        act.Should().Throw<ValidationException>(
-            "Primary category check should be case-insensitive");
+        _ = act.Should().NotThrow();
     }
 
     [TestMethod]
@@ -292,7 +236,7 @@ public class WindowDecorationOptionsTests
         // Arrange
         var original = new WindowDecorationOptions
         {
-            Category = "Tool",
+            Category = WindowCategory.Tool,
             ChromeEnabled = true,
             TitleBar = TitleBarOptions.Default with { Height = 40.0 },
             Backdrop = BackdropKind.Mica,
@@ -302,10 +246,10 @@ public class WindowDecorationOptionsTests
         var modified = original with { Backdrop = BackdropKind.Acrylic };
 
         // Assert
-        modified.Category.Should().Be("Tool");
-        modified.ChromeEnabled.Should().BeTrue();
-        modified.TitleBar.Height.Should().Be(40.0);
-        modified.Backdrop.Should().Be(BackdropKind.Acrylic);
+        _ = modified.Category.Should().Be(WindowCategory.Tool);
+        _ = modified.ChromeEnabled.Should().BeTrue();
+        _ = modified.TitleBar.Height.Should().Be(40.0);
+        _ = modified.Backdrop.Should().Be(BackdropKind.Acrylic);
     }
 
     [TestMethod]
@@ -315,15 +259,16 @@ public class WindowDecorationOptionsTests
         // Arrange & Act
         var options = new WindowDecorationOptions
         {
-            Category = "Test",
+            Category = new WindowCategory("Test"),
         };
 
         // Assert
-        options.ChromeEnabled.Should().BeTrue("ChromeEnabled defaults to true");
-        options.TitleBar.Should().Be(TitleBarOptions.Default, "TitleBar defaults to TitleBarOptions.Default");
-        options.Buttons.Should().Be(WindowButtonsOptions.Default, "Buttons defaults to WindowButtonsOptions.Default");
-        options.Menu.Should().BeNull("Menu defaults to null");
-        options.Backdrop.Should().Be(BackdropKind.None, "Backdrop defaults to None");
-        options.EnableSystemTitleBarOverlay.Should().BeFalse("EnableSystemTitleBarOverlay defaults to false");
+        _ = options.Category.Should().Be(new WindowCategory("Test"), "Category should be set to the provided value");
+        _ = options.ChromeEnabled.Should().BeTrue("ChromeEnabled defaults to true");
+        _ = options.TitleBar.Should().Be(TitleBarOptions.Default, "TitleBar defaults to TitleBarOptions.Default");
+        _ = options.Buttons.Should().Be(WindowButtonsOptions.Default, "Buttons defaults to WindowButtonsOptions.Default");
+        _ = options.Menu.Should().BeNull("Menu defaults to null");
+        _ = options.Backdrop.Should().Be(BackdropKind.None, "Backdrop defaults to None");
+        _ = options.EnableSystemTitleBarOverlay.Should().BeFalse("EnableSystemTitleBarOverlay defaults to false");
     }
 }

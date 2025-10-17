@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DroidNet.Aura.Decoration.Serialization;
@@ -46,7 +45,7 @@ namespace DroidNet.Aura.Decoration.Serialization;
 [JsonSerializable(typeof(BackdropKind))]
 [JsonSerializable(typeof(DragRegionBehavior))]
 [JsonSerializable(typeof(ButtonPlacement))]
-[JsonSerializable(typeof(Dictionary<string, WindowDecorationOptions>))]
+[JsonSerializable(typeof(Dictionary<WindowCategory, WindowDecorationOptions>))]
 public partial class WindowDecorationJsonContext : JsonSerializerContext
 {
 }
