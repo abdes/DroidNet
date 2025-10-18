@@ -27,13 +27,14 @@ public sealed partial class MenuBar : Control
 {
     private const string RootItemsPanelPart = "PART_RootItemsPanel";
 
-    private readonly Dictionary<MenuItemData, MenuItem> rootItemMap = new();
+    private readonly Dictionary<MenuItemData, MenuItem> rootItemMap = [];
     private StackPanel? rootItemsPanel;
     private ObservableCollection<MenuItemData>? rootItemsCollection;
     private Style? rootMenuItemStyle;
     private ICascadedMenuHost? activeHost;
     private Func<ICascadedMenuHost> hostFactory = static () => new PopupMenuHost();
     private CaptureInfo? capture;
+    private MenuDismissKind lastHostDismissKind = MenuDismissKind.Programmatic;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuBar"/> class.
@@ -149,7 +150,7 @@ public sealed partial class MenuBar : Control
             return;
         }
 
-        if (sender is not MenuItem { ItemData: { } itemData } item)
+        if (sender is not MenuItem { ItemData: { } itemData })
         {
             this.LogEventAborted();
             return;
@@ -364,23 +365,32 @@ public sealed partial class MenuBar : Control
         }
     }
 
+    private void OnHostClosing(object? sender, MenuHostClosingEventArgs e)
+        => this.lastHostDismissKind = e.Kind;
+
     private void OnHostClosed(object? sender, EventArgs e)
     {
         this.LogHostClosed();
 
-        if (this.MenuSource is not { Items: { } items })
-        {
-            return;
-        }
+        var dismissalKind = this.lastHostDismissKind;
+        this.lastHostDismissKind = MenuDismissKind.Programmatic;
 
-        var expanded = items.FirstOrDefault(static item => item.IsExpanded);
-        if (expanded is { })
+        if (this.MenuSource is { Items: { } items })
         {
-            expanded.IsExpanded = false;
+            var expanded = items.FirstOrDefault(static item => item.IsExpanded);
+            if (expanded is { })
+            {
+                expanded.IsExpanded = false;
+            }
         }
 
         // Reset any existing pointer capture (defensive, in case Closed is called without Opened).
         this.ReleasePointer();
+
+        if (this.DismissOnFlyoutDismissal)
+        {
+            this.RaiseDismissed(dismissalKind);
+        }
     }
 
     private void Host_OnOpened(object? sender, EventArgs e)
@@ -417,6 +427,7 @@ public sealed partial class MenuBar : Control
         {
             var host = this.hostFactory();
             host.Closed += this.OnHostClosed;
+            host.Closing += this.OnHostClosing;
             host.Opening += this.OnHostOpening;
             host.Opened += this.Host_OnOpened;
             this.activeHost = host;
@@ -583,7 +594,7 @@ public sealed partial class MenuBar : Control
 
             if (this.rootItemMap.TryGetValue(data, out var menuItem))
             {
-                this.rootItemsPanel?.Children.Remove(menuItem);
+                _ = this.rootItemsPanel?.Children.Remove(menuItem);
                 this.DetachRootMenuItem(menuItem);
             }
         }
@@ -678,7 +689,7 @@ public sealed partial class MenuBar : Control
 
         if (menuItem.ItemData is { } data && this.rootItemMap.TryGetValue(data, out var existing) && ReferenceEquals(existing, menuItem))
         {
-            this.rootItemMap.Remove(data);
+            _ = this.rootItemMap.Remove(data);
         }
 
         menuItem.ShowSubmenuGlyph = true;

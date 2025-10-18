@@ -21,7 +21,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
     // Map of MenuItemData -> handler to call when IsChecked changes. We register
     // handlers for checkable and radio items created by this demo so the ViewModel
     // can update its own state when the MenuItem control applies selection state.
-    private readonly Dictionary<MenuItemData, Action<bool>> selectionHandlers = new();
+    private readonly Dictionary<MenuItemData, Action<bool>> selectionHandlers = [];
 
     // Track commands that depend on ReadOnlyMode so we can notify them when it changes
     private readonly List<RelayCommand> conditionalCommands = [];
@@ -80,6 +80,70 @@ public partial class MenuBarDemoViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool ReadOnlyMode { get; set; } = false;
+
+    [ObservableProperty]
+    public partial bool IsExpandableMenuExpanded { get; set; } = false;
+
+    [ObservableProperty]
+    public partial bool DismissOnFlyoutDismissal { get; set; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether the programmatic toggle can be used to change the expandable menu state.
+    /// </summary>
+    /// <remarks>
+    /// The toggle is interactive when the menu is collapsed, or when it is expanded but dismissal forwarding has been disabled.
+    /// </remarks>
+    public bool IsProgrammaticToggleEnabled => !this.IsExpandableMenuExpanded || !this.DismissOnFlyoutDismissal;
+
+    partial void OnIsExpandableMenuExpandedChanged(bool value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.IsProgrammaticToggleEnabled));
+    }
+
+    partial void OnDismissOnFlyoutDismissalChanged(bool value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.IsProgrammaticToggleEnabled));
+    }
+
+    /// <summary>
+    /// Handles user interaction with the programmatic toggle to expand or collapse the menu.
+    /// </summary>
+    /// <param name="toggle">The toggle switch instance wired from the view.</param>
+    [RelayCommand]
+    private void ToggleExpandableMenu(ToggleSwitch? toggle)
+    {
+        if (toggle is null)
+        {
+            return;
+        }
+
+        // Ignore notifications triggered by bindings syncing state instead of direct user interaction.
+        if (toggle.IsOn == this.IsExpandableMenuExpanded)
+        {
+            return;
+        }
+
+        // Respect the enabled state surfaced to the UI.
+        if (!this.IsProgrammaticToggleEnabled)
+        {
+            return;
+        }
+
+        if (toggle.IsOn)
+        {
+            // When expanding via the toggle, suppress auto-dismiss so the bar stays open.
+            this.DismissOnFlyoutDismissal = false;
+            this.IsExpandableMenuExpanded = true;
+        }
+        else
+        {
+            // When collapsing from the toggle, restore the default dismissal behavior.
+            this.IsExpandableMenuExpanded = false;
+            this.DismissOnFlyoutDismissal = true;
+        }
+    }
 
     /// <summary>
     /// Builds a MenuBar demonstration showing proper UX patterns.

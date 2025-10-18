@@ -30,12 +30,18 @@ public sealed partial class MenuBarDemoView : Page
         this.Unloaded += this.OnUnloaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => this.InitializeMenuContext();
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = sender; // unused
+        _ = e; // unused
+
+        _ = this.InitializeMenuContext();
+    }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _ = sender;
-        _ = e;
+        _ = sender; // unused
+        _ = e; // unused
 
         this.controller = null;
         this.menuContext = default;
@@ -44,14 +50,7 @@ public sealed partial class MenuBarDemoView : Page
     }
 
     private bool EnsureMenuContext()
-    {
-        if (this.controller is not null && this.hasMenuContext && this.firstRootItem is not null)
-        {
-            return true;
-        }
-
-        return this.InitializeMenuContext();
-    }
+        => (this.controller is not null && this.hasMenuContext && this.firstRootItem is not null) || this.InitializeMenuContext();
 
     private bool InitializeMenuContext()
     {

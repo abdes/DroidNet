@@ -24,7 +24,7 @@ public sealed partial class ExpandableMenuBar : Control
     private const string HamburgerButtonPart = "PART_HamburgerButton";
     private const string MenuBarPart = "PART_MenuBar";
 
-    private readonly Dictionary<MenuItemData, PropertyChangedEventHandler> rootItemHandlers = new();
+    private readonly Dictionary<MenuItemData, PropertyChangedEventHandler> rootItemHandlers = [];
 
     private FrameworkElement? rootGrid;
     private ButtonBase? hamburgerButton;
@@ -66,6 +66,8 @@ public sealed partial class ExpandableMenuBar : Control
 
         this.SyncHostFactory();
 
+        this.innerMenuBar.DismissOnFlyoutDismissal = this.DismissOnFlyoutDismissal;
+
         if (this.MenuSource is not null)
         {
             this.innerMenuBar.MenuSource = this.MenuSource;
@@ -87,6 +89,7 @@ public sealed partial class ExpandableMenuBar : Control
         if (this.innerMenuBar is not null)
         {
             this.innerMenuBar.Dismissed -= this.OnInnerMenuBarDismissed;
+            this.innerMenuBar.DismissOnFlyoutDismissal = false;
         }
 
         this.templateApplied = false;
@@ -96,9 +99,7 @@ public sealed partial class ExpandableMenuBar : Control
     }
 
     private void OnExpandableMenuBarUnloaded(object? sender, RoutedEventArgs e)
-    {
-        this.DetachRootObservers();
-    }
+        => this.DetachRootObservers();
 
     private void AttachRootItem(MenuItemData item)
     {
@@ -127,7 +128,7 @@ public sealed partial class ExpandableMenuBar : Control
         }
 
         item.PropertyChanged -= handler;
-        this.rootItemHandlers.Remove(item);
+        _ = this.rootItemHandlers.Remove(item);
     }
 
     private void ApplyInitialState()
@@ -156,7 +157,7 @@ public sealed partial class ExpandableMenuBar : Control
         }
 
         this.hasPendingExpansionSource = true;
-        this.SetValue(IsExpandedProperty, true);
+        this.SetValue(IsExpandedProperty, value: true);
     }
 
     private void RequestCollapse(MenuDismissKind kind)
@@ -169,7 +170,7 @@ public sealed partial class ExpandableMenuBar : Control
         }
 
         this.hasPendingCollapseKind = true;
-        this.SetValue(IsExpandedProperty, false);
+        this.SetValue(IsExpandedProperty, value: false);
     }
 
     private void OnInnerMenuBarDismissed(object? sender, MenuDismissedEventArgs e)

@@ -1,9 +1,10 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuBarDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:cm="using:DroidNet.Controls.Menus">
+    xmlns:cm="using:DroidNet.Controls.Menus"
+    xmlns:i="using:Microsoft.Xaml.Interactivity">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -40,7 +41,11 @@
             CornerRadius="6">
             <StackPanel Spacing="6">
                 <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Expandable MenuBar" />
-                <cm:ExpandableMenuBar x:Name="DemoExpandableMenuBar" MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
+                <cm:ExpandableMenuBar
+                    x:Name="DemoExpandableMenuBar"
+                    DismissOnFlyoutDismissal="{x:Bind ViewModel.DismissOnFlyoutDismissal, Mode=TwoWay}"
+                    IsExpanded="{x:Bind ViewModel.IsExpandableMenuExpanded, Mode=TwoWay}"
+                    MenuSource="{x:Bind ViewModel.MenuBarSource, Mode=OneWay}" />
             </StackPanel>
         </Border>
 
@@ -91,10 +96,18 @@
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Shares the same MenuBuilder data and interaction controller as the standard bar" />
                         <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="• Maintains focus and dismissal semantics when collapsing back to hamburger" />
                         <ToggleSwitch
+                            x:Name="ProgrammaticToggle"
                             Header="Try it programmatically"
-                            IsOn="{x:Bind DemoExpandableMenuBar.IsExpanded, Mode=TwoWay}"
+                            IsEnabled="{x:Bind ViewModel.IsProgrammaticToggleEnabled, Mode=OneWay}"
+                            IsOn="{x:Bind ViewModel.IsExpandableMenuExpanded, Mode=OneWay}"
                             OffContent="Hamburger"
-                            OnContent="Expanded" />
+                            OnContent="Expanded">
+                            <i:Interaction.Behaviors>
+                                <i:EventTriggerBehavior EventName="Toggled">
+                                    <i:InvokeCommandAction Command="{x:Bind ViewModel.ToggleExpandableMenuCommand}" CommandParameter="{x:Bind ProgrammaticToggle, Mode=OneWay}" />
+                                </i:EventTriggerBehavior>
+                            </i:Interaction.Behaviors>
+                        </ToggleSwitch>
                     </StackPanel>
                 </Border>
 
