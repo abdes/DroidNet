@@ -78,6 +78,14 @@ public partial class MainShellViewModel : AbstractOutletContainer
                 @event =>
                 {
                     this.Window = (Window)@event.Context.NavigationTarget;
+
+                    // Look up the WindowContext for this window
+                    if (this.windowManagerService is not null)
+                    {
+                        this.Context = this.windowManagerService.OpenWindows
+                            .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
+                    }
+
                     this.SetupWindowTitleBar();
                     this.UpdateMenuFromWindowContext();
                 });
@@ -115,6 +123,17 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the window associated with this view model.
     /// </summary>
     public Window? Window { get; private set; }
+
+    /// <summary>
+    /// Gets the window context associated with this view model.
+    /// </summary>
+    /// <remarks>
+    /// This property provides access to the WindowContext which contains the window's
+    /// decoration options, menu source, and other metadata. It is populated during
+    /// the first ActivationComplete event.
+    /// </remarks>
+    [ObservableProperty]
+    public partial WindowContext? Context { get; set; }
 
     /// <summary>
     /// Gets the content view model for the primary outlet.
@@ -267,8 +286,14 @@ public partial class MainShellViewModel : AbstractOutletContainer
     {
         Debug.Assert(this.Window is not null, "an activated ViewModel must always have a Window");
 
-        this.Window.ExtendsContentIntoTitleBar = true;
-        this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+        // Only extend content into title bar if chrome is enabled
+        var chromeEnabled = this.Context?.Decoration?.ChromeEnabled ?? true;
+        this.Window.ExtendsContentIntoTitleBar = chromeEnabled;
+
+        if (chromeEnabled)
+        {
+            this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+        }
     }
 
     /// <summary>

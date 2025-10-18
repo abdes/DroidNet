@@ -222,13 +222,6 @@ public sealed record WindowDecorationOptions
                 $"Title bar height must be greater than zero. Current value: {this.TitleBar.Height}");
         }
 
-        // Validate TitleBar.Padding
-        if (this.TitleBar.Padding < 0.0)
-        {
-            throw new ValidationException(
-                $"Title bar padding cannot be negative. Current value: {this.TitleBar.Padding}");
-        }
-
         // Validate MenuProviderId if Menu is specified
         if (this.Menu is not null && string.IsNullOrWhiteSpace(this.Menu.MenuProviderId))
         {

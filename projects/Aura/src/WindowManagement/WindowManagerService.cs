@@ -157,8 +157,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
                 this.LogWindowCreated(context.Id, category.ToString(), context.Title);
 
-                // Publish event
+                // Publish event - services like ChromeService will apply settings here
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
+
+                // CRITICAL: Apply chrome settings BEFORE showing window
+                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work
+                if (resolvedDecoration?.ChromeEnabled == true)
+                {
+                    window.ExtendsContentIntoTitleBar = true;
+                }
 
                 // Show window with proper activation control
                 // Use AppWindow.Show(bool) instead of Window.Activate() to respect activateWindow parameter
@@ -213,7 +220,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
                 this.LogWindowCreated(context.Id, category.ToString(), context.Title);
 
+                // Publish event - services like ChromeService will apply settings here
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
+
+                // CRITICAL: Apply chrome settings BEFORE showing window
+                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work
+                if (resolvedDecoration?.ChromeEnabled == true)
+                {
+                    window.ExtendsContentIntoTitleBar = true;
+                }
 
                 window.Activate();
 

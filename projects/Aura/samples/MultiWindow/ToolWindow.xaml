@@ -8,38 +8,116 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="20">
-        <Grid.Background>
-            <SolidColorBrush Opacity="0.3" Color="{ThemeResource SolidBackgroundFillColorBase}" />
-        </Grid.Background>
-        <StackPanel
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="16">
-            <FontIcon
-                FontSize="64"
-                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                Glyph="&#xE90F;" />
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <!--  Compact title bar  -->
+            <RowDefinition Height="*" />
+            <!--  Content  -->
+        </Grid.RowDefinitions>
+
+        <!--  Compact custom title bar (24px height)  -->
+        <Grid
+            x:Name="CustomTitleBar"
+            Grid.Row="0"
+            Height="24"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="8" />
+                <!--  Left padding  -->
+                <ColumnDefinition Width="Auto" />
+                <!--  Icon (optional)  -->
+                <ColumnDefinition Width="*" />
+                <!--  Title and drag area  -->
+                <ColumnDefinition Width="Auto" />
+                <!--  Close button  -->
+                <ColumnDefinition Width="4" />
+                <!--  Right padding  -->
+            </Grid.ColumnDefinitions>
+
+            <!--  Icon (optional, 12x12)  -->
+            <Image
+                x:Name="IconImage"
+                Grid.Column="1"
+                Width="12"
+                Height="12"
+                Margin="0,0,4,0"
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
+
+            <!--  Title text - draggable  -->
             <TextBlock
-                FontSize="24"
-                FontWeight="Bold"
-                Text="Tool Window"
-                TextAlignment="Center" />
-            <TextBlock
+                x:Name="TitleText"
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                FontSize="10"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="A lightweight utility window"
-                TextAlignment="Center" />
-            <Border
-                Margin="0,16,0,0"
-                Padding="12,8"
-                Background="{ThemeResource AccentFillColorDefaultBrush}"
-                CornerRadius="4">
+                Text="{x:Bind Title, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}" />
+
+            <!--  Close button - compact style  -->
+            <Button
+                x:Name="CloseButton"
+                Grid.Column="3"
+                Width="20"
+                Height="20"
+                Padding="0"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="CloseButton_Click"
+                ToolTipService.ToolTip="Close">
+                <Button.Content>
+                    <FontIcon
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        FontSize="10"
+                        Glyph="&#xE8BB;" />
+                </Button.Content>
+                <Button.Resources>
+                    <ResourceDictionary>
+                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SubtleFillColorSecondary}" />
+                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SubtleFillColorTertiary}" />
+                    </ResourceDictionary>
+                </Button.Resources>
+            </Button>
+        </Grid>
+
+        <!--  Window content  -->
+        <Grid Grid.Row="1" Padding="20">
+            <Grid.Background>
+                <SolidColorBrush Opacity="0.3" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+            </Grid.Background>
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="16">
+                <FontIcon
+                    FontSize="64"
+                    Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                    Glyph="&#xE90F;" />
                 <TextBlock
-                    HorizontalAlignment="Center"
-                    FontSize="12"
-                    Foreground="White"
-                    Text="💡 The backdrop effect is visible through the semi-transparent background" />
-            </Border>
-        </StackPanel>
+                    FontSize="24"
+                    FontWeight="Bold"
+                    Text="Tool Window"
+                    TextAlignment="Center" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="A lightweight utility window"
+                    TextAlignment="Center" />
+                <Border
+                    Margin="0,16,0,0"
+                    Padding="12,8"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                    CornerRadius="4">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        FontSize="12"
+                        Foreground="White"
+                        Text="💡 The backdrop effect is visible through the semi-transparent background" />
+                </Border>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

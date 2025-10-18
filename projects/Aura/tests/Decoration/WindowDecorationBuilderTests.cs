@@ -58,10 +58,10 @@ public class WindowDecorationBuilderTests
 
         // Assert
         _ = options.Category.Should().Be(WindowCategory.Tool);
-        _ = options.ChromeEnabled.Should().BeTrue();
-        _ = options.TitleBar.Height.Should().Be(32.0);
-        _ = options.Buttons.ShowMinimize.Should().BeTrue();
-        _ = options.Buttons.ShowMaximize.Should().BeFalse();
+        _ = options.ChromeEnabled.Should().BeFalse("tool windows use custom compact chrome");
+        _ = options.TitleBar.Height.Should().Be(24.0, "tool windows use compact title bar");
+        _ = options.Buttons.ShowMinimize.Should().BeFalse("tool windows typically don't minimize");
+        _ = options.Buttons.ShowMaximize.Should().BeFalse("tool windows typically don't maximize");
         _ = options.Buttons.ShowClose.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
@@ -438,16 +438,17 @@ public class WindowDecorationBuilderTests
     [TestCategory("Customization")]
     public void ComplexCustomization_WorksCorrectly()
     {
-        // Arrange & Act
-        var options = WindowDecorationBuilder.ForToolWindow()
+        // Arrange & Act - Start with ForSecondaryWindow which has chrome enabled
+        var options = WindowDecorationBuilder.ForSecondaryWindow()
             .WithMenu("App.ToolMenu", isCompact: true)
             .WithTitleBarHeight(36.0)
             .WithBackdrop(BackdropKind.Acrylic)
             .NoMinimize()
+            .NoMaximize()
             .Build();
 
         // Assert
-        _ = options.Category.Should().Be(WindowCategory.Tool);
+        _ = options.Category.Should().Be(WindowCategory.Secondary);
         _ = options.Menu.Should().NotBeNull();
         _ = options.Menu!.MenuProviderId.Should().Be("App.ToolMenu");
         _ = options.Menu.IsCompact.Should().BeTrue();

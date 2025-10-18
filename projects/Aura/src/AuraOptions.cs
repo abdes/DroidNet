@@ -88,6 +88,11 @@ public sealed class AuraOptions
     internal bool RegisterBackdropService { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether the window chrome service should be registered.
+    /// </summary>
+    internal bool RegisterChromeService { get; private set; }
+
+    /// <summary>
     /// Gets a value indicating whether the theme mode service should be registered.
     /// </summary>
     internal bool RegisterThemeModeService { get; private set; }
@@ -138,6 +143,20 @@ public sealed class AuraOptions
     public AuraOptions WithBackdropService()
     {
         this.RegisterBackdropService = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers the window chrome service for applying chrome decorations (ExtendsContentIntoTitleBar, etc.).
+    /// </summary>
+    /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
+    /// <remarks>
+    /// This enables chrome application based on window decoration options. The chrome service
+    /// configures title bar customization and system chrome settings. The service is registered as a singleton.
+    /// </remarks>
+    public AuraOptions WithChromeService()
+    {
+        this.RegisterChromeService = true;
         return this;
     }
 

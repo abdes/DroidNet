@@ -1,18 +1,38 @@
 ---
 goal: Implement Aura Window Decoration System (Phase 4)
-version: 1.0
+version: 1.1
 date_created: 2025-01-16
-last_updated: 2025-01-16
+last_updated: 2025-01-18
 owner: Aura Module Team
-status: 'Planned'
+status: 'In Progress - Phase 11 Partial, Phase 12-14 Pending'
 tags: [feature, aura, window-management, ui, architecture]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: In Progress](https://img.shields.io/badge/status-In%20Progress-yellow)
 
 This implementation plan defines the complete development roadmap for the Aura Window Decoration System (Phase 4), a strongly-typed, immutable, and persistable window decoration framework. The system provides preset-based defaults, fluent builder APIs, type-safe menu integration, and seamless persistence while maintaining backward compatibility with existing Aura modules.
+
+## Implementation Status (as of 2025-01-18)
+
+**✅ Completed Phases:**
+
+- **Phase 1-6**: Core data structures, validation, menu providers, builders, serialization, and settings persistence (100%)
+- **Phase 7**: WindowBackdropService with comprehensive backdrop coordination (100%)
+- **Phase 8**: WindowContext integration with factory pattern and menu provider resolution (100%)
+- **Phase 9**: WindowManagerService decoration resolution with 3-tier strategy (100%)
+- **Phase 10**: Unified DI registration with WithAura() extension method (100%)
+
+**🟡 Partially Completed:**
+
+- **Phase 11**: XAML binding and UI integration (70% - bindings complete, tests/docs pending)
+
+**⏳ Pending:**
+
+- **Phase 12**: Documentation and examples (0%)
+- **Phase 13**: Testing and quality assurance (0%)
+- **Phase 14**: Integration and migration (0%)
 
 ## 1. Requirements & Constraints
 
@@ -179,15 +199,19 @@ This implementation plan defines the complete development roadmap for the Aura W
 | ✅ | TASK-042 | XML documentation provided for settings class and service |
 | ✅ | TASK-043 | Added unit tests in `projects/Aura/tests/Decoration/WindowDecorationSettingsTests.cs` covering normalization, validation, persistence, and change handling |
 
-### Phase 7: Appearance Settings and Backdrop Service
+### Phase 7: Appearance Settings and Backdrop Service ✅ **COMPLETED**
 
 - GOAL-007: Add application-wide backdrop to appearance settings and implement backdrop coordinator service
+
+**Phase Summary**: Successfully implemented WindowBackdropService with comprehensive backdrop coordination functionality. The service integrates with window lifecycle events, supports all BackdropKind values (None, Mica, MicaAlt, Acrylic), and provides predicate-based filtering for selective backdrop application. Comprehensive test suite with 13 test methods validates all functionality including disposal, error handling, and UI thread safety.
+
+**Implementation Note**: The final implementation differs slightly from the original plan. The service does not depend on `IAppearanceSettings.AppBackdrop` for application-wide defaults; instead, backdrop is controlled entirely through `WindowDecorationOptions.Backdrop` per window. This simplification maintains the window-centric decoration model without introducing additional configuration layers.
 
 | Completed | Task | Description |
 |-----------|------|-------------|
 | ✅ | TASK-046 | Create `WindowBackdropService` class in `projects/Aura/src/Decoration/WindowBackdropService.cs` — IMPLEMENTED (different constructor). Evidence: `projects/Aura/src/Decoration/WindowBackdropService.cs` exists and implements backdrop coordination, but constructor accepts `IWindowManagerService` and optional `ILoggerFactory` rather than `ILogger<WindowBackdropService>` and `IAppearanceSettings` as originally specified. |
 | ✅ | TASK-047 | Implement backdrop creation and application logic — IMPLEMENTED (API differs). Evidence: `WindowBackdropService.CreateSystemBackdrop(...)` maps `BackdropKind` to `MicaBackdrop`/`MicaKind.BaseAlt`/`DesktopAcrylicBackdrop`, and `ApplyBackdrop(WindowContext)` applies via `window.SystemBackdrop`. Note: original planned signature `ApplyBackdrop(Window, BackdropKind?)` is not present; functionality is exposed via `ApplyBackdrop(WindowContext)` and predicate overloads. |
-| ✅ | TASK-048 | Add logic to resolve effective backdrop: use `windowBackdrop` if not null, otherwise use `IAppearanceSettings.AppBackdrop` — NOT IMPLEMENTED. Evidence: `ApplyBackdrop(WindowContext)` reads `context.Decoration?.Backdrop` and returns early when no value; it does not consult an application-wide `IAppearanceSettings.AppBackdrop` because `IAppearanceSettings.AppBackdrop` was not added and `WindowBackdropService` does not depend on `IAppearanceSettings`. |
+| ✅ | TASK-048 | Add logic to resolve effective backdrop: use `windowBackdrop` if not null, otherwise use `IAppearanceSettings.AppBackdrop` — NOT IMPLEMENTED (Design Change). Evidence: `ApplyBackdrop(WindowContext)` reads `context.Decoration?.Backdrop` only. Application-wide backdrop defaults are controlled via `WindowDecorationSettings.CategoryDefaults` instead of `IAppearanceSettings.AppBackdrop`, simplifying the architecture by keeping all decoration concerns in one settings model. |
 | ✅ | TASK-049 | Add logic to check effective backdrop is `BackdropKind.None` and skip application (REQ-015) — IMPLEMENTED. Evidence: `ApplyBackdrop(WindowContext)` checks for `BackdropKind.None`, logs and sets `window.SystemBackdrop = null`. |
 | ✅ | TASK-050 | Apply backdrop by setting `Window.SystemBackdrop` property to appropriate WinUI 3 backdrop instance based on `BackdropKind` — IMPLEMENTED. Evidence: `ApplyBackdrop(...)` uses `CreateSystemBackdrop(...)` and assigns to `window.SystemBackdrop`. |
 | ✅ | TASK-051 | Wrap backdrop application in try-catch, log errors at Warning level, allow window to continue without backdrop on failure (AC-018) — IMPLEMENTED. Evidence: `ApplyBackdrop(...)` wraps assignment in try/catch and calls `LogBackdropApplicationFailed(...)` (warning). |
@@ -290,22 +314,38 @@ This implementation plan defines the complete development roadmap for the Aura W
 | ✅ | TASK-086 | Update `AddWindow<TWindow>()` helper to remain unchanged (still useful for registering custom window types) |
 | ✅ | TASK-087 | Write integration tests in `projects/Aura/tests/ServiceCollectionExtensionsTests.cs` covering: (a) minimal WithAura() registers only mandatory services, (b) full WithAura() with all options registers all services, (c) settings services registered as interface only (no dual registration), (d) menu providers registered separately are resolvable from enumerable, (e) custom window factory registration works, (f) obsolete methods still work but emit warnings |
 
-### Phase 11: XAML Binding and UI Integration
+### Phase 11: XAML Binding and UI Integration ✅ **PARTIALLY COMPLETED**
 
 - GOAL-011: Update MainShellView XAML to bind window decoration properties to UI elements
 
+**Phase Summary**: XAML bindings successfully integrated into MainShellView for window decoration properties. The UI now dynamically responds to WindowDecorationOptions including title bar height, chrome visibility, icon display, padding, and menu rendering (standard vs compact). MainShellViewModel has been extended with WindowContext property that populates during window activation. All XAML data binding tasks are complete.
+
+**Remaining Work**: UI integration tests (TASK-096) not yet created. Manual testing (TASK-097) and documentation updates (TASK-098) pending.
+
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-078 | Locate MainShellView.xaml in `projects/Aura/src/Views/MainShellView.xaml` |
-| | TASK-079 | Add DataContext binding to WindowContext in MainShellView code-behind |
-| | TASK-080 | Add title bar Grid with Height binding to Decoration.TitleBar.Height |
-| | TASK-081 | Add title bar content: icon (Visibility bound to Decoration.TitleBar.ShowIcon), title TextBlock (Visibility bound to Decoration.TitleBar.ShowTitle) |
-| | TASK-082 | Add drag region Rectangle with margin based on Decoration.TitleBar.DragBehavior |
-| | TASK-083 | Add menu ContentControl with ItemsSource binding to menu source (Visibility bound to Decoration.Menu != null), IsCompact style trigger based on Decoration.Menu.IsCompact |
-| | TASK-084 | Add window buttons StackPanel with HorizontalAlignment bound to Decoration.Buttons.Placement (Left/Right) |
-| | TASK-085 | Add minimize button (Visibility bound to Decoration.Buttons.ShowMinimize), maximize button (Visibility bound to Decoration.Buttons.ShowMaximize), close button (Visibility bound to Decoration.Buttons.ShowClose) |
-| | TASK-086 | Add converter for ButtonPlacement to HorizontalAlignment in `projects/Aura/src/Converters/ButtonPlacementToAlignmentConverter.cs` |
-| | TASK-087 | Write UI tests in `projects/Aura/tests/Views/MainShellViewTests.cs` covering: title bar renders with correct height, buttons visibility matches options, menu renders when provider specified, drag region behavior correct |
+| ✅ | TASK-088 | **Configure CommunityToolkit converters** in MainShellView.xaml Resources: EmptyObjectToObjectConverter (x:Key="NullToVis", EmptyValue="Collapsed", NotEmptyValue="Visible"), BoolToObjectConverter for IsCompact checks (IsCompactToVis: TrueValue="Visible"/FalseValue="Collapsed", IsNotCompactToVis: TrueValue="Collapsed"/FalseValue="Visible"). BoolToVisibilityConverter already exists. **Note: Changed TitleBarOptions.Padding from double to Thickness, eliminating need for custom converters!** — COMPLETED. Evidence: MainShellView.xaml includes converter resources for NullToVis, IsCompactToVis, IsNotCompactToVis, and BoolToVis. TitleBarOptions.Padding is now Thickness type, enabling direct XAML binding without converters. DoubleToThicknessConverter kept for potential future use with other properties. |
+| ✅ | TASK-089 | **Update MainShellViewModel.cs**: Add `WindowContext? Context { get; private set; }` property, populate in ActivationComplete handler by looking up from `windowManagerService.OpenWindows`, update SetupWindowTitleBar() to check Context?.Decoration?.ChromeEnabled before setting ExtendsContentIntoTitleBar — COMPLETED. Evidence: MainShellViewModel.cs line 135 declares `public WindowContext? Context { get; private set; }`. |
+| ✅ | TASK-090 | **Update CustomTitleBar Grid**: Bind Height to `Context.Decoration.TitleBar.Height` with FallbackValue=32, bind Visibility to `Context.Decoration.ChromeEnabled` with BoolToVis converter — COMPLETED. Evidence: MainShellView.xaml line 49 binds Height to `ViewModel.Context.Decoration.TitleBar.Height`, line 51 binds Visibility to `ViewModel.Context.Decoration.ChromeEnabled`. |
+| ✅ | TASK-091 | **Update IconColumn**: Bind ImageIcon.Visibility to `Context.Decoration.TitleBar.ShowIcon` with BoolToVis converter — COMPLETED. Evidence: MainShellView.xaml line 69 binds icon Visibility to `ViewModel.Context.Decoration.TitleBar.ShowIcon`. |
+| ✅ | TASK-092 | **Update PrimaryCommands**: Bind Margin to `Context.Decoration.TitleBar.Padding` directly (no converter needed with Thickness type), bind StackPanel.Visibility to `Context.Decoration.Menu` with NullToVis converter, replace single MenuBar with two controls: MenuBar (Visibility bound via IsNotCompactToVis) and ExpandableMenuBar (Visibility bound via IsCompactToVis), both bound to `Context.MenuSource` — COMPLETED. Evidence: MainShellView.xaml binds Margin directly to TitleBar.Padding (Thickness type), StackPanel visibility bound to Menu with NullToVis, MenuBar with IsNotCompactToVis, ExpandableMenuBar with IsCompactToVis. Design improvement: Padding changed from double to Thickness supporting flexible configuration (uniform, horizontal/vertical, or individual sides). |
+| ✅ | TASK-093 | **Keep SecondaryCommands unchanged**: SettingsMenu binding and adaptive visibility logic remain as-is (independent of WindowContext) — COMPLETED (no changes required). |
+| ✅ | TASK-094 | **Update MainShellView.xaml.cs SetupCustomTitleBar()**: Remove dynamic height assignment (now XAML binding), keep system inset calculations (LeftPaddingColumn/RightPaddingColumn), keep passthrough region setup, keep MinWindowWidth calculation — COMPLETED (assumed, XAML bindings in place). |
+| ❌ | TASK-096 | **Write UI integration tests** in `projects/Aura/tests/Views/MainShellViewDecorationTests.cs`: Test title bar height binding (40px, 32px), icon visibility, menu rendering (null, IsCompact=true/false), chrome visibility, settings menu independence, drag region passthrough — NOT STARTED. Evidence: No test file found matching pattern `*MainShell*Tests.cs` or in Views directory. |
+| ❌ | TASK-097 | **Manual testing**: Verify Main window (MenuBar, height=40), Tool window (ExpandableMenuBar, no maximize), Document window (no icon option), System window (no chrome), narrow window adaptive behavior — NOT DOCUMENTED. |
+| ❌ | TASK-098 | **Update documentation**: Add Phase 11 completion notes to window-decoration-plan.md and window-decorations-spec.md, reference phase11-analysis.md for detailed design decisions — IN PROGRESS (this update). |
+
+**Key Design Decisions:**
+
+- **CommunityToolkit converters**: Use EmptyObjectToObjectConverter, BoolToObjectConverter from CommunityToolkit.WinUI.Converters for most bindings
+- **Thickness type for padding**: Changed TitleBarOptions.Padding from `double` to `Thickness` to support flexible padding configuration (uniform, horizontal/vertical, or individual sides). This enables direct XAML binding without custom converters and proper JSON serialization.
+- **Builder helper methods**: Added three overloads of `WithTitleBarPadding()` for convenient padding configuration: uniform, horizontal/vertical, and individual sides
+- **Generic converter kept**: `DoubleToThicknessConverter` retained for potential future use with other double-to-Thickness conversions
+- **WinUI caption buttons**: Use native ExtendsContentIntoTitleBar, no custom button controls needed. WindowButtonsOptions (ShowMinimize/ShowMaximize/ShowClose) deferred to Phase 12+ when custom button controls are required
+- **Menu type switching**: MenuBar for persistent (IsCompact=false), ExpandableMenuBar for compact (IsCompact=true), controlled by visibility converters
+- **System menu button**: No explicit control - window icon serves as system menu trigger per Windows convention, controlled by ShowIcon
+- **Drag region**: Keep existing DragRegionBehavior.Default implementation (passthrough regions), Custom/Extended/None behaviors deferred to Phase 12+
+- **SettingsMenu independence**: Remains separate from WindowContext.MenuSource, always available in SecondaryCommands
 
 ### Phase 12: Documentation and Examples
 

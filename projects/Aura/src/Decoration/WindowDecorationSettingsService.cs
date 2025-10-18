@@ -83,13 +83,94 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<IW
         IFileSystem fs,
         IPathFinder finder,
         ILoggerFactory? loggerFactory = null)
-        : base(settingsMonitor, fs, loggerFactory ?? NullLoggerFactory.Instance)
+        : base(settingsMonitor, fs, loggerFactory ?? NullLoggerFactory.Instance, autoSaveDelay: TimeSpan.FromSeconds(5))
     {
         ArgumentNullException.ThrowIfNull(finder);
 
-        var current = settingsMonitor.CurrentValue ?? new WindowDecorationSettings();
-        this.categoryOverrides = CloneCategoryOverrides(current.CategoryOverrides);
         this.configFilePath = finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName);
+
+        var logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<WindowDecorationSettingsService>();
+
+        // Try to load from IOptionsMonitor first (works for simple types)
+        var current = settingsMonitor.CurrentValue ?? new WindowDecorationSettings();
+
+        // If IOptionsMonitor couldn't load the data (complex dictionary keys), load manually using JSON
+        if ((current.CategoryOverrides is null || current.CategoryOverrides.Count == 0) &&
+            fs.File.Exists(this.configFilePath))
+        {
+            try
+            {
+                logger.LogInformation(
+                    "IOptionsMonitor loaded 0 overrides, attempting manual JSON deserialization from {Path}",
+                    this.configFilePath);
+
+                var json = fs.File.ReadAllText(this.configFilePath);
+
+                // Parse the JSON to extract the WindowDecorationSettings section
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty(WindowDecorationSettings.ConfigSectionName, out var section))
+                {
+                    var sectionJson = section.GetRawText();
+                    var options = new System.Text.Json.JsonSerializerOptions
+                    {
+                        Converters =
+                        {
+                            new WindowCategoryJsonConverter(),
+                            new Serialization.MenuOptionsJsonConverter(),
+                            new System.Text.Json.Serialization.JsonStringEnumConverter(),
+                        },
+                    };
+
+                    var loaded = System.Text.Json.JsonSerializer.Deserialize<WindowDecorationSettings>(
+                        sectionJson,
+                        options);
+
+                    if (loaded is not null)
+                    {
+                        current = loaded;
+                        logger.LogInformation(
+                            "Successfully loaded {Count} category overrides via manual JSON deserialization",
+                            current.CategoryOverrides?.Count ?? 0);
+                    }
+                }
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to manually load settings from {Path}: {Message}. Using empty defaults",
+                    this.configFilePath,
+                    ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Unexpected error loading settings from {Path}: {Message}. Using empty defaults",
+                    this.configFilePath,
+                    ex.Message);
+            }
+        }
+        else
+        {
+            logger.LogInformation(
+                "Loaded {Count} category overrides from IOptionsMonitor",
+                current.CategoryOverrides?.Count ?? 0);
+        }
+
+        if (current.CategoryOverrides is not null)
+        {
+            foreach (var kvp in current.CategoryOverrides)
+            {
+                logger.LogInformation(
+                    "  Category '{Category}': Menu={Menu}, IsCompact={IsCompact}",
+                    kvp.Key,
+                    kvp.Value.Menu?.MenuProviderId,
+                    kvp.Value.Menu?.IsCompact);
+            }
+        }
+
+        this.categoryOverrides = CloneCategoryOverrides(current.CategoryOverrides);
     }
 
     /// <summary>

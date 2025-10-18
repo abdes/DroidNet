@@ -13,13 +13,47 @@
             <SolidColorBrush Opacity="0.7" Color="{ThemeResource SolidBackgroundFillColorBase}" />
         </Grid.Background>
         <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <!--  Title bar spacer  -->
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!--  Title Bar Spacer - reserves space for system caption buttons  -->
+        <Grid
+            x:Name="TitleBarSpacer"
+            Grid.Row="0"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <!--  Icon  -->
+                <ColumnDefinition Width="Auto" />
+                <!--  Title  -->
+                <ColumnDefinition Width="*" />
+                <!--  Drag region  -->
+            </Grid.ColumnDefinitions>
+
+            <!--  Window Icon  -->
+            <Image
+                Grid.Column="0"
+                Width="16"
+                Height="16"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Source="/Assets/DroidNet.png" />
+
+            <!--  Window Title  -->
+            <TextBlock
+                Grid.Column="1"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Text="{x:Bind Title, Mode=OneWay}" />
+        </Grid>
+
         <!--  Document Toolbar  -->
         <Border
-            Grid.Row="0"
+            Grid.Row="1"
             Padding="12"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1">
@@ -38,7 +72,7 @@
         </Border>
 
         <!--  Document Content  -->
-        <Grid Grid.Row="1" Padding="20">
+        <Grid Grid.Row="2" Padding="20">
             <StackPanel
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"

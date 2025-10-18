@@ -3,12 +3,18 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
+using DroidNet.Hosting.WinUI;
+using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Moq;
 
 namespace DroidNet.Aura.Tests;
 
@@ -18,17 +24,48 @@ namespace DroidNet.Aura.Tests;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class ServiceCollectionExtensionsTests
+public class ServiceCollectionExtensionsTests : VisualUserInterfaceTests
 {
+    /// <summary>
+    /// Registers common test dependencies required by Aura services.
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    private static void RegisterTestDependencies(IServiceCollection services)
+    {
+        // Register logging as application concern
+        services.AddLogging();
+
+        // Register HostingContext required by WindowManagerService
+        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        var hostingContext = new HostingContext
+        {
+            Dispatcher = dispatcherQueue,
+            Application = Application.Current,
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcherQueue),
+        };
+        services.AddSingleton(hostingContext);
+
+        // Register IFileSystem required by settings services (using mock)
+        var mockFileSystem = new Mock<IFileSystem>();
+        services.AddSingleton(mockFileSystem.Object);
+
+        // Register IPathFinder required by settings services (using mock)
+        var mockPathFinder = new Mock<IPathFinder>();
+        mockPathFinder.Setup(pf => pf.GetConfigFilePath(It.IsAny<string>()))
+            .Returns<string>(fileName => Path.Combine(Path.GetTempPath(), fileName));
+        services.AddSingleton(mockPathFinder.Object);
+    }
+
     /// <summary>
     /// Validates that <see cref="ServiceCollectionExtensions.WithAura"/> with no configuration
     /// registers only mandatory services.
     /// </summary>
     [TestMethod]
-    public void WithAura_MinimalSetup_RegistersOnlyMandatoryServices()
+    public Task WithAura_MinimalSetup_RegistersOnlyMandatoryServices() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act
         _ = services.WithAura();
@@ -40,21 +77,24 @@ public class ServiceCollectionExtensionsTests
         _ = provider.GetService<IWindowManagerService>().Should().NotBeNull("IWindowManagerService is mandatory");
 
         // Assert - Optional services should NOT be registered
-        _ = provider.GetService<ISettingsService<WindowDecorationSettings>>().Should().BeNull("decoration settings not requested");
+        _ = provider.GetService<ISettingsService<IWindowDecorationSettings>>().Should().BeNull("decoration settings not requested");
         _ = provider.GetService<ISettingsService<IAppearanceSettings>>().Should().BeNull("appearance settings not requested");
         _ = provider.GetService<WindowBackdropService>().Should().BeNull("backdrop service not requested");
         _ = provider.GetService<IAppThemeModeService>().Should().BeNull("theme mode service not requested");
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that <see cref="ServiceCollectionExtensions.WithAura"/> with full configuration
     /// registers all optional services.
     /// </summary>
     [TestMethod]
-    public void WithAura_FullSetup_RegistersAllOptionalServices()
+    public Task WithAura_FullSetup_RegistersAllOptionalServices() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act
         _ = services.WithAura(options => options
@@ -69,11 +109,13 @@ public class ServiceCollectionExtensionsTests
         _ = provider.GetService<IWindowFactory>().Should().NotBeNull();
         _ = provider.GetService<IWindowContextFactory>().Should().NotBeNull();
         _ = provider.GetService<IWindowManagerService>().Should().NotBeNull();
-        _ = provider.GetService<ISettingsService<WindowDecorationSettings>>().Should().NotBeNull();
+        _ = provider.GetService<ISettingsService<IWindowDecorationSettings>>().Should().NotBeNull();
         _ = provider.GetService<ISettingsService<IAppearanceSettings>>().Should().NotBeNull();
         _ = provider.GetService<WindowBackdropService>().Should().NotBeNull();
         _ = provider.GetService<IAppThemeModeService>().Should().NotBeNull();
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that settings services are registered as interface only (no dual registration).
@@ -83,10 +125,11 @@ public class ServiceCollectionExtensionsTests
     /// registered ONLY as <c>ISettingsService&lt;T&gt;</c> interface to prevent multiple instances.
     /// </remarks>
     [TestMethod]
-    public void WithAura_SettingsServices_RegisteredAsInterfaceOnly()
+    public Task WithAura_SettingsServices_RegisteredAsInterfaceOnly() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act
         _ = services.WithAura(options => options
@@ -95,7 +138,7 @@ public class ServiceCollectionExtensionsTests
 
         // Assert - Check registration descriptors
         var decorationSettingsDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(ISettingsService<WindowDecorationSettings>));
+            d.ServiceType == typeof(ISettingsService<IWindowDecorationSettings>));
 
         var appearanceSettingsDescriptor = services.FirstOrDefault(d =>
             d.ServiceType == typeof(ISettingsService<IAppearanceSettings>));
@@ -114,25 +157,30 @@ public class ServiceCollectionExtensionsTests
 
         _ = concreteDecorationDescriptor.Should().BeNull("concrete decoration settings type should not be registered separately");
         _ = concreteAppearanceDescriptor.Should().BeNull("concrete appearance settings type should not be registered separately");
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that menu providers registered separately are resolvable from enumerable.
     /// </summary>
     [TestMethod]
-    public void WithAura_MenuProviders_RegisteredSeparately_AreResolvable()
+    public Task WithAura_MenuProviders_RegisteredSeparately_AreResolvable() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act - Register Aura services
         _ = services.WithAura();
 
         // Register menu providers separately (as documented pattern)
+#pragma warning disable MA0025 // Implement the functionality - These are test stubs
         services.AddSingleton<IMenuProvider>(
             new MenuProvider("App.MainMenu", () => throw new NotImplementedException("Test provider")));
         services.AddSingleton<IMenuProvider>(
             new MenuProvider("App.ContextMenu", () => throw new NotImplementedException("Test provider")));
+#pragma warning restore MA0025
 
         var provider = services.BuildServiceProvider();
 
@@ -141,16 +189,20 @@ public class ServiceCollectionExtensionsTests
         _ = menuProviders.Should().HaveCount(2);
         _ = menuProviders.Should().Contain(p => p.ProviderId == "App.MainMenu");
         _ = menuProviders.Should().Contain(p => p.ProviderId == "App.ContextMenu");
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that custom window factory registration works correctly.
     /// </summary>
     [TestMethod]
-    public void WithAura_CustomWindowFactory_IsRegistered()
+    public Task WithAura_CustomWindowFactory_IsRegistered() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
+        services.AddLogging(); // Register logging as application concern
 
         // Act
         _ = services.WithAura(options => options
@@ -162,17 +214,20 @@ public class ServiceCollectionExtensionsTests
         var factory = provider.GetService<IWindowFactory>();
         _ = factory.Should().NotBeNull();
         _ = factory.Should().BeOfType<TestWindowFactory>();
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that <see cref="ServiceCollectionExtensions.AddWindow{TWindow}"/>
     /// still works with the new <see cref="ServiceCollectionExtensions.WithAura"/> method.
     /// </summary>
     [TestMethod]
-    public void AddWindow_WorksWithWithAura()
+    public Task AddWindow_WorksWithWithAura() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act
         _ = services.WithAura();
@@ -180,10 +235,12 @@ public class ServiceCollectionExtensionsTests
 
         var provider = services.BuildServiceProvider();
 
-        // Assert
+        // Assert - Create window instance on UI thread
         var window = provider.GetService<Window>();
         _ = window.Should().NotBeNull();
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Validates that fluent configuration methods return the same instance for chaining.
@@ -215,10 +272,11 @@ public class ServiceCollectionExtensionsTests
     /// Validates that partial optional service configuration works correctly.
     /// </summary>
     [TestMethod]
-    public void WithAura_PartialConfiguration_RegistersOnlyRequestedServices()
+    public Task WithAura_PartialConfiguration_RegistersOnlyRequestedServices() => EnqueueAsync(async () =>
     {
         // Arrange
         var services = new ServiceCollection();
+        RegisterTestDependencies(services);
 
         // Act - Only enable decoration settings and backdrop service
         _ = services.WithAura(options => options
@@ -228,25 +286,29 @@ public class ServiceCollectionExtensionsTests
         var provider = services.BuildServiceProvider();
 
         // Assert - Requested services should be registered
-        _ = provider.GetService<ISettingsService<WindowDecorationSettings>>().Should().NotBeNull();
+        _ = provider.GetService<ISettingsService<IWindowDecorationSettings>>().Should().NotBeNull();
         _ = provider.GetService<WindowBackdropService>().Should().NotBeNull();
 
         // Assert - Non-requested services should NOT be registered
         _ = provider.GetService<ISettingsService<IAppearanceSettings>>().Should().BeNull();
         _ = provider.GetService<IAppThemeModeService>().Should().BeNull();
-    }
+
+        await Task.CompletedTask;
+    });
 
     /// <summary>
     /// Test window factory for validation purposes.
     /// </summary>
     private sealed class TestWindowFactory : IWindowFactory
     {
+#pragma warning disable MA0025 // Implement the functionality - This is a test stub
         public TWindow CreateWindow<TWindow>()
             where TWindow : Window
             => throw new NotImplementedException("Test factory");
 
         public Window CreateWindow(string windowTypeName)
             => throw new NotImplementedException("Test factory");
+#pragma warning restore MA0025
 
         public bool TryCreateWindow<TWindow>(out TWindow? window)
             where TWindow : Window
