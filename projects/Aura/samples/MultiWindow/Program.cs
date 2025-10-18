@@ -122,11 +122,13 @@ public static partial class Program
         // Note: We use Microsoft.Extensions.DependencyInjection extensions for registration
         var serviceCollection = new ServiceCollection();
 
-        // Add Aura window management
-        _ = serviceCollection.AddAuraWindowManagement();
+        // Add Aura window management with backdrop service and decoration settings
+        _ = serviceCollection.WithAura(options => options
+            .WithBackdropService()
+            .WithDecorationSettings());
 
-        // Add backdrop service for automatic backdrop application
-        _ = serviceCollection.AddSingleton<WindowBackdropService>();
+        // Register menu providers using standard DI patterns
+        _ = serviceCollection.RegisterMenus();
 
         // Register secondary window types as transient (Main window is singleton)
         _ = serviceCollection.AddWindow<ToolWindow>();
@@ -134,6 +136,9 @@ public static partial class Program
 
         // Integrate with DryIoc container
         container.Populate(serviceCollection);
+
+        // Configure Main window decoration with menu after DI integration
+        ConfigureMainWindowDecoration(container);
 
         /*
          * Configure the Application's Windows.
@@ -151,5 +156,30 @@ public static partial class Program
         // Multi-window demo ViewModels
         container.Register<WindowManagerShellViewModel>(Reuse.Singleton);
         container.Register<WindowManagerShellView>(Reuse.Singleton);
+    }
+
+    /// <summary>
+    /// Configures the Main window decoration to use the application's main menu.
+    /// </summary>
+    /// <param name="container">The DI container.</param>
+    /// <remarks>
+    /// This method sets a category override for the Main window to include the menu provider.
+    /// The override is applied to the WindowDecorationSettings after DI registration completes.
+    /// When the router creates the MainWindow via Target.Main, the WindowManagerService will resolve
+    /// the decoration from settings and apply the menu.
+    /// </remarks>
+    private static void ConfigureMainWindowDecoration(IContainer container)
+    {
+        // Resolve the settings service following Config module pattern
+        var decorationSettingsService = container.Resolve<ISettingsService<IWindowDecorationSettings>>();
+
+        // Configure Main window with menu using the builder pattern
+        var mainWindowDecoration = WindowDecorationBuilder
+            .ForMainWindow()
+            .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
+            .Build();
+
+        // Access via .Settings property - ALL methods are in IWindowDecorationSettings interface
+        decorationSettingsService.Settings.SetCategoryOverride(WindowCategory.Main, mainWindowDecoration);
     }
 }

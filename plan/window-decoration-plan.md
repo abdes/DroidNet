@@ -248,22 +248,47 @@ This implementation plan defines the complete development roadmap for the Aura W
 | ✅ | TASK-074 | Add XML documentation to `ResolveDecoration()` method explaining the 3-tier resolution strategy with 45+ lines of detailed remarks |
 | ✅ | TASK-075 | Write 7 integration tests in `projects/Aura/tests/WindowManagement/WindowManagerServiceDecorationTests.cs`: explicit precedence, settings registry, no settings service, concurrent creation (20 windows), RegisterWindowAsync, CreateWindowAsync by typename, different categories get different defaults - **ALL TESTS PASSING** ✅ |
 
-### Phase 10: DI Registration Extensions
+### Phase 10: Unified DI Registration with WithAura() ✅ **COMPLETED**
 
-- GOAL-010: Provide extension methods for registering decoration services and menu providers in DI container
+- GOAL-010: Provide a single unified `WithAura()` extension method for registering all Aura services with optional feature configuration
+
+**Design Philosophy**:
+
+- Single entry point: `services.WithAura(options => { ... })`
+- Mandatory services always registered (window management core)
+- Optional services via fluent configuration methods on `AuraOptions`
+- Follows Config module patterns for settings service registration
+- Reduces developer confusion by having one clear registration point
+
+**Mandatory Services (always registered)**:
+
+- `IWindowFactory` / `DefaultWindowFactory` (or custom via `WithCustomWindowFactory<T>()`)
+- `IWindowContextFactory` / `WindowContextFactory`
+- `IWindowManagerService` / `WindowManagerService`
+
+**Optional Services (via AuraOptions configuration)**:
+
+- Window decoration settings (`WithDecorationSettings()`)
+- Appearance settings (`WithAppearanceSettings()`)
+- Window backdrop service (`WithBackdropService()`)
+- Theme mode service (`WithThemeModeService()`)
+
+**Note**: Menu providers are registered separately using standard DI patterns, allowing them to be built and registered anywhere in the codebase
 
 | Completed | Task | Description |
 |-----------|------|-------------|
-| | TASK-068 | Create `ServiceCollectionExtensions` class in `projects/Aura/src/Decoration/ServiceCollectionExtensions.cs` |
-| | TASK-069 | Implement AddWindowDecorationServices(this IServiceCollection services) extension method |
-| | TASK-070 | Register WindowBackdropService as singleton in AddWindowDecorationServices |
-| | TASK-071 | Register WindowDecorationSettingsService as singleton wrapping `ISettingsService<WindowDecorationSettings>` |
-| | TASK-072 | Implement AddMenuProvider(this IServiceCollection services, string providerId, `Func<MenuBuilder>` builderFactory) extension method |
-| | TASK-073 | Register MenuProvider instance as singleton IMenuProvider in AddMenuProvider |
-| | TASK-074 | Implement AddScopedMenuProvider(this IServiceCollection services, string providerId, Action<MenuBuilder, IServiceProvider> configureMenu) extension method |
-| | TASK-075 | Register ScopedMenuProvider instance as singleton IMenuProvider in AddScopedMenuProvider |
-| | TASK-076 | Add XML documentation to all extension methods with usage examples (GUD-002) |
-| | TASK-077 | Write integration tests in `projects/Aura/tests/Decoration/ServiceCollectionExtensionsTests.cs` covering: services registered correctly, menu providers resolvable from `IEnumerable<IMenuProvider>`, scoped providers resolve dependencies |
+| ✅ | TASK-076 | Create `AuraOptions` class in `projects/Aura/src/AuraOptions.cs` with fluent configuration methods: `WithDecorationSettings()`, `WithAppearanceSettings()`, `WithBackdropService()`, `WithThemeModeService()`, `WithCustomWindowFactory<T>()` |
+| ✅ | TASK-077 | Update `ServiceCollectionExtensions.cs` to replace `AddAuraWindowManagement()` methods with single `WithAura(Action<AuraOptions>? configure = null)` extension method |
+| ✅ | TASK-078 | Implement `WithAura()` to always register mandatory services (IWindowFactory, IWindowContextFactory, IWindowManagerService) |
+| ✅ | TASK-079 | Implement `WithAura()` to conditionally register optional services based on `AuraOptions` configuration: register `ISettingsService<WindowDecorationSettings>` via `WindowDecorationSettingsService` when `WithDecorationSettings()` called |
+| ✅ | TASK-080 | Implement optional `ISettingsService<IAppearanceSettings>` registration via `AppearanceSettingsService` when `WithAppearanceSettings()` called (following Config module pattern: register as interface only) |
+| ✅ | TASK-081 | Implement optional `WindowBackdropService` singleton registration when `WithBackdropService()` called |
+| ✅ | TASK-082 | Implement optional `IAppThemeModeService` registration when `WithThemeModeService()` called |
+| ✅ | TASK-083 | Mark legacy `AddAuraWindowManagement()` methods as `[Obsolete]` with migration message pointing to `WithAura()` |
+| ✅ | TASK-084 | Add comprehensive XML documentation to `WithAura()` with usage examples showing: (a) minimal setup with just mandatory services, (b) full setup with all optional features, (c) custom window factory registration, (d) menu provider registration using standard DI patterns |
+| ✅ | TASK-085 | Add XML documentation to all `AuraOptions` fluent methods explaining what each optional feature enables |
+| ✅ | TASK-086 | Update `AddWindow<TWindow>()` helper to remain unchanged (still useful for registering custom window types) |
+| ✅ | TASK-087 | Write integration tests in `projects/Aura/tests/ServiceCollectionExtensionsTests.cs` covering: (a) minimal WithAura() registers only mandatory services, (b) full WithAura() with all options registers all services, (c) settings services registered as interface only (no dual registration), (d) menu providers registered separately are resolvable from enumerable, (e) custom window factory registration works, (f) obsolete methods still work but emit warnings |
 
 ### Phase 11: XAML Binding and UI Integration
 
@@ -339,7 +364,6 @@ This implementation plan defines the complete development roadmap for the Aura W
 | | TASK-122 | Update Aura module DI registration to call AddWindowDecorationServices() |
 | | TASK-123 | Update existing Aura sample applications to use decoration system |
 | | TASK-124 | Create migration guide in `projects/Aura/docs/Migration-WindowDecoration.md` for existing users |
-| | TASK-125 | Document breaking changes (none expected per CON-002) and new optional features |
 | | TASK-126 | Add troubleshooting section for common integration issues |
 | | TASK-127 | Update Aura README.md with decoration system overview and quick start |
 | | TASK-128 | Validate backward compatibility: existing code without decorations continues to work |

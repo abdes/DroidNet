@@ -73,12 +73,14 @@ public sealed partial class WindowDecorationSettingsTests
     }
 
     [TestMethod]
-    public async Task SaveAsync_PersistsSettingsToFile()
+    public void SaveAsync_PersistsSettingsToFile()
     {
         using var harness = CreateHarness();
         harness.Service.SetCategoryOverride(new("Main"), WindowDecorationBuilder.ForMainWindow().Build());
 
-        var result = await harness.Service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        // Access SaveSettings through the ISettingsService<IWindowDecorationSettings> interface
+        ISettingsService<IWindowDecorationSettings> settingsService = harness.Service;
+        var result = settingsService.SaveSettings();
 
         _ = result.Should().BeTrue();
         harness.FileMock.Verify(f => f.WriteAllText("C:/config/WindowDecorations.json", It.IsAny<string>()), Times.Once);
