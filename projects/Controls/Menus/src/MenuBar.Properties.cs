@@ -22,12 +22,30 @@ public sealed partial class MenuBar
         new PropertyMetadata(defaultValue: null, OnMenuSourceChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="DismissOnFlyoutDismissal"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty DismissOnFlyoutDismissalProperty = DependencyProperty.Register(
+        nameof(DismissOnFlyoutDismissal),
+        typeof(bool),
+        typeof(MenuBar),
+        new PropertyMetadata(defaultValue: false));
+
+    /// <summary>
     ///     Gets or sets the menu source that provides items and shared services for the bar.
     /// </summary>
     public IMenuSource? MenuSource
     {
         get => (IMenuSource?)this.GetValue(MenuSourceProperty);
         set => this.SetValue(MenuSourceProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether <see cref="Dismissed"/> should be raised when the cascaded host closes.
+    /// </summary>
+    public bool DismissOnFlyoutDismissal
+    {
+        get => (bool)this.GetValue(DismissOnFlyoutDismissalProperty);
+        set => this.SetValue(DismissOnFlyoutDismissalProperty, value);
     }
 
     private static void OnMenuSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

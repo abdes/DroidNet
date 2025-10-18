@@ -21,13 +21,22 @@ public sealed partial class ExpandableMenuBar
         new PropertyMetadata(default(IMenuSource), OnMenuSourceChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="DismissOnFlyoutDismissal"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty DismissOnFlyoutDismissalProperty = DependencyProperty.Register(
+        nameof(DismissOnFlyoutDismissal),
+        typeof(bool),
+        typeof(ExpandableMenuBar),
+        new PropertyMetadata(defaultValue: true, OnDismissOnFlyoutDismissalChanged));
+
+    /// <summary>
     ///     Identifies the <see cref="IsExpanded"/> dependency property.
     /// </summary>
     public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.Register(
         nameof(IsExpanded),
         typeof(bool),
         typeof(ExpandableMenuBar),
-        new PropertyMetadata(false, OnIsExpandedChanged));
+        new PropertyMetadata(defaultValue: false, OnIsExpandedChanged));
 
     /// <summary>
     ///     Gets or sets the shared menu source rendered by the embedded <see cref="MenuBar"/>.
@@ -36,6 +45,15 @@ public sealed partial class ExpandableMenuBar
     {
         get => (IMenuSource?)this.GetValue(MenuSourceProperty);
         set => this.SetValue(MenuSourceProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the embedded menu bar dismisses when its cascaded host closes.
+    /// </summary>
+    public bool DismissOnFlyoutDismissal
+    {
+        get => (bool)this.GetValue(DismissOnFlyoutDismissalProperty);
+        set => this.SetValue(DismissOnFlyoutDismissalProperty, value);
     }
 
     /// <summary>
@@ -55,6 +73,16 @@ public sealed partial class ExpandableMenuBar
         }
 
         control.HandleMenuSourceChanged(e.OldValue as IMenuSource, e.NewValue as IMenuSource);
+    }
+
+    private static void OnDismissOnFlyoutDismissalChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not ExpandableMenuBar control)
+        {
+            return;
+        }
+
+        control.HandleDismissOnFlyoutDismissalChanged((bool)e.NewValue);
     }
 
     private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -132,5 +160,15 @@ public sealed partial class ExpandableMenuBar
                 this.RaiseCollapsed(this.collapseKind);
             }
         }
+    }
+
+    private void HandleDismissOnFlyoutDismissalChanged(bool newValue)
+    {
+        if (this.innerMenuBar is null)
+        {
+            return;
+        }
+
+        this.innerMenuBar.DismissOnFlyoutDismissal = newValue;
     }
 }
