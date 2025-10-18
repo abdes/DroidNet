@@ -22,14 +22,12 @@ public sealed partial class ExpandableMenuBar : Control
 {
     private const string RootGridPart = "PART_RootGrid";
     private const string HamburgerButtonPart = "PART_HamburgerButton";
-    private const string MenuBarContainerPart = "PART_MenuBarContainer";
     private const string MenuBarPart = "PART_MenuBar";
 
     private readonly Dictionary<MenuItemData, PropertyChangedEventHandler> rootItemHandlers = new();
 
     private FrameworkElement? rootGrid;
     private ButtonBase? hamburgerButton;
-    private FrameworkElement? menuBarContainer;
     private MenuBar? innerMenuBar;
     private INotifyCollectionChanged? rootItemsCollection;
     private bool templateApplied;
@@ -60,8 +58,6 @@ public sealed partial class ExpandableMenuBar : Control
         this.rootGrid = this.GetTemplateChild(RootGridPart) as FrameworkElement;
         this.hamburgerButton = this.GetTemplateChild(HamburgerButtonPart) as ButtonBase
             ?? throw new InvalidOperationException($"{nameof(ExpandableMenuBar)} template must declare a ButtonBase named '{HamburgerButtonPart}'.");
-        this.menuBarContainer = this.GetTemplateChild(MenuBarContainerPart) as FrameworkElement
-            ?? throw new InvalidOperationException($"{nameof(ExpandableMenuBar)} template must declare a FrameworkElement named '{MenuBarContainerPart}'.");
         this.innerMenuBar = this.GetTemplateChild(MenuBarPart) as MenuBar
             ?? throw new InvalidOperationException($"{nameof(ExpandableMenuBar)} template must declare a {nameof(MenuBar)} named '{MenuBarPart}'.");
 
@@ -96,7 +92,6 @@ public sealed partial class ExpandableMenuBar : Control
         this.templateApplied = false;
         this.rootGrid = null;
         this.hamburgerButton = null;
-        this.menuBarContainer = null;
         this.innerMenuBar = null;
     }
 
