@@ -226,5 +226,34 @@ public sealed partial class WindowManagerService
     [Conditional("DEBUG")]
     private void LogRouterWindowDestroyed(string targetName)
         => LogRouterWindowDestroyed(this.logger, targetName);
+
+    [LoggerMessage(
+        EventId = 4190,
+        Level = LogLevel.Information,
+        Message = "[WindowManager] decoration resolved explicitly for window id={WindowId}")]
+    private static partial void LogDecorationResolvedExplicit(ILogger logger, Guid windowId);
+
+    private void LogDecorationResolvedExplicit(Guid windowId)
+        => LogDecorationResolvedExplicit(this.logger, windowId);
+
+    [LoggerMessage(
+        EventId = 4191,
+        Level = LogLevel.Debug,
+        Message = "[WindowManager] decoration resolved from settings for window id={WindowId} category={Category}")]
+    private static partial void LogDecorationResolvedFromSettings(ILogger logger, Guid windowId, string category);
+
+    [Conditional("DEBUG")]
+    private void LogDecorationResolvedFromSettings(Guid windowId, WindowCategory category)
+        => LogDecorationResolvedFromSettings(this.logger, windowId, category.ToString());
+
+    [LoggerMessage(
+        EventId = 4192,
+        Level = LogLevel.Debug,
+        Message = "[WindowManager] no decoration resolved for window id={WindowId} (no settings service)")]
+    private static partial void LogNoDecorationResolved(ILogger logger, Guid windowId);
+
+    [Conditional("DEBUG")]
+    private void LogNoDecorationResolved(Guid windowId)
+        => LogNoDecorationResolved(this.logger, windowId);
 }
 #pragma warning restore SA1204 // Static elements should appear before instance elements
