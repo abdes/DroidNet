@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Samples.WinPackagedApp;
@@ -42,13 +43,19 @@ public static class MenuConfiguration
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection RegisterMenus(this IServiceCollection services)
     {
-        // Register main application menu
-        _ = services.AddSingleton<IMenuProvider>(
-            new MenuProvider(MainMenuId, BuildMainMenu));
+        // Register main application menu with ILoggerFactory injection
+        _ = services.AddSingleton<IMenuProvider>(sp =>
+        {
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return new MenuProvider(MainMenuId, () => BuildMainMenu(loggerFactory));
+        });
 
-        // Register window management menu for tool windows
-        _ = services.AddSingleton<IMenuProvider>(
-            new MenuProvider(WindowMenuId, BuildWindowMenu));
+        // Register window management menu for tool windows with ILoggerFactory injection
+        _ = services.AddSingleton<IMenuProvider>(sp =>
+        {
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return new MenuProvider(WindowMenuId, () => BuildWindowMenu(loggerFactory));
+        });
 
         return services;
     }
@@ -56,10 +63,11 @@ public static class MenuConfiguration
     /// <summary>
     /// Builds the main application menu with file, window, view, and help sections.
     /// </summary>
+    /// <param name="loggerFactory">The logger factory for menu services.</param>
     /// <returns>A configured menu builder.</returns>
-    private static MenuBuilder BuildMainMenu()
+    private static MenuBuilder BuildMainMenu(ILoggerFactory loggerFactory)
     {
-        var builder = new MenuBuilder();
+        var builder = new MenuBuilder(loggerFactory);
 
         BuildFileMenu(builder);
         BuildWindowMenu_ForMain(builder);
@@ -210,10 +218,11 @@ public static class MenuConfiguration
     /// <summary>
     /// Builds a simplified window management menu for tool windows.
     /// </summary>
+    /// <param name="loggerFactory">The logger factory for menu services.</param>
     /// <returns>A configured menu builder.</returns>
-    private static MenuBuilder BuildWindowMenu()
+    private static MenuBuilder BuildWindowMenu(ILoggerFactory loggerFactory)
     {
-        var builder = new MenuBuilder();
+        var builder = new MenuBuilder(loggerFactory);
 
         _ = builder.AddMenuItem(
             "Close",

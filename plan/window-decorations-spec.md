@@ -95,6 +95,12 @@ The Window Decoration System provides application developers with:
 - **REQ-019**: Menu provider creation SHALL be thread-safe for concurrent window activation
 - **REQ-020**: The system SHALL log warnings for missing menu providers without throwing exceptions
 - **REQ-021**: WindowCategory SHALL be implemented as a readonly record struct with static predefined constants and case-insensitive string value equality
+- **REQ-022**: MainShellView SHALL bind to WindowContext.Decoration properties for data-driven chrome rendering
+- **REQ-023**: The system SHALL support MenuBar for persistent menus (IsCompact=false) and ExpandableMenuBar for compact menus (IsCompact=true)
+- **REQ-024**: Window control buttons SHALL use WinUI 3 native caption buttons via ExtendsContentIntoTitleBar=true
+- **REQ-025**: Title bar height SHALL be controlled by binding to Decoration.TitleBar.Height, not dynamically calculated
+- **REQ-026**: Icon visibility SHALL be controlled by binding to Decoration.TitleBar.ShowIcon
+- **REQ-027**: The system SHALL preserve existing SettingsMenu (Settings/Themes) independent of WindowContext.MenuSource
 
 ### Security Requirements
 
@@ -672,7 +678,237 @@ public static class ServiceCollectionExtensions
 
 > **Integration tip:** When composing the host (for example in `Program.cs`), ensure the decoration configuration file is included alongside existing entries: add `finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName)` to the configuration file list and call `services.Configure<WindowDecorationSettings>(configuration.GetSection(WindowDecorationSettings.ConfigSectionName))` before invoking `AddWindowDecorationServices()`.
 
-## 5. Acceptance Criteria
+## 5. UI Integration (Phase 11)
+
+### Overview
+
+Phase 11 integrates WindowDecorationOptions with MainShellView to create a fully data-driven window chrome system. All visual aspects (title bar height, icon visibility, menu rendering, button visibility) are controlled through XAML bindings to `WindowContext.Decoration` properties.
+
+### Binding Architecture
+
+**Data Flow:**
+
+```
+WindowDecorationOptions (immutable config)
+    ↓
+WindowContext.Decoration (stored during window creation)
+    ↓
+MainShellViewModel.Context (exposed property)
+    ↓
+MainShellView.xaml (XAML bindings)
+    ↓
+Rendered Chrome (title bar, menu, buttons)
+```
+
+**Key Principle:** MainShellView binds directly to `ViewModel.Context.Decoration.*` properties rather than duplicating state in MainShellViewModel. This ensures WindowContext remains the single source of truth.
+
+### Menu Rendering Strategy
+
+The system supports two menu presentation modes:
+
+1. **Persistent Menu (MenuBar)**: Full-width horizontal menu bar, always visible
+   - Used when `MenuOptions.IsCompact == false` or `Menu == null`
+   - Suitable for Main, Document, Secondary windows
+   - Bound to `WindowContext.MenuSource`
+
+2. **Compact Menu (ExpandableMenuBar)**: Hamburger button that expands to full menu
+   - Used when `MenuOptions.IsCompact == true`
+   - Suitable for Tool, Transient windows with limited vertical space
+   - State management: Collapsed ↔ Expanded
+   - Bound to `WindowContext.MenuSource`
+
+**Implementation:** Two controls in PrimaryCommands, visibility controlled by converters:
+
+```xaml
+<cm:MenuBar Visibility="{x:Bind Context.Decoration.Menu.IsCompact, Converter={StaticResource IsNotCompactToVis}}" />
+<cm:ExpandableMenuBar Visibility="{x:Bind Context.Decoration.Menu.IsCompact, Converter={StaticResource IsCompactToVis}}" />
+```
+
+### Window Control Buttons
+
+**Decision:** Use WinUI 3 native caption buttons, not custom controls.
+
+**Rationale:**
+
+- WinUI provides caption buttons automatically via `ExtendsContentIntoTitleBar = true`
+- Native buttons respect Windows 11 design language (rounded corners, hover animations, theme)
+- Positioned automatically based on system insets (RightPaddingColumn)
+- No custom button implementation required in Phase 11
+
+**Future Work (Phase 12+):**
+
+- Custom button controls to support `ShowMinimize`, `ShowMaximize`, `ShowClose` properties
+- `ButtonPlacement` (Left/Right/Auto) implementation
+- Custom button styles and templates
+
+**Current Behavior:**
+
+- `ChromeEnabled = true` → Native caption buttons shown
+- `ChromeEnabled = false` → System title bar with system buttons
+
+### Title Bar Configuration
+
+| Property | Binding Target | Behavior |
+|----------|----------------|----------|
+| `TitleBar.Height` | `CustomTitleBar.Height` | Sets title bar height in DIPs (device-independent pixels) |
+| `TitleBar.Padding` | `PrimaryCommands.Margin` | Horizontal padding for menu and icon |
+| `TitleBar.ShowIcon` | `ImageIcon.Visibility` | Shows/hides window icon (also serves as system menu trigger) |
+| `TitleBar.ShowTitle` | *(Phase 12+)* | Shows/hides window title TextBlock (deferred) |
+| `TitleBar.DragBehavior` | *(Phase 12+)* | Custom drag regions (current: Default behavior only) |
+
+**Passthrough Regions:**
+
+- `PrimaryCommands`: Menu bar interaction area (non-draggable)
+- `SecondaryCommands`: Settings menu button (non-draggable)
+- `DragColumn`: Main drag region (draggable)
+- System calculates via `InputNonClientPointerSource.SetRegionRects()`
+
+### Chrome Visibility
+
+**ChromeEnabled Binding:**
+
+```xaml
+<Grid x:Name="CustomTitleBar"
+      Visibility="{x:Bind Context.Decoration.ChromeEnabled, Converter={StaticResource BoolToVis}}">
+```
+
+**States:**
+
+- `ChromeEnabled = true`:
+  - CustomTitleBar visible
+  - `Window.ExtendsContentIntoTitleBar = true`
+  - Aura manages chrome, buttons, menu
+
+- `ChromeEnabled = false`:
+  - CustomTitleBar collapsed
+  - `Window.ExtendsContentIntoTitleBar = false`
+  - System provides standard title bar
+  - Validation prevents Menu when ChromeEnabled=false
+
+### Converters
+
+**CommunityToolkit.WinUI.Converters Usage:**
+
+Phase 11 exclusively uses converters from CommunityToolkit.WinUI.Converters - no custom converters are required:
+
+**1. BoolToVisibilityConverter** (already in use)
+
+- Converts boolean to Visibility
+- Used for: ChromeEnabled, ShowIcon
+
+**2. EmptyObjectToObjectConverter**
+
+- Converts null/empty objects to specified values
+- Configuration: `EmptyValue="Collapsed"`, `NotEmptyValue="Visible"`
+- Used for: MenuOptions null checks (menu presence)
+- Example:
+
+```xaml
+<ctkcvt:EmptyObjectToObjectConverter x:Key="NullToVis"
+                                      EmptyValue="Collapsed"
+                                      NotEmptyValue="Visible" />
+```
+
+**3. BoolToObjectConverter**
+
+- Converts boolean to any object type (Visibility in our case)
+- Two instances for IsCompact property handling:
+  - **IsCompactToVis**: `TrueValue="Visible"`, `FalseValue="Collapsed"` (for ExpandableMenuBar)
+  - **IsNotCompactToVis**: `TrueValue="Collapsed"`, `FalseValue="Visible"` (for MenuBar)
+- Example:
+
+```xaml
+<ctkcvt:BoolToObjectConverter x:Key="IsCompactToVis"
+                               TrueValue="Visible"
+                               FalseValue="Collapsed" />
+```
+
+**Benefits:**
+
+- Leverage well-tested, maintained toolkit converters
+- No custom code to maintain
+- Standard patterns recognized by WinUI developers
+- Consistent with existing MainShellView (already uses BoolToVisibilityConverter)
+
+### Settings Menu Independence
+
+**Design Decision:** SettingsMenu (Settings/Themes flyout) remains independent of WindowContext.MenuSource.
+
+**Rationale:**
+
+- Application-level settings (theme, preferences) are always relevant
+- Not tied to window-specific content
+- Provides fallback UI for quick theme switching
+- Adaptive visibility based on window width (existing behavior preserved)
+
+**Binding:** `SecondaryCommands` binds to `ViewModel.SettingsMenu`, not `Context.MenuSource`
+
+### Example Scenarios
+
+**Main Window (Full Menu):**
+
+```csharp
+var decoration = WindowDecorationBuilder.ForMainWindow()
+    .WithMenu("App.MainMenu", isCompact: false)
+    .Build();
+```
+
+- CustomTitleBar: Visible, Height=40px
+- Icon: Visible
+- Menu: MenuBar (persistent), bound to MainMenu provider
+- Buttons: All visible (native WinUI buttons)
+- Backdrop: Mica
+
+**Tool Window (Compact Menu):**
+
+```csharp
+var decoration = WindowDecorationBuilder.ForToolWindow()
+    .WithMenu("App.ToolMenu", isCompact: true)
+    .Build();
+```
+
+- CustomTitleBar: Visible, Height=32px
+- Icon: Visible
+- Menu: ExpandableMenuBar (hamburger)
+- Buttons: Minimize/Close only (no maximize)
+- Backdrop: MicaAlt
+
+**System Window (No Chrome):**
+
+```csharp
+var decoration = new WindowDecorationOptions
+{
+    Category = WindowCategory.System,
+    ChromeEnabled = false,
+};
+```
+
+- CustomTitleBar: Collapsed
+- System title bar shown by OS
+- No custom chrome rendered
+
+### Phase 11 Limitations
+
+**Deferred to Future Phases:**
+
+- Custom button controls (ShowMinimize/ShowMaximize/ShowClose)
+- ButtonPlacement (Left/Right/Auto)
+- Title TextBlock with ShowTitle binding
+- DragRegionBehavior.Custom/Extended/None
+- Per-window decoration overrides in settings
+- Runtime decoration mutation
+
+**Current Capabilities:**
+
+- Title bar height configuration
+- Icon visibility toggle
+- Menu presence and compact mode
+- Chrome on/off toggle
+- Native WinUI button integration
+
+See `plan/phase11-analysis.md` for detailed design rationale and implementation strategy.
+
+## 6. Acceptance Criteria
 
 ### Preset Usage
 

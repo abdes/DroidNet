@@ -150,15 +150,20 @@ public sealed class WindowDecorationBuilder
     /// <returns>A builder configured with tool window defaults.</returns>
     /// <remarks>
     /// <para>
-    /// Tool windows are auxiliary windows like palettes and toolboxes, configured with:
+    /// Tool windows are lightweight auxiliary windows like palettes and toolboxes, configured with:
     /// </para>
     /// <list type="bullet">
     /// <item><description>Category: "Tool"</description></item>
-    /// <item><description>Chrome: Enabled</description></item>
-    /// <item><description>Title bar height: 32px</description></item>
-    /// <item><description>Maximize button: Hidden (tools typically don't maximize)</description></item>
-    /// <item><description>Backdrop: null (uses application-wide default)</description></item>
+    /// <item><description>Chrome: Disabled (uses custom compact title bar instead)</description></item>
+    /// <item><description>Title bar height: 24px (compact for utility windows)</description></item>
+    /// <item><description>No system buttons (custom close button in title bar)</description></item>
+    /// <item><description>Backdrop: MicaAlt (uses application-wide default)</description></item>
     /// </list>
+    /// <para>
+    /// Tool windows use a custom compact title bar with a small close button. The title bar
+    /// is draggable and shows the window title in a compact font (10pt). Close functionality
+    /// is typically accessed via keyboard shortcuts or menu commands.
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>
@@ -172,9 +177,9 @@ public sealed class WindowDecorationBuilder
         return new WindowDecorationBuilder
         {
             category = WindowCategory.Tool,
-            chromeEnabled = true,
-            titleBar = TitleBarOptions.Default,
-            buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
+            chromeEnabled = false, // Disable system chrome for custom compact title bar
+            titleBar = TitleBarOptions.Default with { Height = 24.0 }, // Compact height
+            buttons = WindowButtonsOptions.Default with { ShowMinimize = false, ShowMaximize = false },
             backdrop = DefaultBackdrops[WindowCategory.Tool],
         };
     }

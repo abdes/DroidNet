@@ -25,5 +25,8 @@ public sealed partial class DocumentWindow : Window
 
         // Set a comfortable size for document editing
         this.AppWindow.Resize(new Windows.Graphics.SizeInt32(800, 600));
+
+        // Set the title bar spacer as the drag region when it loads
+        this.TitleBarSpacer.Loaded += (s, e) => this.SetTitleBar(this.TitleBarSpacer);
     }
 }

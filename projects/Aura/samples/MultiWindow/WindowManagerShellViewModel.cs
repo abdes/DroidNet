@@ -139,10 +139,10 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            // Build tool window decoration with selected backdrop and window menu
+            // Build tool window decoration with selected backdrop
+            // Note: Tool windows use custom chrome (ChromeEnabled=false) and cannot have menus
             var decoration = WindowDecorationBuilder.ForToolWindow()
                 .WithBackdrop(this.SelectedBackdrop)
-                .WithMenu(MenuConfiguration.WindowMenuId, isCompact: true)
                 .Build();
 
             var context = await this.windowManager.CreateWindowAsync<ToolWindow>(
@@ -165,10 +165,10 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            // Build document window decoration with selected backdrop and main menu
+            // Build document window decoration with selected backdrop
+            // Note: Document windows use toolbar UI instead of menus
             var decoration = WindowDecorationBuilder.ForDocumentWindow()
                 .WithBackdrop(this.SelectedBackdrop)
-                .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
                 .Build();
 
             var context = await this.windowManager.CreateWindowAsync<DocumentWindow>(

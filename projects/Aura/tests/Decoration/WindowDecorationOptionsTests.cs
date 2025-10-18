@@ -115,25 +115,6 @@ public class WindowDecorationOptionsTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void Validate_WithNegativeTitleBarPadding_ShouldThrow()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = WindowCategory.Tool,
-            TitleBar = TitleBarOptions.Default with { Padding = -5.0 },
-        };
-
-        // Act
-        var act = () => options.Validate();
-
-        // Assert
-        _ = act.Should().Throw<ValidationException>()
-            .WithMessage("*Title bar padding cannot be negative*");
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithEmptyMenuProviderId_ShouldThrow()
     {
         // Arrange

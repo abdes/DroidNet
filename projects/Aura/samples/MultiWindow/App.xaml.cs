@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -22,6 +23,8 @@ public partial class App
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
     private readonly IWindowManagerService windowManager;
+    private readonly WindowBackdropService backdropService;
+    private readonly WindowChromeService chromeService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="App"/> class.
@@ -30,17 +33,23 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter.</param>
     /// <param name="windowManager">The window manager service for multi-window support.</param>
+    /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
+    /// <param name="chromeService">The chrome service for automatic chrome application.</param>
     public App(
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
-        IWindowManagerService windowManager)
+        IWindowManagerService windowManager,
+        WindowBackdropService backdropService,
+        WindowChromeService chromeService)
     {
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
         this.windowManager = windowManager;
+        this.backdropService = backdropService;
+        this.chromeService = chromeService;
         this.InitializeComponent();
     }
 

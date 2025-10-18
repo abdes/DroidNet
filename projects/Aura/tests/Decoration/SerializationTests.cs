@@ -282,7 +282,6 @@ public class SerializationTests
         var original = new TitleBarOptions
         {
             Height = 45.0,
-            Padding = 12.0,
             ShowTitle = false,
             ShowIcon = true,
             DragBehavior = DragRegionBehavior.Custom,
@@ -295,7 +294,6 @@ public class SerializationTests
         // Assert
         _ = deserialized.Should().NotBeNull();
         _ = deserialized!.Height.Should().Be(original.Height);
-        _ = deserialized.Padding.Should().Be(original.Padding);
         _ = deserialized.ShowTitle.Should().Be(original.ShowTitle);
         _ = deserialized.ShowIcon.Should().Be(original.ShowIcon);
         _ = deserialized.DragBehavior.Should().Be(original.DragBehavior);

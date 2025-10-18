@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.UI.Xaml;
+
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
@@ -44,15 +46,6 @@ public sealed record TitleBarOptions
     /// The title bar height. Default is 32.0 pixels. Must be greater than zero.
     /// </value>
     public double Height { get; init; } = 32.0;
-
-    /// <summary>
-    /// Gets the horizontal padding between the title bar edges and its content.
-    /// </summary>
-    /// <value>
-    /// The padding value in device-independent pixels. Default is 8.0 pixels.
-    /// Must be non-negative.
-    /// </value>
-    public double Padding { get; init; } = 8.0;
 
     /// <summary>
     /// Gets a value indicating whether the window title text is displayed in the title bar.

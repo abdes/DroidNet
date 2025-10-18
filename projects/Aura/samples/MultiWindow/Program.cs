@@ -86,10 +86,14 @@ public static partial class Program
         =>
         [
             finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
+            finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName),
         ];
 
     private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
+    {
+        _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
+        _ = sc.Configure<WindowDecorationSettings>(config.GetSection(WindowDecorationSettings.ConfigSectionName));
+    }
 
     private static Routes MakeRoutes() => new(
     [
@@ -122,9 +126,10 @@ public static partial class Program
         // Note: We use Microsoft.Extensions.DependencyInjection extensions for registration
         var serviceCollection = new ServiceCollection();
 
-        // Add Aura window management with backdrop service and decoration settings
+        // Add Aura window management with backdrop service, chrome service, and decoration settings
         _ = serviceCollection.WithAura(options => options
             .WithBackdropService()
+            .WithChromeService()
             .WithDecorationSettings());
 
         // Register menu providers using standard DI patterns
@@ -163,23 +168,58 @@ public static partial class Program
     /// </summary>
     /// <param name="container">The DI container.</param>
     /// <remarks>
-    /// This method sets a category override for the Main window to include the menu provider.
-    /// The override is applied to the WindowDecorationSettings after DI registration completes.
-    /// When the router creates the MainWindow via Target.Main, the WindowManagerService will resolve
-    /// the decoration from settings and apply the menu.
+    /// <para>
+    /// This method provides a default configuration for the Main window that will be used
+    /// ONLY on the very first run when no configuration file exists yet. Once the user has
+    /// a configuration file, their settings are preserved.
+    /// </para>
+    /// <para>
+    /// The check for existing overrides happens AFTER the configuration file is loaded by
+    /// the IOptionsMonitor system, so persisted user customizations (like isCompact=true)
+    /// are properly respected.
+    /// </para>
+    /// <para>
+    /// Important: Do NOT call SetCategoryOverride if an override already exists, as this
+    /// will trigger the auto-save mechanism and overwrite the user's file.
+    /// </para>
     /// </remarks>
     private static void ConfigureMainWindowDecoration(IContainer container)
     {
         // Resolve the settings service following Config module pattern
         var decorationSettingsService = container.Resolve<ISettingsService<IWindowDecorationSettings>>();
 
-        // Configure Main window with menu using the builder pattern
+        // Important: At this point, IOptionsMonitor has already loaded the Aura.json file
+        // if it exists, so CategoryOverrides will contain the persisted user settings.
+        var hasOverride = decorationSettingsService.Settings.CategoryOverrides.ContainsKey(WindowCategory.Main);
+
+        Log.Information(
+            "ConfigureMainWindowDecoration: Main category override exists = {HasOverride}, Override count = {Count}",
+            hasOverride,
+            decorationSettingsService.Settings.CategoryOverrides.Count);
+
+        if (hasOverride)
+        {
+            var existingMenu = decorationSettingsService.Settings.CategoryOverrides[WindowCategory.Main].Menu;
+            Log.Information(
+                "ConfigureMainWindowDecoration: Preserving existing menu settings - Provider = {Menu}, IsCompact = {IsCompact}",
+                existingMenu?.MenuProviderId,
+                existingMenu?.IsCompact);
+
+            // IMPORTANT: Do NOT call SetCategoryOverride here! Just return and let the
+            // existing settings be used. Calling SetCategoryOverride would trigger auto-save
+            // and overwrite the user's configuration.
+            return;
+        }
+
+        // No persisted override exists - this is the first run or the user deleted their config
+        Log.Information("ConfigureMainWindowDecoration: No override found, creating default with isCompact = false");
+
         var mainWindowDecoration = WindowDecorationBuilder
             .ForMainWindow()
             .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
             .Build();
 
-        // Access via .Settings property - ALL methods are in IWindowDecorationSettings interface
+        // This will trigger auto-save after 5 seconds, creating the initial Aura.json file
         decorationSettingsService.Settings.SetCategoryOverride(WindowCategory.Main, mainWindowDecoration);
     }
 }

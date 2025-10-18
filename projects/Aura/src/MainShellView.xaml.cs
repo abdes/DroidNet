@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -34,24 +35,55 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     {
         this.InitializeComponent();
 
+        var uiContext = SynchronizationContext.Current
+            ?? throw new InvalidOperationException("SynchronizationContext.Current is null; ensure constructor runs on UI thread.");
+
         // Convert Loaded and SizeChanged events to observables
         var loadedObservable = Observable.FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
             h => this.CustomTitleBar.Loaded += h,
             h => this.CustomTitleBar.Loaded -= h)
+            .Do(_ => Debug.WriteLine("[MainShellView] CustomTitleBar.Loaded event fired"))
             .Select(_ => Unit.Default);
 
         var sizeChangedObservable = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
             h => this.CustomTitleBar.SizeChanged += h,
             h => this.CustomTitleBar.SizeChanged -= h)
+            .Do(e => Debug.WriteLine($"[MainShellView] CustomTitleBar.SizeChanged event fired: PreviousSize={e.EventArgs.PreviousSize}, NewSize={e.EventArgs.NewSize}"))
+            .Select(_ => Unit.Default);
+
+        var primaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
+                h => this.PrimaryCommands.LayoutUpdated += h,
+                h => this.PrimaryCommands.LayoutUpdated -= h)
+            .Do(_ => Debug.WriteLine("[MainShellView] PrimaryCommands.LayoutUpdated event fired"))
+            .Select(_ => Unit.Default);
+
+        var secondaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
+                h => this.SecondaryCommands.LayoutUpdated += h,
+                h => this.SecondaryCommands.LayoutUpdated -= h)
+            .Do(_ => Debug.WriteLine("[MainShellView] SecondaryCommands.LayoutUpdated event fired"))
             .Select(_ => Unit.Default);
 
         // Merge the observables and throttle the events
         var throttledObservable = loadedObservable
             .Merge(sizeChangedObservable)
-            .Throttle(TimeSpan.FromMilliseconds(100));
+            .Merge(primaryCommandsLayoutObservable)
+            .Merge(secondaryCommandsLayoutObservable)
+            .Throttle(TimeSpan.FromMilliseconds(100))
+            .ObserveOn(uiContext)
+            .Do(_ => Debug.WriteLine("[MainShellView] Throttled event triggered, will call SetupCustomTitleBar"));
 
         // Subscribe to the throttled observable to call SetupCustomTitleBar
-        _ = throttledObservable.Subscribe(_ => this.DispatcherQueue.TryEnqueue(this.SetupCustomTitleBar));
+        _ = throttledObservable.Subscribe(_ =>
+        {
+            // Skip scheduling when the title bar has already been unloaded (window closing).
+            if (!this.IsLoaded)
+            {
+                Debug.WriteLine("[MainShellView] SetupCustomTitleBar skipped because view is unloaded");
+                return;
+            }
+
+            this.SetupCustomTitleBar();
+        });
     }
 
     /// <inheritdoc/>
@@ -92,49 +124,169 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         _Width: (int)Math.Round(bounds.Width * scale),
         _Height: (int)Math.Round(bounds.Height * scale));
 
+    private static void AddPassthroughRegion(
+        FrameworkElement element,
+        double scaleAdjustment,
+        List<Windows.Graphics.RectInt32> regions,
+        string label)
+    {
+        Debug.WriteLine($"{label}.Visibility: {element.Visibility}");
+        Debug.WriteLine($"{label}.ActualWidth: {element.ActualWidth}");
+        Debug.WriteLine($"{label}.ActualHeight: {element.ActualHeight}");
+
+        if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
+        {
+            Debug.WriteLine($"{label} skipped for passthrough region calculation");
+            return;
+        }
+
+        var transform = element.TransformToVisual(visual: null);
+        var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+        Debug.WriteLine($"{label} bounds (window coords): X={bounds.X}, Y={bounds.Y}, W={bounds.Width}, H={bounds.Height}");
+        var scaledRect = GetRect(bounds, scaleAdjustment);
+        Debug.WriteLine($"{label} rect (scaled): X={scaledRect.X}, Y={scaledRect.Y}, W={scaledRect.Width}, H={scaledRect.Height}");
+        regions.Add(scaledRect);
+    }
+
     /// <summary>
     /// Sets up the custom title bar for the window.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configures the custom title bar layout with system caption button reservation.
+    /// The title bar uses a 5-column Grid layout:
+    /// </para>
+    /// <code>
+    /// <![CDATA[
+    /// Title Bar Grid Layout (5 columns)
+    /// ═══════════════════════════════════════════════════════════════════════════
+    ///
+    /// Visual Layout:
+    /// ┌────────────────────────────────────────────────────────────────────────┐
+    /// │ ┌──────┬──────────────┬──────────────────┬─────────┬─────────────────┐ │
+    /// │ │ Icon │ PrimaryCmd   │   Drag Area (*)  │Secondary│SystemReservedRt │ │
+    /// │ │ Auto │ Auto         │   Expands        │ Auto    │ Dynamic (Empty) │ │
+    /// │ │  0   │      1       │        2         │    3    │        4        │ │
+    /// │ └──────┴──────────────┴──────────────────┴─────────┴─────────────────┘ │
+    /// │                                                    ▲                   │
+    /// │                                                    └─ System buttons   │
+    /// │                                                       drawn HERE by OS │
+    /// └────────────────────────────────────────────────────────────────────────┘
+    ///
+    /// Column Details:
+    /// - Column 0: IconColumn (Width="Auto") - Window icon
+    /// - Column 1: PrimaryCommandsColumn (Width="Auto") - MenuBar/ExpandableMenuBar
+    /// - Column 2: DragColumn (Width="*", MinWidth="48") - Draggable area
+    /// - Column 3: SecondaryCommandsColumn (Width="Auto") - Settings menu button
+    /// - Column 4: SystemReservedRight (Width=Dynamic) - Empty space for system buttons
+    ///
+    /// The SystemReservedRight column width is set to appWindow.TitleBar.RightInset
+    /// to reserve space where Windows draws the minimize, maximize, and close buttons.
+    /// UpdateLayout() is called after setting this width to force Grid recalculation.
+    /// ]]>
+    /// </code>
+    /// </remarks>
     private void SetupCustomTitleBar()
     {
+        if (!this.IsLoaded)
+        {
+            Debug.WriteLine("[MainShellView] SetupCustomTitleBar call ignored after unload");
+            return;
+        }
+
+        Debug.WriteLine($"=== SetupCustomTitleBar CALLED at {DateTime.Now:HH:mm:ss.fff} ===");
+
         Debug.Assert(
             this.ViewModel?.Window is not null,
             "expecting a properly setup ViewModel when loaded");
 
+        if (this.ViewModel?.Window is null)
+        {
+            Debug.WriteLine("[MainShellView] SetupCustomTitleBar aborted: ViewModel.Window is null");
+            return;
+        }
+
+        if (this.CustomTitleBar.XamlRoot is null)
+        {
+            Debug.WriteLine("[MainShellView] SetupCustomTitleBar aborted: XamlRoot is null");
+            return;
+        }
+
         var appWindow = this.ViewModel.Window.AppWindow;
         var scaleAdjustment = this.CustomTitleBar.XamlRoot.RasterizationScale;
 
-        this.CustomTitleBar.Height = appWindow.TitleBar.Height / scaleAdjustment;
+        // Note: Height is now controlled by XAML binding to Context.Decoration.TitleBar.Height
+        // Configure system insets for caption buttons
+        // The system insets tell us how much space Windows needs for the caption buttons.
+        // We must reserve this full space with empty padding columns.
+        Debug.WriteLine($"=== SetupCustomTitleBar ===");
+        Debug.WriteLine($"Window Width: {this.ActualWidth}");
+        Debug.WriteLine($"CustomTitleBar Width: {this.CustomTitleBar.ActualWidth}");
+        Debug.WriteLine($"Scale: {scaleAdjustment}");
+        Debug.WriteLine($"System LeftInset (raw): {appWindow.TitleBar.LeftInset}");
+        Debug.WriteLine($"System RightInset (raw): {appWindow.TitleBar.RightInset}");
+        Debug.WriteLine($"System LeftInset (scaled): {appWindow.TitleBar.LeftInset / scaleAdjustment}");
+        Debug.WriteLine($"System RightInset (scaled): {appWindow.TitleBar.RightInset / scaleAdjustment}");
 
-        this.LeftPaddingColumn.Width = new GridLength(appWindow.TitleBar.LeftInset / scaleAdjustment);
-        this.RightPaddingColumn.Width = new GridLength(appWindow.TitleBar.RightInset / scaleAdjustment);
+        var rightInset = appWindow.TitleBar.RightInset / scaleAdjustment;
 
-        var transform = this.PrimaryCommands.TransformToVisual(visual: null);
-        var bounds = transform.TransformBounds(
-            new Rect(
-                0,
-                0,
-                this.PrimaryCommands.ActualWidth,
-                this.PrimaryCommands.ActualHeight));
-        var primaryCommandsRect = GetRect(bounds, scaleAdjustment);
+        Debug.WriteLine($"SystemReservedRight width: {rightInset}");
+        Debug.WriteLine($"IconColumn width: {this.IconColumn.ActualWidth}");
+        Debug.WriteLine($"PrimaryCommandsColumn width: {this.PrimaryCommandsColumn.ActualWidth}");
+        Debug.WriteLine($"DragColumn width: {this.DragColumn.ActualWidth}");
+        Debug.WriteLine($"SecondaryCommandsColumn width: {this.SecondaryCommandsColumn.ActualWidth}");
 
-        transform = this.SecondaryCommands.TransformToVisual(visual: null);
-        bounds = transform.TransformBounds(
-            new Rect(
-                0,
-                0,
-                this.SecondaryCommands.ActualWidth,
-                this.SecondaryCommands.ActualHeight));
-        var secondaryCommandsRect = GetRect(bounds, scaleAdjustment);
+        this.SystemReservedRight.Width = new GridLength(rightInset);
 
-        var rectArray = new[] { primaryCommandsRect, secondaryCommandsRect };
+        // Force Grid to recalculate layout with the new SystemReservedRight width
+        this.CustomTitleBar.UpdateLayout();
 
-        var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(appWindow.Id);
-        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, rectArray);
+        Debug.WriteLine($"=== AFTER UpdateLayout ===");
+        Debug.WriteLine($"DragColumn width (updated): {this.DragColumn.ActualWidth}");
+        Debug.WriteLine($"SystemReservedRight width (updated): {this.SystemReservedRight.ActualWidth}");
 
-        this.MinWindowWidth = this.LeftPaddingColumn.Width.Value + this.IconColumn.ActualWidth +
+        // Configure passthrough regions for interactive elements
+        this.ConfigurePassthroughRegions(appWindow.Id, scaleAdjustment);
+
+        // Calculate minimum window width
+        this.MinWindowWidth = this.IconColumn.ActualWidth +
                               this.PrimaryCommands.ActualWidth + this.DragColumn.MinWidth +
                               this.SecondaryCommands.ActualWidth +
-                              this.RightPaddingColumn.Width.Value;
+                              this.SystemReservedRight.Width.Value;
+    }
+
+    /// <summary>
+    /// Configures passthrough regions for interactive elements in the title bar.
+    /// </summary>
+    /// <param name="windowId">The window ID.</param>
+    /// <param name="scaleAdjustment">The DPI scale adjustment factor.</param>
+    private void ConfigurePassthroughRegions(Microsoft.UI.WindowId windowId, double scaleAdjustment)
+    {
+        // NOTE: Passthrough regions must be calculated relative to the window.
+        // When we use TransformToVisual(null), the element's position already includes
+        // the CustomTitleBar margin, so we don't need to add it separately.
+        var passthroughRegions = new List<Windows.Graphics.RectInt32>();
+
+        Debug.WriteLine($"=== ConfigurePassthroughRegions ===");
+        AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions, nameof(this.PrimaryCommands));
+        AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions, nameof(this.SecondaryCommands));
+
+        Debug.WriteLine($"Total passthrough regions: {passthroughRegions.Count}");
+
+        // Log details of each passthrough region
+        for (var i = 0; i < passthroughRegions.Count; i++)
+        {
+            var region = passthroughRegions[i];
+            Debug.WriteLine($"  Passthrough Region [{i}]: X={region.X}, Y={region.Y}, W={region.Width}, H={region.Height}");
+        }
+
+        // Set passthrough regions (use empty array to clear if none)
+        var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(windowId);
+        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. passthroughRegions]);
+
+        Debug.WriteLine($"=== ConfigurePassthroughRegions Complete - Passthrough regions updated ===");
+
+        Debug.WriteLine($"=== ConfigurePassthroughRegions Complete ===");
     }
 }

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Decoration.Serialization;
 
@@ -34,9 +35,12 @@ namespace DroidNet.Aura.Decoration.Serialization;
 /// </example>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    Converters = [typeof(JsonStringEnumConverter<BackdropKind>), typeof(JsonStringEnumConverter<DragRegionBehavior>), typeof(JsonStringEnumConverter<ButtonPlacement>)])]
+    Converters = [
+        typeof(WindowCategoryJsonConverter),
+        typeof(JsonStringEnumConverter<BackdropKind>),
+        typeof(JsonStringEnumConverter<DragRegionBehavior>),
+        typeof(JsonStringEnumConverter<ButtonPlacement>)])]
 [JsonSerializable(typeof(WindowDecorationSettings))]
 [JsonSerializable(typeof(WindowDecorationOptions))]
 [JsonSerializable(typeof(TitleBarOptions))]

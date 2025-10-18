@@ -68,9 +68,11 @@ public sealed class MenuOptionsJsonConverter : JsonConverter<MenuOptions>
 
                 switch (propertyName)
                 {
+                    case "MenuProviderId":
                     case "menuProviderId":
                         menuProviderId = reader.GetString();
                         break;
+                    case "IsCompact":
                     case "isCompact":
                         isCompact = reader.GetBoolean();
                         break;

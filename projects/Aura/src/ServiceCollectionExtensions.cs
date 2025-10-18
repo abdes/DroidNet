@@ -149,6 +149,12 @@ public static class ServiceCollectionExtensions
             _ = services.AddSingleton<WindowBackdropService>();
         }
 
+        // Register chrome service if requested
+        if (options.RegisterChromeService)
+        {
+            _ = services.AddSingleton<WindowChromeService>();
+        }
+
         // Register theme mode service if requested
         if (options.RegisterThemeModeService)
         {
