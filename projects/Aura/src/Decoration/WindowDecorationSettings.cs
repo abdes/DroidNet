@@ -13,8 +13,7 @@ namespace DroidNet.Aura.Decoration;
 /// the code-defined defaults for window categories. The settings are serialized using <see cref="System.Text.Json"/>.
 /// </para>
 /// <para>
-/// The dictionary uses case-insensitive keys for category names to match the behavior of
-/// <see cref="WindowManagement.WindowCategory"/> constants. Stored <see cref="WindowDecorationOptions"/>
+/// The dictionary is keyed by WindowCategory constants. Stored <see cref="WindowDecorationOptions"/>
 /// instances are immutable records and should be validated before persisting.
 /// </para>
 /// <para>
@@ -22,7 +21,7 @@ namespace DroidNet.Aura.Decoration;
 /// separately in <see cref="WindowDecorationSettingsService"/> and are not persisted.
 /// </para>
 /// </remarks>
-public sealed class WindowDecorationSettings
+public sealed class WindowDecorationSettings : IWindowDecorationSettings
 {
     /// <summary>
     /// The name of the configuration file where the decoration settings are stored.
@@ -38,9 +37,25 @@ public sealed class WindowDecorationSettings
     /// Gets the category-based decoration overrides that supersede code-defined defaults.
     /// </summary>
     /// <value>
-    /// A dictionary keyed by category name (case-insensitive) containing user/application-specific
+    /// A dictionary keyed by category containing user/application-specific
     /// customizations that override the built-in defaults.
     /// </value>
-    public IDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides { get; }
+    public IDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides { get; init; }
         = new Dictionary<WindowCategory, WindowDecorationOptions>();
+
+    /// <inheritdoc/>
+    IReadOnlyDictionary<WindowCategory, WindowDecorationOptions> IWindowDecorationSettings.CategoryOverrides
+        => (IReadOnlyDictionary<WindowCategory, WindowDecorationOptions>)this.CategoryOverrides;
+
+    /// <inheritdoc/>
+    public WindowDecorationOptions GetEffectiveDecoration(WindowCategory category)
+        => throw new InvalidOperationException("Use the service `Settings` property to call methods.");
+
+    /// <inheritdoc/>
+    public void SetCategoryOverride(WindowCategory category, WindowDecorationOptions options)
+        => throw new InvalidOperationException("Use the service `Settings` property to call methods.");
+
+    /// <inheritdoc/>
+    public bool RemoveCategoryOverride(WindowCategory category)
+        => throw new InvalidOperationException("Use the service `Settings` property to call methods.");
 }

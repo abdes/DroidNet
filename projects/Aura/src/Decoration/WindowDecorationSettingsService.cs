@@ -14,7 +14,7 @@ namespace DroidNet.Aura.Decoration;
 /// Settings service responsible for persisting <see cref="WindowDecorationSettings"/> and resolving
 /// effective window decorations from code-defined defaults and persisted category overrides.
 /// </summary>
-public sealed partial class WindowDecorationSettingsService : SettingsService<WindowDecorationSettings>, IWindowDecorationSettingsService
+public sealed partial class WindowDecorationSettingsService : SettingsService<IWindowDecorationSettings>, IWindowDecorationSettings
 {
     /// <summary>
     /// Code-defined default window decoration options for standard window categories.
@@ -95,9 +95,14 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
     /// <summary>
     /// Gets the current read-only dictionary of category-specific window decoration overrides.
     /// </summary>
+    /// <inheritdoc/>
     public IReadOnlyDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides => this.categoryOverrides;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Resolves the effective decoration options for a given window category.
+    /// </summary>
+    /// <param name="category">The window category.</param>
+    /// <returns>The effective decoration options combining code-defined defaults with any persisted overrides.</returns>
     public WindowDecorationOptions GetEffectiveDecoration(WindowCategory category)
     {
         // First, check for a persisted category override
@@ -116,7 +121,11 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
         return Defaults[WindowCategory.System];
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Sets a persisted override for a window category, replacing any existing override.
+    /// </summary>
+    /// <param name="category">The window category to override.</param>
+    /// <param name="options">The decoration options to persist as an override.</param>
     public void SetCategoryOverride(WindowCategory category, WindowDecorationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -134,7 +143,11 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
         _ = this.SetField(ref this.categoryOverrides, updated, nameof(this.CategoryOverrides));
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Removes a persisted category override, reverting to the code-defined default.
+    /// </summary>
+    /// <param name="category">The window category to revert to default.</param>
+    /// <returns><see langword="true"/> if an override was removed; <see langword="false"/> otherwise.</returns>
     public bool RemoveCategoryOverride(WindowCategory category)
     {
         if (!this.categoryOverrides.ContainsKey(category))
@@ -156,32 +169,19 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
         return true;
     }
 
-    /// <summary>
-    /// Saves the current decoration settings asynchronously.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token for the save operation.</param>
-    /// <returns><see langword="true"/> when the settings were persisted successfully.</returns>
-    public ValueTask<bool> SaveAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(this.SaveSettings());
-    }
-
     /// <inheritdoc/>
     protected override WindowDecorationSettings GetSettingsSnapshot()
     {
-        var snapshot = new WindowDecorationSettings();
-
-        foreach (var pair in this.categoryOverrides)
+        var snapshot = new WindowDecorationSettings
         {
-            snapshot.CategoryOverrides[pair.Key] = pair.Value;
-        }
+            CategoryOverrides = new Dictionary<WindowCategory, WindowDecorationOptions>(this.categoryOverrides),
+        };
 
         return snapshot;
     }
 
     /// <inheritdoc/>
-    protected override void UpdateProperties(WindowDecorationSettings newSettings)
+    protected override void UpdateProperties(IWindowDecorationSettings newSettings)
     {
         ArgumentNullException.ThrowIfNull(newSettings);
 
@@ -197,7 +197,7 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<Wi
     protected override string GetConfigSectionName() => WindowDecorationSettings.ConfigSectionName;
 
     private static Dictionary<WindowCategory, WindowDecorationOptions> CloneCategoryOverrides(
-        IDictionary<WindowCategory, WindowDecorationOptions>? source)
+        IEnumerable<KeyValuePair<WindowCategory, WindowDecorationOptions>>? source)
     {
         var clone = new Dictionary<WindowCategory, WindowDecorationOptions>();
 

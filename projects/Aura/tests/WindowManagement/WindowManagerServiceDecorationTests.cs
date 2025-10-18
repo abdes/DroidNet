@@ -371,18 +371,14 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     public Task CreateWindow_MainCategory_GetsMainDefault_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var decorationSettings = new Mock<IWindowDecorationSettingsService>();
-        _ = decorationSettings.As<ISettingsService<WindowDecorationSettings>>();
-        _ = decorationSettings
-            .Setup(s => s.GetEffectiveDecoration(WindowCategory.Main))
-            .Returns(WindowDecorationBuilder.ForMainWindow().Build());
+        var settingsService = CreateMockSettingsService(WindowCategory.Main);
 
         var windowManager = new WindowManagerService(
             this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
-            decorationSettingsService: decorationSettings.Object);
+            decorationSettingsService: settingsService.Object);
 
         WindowContext? context = null;
 
@@ -416,18 +412,14 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     public Task CreateWindow_ToolCategory_GetsToolDefault_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var decorationSettings = new Mock<IWindowDecorationSettingsService>();
-        _ = decorationSettings.As<ISettingsService<WindowDecorationSettings>>();
-        _ = decorationSettings
-            .Setup(s => s.GetEffectiveDecoration(WindowCategory.Tool))
-            .Returns(WindowDecorationBuilder.ForToolWindow().Build());
+        var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
             this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
-            decorationSettingsService: decorationSettings.Object);
+            decorationSettingsService: settingsService.Object);
 
         WindowContext? context = null;
 
@@ -461,18 +453,14 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     public Task CreateWindow_DocumentCategory_GetsDocumentDefault_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var decorationSettings = new Mock<IWindowDecorationSettingsService>();
-        _ = decorationSettings.As<ISettingsService<WindowDecorationSettings>>();
-        _ = decorationSettings
-            .Setup(s => s.GetEffectiveDecoration(WindowCategory.Document))
-            .Returns(WindowDecorationBuilder.ForDocumentWindow().Build());
+        var settingsService = CreateMockSettingsService(WindowCategory.Document);
 
         var windowManager = new WindowManagerService(
             this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
-            decorationSettingsService: decorationSettings.Object);
+            decorationSettingsService: settingsService.Object);
 
         WindowContext? context = null;
 
@@ -501,14 +489,11 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     /// <summary>
     /// Helper to create a mock settings service that returns a preset decoration for a category.
     /// </summary>
-    private static Mock<ISettingsService<WindowDecorationSettings>> CreateMockSettingsService(
+    private static Mock<ISettingsService<IWindowDecorationSettings>> CreateMockSettingsService(
         WindowCategory category)
     {
-        var mockService = new Mock<ISettingsService<WindowDecorationSettings>>();
-        var mockDecoration = new Mock<IWindowDecorationSettingsService>();
-
-        // Make the mock implement both interfaces
-        _ = mockDecoration.As<ISettingsService<WindowDecorationSettings>>();
+        var mockService = new Mock<ISettingsService<IWindowDecorationSettings>>();
+        var mockSettings = new Mock<IWindowDecorationSettings>();
 
         // Setup GetEffectiveDecoration to return appropriate preset
         var decoration = category switch
@@ -520,11 +505,15 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             _ => WindowDecorationBuilder.ForSecondaryWindow().Build(),
         };
 
-        _ = mockDecoration
+        _ = mockSettings
             .Setup(s => s.GetEffectiveDecoration(It.IsAny<WindowCategory>()))
             .Returns(decoration);
 
-        return mockDecoration.As<ISettingsService<WindowDecorationSettings>>();
+        _ = mockService
+            .Setup(s => s.Settings)
+            .Returns(mockSettings.Object);
+
+        return mockService;
     }
 
     /// <summary>

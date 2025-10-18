@@ -14,6 +14,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
+using DroidNet.Samples.WinPackagedApp;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -138,13 +139,17 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
+            // Build tool window decoration with selected backdrop and window menu
+            var decoration = WindowDecorationBuilder.ForToolWindow()
+                .WithBackdrop(this.SelectedBackdrop)
+                .WithMenu(MenuConfiguration.WindowMenuId, isCompact: true)
+                .Build();
+
             var context = await this.windowManager.CreateWindowAsync<ToolWindow>(
                 category: WindowCategory.Tool,
-                title: string.Create(CultureInfo.InvariantCulture, $"Tool Window {this.WindowCount + 1}"))
+                title: string.Create(CultureInfo.InvariantCulture, $"Tool Window {this.WindowCount + 1}"),
+                decoration: decoration)
                 .ConfigureAwait(true);
-
-            // Manually apply the selected backdrop to demonstrate WindowBackdropService
-            this.ApplyBackdropToWindow(context);
         }
         catch (Exception ex)
         {
@@ -160,42 +165,21 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
+            // Build document window decoration with selected backdrop and main menu
+            var decoration = WindowDecorationBuilder.ForDocumentWindow()
+                .WithBackdrop(this.SelectedBackdrop)
+                .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
+                .Build();
+
             var context = await this.windowManager.CreateWindowAsync<DocumentWindow>(
                 category: WindowCategory.Document,
-                title: string.Create(CultureInfo.InvariantCulture, $"Document {this.WindowCount + 1}"))
+                title: string.Create(CultureInfo.InvariantCulture, $"Document {this.WindowCount + 1}"),
+                decoration: decoration)
                 .ConfigureAwait(true);
-
-            // Manually apply the selected backdrop to demonstrate WindowBackdropService
-            this.ApplyBackdropToWindow(context);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to create document window: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Applies the selected backdrop to a window.
-    /// </summary>
-    /// <param name="context">The window context.</param>
-    private void ApplyBackdropToWindow(WindowContext context)
-    {
-        try
-        {
-            // Note: Since WindowContext and WindowDecorationOptions are immutable,
-            // we can't dynamically change the decoration. The backdrop should be set
-            // during window creation. This method demonstrates the backdrop service API
-            // but in practice, decorations should be configured when creating windows.
-
-            // Apply backdrop using the backdrop service directly
-            // The service will use the decoration's backdrop if available
-            var backdropService = new WindowBackdropService(this.windowManager);
-            backdropService.ApplyBackdrop(context);
-            backdropService.Dispose();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Failed to apply backdrop: {ex.Message}");
         }
     }
 

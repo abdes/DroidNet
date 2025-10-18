@@ -57,7 +57,7 @@
                 Background="Transparent"
                 Orientation="Horizontal"
                 Spacing="12">
-                <cm:MenuBar VerticalAlignment="Center" MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}" />
+                <cm:MenuBar VerticalAlignment="Center" MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}" />
             </StackPanel>
             <StackPanel
                 x:Name="SecondaryCommands"

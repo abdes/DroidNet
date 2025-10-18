@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;
 using DroidNet.Hosting.WinUI;
@@ -37,6 +38,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
+    private readonly IWindowManagerService? windowManagerService;
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
@@ -47,7 +49,12 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher and application information.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
-    public MainShellViewModel(IRouter router, HostingContext hostingContext, ISettingsService<IAppearanceSettings> appearanceSettingsService)
+    /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
+    public MainShellViewModel(
+        IRouter router,
+        HostingContext hostingContext,
+        ISettingsService<IAppearanceSettings> appearanceSettingsService,
+        IWindowManagerService? windowManagerService = null)
     {
         Debug.Assert(
             hostingContext.Dispatcher is not null,
@@ -55,9 +62,11 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.dispatcherQueue = hostingContext.Dispatcher;
 
         this.appearanceSettingsService = appearanceSettingsService;
+        this.windowManagerService = windowManagerService;
         appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
-        this.InitializeSettingsMenu(); // Do this after we set this.appearanceSettingsService
+        // Initialize fallback settings menu (used if window context has no menu)
+        this.InitializeSettingsMenu();
         this.SettingsMenu = this.MenuBuilder.Build();
         this.SynchronizeThemeSelection();
 
@@ -70,6 +79,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
                 {
                     this.Window = (Window)@event.Context.NavigationTarget;
                     this.SetupWindowTitleBar();
+                    this.UpdateMenuFromWindowContext();
                 });
     }
 
@@ -84,9 +94,19 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public MenuBuilder MenuBuilder { get; } = new MenuBuilder();
 
     /// <summary>
-    /// Gets the menu source consumed by menu controls for settings and themes.
+    /// Gets the menu source consumed by menu controls.
     /// </summary>
-    public IMenuSource SettingsMenu { get; }
+    /// <remarks>
+    /// This property returns the menu from the WindowContext if available (which comes from the registered
+    /// menu provider for the Main window category), otherwise falls back to the default settings menu.
+    /// </remarks>
+    [ObservableProperty]
+    public partial IMenuSource? MainMenu { get; set; }
+
+    /// <summary>
+    /// Gets the fallback settings menu (Settings and Themes) shown in the MenuButton.
+    /// </summary>
+    public IMenuSource SettingsMenu { get; private set; } = null!;
 
     [ObservableProperty]
     public partial bool IsLightModeActive { get; set; }
@@ -100,6 +120,29 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the content view model for the primary outlet.
     /// </summary>
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
+
+    /// <summary>
+    /// Updates the MainMenu property from the WindowContext's MenuSource.
+    /// </summary>
+    /// <remarks>
+    /// This method looks up the window context from the window manager service and uses
+    /// the menu source from the context if available. Falls back to the settings menu otherwise.
+    /// </remarks>
+    private void UpdateMenuFromWindowContext()
+    {
+        if (this.Window is null || this.windowManagerService is null)
+        {
+            this.MainMenu = this.SettingsMenu;
+            return;
+        }
+
+        // Find the window context for this window
+        var windowContext = this.windowManagerService.OpenWindows
+            .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
+
+        // Use the menu from the window context if available, otherwise fallback to settings menu
+        this.MainMenu = windowContext?.MenuSource ?? this.SettingsMenu;
+    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)

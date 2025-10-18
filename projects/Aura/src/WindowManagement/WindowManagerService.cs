@@ -34,7 +34,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private readonly IWindowContextFactory windowContextFactory;
     private readonly IAppThemeModeService? themeModeService;
     private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
-    private readonly ISettingsService<WindowDecorationSettings>? decorationSettingsService;
+    private readonly ISettingsService<IWindowDecorationSettings>? decorationSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
     private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
@@ -64,7 +64,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         IAppThemeModeService? themeModeService = null,
         ISettingsService<IAppearanceSettings>? appearanceSettingsService = null,
         IRouter? router = null,
-        ISettingsService<WindowDecorationSettings>? decorationSettingsService = null)
+        ISettingsService<IWindowDecorationSettings>? decorationSettingsService = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(windowContextFactory);
@@ -598,7 +598,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <item>
     /// <term>Settings Registry</term>
     /// <description>If a decoration settings service is available, calls
-    /// <see cref="IWindowDecorationSettingsService.GetEffectiveDecoration"/> which internally implements:
+    /// <see cref="IWindowDecorationSettings.GetEffectiveDecoration"/> which internally implements:
     /// (a) persisted user override, (b) code-defined category default, (c) System category fallback.
     /// </description>
     /// </item>
@@ -624,10 +624,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
         }
 
         // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
-        if (this.decorationSettingsService is IWindowDecorationSettingsService settingsService)
+        if (this.decorationSettingsService is not null)
         {
             this.LogDecorationResolvedFromSettings(windowId, category);
-            return settingsService.GetEffectiveDecoration(category);
+            return this.decorationSettingsService.Settings.GetEffectiveDecoration(category);
         }
 
         // Tier 3: No decoration available

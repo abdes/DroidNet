@@ -90,17 +90,132 @@ Factory interface for creating windows:
 ```csharp
 var serviceCollection = new ServiceCollection();
 
-// Add window management services
-serviceCollection.AddAuraWindowManagement();
+// Add window management services with backdrop service and decoration settings
+serviceCollection.WithAura(options => options
+    .WithBackdropService()
+    .WithDecorationSettings());
 
-// Add backdrop service for automatic backdrop application
-serviceCollection.AddSingleton<WindowBackdropService>();
+// Register menu providers using standard DI patterns
+serviceCollection.RegisterMenus();
 
 // Register window types
 serviceCollection.AddWindow<MainWindow>();
 serviceCollection.AddWindow<ToolWindow>();
 serviceCollection.AddWindow<DocumentWindow>();
 ```
+
+### Menu System
+
+The sample demonstrates how to create and register menu providers for use in window decorations:
+
+#### Menu Configuration
+
+Menus are configured in a dedicated `MenuConfiguration.cs` file that provides:
+
+- **Main Menu** - Full application menu with File, Window, View, and Help sections
+- **Window Menu** - Simplified menu for tool windows with Close and Options
+
+```csharp
+public static class MenuConfiguration
+{
+    public const string MainMenuId = "App.MainMenu";
+    public const string WindowMenuId = "App.WindowMenu";
+
+    public static IServiceCollection RegisterMenus(this IServiceCollection services)
+    {
+        // Register main application menu
+        services.AddSingleton<IMenuProvider>(
+            new MenuProvider(MainMenuId, BuildMainMenu));
+
+        // Register window management menu for tool windows
+        services.AddSingleton<IMenuProvider>(
+            new MenuProvider(WindowMenuId, BuildWindowMenu));
+
+        return services;
+    }
+
+    private static MenuBuilder BuildMainMenu()
+    {
+        var builder = new MenuBuilder();
+
+        // File Menu with icons (FontIconSource, size 16) and accelerators
+        builder.AddSubmenu("File", fileMenu =>
+        {
+            fileMenu.AddMenuItem("New Document Window",
+                icon: new FontIconSource { Glyph = "\uE8A5", FontSize = 16 },
+                acceleratorText: "Ctrl+N");
+            fileMenu.AddMenuItem("New Tool Window",
+                icon: new FontIconSource { Glyph = "\uE8A7", FontSize = 16 });
+            fileMenu.AddSeparator();
+            fileMenu.AddMenuItem("Exit",
+                icon: new FontIconSource { Glyph = "\uE8BB", FontSize = 16 },
+                acceleratorText: "Alt+F4");
+        }, new FontIconSource { Glyph = "\uE8B7", FontSize = 16 });
+
+        // Window Menu with backdrop selection
+        builder.AddSubmenu("Window", windowMenu =>
+        {
+            windowMenu.AddMenuItem("Close All Windows",
+                icon: new SymbolIconSource { Symbol = Symbol.ClosePane });
+            windowMenu.AddSeparator();
+            windowMenu.AddSubmenu("Backdrop Style", backdropMenu =>
+            {
+                backdropMenu.AddMenuItem("None");
+                backdropMenu.AddMenuItem("Mica");
+                backdropMenu.AddMenuItem("Mica Alt");
+                backdropMenu.AddMenuItem("Acrylic");
+            });
+        });
+
+        // View and Help menus...
+        return builder;
+    }
+}
+```
+
+#### Using Menus with Window Decorations
+
+When creating windows, specify the menu provider ID in the decoration:
+
+```csharp
+// Document window with full main menu
+var decoration = WindowDecorationBuilder.ForDocumentWindow()
+    .WithBackdrop(BackdropKind.Mica)
+    .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
+    .Build();
+
+var context = await windowManager.CreateWindowAsync<DocumentWindow>(
+    category: WindowCategory.Document,
+    title: "My Document",
+    decoration: decoration);
+
+// Tool window with compact menu
+var toolDecoration = WindowDecorationBuilder.ForToolWindow()
+    .WithBackdrop(BackdropKind.None)
+    .WithMenu(MenuConfiguration.WindowMenuId, isCompact: true)
+    .Build();
+
+var toolContext = await windowManager.CreateWindowAsync<ToolWindow>(
+    category: WindowCategory.Tool,
+    title: "My Tool",
+    decoration: toolDecoration);
+```
+
+#### Menu Structure
+
+**Main Menu Features:**
+
+- File menu with New Document/Tool Window commands and Exit
+- Window menu with Close All, Backdrop Style selection, and layout options (Cascade, Tile)
+- View menu with toolbar/status bar toggles, Refresh, and Full Screen
+- Help menu with Documentation and About
+
+**Window Menu Features:**
+
+- Close command with Alt+F4 accelerator
+- Options submenu with Always on Top and Transparent toggles
+
+All menu items include appropriate icons and keyboard accelerators for enhanced usability.
 
 ### Backdrop Service Usage
 
@@ -260,7 +375,8 @@ public class CustomWindowFactory : IWindowFactory
 }
 
 // Register custom factory
-serviceCollection.AddAuraWindowManagement<CustomWindowFactory>();
+serviceCollection.WithAura(options => options
+    .WithCustomWindowFactory<CustomWindowFactory>());
 ```
 
 ## Related Documentation
