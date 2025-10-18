@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
+using DroidNet.Aura.Decoration;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -33,6 +34,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private readonly IWindowContextFactory windowContextFactory;
     private readonly IAppThemeModeService? themeModeService;
     private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
+    private readonly ISettingsService<WindowDecorationSettings>? decorationSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
     private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
@@ -53,6 +55,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
     /// <param name="appearanceSettingsService">Optional appearance settings service for theme properties and change notifications.</param>
     /// <param name="router">Optional router for integrating with routing-based window creation.</param>
+    /// <param name="decorationSettingsService">Optional decoration settings service for resolving window decorations by category.</param>
     public WindowManagerService(
         IWindowFactory windowFactory,
         IWindowContextFactory windowContextFactory,
@@ -60,7 +63,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         ILoggerFactory? loggerFactory = null,
         IAppThemeModeService? themeModeService = null,
         ISettingsService<IAppearanceSettings>? appearanceSettingsService = null,
-        IRouter? router = null)
+        IRouter? router = null,
+        ISettingsService<WindowDecorationSettings>? decorationSettingsService = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(windowContextFactory);
@@ -73,6 +77,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.themeModeService = themeModeService;
         this.appearanceSettingsService = appearanceSettingsService;
+        this.decorationSettingsService = decorationSettingsService;
 
         if (this.themeModeService is not null && this.appearanceSettingsService is not null)
         {
@@ -114,7 +119,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true)
+        bool activateWindow = true,
+        Decoration.WindowDecorationOptions? decoration = null)
         where TWindow : Window
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
@@ -130,7 +136,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(requestedWindowType);
 
                 var window = this.windowFactory.CreateWindow<TWindow>();
-                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
+
+                // Resolve decoration using 3-tier priority system
+                var windowId = Guid.NewGuid();
+                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
+
+                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -169,7 +180,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true)
+        bool activateWindow = true,
+        Decoration.WindowDecorationOptions? decoration = null)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(windowTypeName);
@@ -183,7 +195,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogCreatingWindow(windowTypeName);
 
                 var window = this.windowFactory.CreateWindow(windowTypeName);
-                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
+
+                // Resolve decoration using 3-tier priority system
+                var windowId = Guid.NewGuid();
+                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
+
+                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
 
                 this.ApplyTheme(context);
 
@@ -334,7 +351,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         Window window,
         WindowCategory category,
         string? title = null,
-        IReadOnlyDictionary<string, object>? metadata = null)
+        IReadOnlyDictionary<string, object>? metadata = null,
+        Decoration.WindowDecorationOptions? decoration = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
@@ -353,7 +371,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
             {
                 this.LogRegisteringWindow(window.GetType().Name);
 
-                context = this.windowContextFactory.Create(window, category, title, decoration: null, metadata);
+                // Resolve decoration using 3-tier priority system
+                var windowId = Guid.NewGuid();
+                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
+
+                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -552,6 +574,65 @@ public sealed partial class WindowManagerService : IWindowManagerService
     {
         var lifecycleEvent = WindowLifecycleEvent.Create(eventType, context);
         this.windowEventsSubject.OnNext(lifecycleEvent);
+    }
+
+    /// <summary>
+    /// Resolves the effective window decoration options using a 3-tier priority system.
+    /// </summary>
+    /// <param name="windowId">The window identifier for logging purposes.</param>
+    /// <param name="category">The window category used for settings lookup.</param>
+    /// <param name="explicitDecoration">Optional explicit decoration provided by caller.</param>
+    /// <returns>
+    /// The resolved <see cref="Decoration.WindowDecorationOptions"/>, or null if no decoration is available.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Resolution priority (first match wins):
+    /// </para>
+    /// <list type="number">
+    /// <item>
+    /// <term>Explicit Parameter</term>
+    /// <description>If <paramref name="explicitDecoration"/> is not null, it is returned immediately.
+    /// This allows per-window customization that overrides all other sources.</description>
+    /// </item>
+    /// <item>
+    /// <term>Settings Registry</term>
+    /// <description>If a decoration settings service is available, calls
+    /// <see cref="IWindowDecorationSettingsService.GetEffectiveDecoration"/> which internally implements:
+    /// (a) persisted user override, (b) code-defined category default, (c) System category fallback.
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <term>No Decoration</term>
+    /// <description>If no settings service is registered, returns null (window gets no Aura chrome).</description>
+    /// </item>
+    /// </list>
+    /// <para>
+    /// This method is stateless and thread-safe. The settings service is a singleton with immutable reads.
+    /// </para>
+    /// </remarks>
+    private Decoration.WindowDecorationOptions? ResolveDecoration(
+        Guid windowId,
+        WindowCategory category,
+        Decoration.WindowDecorationOptions? explicitDecoration)
+    {
+        // Tier 1: Explicit parameter wins (highest priority)
+        if (explicitDecoration is not null)
+        {
+            this.LogDecorationResolvedExplicit(windowId);
+            return explicitDecoration;
+        }
+
+        // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
+        if (this.decorationSettingsService is IWindowDecorationSettingsService settingsService)
+        {
+            this.LogDecorationResolvedFromSettings(windowId, category);
+            return settingsService.GetEffectiveDecoration(category);
+        }
+
+        // Tier 3: No decoration available
+        this.LogNoDecorationResolved(windowId);
+        return null;
     }
 
     /// <summary>

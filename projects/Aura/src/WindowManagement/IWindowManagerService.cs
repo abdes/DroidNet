@@ -39,13 +39,25 @@ public interface IWindowManagerService : IDisposable
     /// <param name="title">Optional window title. If null, uses the window's default title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <param name="activateWindow">Whether to activate the window after creation. Default is true.</param>
+    /// <param name="decoration">Optional decoration options. If null, decoration is resolved from settings by category, or no decoration is applied if no settings service is available.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when window creation fails.</exception>
+    /// <remarks>
+    /// <para>
+    /// Decoration resolution priority:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
+    /// <item><description>Settings registry lookup by <paramref name="category"/></description></item>
+    /// <item><description>No decoration (if no settings service)</description></item>
+    /// </list>
+    /// </remarks>
     public Task<WindowContext> CreateWindowAsync<TWindow>(
         WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true)
+        bool activateWindow = true,
+        Decoration.WindowDecorationOptions? decoration = null)
         where TWindow : Window;
 
     /// <summary>
@@ -56,13 +68,25 @@ public interface IWindowManagerService : IDisposable
     /// <param name="title">Optional window title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
     /// <param name="activateWindow">Whether to activate the window after creation.</param>
+    /// <param name="decoration">Optional decoration options. If null, decoration is resolved from settings by category, or no decoration is applied if no settings service is available.</param>
     /// <returns>The created <see cref="WindowContext"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Decoration resolution priority:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
+    /// <item><description>Settings registry lookup by <paramref name="category"/></description></item>
+    /// <item><description>No decoration (if no settings service)</description></item>
+    /// </list>
+    /// </remarks>
     public Task<WindowContext> CreateWindowAsync(
         string windowTypeName,
         WindowCategory category,
         string? title = null,
         IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true);
+        bool activateWindow = true,
+        Decoration.WindowDecorationOptions? decoration = null);
 
     /// <summary>
     /// Closes a specific window by its context.
@@ -117,15 +141,27 @@ public interface IWindowManagerService : IDisposable
     /// <param name="category">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
     /// <param name="title">Optional window title. If null, uses the window's current title.</param>
     /// <param name="metadata">Optional metadata to associate with the window.</param>
+    /// <param name="decoration">Optional decoration options. If null, decoration is resolved from settings by category, or no decoration is applied if no settings service is available.</param>
     /// <returns>The created <see cref="WindowContext"/> for the registered window.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the window is already registered.</exception>
     /// <remarks>
+    /// <para>
     /// This method is primarily used for integrating windows created outside the window manager,
     /// such as windows created by the routing system. The window must not already be tracked.
+    /// </para>
+    /// <para>
+    /// Decoration resolution priority:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
+    /// <item><description>Settings registry lookup by <paramref name="category"/></description></item>
+    /// <item><description>No decoration (if no settings service)</description></item>
+    /// </list>
     /// </remarks>
     public Task<WindowContext> RegisterWindowAsync(
         Window window,
         WindowCategory category,
         string? title = null,
-        IReadOnlyDictionary<string, object>? metadata = null);
+        IReadOnlyDictionary<string, object>? metadata = null,
+        Decoration.WindowDecorationOptions? decoration = null);
 }
