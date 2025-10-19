@@ -4,430 +4,244 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DroidNet.Config.Sources;
 using DroidNet.Config.Tests.TestHelpers;
 using FluentAssertions;
-using Testably.Abstractions.Testing;
 
 namespace DroidNet.Config.Tests.Sources;
 
-/// <summary>
-/// Comprehensive unit tests for JsonSettingsSource covering serialization,
-/// atomic writes, file watching, error handling, multi-section structure, and metadata.
-/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("JSON Settings Source")]
 public class JsonSettingsSourceTests : SettingsTestBase
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
-    public async Task ReadAsync_WithValidJsonFile_ShouldDeserializeCorrectly()
+    public async Task LoadAsync_ReturnsEmptyPayload_WhenFileMissing()
     {
-        // Arrange
-        var settings = new Dictionary<string, object>
+        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "missing.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+
+        var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        _ = result.IsSuccess.Should().BeTrue();
+        _ = result.Value.Sections.Should().BeEmpty();
+        _ = result.Value.Metadata.Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task LoadAsync_ReturnsFailure_WhenMetadataMissing()
+    {
+        var jsonWithoutMetadata = JsonSerializer.Serialize(new
         {
-            { nameof(TestSettings), new TestSettings { Name = "Test", Value = 123 } }
-        };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        var filePath = this.CreateMultiSectionSettingsFile("test.json", settings, metadata);
-
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        var result = await source.ReadAsync();
-
-        // Assert
-        _ = result.Success.Should().BeTrue();
-        _ = result.SectionsData.Should().ContainKey(nameof(TestSettings));
-        _ = result.Metadata.Should().NotBeNull();
-        _ = result.Metadata!.Version.Should().Be("1.0");
-    }
-
-    [TestMethod]
-    public async Task ReadAsync_WithNonExistentFile_ShouldReturnEmptyResult()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "nonexistent.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        var result = await source.ReadAsync();
-
-        // Assert
-        _ = result.Success.Should().BeTrue();
-        _ = result.SectionsData.Should().BeEmpty();
-        _ = result.Metadata.Should().BeNull();
-    }
-
-    [TestMethod]
-    public async Task ReadAsync_WithInvalidJson_ShouldReturnFailure()
-    {
-        // Arrange
-        var filePath = this.CreateTempSettingsFile("invalid.json", "{ invalid json content }");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        var result = await source.ReadAsync();
-
-        // Assert
-        _ = result.Success.Should().BeFalse();
-        _ = result.ErrorMessage.Should().Contain("deserialize");
-        _ = result.Exception.Should().NotBeNull();
-    }
-
-    [TestMethod]
-    public async Task ReadAsync_WithMissingMetadata_ShouldReturnFailure()
-    {
-        // Arrange - JSON without metadata section
-        var json = JsonSerializer.Serialize(new
-        {
-            TestSettings = new { Name = "Test", Value = 123 }
+            Sample = new { Value = 42 },
         });
-        var filePath = this.CreateTempSettingsFile("no-metadata.json", json);
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var filePath = this.CreateTempSettingsFile("missing-metadata.json", jsonWithoutMetadata);
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
-        // Act
-        var result = await source.ReadAsync();
+        var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert
-        _ = result.Success.Should().BeFalse();
-        _ = result.ErrorMessage.Should().Contain("metadata");
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+        _ = result.Error!.InnerException.Should().BeOfType<JsonException>();
     }
 
     [TestMethod]
-    public async Task WriteAsync_ShouldCreateFileWithProperStructure()
+    public async Task LoadAsync_ReturnsFailure_WhenFileEmpty()
     {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "write-test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var filePath = this.CreateTempSettingsFile("empty.json", string.Empty);
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
-        var settings = new TestSettings { Name = "WriteTest", Value = 456 };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
+        var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Act
-        var result = await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = settings }, metadata);
-
-        // Assert
-        _ = result.Success.Should().BeTrue();
-        _ = this.FileSystem.File.Exists(filePath).Should().BeTrue();
-
-        var content = this.FileSystem.File.ReadAllText(filePath);
-        _ = content.Should().Contain("metadata"); // camelCase per JSON naming policy
-        _ = content.Should().Contain("TestSettings");
-        _ = content.Should().Contain("WriteTest");
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
     }
 
     [TestMethod]
-    public async Task WriteAsync_ShouldUseAtomicWritePattern()
+    public async Task LoadAsync_ReturnsFailure_WhenJsonMalformed()
     {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "atomic-test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var malformedJson = "{ \"metadata\": \"incomplete";
+        var filePath = this.CreateTempSettingsFile("malformed.json", malformedJson);
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
-        var settings = new TestSettings { Name = "Atomic", Value = 789 };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
+        var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Act
-        await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = settings }, metadata);
-
-        // Assert - File should exist and be valid
-        _ = this.FileSystem.File.Exists(filePath).Should().BeTrue();
-
-        // Verify we can read it back successfully
-        var readResult = await source.ReadAsync();
-        _ = readResult.Success.Should().BeTrue();
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+    _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
+        _ = result.Error.Message.Should().Contain("Failed to deserialize JSON content.");
     }
 
     [TestMethod]
-    public async Task WriteAsync_WhenDirectoryDoesNotExist_ShouldCreateDirectory()
+    public async Task SaveAsync_WritesMetadataAndSectionsInCamelCase()
     {
-        // Arrange
-        var directory = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "newdir");
-        var filePath = this.FileSystem.Path.Combine(directory, "test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "structure.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
-        var settings = new TestSettings();
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
+        var metadata = new SettingsMetadata { Version = "1.2.3", SchemaVersion = "20251020" };
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [nameof(TestSettings)] = new TestSettings { Name = "Json Source", Value = 7 },
+        };
 
-        // Act
-        var result = await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = settings }, metadata);
+        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert
-        _ = result.Success.Should().BeTrue();
+        _ = result.IsSuccess.Should().BeTrue();
+
+        var content = await this.FileSystem.File.ReadAllTextAsync(filePath, default).ConfigureAwait(true);
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+
+        _ = root.TryGetProperty("metadata", out var metadataElement).Should().BeTrue();
+        _ = metadataElement.TryGetProperty("Version", out var version).Should().BeTrue();
+        _ = version.GetString().Should().Be("1.2.3");
+        _ = metadataElement.TryGetProperty("SchemaVersion", out var schemaVersion).Should().BeTrue();
+        _ = schemaVersion.GetString().Should().Be("20251020");
+
+        _ = root.TryGetProperty(nameof(TestSettings), out var sectionElement).Should().BeTrue();
+        _ = sectionElement.TryGetProperty("name", out var name).Should().BeTrue();
+        _ = name.GetString().Should().Be("Json Source");
+    }
+
+    [TestMethod]
+    public async Task SaveAsync_CreatesMissingDirectory()
+    {
+        var directory = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "json", "nested");
+        var filePath = this.FileSystem.Path.Combine(directory, "settings.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+
+        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "Created", Value = 1 } };
+
+        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        _ = result.IsSuccess.Should().BeTrue();
         _ = this.FileSystem.Directory.Exists(directory).Should().BeTrue();
         _ = this.FileSystem.File.Exists(filePath).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task WriteAsync_ToReadOnlySource_ShouldFail()
+    public async Task SaveAsync_MergesExistingSections()
     {
-        // Arrange
-        var directory = this.FileSystem.Path.GetTempPath();
-        this.FileSystem.Directory.CreateDirectory(directory);
-        var filePath = this.FileSystem.Path.Combine(directory, "readonly.json");
-        this.FileSystem.File.WriteAllText(filePath, "{}");
-
-        // Make file read-only
-        var fileInfo = this.FileSystem.FileInfo.New(filePath);
-        fileInfo.IsReadOnly = true;
-
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-        var settings = new TestSettings();
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-
-        // Act
-        var result = await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = settings }, metadata);
-
-        // Assert - MockFileSystem might not fully support read-only behavior
-        // Adjust expectations based on Testably.Abstractions behavior
-        _ = result.Should().NotBeNull();
-    }
-
-    [TestMethod]
-    public async Task ReadAsync_WithMultipleSections_ShouldLoadAllSections()
-    {
-        // Arrange
-        var settings = new Dictionary<string, object>
+        var initialSections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "Section1", Value = 1 } },
-            { nameof(AlternativeTestSettings), new AlternativeTestSettings { Theme = "Dark", FontSize = 16 } }
+            ["Section1"] = new TestSettings { Name = "First", Value = 1 },
+            ["Section2"] = new AlternativeTestSettings { Theme = "Light", FontSize = 12 },
         };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        var filePath = this.CreateMultiSectionSettingsFile("multi.json", settings, metadata);
+        var existingPath = this.CreateMultiSectionSettingsFile("merge.json", initialSections);
+        using var source = new JsonSettingsSource(existingPath, this.FileSystem, this.LoggerFactory);
 
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        var result = await source.ReadAsync();
-
-        // Assert
-        _ = result.Success.Should().BeTrue();
-        _ = result.SectionsData.Should().HaveCount(2);
-        _ = result.SectionsData.Should().ContainKey(nameof(TestSettings));
-        _ = result.SectionsData.Should().ContainKey(nameof(AlternativeTestSettings));
-    }
-
-    [TestMethod]
-    public async Task WriteAsync_ShouldPreserveExistingSections()
-    {
-        // Arrange
-        var initialSettings = new Dictionary<string, object>
+        var metadata = new SettingsMetadata { Version = "2.0", SchemaVersion = "20251020" };
+        var update = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { "Section1", new TestSettings { Name = "First", Value = 1 } },
-            { "Section2", new AlternativeTestSettings { Theme = "Light" } }
+            ["Section3"] = new TestSettings { Name = "Third", Value = 3 },
         };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        var filePath = this.CreateMultiSectionSettingsFile("preserve.json", initialSettings, metadata);
 
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var result = await source.SaveAsync(update, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Act - Update only Section1
-        var updatedSettings = new TestSettings { Name = "Updated", Value = 999 };
-        await source.WriteAsync(new Dictionary<string, object> { ["Section1"] = updatedSettings }, metadata);
+        _ = result.IsSuccess.Should().BeTrue();
 
-        // Assert
-        var readResult = await source.ReadAsync();
-        _ = readResult.SectionsData.Should().HaveCount(2);
-        _ = readResult.SectionsData.Should().ContainKey("Section1");
-        _ = readResult.SectionsData.Should().ContainKey("Section2");
+        var content = await this.FileSystem.File.ReadAllTextAsync(existingPath, default).ConfigureAwait(true);
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+        _ = root.TryGetProperty("Section1", out _).Should().BeTrue();
+        _ = root.TryGetProperty("Section2", out _).Should().BeTrue();
+        _ = root.TryGetProperty("Section3", out var section3).Should().BeTrue();
+        _ = section3.TryGetProperty("name", out var name).Should().BeTrue();
+        _ = name.GetString().Should().Be("Third");
     }
 
     [TestMethod]
-    public async Task ReloadAsync_ShouldRefreshDataFromFile()
+    public async Task SaveAsync_ReturnsFailure_WhenExistingContentInvalid()
     {
-        // Arrange
-        var settings = new Dictionary<string, object>
+        var invalidExistingJson = JsonSerializer.Serialize(new { Section = new { Value = 5 } });
+        var filePath = this.CreateTempSettingsFile("invalid-existing.json", invalidExistingJson);
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+
+        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "New", Value = 10 } };
+
+        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+    }
+
+    [TestMethod]
+    public async Task SaveAsync_ReturnsFailure_WhenSerializationThrowsJsonException()
+    {
+        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "serialize-fail.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+
+        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "Original", Value = 1 } }
+            ["ThrowingSection"] = new ThrowingSection { Value = 123 },
         };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        var filePath = this.CreateMultiSectionSettingsFile("reload.json", settings, metadata);
 
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-        await source.ReadAsync();
+        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Modify the file externally
-        var updatedSettings = new Dictionary<string, object>
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+    _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
+        _ = result.Error.Message.Should().Contain("Failed to serialize settings to JSON.");
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ReturnsSuccess_ForSerializableSections()
+    {
+        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "validate.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "Updated", Value = 999 } }
+            ["Section"] = new TestSettings { Name = "Valid", Value = 99 },
         };
-        var updatedPath = this.CreateMultiSectionSettingsFile("reload.json", updatedSettings, metadata);
 
-        // Act
-        var reloadResult = await source.ReloadAsync();
+        var result = await source.ValidateAsync(sections, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert
-        _ = reloadResult.Success.Should().BeTrue();
-
-        var readResult = await source.ReadAsync();
-        _ = readResult.Success.Should().BeTrue();
+        _ = result.IsSuccess.Should().BeTrue();
+        _ = result.Value.SectionsValidated.Should().Be(1);
+        _ = result.Value.Message.Should().Contain("Validated");
     }
 
     [TestMethod]
-    public void IsAvailable_WhenDirectoryExists_ShouldReturnTrue()
+    public async Task ValidateAsync_ReturnsFailure_ForUnsupportedSectionType()
     {
-        // Arrange
-        var directory = this.FileSystem.Path.GetTempPath();
-        this.FileSystem.Directory.CreateDirectory(directory);
-        var filePath = this.FileSystem.Path.Combine(directory, "available.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "validate-fail.json");
+        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
-        // Act & Assert
-        _ = source.IsAvailable.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void IsAvailable_WhenDirectoryDoesNotExist_ShouldReturnFalse()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine("Z:\\nonexistent\\path", "test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act & Assert
-        _ = source.IsAvailable.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void Id_ShouldReturnFilePath()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act & Assert
-        _ = source.Id.Should().Be(filePath);
-    }
-
-    [TestMethod]
-    public void CanWrite_ShouldReturnTrue()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act & Assert
-        _ = source.CanWrite.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void SupportsEncryption_ShouldReturnFalse()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "test.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act & Assert
-        _ = source.SupportsEncryption.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public async Task WriteAsync_WithCancellation_ShouldThrowOperationCanceledException()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "cancel.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-        var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        var settings = new TestSettings();
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-
-        // Act
-        var act = async () => await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = settings }, metadata, cts.Token);
-
-        // Assert
-        _ = await act.Should().ThrowAsync<OperationCanceledException>();
-    }
-
-    [TestMethod]
-    public void Dispose_ShouldReleaseResources()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "dispose.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        source.Dispose();
-
-        // Assert - Accessing disposed object should throw
-        var act = async () => await source.ReadAsync();
-        _ = act.Should().ThrowAsync<ObjectDisposedException>();
-    }
-
-    [TestMethod]
-    public async Task ReadAsync_WithEmptyFile_ShouldReturnFailure()
-    {
-        // Arrange
-        var filePath = this.CreateTempSettingsFile("empty.json", string.Empty);
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        // Act
-        var result = await source.ReadAsync();
-
-        // Assert
-        _ = result.Success.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public async Task WriteAsync_MultipleTimes_ShouldUpdateContent()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "multi-write.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-
-        // Act - Write multiple times
-        await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = new TestSettings { Name = "First", Value = 1 } }, metadata);
-        await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = new TestSettings { Name = "Second", Value = 2 } }, metadata);
-        await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = new TestSettings { Name = "Third", Value = 3 } }, metadata);
-
-        // Assert - Should have latest values
-        var readResult = await source.ReadAsync();
-        _ = readResult.Success.Should().BeTrue();
-        _ = this.FileSystem.File.Exists(filePath).Should().BeTrue();
-    }
-
-    [TestMethod]
-    public async Task WriteAsync_WithComplexNestedObjects_ShouldSerializeCorrectly()
-    {
-        // Arrange
-        var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "complex.json");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
-
-        var complexSettings = new TestSettings
+        var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            Name = "Complex",
-            Value = 123,
-            Description = "A complex test object"
+            ["Section"] = new Action(() => { }),
         };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
 
-        // Act
-        var writeResult = await source.WriteAsync(new Dictionary<string, object> { [nameof(TestSettings)] = complexSettings }, metadata);
+        var result = await source.ValidateAsync(sections, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert
-        _ = writeResult.Success.Should().BeTrue();
-
-        var readResult = await source.ReadAsync();
-        _ = readResult.Success.Should().BeTrue();
-        _ = readResult.SectionsData.Should().ContainKey(nameof(TestSettings));
+        _ = result.IsSuccess.Should().BeFalse();
+        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+        _ = result.Error!.InnerException.Should().BeOfType<NotSupportedException>();
     }
 
-    [TestMethod]
-    public void WatchForChanges_ShouldReturnWatcher()
+    private sealed class ThrowingSection
     {
-        // Arrange
-        var filePath = this.CreateTempSettingsFile("watch.json", "{}");
-        var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        [JsonConverter(typeof(JsonWriteThrowsConverter))]
+        public int Value { get; set; }
+    }
 
-        bool changeDetected = false;
+    private sealed class JsonWriteThrowsConverter : JsonConverter<int>
+    {
+        public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return reader.GetInt32();
+        }
 
-        // Act
-        var watcher = source.WatchForChanges(_ => changeDetected = true);
-
-        // Assert - MockFileSystem might not fully support file watching
-        // Adjust based on Testably.Abstractions capabilities
-        _ = watcher.Should().NotBeNull();
-        watcher?.Dispose();
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
+        {
+            throw new JsonException("Serialization failed for test coverage.");
+        }
     }
 }

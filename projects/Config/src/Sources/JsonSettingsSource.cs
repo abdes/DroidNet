@@ -2,27 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.IO.Abstractions;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Testably.Abstractions;
 
 namespace DroidNet.Config.Sources;
 
 /// <summary>
 /// Settings source that persists settings to JSON files with atomic write operations.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="JsonSettingsSource"/> class.
-/// </remarks>
-/// <param name="filePath">The path to the JSON file for this settings source.</param>
-/// <param name="fileSystem">The file system abstraction to use for file operations.</param>
-/// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
-public partial class JsonSettingsSource(
-    string filePath,
-    IFileSystem fileSystem,
-    ILoggerFactory? loggerFactory = null) : ISettingsSource, IDisposable
+public sealed partial class JsonSettingsSource : FileSettingsSource
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -30,86 +21,61 @@ public partial class JsonSettingsSource(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private readonly ILogger<JsonSettingsSource> logger = loggerFactory?.CreateLogger<JsonSettingsSource>() ?? NullLogger<JsonSettingsSource>.Instance;
-    private readonly IFileSystem fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly string filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
-    private readonly SemaphoreSlim fileLock = new(1, 1);
-    private FileSystemWatcher? fileWatcher;
+    private readonly ILogger<JsonSettingsSource> logger;
+    private readonly SemaphoreSlim operationLock = new(1, 1);
     private bool isDisposed;
 
-    /// <inheritdoc/>
-    public string Id => this.filePath;
-
-    /// <inheritdoc/>
-    public bool CanWrite => true;
-
-    /// <inheritdoc/>
-    public bool SupportsEncryption => false;
-
-    /// <inheritdoc/>
-    public bool IsAvailable
+    /// <summary>
+    /// Initializes a new instance of the <see cref="JsonSettingsSource"/> class.
+    /// </summary>
+    /// <param name="filePath">The path to the JSON file for this settings source.</param>
+    /// <param name="fileSystem">The file system abstraction to use for file operations.</param>
+    /// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
+    public JsonSettingsSource(
+        string filePath,
+        IFileSystem fileSystem,
+        ILoggerFactory? loggerFactory = null)
+        : base(
+            id: filePath ?? throw new ArgumentNullException(nameof(filePath)),
+            path: (fileSystem ?? throw new ArgumentNullException(nameof(fileSystem))).Path.GetFullPath(filePath),
+            fileSystem: fileSystem,
+            crypto: null,
+            loggerFactory: loggerFactory)
     {
-        get
-        {
-            try
-            {
-                var directory = this.fileSystem.Path.GetDirectoryName(this.filePath);
-                return directory is null || this.fileSystem.Directory.Exists(directory);
-            }
-            catch (IOException)
-            {
-                // File system error means source is not available
-                return false;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // No access means source is not available
-                return false;
-            }
-
-            // Other exceptions will be thrown to the caller
-        }
+        this.logger = loggerFactory?.CreateLogger<JsonSettingsSource>() ?? NullLogger<JsonSettingsSource>.Instance;
     }
 
     /// <inheritdoc/>
-    public async Task<SettingsSourceReadResult> ReadAsync(CancellationToken cancellationToken = default)
+    public override async Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
 
-        await this.fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await this.ReadFileAndDeserializeAsync(cancellationToken).ConfigureAwait(false);
+            LogLoadRequested(this.logger, this.Id, this.SourcePath, reload);
+
+            var payload = await this.ReadFilePayloadAsync(cancellationToken).ConfigureAwait(false);
+
+            LogLoadSucceeded(this.logger, this.Id, payload.SectionCount);
+            return Result.Ok(payload);
         }
         catch (JsonException ex)
         {
-            LogJsonDeserializationError(this.logger, ex, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"Failed to deserialize settings from '{this.filePath}': {ex.Message}",
-                ex);
+            return this.FailRead("Failed to deserialize JSON content.", ex);
         }
-        catch (IOException ex)
+        catch (SettingsPersistenceException ex)
         {
-            LogIoError(this.logger, ex, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"I/O error reading settings from '{this.filePath}': {ex.Message}",
-                ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            LogAccessDenied(this.logger, ex, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"Access denied reading settings from '{this.filePath}': {ex.Message}",
-                ex);
+            return Result.Fail<SettingsReadPayload>(ex);
         }
         finally
         {
-            _ = this.fileLock.Release();
+            _ = this.operationLock.Release();
         }
     }
 
     /// <inheritdoc/>
-    public async Task<SettingsSourceWriteResult> WriteAsync(
+    public override async Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         SettingsMetadata metadata,
         CancellationToken cancellationToken = default)
@@ -119,51 +85,37 @@ public partial class JsonSettingsSource(
         ArgumentNullException.ThrowIfNull(sectionsData);
         ArgumentNullException.ThrowIfNull(metadata);
 
-        await this.fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            LogWritingFile(this.logger, this.filePath, sectionsData.Count);
+            LogSaveRequested(this.logger, this.Id, sectionsData.Count);
 
-            this.EnsureDirectoryExists();
+            var mergedSections = await this.MergeSectionsAsync(sectionsData, cancellationToken).ConfigureAwait(false);
+            var jsonContent = SerializeSections(mergedSections, metadata);
 
-            // Merge with existing sections to preserve them
-            var mergedSections = await this.MergeWithExistingSectionsAsync(sectionsData, cancellationToken).ConfigureAwait(false);
+            await this.WriteAllBytesAsync(jsonContent, cancellationToken).ConfigureAwait(false);
 
-            var jsonContent = SerializeSettings(mergedSections, metadata);
-            await this.WriteAtomicallyAsync(jsonContent, cancellationToken).ConfigureAwait(false);
+            LogSaveSucceeded(this.logger, this.Id, mergedSections.Count);
 
-            LogWriteSuccess(this.logger, this.filePath);
-            return SettingsSourceWriteResult.CreateSuccess($"Successfully wrote {sectionsData.Count} section(s) to '{this.filePath}'");
+            var payload = new SettingsWritePayload(metadata, sectionsData.Count, this.SourcePath);
+            return Result.Ok(payload);
         }
         catch (JsonException ex)
         {
-            LogJsonSerializationError(this.logger, ex, this.filePath);
-            return SettingsSourceWriteResult.CreateFailure(
-                $"Failed to serialize settings to '{this.filePath}': {ex.Message}",
-                ex);
+            return this.FailWrite("Failed to serialize settings to JSON.", ex);
         }
-        catch (IOException ex)
+        catch (SettingsPersistenceException ex)
         {
-            LogIoError(this.logger, ex, this.filePath);
-            return SettingsSourceWriteResult.CreateFailure(
-                $"I/O error writing settings to '{this.filePath}': {ex.Message}",
-                ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            LogAccessDenied(this.logger, ex, this.filePath);
-            return SettingsSourceWriteResult.CreateFailure(
-                $"Access denied writing settings to '{this.filePath}': {ex.Message}",
-                ex);
+            return Result.Fail<SettingsWritePayload>(ex);
         }
         finally
         {
-            _ = this.fileLock.Release();
+            _ = this.operationLock.Release();
         }
     }
 
     /// <inheritdoc/>
-    public async Task<SettingsSourceResult> ValidateAsync(
+    public override async Task<Result<SettingsValidationPayload>> ValidateAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         CancellationToken cancellationToken = default)
     {
@@ -171,235 +123,154 @@ public partial class JsonSettingsSource(
 
         ArgumentNullException.ThrowIfNull(sectionsData);
 
-        await Task.Yield(); // Make method truly async
+        await Task.Yield();
 
         try
         {
-            LogValidatingContent(this.logger, sectionsData.Count);
+            LogValidationRequested(this.logger, this.Id, sectionsData.Count);
 
-            // Create flat structure for validation (same as serialization)
-            var flatStructure = new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["metadata"] = new SettingsMetadata { Version = "1.0", SchemaVersion = "validation" },
-            };
+            var structure = CreateValidationStructure(sectionsData);
+            _ = JsonSerializer.Serialize(structure, SerializerOptions);
 
-            // Add all sections at the root level
-            foreach (var kvp in sectionsData)
-            {
-                flatStructure[kvp.Key] = kvp.Value;
-            }
+            LogValidationSucceeded(this.logger, this.Id, sectionsData.Count);
 
-            // Attempt to serialize to validate JSON compatibility
-            _ = JsonSerializer.Serialize(flatStructure, SerializerOptions);
-
-            LogValidationSuccess(this.logger, sectionsData.Count);
-            return SettingsSourceResult.CreateSuccess($"Successfully validated {sectionsData.Count} section(s)");
+            var payload = new SettingsValidationPayload(sectionsData.Count, $"Validated {sectionsData.Count} section(s).");
+            return Result.Ok(payload);
         }
         catch (JsonException ex)
         {
-            LogValidationFailed(this.logger, ex);
-            return SettingsSourceResult.CreateFailure(
-                $"Validation failed: Content is not serializable to JSON: {ex.Message}",
-                ex);
+            return this.FailValidation("Content could not be serialized to JSON.", ex);
         }
         catch (NotSupportedException ex)
         {
-            // Serialization of certain types may not be supported
-            LogValidationFailed(this.logger, ex);
-            return SettingsSourceResult.CreateFailure(
-                $"Validation failed: Content contains unsupported types: {ex.Message}",
-                ex);
+            return this.FailValidation("Content includes unsupported types for serialization.", ex);
         }
     }
 
     /// <inheritdoc/>
-    public async Task<SettingsSourceResult> ReloadAsync(CancellationToken cancellationToken = default)
-    {
-        this.ThrowIfDisposed();
-
-        try
-        {
-            LogReloading(this.logger, this.filePath);
-
-            var readResult = await this.ReadAsync(cancellationToken).ConfigureAwait(false);
-            if (!readResult.Success)
-            {
-                return SettingsSourceResult.CreateFailure(
-                    $"Reload failed: {readResult.ErrorMessage}",
-                    readResult.Exception);
-            }
-
-            LogReloadSuccess(this.logger, this.filePath);
-            return SettingsSourceResult.CreateSuccess($"Successfully reloaded from '{this.filePath}'");
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancellation is not an error - let it bubble up
-            throw;
-        }
-    }
-
-    /// <inheritdoc/>
-    public IDisposable? WatchForChanges(Action<string> changeHandler)
-    {
-        this.ThrowIfDisposed();
-        ArgumentNullException.ThrowIfNull(changeHandler);
-
-        try
-        {
-            return this.CreateFileWatcher(changeHandler);
-        }
-        catch (ArgumentException ex)
-        {
-            // Invalid path or filter pattern - this is a programming error, log and rethrow
-            LogWatchingFailed(this.logger, ex, this.filePath);
-            throw;
-        }
-        catch (IOException ex)
-        {
-            // Network path unavailable, too many watchers, etc. - watching is optional
-            LogWatchingFailed(this.logger, ex, this.filePath);
-            return null;
-        }
-        catch (PlatformNotSupportedException ex)
-        {
-            // FileSystemWatcher not supported on this platform - watching is optional
-            LogWatchingFailed(this.logger, ex, this.filePath);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Releases resources used by the JsonSettingsSource.
-    /// </summary>
-    public void Dispose()
-    {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Releases the unmanaged resources used by the JsonSettingsSource and optionally releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
         {
+            base.Dispose(disposing);
             return;
         }
 
         if (disposing)
         {
-            this.fileWatcher?.Dispose();
-            this.fileLock.Dispose();
+            this.operationLock.Dispose();
         }
 
         this.isDisposed = true;
+        base.Dispose(disposing);
     }
 
-    private async Task<Dictionary<string, object>> MergeWithExistingSectionsAsync(
+    private static string SerializeSections(
         IReadOnlyDictionary<string, object> sectionsData,
-        CancellationToken cancellationToken)
+        SettingsMetadata metadata)
     {
-        var mergedSections = new Dictionary<string, object>(StringComparer.Ordinal);
-
-        // Read existing sections to preserve them
-        if (this.fileSystem.File.Exists(this.filePath))
-        {
-            var readResult = await this.ReadFileAndDeserializeAsync(cancellationToken).ConfigureAwait(false);
-            if (readResult.Success && readResult.SectionsData != null)
-            {
-                foreach (var kvp in readResult.SectionsData)
-                {
-                    mergedSections[kvp.Key] = kvp.Value;
-                }
-            }
-        }
-
-        // Merge new sections (overwriting existing ones with same key)
-        foreach (var kvp in sectionsData)
-        {
-            mergedSections[kvp.Key] = kvp.Value;
-        }
-
-        return mergedSections;
-    }
-
-    private static string SerializeSettings(IReadOnlyDictionary<string, object> sectionsData, SettingsMetadata metadata)
-    {
-        // Create a flat dictionary with metadata and all sections at the same level
         var flatStructure = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["metadata"] = metadata,
         };
 
-        // Add all sections at the root level
-        foreach (var kvp in sectionsData)
+        foreach (var (key, value) in sectionsData)
         {
-            flatStructure[kvp.Key] = kvp.Value;
+            flatStructure[key] = value;
         }
 
         return JsonSerializer.Serialize(flatStructure, SerializerOptions);
     }
 
-    private async Task<SettingsSourceReadResult> ReadFileAndDeserializeAsync(CancellationToken cancellationToken)
+    private static Dictionary<string, object> CreateValidationStructure(IReadOnlyDictionary<string, object> sectionsData)
     {
-        LogReadingFile(this.logger, this.filePath);
-
-        if (!this.fileSystem.File.Exists(this.filePath))
+        var structure = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            LogFileNotFound(this.logger, this.filePath);
-            return SettingsSourceReadResult.CreateSuccess(
-                new Dictionary<string, object>(StringComparer.Ordinal),
-                metadata: null);
+            ["metadata"] = new SettingsMetadata
+            {
+                Version = "validation",
+                SchemaVersion = "validation",
+            },
+        };
+
+        foreach (var (key, value) in sectionsData)
+        {
+            structure[key] = value;
         }
 
-        var fileContent = await this.fileSystem.File.ReadAllTextAsync(this.filePath, cancellationToken).ConfigureAwait(false);
+        return structure;
+    }
 
-        if (string.IsNullOrWhiteSpace(fileContent))
+    private Result<SettingsReadPayload> FailRead(string message, Exception exception)
+    {
+        var wrapped = exception as SettingsPersistenceException
+                      ?? new SettingsPersistenceException($"{message} (source: '{this.Id}')", this.Id, exception);
+
+        LogLoadFailed(this.logger, this.Id, wrapped.Message, exception);
+        return Result.Fail<SettingsReadPayload>(wrapped);
+    }
+
+    private Result<SettingsWritePayload> FailWrite(string message, Exception exception)
+    {
+        var wrapped = exception as SettingsPersistenceException
+                      ?? new SettingsPersistenceException($"{message} (source: '{this.Id}')", this.Id, exception);
+
+        LogSaveFailed(this.logger, this.Id, wrapped.Message, exception);
+        return Result.Fail<SettingsWritePayload>(wrapped);
+    }
+
+    private Result<SettingsValidationPayload> FailValidation(string message, Exception exception)
+    {
+        var wrapped = new SettingsPersistenceException($"{message} (source: '{this.Id}')", this.Id, exception);
+        LogValidationFailed(this.logger, this.Id, wrapped.Message, exception);
+        return Result.Fail<SettingsValidationPayload>(wrapped);
+    }
+
+    private async Task<SettingsReadPayload> ReadFilePayloadAsync(CancellationToken cancellationToken)
+    {
+        if (!this.FileSystem.File.Exists(this.SourcePath))
         {
-            LogEmptyFile(this.logger, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"Settings file '{this.filePath}' is empty",
+            LogFileMissing(this.logger, this.Id, this.SourcePath);
+            var emptySections = new ReadOnlyDictionary<string, object>(
+                new Dictionary<string, object>(StringComparer.Ordinal));
+            return new SettingsReadPayload(emptySections, metadata: null, this.SourcePath);
+        }
+
+        var content = await this.ReadAllBytesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new SettingsPersistenceException(
+                $"Settings file '{this.SourcePath}' is empty.",
+                this.Id,
                 new JsonException("Empty settings file"));
         }
 
-        // Deserialize to JsonDocument first to handle flat structure WITHOUT case conversion
-        using var document = JsonDocument.Parse(fileContent);
+        using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
 
-        // Extract metadata (required) - metadata property name is lowercase by convention
         if (!root.TryGetProperty("metadata", out var metadataElement))
         {
-            LogMissingMetadata(this.logger, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"Settings file '{this.filePath}' is missing required 'metadata' section",
+            throw new SettingsPersistenceException(
+                $"Settings file '{this.SourcePath}' is missing required 'metadata' section.",
+                this.Id,
                 new JsonException("Missing required metadata section"));
         }
 
-        // Deserialize metadata WITHOUT case conversion to preserve property names
-        var metadata = JsonSerializer.Deserialize<SettingsMetadata>(metadataElement.GetRawText());
+        var metadata = JsonSerializer.Deserialize<SettingsMetadata>(metadataElement.GetRawText())
+                       ?? throw new SettingsPersistenceException(
+                           $"Failed to deserialize metadata from '{this.SourcePath}'.",
+                           this.Id,
+                           new JsonException("Invalid metadata format"));
 
-        if (metadata is null)
-        {
-            LogInvalidJsonFormat(this.logger, this.filePath);
-            return SettingsSourceReadResult.CreateFailure(
-                $"Failed to deserialize metadata from '{this.filePath}'",
-                new JsonException("Invalid metadata format"));
-        }
-
-        // Extract all sections (everything except "metadata")
-        // PRESERVE section name casing - do NOT convert to camelCase!
         var sections = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var property in root.EnumerateObject())
         {
             if (property.Name.Equals("metadata", StringComparison.OrdinalIgnoreCase))
             {
-                continue; // Skip metadata
+                continue;
             }
 
-            // Deserialize each section as a generic object (will be JsonElement)
             var sectionValue = JsonSerializer.Deserialize<object>(property.Value.GetRawText());
             if (sectionValue is not null)
             {
@@ -407,208 +278,44 @@ public partial class JsonSettingsSource(
             }
         }
 
-        LogReadSuccess(this.logger, this.filePath, sections.Count);
+        LogReadSections(this.logger, this.Id, sections.Count);
 
-        Console.WriteLine($"[DEBUG JsonSource] Read {sections.Count} sections from {this.filePath}:");
-        foreach (var kvp in sections)
-        {
-            Console.WriteLine($"[DEBUG JsonSource]   Section: '{kvp.Key}', ValueType: {kvp.Value?.GetType().Name ?? "null"}");
-        }
-
-        return SettingsSourceReadResult.CreateSuccess(sections, metadata);
+        return new SettingsReadPayload(
+            new ReadOnlyDictionary<string, object>(sections),
+            metadata,
+            this.SourcePath);
     }
 
-    private DisposableAction? CreateFileWatcher(Action<string> changeHandler)
+    private async Task<Dictionary<string, object>> MergeSectionsAsync(
+        IReadOnlyDictionary<string, object> sectionsData,
+        CancellationToken cancellationToken)
     {
-        var directory = this.fileSystem.Path.GetDirectoryName(this.filePath);
-        var fileName = this.fileSystem.Path.GetFileName(this.filePath);
+        var merged = new Dictionary<string, object>(StringComparer.Ordinal);
 
-        if (directory is null || !this.fileSystem.Directory.Exists(directory))
+        if (this.FileSystem.File.Exists(this.SourcePath))
         {
-            LogCannotWatchInvalidPath(this.logger, this.filePath);
-            return null;
-        }
-
-        this.fileWatcher = new FileSystemWatcher(directory, fileName)
-        {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-            EnableRaisingEvents = true,
-        };
-
-        void OnChanged(object sender, FileSystemEventArgs e)
-        {
-            LogFileChanged(this.logger, e.FullPath, e.ChangeType.ToString());
-            changeHandler(this.Id);
-        }
-
-        this.fileWatcher.Changed += OnChanged;
-        this.fileWatcher.Created += OnChanged;
-        this.fileWatcher.Deleted += OnChanged;
-        this.fileWatcher.Renamed += (sender, e) =>
-        {
-            LogFileRenamed(this.logger, e.OldFullPath, e.FullPath);
-            changeHandler(this.Id);
-        };
-
-        LogWatchingStarted(this.logger, this.filePath);
-
-        return new DisposableAction(() =>
-        {
-            if (this.fileWatcher is not null)
+            try
             {
-                this.fileWatcher.EnableRaisingEvents = false;
-                this.fileWatcher.Dispose();
-                this.fileWatcher = null;
-                LogWatchingStopped(this.logger, this.filePath);
+                var existing = await this.ReadFilePayloadAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var (sectionName, sectionValue) in existing.Sections)
+                {
+                    merged[sectionName] = sectionValue;
+                }
             }
-        });
-    }
-
-    private void EnsureDirectoryExists()
-    {
-        var directory = this.fileSystem.Path.GetDirectoryName(this.filePath);
-        if (directory is not null && !this.fileSystem.Directory.Exists(directory))
-        {
-            _ = this.fileSystem.Directory.CreateDirectory(directory);
-            LogDirectoryCreated(this.logger, directory);
-        }
-    }
-
-    private async Task WriteAtomicallyAsync(string jsonContent, CancellationToken cancellationToken)
-    {
-        var tempFilePath = $"{this.filePath}.tmp";
-        var backupFilePath = $"{this.filePath}.bak";
-
-        try
-        {
-            await this.fileSystem.File.WriteAllTextAsync(tempFilePath, jsonContent, cancellationToken).ConfigureAwait(false);
-
-            this.CreateBackupIfExists(backupFilePath);
-            this.fileSystem.File.Move(tempFilePath, this.filePath);
-            this.DeleteBackupIfExists(backupFilePath);
-        }
-        catch (IOException ex)
-        {
-            // IO failure during atomic write - attempt to restore backup
-            this.RestoreBackupOrThrow(backupFilePath, ex);
-            throw; // Rethrow original exception after successful restore
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            // Permission denied during atomic write - attempt to restore backup
-            this.RestoreBackupOrThrow(backupFilePath, ex);
-            throw; // Rethrow original exception after successful restore
-        }
-        catch (OperationCanceledException ex)
-        {
-            // Cancellation during atomic write - attempt to restore backup
-            this.RestoreBackupOrThrow(backupFilePath, ex);
-            throw; // Rethrow original exception after successful restore
-        }
-        finally
-        {
-            this.CleanupTempFileIfExists(tempFilePath);
-        }
-    }
-
-    private void CreateBackupIfExists(string backupFilePath)
-    {
-        if (this.fileSystem.File.Exists(this.filePath))
-        {
-            if (this.fileSystem.File.Exists(backupFilePath))
+            catch (SettingsPersistenceException ex)
             {
-                this.fileSystem.File.Delete(backupFilePath);
+                LogMergeFailed(this.logger, this.Id, ex.Message, ex);
+                throw;
             }
-
-            this.fileSystem.File.Move(this.filePath, backupFilePath);
-            LogBackupCreated(this.logger, backupFilePath);
-        }
-    }
-
-    private void DeleteBackupIfExists(string backupFilePath)
-    {
-        if (this.fileSystem.File.Exists(backupFilePath))
-        {
-            this.fileSystem.File.Delete(backupFilePath);
-        }
-    }
-
-    private void RestoreBackupOrThrow(string backupFilePath, Exception originalException)
-    {
-        if (!this.fileSystem.File.Exists(backupFilePath))
-        {
-            // No backup exists - nothing to restore, original exception will be thrown
-            return;
         }
 
-        try
+        foreach (var (sectionName, sectionValue) in sectionsData)
         {
-            if (this.fileSystem.File.Exists(this.filePath))
-            {
-                this.fileSystem.File.Delete(this.filePath);
-            }
-
-            this.fileSystem.File.Move(backupFilePath, this.filePath);
-            LogBackupRestored(this.logger, this.filePath);
-        }
-        catch (IOException restoreEx)
-        {
-            // Restore failed - this is CRITICAL as data may be corrupted
-            LogBackupRestoreFailed(this.logger, restoreEx, backupFilePath);
-            throw new SettingsPersistenceException(
-                $"Write operation failed AND backup restoration failed for '{this.filePath}'. Data may be in an inconsistent state.",
-                new AggregateException(originalException, restoreEx));
-        }
-        catch (UnauthorizedAccessException restoreEx)
-        {
-            // Restore failed - this is CRITICAL as data may be corrupted
-            LogBackupRestoreFailed(this.logger, restoreEx, backupFilePath);
-            throw new SettingsPersistenceException(
-                $"Write operation failed AND backup restoration failed for '{this.filePath}'. Data may be in an inconsistent state.",
-                new AggregateException(originalException, restoreEx));
-        }
-    }
-
-    private void CleanupTempFileIfExists(string tempFilePath)
-    {
-        if (!this.fileSystem.File.Exists(tempFilePath))
-        {
-            return;
+            merged[sectionName] = sectionValue;
         }
 
-        try
-        {
-            this.fileSystem.File.Delete(tempFilePath);
-            LogTempFileCleanedUp(this.logger, tempFilePath);
-        }
-#pragma warning disable CA1031 // Do not catch general exception types
-        catch (Exception ex)
-        {
-            // Best-effort cleanup in finally block - orphaned temp file is acceptable
-            // We must not throw here as it would mask the real exception from the operation
-            // Temp files are transient and can be manually cleaned up if needed
-            LogTempFileCleanupFailed(this.logger, ex, tempFilePath);
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
+        return merged;
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    /// <summary>
-    /// Helper class to create a disposable from an action.
-    /// </summary>
-    private sealed class DisposableAction(Action action) : IDisposable
-    {
-        private readonly Action action = action ?? throw new ArgumentNullException(nameof(action));
-        private bool isDisposed;
-
-        public void Dispose()
-        {
-            if (!this.isDisposed)
-            {
-                this.action();
-                this.isDisposed = true;
-            }
-        }
-    }
 }

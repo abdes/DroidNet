@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 
 namespace DroidNet.Config.Tests.TestHelpers;
 
@@ -21,15 +21,15 @@ public class MockSettingsSource : ISettingsSource, IDisposable
         this.Id = id;
     }
 
-    public event EventHandler<SettingsSourceChangedEventArgs>? Changed;
-
     public event EventHandler<SourceErrorEventArgs>? Error;
+
+    public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
     public string Id { get; }
 
     public bool CanWrite { get; set; } = true;
 
-    public bool SupportsEncryption { get; set; } = false;
+    public bool SupportsEncryption { get; set; }
 
     public bool IsAvailable { get; set; } = true;
 
@@ -43,25 +43,28 @@ public class MockSettingsSource : ISettingsSource, IDisposable
 
     public bool ShouldFailWrite { get; set; }
 
+    bool ISettingsSource.WatchForChanges { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
     public void AddSection(string sectionName, object data)
     {
         this.sections[sectionName] = data;
     }
 
-    public Task<SettingsSourceReadResult> ReadAsync(CancellationToken cancellationToken = default)
+    public Task<Result<SettingsReadPayload>> LoadAsync(CancellationToken cancellationToken = default)
     {
         this.ReadCallCount++;
 
         if (this.ShouldFailRead)
         {
-            return Task.FromResult(SettingsSourceReadResult.CreateFailure("Simulated read failure"));
+            return Task.FromResult(Result.Fail<SettingsReadPayload>(new InvalidOperationException("Simulated read failure")));
         }
 
-        var result = SettingsSourceReadResult.CreateSuccess(this.sections, this.Metadata);
-        return Task.FromResult(result);
+        var sections = new ReadOnlyDictionary<string, object>(new Dictionary<string, object>(this.sections));
+        var payload = new SettingsReadPayload(sections, this.Metadata, this.Id);
+        return Task.FromResult(Result.Ok(payload));
     }
 
-    public Task<SettingsSourceWriteResult> WriteAsync(
+    public Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         SettingsMetadata metadata,
         CancellationToken cancellationToken = default)
@@ -70,7 +73,7 @@ public class MockSettingsSource : ISettingsSource, IDisposable
 
         if (this.ShouldFailWrite)
         {
-            return Task.FromResult(SettingsSourceWriteResult.CreateFailure("Simulated write failure"));
+            return Task.FromResult(Result.Fail<SettingsWritePayload>(new InvalidOperationException("Simulated write failure")));
         }
 
         foreach (var section in sectionsData)
@@ -80,27 +83,29 @@ public class MockSettingsSource : ISettingsSource, IDisposable
 
         this.Metadata = metadata;
 
-        return Task.FromResult(SettingsSourceWriteResult.CreateSuccess());
+        var payload = new SettingsWritePayload(metadata, sectionsData.Count, this.Id);
+        return Task.FromResult(Result.Ok(payload));
     }
 
-    public Task<SettingsSourceResult> ValidateAsync(
+    public Task<Result<SettingsValidationPayload>> ValidateAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         CancellationToken cancellationToken = default)
     {
-        // Mock implementation - always succeed
-        return Task.FromResult(SettingsSourceResult.CreateSuccess("Validation succeeded"));
+        var payload = new SettingsValidationPayload(sectionsData.Count, "Validation succeeded");
+        return Task.FromResult(Result.Ok(payload));
     }
 
-    public Task<SettingsSourceResult> ReloadAsync(CancellationToken cancellationToken = default)
+    public Task<Result<SettingsValidationPayload>> ReloadAsync(CancellationToken cancellationToken = default)
     {
         this.ReadCallCount++;
 
         if (this.ShouldFailRead)
         {
-            return Task.FromResult(SettingsSourceResult.CreateFailure("Simulated reload failure"));
+            return Task.FromResult(Result.Fail<SettingsValidationPayload>(new InvalidOperationException("Simulated reload failure")));
         }
 
-        return Task.FromResult(SettingsSourceResult.CreateSuccess("Reload succeeded"));
+        var payload = new SettingsValidationPayload(this.sections.Count, "Reload succeeded");
+        return Task.FromResult(Result.Ok(payload));
     }
 
     public IDisposable? WatchForChanges(Action<string> changeHandler)
@@ -119,9 +124,9 @@ public class MockSettingsSource : ISettingsSource, IDisposable
         // No-op for mock
     }
 
-    public void TriggerChange(SettingsSourceChangeType changeType)
+    public void TriggerChange(SourceChangeType changeType)
     {
-        this.Changed?.Invoke(this, new SettingsSourceChangedEventArgs(this.Id, changeType));
+        this.SourceChanged?.Invoke(this, new SourceChangedEventArgs(this.Id, changeType));
     }
 
     public void TriggerError(string errorMessage, Exception? exception = null)
@@ -138,6 +143,12 @@ public class MockSettingsSource : ISettingsSource, IDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    public Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
+    {
+        // For the mock, the reload flag is ignored. Delegate to the primary LoadAsync implementation.
+        return this.LoadAsync(cancellationToken);
     }
 
     private class MockDisposable : IDisposable

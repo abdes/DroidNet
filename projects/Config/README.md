@@ -600,10 +600,11 @@ For a detailed HTML report, use ReportGenerator:
 dotnet tool install -g dotnet-reportgenerator-globaltool
 
 # Run tests with coverage (from Config project directory)
+➜ dotnet test -- --coverage --results-directory ./Coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
 dotnet test Config.sln -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
 
 # Generate HTML report
-reportgenerator -reports:"..\..\bin\Config.Tests\x64\Debug\net9.0-windows10.0.26100.0\TestResults\coverage.cobertura.xml" -targetdir:".\TestResults\CoverageReport" -reporttypes:Html
+➜ reportgenerator -reports:".\Coverage\coverage.cobertura.xml" -targetdir:".\CoverageReport" -reporttypes:Htmlreportgenerator -reports:"..\..\bin\Config.Tests\x64\Debug\net9.0-windows10.0.26100.0\TestResults\coverage.cobertura.xml" -targetdir:".\TestResults\CoverageReport" -reporttypes:Html
 
 # Open the report
 start .\TestResults\CoverageReport\index.html

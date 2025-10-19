@@ -212,7 +212,7 @@ public class SettingsManagerTests : SettingsTestBase
         var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
 
         var eventFired = false;
-        SettingsSourceChangedEventArgs? eventArgs = null;
+        SourceChangedEventArgs? eventArgs = null;
         manager.SourceChanged += (_, e) =>
         {
             eventFired = true;
@@ -226,25 +226,7 @@ public class SettingsManagerTests : SettingsTestBase
         _ = eventFired.Should().BeTrue();
         _ = eventArgs.Should().NotBeNull();
         _ = eventArgs!.SourceId.Should().Be("source");
-        _ = eventArgs.ChangeType.Should().Be(SettingsSourceChangeType.Added);
-    }
-
-    [TestMethod]
-    public async Task SourceChanged_ShouldFireWhenSourceFails()
-    {
-        // Arrange
-        var source = new MockSettingsSource("source") { ShouldFailRead = true };
-
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
-
-        var eventsFired = new List<SettingsSourceChangedEventArgs>();
-        manager.SourceChanged += (_, e) => eventsFired.Add(e);
-
-        // Act
-        await manager.InitializeAsync();
-
-        // Assert
-        _ = eventsFired.Should().Contain(e => e.ChangeType == SettingsSourceChangeType.Failed);
+        _ = eventArgs.ChangeType.Should().Be(SourceChangeType.Added);
     }
 
     [TestMethod]

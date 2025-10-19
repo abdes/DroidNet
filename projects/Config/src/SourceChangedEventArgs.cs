@@ -7,7 +7,7 @@ namespace DroidNet.Config;
 /// <summary>
 /// Types of changes that can occur to settings sources.
 /// </summary>
-public enum SettingsSourceChangeType
+public enum SourceChangeType
 {
     /// <summary>A new source was added to the service.</summary>
     Added,
@@ -18,21 +18,21 @@ public enum SettingsSourceChangeType
     /// <summary>A source was removed from the service.</summary>
     Removed,
 
-    /// <summary>A source failed to load or operation failed.</summary>
-    Failed,
+    /// <summary>A source was renamed.</summary>
+    Renamed,
 }
 
 /// <summary>
 /// Event arguments for settings source lifecycle changes.
 /// </summary>
-public sealed class SettingsSourceChangedEventArgs : EventArgs
+public sealed class SourceChangedEventArgs : EventArgs
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsSourceChangedEventArgs"/> class.
+    /// Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
     /// </summary>
     /// <param name="sourceId">The identifier of the settings source that changed.</param>
     /// <param name="changeType">The type of change that occurred.</param>
-    public SettingsSourceChangedEventArgs(string sourceId, SettingsSourceChangeType changeType)
+    public SourceChangedEventArgs(string sourceId, SourceChangeType changeType)
     {
         this.SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
         this.ChangeType = changeType;
@@ -40,12 +40,12 @@ public sealed class SettingsSourceChangedEventArgs : EventArgs
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsSourceChangedEventArgs"/> class.
+    /// Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
     /// </summary>
     /// <param name="sourceId">The identifier of the settings source that changed.</param>
     /// <param name="changeType">The type of change that occurred.</param>
     /// <param name="errorMessage">Optional error message if the change represents a failure.</param>
-    public SettingsSourceChangedEventArgs(string sourceId, SettingsSourceChangeType changeType, string? errorMessage)
+    public SourceChangedEventArgs(string sourceId, SourceChangeType changeType, string? errorMessage)
     {
         this.SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
         this.ChangeType = changeType;
@@ -61,7 +61,7 @@ public sealed class SettingsSourceChangedEventArgs : EventArgs
     /// <summary>
     /// Gets the type of change that occurred.
     /// </summary>
-    public SettingsSourceChangeType ChangeType { get; }
+    public SourceChangeType ChangeType { get; }
 
     /// <summary>
     /// Gets an optional error message if the change represents a failure.
