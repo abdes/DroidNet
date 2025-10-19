@@ -11,6 +11,11 @@ namespace DroidNet.Config;
 public interface ISettingsSource
 {
     /// <summary>
+    /// Event raised when a settings source lifecycle change occurs (added, updated, removed, failed).
+    /// </summary>
+    public event EventHandler<SourceChangedEventArgs>? SourceChanged;
+
+    /// <summary>
     /// Gets the unique identifier for this settings source.
     /// </summary>
     public string Id { get; }
@@ -31,11 +36,17 @@ public interface ISettingsSource
     public bool IsAvailable { get; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this source is currently available for operations.
+    /// </summary>
+    public bool WatchForChanges { get; set; }
+
+    /// <summary>
     /// Reads settings content from the source.
     /// </summary>
+    /// <param name="reload">If true, forces a reload from the underlying source; otherwise, may use cached data.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that represents the read operation. The task result contains the read result.</returns>
-    public Task<SettingsSourceReadResult> ReadAsync(CancellationToken cancellationToken = default);
+    public Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Writes settings content to the source using atomic operations.
@@ -44,7 +55,7 @@ public interface ISettingsSource
     /// <param name="metadata">Metadata to be written alongside the settings.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that represents the write operation. The task result contains the write result.</returns>
-    public Task<SettingsSourceWriteResult> WriteAsync(
+    public Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         SettingsMetadata metadata,
         CancellationToken cancellationToken = default);
@@ -55,21 +66,7 @@ public interface ISettingsSource
     /// <param name="sectionsData">Dictionary of section names to their serialized content.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that represents the validation operation. The task result contains the validation result.</returns>
-    public Task<SettingsSourceResult> ValidateAsync(
+    public Task<Result<SettingsValidationPayload>> ValidateAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Forces a reload of the settings from the persistent store.
-    /// </summary>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A task that represents the reload operation. The task result contains the reload result.</returns>
-    public Task<SettingsSourceResult> ReloadAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Watches for external changes to the settings source and invokes the provided handler.
-    /// </summary>
-    /// <param name="changeHandler">Handler to invoke when changes are detected.</param>
-    /// <returns>A disposable object that stops watching when disposed. Returns null if watching is not supported.</returns>
-    public IDisposable? WatchForChanges(Action<string> changeHandler);
 }

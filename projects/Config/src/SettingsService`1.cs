@@ -8,7 +8,6 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-
 namespace DroidNet.Config;
 
 /// <summary>
@@ -54,12 +53,10 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
 
-
     /// <summary>
     /// Occurs when the initialization state changes.
     /// </summary>
     public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
-
 
     /// <summary>
     /// Occurs when an error is reported by the settings source.
@@ -113,7 +110,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     /// <returns>A default settings instance.</returns>
     protected abstract TSettings CreateDefaultSettings();
 
-
     /// <summary>
     /// Gets a value indicating whether the settings have unsaved changes.
     /// </summary>
@@ -122,7 +118,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         get => this.isDirty;
         internal set => this.SetField(ref this.isDirty, value);
     }
-
 
     /// <summary>
     /// Gets a value indicating whether an operation is in progress.
@@ -145,7 +140,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         {
             return;
         }
-
 
         await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -186,7 +180,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         {
             return;
         }
-
 
         await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

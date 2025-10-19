@@ -442,4 +442,31 @@ public class DependencyInjectionTests : SettingsTestBase
         // Assert
         _ = await act.Should().ThrowAsync<SettingsValidationException>();
     }
+
+    [TestMethod]
+    public void WithSettings_WithPathResolver_ShouldRegisterSettingsSourcesAndManager()
+    {
+        // Arrange - create a settings file using the test file system
+        var settings = new Dictionary<string, object>
+        {
+            { nameof(TestSettings), new TestSettings() }
+        };
+        var filePath = this.CreateMultiSectionSettingsFile("resolver.json", settings);
+
+        // Register a simple IPathFinder that will resolve the config file to the created path
+        var pathFinder = new TestPathFinder(filePath);
+        this.Container.RegisterInstance<IPathFinder>(pathFinder);
+
+        // Act - call the overload that accepts a Func<IPathFinder, IEnumerable<string>>
+        this.Container.WithSettings(pf => new[] { pf.GetConfigFilePath("resolver.json") });
+
+        // Assert
+        var manager = this.Container.Resolve<ISettingsManager>();
+        _ = manager.Should().NotBeNull();
+
+        var sources = this.Container.Resolve<IEnumerable<ISettingsSource>>();
+        _ = sources.Should().NotBeNull();
+        _ = sources.Should().HaveCount(1);
+        _ = sources.First().Should().BeOfType<JsonSettingsSource>();
+    }
 }

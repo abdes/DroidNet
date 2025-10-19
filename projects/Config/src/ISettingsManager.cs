@@ -13,7 +13,7 @@ public interface ISettingsManager : IDisposable
     /// <summary>
     /// Event raised when a settings source lifecycle change occurs (added, updated, removed, failed).
     /// </summary>
-    public event EventHandler<SettingsSourceChangedEventArgs>? SourceChanged;
+    public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
     /// <summary>
     /// Gets the collection of all registered settings sources.
@@ -70,5 +70,5 @@ public interface ISettingsManager : IDisposable
     /// </summary>
     /// <param name="handler">The handler to invoke when source changes occur.</param>
     /// <returns>A disposable object that unsubscribes when disposed.</returns>
-    public IDisposable SubscribeToSourceChanges(Action<SettingsSourceChangedEventArgs> handler);
+    public IDisposable SubscribeToSourceChanges(Action<SourceChangedEventArgs> handler);
 }

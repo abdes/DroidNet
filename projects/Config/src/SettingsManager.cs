@@ -35,7 +35,7 @@ public sealed partial class SettingsManager(
     private bool isDisposed;
 
     /// <inheritdoc/>
-    public event EventHandler<SettingsSourceChangedEventArgs>? SourceChanged;
+    public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
     /// <inheritdoc/>
     public IReadOnlyList<ISettingsSource> Sources
@@ -51,8 +51,6 @@ public sealed partial class SettingsManager(
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
-
-        Console.WriteLine($"[DEBUG] SettingsManager.InitializeAsync called, sources count: {this.sources.Count}, already initialized: {this.isInitialized}");
 
         await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -70,48 +68,34 @@ public sealed partial class SettingsManager(
             {
                 try
                 {
-                    Console.WriteLine($"[DEBUG InitializeAsync] About to read source '{source.Id}'");
                     LogLoadingSource(this.logger, source.Id);
-                    var result = await source.ReadAsync(cancellationToken).ConfigureAwait(false);
-                    Console.WriteLine($"[DEBUG InitializeAsync] Source '{source.Id}' read result: Success={result.Success}, SectionsData={result.SectionsData?.Count ?? 0} sections");
+                    var result = await source.LoadAsync(false, cancellationToken).ConfigureAwait(false);
 
-                    if (result.Success)
+                    if (result.IsSuccess)
                     {
-                        // Cache the sections data from this source (last-loaded-wins)
-                        if (result.SectionsData != null)
+                        var payload = result.Value;
+
+                        foreach (var (sectionName, sectionData) in payload.Sections)
                         {
-                            Console.WriteLine($"[DEBUG InitializeAsync] Source '{source.Id}' returned {result.SectionsData.Count} sections:");
-                            foreach (var (sectionName, sectionData) in result.SectionsData)
+                            if (sectionData != null)
                             {
-                                Console.WriteLine($"[DEBUG InitializeAsync]   Caching section '{sectionName}', data type: {sectionData?.GetType().Name ?? "null"}");
-                                if (sectionData != null)
-                                {
-                                    this.cachedSections[sectionName] = sectionData;
-                                }
+                                this.cachedSections[sectionName] = sectionData;
                             }
                         }
 
                         LogLoadedSource(this.logger, source.Id);
-                        this.OnSourceChanged(new SettingsSourceChangedEventArgs(source.Id, SettingsSourceChangeType.Added));
+                        this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
                     }
                     else
                     {
-                        Console.WriteLine($"[DEBUG InitializeAsync] Source '{source.Id}' FAILED: {result.ErrorMessage}");
-                        LogFailedToLoadSource(this.logger, source.Id, result.ErrorMessage);
-                        this.OnSourceChanged(
-                            new SettingsSourceChangedEventArgs(
-                                source.Id,
-                                SettingsSourceChangeType.Failed,
-                                result.ErrorMessage));
+                        var errorMessage = result.Error.Message;
+                        LogFailedToLoadSource(this.logger, source.Id, errorMessage);
                     }
                 }
 #pragma warning disable CA1031 // Do not catch general exception types
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[DEBUG InitializeAsync] EXCEPTION reading source '{source.Id}': {ex.Message}");
                     LogExceptionLoadingSource(this.logger, ex, source.Id);
-                    this.OnSourceChanged(
-                        new SettingsSourceChangedEventArgs(source.Id, SettingsSourceChangeType.Failed, ex.Message));
                 }
 #pragma warning restore CA1031 // Do not catch general exception types
             }
@@ -169,55 +153,8 @@ public sealed partial class SettingsManager(
         await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Clear the cache before reloading
-            this.cachedSections.Clear();
-
-            foreach (var source in this.sources)
-            {
-                try
-                {
-                    var result = await source.ReadAsync(cancellationToken).ConfigureAwait(false);
-
-                    if (result.Success)
-                    {
-                        // Update cache with reloaded data (last-loaded-wins)
-                        if (result.SectionsData != null)
-                        {
-                            foreach (var (sectionName, sectionData) in result.SectionsData)
-                            {
-                                if (sectionData != null)
-                                {
-                                    this.cachedSections[sectionName] = sectionData;
-                                }
-                            }
-                        }
-
-                        LogReloadedSource(this.logger, source.Id);
-                        this.OnSourceChanged(
-                            new SettingsSourceChangedEventArgs(source.Id, SettingsSourceChangeType.Updated));
-                    }
-                    else
-                    {
-                        LogFailedToReloadSource(this.logger, source.Id, result.ErrorMessage);
-                    }
-                }
-#pragma warning disable CA1031 // Do not catch general exception types
-                catch (Exception ex)
-                {
-                    LogExceptionReloadingSource(this.logger, ex, source.Id);
-                }
-#pragma warning restore CA1031 // Do not catch general exception types
-            }
-
-            // Notify all service instances to reload
-            foreach (var serviceInstance in this.serviceInstances.Values)
-            {
-                if (serviceInstance is IAsyncDisposable asyncService)
-                {
-                    // Services will handle their own reload internally
-                    LogServiceHandlesReload(this.logger, serviceInstance.GetType().Name);
-                }
-            }
+            await this.ReloadSourcesAsync(cancellationToken).ConfigureAwait(false);
+            this.NotifyServicesOfReload();
         }
         finally
         {
@@ -274,10 +211,22 @@ public sealed partial class SettingsManager(
             // Load the new source if manager is already initialized
             if (this.isInitialized)
             {
-                var result = await source.ReadAsync(cancellationToken).ConfigureAwait(false);
-                if (result.Success)
+                var result = await source.LoadAsync(false, cancellationToken).ConfigureAwait(false);
+                if (result.IsSuccess)
                 {
-                    this.OnSourceChanged(new SettingsSourceChangedEventArgs(source.Id, SettingsSourceChangeType.Added));
+                    foreach (var (sectionName, sectionData) in result.Value.Sections)
+                    {
+                        if (sectionData != null)
+                        {
+                            this.cachedSections[sectionName] = sectionData;
+                        }
+                    }
+
+                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
+                }
+                else
+                {
+                    LogFailedToLoadSource(this.logger, source.Id, result.Error.Message);
                 }
             }
         }
@@ -300,7 +249,7 @@ public sealed partial class SettingsManager(
             _ = this.sources.Remove(source);
             LogRemovedSource(this.logger, sourceId);
 
-            this.OnSourceChanged(new SettingsSourceChangedEventArgs(sourceId, SettingsSourceChangeType.Removed));
+            this.OnSourceChanged(new SourceChangedEventArgs(sourceId, SourceChangeType.Removed));
 
             // Dispose the source if it's disposable
             if (source is IDisposable disposable)
@@ -315,7 +264,7 @@ public sealed partial class SettingsManager(
     }
 
     /// <inheritdoc/>
-    public IDisposable SubscribeToSourceChanges(Action<SettingsSourceChangedEventArgs> handler)
+    public IDisposable SubscribeToSourceChanges(Action<SourceChangedEventArgs> handler)
     {
         this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(handler);
@@ -327,7 +276,7 @@ public sealed partial class SettingsManager(
 
         return subscription;
 
-        void EventHandler(object? sender, SettingsSourceChangedEventArgs args) => handler(args);
+        void EventHandler(object? sender, SourceChangedEventArgs args) => handler(args);
     }
 
     /// <inheritdoc/>
@@ -393,69 +342,29 @@ public sealed partial class SettingsManager(
         pocoType ??= typeof(TSettings);
 
         // Use cached sections data instead of re-reading from sources
-        Console.WriteLine($"[DEBUG] LoadSettingsAsync: Looking for section '{sectionName}', TSettings={typeof(TSettings).Name}, PocoType={pocoType.Name}");
-        Console.WriteLine($"[DEBUG] Cache has {this.cachedSections.Count} sections: {string.Join(", ", this.cachedSections.Keys)}");
-
         if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
         {
-            Console.WriteLine($"[DEBUG] Found section data, type={sectionData?.GetType().Name ?? "null"}");
-
             if (sectionData is TSettings typedData)
             {
                 mergedSettings = typedData;
-                Console.WriteLine($"[DEBUG] Direct cast to {typeof(TSettings).Name} succeeded");
                 LogLoadedSettingsForType(this.logger, sectionName, "cache");
             }
             else if (sectionData is System.Text.Json.JsonElement jsonElement)
             {
-                Console.WriteLine($"[DEBUG] sectionData is JsonElement, attempting to deserialize to {pocoType.Name}");
-                Console.WriteLine($"[DEBUG] JsonElement raw text: {jsonElement.GetRawText()}");
-
                 // Deserialize JsonElement to the POCO type first
                 // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
                 var pocoInstance = System.Text.Json.JsonSerializer.Deserialize(
                     jsonElement.GetRawText(),
                     pocoType);
 
-                Console.WriteLine($"[DEBUG] Deserialization result: {(pocoInstance == null ? "null" : "success")}");
-
-                // Debug: Print properties using reflection
-                if (pocoInstance != null)
-                {
-                    var nameProperty = pocoInstance.GetType().GetProperty("Name");
-                    var valueProperty = pocoInstance.GetType().GetProperty("Value");
-                    if (nameProperty != null)
-                    {
-                        Console.WriteLine($"[DEBUG] Deserialized {pocoType.Name}.Name: '{nameProperty.GetValue(pocoInstance)}'");
-                    }
-
-                    if (valueProperty != null)
-                    {
-                        Console.WriteLine($"[DEBUG] Deserialized {pocoType.Name}.Value: {valueProperty.GetValue(pocoInstance)}");
-                    }
-                }
-
                 // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
                 if (pocoInstance is TSettings typedInstance)
                 {
                     mergedSettings = typedInstance;
-                    Console.WriteLine($"[DEBUG] Successfully cast {pocoType.Name} to {typeof(TSettings).Name}");
-                }
-                else
-                {
-                    Console.WriteLine($"[DEBUG] Failed to cast {pocoType.Name} to {typeof(TSettings).Name}");
                 }
 
                 LogLoadedSettingsForType(this.logger, sectionName, "cache (deserialized from JsonElement)");
             }
-            else
-            {
-                Console.WriteLine($"[DEBUG] sectionData is neither {typeof(TSettings).Name} nor JsonElement!");
-            }
-        }
-        else
-        {
-            Console.WriteLine($"[DEBUG] Section '{sectionName}' NOT found in cache!");
         }
 
         // Return null if no settings were found - the service will handle creating defaults
@@ -484,15 +393,16 @@ public sealed partial class SettingsManager(
         {
             try
             {
-                var result = await source.WriteAsync(sectionsData, metadata, cancellationToken).ConfigureAwait(false);
-                if (result.Success)
+                var result = await source.SaveAsync(sectionsData, metadata, cancellationToken).ConfigureAwait(false);
+                if (result.IsSuccess)
                 {
+                    this.cachedSections[sectionName] = settings!;
                     LogSavedSettingsForType(this.logger, sectionName, source.Id);
-                    this.OnSourceChanged(new SettingsSourceChangedEventArgs(source.Id, SettingsSourceChangeType.Updated));
+                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Updated));
                 }
                 else
                 {
-                    LogFailedToSaveSettingsForType(this.logger, sectionName, source.Id, result.ErrorMessage);
+                    LogFailedToSaveSettingsForType(this.logger, sectionName, source.Id, result.Error.Message);
                 }
             }
             catch (Exception ex)
@@ -506,9 +416,60 @@ public sealed partial class SettingsManager(
         }
     }
 
-    private void OnSourceChanged(SettingsSourceChangedEventArgs args)
+    private void OnSourceChanged(SourceChangedEventArgs args)
     {
         this.SourceChanged?.Invoke(this, args);
+    }
+
+    private async Task ReloadSourcesAsync(CancellationToken cancellationToken)
+    {
+        this.cachedSections.Clear();
+
+        foreach (var source in this.sources)
+        {
+            try
+            {
+                var result = await source.LoadAsync(true, cancellationToken).ConfigureAwait(false);
+
+                if (result.IsSuccess)
+                {
+                    var payload = result.Value;
+
+                    foreach (var (sectionName, sectionData) in payload.Sections)
+                    {
+                        if (sectionData != null)
+                        {
+                            this.cachedSections[sectionName] = sectionData;
+                        }
+                    }
+
+                    LogReloadedSource(this.logger, source.Id);
+                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Updated));
+                }
+                else
+                {
+                    LogFailedToReloadSource(this.logger, source.Id, result.Error.Message);
+                }
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch (Exception ex)
+            {
+                LogExceptionReloadingSource(this.logger, ex, source.Id);
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+        }
+    }
+
+    private void NotifyServicesOfReload()
+    {
+        foreach (var serviceInstance in this.serviceInstances.Values)
+        {
+            if (serviceInstance is IAsyncDisposable)
+            {
+                // Services will handle their own reload internally
+                LogServiceHandlesReload(this.logger, serviceInstance.GetType().Name);
+            }
+        }
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsManager));
