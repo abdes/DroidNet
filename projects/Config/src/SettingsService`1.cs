@@ -3,208 +3,334 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.IO.Abstractions;
-using System.Reactive.Linq;
+using System.ComponentModel.DataAnnotations;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+
 
 namespace DroidNet.Config;
 
 /// <summary>
-///     Provides an abstract base class for managing settings in a configuration section corresponding
-///     the type <typeparamref name="TSettings" />. Provides common functionality for property change
-///     notifications, monitoring of the settings using <see cref="IOptionsMonitor{TOptions}" />, and
-///     serialization of the live settings to a Json file.
+/// Provides management, validation, and persistence for a specific settings type.
+/// Handles loading, saving, resetting, and validation of settings, and tracks state changes.
 /// </summary>
-/// <typeparam name="TSettings">The type of the settings.</typeparam>
+/// <typeparam name="TSettings">The type of settings managed by this service.</typeparam>
 /// <remarks>
-///     Implementations of this interface are expected to provide the following functionality:
-///     <list>
-///         <item>
-///             <term>Property Change Notifications</term>
-///             <description>
-///                 Implementations must notify listeners when any property of the settings object changes. This can
-///                 be achieved by raising the <see cref="INotifyPropertyChanged.PropertyChanged" /> event whenever
-///                 a property is updated. The property setters should invoke this event, and a method like
-///                 <see cref="SetField{T}" /> can be used to compare old and new values before triggering the
-///                 notification.
-///             </description>
-///         </item>
-///         <item>
-///             <term>Disposable Functionality</term>
-///             <description>
-///                 Implementations must manage resources properly by implementing the <see cref="IDisposable" />
-///                 interface. This includes disposing of any subscriptions or unmanaged resources and suppressing
-///                 finalization. A typical implementation should override the <see cref="IDisposable.Dispose" />
-///                 method to dispose of resources and mark the instance as disposed to prevent further usage.
-///             </description>
-///         </item>
-///     </list>
+/// This is an abstract base class. Concrete implementations must:
+/// <list type="bullet">
+/// <item>Inherit from SettingsService&lt;TSettings&gt;</item>
+/// <item>Implement the TSettings interface</item>
+/// <item>Override <see cref="GetSettingsSnapshot"/> to provide the current settings as a POCO</item>
+/// <item>Override <see cref="UpdateProperties"/> to update properties from loaded settings</item>
+/// <item>Override <see cref="CreateDefaultSettings"/> to provide default settings instance</item>
+/// </list>
 /// </remarks>
-public abstract partial class SettingsService<TSettings> : ISettingsService<TSettings>
+public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     where TSettings : class
 {
-    private readonly IFileSystem fs;
-
-    /// <summary>
-    ///     By default, the serialized Json has the numeric value of the enums. Using the custom
-    ///     converter will make it serialize the enum name instead, using the original case of the enum
-    ///     value.
-    /// </summary>
-    private readonly JsonSerializerOptions jsonSerializerOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(new OriginalCaseNamingPolicy(), allowIntegerValues: false) },
-    };
-
+    private readonly SettingsManager manager;
     private readonly ILogger logger;
-    private readonly IDisposable settingsChangedSubscription;
-    private readonly IDisposable? autoSaveSubscription;
+    private readonly SemaphoreSlim operationLock;
+    private bool isDirty;
+    private bool isBusy;
+    private bool isInitialized;
     private bool isDisposed;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="SettingsService{TSettings}" /> class.
+    /// Initializes a new instance of the <see cref="SettingsService{TSettings}"/> class.
     /// </summary>
-    /// <param name="settingsMonitor">The settings monitor.</param>
-    /// <param name="fs">The file system.</param>
-    /// <param name="loggerFactory">
-    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
-    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
-    /// </param>
-    /// <param name="autoSaveDelay">
-    ///     The delay before auto-saving settings after a change. If <see langword="null"/>, auto-save is disabled.
-    ///     Default is 5 seconds.
-    /// </param>
-    protected SettingsService(
-        IOptionsMonitor<TSettings> settingsMonitor,
-        IFileSystem fs,
-        ILoggerFactory? loggerFactory = null,
-        TimeSpan? autoSaveDelay = null)
+    /// <param name="manager">The settings manager used to load and save settings.</param>
+    /// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
+    protected SettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ??
-                      NullLoggerFactory.Instance.CreateLogger<SettingsService<TSettings>>();
-        this.fs = fs;
+        this.logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ?? NullLogger<SettingsService<TSettings>>.Instance;
 
-        // Default auto-save delay is 5 seconds if not explicitly disabled
-        autoSaveDelay ??= TimeSpan.FromSeconds(5);
+        this.manager = manager ?? throw new ArgumentNullException(nameof(manager));
+        this.operationLock = new SemaphoreSlim(1, 1);
+    }
 
-        // Throttle because the implementation of Microsoft.Extensions.Configuration fires multiple
-        // times for the same change
-        // https://github.com/dotnet/runtime/issues/109445
-        IDisposable? onChangeToken = null;
-        this.settingsChangedSubscription = Observable.FromEvent<Action<TSettings, string?>, Tuple<TSettings, string?>>(
-                conversion: rxOnNext => (settings, name) => rxOnNext(Tuple.Create(settings, name)),
-                addHandler: handler => onChangeToken = settingsMonitor.OnChange(handler),
-                removeHandler: _ => onChangeToken?.Dispose())
-            .Throttle(TimeSpan.FromMilliseconds(500))
-            .Subscribe(t => this.UpdateProperties(t.Item1));
+    /// <inheritdoc/>
+    /// <inheritdoc/>
+    public event PropertyChangedEventHandler? PropertyChanged;
 
-        /*
-         * Note: we're using the OnChange(TSettings, string?) version because Moq cannot mock
-         * extension methods. We are also doing a conversion of the arguments to a tuple, because Rx
-         * cannot handle multiple arguments.
-         */
 
-        // Setup auto-save with configurable throttle delay
-        if (autoSaveDelay > TimeSpan.Zero)
+    /// <summary>
+    /// Occurs when the initialization state changes.
+    /// </summary>
+    public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
+
+
+    /// <summary>
+    /// Occurs when an error is reported by the settings source.
+    /// </summary>
+    public event EventHandler<SourceErrorEventArgs>? SourceError;
+
+    /// <summary>
+    /// Gets the section name used to identify this settings type in storage sources.
+    /// Must be implemented by derived classes to provide a unique identifier.
+    /// </summary>
+    public abstract string SectionName { get; }
+
+    /// <summary>
+    /// Gets the concrete POCO type used for deserialization from storage.
+    /// Override this property if TSettings is an interface to specify the concrete implementation type.
+    /// </summary>
+    /// <remarks>
+    /// When TSettings is an interface, this property should return the concrete class type
+    /// that implements the interface and can be deserialized from JSON.
+    /// The default implementation returns typeof(TSettings).
+    /// </remarks>
+    protected virtual Type PocoType => typeof(TSettings);
+
+    /// <summary>
+    /// Gets the current settings instance.
+    /// </summary>
+    public TSettings Settings
+    {
+        get
         {
-            this.autoSaveSubscription = Observable
-                .FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
-                    handler => this.PropertyChanged += handler,
-                    handler => this.PropertyChanged -= handler)
-                .Throttle(autoSaveDelay.Value)
-                .Subscribe(
-                    _ => this.TrySaveSettings());
+            this.ThrowIfDisposed();
+            return (TSettings)(object)this;
         }
     }
 
-    /// <inheritdoc />
-    public event PropertyChangedEventHandler? PropertyChanged;
+    /// <summary>
+    /// Creates a POCO snapshot of the current settings state for serialization.
+    /// </summary>
+    /// <returns>A POCO object representing the current settings.</returns>
+    protected abstract object GetSettingsSnapshot();
 
-    /// <inheritdoc />
-    public bool IsDirty { get; private set; }
+    /// <summary>
+    /// Updates the properties of this service from a loaded settings POCO.
+    /// </summary>
+    /// <param name="settings">The loaded settings POCO to apply.</param>
+    protected abstract void UpdateProperties(TSettings settings);
 
-    /// <inheritdoc />
-    public TSettings Settings => (TSettings)(object)this;
+    /// <summary>
+    /// Creates a new instance with default settings values.
+    /// </summary>
+    /// <returns>A default settings instance.</returns>
+    protected abstract TSettings CreateDefaultSettings();
 
-    /// <inheritdoc />
+
+    /// <summary>
+    /// Gets a value indicating whether the settings have unsaved changes.
+    /// </summary>
+    public bool IsDirty
+    {
+        get => this.isDirty;
+        internal set => this.SetField(ref this.isDirty, value);
+    }
+
+
+    /// <summary>
+    /// Gets a value indicating whether an operation is in progress.
+    /// </summary>
+    public bool IsBusy
+    {
+        get => this.isBusy;
+        private set => this.SetField(ref this.isBusy, value);
+    }
+
+    /// <summary>
+    /// Loads settings from all sources and initializes the service.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        if (this.isInitialized)
+        {
+            return;
+        }
+
+
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            this.IsBusy = true;
+            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
+
+            // If no settings were loaded from sources, use default settings
+            if (loadedSettings == null)
+            {
+                loadedSettings = this.CreateDefaultSettings();
+            }
+
+            // Update properties from loaded settings
+            this.UpdateProperties(loadedSettings);
+
+            this.isInitialized = true;
+            this.IsDirty = false;
+            this.InitializationStateChanged?.Invoke(this, new InitializationStateChangedEventArgs(true));
+        }
+        finally
+        {
+            this.IsBusy = false;
+            _ = this.operationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Validates and saves the current settings to all writable sources.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task SaveAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
+        if (!this.IsDirty)
+        {
+            return;
+        }
+
+
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            this.IsBusy = true;
+            var validationErrors = await this.ValidateAsync(cancellationToken).ConfigureAwait(false);
+            if (validationErrors.Count > 0)
+            {
+                throw new SettingsValidationException("Settings validation failed", validationErrors);
+            }
+
+            var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
+            var settingsSnapshot = this.GetSettingsSnapshot();
+            await this.manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, metadata, cancellationToken).ConfigureAwait(false);
+            this.IsDirty = false;
+        }
+        finally
+        {
+            this.IsBusy = false;
+            _ = this.operationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reloads settings from all sources, discarding unsaved changes.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
+
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            this.IsBusy = true;
+
+            // First, reload all sources in the manager to refresh the cache
+            await this.manager.ReloadAllAsync(cancellationToken).ConfigureAwait(false);
+
+            // Then load the refreshed settings from the updated cache
+            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
+
+            // If no settings were loaded from sources, use default settings
+            if (loadedSettings == null)
+            {
+                loadedSettings = this.CreateDefaultSettings();
+            }
+
+            this.UpdateProperties(loadedSettings);
+
+            this.IsDirty = false;
+            this.OnPropertyChanged(nameof(this.Settings));
+        }
+        finally
+        {
+            this.IsBusy = false;
+            _ = this.operationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Validates the current settings instance using data annotations.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A read-only list of validation errors, or empty if valid.</returns>
+    public async Task<IReadOnlyList<SettingsValidationError>> ValidateAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        await Task.CompletedTask.ConfigureAwait(false);
+
+        var errors = new List<SettingsValidationError>();
+        var settingsSnapshot = this.GetSettingsSnapshot();
+        var validationContext = new ValidationContext(settingsSnapshot);
+        var validationResults = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(settingsSnapshot, validationContext, validationResults, validateAllProperties: true);
+
+        if (!isValid)
+        {
+            foreach (var result in validationResults)
+            {
+                var propertyName = result.MemberNames.FirstOrDefault() ?? "Unknown";
+                var errorMessage = result.ErrorMessage ?? "Validation failed";
+                errors.Add(new SettingsValidationError(propertyName, errorMessage));
+            }
+        }
+
+        return errors.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Runs migrations for the settings type. (No-op by default.)
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task RunMigrationsAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resets the settings to their default values.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task ResetToDefaultsAsync(CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
+
+        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            this.IsBusy = true;
+            var defaultSettings = this.CreateDefaultSettings();
+
+            this.UpdateProperties(defaultSettings);
+
+            this.IsDirty = true;
+            this.OnPropertyChanged(nameof(this.Settings));
+        }
+        finally
+        {
+            this.IsBusy = false;
+            _ = this.operationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Releases all resources used by the service.
+    /// </summary>
     public void Dispose()
     {
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    ///     This implementation uses Json as the serialization format, and places the settings
-    ///     properties in a section named with the type name of the <typeparamref name="TSettings" />
-    ///     type parameter.
-    ///     <para>
-    ///         If the configuration file exists, it will be silently overwritten. If any directories in the
-    ///         configuration file path do not exist, they will be created.
-    ///     </para>
-    /// </remarks>
-    public bool SaveSettings()
-    {
-        if (!this.IsDirty)
-        {
-            return true;
-        }
-
-        var settings = this.GetSettingsSnapshot();
-        var configFilePath = this.GetConfigFilePath();
-        var sectionName = this.GetConfigSectionName();
-
-        try
-        {
-            string configText;
-            if (string.IsNullOrEmpty(sectionName))
-            {
-                // No section name, just serialize the settings directly
-                configText = JsonSerializer.Serialize(settings, this.jsonSerializerOptions);
-            }
-            else
-            {
-                // Wrap the settings inside the section name
-                var configObject = new Dictionary<string, object>(StringComparer.Ordinal) { { sectionName, settings } };
-                configText = JsonSerializer.Serialize(configObject, this.jsonSerializerOptions);
-            }
-
-            // Ensure all directories in the path exist
-            var directoryPath = this.fs.Path.GetDirectoryName(configFilePath);
-            if (directoryPath != null && !Directory.Exists(directoryPath))
-            {
-                _ = this.fs.Directory.CreateDirectory(directoryPath);
-            }
-
-            this.fs.File.WriteAllText(configFilePath, configText);
-
-            this.IsDirty = false;
-        }
-#pragma warning disable CA1031 // We want to catch all exceptions here
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            this.LogSettingsSaveError(typeof(TSettings).Name, configFilePath, ex);
-            return false;
-        }
-
-        this.LogSettingsSaved(typeof(TSettings).Name, configFilePath);
-        return true;
-    }
-
     /// <summary>
-    ///     Releases the unmanaged resources used by the <see cref="SettingsService{TSettings}" /> and
-    ///     optionally releases the managed resources.
+    /// Releases managed and unmanaged resources.
     /// </summary>
-    /// <param name="disposing">
-    ///     <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
-    ///     to release only unmanaged resources.
-    /// </param>
+    /// <param name="disposing">True if called from Dispose, false if called from finalizer.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (this.isDisposed)
@@ -214,59 +340,27 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
         if (disposing)
         {
-            // Dispose auto-save subscription first to prevent saves during disposal
-            this.autoSaveSubscription?.Dispose();
-
-            // Save any pending changes before disposing
-            if (this.IsDirty)
-            {
-                this.LogDisposedWhileDirty(typeof(TSettings).Name);
-                _ = this.SaveSettings();
-            }
-
-            this.settingsChangedSubscription.Dispose();
+            this.operationLock.Dispose();
         }
 
         this.isDisposed = true;
     }
 
     /// <summary>
-    ///     Updates the properties of the settings. Called when the
-    ///     <see cref="IOptionsMonitor{TOptions}">
-    ///         options monitor
-    ///     </see>
-    ///     reports changes to the configuration, after it is reloaded.
-    ///     Implementations of this class are expected to update their properties, with change
-    ///     notifications, using the values provided in <paramref name="newSettings" />.
+    /// Raises the <see cref="PropertyChanged"/> event.
     /// </summary>
-    /// <param name="newSettings">The new settings.</param>
-    protected abstract void UpdateProperties(TSettings newSettings);
+    /// <param name="propertyName">The name of the property that changed.</param>
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     /// <summary>
-    ///     Gets the full path to the configuration file. The file may or may not exist, and when it
-    ///     exists, it will be silently overwritten. Non-existing directories in the path will be
-    ///     created as needed.
+    /// Sets a field and raises <see cref="PropertyChanged"/> if the value changes.
     /// </summary>
-    /// <returns>The configuration file path.</returns>
-    protected abstract string GetConfigFilePath();
-
-    /// <summary>
-    ///     Gets the section name corresponding to the settings of type <typeparamref name="TSettings" />
-    ///     within the configuration file.
-    /// </summary>
-    /// <returns>The section name to use or <see langword="null" /> to not use a section.</returns>
-    protected abstract string? GetConfigSectionName();
-
-    /// <summary>
-    ///     Sets the field and notifies listeners of the property change.
-    /// </summary>
-    /// <typeparam name="T">The type of the field.</typeparam>
-    /// <param name="field">The field to set.</param>
-    /// <param name="value">The value to set.</param>
-    /// <param name="propertyName">The name of the property. This is optional and can be omitted.</param>
-    /// <returns>
-    ///     <see langword="true" /> if the field was set; otherwise, <see langword="false" />.
-    /// </returns>
+    /// <typeparam name="T">The field type.</typeparam>
+    /// <param name="field">The field reference.</param>
+    /// <param name="value">The new value.</param>
+    /// <param name="propertyName">The property name.</param>
+    /// <returns>True if the value changed; otherwise, false.</returns>
     protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -275,51 +369,23 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
         }
 
         field = value;
-        this.IsDirty = true;
-        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        this.OnPropertyChanged(propertyName);
         return true;
     }
 
     /// <summary>
-    ///     Gets a snapshot of the current settings. Future modifications of the settings will not be
-    ///     reflected in the returned snapshot.
+    /// Throws if the service has been disposed.
     /// </summary>
-    /// <returns>A snapshot of the settings.</returns>
-    protected abstract TSettings GetSettingsSnapshot();
-
-    private void TrySaveSettings()
-    {
-        if (this.IsDirty)
-        {
-            _ = this.SaveSettings();
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "SettingsService for `{ConfigName}` disposed of while dirty")]
-    private partial void LogDisposedWhileDirty(string configName);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Settings for `{ConfigName}` saved to file `{ConfigFilePath}`")]
-    private partial void LogSettingsSaved(string configName, string configFilePath);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to save settings for `{ConfigName}` to file `{ConfigFilePath}`")]
-    private partial void LogSettingsSaveError(string configName, string configFilePath, Exception error);
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsService<>));
 
     /// <summary>
-    ///     Represents a naming policy, for the <see cref="JsonSerializer" /> that retains the original
-    ///     case of the enum names.
+    /// Throws if the service has not been initialized.
     /// </summary>
-    private sealed class OriginalCaseNamingPolicy : JsonNamingPolicy
+    private void ThrowIfNotInitialized()
     {
-        /// <inheritdoc />
-        public override string ConvertName(string name) => name;
+        if (!this.isInitialized)
+        {
+            throw new InvalidOperationException("SettingsService must be initialized. Call InitializeAsync first.");
+        }
     }
 }

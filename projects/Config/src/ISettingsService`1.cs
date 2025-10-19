@@ -7,48 +7,97 @@ using System.ComponentModel;
 namespace DroidNet.Config;
 
 /// <summary>
-///     Provides an interface for managing settings with property change notification and disposable
-///     functionality.
+/// The primary contract for strongly-typed settings service used at runtime.
+/// This is the single canonical service contract consumers should use.
+/// The service implementation must implement the TSettings interface for direct property access.
 /// </summary>
-/// <typeparam name="TSettings">The type of the settings interface.</typeparam>
-/// <remarks>
-///     Implementations of this interface should also implement <typeparamref name="TSettings"/> directly,
-///     providing both service functionality (IsDirty, SaveSettings) and direct property access.
-///     <para>
-///     This allows consumers to cast the service to access settings properties:
-///     <code>
-///       ISettingsService&lt;IAppearanceSettings&gt; service = ...;
-///       var settings = (IAppearanceSettings)service;
-///       var theme = settings.AppThemeMode;
-///     </code>
-///     </para>
-/// </remarks>
-public interface ISettingsService<out TSettings> : INotifyPropertyChanged, IDisposable
+/// <typeparam name="TSettings">The strongly-typed settings interface.</typeparam>
+public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposable
     where TSettings : class
 {
     /// <summary>
-    ///     Gets a value indicating whether the settings have been modified.
+    /// Event raised when the settings service initialization state changes.
     /// </summary>
-    public bool IsDirty { get; }
+    public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
 
     /// <summary>
-    ///     Gets the settings instance, allowing typed access to settings properties.
+    /// Event raised when a settings source experiences an error or failure.
+    /// </summary>
+    public event EventHandler<SourceErrorEventArgs>? SourceError;
+
+    /// <summary>
+    /// Gets the section name used to identify this settings type in storage sources.
     /// </summary>
     /// <remarks>
-    ///     This property allows direct access to settings properties without explicit casting:
-    ///     <code>
-    ///       ISettingsService&lt;IAppearanceSettings&gt; service = ...;
-    ///       var theme = service.Settings.AppThemeMode;
-    ///     </code>
+    /// This name is used as the key in the JSON sections dictionary and must be unique
+    /// across all settings types managed by the SettingsManager.
+    /// </remarks>
+    public string SectionName { get; }
+
+    /// <summary>
+    /// Gets the settings instance that implements the TSettings interface.
+    /// This provides typed access to all settings properties.
+    /// </summary>
+    /// <remarks>
+    /// The Settings property provides direct access to settings properties:
+    /// <code>
+    /// ISettingsService&lt;IEditorSettings&gt; service = ...;
+    /// var fontSize = service.Settings.FontSize;
+    /// service.Settings.FontSize = 14;
+    /// </code>
     /// </remarks>
     public TSettings Settings { get; }
 
     /// <summary>
-    ///     Saves the current settings if they have been modified (i.e. <see cref="IsDirty" /> is <see langword="true" />.
+    /// Gets a value indicating whether the settings have been modified since the last save.
     /// </summary>
-    /// <returns>
-    ///     <see langword="true" /> if the settings were saved successfully; otherwise,
-    ///     <see langword="false" />.
-    /// </returns>
-    public bool SaveSettings();
+    public bool IsDirty { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the service is currently performing an async operation.
+    /// </summary>
+    public bool IsBusy { get; }
+
+    /// <summary>
+    /// Initializes the settings service by loading from all configured sources.
+    /// Must be called before using the service.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the initialization.</param>
+    /// <returns>A task that represents the initialization operation.</returns>
+    public Task InitializeAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Saves the current settings to persistent storage if modifications exist.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the save operation.</param>
+    /// <returns>A task that represents the save operation.</returns>
+    public Task SaveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Forces a reload of settings from all sources, discarding any unsaved changes.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the reload operation.</param>
+    /// <returns>A task that represents the reload operation.</returns>
+    public Task ReloadAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates the current settings and returns any validation errors.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the validation.</param>
+    /// <returns>A task that represents the validation operation. The task result contains validation errors.</returns>
+    public Task<IReadOnlyList<SettingsValidationError>> ValidateAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs any available migrations for this settings type to bring the schema up to date.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the migration operation.</param>
+    /// <returns>A task that represents the migration operation.</returns>
+    public Task RunMigrationsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resets the settings to their default values.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the reset operation.</param>
+    /// <returns>A task that represents the reset operation.</returns>
+    public Task ResetToDefaultsAsync(CancellationToken cancellationToken = default);
 }
