@@ -10,124 +10,41 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Extension methods for configuring the Settings Module with DryIoc dependency injection.
+/// Extension methods for integrating the DroidNet Config module with DryIoc dependency injection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This extension enables easy integration of the Settings Module into applications built with
-/// the DryIoc container and the DroidNet bootstrapper pattern.
+/// These extensions enable easy registration of config sources and strongly-typed settings services in applications using the DroidNet bootstrapper pattern.
 /// </para>
-/// <para><strong>Service Registration</strong></para>
+/// <para><strong>Typical Usage</strong></para>
+/// <code><![CDATA[
+/// var bootstrapper = new Bootstrapper(args)
+///     .Configure()
+///     .WithLoggingAbstraction()
+///     .WithConfig()
+///     .WithJsonConfigSource(id: "droidnet.aura", filePath: "path/to/Aura.json", watch: true)
+///     .WithJsonConfigSource(id: "localsettings", filePath: "path/to/LocalSettings.json", watch: true)
+///     .WithSettings<IAppearanceSettings, AppearanceSettingsService>()
+///     .WithSettings<IWindowDecorationSettings, WindowDecorationSettingsService>()
+///     .Build();
+/// ]]></code>
 /// <para>
-/// When configuring settings, the following services are automatically registered:
+/// This pattern registers the config infrastructure, adds JSON config sources, and enables injection of settings services into client code.
 /// </para>
-/// <list type="bullet">
-///   <item>Settings sources (ISettingsSource implementations) based on file paths</item>
-///   <item>Settings manager (ISettingsManager) as a singleton orchestrator</item>
-///   <item>Settings service factory (ISettingsService&lt;TSettings&gt;) for typed access</item>
-/// </list>
-/// <para><strong>Source Type Detection</strong></para>
-/// <para>
-/// The extension automatically maps file extensions to appropriate source types:
-/// </para>
-/// <list type="bullet">
-///   <item><c>.json</c> - Maps to <see cref="JsonSettingsSource"/> for standard JSON settings</item>
-///   <item><c>.secure.json</c> - Reserved for <c>EncryptedJsonSettingsSource</c> (Phase 4, not yet implemented)</item>
-/// </list>
 /// </remarks>
-///
-/// <example>
-/// <strong>Basic Usage</strong>
-/// <code><![CDATA[
-/// var bootstrapper = new Bootstrapper(args)
-///     .Configure()
-///     .WithAppServices(container =>
-///     {
-///         container
-///             .WithSettings(new[]
-///             {
-///                 "appsettings.json",
-///                 "appsettings.Development.json"
-///             })
-///             .WithSettingsService<AppSettings>()
-///             .WithSettingsService<UserPreferences>();
-///     })
-///     .Build();
-/// ]]></code>
-///
-/// <strong>Using with Path Finder</strong>
-/// <code><![CDATA[
-/// var bootstrapper = new Bootstrapper(args)
-///     .Configure()
-///     .WithAppServices(container =>
-///     {
-///         container.WithSettings(pathFinder =>
-///         {
-///             return new[]
-///             {
-///                 pathFinder.GetPath(KnownFolder.ApplicationData, "settings.json"),
-///                 pathFinder.GetPath(KnownFolder.LocalApplicationData, "local-settings.json")
-///             };
-///         })
-///         .WithSettingsService<AppSettings>();
-///     })
-///     .Build();
-/// ]]></code>
-///
-/// <strong>Accessing Settings in Services</strong>
-/// <code><![CDATA[
-/// public class MyService
-/// {
-///     private readonly ISettingsService<AppSettings> appSettings;
-///
-///     public MyService(ISettingsService<AppSettings> appSettings)
-///     {
-///         this.appSettings = appSettings;
-///     }
-///
-///     public void UseSettings()
-///     {
-///         var theme = this.appSettings.Current.Theme;
-///         this.appSettings.Current.Theme = "Dark";
-///         await this.appSettings.SaveAsync();
-///     }
-/// }
-/// ]]></code>
-/// </example>
 public static class BootstrapperExtensions
 {
     /// <summary>
-    /// Configures settings services in a DryIoc container with specified file paths.
+    /// Registers baseline Config services in the DryIoc container, including SettingsManager and related abstractions.
     /// </summary>
     /// <param name="container">The DryIoc container to configure.</param>
-    /// <param name="settingsFilePaths">The file paths to settings files that will be used as sources.</param>
     /// <returns>The container instance for method chaining.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown if <paramref name="container"/> or <paramref name="settingsFilePaths"/> is <see langword="null"/>.
-    /// </exception>
     /// <remarks>
-    /// <para>
-    /// This method registers settings sources based on file extensions, creates a settings manager
-    /// to orchestrate all sources, and configures a factory for typed settings services.
-    /// </para>
-    /// <para>
-    /// Settings files are loaded in order with a last-loaded-wins strategy. If multiple sources
-    /// contain the same setting section, values from later sources override earlier ones.
-    /// </para>
+    /// Call this before adding config sources or settings services. This sets up the core infrastructure for config and settings management.
     /// </remarks>
-    public static IContainer WithSettings(this IContainer container, IEnumerable<string> settingsFilePaths)
+    public static IContainer WithConfig(this IContainer container)
     {
         ArgumentNullException.ThrowIfNull(container);
-        ArgumentNullException.ThrowIfNull(settingsFilePaths);
-
-        var filePaths = settingsFilePaths.ToList();
-        if (filePaths.Count == 0)
-        {
-            throw new ArgumentException("At least one settings file path must be provided.", nameof(settingsFilePaths));
-        }
-
-        // Register settings sources based on file extensions
-        RegisterSettingsSources(container, filePaths);
 
         // Register SettingsManager as singleton
         container.Register<SettingsManager>(
@@ -143,44 +60,28 @@ public static class BootstrapperExtensions
             resolver => resolver.Resolve<SettingsManager>(),
             Reuse.Singleton);
 
+        // Register encryption providers here if needed (future extension)
+        _ = 0; // TODO: Placeholder for future encryption provider registrations (concrete class and ifce->concrete)
+
         return container;
     }
 
     /// <summary>
-    /// Registers a settings service for a specific settings type.
+    /// Registers a settings service for a specific settings type, enabling injection of strongly-typed settings into client code.
     /// </summary>
     /// <typeparam name="TSettings">The settings interface type.</typeparam>
-    /// <typeparam name="TService">The concrete settings service implementation type.</typeparam>
+    /// <typeparam name="TService">The concrete settings service implementation type (must inherit SettingsService&lt;TSettings&gt;).</typeparam>
     /// <param name="container">The DryIoc container to configure.</param>
     /// <returns>The container instance for method chaining.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown if <paramref name="container"/> is <see langword="null"/>.
-    /// </exception>
     /// <remarks>
-    /// <para>
-    /// This method registers the concrete settings service implementation that will be created
-    /// by the <see cref="ISettingsManager"/> when <c>GetService&lt;TSettings&gt;()</c> is called.
-    /// The application should call this method once for each settings type it needs to use.
-    /// </para>
-    /// <para>
-    /// The settings manager must be registered first by calling <see cref="WithSettings(IContainer, IEnumerable{string})"/>.
-    /// </para>
+    /// Call this for each settings type you want to inject. The service will be resolved from the registered SettingsManager.
     /// </remarks>
-    /// <example>
-    /// <code><![CDATA[
-    /// container
-    ///     .WithSettings(new[] { "appsettings.json" })
-    ///     .WithSettingsService<IEditorSettings, EditorSettingsService>()
-    ///     .WithSettingsService<IAppSettings, AppSettingsService>();
-    /// ]]></code>
-    /// </example>
-    public static IContainer WithSettingsService<TSettings, TService>(this IContainer container)
+    public static IContainer WithSettings<TSettings, TService>(this IContainer container)
         where TSettings : class
         where TService : SettingsService<TSettings>
     {
         ArgumentNullException.ThrowIfNull(container);
 
-        // Register the concrete service implementation using a factory delegate
         container.RegisterDelegate<ISettingsService<TSettings>>(
             resolver =>
             {
@@ -194,117 +95,52 @@ public static class BootstrapperExtensions
     }
 
     /// <summary>
-    /// Configures settings services in a DryIoc container using a path resolver function.
+    /// Registers a JSON config source for settings, optionally with encryption and file watching, keyed by a unique id.
     /// </summary>
     /// <param name="container">The DryIoc container to configure.</param>
-    /// <param name="pathResolver">
-    /// A function that takes an <see cref="IPathFinder"/> and returns the file paths
-    /// to settings files that will be used as sources.
+    /// <param name="id">Unique key for the config source (used for service resolution).</param>
+    /// <param name="filePath">Path to the JSON settings file.</param>
+    /// <param name="encryption">
+    /// Optional type of encryption provider. Must implement <see cref="IEncryptionProvider"/> if provided.
     /// </param>
+    /// <param name="watch">Whether to watch the file for changes (passed to the source).</param>
     /// <returns>The container instance for method chaining.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown if <paramref name="container"/> or <paramref name="pathResolver"/> is <see langword="null"/>.
-    /// </exception>
     /// <remarks>
-    /// <para>
-    /// This overload allows you to use the <see cref="IPathFinder"/> service to resolve
-    /// application-specific paths for settings files. This is useful when settings need
-    /// to be stored in well-known folders like AppData or LocalAppData.
-    /// </para>
-    /// <para>
-    /// The path resolver function is called during container configuration, so the
-    /// <see cref="IPathFinder"/> service must already be registered in the container.
-    /// </para>
+    /// Registers a config source for the given file. Encryption support is planned for future versions.
+    /// The <paramref name="id"/> is used as the DryIoc service key.
     /// </remarks>
-    public static IContainer WithSettings(
+    public static IContainer WithJsonConfigSource(
         this IContainer container,
-        Func<IPathFinder, IEnumerable<string>> pathResolver)
+        string id,
+        string filePath,
+        Type? encryption = null,
+        bool watch = true)
     {
         ArgumentNullException.ThrowIfNull(container);
-        ArgumentNullException.ThrowIfNull(pathResolver);
-
-        // Resolve IPathFinder and get file paths
-        var pathFinder = container.Resolve<IPathFinder>();
-        var filePaths = pathResolver(pathFinder);
-
-        return WithSettings(container, filePaths);
-    }
-
-    /// <summary>
-    /// Registers settings sources in the container based on file extensions.
-    /// </summary>
-    /// <param name="container">The DryIoc container to register sources in.</param>
-    /// <param name="filePaths">The collection of file paths to create sources for.</param>
-    private static void RegisterSettingsSources(IContainer container, List<string> filePaths)
-    {
-        for (var i = 0; i < filePaths.Count; i++)
-        {
-            var filePath = filePaths[i];
-            var sourceType = GetSourceTypeFromExtension(filePath);
-
-            // Register each source with a unique service key based on index
-            var serviceKey = $"SettingsSource_{i}";
-
-            if (sourceType == typeof(JsonSettingsSource))
-            {
-                // Capture filePath in a closure for the factory
-                var capturedFilePath = filePath;
-
-                // Register the source using a factory delegate
-                container.RegisterDelegate<ISettingsSource>(
-                    resolverContext =>
-                    {
-                        var fileSystem = resolverContext.Resolve<IFileSystem>();
-                        var loggerFactory = resolverContext.Resolve<ILoggerFactory>();
-                        return new JsonSettingsSource(capturedFilePath, fileSystem, loggerFactory);
-                    },
-                    Reuse.Singleton,
-                    serviceKey: serviceKey);
-            }
-            else
-            {
-                // Future: Handle EncryptedJsonSettingsSource when Phase 4 is implemented
-                throw new NotSupportedException(
-                    $"Settings source type '{sourceType.Name}' for file '{filePath}' is not yet implemented. " +
-                    "Encrypted settings sources will be available in Phase 4.");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Determines the appropriate settings source type based on file extension.
-    /// </summary>
-    /// <param name="filePath">The file path to check.</param>
-    /// <returns>The type of settings source to use for this file.</returns>
-    /// <remarks>
-    /// <para>Supported mappings:</para>
-    /// <list type="bullet">
-    ///   <item><c>.json</c> → <see cref="JsonSettingsSource"/></item>
-    ///   <item><c>.secure.json</c> → <c>EncryptedJsonSettingsSource</c> (Phase 4, not yet implemented)</item>
-    /// </list>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the file extension is not recognized.</exception>
-    private static Type GetSourceTypeFromExtension(string filePath)
-    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        // Check for .secure.json first (more specific)
-        if (filePath.EndsWith(".secure.json", StringComparison.OrdinalIgnoreCase))
+        if (encryption != null && !typeof(IEncryptionProvider).IsAssignableFrom(encryption))
         {
-            // Return placeholder type - will be implemented in Phase 4
-            return typeof(object); // Placeholder for EncryptedJsonSettingsSource
+            throw new ArgumentException(
+                $"The provided type {encryption} must implement {nameof(IEncryptionProvider)}.",
+                nameof(encryption));
         }
 
-        // Check for .json
-        if (filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            return typeof(JsonSettingsSource);
-        }
+        container.RegisterDelegate<ISettingsSource>(
+            r =>
+            {
+                var fs = r.Resolve<IFileSystem>();
+                var loggerFactory = r.Resolve<ILoggerFactory>();
+                var encryptionProvider = encryption == null
+                    ? null
+                    : (IEncryptionProvider)r.Resolve(encryption);
 
-        throw new ArgumentException(
-            $"Unrecognized settings file extension for '{filePath}'. " +
-            "Supported extensions are: .json (for JsonSettingsSource), " +
-            ".secure.json (for EncryptedJsonSettingsSource, Phase 4).",
-            nameof(filePath));
+                return new JsonSettingsSource(id, filePath, fs, watch, encryptionProvider, loggerFactory);
+            },
+            reuse: Reuse.Singleton,
+            serviceKey: id);
+
+        return container;
     }
 }

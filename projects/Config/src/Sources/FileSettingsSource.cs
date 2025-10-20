@@ -43,7 +43,11 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     ///     A unique identifier for this settings source. Recommended format: `Domain:FileName` where Domain may be used
     ///     to distinguish between global, user, and built-in application settings.
     /// </param>
-    /// <param name="path">The file system path to the configuration file.</param>
+    /// <param name="filePath">The file system path to the configuration file.</param>
+    /// <param name="watch">
+    ///     A value indicating whether the source should watch the file for changes and raise
+    ///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
+    /// </param>
     /// <param name="fileSystem">
     ///     The <see cref="IFileSystem"/> abstraction used for file operations; this parameter cannot be <see
     ///     langword="null"/> and can be mocked or stubbed in tests.
@@ -57,25 +61,31 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     ///     <see langword="null"/>, a <see cref="NullLogger{FileSettingsSource}"/> instance is used.
     /// </param>
     /// <exception cref="ArgumentNullException">
-    ///     Thrown when <paramref name="path"/> or <paramref name="fileSystem"/> is <see langword="null"/>.
+    ///     Thrown when <paramref name="filePath"/> or <paramref name="fileSystem"/> is <see langword="null"/>.
     /// </exception>
-    protected FileSettingsSource(string id, string path, IFileSystem fileSystem, IEncryptionProvider? crypto = null, ILoggerFactory? loggerFactory = null)
+    protected FileSettingsSource(string id, string filePath, IFileSystem fileSystem, bool watch, IEncryptionProvider? crypto = null, ILoggerFactory? loggerFactory = null)
         : base(id, crypto, loggerFactory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(filePath);
         ArgumentNullException.ThrowIfNull(fileSystem);
 
         this.fs = fileSystem;
 
         // Validate and normalize the provided path early so the rest of the instance
         // implementation can assume a valid file path and use Debug.Assert for contracts.
-        if (!this.PathIsValid(path))
+        if (!this.PathIsValid(filePath))
         {
-            throw new ArgumentException("Path must be an absolute file path and contain a file name.", nameof(path));
+            throw new ArgumentException("Path must be an absolute file path and contain a file name.", nameof(filePath));
         }
 
-        this.path = path;
+        this.path = filePath;
+
+        // Start watching if needed
+        if (watch)
+        {
+            this.StartWatching();
+        }
     }
 
     /// <inheritdoc/>
