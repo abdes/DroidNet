@@ -11,9 +11,34 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config.Sources;
 
 /// <summary>
-/// Settings source that persists settings to JSON files with atomic write operations.
+///     Settings source that persists settings to JSON files with atomic write operations.
 /// </summary>
-public sealed partial class JsonSettingsSource : FileSettingsSource
+/// <param name="id">
+///     A unique identifier for this settings source. Recommended format: `Domain:FileName` where Domain may be used
+///     to distinguish between global, user, and built-in application settings.
+/// </param>
+/// <param name="filePath">The file system path to the configuration file.</param>
+/// <param name="watch">
+///     A value indicating whether the source should watch the file for changes and raise
+///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
+/// </param>
+/// <param name="fileSystem">
+///     The <see cref="IFileSystem"/> abstraction used for file operations; this parameter cannot be <see
+///     langword="null"/> and can be mocked or stubbed in tests.
+/// </param>
+/// <param name="crypto">
+///     An optional <see cref="IEncryptionProvider"/> used to encrypt and decrypt file contents. If <see
+///     langword="null"/>, <see cref="NoEncryptionProvider.Instance"/> is used, meaning no encryption.
+/// </param>
+/// <param name="loggerFactory">
+///     An optional <see cref="ILoggerFactory"/> used to create an <see cref="ILogger{FileSettingsSource}"/>; if
+///     <see langword="null"/>, a <see cref="NullLogger{FileSettingsSource}"/> instance is used.
+/// </param>
+/// <exception cref="ArgumentNullException">
+///     Thrown when <paramref name="filePath"/> or <paramref name="fileSystem"/> is <see langword="null"/>.
+/// </exception>
+public sealed partial class JsonSettingsSource(string id, string filePath, IFileSystem fileSystem, bool watch, IEncryptionProvider? crypto = null, ILoggerFactory? loggerFactory = null)
+    : FileSettingsSource(id, filePath, fileSystem, watch, crypto, loggerFactory)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -21,29 +46,9 @@ public sealed partial class JsonSettingsSource : FileSettingsSource
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private readonly ILogger<JsonSettingsSource> logger;
+    private readonly ILogger<JsonSettingsSource> logger = loggerFactory?.CreateLogger<JsonSettingsSource>() ?? NullLogger<JsonSettingsSource>.Instance;
     private readonly SemaphoreSlim operationLock = new(1, 1);
     private bool isDisposed;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="JsonSettingsSource"/> class.
-    /// </summary>
-    /// <param name="filePath">The path to the JSON file for this settings source.</param>
-    /// <param name="fileSystem">The file system abstraction to use for file operations.</param>
-    /// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
-    public JsonSettingsSource(
-        string filePath,
-        IFileSystem fileSystem,
-        ILoggerFactory? loggerFactory = null)
-        : base(
-            id: filePath ?? throw new ArgumentNullException(nameof(filePath)),
-            path: (fileSystem ?? throw new ArgumentNullException(nameof(fileSystem))).Path.GetFullPath(filePath),
-            fileSystem: fileSystem,
-            crypto: null,
-            loggerFactory: loggerFactory)
-    {
-        this.logger = loggerFactory?.CreateLogger<JsonSettingsSource>() ?? NullLogger<JsonSettingsSource>.Instance;
-    }
 
     /// <inheritdoc/>
     public override async Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
@@ -90,7 +95,7 @@ public sealed partial class JsonSettingsSource : FileSettingsSource
         {
             LogSaveRequested(this.logger, this.Id, sectionsData.Count);
 
-            var mergedSections = await this.MergeSectionsAsync(sectionsData, cancellationToken).ConfigureAwait(false);
+            var mergedSections = await this.MergeWithExistingSectionsAsync(sectionsData, cancellationToken).ConfigureAwait(false);
             var jsonContent = SerializeSections(mergedSections, metadata);
 
             await this.WriteAllBytesAsync(jsonContent, cancellationToken).ConfigureAwait(false);
@@ -286,27 +291,28 @@ public sealed partial class JsonSettingsSource : FileSettingsSource
             this.SourcePath);
     }
 
-    private async Task<Dictionary<string, object>> MergeSectionsAsync(
+    private async Task<Dictionary<string, object>> MergeWithExistingSectionsAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         CancellationToken cancellationToken)
     {
-        var merged = new Dictionary<string, object>(StringComparer.Ordinal);
+        Dictionary<string, object> merged;
 
         if (this.FileSystem.File.Exists(this.SourcePath))
         {
             try
             {
                 var existing = await this.ReadFilePayloadAsync(cancellationToken).ConfigureAwait(false);
-                foreach (var (sectionName, sectionValue) in existing.Sections)
-                {
-                    merged[sectionName] = sectionValue;
-                }
+                merged = new Dictionary<string, object>(existing.Sections, StringComparer.Ordinal);
             }
             catch (SettingsPersistenceException ex)
             {
                 LogMergeFailed(this.logger, this.Id, ex.Message, ex);
                 throw;
             }
+        }
+        else
+        {
+            merged = new Dictionary<string, object>(StringComparer.Ordinal);
         }
 
         foreach (var (sectionName, sectionValue) in sectionsData)

@@ -22,7 +22,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task LoadAsync_ReturnsEmptyPayload_WhenFileMissing()
     {
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "missing.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -39,7 +39,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
             Sample = new { Value = 42 },
         });
         var filePath = this.CreateTempSettingsFile("missing-metadata.json", jsonWithoutMetadata);
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -52,7 +52,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task LoadAsync_ReturnsFailure_WhenFileEmpty()
     {
         var filePath = this.CreateTempSettingsFile("empty.json", string.Empty);
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -65,7 +65,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     {
         const string malformedJson = "{ \"metadata\": \"incomplete";
         var filePath = this.CreateTempSettingsFile("malformed.json", malformedJson);
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -79,7 +79,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task SaveAsync_WritesMetadataAndSectionsInCamelCase()
     {
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "structure.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var metadata = new SettingsMetadata { Version = "1.2.3", SchemaVersion = "20251020" };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -111,7 +111,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     {
         var directory = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "json", "nested");
         var filePath = this.FileSystem.Path.Combine(directory, "settings.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "Created", Value = 1 } };
@@ -132,7 +132,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
             ["Section2"] = new AlternativeTestSettings { Theme = "Light", FontSize = 12 },
         };
         var existingPath = this.CreateMultiSectionSettingsFile("merge.json", initialSections);
-        using var source = new JsonSettingsSource(existingPath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", existingPath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var metadata = new SettingsMetadata { Version = "2.0", SchemaVersion = "20251020" };
         var update = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -159,7 +159,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     {
         var invalidExistingJson = JsonSerializer.Serialize(new { Section = new { Value = 5 } });
         var filePath = this.CreateTempSettingsFile("invalid-existing.json", invalidExistingJson);
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "New", Value = 10 } };
@@ -174,7 +174,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task SaveAsync_ReturnsFailure_WhenSerializationThrowsJsonException()
     {
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "serialize-fail.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -194,7 +194,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task ValidateAsync_ReturnsSuccess_ForSerializableSections()
     {
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "validate.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
@@ -212,7 +212,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     public async Task ValidateAsync_ReturnsFailure_ForUnsupportedSectionType()
     {
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "validate-fail.json");
-        using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
+        using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {

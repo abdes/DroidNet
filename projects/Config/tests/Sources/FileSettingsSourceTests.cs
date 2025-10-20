@@ -5,8 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Text;
-
-using DroidNet.Config;
 using DroidNet.Config.Sources;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -66,7 +64,7 @@ public class FileSettingsSourceTests : IDisposable
     {
         Action act = () => _ = new TestFileSettingsSource("test", path: null!, this.fs);
 
-        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("path");
+        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("filePath");
     }
 
     [TestMethod]
@@ -86,7 +84,7 @@ public class FileSettingsSourceTests : IDisposable
 
         Action act = () => _ = new TestFileSettingsSource("test", capturedPath, this.fs);
 
-        _ = act.Should().Throw<ArgumentException>().WithParameterName("path");
+        _ = act.Should().Throw<ArgumentException>().WithParameterName("filePath");
     }
 
     [TestMethod]
@@ -103,7 +101,7 @@ public class FileSettingsSourceTests : IDisposable
 
         Action act = () => _ = new TestFileSettingsSource("test", validLookingPath, mockFs.Object);
 
-        _ = act.Should().Throw<ArgumentException>().WithParameterName("path");
+        _ = act.Should().Throw<ArgumentException>().WithParameterName("filePath");
     }
 
     [TestMethod]
@@ -962,7 +960,7 @@ public class FileSettingsSourceTests : IDisposable
         IFileSystem fileSystem,
         IEncryptionProvider? crypto = null,
         ILoggerFactory? loggerFactory = null)
-        : FileSettingsSource(id, path, fileSystem, crypto, loggerFactory)
+        : FileSettingsSource(id, path, fileSystem, watch: false, crypto, loggerFactory)
     {
         public override Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("LoadAsync is not used in these unit tests. Call ReadAllTextAsync instead.");
