@@ -26,9 +26,8 @@ public sealed class SettingsMetadata
     ///     Gets the version of the settings content.
     /// </summary>
     /// <remarks>
-    ///     This value changes every time the actual configuration data is updated—whether by a user, a migration, or a
-    ///     system process. Use it to track the logical state of the settings and to help with change detection,
-    ///     rollbacks, or conflict resolution.
+    ///     This value changes every time the actual configuration data is updated—whether by a user or a system process. Use it
+    ///     to track the logical state of the settings and to help with change detection, rollbacks, or conflict resolution.
     /// </remarks>
     [JsonPropertyName("Version")]
     public required string Version { get; init; } = string.Empty;
@@ -57,8 +56,8 @@ public sealed class SettingsMetadata
     ///     Gets the name of the tool or component that wrote the settings, if available.
     /// </summary>
     /// <remarks>
-    ///     This field identifies which application, service, or migration tool last modified the settings. It’s
-    ///     especially useful in environments where multiple tools or services may update configuration data.
+    ///     This field identifies which application, service, or tool last modified the settings. It’s especially useful in
+    ///     environments where multiple tools or services may update configuration data.
     /// </remarks>
     [JsonPropertyName("WrittenBy")]
     public string? WrittenBy { get; init; }

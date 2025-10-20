@@ -30,6 +30,17 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     public string SectionName { get; }
 
     /// <summary>
+    /// Gets the concrete POCO type used for deserialization from storage.
+    /// Override this property if TSettings is an interface to specify the concrete implementation type.
+    /// </summary>
+    /// <remarks>
+    /// When TSettings is an interface, this property should return the concrete class type
+    /// that implements the interface and can be deserialized from JSON.
+    /// The default implementation returns typeof(TSettings).
+    /// </remarks>
+    public Type SettingsType { get; }
+
+    /// <summary>
     /// Gets the settings instance that implements the TSettings interface.
     /// This provides typed access to all settings properties.
     /// </summary>
@@ -81,13 +92,6 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     /// <param name="cancellationToken">Token to cancel the validation.</param>
     /// <returns>A task that represents the validation operation. The task result contains validation errors.</returns>
     public Task<IReadOnlyList<SettingsValidationError>> ValidateAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Runs any available migrations for this settings type to bring the schema up to date.
-    /// </summary>
-    /// <param name="cancellationToken">Token to cancel the migration operation.</param>
-    /// <returns>A task that represents the migration operation.</returns>
-    public Task RunMigrationsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resets the settings to their default values.

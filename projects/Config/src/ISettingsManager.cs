@@ -5,52 +5,61 @@
 namespace DroidNet.Config;
 
 /// <summary>
-/// Central manager for all settings sources and services.
-/// Orchestrates source loading with last-loaded-wins strategy and provides typed settings service instances.
+///     Central orchestrator that manages all settings sources and settings services.
 /// </summary>
+/// <remarks>
+///     The settings manager must be initialized by calling <see cref="InitializeAsync(CancellationToken)"/> before any
+///     settings services can be retrieved via <see cref="GetService{TSettings}"/>. This ensures that all sources are
+///     loaded and ready, all sections are discovered, and services can be properly mapped to their corresponding
+///     sections loaded from the source.
+/// </remarks>
 public interface ISettingsManager : IDisposable
 {
     /// <summary>
-    /// Event raised when a settings source lifecycle change occurs (added, updated, removed, failed).
+    ///     Event raised when a settings source <see cref="SourceChangedEventArgs">lifecycle change</see> occurs.
     /// </summary>
     public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
     /// <summary>
-    /// Gets the collection of all registered settings sources.
+    ///     Gets the collection of all settings sources, currently managed by the settings manager. This collection
+    ///     includes sources registered with the DI container, or added at runtime directly to the manager.
     /// </summary>
+    /// <remarks>
+    ///     The order of sources in this collection reflects the order in which they were added to the manager, and is
+    ///     crucial in applying the last-loaded-wins strategy for settings composition.
+    /// </remarks>
     public IReadOnlyList<ISettingsSource> Sources { get; }
 
     /// <summary>
-    /// Initializes all registered settings sources.
+    ///     Initializes the settings manager during application startup, by loading all settings sources in the current
+    ///     snapshot of the <see cref="Sources"/> collection. This method must be called before any settings services
+    ///     can be retrieved, and will only have an effect the first time it is invoked.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the initialization.</param>
     /// <returns>A task that represents the initialization operation.</returns>
     public Task InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets or creates a settings service for the specified settings type.
+    ///     Gets or creates a settings service for the specified settings type. It is up to the concrete implementation
+    ///     to match the settings type to the appropriate section loaded from the sources. If no matching section is found,
+    ///     a valid service instance should still be returned, with default values for all settings.
     /// </summary>
-    /// <typeparam name="TSettings">The settings type interface.</typeparam>
+    /// <typeparam name="TSettingsInterface">The settings type interface.</typeparam>
     /// <returns>The settings service instance.</returns>
-    public ISettingsService<TSettings> GetService<TSettings>()
-        where TSettings : class;
+    public ISettingsService<TSettingsInterface> GetService<TSettingsInterface>()
+        where TSettingsInterface : class;
 
     /// <summary>
-    /// Reloads all settings sources and updates all active settings services.
+    ///     Reloads all settings sources and updates all active settings services with data from the refreshed sources,
+    ///     or default values if sections are missing after reload.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the reload operation.</param>
     /// <returns>A task that represents the reload operation.</returns>
     public Task ReloadAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Runs migrations for all registered settings services.
-    /// </summary>
-    /// <param name="cancellationToken">Token to cancel the migration operation.</param>
-    /// <returns>A task that represents the migration operation.</returns>
-    public Task RunMigrationsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Adds a new settings source to the manager.
+    ///     Adds a new settings source to the manager. Concrete implementations may have different strategies for
+    ///     resolving conflicts and applying changes to active settings services.
     /// </summary>
     /// <param name="source">The settings source to add.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
@@ -58,17 +67,11 @@ public interface ISettingsManager : IDisposable
     public Task AddSourceAsync(ISettingsSource source, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Removes a settings source from the manager.
+    ///     Removes a settings source from the manager. Concrete implementations may have different strategies for
+    ///     applying changes to active settings services.
     /// </summary>
     /// <param name="sourceId">The identifier of the source to remove.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that represents the remove operation.</returns>
     public Task RemoveSourceAsync(string sourceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Subscribes to source change notifications.
-    /// </summary>
-    /// <param name="handler">The handler to invoke when source changes occur.</param>
-    /// <returns>A disposable object that unsubscribes when disposed.</returns>
-    public IDisposable SubscribeToSourceChanges(Action<SourceChangedEventArgs> handler);
 }

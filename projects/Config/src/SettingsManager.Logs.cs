@@ -112,10 +112,10 @@ public partial class SettingsManager
 
     [LoggerMessage(
         EventId = 14,
-        Level = LogLevel.Information,
-        Message = "Running migrations for all settings services")]
+        Level = LogLevel.Warning,
+        Message = "Failed to deserialize settings for {SettingsType} from section {SectionName}")]
     [ExcludeFromCodeCoverage]
-    private static partial void LogRunningMigrations(ILogger logger);
+    private static partial void LogSettingsDeserializationFailed(ILogger logger, string sectionName, Type settingsType);
 
     [LoggerMessage(
         EventId = 15,

@@ -69,25 +69,29 @@ public static class BootstrapperExtensions
     /// <summary>
     /// Registers a settings service for a specific settings type, enabling injection of strongly-typed settings into client code.
     /// </summary>
-    /// <typeparam name="TSettings">The settings interface type.</typeparam>
+    /// <typeparam name="TSettingsInterface">The settings interface type.</typeparam>
     /// <typeparam name="TService">The concrete settings service implementation type (must inherit SettingsService&lt;TSettings&gt;).</typeparam>
     /// <param name="container">The DryIoc container to configure.</param>
     /// <returns>The container instance for method chaining.</returns>
     /// <remarks>
     /// Call this for each settings type you want to inject. The service will be resolved from the registered SettingsManager.
     /// </remarks>
-    public static IContainer WithSettings<TSettings, TService>(this IContainer container)
-        where TSettings : class
-        where TService : SettingsService<TSettings>
+    public static IContainer WithSettings<TSettingsInterface, TService>(this IContainer container)
+        where TSettingsInterface : class
+        where TService : ISettingsService<TSettingsInterface>
     {
         ArgumentNullException.ThrowIfNull(container);
 
-        container.RegisterDelegate<ISettingsService<TSettings>>(
+        // Register a concrete service instance `TService` keyed by the settings
+        // interface type. This is only for use by the SettingsManager.
+        container.Register<ISettingsService<TSettingsInterface>, TService>(Reuse.Singleton, serviceKey: "__uninitialized__");
+
+        // Register a delegate to resolve the consumer-oriented settings service from the SettingsManager
+        container.RegisterDelegate(
             resolver =>
             {
                 var manager = resolver.Resolve<SettingsManager>();
-                var loggerFactory = resolver.Resolve<ILoggerFactory>();
-                return (ISettingsService<TSettings>)Activator.CreateInstance(typeof(TService), manager, loggerFactory)!;
+                return manager.GetService<TSettingsInterface>();
             },
             Reuse.Singleton);
 

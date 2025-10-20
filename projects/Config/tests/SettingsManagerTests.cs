@@ -170,6 +170,7 @@ public class SettingsManagerTests : SettingsTestBase
 
         using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
+        this.Container.WithSettings<ITestSettings, TestSettingsService>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
@@ -190,6 +191,8 @@ public class SettingsManagerTests : SettingsTestBase
 
         using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
+        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        this.Container.WithSettings<IAlternativeTestSettings, AlternativeTestSettingsService>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
@@ -347,6 +350,7 @@ public class SettingsManagerTests : SettingsTestBase
 
         using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
+        this.Container.WithSettings<ITestSettings, TestSettingsService>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
