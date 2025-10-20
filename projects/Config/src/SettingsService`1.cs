@@ -59,26 +59,10 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
 
     /// <summary>
-    /// Occurs when an error is reported by the settings source.
-    /// </summary>
-    public event EventHandler<SourceErrorEventArgs>? SourceError;
-
-    /// <summary>
     /// Gets the section name used to identify this settings type in storage sources.
     /// Must be implemented by derived classes to provide a unique identifier.
     /// </summary>
     public abstract string SectionName { get; }
-
-    /// <summary>
-    /// Gets the concrete POCO type used for deserialization from storage.
-    /// Override this property if TSettings is an interface to specify the concrete implementation type.
-    /// </summary>
-    /// <remarks>
-    /// When TSettings is an interface, this property should return the concrete class type
-    /// that implements the interface and can be deserialized from JSON.
-    /// The default implementation returns typeof(TSettings).
-    /// </remarks>
-    protected virtual Type PocoType => typeof(TSettings);
 
     /// <summary>
     /// Gets the current settings instance.
@@ -91,24 +75,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
             return (TSettings)(object)this;
         }
     }
-
-    /// <summary>
-    /// Creates a POCO snapshot of the current settings state for serialization.
-    /// </summary>
-    /// <returns>A POCO object representing the current settings.</returns>
-    protected abstract object GetSettingsSnapshot();
-
-    /// <summary>
-    /// Updates the properties of this service from a loaded settings POCO.
-    /// </summary>
-    /// <param name="settings">The loaded settings POCO to apply.</param>
-    protected abstract void UpdateProperties(TSettings settings);
-
-    /// <summary>
-    /// Creates a new instance with default settings values.
-    /// </summary>
-    /// <returns>A default settings instance.</returns>
-    protected abstract TSettings CreateDefaultSettings();
 
     /// <summary>
     /// Gets a value indicating whether the settings have unsaved changes.
@@ -127,6 +93,17 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         get => this.isBusy;
         private set => this.SetField(ref this.isBusy, value);
     }
+
+    /// <summary>
+    /// Gets the concrete POCO type used for deserialization from storage.
+    /// Override this property if TSettings is an interface to specify the concrete implementation type.
+    /// </summary>
+    /// <remarks>
+    /// When TSettings is an interface, this property should return the concrete class type
+    /// that implements the interface and can be deserialized from JSON.
+    /// The default implementation returns typeof(TSettings).
+    /// </remarks>
+    protected virtual Type PocoType => typeof(TSettings);
 
     /// <summary>
     /// Loads settings from all sources and initializes the service.
@@ -148,10 +125,7 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
             var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
 
             // If no settings were loaded from sources, use default settings
-            if (loadedSettings == null)
-            {
-                loadedSettings = this.CreateDefaultSettings();
-            }
+            loadedSettings ??= this.CreateDefaultSettings();
 
             // Update properties from loaded settings
             this.UpdateProperties(loadedSettings);
@@ -225,10 +199,7 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
             var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
 
             // If no settings were loaded from sources, use default settings
-            if (loadedSettings == null)
-            {
-                loadedSettings = this.CreateDefaultSettings();
-            }
+            loadedSettings ??= this.CreateDefaultSettings();
 
             this.UpdateProperties(loadedSettings);
 
@@ -340,11 +311,22 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     }
 
     /// <summary>
-    /// Raises the <see cref="PropertyChanged"/> event.
+    /// Creates a POCO snapshot of the current settings state for serialization.
     /// </summary>
-    /// <param name="propertyName">The name of the property that changed.</param>
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    /// <returns>A POCO object representing the current settings.</returns>
+    protected abstract object GetSettingsSnapshot();
+
+    /// <summary>
+    /// Updates the properties of this service from a loaded settings POCO.
+    /// </summary>
+    /// <param name="settings">The loaded settings POCO to apply.</param>
+    protected abstract void UpdateProperties(TSettings settings);
+
+    /// <summary>
+    /// Creates a new instance with default settings values.
+    /// </summary>
+    /// <returns>A default settings instance.</returns>
+    protected abstract TSettings CreateDefaultSettings();
 
     /// <summary>
     /// Sets a field and raises <see cref="PropertyChanged"/> if the value changes.
@@ -365,6 +347,13 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         this.OnPropertyChanged(propertyName);
         return true;
     }
+
+    /// <summary>
+    /// Raises the <see cref="PropertyChanged"/> event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that changed.</param>
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     /// <summary>
     /// Throws if the service has been disposed.

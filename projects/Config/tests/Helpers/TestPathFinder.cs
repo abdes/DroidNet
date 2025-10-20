@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 [ExcludeFromCodeCoverage]
 internal sealed class TestPathFinder : IPathFinder
@@ -40,13 +40,7 @@ internal sealed class TestPathFinder : IPathFinder
 
     public string LocalAppState => string.Empty;
 
-    public string GetConfigFilePath(string configFileName)
-    {
-        return this.resolvedPath;
-    }
+    public string GetConfigFilePath(string configFileName) => this.resolvedPath;
 
-    public string GetProgramConfigFilePath(string configFileName)
-    {
-        return this.resolvedPath;
-    }
+    public string GetProgramConfigFilePath(string configFileName) => this.resolvedPath;
 }

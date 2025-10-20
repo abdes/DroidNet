@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DroidNet.Config.Sources;
-using DroidNet.Config.Tests.TestHelpers;
+using DroidNet.Config.Tests.Helpers;
 using FluentAssertions;
 
 namespace DroidNet.Config.Tests.Sources;
@@ -63,7 +63,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
     [TestMethod]
     public async Task LoadAsync_ReturnsFailure_WhenJsonMalformed()
     {
-        var malformedJson = "{ \"metadata\": \"incomplete";
+        const string malformedJson = "{ \"metadata\": \"incomplete";
         var filePath = this.CreateTempSettingsFile("malformed.json", malformedJson);
         using var source = new JsonSettingsSource(filePath, this.FileSystem, this.LoggerFactory);
 
@@ -71,7 +71,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
 
         _ = result.IsSuccess.Should().BeFalse();
         _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
-    _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
+        _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
         _ = result.Error.Message.Should().Contain("Failed to deserialize JSON content.");
     }
 
@@ -186,7 +186,7 @@ public class JsonSettingsSourceTests : SettingsTestBase
 
         _ = result.IsSuccess.Should().BeFalse();
         _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
-    _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
+        _ = result.Error!.InnerException.Should().BeAssignableTo<JsonException>();
         _ = result.Error.Message.Should().Contain("Failed to serialize settings to JSON.");
     }
 
@@ -232,16 +232,11 @@ public class JsonSettingsSourceTests : SettingsTestBase
         public int Value { get; set; }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated by test runtime via reflection")]
     private sealed class JsonWriteThrowsConverter : JsonConverter<int>
     {
-        public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return reader.GetInt32();
-        }
+        public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.GetInt32();
 
-        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
-        {
-            throw new JsonException("Serialization failed for test coverage.");
-        }
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => throw new JsonException("Serialization failed for test coverage.");
     }
 }

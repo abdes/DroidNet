@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Interface for test settings with validation errors.
@@ -13,11 +13,11 @@ namespace DroidNet.Config.Tests.TestHelpers;
 public interface IInvalidTestSettings : INotifyPropertyChanged
 {
     [Required]
-    string? RequiredField { get; set; }
+    public string? RequiredField { get; set; }
 
     [Range(1, 10)]
-    int OutOfRangeValue { get; set; }
+    public int OutOfRangeValue { get; set; }
 
     [EmailAddress]
-    string? InvalidEmail { get; set; }
+    public string? InvalidEmail { get; set; }
 }

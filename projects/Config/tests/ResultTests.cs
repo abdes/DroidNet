@@ -207,10 +207,9 @@ public class ResultTests
     {
         var ok = Result.Ok(10);
 
-        object? nullObj = null;
         object otherType = 10; // boxed int, not Result<int>
 
-        _ = ok.Equals(nullObj).Should().BeFalse();
+        _ = ok.Equals(null).Should().BeFalse();
         _ = ok.Equals(otherType).Should().BeFalse();
     }
 
@@ -219,7 +218,11 @@ public class ResultTests
     {
         var ok = Result.Ok("present");
         var called = false;
-        string F(Exception _) { called = true; return "fallback"; }
+        string F(Exception ex)
+        {
+            called = true;
+            return "fallback";
+        }
 
         var res = ok.GetOrElse(F);
 
@@ -274,7 +277,7 @@ public class ResultTests
     public void MapError_Success_NoOp()
     {
         var ok = Result.Ok(5);
-        var mapped = ok.MapError(e => new Exception("wrap", e));
+        var mapped = ok.MapError(e => new InvalidOperationException("wrap", e));
         _ = mapped.IsSuccess.Should().BeTrue();
         _ = mapped.Value.Should().Be(5);
     }

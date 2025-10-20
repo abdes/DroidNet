@@ -7,7 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Alternative test settings implementation for multi-service testing.
@@ -41,9 +41,7 @@ public class AlternativeTestSettings : IAlternativeTestSettings
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {

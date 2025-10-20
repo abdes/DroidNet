@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config.Sources;
-using DroidNet.Config.Tests.TestHelpers;
+using DroidNet.Config.Tests.Helpers;
 using DryIoc;
 using FluentAssertions;
 
@@ -19,24 +19,25 @@ namespace DroidNet.Config.Tests.Integration;
 [TestCategory("DI Integration")]
 public class DependencyInjectionTests : SettingsTestBase
 {
-    /// <summary>
-    /// Disable default settings service registrations since these tests explicitly test
-    /// the WithSettingsService bootstrapper extension which registers services itself.
-    /// </summary>
-    protected override bool RegisterDefaultSettingsServices => false;
+    public DependencyInjectionTests()
+        : base(registerDefaultSettingsServices: false)
+    {
+    }
+
+    public TestContext TestContext { get; set; }
 
     [TestMethod]
     public void WithSettings_ShouldRegisterSettingsManager()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
         // Act
-        this.Container.WithSettings(new[] { filePath });
+        _ = this.Container.WithSettings([filePath]);
 
         // Assert
         var manager = this.Container.Resolve<ISettingsManager>();
@@ -48,14 +49,14 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_ShouldRegisterSettingsSources()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
         // Act
-        this.Container.WithSettings(new[] { filePath });
+        _ = this.Container.WithSettings([filePath]);
 
         // Assert
         var sources = this.Container.Resolve<IEnumerable<ISettingsSource>>();
@@ -68,19 +69,19 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettingsService_ShouldRegisterTypedService()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
         // Act
-        this.Container
-            .WithSettings(new[] { filePath })
+        _ = this.Container
+            .WithSettings([filePath])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        manager.InitializeAsync().Wait();
+        manager.InitializeAsync(this.TestContext.CancellationToken).Wait(this.TestContext.CancellationToken);
 
         // Assert
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
@@ -91,18 +92,18 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettingsService_ShouldReturnSingletonInstance()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
-        this.Container
-            .WithSettings(new[] { filePath })
+        _ = this.Container
+            .WithSettings([filePath])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        manager.InitializeAsync().Wait();
+        manager.InitializeAsync(this.TestContext.CancellationToken).Wait(this.TestContext.CancellationToken);
 
         // Act
         var service1 = this.Container.Resolve<ISettingsService<ITestSettings>>();
@@ -116,20 +117,20 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_WithMultipleFiles_ShouldRegisterAllSources()
     {
         // Arrange
-        var settings1 = new Dictionary<string, object>
+        var settings1 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "File1" } }
+            { nameof(TestSettings), new TestSettings { Name = "File1" } },
         };
-        var settings2 = new Dictionary<string, object>
+        var settings2 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "File2" } }
+            { nameof(TestSettings), new TestSettings { Name = "File2" } },
         };
 
         var file1 = this.CreateMultiSectionSettingsFile("test1.json", settings1);
         var file2 = this.CreateMultiSectionSettingsFile("test2.json", settings2);
 
         // Act
-        this.Container.WithSettings(new[] { file1, file2 });
+        _ = this.Container.WithSettings([file1, file2]);
 
         // Assert
         var sources = this.Container.Resolve<IEnumerable<ISettingsSource>>();
@@ -140,28 +141,28 @@ public class DependencyInjectionTests : SettingsTestBase
     public async Task WithSettings_ShouldSupportLastLoadedWinsStrategy()
     {
         // Arrange
-        var settings1 = new Dictionary<string, object>
+        var settings1 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "First", Value = 1 } }
+            { nameof(TestSettings), new TestSettings { Name = "First", Value = 1 } },
         };
-        var settings2 = new Dictionary<string, object>
+        var settings2 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "Second", Value = 2 } }
+            { nameof(TestSettings), new TestSettings { Name = "Second", Value = 2 } },
         };
 
         var file1 = this.CreateMultiSectionSettingsFile("first.json", settings1);
         var file2 = this.CreateMultiSectionSettingsFile("second.json", settings2);
 
-        this.Container
-            .WithSettings(new[] { file1, file2 })
+        _ = this.Container
+            .WithSettings([file1, file2])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync();
+        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = service.Settings.Name.Should().Be("Second");
@@ -172,20 +173,20 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_WithMultipleSettingsTypes_ShouldResolveBoth()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
-            { nameof(AlternativeTestSettings), new AlternativeTestSettings() }
+            { nameof(AlternativeTestSettings), new AlternativeTestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("multi.json", settings);
 
-        this.Container
-            .WithSettings(new[] { filePath })
+        _ = this.Container
+            .WithSettings([filePath])
             .WithSettingsService<ITestSettings, TestSettingsService>()
             .WithSettingsService<IAlternativeTestSettings, AlternativeTestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        manager.InitializeAsync().Wait();
+        manager.InitializeAsync(this.TestContext.CancellationToken).Wait(this.TestContext.CancellationToken);
 
         // Act
         var service1 = this.Container.Resolve<ISettingsService<ITestSettings>>();
@@ -201,7 +202,7 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_WithEmptyFileList_ShouldThrowArgumentException()
     {
         // Act
-        var act = () => this.Container.WithSettings(Array.Empty<string>());
+        var act = () => this.Container.WithSettings([]);
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
@@ -215,7 +216,7 @@ public class DependencyInjectionTests : SettingsTestBase
         IContainer? nullContainer = null;
 
         // Act
-        var act = () => nullContainer!.WithSettings(new[] { "test.json" });
+        var act = () => nullContainer!.WithSettings(["test.json"]);
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>();
@@ -241,7 +242,7 @@ public class DependencyInjectionTests : SettingsTestBase
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "test.xml");
 
         // Act
-        var act = () => this.Container.WithSettings(new[] { filePath });
+        var act = () => this.Container.WithSettings([filePath]);
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
@@ -255,7 +256,7 @@ public class DependencyInjectionTests : SettingsTestBase
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "test.secure.json");
 
         // Act
-        var act = () => this.Container.WithSettings(new[] { filePath });
+        var act = () => this.Container.WithSettings([filePath]);
 
         // Assert
         _ = act.Should().Throw<NotSupportedException>()
@@ -266,52 +267,36 @@ public class DependencyInjectionTests : SettingsTestBase
     public async Task FullPipeline_WithRealScenario_ShouldWorkEndToEnd()
     {
         // Arrange
-        var appSettings = new Dictionary<string, object>
+        var appSettings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "AppSettings", Value = 100 } }
+            { nameof(TestSettings), new TestSettings { Name = "AppSettings", Value = 100 } },
         };
-        var userSettings = new Dictionary<string, object>
+        var userSettings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "UserSettings", Value = 200 } }
+            { nameof(TestSettings), new TestSettings { Name = "UserSettings", Value = 200 } },
         };
 
         var appFile = this.CreateMultiSectionSettingsFile("appsettings.json", appSettings);
         var userFile = this.CreateMultiSectionSettingsFile("user-settings.json", userSettings);
 
         // Act - Setup container like a real application would
-        this.Container
-            .WithSettings(new[] { appFile, userFile })
+        _ = this.Container
+            .WithSettings([appFile, userFile])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync();
+        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Modify and save
         service.Settings.Value = 999;
 
-        Console.WriteLine($"[DEBUG TEST] Service type: {service.GetType().FullName}");
-        Console.WriteLine($"[DEBUG TEST] Service base type: {service.GetType().BaseType?.FullName}");
-
         var isDirtyProperty = service.GetType().GetProperty("IsDirty");
-        Console.WriteLine($"[DEBUG TEST] IsDirty property: {isDirtyProperty?.Name ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty property type: {isDirtyProperty?.PropertyType.FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty can read: {isDirtyProperty?.CanRead}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty can write: {isDirtyProperty?.CanWrite}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty declaring type: {isDirtyProperty?.DeclaringType?.FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty reflected type: {isDirtyProperty?.ReflectedType?.FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty get method: {isDirtyProperty?.GetMethod?.Name ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty set method: {isDirtyProperty?.SetMethod?.Name ?? "NULL"}");
 
-        if (isDirtyProperty != null)
-        {
-            Console.WriteLine($"[DEBUG TEST] Attempting to set IsDirty to true on object of type {service.GetType().FullName}");
-        }
-
-        isDirtyProperty?.SetValue(service, true);
-        await service.SaveAsync();
+        isDirtyProperty?.SetValue(service, value: true);
+        await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = service.Settings.Name.Should().Be("UserSettings");
@@ -323,14 +308,14 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_ShouldRegisterFileSystemDependency()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
         // Act
-        this.Container.WithSettings(new[] { filePath });
+        _ = this.Container.WithSettings([filePath]);
 
         // Assert
         var fileSystem = this.Container.Resolve<System.IO.Abstractions.IFileSystem>();
@@ -341,14 +326,14 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_ShouldRegisterLoggerFactoryDependency()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
         // Act
-        this.Container.WithSettings(new[] { filePath });
+        _ = this.Container.WithSettings([filePath]);
 
         // Assert
         var loggerFactory = this.Container.Resolve<Microsoft.Extensions.Logging.ILoggerFactory>();
@@ -359,22 +344,22 @@ public class DependencyInjectionTests : SettingsTestBase
     public async Task WithSettings_AfterServiceResolution_ShouldProvideInitializedData()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "InitialData", Value = 42 } }
+            { nameof(TestSettings), new TestSettings { Name = "InitialData", Value = 42 } },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
-        this.Container
-            .WithSettings(new[] { filePath })
+        _ = this.Container
+            .WithSettings([filePath])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync();
+        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = service.Settings.Name.Should().Be("InitialData");
@@ -385,13 +370,13 @@ public class DependencyInjectionTests : SettingsTestBase
     public void SettingsManager_ShouldBeSingleton()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
-        this.Container.WithSettings(new[] { filePath });
+        _ = this.Container.WithSettings([filePath]);
 
         // Act
         var manager1 = this.Container.Resolve<ISettingsManager>();
@@ -405,51 +390,41 @@ public class DependencyInjectionTests : SettingsTestBase
     public async Task WithSettings_WithValidation_ShouldEnforceConstraints()
     {
         // Arrange
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings { Name = "Test", Value = 50 } }
+            { nameof(TestSettings), new TestSettings { Name = "Test", Value = 50 } },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
 
-        this.Container
-            .WithSettings(new[] { filePath })
+        _ = this.Container
+            .WithSettings([filePath])
             .WithSettingsService<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync();
+        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act - Set invalid value
         service.Settings.Name = string.Empty; // Violates StringLength minimum
 
-        Console.WriteLine($"[DEBUG TEST] Service type: {service.GetType().FullName}");
-        Console.WriteLine($"[DEBUG TEST] Service base type: {service.GetType().BaseType?.FullName}");
-
         var isDirtyProperty = service.GetType().GetProperty("IsDirty");
-        Console.WriteLine($"[DEBUG TEST] IsDirty property: {isDirtyProperty?.Name ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty property type: {isDirtyProperty?.PropertyType.FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty can read: {isDirtyProperty?.CanRead}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty can write: {isDirtyProperty?.CanWrite}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty declaring type: {isDirtyProperty?.DeclaringType?.FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG TEST] IsDirty set method: {isDirtyProperty?.SetMethod?.Name ?? "NULL"}");
+        isDirtyProperty?.SetValue(service, value: true);
 
-        isDirtyProperty?.SetValue(service, true);
-
-        var act = async () => await service.SaveAsync();
+        var act = async () => await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        _ = await act.Should().ThrowAsync<SettingsValidationException>();
+        _ = await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(true);
     }
 
     [TestMethod]
     public void WithSettings_WithPathResolver_ShouldRegisterSettingsSourcesAndManager()
     {
         // Arrange - create a settings file using the test file system
-        var settings = new Dictionary<string, object>
+        var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            { nameof(TestSettings), new TestSettings() }
+            { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("resolver.json", settings);
 
@@ -458,7 +433,7 @@ public class DependencyInjectionTests : SettingsTestBase
         this.Container.RegisterInstance<IPathFinder>(pathFinder);
 
         // Act - call the overload that accepts a Func<IPathFinder, IEnumerable<string>>
-        this.Container.WithSettings(pf => new[] { pf.GetConfigFilePath("resolver.json") });
+        _ = this.Container.WithSettings(pf => [pf.GetConfigFilePath("resolver.json")]);
 
         // Assert
         var manager = this.Container.Resolve<ISettingsManager>();
