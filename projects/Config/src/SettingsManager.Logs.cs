@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Config;
 
+#pragma warning disable SA1204 // Static elements should appear before instance elements
+
 /// <summary>
 /// Central orchestrator that manages all settings sources and provides access to settings services.
 /// Implements last-loaded-wins strategy for multi-source composition.
@@ -18,9 +20,12 @@ public partial class SettingsManager
         EventId = 1,
         Level = LogLevel.Debug,
         Message = "SettingsManager already initialized")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogAlreadyInitialized(ILogger logger);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogAlreadyInitialized() => LogAlreadyInitialized(this.logger);
 
     [LoggerMessage(
         EventId = 2,
@@ -29,13 +34,22 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogInitializing(ILogger logger, int sourceCount);
 
+    [ExcludeFromCodeCoverage]
+    private void LogInitializing(int sourceCount) => LogInitializing(this.logger, sourceCount);
+
+    [ExcludeFromCodeCoverage]
+    private void LogInitializing() => this.LogInitializing(this.sources.Count);
+
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Debug,
         Message = "Loading settings source: {SourceId}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogLoadingSource(ILogger logger, string sourceId);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogLoadingSource(string sourceId) => LogLoadingSource(this.logger, sourceId);
 
     [LoggerMessage(
         EventId = 4,
@@ -44,6 +58,9 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogLoadedSource(ILogger logger, string sourceId);
 
+    [ExcludeFromCodeCoverage]
+    private void LogLoadedSource(string sourceId) => LogLoadedSource(this.logger, sourceId);
+
     [LoggerMessage(
         EventId = 5,
         Level = LogLevel.Warning,
@@ -51,12 +68,8 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogFailedToLoadSource(ILogger logger, string sourceId, string? errorMessage);
 
-    [LoggerMessage(
-        EventId = 6,
-        Level = LogLevel.Error,
-        Message = "Exception loading source: {SourceId}")]
     [ExcludeFromCodeCoverage]
-    private static partial void LogExceptionLoadingSource(ILogger logger, Exception exception, string sourceId);
+    private void LogFailedToLoadSource(string sourceId, string? errorMessage) => LogFailedToLoadSource(this.logger, sourceId, errorMessage);
 
     [LoggerMessage(
         EventId = 7,
@@ -65,13 +78,19 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogInitializationComplete(ILogger logger);
 
+    [ExcludeFromCodeCoverage]
+    private void LogInitializationComplete() => LogInitializationComplete(this.logger);
+
     [LoggerMessage(
         EventId = 8,
         Level = LogLevel.Debug,
         Message = "Creating new settings service for type: {SettingsType}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogCreatingService(ILogger logger, string settingsType);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogCreatingService(string settingsType) => LogCreatingService(this.logger, settingsType);
 
     [LoggerMessage(
         EventId = 9,
@@ -80,35 +99,19 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogReloadingAllSources(ILogger logger);
 
-    [LoggerMessage(
-        EventId = 10,
-        Level = LogLevel.Debug,
-        Message = "Successfully reloaded source: {SourceId}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
-    private static partial void LogReloadedSource(ILogger logger, string sourceId);
-
-    [LoggerMessage(
-        EventId = 11,
-        Level = LogLevel.Warning,
-        Message = "Failed to reload source {SourceId}: {ErrorMessage}")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogFailedToReloadSource(ILogger logger, string sourceId, string? errorMessage);
-
-    [LoggerMessage(
-        EventId = 12,
-        Level = LogLevel.Error,
-        Message = "Exception reloading source: {SourceId}")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogExceptionReloadingSource(ILogger logger, Exception exception, string sourceId);
+    private void LogReloadingAllSources() => LogReloadingAllSources(this.logger);
 
     [LoggerMessage(
         EventId = 13,
         Level = LogLevel.Debug,
         Message = "Service instance will handle reload: {ServiceType}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogServiceHandlesReload(ILogger logger, string serviceType);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogServiceHandlesReload(string serviceType) => LogServiceHandlesReload(this.logger, serviceType);
 
     [LoggerMessage(
         EventId = 14,
@@ -117,12 +120,8 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogSettingsDeserializationFailed(ILogger logger, string sectionName, Type settingsType);
 
-    [LoggerMessage(
-        EventId = 15,
-        Level = LogLevel.Error,
-        Message = "Migration failed for service: {ServiceType}")]
     [ExcludeFromCodeCoverage]
-    private static partial void LogMigrationFailed(ILogger logger, Exception exception, string serviceType);
+    private void LogSettingsDeserializationFailed(string sectionName, Type settingsType) => LogSettingsDeserializationFailed(this.logger, sectionName, settingsType);
 
     [LoggerMessage(
         EventId = 16,
@@ -131,6 +130,9 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogAddedSource(ILogger logger, string sourceId);
 
+    [ExcludeFromCodeCoverage]
+    private void LogAddedSource(string sourceId) => LogAddedSource(this.logger, sourceId);
+
     [LoggerMessage(
         EventId = 17,
         Level = LogLevel.Information,
@@ -138,36 +140,41 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogRemovedSource(ILogger logger, string sourceId);
 
+    [ExcludeFromCodeCoverage]
+    private void LogRemovedSource(string sourceId) => LogRemovedSource(this.logger, sourceId);
+
     [LoggerMessage(
         EventId = 18,
         Level = LogLevel.Debug,
         Message = "Disposing SettingsManager")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogDisposingManager(ILogger logger);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogDisposingManager() => LogDisposingManager(this.logger);
 
     [LoggerMessage(
         EventId = 19,
         Level = LogLevel.Debug,
         Message = "Loaded settings for {SettingsType} from source {SourceId}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogLoadedSettingsForType(ILogger logger, string settingsType, string sourceId);
 
-    [LoggerMessage(
-        EventId = 20,
-        Level = LogLevel.Warning,
-        Message = "Failed to load settings for {SettingsType} from source {SourceId}")]
+    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
-    private static partial void LogFailedToLoadSettingsForType(ILogger logger, Exception exception, string settingsType, string sourceId);
+    private void LogLoadedSettingsForType(string settingsType, string sourceId) => LogLoadedSettingsForType(this.logger, settingsType, sourceId);
 
     [LoggerMessage(
         EventId = 21,
         Level = LogLevel.Debug,
         Message = "Saved settings for {SettingsType} to source {SourceId}")]
-    [Conditional("DEBUG")]
     [ExcludeFromCodeCoverage]
     private static partial void LogSavedSettingsForType(ILogger logger, string settingsType, string sourceId);
+
+    [Conditional("DEBUG")]
+    [ExcludeFromCodeCoverage]
+    private void LogSavedSettingsForType(string settingsType, string sourceId) => LogSavedSettingsForType(this.logger, settingsType, sourceId);
 
     [LoggerMessage(
         EventId = 22,
@@ -176,10 +183,16 @@ public partial class SettingsManager
     [ExcludeFromCodeCoverage]
     private static partial void LogFailedToSaveSettingsForType(ILogger logger, string settingsType, string sourceId, string? errorMessage);
 
+    [ExcludeFromCodeCoverage]
+    private void LogFailedToSaveSettingsForType(string settingsType, string sourceId, string? errorMessage) => LogFailedToSaveSettingsForType(this.logger, settingsType, sourceId, errorMessage);
+
     [LoggerMessage(
         EventId = 23,
         Level = LogLevel.Error,
         Message = "Exception saving settings for {SettingsType} to source {SourceId}")]
     [ExcludeFromCodeCoverage]
     private static partial void LogExceptionSavingSettingsForType(ILogger logger, Exception exception, string settingsType, string sourceId);
+
+    [ExcludeFromCodeCoverage]
+    private void LogExceptionSavingSettingsForType(Exception exception, string settingsType, string sourceId) => LogExceptionSavingSettingsForType(this.logger, exception, settingsType, sourceId);
 }
